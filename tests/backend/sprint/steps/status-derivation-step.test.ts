@@ -61,6 +61,14 @@ describe("runStatusDerivationStep", () => {
     expect(result[0].status).toBe("BLOCKED");
   });
 
+  it("preserves explicitly blocked sessions instead of requeueing them", () => {
+    const subtasks: Subtask[] = [
+      { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "BLOCKED", session_state: "BLOCKED" },
+    ];
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    expect(result[0].status).toBe("BLOCKED");
+  });
+
   it("ignores running or completed or failed tasks if not retrying", () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "RUNNING" },
@@ -107,5 +115,29 @@ describe("runStatusDerivationStep", () => {
     ];
     const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
     expect(result[0].status).toBe("BLOCKED");
+  });
+
+  it("maintains QUOTA status for tasks that hit quota or rate limits", () => {
+    const subtasks: Subtask[] = [
+      { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "PENDING", session_state: "QUOTA" },
+      { id: "task-2", title: "Task 2", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "PENDING", session_state: "RATE_LIMITED" },
+      { id: "task-3", title: "Task 3", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "QUOTA", session_state: undefined },
+    ];
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    expect(result[0].status).toBe("QUOTA");
+    expect(result[1].status).toBe("QUOTA");
+    expect(result[2].status).toBe("QUOTA");
+  });
+
+  it("handles mixed valid and blocked states correctly", () => {
+    const subtasks: Subtask[] = [
+      { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: true, status: "COMPLETED" },
+      { id: "task-2", title: "Task 2", prompt: "", depends_on: ["task-1"], is_independent: false, is_merged: false, status: "PENDING" },
+      { id: "task-3", title: "Task 3", prompt: "", depends_on: ["task-1"], is_independent: false, is_merged: false, status: "PENDING", session_state: "ACTION_REQUIRED" },
+    ];
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    expect(result[0].status).toBe("COMPLETED");
+    expect(result[1].status).toBe("PENDING");
+    expect(result[2].status).toBe("BLOCKED");
   });
 });

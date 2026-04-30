@@ -79,10 +79,13 @@ describe('ActivityCacheService', () => {
       mockDeps.getSubtasks.mockClear();
       mockDeps.fetchRecentActivities.mockClear();
 
+      // Need to re-mock getSubtasks so it returns the tasks that trigger cache check
+      mockDeps.getSubtasks.mockReturnValue([mockTask]);
+
       // Second call within TTL should return cached data
       const result2 = await service.getLiveActivitiesForActiveTasks();
 
-      expect(mockDeps.getSubtasks).not.toHaveBeenCalled();
+      expect(mockDeps.getSubtasks).toHaveBeenCalledTimes(1);
       expect(mockDeps.fetchRecentActivities).not.toHaveBeenCalled();
       expect(result2).toEqual({ 'session-1': [mockActivity] });
     });
@@ -127,6 +130,39 @@ describe('ActivityCacheService', () => {
       await service.getLiveActivitiesForActiveTasks();
 
       expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
+    });
+
+    it('should partially reuse cache and only fetch missing/stale sessions', async () => {
+      const mockTask2 = { ...mockTask, id: 'task-2' };
+      const mockActivity2 = { ...mockActivity, id: 'act-2', taskId: 'task-2' };
+
+      mockDeps.getSubtasks.mockReturnValue([mockTask, mockTask2]);
+      mockDeps.resolveSessionNameFromTask.mockImplementation((t) => {
+        if (t.id === 'task-1') return 'session-1';
+        return 'session-2';
+      });
+      mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity]);
+
+      // Populate session-1 cache
+      mockDeps.getSubtasks.mockReturnValue([mockTask]);
+      await service.getLiveActivitiesForActiveTasks();
+
+      // Now both session-1 and session-2 are active, but session-1 is cached
+      mockDeps.getSubtasks.mockReturnValue([mockTask, mockTask2]);
+      mockDeps.fetchRecentActivities.mockClear();
+      mockDeps.fetchRecentActivities.mockResolvedValue([mockActivity2]);
+
+      const result = await service.getLiveActivitiesForActiveTasks();
+
+      // Should only fetch session-2
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
+      expect(mockDeps.fetchRecentActivities).toHaveBeenCalledWith('session-2', PAGE_SIZE);
+
+      // Should combine both cached and new data
+      expect(result).toEqual({
+        'session-1': [mockActivity],
+        'session-2': [mockActivity2],
+      });
     });
 
     it('should return empty object if no active tasks', async () => {

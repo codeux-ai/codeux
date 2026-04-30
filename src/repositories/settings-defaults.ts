@@ -5,6 +5,7 @@ import type {
   InvocationRoutingId,
   InvocationRoutingProfile,
   InvocationRoutingSettings,
+  ProviderConfigId,
   ProviderId,
   ProviderSettings,
   ProviderStrategy,
@@ -31,7 +32,7 @@ export const DEFAULT_SKILLS: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => 
   isInternal: true,
 }));
 
-export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code"];
+export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code"];
 export const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
 export const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "ORCHESTRATOR"];
 export const INVOCATION_ROUTING_PROFILES: InvocationRoutingProfile[] = ["GLOBAL", "WORKER"];
@@ -44,10 +45,31 @@ export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
   "ci_fix",
   "merge_conflict",
 ];
-export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["DOCKER"];
+export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["DOCKER", "HOST"];
 export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "CREATE_PR", "WHEN_GREEN", "ALWAYS"];
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["VIRTUAL"];
-export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code"];
+export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code"];
+export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> = {
+  jules: "jules",
+  gemini: "gemini",
+  codex: "codex",
+  "claude-code": "claude-code",
+  "qwen-code": "qwen-code",
+};
+export const DEFAULT_PROVIDER_CONFIG_NAMES: Record<ProviderId, string> = {
+  jules: "Jules Primary",
+  gemini: "Gemini Primary",
+  codex: "Codex Primary",
+  "claude-code": "Claude Primary",
+  "qwen-code": "Qwen Primary",
+};
+export const DEFAULT_PROVIDER_AUTH_PATHS: Record<ProviderId, string> = {
+  jules: "",
+  gemini: "~/.gemini",
+  codex: "~/.codex",
+  "claude-code": "~/.claude",
+  "qwen-code": "~/.qwen",
+};
 
 // AI Models catalog — available model identifiers per virtual worker provider
 export const GEMINI_MODELS: string[] = [
@@ -90,16 +112,29 @@ export const CODEX_MODELS: string[] = [
   "gpt-5",
 ];
 
+export const QWEN_MODELS: string[] = [
+  "qwen3-coder-plus",
+  "qwen3.5-plus",
+  "qwen3-coder-next",
+  "qwen3-max",
+  "qwen3-max-2026-01-23",
+  "qwen-plus",
+  "qwen-max",
+  "local-model",
+];
+
 export const AI_MODEL_CATALOG: Record<string, string[]> = {
   gemini: GEMINI_MODELS,
   "claude-code": CLAUDE_MODELS,
   codex: CODEX_MODELS,
+  "qwen-code": QWEN_MODELS,
 };
 
 export const DEFAULT_VIRTUAL_WORKER_MODELS: Record<string, string> = {
   gemini: "auto",
   "claude-code": "default",
   codex: "gpt-5.3-codex",
+  "qwen-code": "qwen3-coder-plus",
 };
 
 export const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
@@ -111,38 +146,82 @@ export const MAX_JULES_CI_AUTOFIX_RETRIES = 20;
 
 export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
   jules: {
+    provider: "jules",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES.jules,
     enabled: true,
     model: "default",
     weight: 60,
     thinkingMode: "MEDIUM",
     apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS.jules,
     maxConcurrentTasks: 15,
   },
   gemini: {
+    provider: "gemini",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES.gemini,
     enabled: true,
     model: "default",
     weight: 20,
     thinkingMode: "MEDIUM",
     apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS.gemini,
     maxConcurrentTasks: 0,
   },
   codex: {
+    provider: "codex",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES.codex,
     enabled: true,
     model: "gpt-5.3-codex",
     weight: 20,
     thinkingMode: "HIGH",
     apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS.codex,
     maxConcurrentTasks: 0,
   },
   "claude-code": {
+    provider: "claude-code",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES["claude-code"],
     enabled: false,
     model: "default",
     weight: 0,
     thinkingMode: "HIGH",
     apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS["claude-code"],
+    maxConcurrentTasks: 0,
+  },
+  "qwen-code": {
+    provider: "qwen-code",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES["qwen-code"],
+    enabled: false,
+    model: "qwen3-coder-plus",
+    weight: 0,
+    thinkingMode: "HIGH",
+    apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS["qwen-code"],
     maxConcurrentTasks: 0,
   },
 };
+
+export const createDefaultProviderSettings = (
+  providerId: ProviderId,
+  name = DEFAULT_PROVIDER_CONFIG_NAMES[providerId],
+): ProviderSettings => ({
+  ...DEFAULT_PROVIDER_SETTINGS[providerId],
+  provider: providerId,
+  name,
+});
+
+export const buildDefaultProviderSettingsMap = (): Record<ProviderConfigId, ProviderSettings> => ({
+  [DEFAULT_PROVIDER_CONFIG_IDS.jules]: createDefaultProviderSettings("jules"),
+  [DEFAULT_PROVIDER_CONFIG_IDS.gemini]: createDefaultProviderSettings("gemini"),
+  [DEFAULT_PROVIDER_CONFIG_IDS.codex]: createDefaultProviderSettings("codex"),
+  [DEFAULT_PROVIDER_CONFIG_IDS["claude-code"]]: createDefaultProviderSettings("claude-code"),
+});
 
 export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationRoutingSettings> = {
   task_coding: {
@@ -214,14 +293,9 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     clarificationCooldownSeconds: 300,
   },
   aiProvider: {
-    provider: "jules",
+    provider: DEFAULT_PROVIDER_CONFIG_IDS.jules,
     strategy: "MANUAL",
-    providers: {
-      jules: { ...DEFAULT_PROVIDER_SETTINGS.jules },
-      gemini: { ...DEFAULT_PROVIDER_SETTINGS.gemini },
-      codex: { ...DEFAULT_PROVIDER_SETTINGS.codex },
-      "claude-code": { ...DEFAULT_PROVIDER_SETTINGS["claude-code"] },
-    },
+    providers: buildDefaultProviderSettingsMap(),
     invocationRouting: {
       task_coding: { ...DEFAULT_INVOCATION_ROUTING.task_coding, allowedProviders: [], providers: {} },
       planning: { ...DEFAULT_INVOCATION_ROUTING.planning, allowedProviders: [], providers: {} },
@@ -231,7 +305,6 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       ci_fix: { ...DEFAULT_INVOCATION_ROUTING.ci_fix, allowedProviders: [], providers: {} },
       merge_conflict: { ...DEFAULT_INVOCATION_ROUTING.merge_conflict, allowedProviders: [], providers: {} },
     },
-    julesApiKey: "",
   },
   git: {
     githubMode: "REMOTE",
@@ -244,10 +317,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   ciIntelligence: {
     enabled: true,
     enableLivePrMonitoring: true,
-    waitForCiBeforeMainMerge: true,
     resolveAllCommentsBeforeMainMerge: true,
     resolveMainMergeConflicts: false,
-    waitForCiBeforeFeatureMerge: true,
     resolveAllCommentsBeforeFeatureMerge: true,
     resolveMergeConflicts: false,
     waitForJulesCiAutofix: false,
@@ -287,10 +358,12 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerMountGeminiAuth: false,
     containerMountCodexAuth: false,
     containerMountClaudeCodeAuth: false,
+    containerMountQwenCodeAuth: false,
     containerGithubAuthPath: "~/.config/gh",
     containerGeminiAuthPath: "~/.gemini",
     containerCodexAuthPath: "~/.codex",
     containerClaudeCodeAuthPath: "~/.claude",
+    containerQwenCodeAuthPath: "~/.qwen",
     maxPlanningJsonRetries: 3,
     maxQuotaRetriesWithoutTimer: 5,
   },
@@ -300,7 +373,6 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     autoStartOnRunningSprint: true,
     rebuildOnTaskCompletion: true,
     rebuildOnSprintCompletion: true,
-    pullLatestOnRebuild: true,
     autoStopOnTerminalSprint: false,
     maxConcurrentContainers: 5,
     hostPortRangeStart: 5555,
@@ -310,7 +382,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   workers: {
     executionMode: "VIRTUAL",
-    virtualWorkerProvider: "codex",
+    virtualWorkerProvider: DEFAULT_PROVIDER_CONFIG_IDS.codex,
     model: "gpt-5.3-codex",
     maxConcurrency: 1,
     timeoutSeconds: 300,

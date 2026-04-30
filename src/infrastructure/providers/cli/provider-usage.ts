@@ -62,13 +62,25 @@ function tokenizeWithCodexModel(model: string | null | undefined, text: string):
   }
 }
 
-function estimateTelemetry(provider: "codex" | "claude-code", model: string | null | undefined, inputText: string, outputText: string): ProviderUsageTelemetry {
-  const inputTokens = provider === "claude-code"
-    ? countAnthropicTokens(inputText)
-    : tokenizeWithCodexModel(model, inputText);
-  const outputTokens = provider === "claude-code"
-    ? countAnthropicTokens(outputText)
-    : tokenizeWithCodexModel(model, outputText);
+function estimateTextTokens(provider: "gemini" | "codex" | "claude-code" | "qwen-code", model: string | null | undefined, text: string): number {
+  if (!text.trim()) {
+    return 0;
+  }
+  if (provider === "claude-code") {
+    return countAnthropicTokens(text);
+  }
+  if (provider === "codex") {
+    return tokenizeWithCodexModel(model, text);
+  }
+
+  // Gemini CLI can suppress machine-readable stats when native MCP tools are enabled.
+  // Use the same conservative character heuristic used for non-native telemetry.
+  return Math.ceil(text.length / 4);
+}
+
+function estimateTelemetry(provider: "gemini" | "codex" | "claude-code" | "qwen-code", model: string | null | undefined, inputText: string, outputText: string): ProviderUsageTelemetry {
+  const inputTokens = estimateTextTokens(provider, model, inputText);
+  const outputTokens = estimateTextTokens(provider, model, outputText);
   return {
     inputTokens,
     cachedInputTokens: 0,
@@ -92,13 +104,15 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
     const inputTokens = toNumber(directTokens.input);
     const cachedInputTokens = toNumber(directTokens.cached);
     const outputTokens = toNumber(directTokens.candidates);
-    const totalTokens = inputTokens + outputTokens;
+    const reasoningOutputTokens = toNumber(directTokens.thoughts);
+    const totalTokens = inputTokens + outputTokens + reasoningOutputTokens;
     if (totalTokens > 0) {
       return {
         ...emptyTelemetry(),
         inputTokens,
         cachedInputTokens,
         outputTokens,
+        reasoningOutputTokens,
         totalTokens,
         usageSource: "reported",
         rawUsageJson: stats,
@@ -111,6 +125,7 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
     let inputTokens = 0;
     let cachedInputTokens = 0;
     let outputTokens = 0;
+    let reasoningOutputTokens = 0;
     for (const entry of models) {
       const tokens = entry && typeof entry === "object" ? (entry as Record<string, unknown>).tokens : null;
       if (!tokens || typeof tokens !== "object") {
@@ -119,14 +134,16 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
       inputTokens += toNumber((tokens as Record<string, unknown>).input);
       cachedInputTokens += toNumber((tokens as Record<string, unknown>).cached);
       outputTokens += toNumber((tokens as Record<string, unknown>).candidates);
+      reasoningOutputTokens += toNumber((tokens as Record<string, unknown>).thoughts);
     }
-    const totalTokens = inputTokens + outputTokens;
+    const totalTokens = inputTokens + outputTokens + reasoningOutputTokens;
     if (totalTokens > 0) {
       return {
         ...emptyTelemetry(),
         inputTokens,
         cachedInputTokens,
         outputTokens,
+        reasoningOutputTokens,
         totalTokens,
         usageSource: "reported",
         rawUsageJson: stats,
@@ -192,6 +209,14 @@ async function parseClaudeSessionTelemetry(cwd: string, nativeSessionId: string)
   const slug = cwd.replaceAll(path.sep, "-");
   const sessionPath = path.join(os.homedir(), ".claude", "projects", slug, `${nativeSessionId}.jsonl`);
   const raw = await fs.readFile(sessionPath, "utf8").catch(() => "");
+  return parseClaudeSessionJsonl(raw, nativeSessionId, { sessionPath });
+}
+
+function parseClaudeSessionJsonl(
+  raw: string,
+  nativeSessionId: string,
+  rawUsageJson: Record<string, unknown> | null,
+): ProviderUsageTelemetry | null {
   if (!raw.trim()) {
     return null;
   }
@@ -233,14 +258,14 @@ async function parseClaudeSessionTelemetry(cwd: string, nativeSessionId: string)
     outputTokens,
     totalTokens,
     usageSource: "reported",
-    rawUsageJson: { sessionPath },
+    rawUsageJson,
     transcriptText: extractClaudeTranscript(parsedLines),
     nativeSessionId,
   };
 }
 
 export async function collectProviderUsageTelemetry(args: {
-  provider: "gemini" | "codex" | "claude-code";
+  provider: "gemini" | "codex" | "claude-code" | "qwen-code";
   model: string;
   prompt: string;
   cwd: string;
@@ -248,6 +273,7 @@ export async function collectProviderUsageTelemetry(args: {
   stderr: string;
   capturedText?: string;
   nativeSessionId?: string | null;
+  claudeSessionJsonl?: string | null;
 }): Promise<ProviderUsageTelemetry> {
   const fallbackOutput = [args.capturedText || "", args.stdout || "", args.stderr || ""].filter(Boolean).join("\n").trim();
 
@@ -260,11 +286,9 @@ export async function collectProviderUsageTelemetry(args: {
       usage.nativeSessionId = typeof parsed?.session_id === "string" ? parsed.session_id : null;
       return usage;
     }
-    return {
-      ...emptyTelemetry(),
-      transcriptText: typeof parsed?.response === "string" ? parsed.response : fallbackOutput,
-      nativeSessionId: typeof parsed?.session_id === "string" ? parsed.session_id : null,
-    };
+    const estimated = estimateTelemetry("gemini", args.model, args.prompt, typeof parsed?.response === "string" ? parsed.response : fallbackOutput);
+    estimated.nativeSessionId = typeof parsed?.session_id === "string" ? parsed.session_id : null;
+    return estimated;
   }
 
   if (args.provider === "codex") {
@@ -277,6 +301,15 @@ export async function collectProviderUsageTelemetry(args: {
   }
 
   if (args.nativeSessionId) {
+    if (args.claudeSessionJsonl) {
+      const usage = parseClaudeSessionJsonl(args.claudeSessionJsonl, args.nativeSessionId, { source: "container-session-jsonl" });
+      if (usage && usage.totalTokens > 0) {
+        return usage;
+      }
+      if (usage) {
+        return estimateTelemetry("claude-code", args.model, args.prompt, usage.transcriptText || fallbackOutput);
+      }
+    }
     const usage = await parseClaudeSessionTelemetry(args.cwd, args.nativeSessionId);
     if (usage && usage.totalTokens > 0) {
       return usage;

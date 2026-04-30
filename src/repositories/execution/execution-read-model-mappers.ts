@@ -54,6 +54,7 @@ export function mapProviderInvocationUsageRow(row: ProviderInvocationUsageRow): 
     purpose: row.purpose as any,
     status: row.status as any,
     model: row.model,
+    executionMode: row.execution_mode as ProviderInvocationUsageRecord["executionMode"],
     nativeSessionId: row.native_session_id,
     usageSource: row.usage_source as any,
     promptChars: toNumber(row.prompt_chars),

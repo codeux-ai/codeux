@@ -17,8 +17,5 @@ export interface ProjectStatsQueryDependencies {
   getWallTimeTotalsBySprintRunIdsForRange: (id: string, s: string, e: string, n: string) => Map<string, number>;
   getTaskMetadata: (id: string) => Map<string, StatsEntityMetadata>;
   getSprintMetadata: (id: string) => Map<string, StatsEntityMetadata>;
-  mapProviderInvocationUsageRow: (row: ProviderInvocationUsageRow) => ProviderInvocationUsageRecord;
-  mergeUsageTotals: (target: ExecutionUsageTotals, source: ProviderInvocationUsageRecord) => void;
-  mergeUsageMap: (map: Map<string, ExecutionUsageTotals>, key: string | null, source: ProviderInvocationUsageRecord) => void;
   updateLastActivity: (map: Map<string, string>, key: string | null, date: string | null) => void;
 }

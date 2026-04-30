@@ -1,3 +1,6 @@
+import type { ProjectExecutionStatsSnapshot, ExecutionStatsEntitySummary, SegmentDefinition, ProjectStatsWindow } from "../../../types.js";
+import type { UsageChartState } from "../use-usage-chart-state.js";
+import type { StatsVisualMode } from "./StatsShared.js";
 import type { FunctionComponent } from "preact";
 import { Layers3 } from "lucide-preact";
 import {
@@ -10,7 +13,25 @@ import {
 } from "./StatsShared.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
 
-export const AnalysisStudioSection: FunctionComponent<any> = ({
+export interface AnalysisStudioSectionProps {
+  stats: ProjectExecutionStatsSnapshot | null;
+  planningUsage: ExecutionStatsEntitySummary | null;
+  providerSegments: SegmentDefinition[];
+  tokenSegments: SegmentDefinition[];
+  sourceSegments: SegmentDefinition[];
+  visualMode: StatsVisualMode;
+  setVisualMode: (mode: StatsVisualMode) => void;
+  chartState: UsageChartState;
+  activeWindow: ProjectStatsWindow | string;
+  customFrom: string;
+  customTo: string;
+  applyPresetWindow: (value: Exclude<ProjectStatsWindow, "custom">) => void;
+  setCustomFrom: (value: string) => void;
+  setCustomTo: (value: string) => void;
+  applyCustomRange: () => void;
+}
+
+export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps> = ({
   stats,
   planningUsage,
   providerSegments,
@@ -19,17 +40,35 @@ export const AnalysisStudioSection: FunctionComponent<any> = ({
   visualMode,
   setVisualMode,
   chartState,
+  activeWindow,
+  customFrom,
+  customTo,
+  applyPresetWindow,
+  setCustomFrom,
+  setCustomTo,
+  applyCustomRange,
 }) => {
+  if (!stats) return null;
+
   return (
     <>
-      {stats ? (
-        <div className="flex justify-end mb-4">
-          <ViewToggle value={visualMode} onChange={setVisualMode} />
-        </div>
-      ) : null}
+      <div className="flex justify-end mb-4">
+        <ViewToggle value={visualMode} onChange={setVisualMode} />
+      </div>
 
       {visualMode === "trend" ? (
-        <TrendStudio stats={stats} planningUsage={planningUsage} chartState={chartState} />
+        <TrendStudio
+          stats={stats}
+          planningUsage={planningUsage}
+          chartState={chartState}
+          activeWindow={activeWindow}
+          customFrom={customFrom}
+          customTo={customTo}
+          onSelectPreset={applyPresetWindow}
+          onCustomFromChange={setCustomFrom}
+          onCustomToChange={setCustomTo}
+          onApplyCustom={applyCustomRange}
+        />
       ) : null}
 
       {visualMode === "composition" ? (

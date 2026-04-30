@@ -176,6 +176,7 @@ const PROVIDER_PATTERNS: Record<string, ErrorPattern[]> = {
   gemini: GEMINI_PATTERNS,
   "claude-code": CLAUDE_CODE_PATTERNS,
   codex: CODEX_PATTERNS,
+  "qwen-code": CODEX_PATTERNS,
 };
 
 const PROVIDER_NOT_FOUND_PATTERNS: RegExp[] = [
@@ -188,11 +189,17 @@ const PROVIDER_LABELS: Record<string, string> = {
   gemini: "Gemini",
   "claude-code": "Claude Code",
   codex: "Codex",
+  "qwen-code": "Qwen Code",
 };
 
 function isGeminiRuntimeStorageError(text: string): boolean {
   return /ENOENT/i.test(text)
     && /\.sprint-os-home\/\.gemini\//i.test(text);
+}
+
+function isCodexTransportServerError(text: string): boolean {
+  return /responses_websocket/i.test(text)
+    && /HTTP error:\s*5\d\d/i.test(text);
 }
 
 function computeResetAtIso(resetAfter: string): string | null {
@@ -229,11 +236,21 @@ function buildUserMessage(
 }
 
 export function classifyProviderError(
-  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">,
+  provider: Exclude<ProviderId, "jules">,
   result: CommandResult,
 ): ProviderErrorClassification {
   const combined = `${result.stdout}\n${result.stderr}`;
   const providerPatterns = PROVIDER_PATTERNS[provider] ?? [];
+
+  if (provider === "codex" && isCodexTransportServerError(combined)) {
+    return {
+      category: "UNKNOWN",
+      provider,
+      userMessage: buildUserMessage(provider, "UNKNOWN", null),
+      resetAfter: null,
+      resetAtIso: null,
+    };
+  }
 
   for (const entry of providerPatterns) {
     if (entry.patterns.some((pattern) => pattern.test(combined))) {

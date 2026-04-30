@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
@@ -8,13 +8,6 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { SettingsAgentsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsAgentsPanel.js";
 
 expect.extend(matchers);
-
-if (typeof window !== "undefined" && !window.requestAnimationFrame) {
-  window.requestAnimationFrame = (callback: FrameRequestCallback) => {
-    return setTimeout(() => callback(performance.now()), 0);
-  };
-  window.cancelAnimationFrame = (id: number) => clearTimeout(id);
-}
 
 describe("SettingsAgentsPanel", () => {
   it("shows QA above templates and keeps QA preset selectors enabled with project presets", async () => {

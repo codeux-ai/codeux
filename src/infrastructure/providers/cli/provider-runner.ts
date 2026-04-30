@@ -10,6 +10,9 @@ import { randomUUID } from "crypto";
 import { getRepoSprintOsPath } from "../../../shared/config/sprint-os-paths.js";
 import { collectProviderUsageTelemetry, type ProviderUsageTelemetry } from "./provider-usage.js";
 
+const CONTAINER_WORKSPACE_ROOT = "/workspace";
+const CONTAINER_RUNTIME_HOME = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".sprint-os-home");
+
 export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
 
 export interface ProviderRunResult extends CommandResult {
@@ -18,7 +21,9 @@ export interface ProviderRunResult extends CommandResult {
   text?: string;
 }
 
-export const providerSpecs: Record<Extract<ProviderId, "gemini" | "codex" | "claude-code">, ProviderCommandSpec> = {
+export type CliProviderId = Extract<ProviderId, "gemini" | "codex" | "claude-code" | "qwen-code">;
+
+export const providerSpecs: Record<CliProviderId, ProviderCommandSpec> = {
   "gemini": (model: string, prompt: string) => ({
     command: "gemini",
     args: ["--yolo", "--output-format", "json", "--p", prompt]
@@ -34,16 +39,30 @@ export const providerSpecs: Record<Extract<ProviderId, "gemini" | "codex" | "cla
     if (model && model !== "default") args.push("--model", model);
     args.push(prompt);
     return { command: "codex", args };
-  }
+  },
+  "qwen-code": (model: string, prompt: string) => {
+    const args = ["--yolo"];
+    if (model && model !== "default") args.push("--model", model);
+    args.push("-p", prompt);
+    return { command: "qwen", args };
+  },
 };
 
 export interface ProviderRunInput {
-  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+  provider: CliProviderId;
   prompt: string;
   cwd: string;
   model: string;
   apiKey: string;
+  qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+  qwenRegion?: "china" | "international";
+  qwenBaseUrl?: string;
+  qwenEnvKey?: string;
+  qwenProtocol?: "openai" | "anthropic" | "gemini";
+  providerMountAuth?: boolean;
+  providerAuthPath?: string;
   sessionId: string;
+  workspaceSessionId?: string;
   workflowSettings: CliWorkflowSettings;
   repoPath: string;
   githubToken?: string;
@@ -69,7 +88,7 @@ export class ProviderRunner implements IProviderRunner {
       ? await this.dockerRunner.ensureWorkspace({
         cwd: input.cwd,
         repoPath: input.repoPath,
-        sessionId: input.sessionId,
+        sessionId: input.workspaceSessionId || input.sessionId,
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
@@ -88,13 +107,13 @@ export class ProviderRunner implements IProviderRunner {
       ? await this.dockerRunner.ensureWorkspace({
         cwd: input.cwd,
         repoPath: input.repoPath,
-        sessionId: input.sessionId,
+        sessionId: input.workspaceSessionId || input.sessionId,
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
     const outputPath = input.provider === "codex"
       ? input.workflowSettings.executionMode === "DOCKER"
-        ? pathPosix.join("/workspace", ".sprint-os", "tmp", `provider-last-message-${input.sessionId}.txt`)
+        ? pathPosix.join("/workspace", `provider-last-message-${input.sessionId}.txt`)
         : path.join(getRepoSprintOsPath(input.repoPath, "tmp"), `provider-last-message-${input.sessionId}.txt`)
       : null;
 
@@ -130,11 +149,18 @@ export class ProviderRunner implements IProviderRunner {
   }
 
   private async runProviderInternal(input: {
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+    provider: CliProviderId;
     prompt: string;
     cwd: string;
     model: string;
     apiKey: string;
+    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+    qwenRegion?: "china" | "international";
+    qwenBaseUrl?: string;
+    qwenEnvKey?: string;
+    qwenProtocol?: "openai" | "anthropic" | "gemini";
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
     sessionId: string;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
@@ -145,12 +171,12 @@ export class ProviderRunner implements IProviderRunner {
     continueSessionId?: string | null;
     mcpConnection?: McpConnectionInfo | null;
   }): Promise<ProviderRunResult> {
-    const { provider, prompt, cwd, model, apiKey, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
-    const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken);
+    const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
+    const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken, providerMountAuth, input);
     const nativeSessionId = input.continueSessionId || (provider === "claude-code" ? randomUUID() : null);
 
     const continueSession = !!input.continueSessionId;
-    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath, nativeSessionId, continueSession, !!input.mcpConnection);
+    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath, nativeSessionId, continueSession, !!input.mcpConnection, input.qwenAuthMode, input.qwenProtocol);
     const { command, args } = spec;
 
     const localMcpCleanup: Array<{ path: string; originalContent: string | null }> = [];
@@ -164,6 +190,8 @@ export class ProviderRunner implements IProviderRunner {
         const result = await this.dockerRunner.runProviderInDocker({
           command, args, cwd, providerEnv, sessionId,
           providerLabel: provider, workflowSettings, repoPath, signal, onActivity,
+          providerMountAuth,
+          providerAuthPath,
           mcpConnection: input.mcpConnection
         });
         if (!result.ok && isDockerWorkspaceMountError(result)) {
@@ -191,8 +219,11 @@ export class ProviderRunner implements IProviderRunner {
         result = await runCmd();
       }
       const capturedText = input.codexOutputPath
-        ? (await fs.readFile(input.codexOutputPath, "utf8").catch(() => "")).trim()
+        ? await this.readProviderOutputPath(cwd, input.codexOutputPath, workflowSettings.executionMode)
         : "";
+      const claudeSessionJsonl = provider === "claude-code" && nativeSessionId
+        ? await this.readClaudeSessionJsonl(cwd, nativeSessionId, workflowSettings.executionMode)
+        : null;
       const usageTelemetry = await collectProviderUsageTelemetry({
         provider,
         model,
@@ -202,6 +233,7 @@ export class ProviderRunner implements IProviderRunner {
         stderr: result.stderr,
         capturedText,
         nativeSessionId,
+        claudeSessionJsonl,
       });
       return {
         ...result,
@@ -219,14 +251,47 @@ export class ProviderRunner implements IProviderRunner {
     }
   }
 
+  private async readProviderOutputPath(
+    cwd: string,
+    outputPath: string,
+    executionMode: CliWorkflowSettings["executionMode"],
+  ): Promise<string> {
+    if (executionMode === "DOCKER" && outputPath.startsWith(`${CONTAINER_WORKSPACE_ROOT}/`)) {
+      return ((await this.dockerRunner.readWorkspaceFile?.(cwd, outputPath).catch(() => null)) || "").trim();
+    }
+
+    return (await fs.readFile(outputPath, "utf8").catch(() => "")).trim();
+  }
+
+  private async readClaudeSessionJsonl(
+    cwd: string,
+    nativeSessionId: string,
+    executionMode: CliWorkflowSettings["executionMode"],
+  ): Promise<string | null> {
+    if (executionMode !== "DOCKER") {
+      return null;
+    }
+
+    const sessionPath = pathPosix.join(
+      CONTAINER_RUNTIME_HOME,
+      ".claude",
+      "projects",
+      CONTAINER_WORKSPACE_ROOT.replaceAll(pathPosix.sep, "-"),
+      `${nativeSessionId}.jsonl`,
+    );
+    return (await this.dockerRunner.readWorkspaceFile?.(cwd, sessionPath).catch(() => null)) || null;
+  }
+
   private buildCommandSpec(
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">,
+    provider: CliProviderId,
     model: string,
     prompt: string,
     codexOutputPath?: string | null,
     nativeSessionId?: string | null,
     continueSession?: boolean,
     mcpNative?: boolean,
+    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER",
+    qwenProtocol?: "openai" | "anthropic" | "gemini",
   ): { command: string; args: string[] } {
     if (provider === "codex" && codexOutputPath) {
       // `codex exec resume --last` continues the most recent session in the cwd
@@ -250,10 +315,9 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     if (provider === "gemini" && mcpNative) {
-      // MCP-native mode: drop --output-format json so Gemini loads MCP tools and returns plain text
       const args = continueSession
-        ? ["--resume", "--yolo", "--p", prompt]
-        : ["--yolo", "--p", prompt];
+        ? ["--resume", "--yolo", "--output-format", "json", "--p", prompt]
+        : ["--yolo", "--output-format", "json", "--p", prompt];
       return { command: "gemini", args };
     }
 
@@ -265,6 +329,16 @@ export class ProviderRunner implements IProviderRunner {
         command: "gemini",
         args,
       };
+    }
+
+    if (provider === "qwen-code") {
+      const authType = qwenAuthMode === "LOCAL_AUTH" ? "qwen-oauth" : (qwenProtocol || "openai");
+      const args = ["--auth-type", authType, "--yolo"];
+      if (model && model !== "default") {
+        args.push("--model", model);
+      }
+      args.push("-p", prompt);
+      return { command: "qwen", args };
     }
 
     const providerSpec = providerSpecs[provider];
@@ -280,15 +354,14 @@ export class ProviderRunner implements IProviderRunner {
     model: string,
     apiKey: string,
     workflowSettings: CliWorkflowSettings,
-    githubToken?: string
+    githubToken?: string,
+    providerMountAuth?: boolean,
+    qwenConfig?: Pick<ProviderRunInput, "qwenAuthMode" | "qwenRegion" | "qwenBaseUrl" | "qwenEnvKey" | "qwenProtocol">,
   ): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...process.env };
     const useContainerMounts = workflowSettings.executionMode === "DOCKER";
     const useGithubMount = useContainerMounts && workflowSettings.containerMountGithubAuth;
-    const useProviderMount = useContainerMounts
-      && ((provider === "gemini" && workflowSettings.containerMountGeminiAuth)
-        || (provider === "claude-code" && workflowSettings.containerMountClaudeCodeAuth)
-        || (provider === "codex" && workflowSettings.containerMountCodexAuth));
+    const useProviderMount = useContainerMounts && Boolean(providerMountAuth);
 
     if (githubToken && !useGithubMount) {
       env.GH_TOKEN = githubToken;
@@ -297,11 +370,33 @@ export class ProviderRunner implements IProviderRunner {
     if (provider === "gemini") {
       if (model && model !== "default") env.GEMINI_MODEL = model;
       if (apiKey && !useProviderMount) env.GEMINI_API_KEY = apiKey;
+      env.GEMINI_CLI_TRUST_WORKSPACE = "true";
     } else if (provider === "claude-code") {
       if (apiKey && !useProviderMount) env.ANTHROPIC_API_KEY = apiKey;
     } else if (provider === "codex") {
       if (model && model !== "default") env.CODEX_MODEL = model;
       if (apiKey && !useProviderMount) env.OPENAI_API_KEY = apiKey;
+    } else if (provider === "qwen-code") {
+      if (apiKey && !useProviderMount) {
+        const envKey = qwenConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"
+          ? "BAILIAN_CODING_PLAN_API_KEY"
+          : qwenConfig?.qwenEnvKey || "DASHSCOPE_API_KEY";
+        env[envKey] = apiKey;
+        env.DASHSCOPE_API_KEY ||= apiKey;
+        env.BAILIAN_CODING_PLAN_API_KEY ||= apiKey;
+        env.QWEN_API_KEY ||= apiKey;
+        if ((qwenConfig?.qwenProtocol || "openai") === "openai") {
+          env.OPENAI_API_KEY ||= apiKey;
+        }
+      }
+      const baseUrl = qwenConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"
+        ? qwenConfig.qwenRegion === "china"
+          ? "https://coding.dashscope.aliyuncs.com/v1"
+          : "https://coding-intl.dashscope.aliyuncs.com/v1"
+        : qwenConfig?.qwenBaseUrl;
+      if (baseUrl) {
+        env.OPENAI_BASE_URL = baseUrl;
+      }
     }
     return env;
   }
@@ -311,7 +406,7 @@ export class ProviderRunner implements IProviderRunner {
     return text.includes("stream disconnected before completion") || text.includes("error sending request for url") || text.includes("channel closed");
   }
 
-  private shouldSuppressStructuredStdout(provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">, line: string): boolean {
+  private shouldSuppressStructuredStdout(provider: CliProviderId, line: string): boolean {
     if (provider !== "gemini" && provider !== "codex") {
       return false;
     }
@@ -330,7 +425,7 @@ export class ProviderRunner implements IProviderRunner {
   private async writeLocalMcpConfig(
     conn: McpConnectionInfo,
     cwd: string,
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">
+    provider: CliProviderId
   ): Promise<Array<{ path: string; originalContent: string | null }>> {
     const headers: Record<string, string> = {};
     if (conn.authToken) {
@@ -352,8 +447,8 @@ export class ProviderRunner implements IProviderRunner {
       const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
       await fs.writeFile(configPath, JSON.stringify(config, null, 2));
       created.push({ path: configPath, originalContent });
-    } else if (provider === "gemini") {
-      const dirPath = path.join(cwd, ".gemini");
+    } else if (provider === "gemini" || provider === "qwen-code") {
+      const dirPath = path.join(cwd, provider === "gemini" ? ".gemini" : ".qwen");
       await fs.mkdir(dirPath, { recursive: true });
       const configPath = path.join(dirPath, "settings.json");
       const mcpServers = {

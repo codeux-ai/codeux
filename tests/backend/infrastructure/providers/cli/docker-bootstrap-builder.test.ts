@@ -6,6 +6,8 @@ import {
   GITHUB_CREDENTIALS_MOUNT,
   GEMINI_CREDENTIALS_MOUNT,
   CLAUDE_CODE_CREDENTIALS_MOUNT,
+  CLAUDE_CODE_AUTH_JSON_MOUNT,
+  QWEN_CODE_CREDENTIALS_MOUNT,
   GITCONFIG_CREDENTIALS_MOUNT,
   CLAUDE_CODE_MCP_CONFIG_MOUNT,
   GEMINI_MCP_SETTINGS_MOUNT,
@@ -73,9 +75,10 @@ describe("DockerBootstrapBuilder", () => {
       runtimeNpmCache: "/runtime/npm-cache",
     });
 
-    expect(script).toContain(`copy_if_present "${CLAUDE_CODE_MCP_CONFIG_MOUNT}" "$HOME/.mcp.json"`);
-    expect(script).toContain(`copy_if_present "${GEMINI_MCP_SETTINGS_MOUNT}" "$HOME/.gemini/settings.json"`);
-    expect(script).toContain(`copy_if_present "${CODEX_MCP_CONFIG_MOUNT}" "$HOME/.codex/config.toml"`);
+    expect(script).toContain(`merge_json_file "${CLAUDE_CODE_MCP_CONFIG_MOUNT}" "$HOME/.mcp.json"`);
+    expect(script).toContain(`merge_json_file "${GEMINI_MCP_SETTINGS_MOUNT}" "$HOME/.gemini/settings.json"`);
+    expect(script).toContain(`append_if_missing_literal "${CODEX_MCP_CONFIG_MOUNT}" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]"`);
+    expect(script).toContain(`merge_json_file "/opt/provider-config/qwen-settings.json" "$HOME/.qwen/settings.json"`);
   });
 
   it("should not include fallback install if no providers specified", () => {
@@ -100,10 +103,12 @@ describe("DockerCredentialMountBuilder", () => {
     containerMountGeminiAuth: false,
     containerMountCodexAuth: false,
     containerMountClaudeCodeAuth: false,
+    containerMountQwenCodeAuth: false,
     containerGithubAuthPath: "/mock/gh",
     containerGeminiAuthPath: "/mock/gemini",
     containerCodexAuthPath: "/mock/codex",
     containerClaudeCodeAuthPath: "/mock/claude",
+    containerQwenCodeAuthPath: "/mock/qwen",
   } as unknown as CliWorkflowSettings;
 
   afterEach(() => {
@@ -130,6 +135,7 @@ describe("DockerCredentialMountBuilder", () => {
       containerMountGeminiAuth: true,
       containerMountCodexAuth: true,
       containerMountClaudeCodeAuth: true,
+      containerMountQwenCodeAuth: true,
     };
     const onActivity = vi.fn();
 
@@ -137,13 +143,15 @@ describe("DockerCredentialMountBuilder", () => {
 
     const mounts = await builder.build(settings, mockRepoPath, onActivity);
 
-    expect(mounts).toHaveLength(5);
+    expect(mounts).toHaveLength(7);
     expect(mounts).toEqual(expect.arrayContaining([
       expect.objectContaining({ destination: GITCONFIG_CREDENTIALS_MOUNT }),
       expect.objectContaining({ destination: GITHUB_CREDENTIALS_MOUNT }),
       expect.objectContaining({ destination: GEMINI_CREDENTIALS_MOUNT }),
       expect.objectContaining({ destination: CODEX_CREDENTIALS_MOUNT }),
       expect.objectContaining({ destination: CLAUDE_CODE_CREDENTIALS_MOUNT }),
+      expect.objectContaining({ destination: CLAUDE_CODE_AUTH_JSON_MOUNT }),
+      expect.objectContaining({ destination: QWEN_CODE_CREDENTIALS_MOUNT }),
     ]));
     expect(onActivity).toHaveBeenCalledWith(expect.stringContaining("Resolved credential mount for GitConfig"));
   });

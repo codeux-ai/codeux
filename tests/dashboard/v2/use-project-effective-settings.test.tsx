@@ -1,11 +1,14 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { useProjectEffectiveSettings } from "../../../dashboard/src/v2/hooks/use-project-effective-settings.js";
+import {
+  clearEffectiveSettingsCacheForTests,
+  useProjectEffectiveSettings,
+} from "../../../dashboard/src/v2/hooks/use-project-effective-settings.js";
 import { fetchProjectEffectiveSettings } from "../../../dashboard/src/v2/lib/settings-api.js";
 
 expect.extend(matchers);
@@ -17,6 +20,7 @@ vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
 describe("useProjectEffectiveSettings", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    clearEffectiveSettingsCacheForTests();
   });
 
   afterEach(() => {

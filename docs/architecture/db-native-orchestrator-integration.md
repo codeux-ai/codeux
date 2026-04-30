@@ -145,11 +145,14 @@ When all sprint tasks are settled, the same completion path now also handles the
 - if `ciIntelligence.mainBranchAutoMergeMode != OFF` and no main PR exists yet, Sprint OS opens or resolves the `feature -> default` PR automatically
 - it then re-checks the main merge gate and applies the configured auto-merge policy
 - `CREATE_PR` stops after PR creation/resolution and does not auto-merge
-- `WHEN_GREEN` waits for green checks when main-CI waiting is enabled
-- `ALWAYS` can proceed without CI waiting when `waitForCiBeforeMainMerge = false`
+- `WHEN_GREEN` waits for green checks before merging
+- `ALWAYS` attempts the final main PR merge without waiting for CI
 - Sprint OS now emits `sprint_completed` only after an enabled main auto-merge flow actually settles, including the case where the `feature -> default` PR has already been merged
 - while main auto-merge is still pending, waiting on CI, ready to merge, or armed in GitHub, the sprint stays active instead of completing early
 - if the main merge gate is `DIRTY`, has failed checks, is review-blocked, or an open main-merge conflict handoff item for the same sprint run still exists, the sprint run pauses instead of completing
+- if a CLI task hits an unrecoverable Git push/auth/configuration error, Sprint OS now records that task run as `BLOCKED` rather than retryable `FAILED`, so the watch loop pauses the sprint instead of requeueing the same token-burning failure forever
+- if a CLI task hits an unrecoverable execution-environment failure such as missing Docker in a Docker-required path, Sprint OS also records that run as `BLOCKED` rather than retrying indefinitely
+- when a sprint run transitions to `completed`, `failed`, or terminal `cancelled`, Sprint OS now removes resumable CLI workspaces for that sprint immediately so disk usage drops without waiting for the next restart
 
 ## Active Ownership
 
@@ -183,6 +186,14 @@ Feature PR merge waiting now only applies to code-complete tasks that have merge
 - `task.worker_branch`
 - `task.pr_url`
 
+Feature PR gate pre-processing now runs through pure transition helpers before any async PR/CI checks:
+
+- merge-indicator normalization (`MERGED` / `AUTOMERGE` / conflict preservation)
+- `COMPLETED` <-> `CODING_COMPLETED` merge-wait adjustments
+- intervention-field clearing for code-complete states
+
+The gate applies these transition snapshots first, persists changed merge/status state, and only then executes PR/CI policy checks. This removes implicit in-loop mutation ordering from merge readiness decisions while preserving existing CI gate events and report semantics.
+
 This keeps no-output tasks, such as validation-only or test-only runs, moving from `CODING_COMPLETED` to final `COMPLETED` instead of pushing them into the CI/PR wait path.
 The same merge-evidence rule is now used by dependency unlocking, the merge protocol, live dashboard status projection, and the final watch-loop completion check so a sprint can finish cleanly when a successful task never opened a branch or PR.
 
@@ -194,6 +205,7 @@ The dashboard rerun endpoint now uses the same DB-native dispatch path:
 2. persist `is_merged = false` on the DB task record
 3. reuse an active sprint run or create a dashboard-triggered sprint run
 4. create a fresh dispatch and task run through `SprintTaskDispatchService`
+5. if rerun had to create a fresh sprint run, resume the watch loop on that run after the new dispatch is launched so CI/merge supervision continues automatically
 
 Reruns no longer bypass the execution model.
 

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeAiProvider } from "../../../../../src/domain/settings/settings-sanitizers/ai-provider-sanitizer.js";
+import { buildDefaultIntegrationProviders } from "../../../../../src/domain/settings/provider-config-utils.js";
 
 describe("sanitizeAiProvider", () => {
-  it("uses external hints for fallback api keys", () => {
+  it("uses external hints to build the default instance catalog", () => {
     const input = { aiProvider: { provider: "gemini" } };
-    const result = sanitizeAiProvider(input, {
+    const externalHints = {
       resolved: {
         julesApiKey: "jules-key",
         geminiApiKey: "gemini-key",
@@ -14,25 +15,43 @@ describe("sanitizeAiProvider", () => {
       },
       env: {},
       settingsJson: {},
+    };
+    const integrationProviders = buildDefaultIntegrationProviders(externalHints);
+    const result = sanitizeAiProvider(input, {
+      externalHints,
+      integrationProviders,
     });
 
     expect(result.provider).toBe("gemini");
-    expect(result.providers.jules.apiKey).toBe("jules-key");
-    expect(result.providers.gemini.apiKey).toBe("gemini-key");
-    expect(result.providers.codex.apiKey).toBe("codex-key");
-    expect(result.providers["claude-code"].apiKey).toBe("claude-key");
+    expect(integrationProviders.jules.apiKey).toBe("jules-key");
+    expect(integrationProviders.gemini.apiKey).toBe("gemini-key");
+    expect(result.providers.jules.provider).toBe("jules");
+    expect(result.providers.gemini.provider).toBe("gemini");
   });
 
-  it("prioritizes input over external hints for api keys", () => {
-    const input = { aiProvider: { julesApiKey: "explicit-jules-key", providers: { gemini: { apiKey: "explicit-gemini-key" } } } };
+  it("prioritizes input over defaults for provider config fields", () => {
+    const input = { aiProvider: { providers: { gemini: { model: "gemini-2.5-flash", weight: 55 } } } };
     const result = sanitizeAiProvider(input, {
-      resolved: { julesApiKey: "jules-key", geminiApiKey: "gemini-key", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      externalHints: {
+        resolved: { julesApiKey: "jules-key", geminiApiKey: "gemini-key", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        env: {},
+        settingsJson: {},
+      },
+    });
+
+    expect(result.providers.gemini.model).toBe("gemini-2.5-flash");
+    expect(result.providers.gemini.weight).toBe(55);
+    expect(result.providers.jules.provider).toBe("jules");
+  });
+
+  it("supports legacy flat julesApiKey input during migration through integration providers", () => {
+    const integrationProviders = buildDefaultIntegrationProviders({
+      resolved: { julesApiKey: "jules-key", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
       env: {},
       settingsJson: {},
     });
 
-    expect(result.julesApiKey).toBe("explicit-jules-key");
-    expect(result.providers.gemini.apiKey).toBe("explicit-gemini-key");
+    expect(integrationProviders.jules.apiKey).toBe("jules-key");
   });
 
   it("normalizes invocation routing with sparse provider overrides", () => {

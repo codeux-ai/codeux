@@ -10,7 +10,7 @@ import { Brain, Search, X, AlertTriangle, Save, Check, RotateCcw, ZoomIn, ZoomOu
 import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, getEmbeddingMap, type EmbeddingModelWithStatus, type ReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
 import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.js";
 import { useProjectData } from "./context/project-data.js";
-import { fetchSprints } from "./lib/project-api.js";
+import { useSprints } from "../hooks/useSprints.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import { prepareMemoryGraph, type MemNode, type Edge, type GraphMetadata, CLUSTER } from "./lib/memory-graph.js";
 import type { SprintRecord, AgentPreset } from "./types.js";
@@ -92,11 +92,15 @@ export const MemoryPage: FunctionComponent = () => {
     const [showAddModal, setShowAddModal] = useState(false);
 
     // Sprint / agent filter state
-    const [sprints, setSprints] = useState<SprintRecord[]>([]);
+    const { data: projectSprints } = useSprints(pid || null);
+    const sprints = projectSprints as SprintRecord[];
     const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
     const [selectedSprintId, setSelectedSprintId] = useState<string | undefined>(undefined);
     const [selectedAgentPresetId, setSelectedAgentPresetId] = useState<string | undefined>(undefined);
-    const sprintsLoaded = useRef(false);
+    const effectiveSelectedSprintId = activeTier === "short_term"
+        ? (selectedSprintId || sprints[0]?.id)
+        : undefined;
+    const memoryDataEnabled = activeTier !== "short_term" || !!effectiveSelectedSprintId;
 
     const {
         loading,
@@ -107,7 +111,7 @@ export const MemoryPage: FunctionComponent = () => {
         initialStats,
         graphData,
         loadData
-    } = useMemoryPageData(pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId);
+    } = useMemoryPageData(pid, activeScope, activeTier, effectiveSelectedSprintId, selectedAgentPresetId, memoryDataEnabled);
 
     const {
         models,
@@ -139,25 +143,20 @@ export const MemoryPage: FunctionComponent = () => {
     const lobRef = useRef(lobotomize);
     lobRef.current = lobotomize;
 
-    /* ── Fetch sprints & agent presets on project change ─────────────── */
+    /* ── Fetch agent presets on project change ─────────────── */
     useEffect(() => {
         if (!pid) return;
-        sprintsLoaded.current = false;
-        Promise.all([
-            fetchSprints(pid).then((res) => res.sprints).catch(() => [] as SprintRecord[]),
-            fetchAgentPresets(pid).catch(() => [] as AgentPreset[]),
-        ]).then(([sprintsData, presetsData]) => {
-            // Sort sprints by number descending so latest is first
-            const sorted = [...sprintsData].sort((a, b) => (b.number ?? 0) - (a.number ?? 0));
-            setSprints(sorted);
+        fetchAgentPresets(pid).catch(() => [] as AgentPreset[]).then((presetsData) => {
             setAgentPresets(presetsData);
-            // Default short-term to latest sprint
-            if (sorted.length > 0 && !sprintsLoaded.current) {
-                setSelectedSprintId(sorted[0].id);
-            }
-            sprintsLoaded.current = true;
         });
     }, [pid]);
+
+    useEffect(() => {
+        if (activeTier !== "short_term" || selectedSprintId || sprints.length === 0) {
+            return;
+        }
+        setSelectedSprintId(sprints[0]!.id);
+    }, [activeTier, selectedSprintId, sprints]);
 
 
     useEffect(() => {

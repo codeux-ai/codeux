@@ -143,12 +143,13 @@ const createInitialShipAnimationState = (shipKey: string, now: number) => {
         lastTime: now,
         yWobbleOffset: (stableRand(shipKey, 42) - 0.5) * 6,
         yWobblePhase: stableRand(shipKey, 43) * Math.PI * 2,
+        pingedCheckpoints: new Set<number>(),
     };
 };
 
 /* ─── SVG: Container Ship ────────────────────────────────────────────────── */
 
-const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean }> = memo(({ accentColor, dim, isMoving, isDark }) => {
+const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean; isFailed?: boolean }> = memo(({ accentColor, dim, isMoving, isDark, isFailed }) => {
     const o = dim ? 0.35 : 1;
     const hullFill = isDark ? "#0f1d33" : "#c8d6e5";
     const hullStroke = isDark ? "#1a3050" : "#8395a7";
@@ -158,6 +159,7 @@ const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolean; isMo
     const funnelFill = isDark ? "#1e3450" : "#8395a7";
     const windowFill = isDark ? "#4a8ad4" : "#2e86de";
     const smokeFill = isDark ? "#b8c8d8" : "#636e72";
+    const failSmokeFill = isDark ? "#4b5563" : "#374151";
     return (
         <g opacity={o}>
             {/* Water reflection */}
@@ -210,13 +212,25 @@ const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolean; isMo
                     ))}
                 </g>
             )}
+            {/* Failure Smoke */}
+            {isFailed && (
+                <g opacity={0.8}>
+                    {[0, 1, 2, 3, 4].map(j => (
+                        <circle key={j} cx={j * 2 - 4} cy={-5} r={1.5} fill={failSmokeFill}>
+                            <animate attributeName="cy" values="-5;-30" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
+                            <animate attributeName="r" values="1.5;6" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
+                            <animate attributeName="opacity" values="0.8;0" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
+                        </circle>
+                    ))}
+                </g>
+            )}
         </g>
     );
 });
 
 /* ─── SVG: Wooden Ship ───────────────────────────────────────────────────── */
 
-const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean }> = memo(({ accentColor, dim, isMoving, isDark }) => {
+const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean; isFailed?: boolean }> = memo(({ accentColor, dim, isMoving, isDark, isFailed }) => {
     const o = dim ? 0.35 : 1;
     const hullFill = isDark ? "#5C3D0E" : "#8B6914";
     const hullStroke = isDark ? "#7A5518" : "#A67B20";
@@ -227,6 +241,7 @@ const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; isMovin
     const sailStroke = isDark ? "#C9BFA8" : "#B8A888";
     const cabinFill = isDark ? "#4A3008" : "#7A5518";
     const windowFill = isDark ? "#FFD080" : "#FFE0A0";
+    const failSmokeFill = isDark ? "#4b5563" : "#374151";
     return (
         <g opacity={o}>
             {/* Water reflection */}
@@ -296,6 +311,18 @@ const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; isMovin
             <circle cx={-30} cy={8} r={1.4} fill={accentColor} opacity={0.4}>
                 <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2.5s" repeatCount="indefinite" />
             </circle>
+            {/* Failure Smoke */}
+            {isFailed && (
+                <g opacity={0.8}>
+                    {[0, 1, 2, 3, 4].map(j => (
+                        <circle key={j} cx={j * 2 - 4} cy={0} r={1.5} fill={failSmokeFill}>
+                            <animate attributeName="cy" values="0;-25" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
+                            <animate attributeName="r" values="1.5;6" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
+                            <animate attributeName="opacity" values="0.8;0" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
+                        </circle>
+                    ))}
+                </g>
+            )}
         </g>
     );
 });
@@ -679,10 +706,14 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
         lastTime: number;
         yWobbleOffset: number;  // small random Y wobble for natural movement
         yWobblePhase: number;   // phase of wobble oscillation
+        pingedCheckpoints: Set<number>;
     }>>(new Map());
     const tickerRef = useRef<(() => void) | null>(null);
     const bobTweensRef = useRef<gsap.core.Tween[]>([]);
     const isDark = useIsDark();
+
+    /* ── Tracking previous statuses for shake/tilt effect ────────── */
+    const prevStatusesRef = useRef<Map<string, string>>(new Map());
 
     /* ── Mouse ripple effect ─────────────────────────────────────── */
     const svgRef = useRef<SVGSVGElement>(null);
@@ -789,6 +820,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                 state.lastTime = resetState.lastTime;
                 state.yWobbleOffset = resetState.yWobbleOffset;
                 state.yWobblePhase = resetState.yWobblePhase;
+                state.pingedCheckpoints.clear();
             }
 
             const dt = now - state.lastTime;
@@ -825,6 +857,24 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
 
             const x = HARBOUR_X + 20 + state.currentProgress * RACE_LEN;
             gsap.set(el, { x, y: state.currentY });
+
+            // Checkpoint pings
+            const checkPing = (cp: number) => {
+                if (state.currentProgress >= cp && !state.pingedCheckpoints.has(cp)) {
+                    state.pingedCheckpoints.add(cp);
+                    const pingEl = el.querySelector(".checkpoint-ping");
+                    if (pingEl) {
+                        gsap.fromTo(pingEl,
+                            { opacity: 0.8, r: 0 },
+                            { opacity: 0, r: 60, duration: 1.5, ease: "power2.out" }
+                        );
+                    }
+                }
+            };
+
+            checkPing(CP.CI);
+            checkPing(CP.AUTOMERGE);
+            checkPing(CP.COMPLETED);
         });
     }, [activeShips]);
 
@@ -849,6 +899,38 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
             }
         };
     }, [activeShips, updatePositions]);
+
+    /* ── Status change animations (shake/tilt) ───────────────────── */
+    useEffect(() => {
+        const group = shipsGroupRef.current;
+        if (!group) return;
+
+        const els = Array.from(group.querySelectorAll<SVGGElement>(".race-ship"));
+
+        activeShips.forEach((ship, i) => {
+            const prevStatus = prevStatusesRef.current.get(ship.key);
+            const currentStatus = ship.task.status;
+
+            if (prevStatus && prevStatus !== currentStatus && (currentStatus === "FAILED" || currentStatus === "BLOCKED")) {
+                const el = els[i];
+                if (el) {
+                    const wrapper = el.querySelector(".ship-model-wrapper");
+                    if (wrapper) {
+                        // Momentary tilt/shake
+                        gsap.timeline()
+                            .to(wrapper, { rotation: -15, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
+                            .to(wrapper, { rotation: 10, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
+                            .to(wrapper, { rotation: -5, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
+                            .to(wrapper, { rotation: 0, duration: 0.3, ease: "power2.out", transformOrigin: "center center" });
+                    }
+                }
+            }
+
+            if (currentStatus) {
+                prevStatusesRef.current.set(ship.key, currentStatus);
+            }
+        });
+    }, [activeShips]);
 
     /* ── Bobbing & sway animation ────────────────────────────────── */
     const shipIdLineup = useMemo(() => activeShips.map(s => s.key).join(","), [activeShips]);
@@ -1063,6 +1145,9 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                             const isFailed = s.task.status === "FAILED";
                             return (
                                 <g key={s.key} className="race-ship">
+                                    {/* Checkpoint Ping */}
+                                    <circle className="checkpoint-ping" cx={0} cy={24} r={0} fill="none" stroke={s.style.color} strokeWidth={1.5} opacity={0} />
+
                                     {/* Wake trail */}
                                     <ellipse cx={-45} cy={14} rx={isMoving ? 60 : 25} ry={isMoving ? 4.5 : 2}
                                         fill="url(#br-wake)" opacity={isMoving ? 0.3 : 0.06}>
@@ -1090,19 +1175,13 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                                     <ellipse cx={0} cy={24} rx={isMoving ? 48 : 34} ry={isMoving ? 10 : 6}
                                         fill={s.style.color} opacity={isMoving ? 0.08 : 0.03} filter="url(#br-glow2)" />
 
-                                    {/* Failed X */}
-                                    {isFailed && (
-                                        <g opacity={0.3}>
-                                            <line x1={-16} y1={-16} x2={16} y2={16} stroke="#E3000F" strokeWidth={3} />
-                                            <line x1={16} y1={-16} x2={-16} y2={16} stroke="#E3000F" strokeWidth={3} />
-                                        </g>
-                                    )}
-
                                     {/* Ship */}
-                                    {s.shipType === "container"
-                                        ? <ContainerShip accentColor={s.style.color} dim={s.style.dim} isMoving={isMoving} isDark={isDark} />
-                                        : <WoodenShip accentColor={s.style.color} dim={s.style.dim} isMoving={isMoving} isDark={isDark} />
-                                    }
+                                    <g className="ship-model-wrapper">
+                                        {s.shipType === "container"
+                                            ? <ContainerShip accentColor={s.style.color} dim={s.style.dim} isMoving={isMoving} isDark={isDark} isFailed={isFailed} />
+                                            : <WoodenShip accentColor={s.style.color} dim={s.style.dim} isMoving={isMoving} isDark={isDark} isFailed={isFailed} />
+                                        }
+                                    </g>
 
                                     {/* Tow line + trailing badge */}
                                     <g transform="translate(-44, 4)">

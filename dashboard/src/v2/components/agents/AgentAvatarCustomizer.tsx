@@ -5,7 +5,7 @@ import {
 } from "lucide-preact";
 import type { AgentAvatarConfig } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
-import { AgentAvatarScene } from "./AgentAvatarScene.js";
+import { LazyAgentAvatarScene } from "./LazyAgentAvatarScene.js";
 import {
   ROBOT_CHASSIS_OPTIONS,
   ROBOT_EYE_OPTIONS,
@@ -153,7 +153,7 @@ export function AgentAvatarCustomizer({
       {/* ── Preview stage ── */}
       <div className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-gradient-to-b from-slate-50 to-slate-100 shadow-[0_2px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:from-void-800/80 dark:to-void-900 dark:shadow-[0_4px_24px_rgba(0,0,0,0.3)]">
         <div className="h-[300px] w-full">
-          <AgentAvatarScene
+          <LazyAgentAvatarScene
             config={config}
             expression={activeExpression}
             fallbackMode={fallbackMode}

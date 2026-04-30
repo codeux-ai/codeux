@@ -58,6 +58,7 @@ Production refinement shipped on March 15, 2026:
 - project execution snapshots are now throttled per project instead of being rebuilt on every task-run event burst
 - runtime-status, structure, projects, and overview snapshots each have their own cadence limits
 - project execution refresh no longer implies a `projects.updated` snapshot by default, which removes a major source of redundant dashboard work during active sprints
+- snapshot-based events (`project.live.updated`, `project.execution.updated`, and `overview.telemetry.updated`) are now fingerprinted; publications and sequence increments are skipped if the semantic payload (ignoring timestamps like `updatedAt`) is unchanged
 
 ### Dashboard websocket endpoint
 
@@ -130,6 +131,12 @@ Additional March 15, 2026 tuning:
 - noisy task-run updates and task-run event appends no longer force overview telemetry refresh on every mutation
 - lease updates still refresh the project execution surface, but they no longer churn overview telemetry
 - attention queue open/claim/resolve mutations now notify the live execution snapshot directly instead of waiting for a nearby side-effect refresh
+
+April 29, 2026 refinement:
+
+- `ExecutionRepository` now coalesces burst `scheduleProjectExecutionRefresh` notifications per project into a single next-tick dispatch before handing off to `DashboardRealtimeService`
+- coalescing preserves escalation semantics: if any write in the burst requests `includeOverview`, the flushed notification for that project includes `includeOverview: true`
+- refreshes remain isolated per project, so burst activity in one project does not suppress another project's refresh
 
 Production refinement shipped on March 15, 2026:
 

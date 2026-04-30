@@ -17,6 +17,13 @@ interface UseProjectTasksOptions {
   enabled?: boolean;
 }
 
+const taskRecordsCache = new Map<string, TaskRecord[]>();
+const taskRecordsInflightRequests = new Map<string, Promise<TaskRecord[]>>();
+
+const getTaskRecordsKey = (projectId: string, sprintId?: string | null): string => (
+  `${projectId}:${sprintId || "all"}`
+);
+
 export function useProjectTasks(
   projectId: string | null,
   sources: Source[],
@@ -29,6 +36,7 @@ export function useProjectTasks(
   const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
   const enabled = options?.enabled ?? true;
+  const resourceKey = projectId ? getTaskRecordsKey(projectId, sprintId) : null;
 
   const refreshInternal = useCallback(async (options?: { silent?: boolean }): Promise<void> => {
     if (!projectId || !enabled) {
@@ -44,7 +52,20 @@ export function useProjectTasks(
       setLoading(true);
     }
     try {
-      const nextTaskRecords = await fetchTasks(projectId, sprintId || undefined);
+      const key = getTaskRecordsKey(projectId, sprintId);
+      let request = taskRecordsInflightRequests.get(key);
+      if (!request) {
+        request = fetchTasks(projectId, sprintId || undefined).finally(() => {
+          taskRecordsInflightRequests.delete(key);
+        });
+        taskRecordsInflightRequests.set(key, request);
+      }
+      const fetchedTaskRecords = await request;
+      const cached = taskRecordsCache.get(key) || [];
+      const nextTaskRecords = areTaskRecordListsEqual(cached, fetchedTaskRecords)
+        ? cached
+        : fetchedTaskRecords;
+      taskRecordsCache.set(key, nextTaskRecords);
       setTaskRecords((current) => (areTaskRecordListsEqual(current, nextTaskRecords) ? current : nextTaskRecords));
       hasLoadedRef.current = true;
       setError(null);
@@ -59,8 +80,12 @@ export function useProjectTasks(
 
   useEffect(() => {
     hasLoadedRef.current = false;
+    if (resourceKey && taskRecordsCache.has(resourceKey)) {
+      setTaskRecords(taskRecordsCache.get(resourceKey)!);
+      hasLoadedRef.current = true;
+    }
     void refreshInternal();
-  }, [enabled, projectId, sprintId, refreshInternal]);
+  }, [enabled, projectId, resourceKey, sprintId, refreshInternal]);
 
   useEffect(() => {
     if (!projectId || !enabled) {
@@ -79,10 +104,35 @@ export function useProjectTasks(
     });
   }, [enabled, projectId, refreshInternal]);
 
+  const sourcesByIdRef = useRef<Map<string, Source>>(new Map());
+  const sprintsByIdRef = useRef<Map<string, Sprint>>(new Map());
+  const prevTasksMapRef = useRef<Map<string, Task>>(new Map());
+
   const tasks = useMemo(() => {
-    const sourcesById = new Map(sources.map((source) => [source.id, source]));
-    const sprintsById = new Map(sprints.map((sprint) => [sprint.id, sprint]));
-    return taskRecords.map((task) => toTaskViewModel(task, sourcesById, sprintsById));
+    const sourcesById = sourcesByIdRef.current;
+    sourcesById.clear();
+    for (const source of sources) {
+      sourcesById.set(source.id, source);
+    }
+
+    const sprintsById = sprintsByIdRef.current;
+    sprintsById.clear();
+    for (const sprint of sprints) {
+      sprintsById.set(sprint.id, sprint);
+    }
+
+    const prevTasksMap = prevTasksMapRef.current;
+    const nextTasksMap = new Map<string, Task>();
+
+    const nextTasks = taskRecords.map((taskRecord) => {
+      const prevTask = prevTasksMap.get(taskRecord.id);
+      const nextTask = toTaskViewModel(taskRecord, sourcesById, sprintsById, prevTask);
+      nextTasksMap.set(taskRecord.id, nextTask);
+      return nextTask;
+    });
+
+    prevTasksMapRef.current = nextTasksMap;
+    return nextTasks;
   }, [sources, sprints, taskRecords]);
 
   const refresh = useCallback(async (): Promise<void> => {

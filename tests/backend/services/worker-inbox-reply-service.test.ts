@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkerInboxReplyService } from "../../../src/services/worker-inbox-reply-service.js";
 
+vi.mock("../../../src/services/git-branch-sync-service.js", () => ({
+  fetchOriginIfAvailable: vi.fn(),
+  syncRemoteBranchIfAvailable: vi.fn(),
+}));
+
+import { syncRemoteBranchIfAvailable } from "../../../src/services/git-branch-sync-service.js";
 
 describe("WorkerInboxReplyService", () => {
   const mockRunProviderForText = vi.fn();
@@ -14,6 +20,10 @@ describe("WorkerInboxReplyService", () => {
         "claude-code": { enabled: false, model: "default", weight: 0, thinkingMode: "MEDIUM", apiKey: "" },
       },
     },
+    git: {
+      githubMode: "REMOTE",
+      defaultBranch: "dev",
+    },
   } as any;
   const geminiRoute = {
     provider: "gemini",
@@ -26,6 +36,7 @@ describe("WorkerInboxReplyService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRunProviderForText.mockReset();
+    vi.mocked(syncRemoteBranchIfAvailable).mockResolvedValue(true);
   });
 
   it("generates a markdown reply with worker agent context", async () => {
@@ -438,6 +449,7 @@ describe("WorkerInboxReplyService", () => {
         type: "worker_reply",
       }),
     );
+    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", undefined);
   });
 
   it("falls back to the latest activity summary when Jules did not emit an explicit clarification message", async () => {
@@ -515,5 +527,74 @@ describe("WorkerInboxReplyService", () => {
         "No explicit Jules clarification message was captured. Latest related activity summary: Jules is asking whether the new service should preserve session lineage.",
       ),
     });
+  });
+
+  it("does not refresh origin before clarification replies in LOCAL git mode", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "Only the clarification answer." });
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Sprint OS",
+          baseDir: "/repo",
+        }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn(),
+        listMessages: vi.fn(),
+      } as any,
+      taskService: {
+        resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
+      } as any,
+      agentPresetSyncService: {
+        getProjectManagerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Project manager guide fallback",
+        }),
+      } as any,
+      executionRepository: {
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-3" }),
+        updateProviderInvocationUsage: vi.fn(),
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-6" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
+      getDashboardSettings: () => ({
+        ...settings,
+        git: {
+          githubMode: "LOCAL",
+          defaultBranch: "dev",
+        },
+      }),
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+    });
+
+    await service.generateClarificationReply({
+      projectId: "project-1",
+      sprintGoal: "Ship the fix",
+      subtasks: [{
+        id: "T1",
+        title: "Fix clarification handling",
+        prompt: "Repair the Jules clarification flow.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+        activities: [],
+      }],
+      task: {
+        id: "T1",
+        title: "Fix clarification handling",
+        prompt: "Repair the Jules clarification flow.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+        activities: [],
+      },
+    });
+
+    expect(syncRemoteBranchIfAvailable).not.toHaveBeenCalled();
   });
 });

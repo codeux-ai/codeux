@@ -21,6 +21,11 @@ export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStat
       continue;
     }
 
+    if (task.session_state === "BLOCKED") {
+      task.status = "BLOCKED";
+      continue;
+    }
+
     if (task.session_state === "FAILED" && options.retryFailed) {
       applyPendingTaskRuntimeReset(task, {
         preserveProvider: true,

@@ -51,12 +51,16 @@ export const pickContainerEnv = (env: NodeJS.ProcessEnv): Array<{ key: string; v
   const allowed = new Set<string>([
     "GEMINI_MODEL",
     "GEMINI_API_KEY",
+    "GEMINI_CLI_TRUST_WORKSPACE",
     "CODEX_MODEL",
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
     "OPENAI_ORG_ID",
     "OPENAI_PROJECT_ID",
     "ANTHROPIC_API_KEY",
+    "DASHSCOPE_API_KEY",
+    "BAILIAN_CODING_PLAN_API_KEY",
+    "QWEN_API_KEY",
     "GH_TOKEN",
     "GITHUB_TOKEN",
     "HTTP_PROXY",
@@ -107,6 +111,8 @@ export const getProviderFallbackInstallCommand = (providerCommand: string): stri
       return "npm install -g @openai/codex";
     case "claude":
       return "if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH=\"$HOME/.local/bin:$PATH\"; else echo \"provider-runner: curl not found; cannot install claude\" >&2; fi";
+    case "qwen":
+      return "npm install -g @qwen-code/qwen-code";
     default:
       return undefined;
   }

@@ -28,9 +28,16 @@ interface ParsedProviderManagementJSON {
 
 export interface ProcessManagementActionArgs {
   projectId: string;
-  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+  provider: Exclude<ProviderId, "jules">;
   model: string;
   apiKey: string;
+  qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+  qwenRegion?: "china" | "international";
+  qwenBaseUrl?: string;
+  qwenEnvKey?: string;
+  qwenProtocol?: "openai" | "anthropic" | "gemini";
+  providerMountAuth?: boolean;
+  providerAuthPath?: string;
   sessionId: string;
   settings: DashboardSettings;
   prompt: string;
@@ -130,6 +137,13 @@ export class ChatManagementActionService {
         prompt: args.prompt,
         model: args.model,
         apiKey: args.apiKey,
+        qwenAuthMode: args.qwenAuthMode,
+        qwenRegion: args.qwenRegion,
+        qwenBaseUrl: args.qwenBaseUrl,
+        qwenEnvKey: args.qwenEnvKey,
+        qwenProtocol: args.qwenProtocol,
+        providerMountAuth: args.providerMountAuth,
+        providerAuthPath: args.providerAuthPath,
         sessionId: args.sessionId,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
@@ -206,6 +220,13 @@ export class ChatManagementActionService {
         prompt: args.prompt,
         model: args.model,
         apiKey: args.apiKey,
+        qwenAuthMode: args.qwenAuthMode,
+        qwenRegion: args.qwenRegion,
+        qwenBaseUrl: args.qwenBaseUrl,
+        qwenEnvKey: args.qwenEnvKey,
+        qwenProtocol: args.qwenProtocol,
+        providerMountAuth: args.providerMountAuth,
+        providerAuthPath: args.providerAuthPath,
         sessionId: args.sessionId,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,

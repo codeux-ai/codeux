@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -11,6 +11,7 @@ import { SettingsRepository } from "../../../src/repositories/settings-repositor
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
 import type { IProviderRunner } from "../../../src/infrastructure/providers/cli/provider-runner.js";
+import { WorkspaceManager } from "../../../src/infrastructure/providers/cli/workspace-manager.js";
 import * as providerRetryPolicy from "../../../src/shared/providers/provider-retry-policy.js";
 
 const tempDirs: string[] = [];
@@ -24,6 +25,14 @@ afterEach(async () => {
 
 
 describe("PlanningAgentService", () => {
+  beforeEach(() => {
+    vi.spyOn(WorkspaceManager.prototype, "createSnapshotWorkspace")
+      .mockResolvedValue("docker-volume://planning-test");
+    vi.spyOn(WorkspaceManager.prototype, "removeWorktree")
+      .mockResolvedValue(undefined);
+    vi.spyOn(WorkspaceManager.prototype, "readWorkspaceFile")
+      .mockResolvedValue("## Category: Patterns\n- prefer consistent planning context\n");
+  });
 
   it("uses the Planning agent reply to improve prompts and create tasks", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-agent-"));
@@ -97,7 +106,7 @@ describe("PlanningAgentService", () => {
                   key: "TASK-1",
                   title: "Redesign sprint gallery",
                   description: "Refresh the top sprint cells and completed-state visuals.",
-                  promptMarkdown: "Update the sprint gallery UI and completed-state styling.",
+                  promptMarkdown: "## Objective\nUpdate the sprint gallery UI and completed-state styling.\n\n## Scope\n- UI components\n\n## Implementation Requirements\n1. Refresh cells\n\n## Constraints\n- Keep it fast\n\n## Verification\n- Visual check",
                   priority: "high",
                   executorType: "auto",
                   dependsOn: [],
@@ -106,7 +115,7 @@ describe("PlanningAgentService", () => {
                   key: "TASK-2",
                   title: "Wire planning actions",
                   description: "Connect improve and planning flows to the isolated runtime.",
-                  promptMarkdown: "Hook the sprint modal into Planning agent endpoints and verify behavior.",
+                  promptMarkdown: "## Objective\nHook the sprint modal into Planning agent endpoints and verify behavior.\n\n## Scope\n- Modal components\n\n## Implementation Requirements\n1. Connect actions\n\n## Constraints\n- Use isolated runtime\n\n## Verification\n- Integration test",
                   priority: "medium",
                   executorType: "docker_cli",
                   dependsOn: ["TASK-1"],
@@ -122,7 +131,7 @@ describe("PlanningAgentService", () => {
                 key: "TASK-1",
                 title: "Redesign sprint gallery",
                 description: "Refresh the top sprint cells and completed-state visuals.",
-                promptMarkdown: "Update the sprint gallery UI and completed-state styling.",
+                promptMarkdown: "## Objective\nUpdate the sprint gallery UI and completed-state styling.\n\n## Scope\n- UI components\n\n## Implementation Requirements\n1. Refresh cells\n\n## Constraints\n- Keep it fast\n\n## Verification\n- Visual check",
                 priority: "high",
                 executorType: "auto",
                 dependsOn: [],
@@ -131,7 +140,7 @@ describe("PlanningAgentService", () => {
                 key: "TASK-2",
                 title: "Wire planning actions",
                 description: "Connect improve and planning flows to the isolated runtime.",
-                promptMarkdown: "Hook the sprint modal into Planning agent endpoints and verify behavior.",
+                promptMarkdown: "## Objective\nHook the sprint modal into Planning agent endpoints and verify behavior.\n\n## Scope\n- Modal components\n\n## Implementation Requirements\n1. Connect actions\n\n## Constraints\n- Use isolated runtime\n\n## Verification\n- Integration test",
                 priority: "medium",
                 executorType: "docker_cli",
                 dependsOn: ["TASK-1"],
@@ -257,7 +266,7 @@ describe("PlanningAgentService", () => {
                   key: "TASK-1",
                   title: "Plan via virtual worker",
                   description: "Ensure planning runs without a connected MCP listener.",
-                  promptMarkdown: "Use the virtual worker runtime to produce sprint tasks.",
+                  promptMarkdown: "## Objective\nUse the virtual worker runtime to produce sprint tasks.\n\n## Scope\n- Planning service\n\n## Implementation Requirements\n1. Run virtual\n\n## Constraints\n- No live MCP\n\n## Verification\n- Tasks created",
                   priority: "medium",
                   executorType: "auto",
                   dependsOn: [],
@@ -273,7 +282,7 @@ describe("PlanningAgentService", () => {
                 key: "TASK-1",
                 title: "Plan via virtual worker",
                 description: "Ensure planning runs without a connected MCP listener.",
-                promptMarkdown: "Use the virtual worker runtime to produce sprint tasks.",
+                promptMarkdown: "## Objective\nUse the virtual worker runtime to produce sprint tasks.\n\n## Scope\n- Planning service\n\n## Implementation Requirements\n1. Run virtual\n\n## Constraints\n- No live MCP\n\n## Verification\n- Tasks created",
                 priority: "medium",
                 executorType: "auto",
                 dependsOn: [],
@@ -589,7 +598,7 @@ describe("PlanningAgentService", () => {
     expect(sleepSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("accepts loose virtual planning JSON with prose, subtasks, prompt, and dependencies fields", async () => {
+  it("accepts virtual planning JSON with prose but rejects legacy shape fields", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-loose-"));
     tempDirs.push(dir);
 
@@ -633,20 +642,22 @@ describe("PlanningAgentService", () => {
             "Planned sprint:",
             "{",
             '  "goal": "Loose improved prompt",',
-            '  "subtasks": [',
+            '  "tasks": [',
             "    {",
-            '      "id": "TASK-1",',
-            '      "name": "First task",',
+            '      "key": "TASK-1",',
+            '      "title": "First task",',
             '      "description": "Setup work",',
-            '      "prompt": "Perform the setup work",',
+            '      "promptMarkdown": "## Objective\\nPerform the setup work\\n\\n## Scope\\n- Setup\\n\\n## Implementation Requirements\\n1. Setup\\n\\n## Constraints\\n- None\\n\\n## Verification\\n- Done",',
             '      "priority": "HIGH",',
-            '      "executorType": "AUTO"',
+            '      "executorType": "AUTO",',
+            '      "dependsOn": []',
             "    },",
             "    {",
-            '      "id": "TASK-2",',
-            '      "name": "Second task",',
-            '      "instructions": "Finish the follow-up work",',
-            '      "dependencies": ["TASK-1"],',
+            '      "key": "TASK-2",',
+            '      "title": "Second task",',
+            '      "description": "Follow-up",',
+            '      "promptMarkdown": "## Objective\\nFinish the follow-up work\\n\\n## Scope\\n- Follow-up\\n\\n## Implementation Requirements\\n1. Follow-up\\n\\n## Constraints\\n- None\\n\\n## Verification\\n- Done",',
+            '      "dependsOn": ["TASK-1"],',
             '      "executorType": "MCP_WORKER"',
             "    }",
             "  ]",
@@ -735,7 +746,7 @@ describe("PlanningAgentService", () => {
               key: "T01",
               title: "Overridden task",
               description: "Desc",
-              promptMarkdown: "Prompt",
+              promptMarkdown: "## Objective\nPrompt\n\n## Scope\n- Scope\n\n## Implementation Requirements\n1. Req\n\n## Constraints\n- Const\n\n## Verification\n- Verif",
               priority: "medium",
               executorType: "auto",
               dependsOn: [],
@@ -868,7 +879,7 @@ describe("PlanningAgentService", () => {
         signal: null,
         text: JSON.stringify({
           goal: "Custom goal",
-          tasks: [{ key: "T01", title: "Custom task", description: "D", promptMarkdown: "P", priority: "medium", executorType: "auto", dependsOn: [] }],
+          tasks: [{ key: "T01", title: "Custom task", description: "D", promptMarkdown: "## Objective\\nP\\n\\n## Scope\\n- S\\n\\n## Implementation Requirements\\n1. R\\n\\n## Constraints\\n- C\\n\\n## Verification\\n- V", priority: "medium", executorType: "auto", dependsOn: [] }],
         }),
         usageTelemetry: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: null },
       }),
@@ -1100,7 +1111,7 @@ describe("PlanningAgentService", () => {
           signal: null,
           text: JSON.stringify({
             goal: "Goal",
-            tasks: [{ key: "T01", title: "Task 1", description: "D", promptMarkdown: "P", priority: "high", executorType: "auto", dependsOn: [] }],
+            tasks: [{ key: "T01", title: "Task 1", description: "D", promptMarkdown: "## Objective\nP\n\n## Scope\n- S\n\n## Implementation Requirements\n1. R\n\n## Constraints\n- C\n\n## Verification\n- V", priority: "high", executorType: "auto", dependsOn: [] }],
           }),
           usageTelemetry: { inputTokens: 50, cachedInputTokens: 0, outputTokens: 40, reasoningOutputTokens: 0, totalTokens: 90, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: "native-123" },
           nativeSessionId: "native-123",

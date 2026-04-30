@@ -1,17 +1,19 @@
 import type { FunctionComponent } from "preact";
 import { useMemo, useState } from "preact/hooks";
-import { ArrowDownRight, ArrowUpRight, Brain, Database } from "lucide-preact";
+import { ArrowDownRight, ArrowUpRight, Brain, Database, Activity } from "lucide-preact";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type { ExecutionStatsEntitySummary } from "../../../types.js";
 import { formatTokens, formatDuration, formatDateTime } from "../stats-utils.js";
 import {
   CHIP_CLASS,
   INPUT_CLASS,
-  LEDGER_ROW_CLASS,
+  LEDGER_ROW_MODERN_CLASS,
   PANEL_CLASS,
   SUBPANEL_CLASS,
   SortButton,
   TokenChip,
+  TokenFlowBar,
+  getProviderIcon,
   getLedgerSortValue,
   type LedgerSortKey
 } from "./StatsShared.js";
@@ -122,50 +124,75 @@ export const TelemetryLedger: FunctionComponent<{
               {visibleItems.map((item, index) => {
 
                 return (
-                  <div key={item.id} className={LEDGER_ROW_CLASS}>
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/75 text-sm font-black text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
-                        {index + 1}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                  <div key={item.id} className={LEDGER_ROW_MODERN_CLASS}>
+                    <div className="flex flex-col gap-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex min-w-0 items-start gap-4">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-white/75 text-sm font-black text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
+                            {index + 1}
+                          </div>
                           <div className="min-w-0">
                             <div className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white">{item.label}</div>
-                            <div className="mt-1 flex flex-wrap gap-2">
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              {item.provider ? (() => {
+                                const pIcon = getProviderIcon(item.provider as string);
+                                const ProviderIcon = pIcon.icon;
+                                return (
+                                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${pIcon.bg} ${pIcon.text} ${CHIP_CLASS}`}>
+                                    <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
+                                    {item.provider}
+                                  </span>
+                                );
+                              })() : null}
+                              {item.purpose ? (
+                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 ${CHIP_CLASS}`}>
+                                  <Activity className="h-3 w-3" strokeWidth={2.5} />
+                                  {item.purpose.replace(/_/g, " ")}
+                                </span>
+                              ) : null}
                               {item.secondaryLabel ? (
-                                <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
                                   {item.secondaryLabel}
                                 </span>
                               ) : null}
                               {item.status ? (
-                                <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
                                   {item.status}
                                 </span>
                               ) : null}
                             </div>
                           </div>
-                          <div className="text-left xl:text-right">
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Last activity</div>
-                            <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{formatDateTime(item.lastActivityAt)}</div>
-                          </div>
                         </div>
+                        <div className="text-right shrink-0 hidden sm:block">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Last activity</div>
+                          <div className="mt-1 text-xs font-bold text-slate-700 dark:text-slate-200">{formatDateTime(item.lastActivityAt)}</div>
+                        </div>
+                      </div>
 
-                        <div className="mt-4 flex flex-wrap gap-3">
-                            <div className={`${SUBPANEL_CLASS} flex-1 min-w-[120px]`}>
-                              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Total</div>
-                              <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{formatTokens(item.usage.totalTokens)}</div>
-                            </div>
-                            <div className={`${SUBPANEL_CLASS} flex-1 min-w-[120px]`}>
-                              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Active</div>
-                              <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{formatDuration(item.usage.activeTimeMs)}</div>
-                            </div>
-                            <div className={`${SUBPANEL_CLASS} flex-1 min-w-[120px]`}>
-                              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Calls</div>
-                              <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{item.usage.invocationCount.toLocaleString()}</div>
-                            </div>
-                          </div>
+                      <div className="grid grid-cols-3 gap-6">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Total Tokens</div>
+                          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(item.usage.totalTokens)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active Time</div>
+                          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{formatDuration(item.usage.activeTimeMs)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Calls</div>
+                          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{item.usage.invocationCount.toLocaleString()}</div>
+                        </div>
+                      </div>
 
-                        <div className="mt-4 flex flex-wrap gap-2">
+                      <div className="flex flex-col gap-3">
+                        <TokenFlowBar 
+                          input={item.usage.inputTokens} 
+                          cached={item.usage.cachedInputTokens} 
+                          output={item.usage.outputTokens} 
+                          reasoning={item.usage.reasoningOutputTokens} 
+                          total={item.usage.totalTokens} 
+                        />
+                        <div className="flex flex-wrap gap-2">
                           <TokenChip icon={ArrowDownRight} label="In" value={item.usage.inputTokens} tone="border-signal-500/16 bg-signal-500/8 text-signal-600 dark:text-signal-400" />
                           <TokenChip icon={Database} label="Cached" value={item.usage.cachedInputTokens} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
                           <TokenChip icon={ArrowUpRight} label="Out" value={item.usage.outputTokens} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />

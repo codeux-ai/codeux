@@ -44,6 +44,7 @@ import { ExecutionControlService } from "../services/execution-control-service.j
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
+import { DockerAssetPruneService } from "../services/docker-asset-prune-service.js";
 import { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../services/planning-agent-service.js";
@@ -66,6 +67,7 @@ import { VirtualWorkerService } from "../services/virtual-worker-service.js";
 import type { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
 import { SprintPreviewService } from "../services/sprint-preview-service.js";
+import { resolveEffectiveDashboardSettings } from "../services/settings-resolution-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -217,6 +219,17 @@ export class JulesAgentServer {
       executionRepository: this.executionRepository,
       projectManagementRepository: this.projectManagementRepository,
       sprintOrchestrator: this.sprintOrchestrator,
+      dockerService: this.dockerService,
+      getDashboardSettings: (scope) => {
+        if (!scope?.projectId) {
+          return this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+        }
+        return resolveEffectiveDashboardSettings(
+          this.settingsRepository,
+          scope.projectId,
+          scope.sprintId,
+        ).settings;
+      },
       logger: this.logger.child({ component: "runtime-startup-recovery-service" }),
     });
     this.dashboardRealtimeService = deps.dashboardRealtimeService;
@@ -430,13 +443,18 @@ export class JulesAgentServer {
 
   private getEffectiveJulesApiKey(): string | undefined {
     const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
-    const uiProviderKey = settings.aiProvider?.providers?.jules?.apiKey?.trim();
+    const providerEntries = Object.entries(settings.aiProvider?.providers || {});
+    const uiProviderKey = providerEntries
+      .find(([providerConfigId, provider]) => {
+        const providerType = provider.provider
+          || (providerConfigId === "jules" || providerConfigId.startsWith("jules-") ? "jules" : null);
+        return providerType === "jules" && provider.apiKey.trim().length > 0;
+      })
+      ?.[1]
+      ?.apiKey
+      ?.trim();
     if (uiProviderKey && uiProviderKey.length > 0) {
       return uiProviderKey;
-    }
-    const uiKey = settings.aiProvider?.julesApiKey?.trim();
-    if (uiKey && uiKey.length > 0) {
-      return uiKey;
     }
     const liveEnvKey = process.env.JULES_API_KEY?.trim() || process.env.JULES_KEY?.trim();
     if (liveEnvKey && liveEnvKey.length > 0) {
@@ -502,7 +520,7 @@ export class JulesAgentServer {
     const featureBranchPrefix = settings.git.featureBranchPrefix?.trim() || "feature/";
 
     const hasRunningTasks = subtasks.some((task) => task.status === "RUNNING");
-    if (ci.enabled && ci.waitForCiBeforeFeatureMerge && hasRunningTasks && featureBranch) {
+    if (ci.enabled && ci.featurePrAutoMergeMode === "WHEN_GREEN" && hasRunningTasks && featureBranch) {
       return {
         scope: "FEATURE_PR_CI",
         featureBranch,
@@ -877,6 +895,14 @@ export class JulesAgentServer {
       recoveredSprintRunIds = recoveryResult.resumedSprintRunIds;
     } catch (error) {
       this.logger.error("Failed to recover runtime state on startup", { error });
+    }
+    try {
+      await new DockerAssetPruneService(
+        this.sessionTracking,
+        this.logger.child({ component: "docker-asset-prune-service" }),
+      ).cleanupOnStartup();
+    } catch (error) {
+      this.logger.error("Failed to prune stale Docker assets on startup", { error });
     }
 
     if (this.isDashboardEnabled()) {

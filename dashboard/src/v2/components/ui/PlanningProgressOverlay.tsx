@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { ContainerShip, WoodenShip } from "./PlanningShip.js";
 import { type PlanningActionType, PLANNING_ACTION_LABELS } from "../../lib/sprint-planning-feedback.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface PlanningProgressOverlayProps {
   isBusy: boolean;
@@ -41,10 +42,11 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
     if (!feedback || !textContainerRef.current) return;
     if (prevTextRef.current !== feedback.text) {
       const ctx = gsap.context(() => {
+        gsap.killTweensOf(textContainerRef.current);
         gsap.fromTo(
           textContainerRef.current,
           { opacity: 0, y: reducedMotion ? 0 : 10 },
-          { opacity: 1, y: 0, duration: reducedMotion ? 0 : 0.4, ease: "power2.out" }
+          { opacity: 1, y: 0, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.entry, ease: MODAL_MOTION.overlay.entryEase }
         );
       });
       prevTextRef.current = feedback.text;

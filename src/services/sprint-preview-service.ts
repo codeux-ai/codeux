@@ -35,6 +35,7 @@ import {
 } from "./sprint-preview-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { getHomeSprintOsPath, getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -179,7 +180,7 @@ export class SprintPreviewService {
           workspacePath,
           featureBranch,
           defaultBranch,
-          !options?.rebuild || settings.pullLatestOnRebuild !== false,
+          effectiveSettings.git.githubMode === "REMOTE",
         );
         await fs.mkdir(path.dirname(startupRuntimePath), { recursive: true });
         await fs.writeFile(startupRuntimePath, preparedScript.content, "utf8");
@@ -953,7 +954,7 @@ export class SprintPreviewService {
     syncLatestFromOrigin = true,
   ): Promise<void> {
     if (syncLatestFromOrigin) {
-      await this.fetchOriginIfAvailable(repoPath);
+      await fetchOriginIfAvailable(repoPath);
     }
     await this.ensurePreviewBranchExists(repoPath, featureBranch, defaultBranch);
     const exportRef = await this.resolvePreviewExportRef(repoPath, featureBranch);
@@ -997,20 +998,6 @@ export class SprintPreviewService {
       return branch;
     }
     throw new Error(`Cannot export sprint preview workspace: branch ${branch} does not exist locally or on origin.`);
-  }
-
-  private async fetchOriginIfAvailable(repoPath: string): Promise<void> {
-    try {
-      await runCommandStrict("git", ["remote", "get-url", "origin"], repoPath);
-    } catch {
-      return;
-    }
-
-    try {
-      await runCommandStrict("git", ["fetch", "origin"], repoPath);
-    } catch {
-      // Preview workspace export can still proceed from local refs when fetch fails.
-    }
   }
 
   private async resolvePreviewBranchBaseRef(repoPath: string, defaultBranch: string): Promise<string> {

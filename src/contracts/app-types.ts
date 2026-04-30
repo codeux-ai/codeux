@@ -48,7 +48,8 @@ export interface JulesActivity {
 
 export type SubtaskStatus = "PENDING" | "RUNNING" | "CODING_COMPLETED" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA";
 export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | "PR_ONLY" | "QA_PENDING";
-export type ProviderId = "jules" | "gemini" | "codex" | "claude-code";
+export type ProviderId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code";
+export type ProviderConfigId = string;
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "ORCHESTRATOR";
 export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
 export type InvocationRoutingProfile = "GLOBAL" | "WORKER";
@@ -60,7 +61,7 @@ export type InvocationRoutingId =
   | "qa_review"
   | "ci_fix"
   | "merge_conflict";
-export type CliExecutionMode = "DOCKER";
+export type CliExecutionMode = "DOCKER" | "HOST";
 export type FeaturePrAutoMergeMode = "OFF" | "CREATE_PR" | "WHEN_GREEN" | "ALWAYS";
 export type WorkerExecutionMode = "VIRTUAL";
 export type VirtualWorkerProvider = Exclude<ProviderId, "jules">;
@@ -533,12 +534,21 @@ export interface AutomationInterventionsSettings {
 }
 
 export interface ProviderSettings {
+  provider: ProviderId;
+  name: string;
   enabled: boolean;
   model: string;
   weight: number;
   thinkingMode: ThinkingMode;
   apiKey: string;
+  mountAuth: boolean;
+  authPath: string;
   maxConcurrentTasks: number;
+  qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+  qwenRegion?: "china" | "international";
+  qwenBaseUrl?: string;
+  qwenEnvKey?: string;
+  qwenProtocol?: "openai" | "anthropic" | "gemini";
 }
 
 export interface InvocationProviderOverrideSettings {
@@ -551,17 +561,16 @@ export interface InvocationProviderOverrideSettings {
 export interface InvocationRoutingSettings {
   profile: InvocationRoutingProfile;
   strategy: ProviderStrategy;
-  provider: ProviderId | null;
-  allowedProviders: ProviderId[];
-  providers: Partial<Record<ProviderId, InvocationProviderOverrideSettings>>;
+  provider: ProviderConfigId | null;
+  allowedProviders: ProviderConfigId[];
+  providers: Record<ProviderConfigId, InvocationProviderOverrideSettings>;
 }
 
 export interface AiProviderSettings {
-  provider: ProviderId;
+  provider: ProviderConfigId | null;
   strategy: ProviderStrategy;
-  providers: Record<ProviderId, ProviderSettings>;
+  providers: Record<ProviderConfigId, ProviderSettings>;
   invocationRouting: Record<InvocationRoutingId, InvocationRoutingSettings>;
-  julesApiKey: string;
 }
 
 export interface GitSettings {
@@ -576,10 +585,8 @@ export interface GitSettings {
 export interface CiIntelligenceSettings {
   enabled: boolean;
   enableLivePrMonitoring: boolean;
-  waitForCiBeforeMainMerge: boolean;
   resolveAllCommentsBeforeMainMerge: boolean;
   resolveMainMergeConflicts: boolean;
-  waitForCiBeforeFeatureMerge: boolean;
   resolveAllCommentsBeforeFeatureMerge: boolean;
   resolveMergeConflicts: boolean;
   waitForJulesCiAutofix: boolean;
@@ -621,10 +628,12 @@ export interface CliWorkflowSettings {
   containerMountGeminiAuth: boolean;
   containerMountCodexAuth: boolean;
   containerMountClaudeCodeAuth: boolean;
+  containerMountQwenCodeAuth: boolean;
   containerGithubAuthPath: string;
   containerGeminiAuthPath: string;
   containerCodexAuthPath: string;
   containerClaudeCodeAuthPath: string;
+  containerQwenCodeAuthPath: string;
   maxPlanningJsonRetries: number;
   maxQuotaRetriesWithoutTimer: number;
 }
@@ -635,7 +644,6 @@ export interface SprintPreviewSettings {
   autoStartOnRunningSprint: boolean;
   rebuildOnTaskCompletion: boolean;
   rebuildOnSprintCompletion: boolean;
-  pullLatestOnRebuild: boolean;
   autoStopOnTerminalSprint: boolean;
   maxConcurrentContainers: number;
   hostPortRangeStart: number;
@@ -646,7 +654,7 @@ export interface SprintPreviewSettings {
 
 export interface WorkerSettings {
   executionMode: WorkerExecutionMode;
-  virtualWorkerProvider: VirtualWorkerProvider;
+  virtualWorkerProvider: ProviderConfigId;
   model: string;
   maxConcurrency: number;
   timeoutSeconds: number;
@@ -795,6 +803,7 @@ export interface ExternalSettingsHints {
     geminiApiKey: string;
     codexApiKey: string;
     claudeCodeApiKey: string;
+    qwenCodeApiKey: string;
     githubToken: string;
   };
   settingsJson: {
@@ -802,6 +811,7 @@ export interface ExternalSettingsHints {
     geminiApiKey: string;
     codexApiKey: string;
     claudeCodeApiKey: string;
+    qwenCodeApiKey: string;
     githubToken: string;
   };
   resolved: {
@@ -809,6 +819,7 @@ export interface ExternalSettingsHints {
     geminiApiKey: string;
     codexApiKey: string;
     claudeCodeApiKey: string;
+    qwenCodeApiKey: string;
     githubToken: string;
   };
   providerAvailability: {
@@ -816,6 +827,7 @@ export interface ExternalSettingsHints {
     gemini: { hasApiKey: boolean; hasLocalAuth: boolean };
     codex: { hasApiKey: boolean; hasLocalAuth: boolean };
     claudeCode: { hasApiKey: boolean; hasLocalAuth: boolean };
+    qwenCode: { hasApiKey: boolean; hasLocalAuth: boolean };
   };
 }
 

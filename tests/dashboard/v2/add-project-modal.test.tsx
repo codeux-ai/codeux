@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 /** @jsx h */
 import { h } from "preact";
 import { render, screen, fireEvent, cleanup } from "@testing-library/preact";

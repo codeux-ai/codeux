@@ -16,6 +16,7 @@ import { ProjectAttentionService } from "../../../src/domain/workers/project-att
 import { WorkerTaskDispatchService } from "../../../src/services/worker-task-dispatch-service.js";
 import { VirtualWorkerService } from "../../../src/services/virtual-worker-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import * as cliProcessRunner from "../../../src/services/cli-process-runner.js";
 
 const tempDirs: string[] = [];
 
@@ -695,11 +696,15 @@ describe("VirtualWorkerService", () => {
       "task/branch",
       "feature/branch",
       "Workspace guidance",
+      "## PROJECT CONTEXT FROM MEMORY\n- [patterns] Prefer preserving both branch intents.",
+      "Record durable merge learnings in .task-learnings.md",
     );
 
     expect(prompt).toContain("Preserve the current task change.");
     expect(prompt).toContain("T01 Earlier merge");
     expect(prompt).toContain("Keep the earlier merged edit.");
+    expect(prompt).toContain("## PROJECT CONTEXT FROM MEMORY");
+    expect(prompt).toContain("Record durable merge learnings in .task-learnings.md");
     expect(prompt).toContain("Workspace guidance");
   });
 
@@ -719,14 +724,18 @@ describe("VirtualWorkerService", () => {
         }
       },
       "fix/branch",
-      "Workspace guidance context"
+      "Workspace guidance context",
+      "## PROJECT CONTEXT FROM MEMORY\n- [error] This suite flakes when env vars are missing.",
+      "Record durable CI learnings in .task-learnings.md",
     );
 
     expect(prompt).toContain("CI checks have failed for PR #1 on branch `fix/branch`");
+    expect(prompt).toContain("## PROJECT CONTEXT FROM MEMORY");
     expect(prompt).toContain("lint, test");
     expect(prompt).toContain("Lint Job");
     expect(prompt).toContain("Error: lint failed");
     expect(prompt).toContain("Do the task");
+    expect(prompt).toContain("Record durable CI learnings in .task-learnings.md");
     expect(prompt).toContain("Fix CI");
     expect(prompt).toContain("Workspace guidance context");
   });
@@ -785,24 +794,118 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockResolvedValue({ worktreePath: "/tmp/wt" });
     vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
     vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
     vi.spyOn((virtualWorkerService as any), "runProviderWithRetry").mockResolvedValue(undefined);
+    (virtualWorkerService as any).prService = {
+      hasUnpushedCommits: vi.fn().mockResolvedValue(true),
+      hasWorkerBranchCommitsAgainstFeature: vi.fn().mockResolvedValue(true),
+    };
+    const runCommandSpy = vi.spyOn(cliProcessRunner, "runCommandStrict")
+      .mockResolvedValueOnce({ ok: true, stdout: "", stderr: "", code: 0 })
+      .mockResolvedValueOnce({ ok: true, stdout: "cafebabe\n", stderr: "", code: 0 });
 
     const execRepo = (virtualWorkerService as any).deps.executionRepository;
     vi.spyOn(execRepo, "createExecutionInvocation").mockReturnValue({ id: "exec-inv-1" });
     vi.spyOn(execRepo, "appendExecutionInvocationMessage").mockReturnValue({});
     vi.spyOn(execRepo, "updateExecutionInvocation").mockReturnValue({});
 
-    // runCommandStrict is imported in cli-process-runner. We'll mock the whole module or just bypass it.
-    // Instead of bypassing runCommandStrict, we can mock runMergeIntoSource and ensureMergeConflictResolved and runCommandStrict if we mock it at the top,
-    // but since we didn't, let's just mock resolveCiFixAttention directly if needed? No, we want to cover resolveCiFixAttention.
-    // Actually we can mock child_process.spawn or commandRunner.run.
-    // But virtualWorkerService uses `runCommandStrict` internally. If it fails, the catch block runs.
-    
-    // Let's just run it and let it fail to cover the catch block!
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
     
     const updatedItem = projectAttentionService.getItem(item.id);
-    expect(updatedItem?.status).toBe("resolved"); // or open if it failed and escalated
+    expect(updatedItem?.status).toBe("resolved");
+    expect(runCommandSpy.mock.calls.some((call) => (
+      call[0] === "git"
+      && JSON.stringify(call[1]) === JSON.stringify(["push", "-u", "origin", "refs/heads/fix/branch:refs/heads/fix/branch"])
+      && call[2] === "/test"
+    ))).toBe(true);
+  });
+
+  it("reuses an existing task workspace for CI autofix when the branch already has a CLI session", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository, sessionTracking } = await setupServiceWithProject();
+
+    sessionTracking.createSession({
+      id: "cli-codex-existing",
+      provider: "codex",
+      state: "COMPLETED",
+      repoPath: "/test",
+      workerBranch: "fix/branch",
+      featureBranch: "main",
+    });
+
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:reuse",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Fix it",
+      payload: { repoPath: "/test", branchName: "fix/branch" },
+    });
+
+    const buildWorkspaceRef = vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceRef")
+      .mockReturnValue("/tmp/reused-worktree");
+    const prepareWorktree = vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")
+      .mockResolvedValue({ worktreePath: "/tmp/reused-worktree", resumed: true });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
+    vi.spyOn((virtualWorkerService as any), "runProviderWithRetry").mockResolvedValue(undefined);
+
+    const execRepo = (virtualWorkerService as any).deps.executionRepository;
+    vi.spyOn(execRepo, "createExecutionInvocation").mockReturnValue({ id: "exec-inv-reuse" });
+    vi.spyOn(execRepo, "appendExecutionInvocationMessage").mockReturnValue({});
+    vi.spyOn(execRepo, "updateExecutionInvocation").mockReturnValue({});
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(buildWorkspaceRef).toHaveBeenCalledWith("/test", "cli-codex-existing", expect.anything());
+    expect(prepareWorktree).toHaveBeenCalledWith("/test", "/tmp/reused-worktree", "fix/branch", "fix/branch", "cli-codex-existing");
+  });
+
+  it("falls back to HOST mode for CI autofix when docker is unavailable", async () => {
+    const { virtualWorkerService } = await setupService();
+
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(false);
+
+    await expect((virtualWorkerService as any).resolveVirtualWorkerWorkflowSettings({
+      workflowSettings: {
+        ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
+        executionMode: "DOCKER",
+      },
+      sessionId: "sess-1",
+      repoPath: "/test",
+      purpose: "ci_fix",
+    })).resolves.toEqual(expect.objectContaining({ executionMode: "HOST" }));
+  });
+
+  it("keeps merge conflict resolution Docker-only when docker is unavailable", async () => {
+    const { virtualWorkerService } = await setupService();
+
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(false);
+
+    await expect((virtualWorkerService as any).resolveVirtualWorkerWorkflowSettings({
+      workflowSettings: {
+        ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
+        executionMode: "DOCKER",
+      },
+      sessionId: "sess-1",
+      repoPath: "/test",
+      purpose: "merge_conflict",
+    })).rejects.toThrow("Docker is unavailable");
   });
 
   it("resolveMergeConflictAttention covers execution path", async () => {
@@ -834,7 +937,16 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockResolvedValue({ worktreePath: "/tmp/wt" });
     vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
     vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("diff --git a/file.txt b/file.txt");
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch")
+      .mockResolvedValue({ hasChanges: true, commitSha: "merge-fix-sha" });
     vi.spyOn((virtualWorkerService as any), "runProviderWithRetry").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "initial-head\n",
+      stderr: "",
+      code: 0,
+    });
 
     const execRepo = (virtualWorkerService as any).deps.executionRepository;
     vi.spyOn(execRepo, "createExecutionInvocation").mockReturnValue({ id: "exec-inv-2" });
@@ -844,8 +956,52 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any), "runMergeIntoSource").mockResolvedValue(true);
     vi.spyOn((virtualWorkerService as any), "ensureMergeConflictResolved").mockResolvedValue(undefined);
     vi.spyOn((virtualWorkerService as any), "finalizeMergeCommit").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any), "ensureTargetMergedIntoSource").mockResolvedValue(undefined);
 
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+  });
+
+  it("routes merge preparation through the workspace runner for docker-volume workspaces", async () => {
+    const { virtualWorkerService, sessionTracking } = await setupServiceWithProject();
+
+    const runWorkspaceCommand = vi.spyOn((virtualWorkerService as any).workspaceManager, "runWorkspaceCommand")
+      .mockResolvedValue({ ok: true, stdout: "", stderr: "", code: 0 } as any);
+    const activitySpy = vi.spyOn(sessionTracking, "appendActivity");
+
+    const hasConflicts = await (virtualWorkerService as any).runMergeIntoSource(
+      "docker-volume://merge-workspace",
+      "main",
+      "session-1",
+    );
+
+    expect(hasConflicts).toBe(false);
+    expect(runWorkspaceCommand).toHaveBeenCalledWith(
+      "docker-volume://merge-workspace",
+      "git",
+      ["merge", "--no-ff", "--no-commit", "origin/main"],
+    );
+    expect(activitySpy).toHaveBeenCalledWith("session-1", expect.objectContaining({
+      originator: "system",
+      description: "Prepared merge of origin/main into the source branch without conflicts.",
+    }));
+  });
+
+  it("rejects merge conflict resolution when the target branch is not in HEAD", async () => {
+    const { virtualWorkerService } = await setupServiceWithProject();
+
+    const runWorkspaceCommand = vi.spyOn((virtualWorkerService as any).workspaceManager, "runWorkspaceCommand")
+      .mockRejectedValue(new Error("not ancestor"));
+
+    await expect((virtualWorkerService as any).ensureTargetMergedIntoSource(
+      "docker-volume://merge-workspace",
+      "main",
+    )).rejects.toThrow("origin/main is not contained");
+
+    expect(runWorkspaceCommand).toHaveBeenCalledWith(
+      "docker-volume://merge-workspace",
+      "git",
+      ["merge-base", "--is-ancestor", "origin/main", "HEAD"],
+    );
   });
 
   it("escalates to human when provider execution fails during handleAttentionItem", async () => {

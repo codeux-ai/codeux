@@ -63,6 +63,12 @@ const validateProviderSettings = (
     issues.push({ path, message: "Expected an object" });
     return;
   }
+  if (typeof value.provider !== "string" || !PROVIDER_IDS.includes(value.provider as ProviderId)) {
+    issues.push({ path: `${path}.provider`, message: `Expected one of: ${PROVIDER_IDS.join(", ")}` });
+  }
+  if (typeof value.name !== "string") {
+    issues.push({ path: `${path}.name`, message: "Expected a string" });
+  }
   if (typeof value.enabled !== "boolean") {
     issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
   }
@@ -78,6 +84,12 @@ const validateProviderSettings = (
   if (typeof value.apiKey !== "string") {
     issues.push({ path: `${path}.apiKey`, message: "Expected a string" });
   }
+  if (typeof value.mountAuth !== "boolean") {
+    issues.push({ path: `${path}.mountAuth`, message: "Expected a boolean" });
+  }
+  if (typeof value.authPath !== "string") {
+    issues.push({ path: `${path}.authPath`, message: "Expected a string" });
+  }
   if (typeof value.maxConcurrentTasks !== "number") {
     issues.push({ path: `${path}.maxConcurrentTasks`, message: "Expected a number" });
   }
@@ -92,26 +104,26 @@ const validateAiProvider = (
     issues.push({ path, message: "Expected an object" });
     return;
   }
-  if (typeof value.provider !== "string" || !PROVIDER_IDS.includes(value.provider as ProviderId)) {
-    issues.push({ path: `${path}.provider`, message: `Expected one of: ${PROVIDER_IDS.join(", ")}` });
+  if (value.provider !== null && typeof value.provider !== "string") {
+    issues.push({ path: `${path}.provider`, message: "Expected null or a provider config id string" });
   }
   if (typeof value.strategy !== "string" || !PROVIDER_STRATEGIES.includes(value.strategy as ProviderStrategy)) {
     issues.push({ path: `${path}.strategy`, message: `Expected one of: ${PROVIDER_STRATEGIES.join(", ")}` });
   }
-  if (typeof value.julesApiKey !== "string") {
-    issues.push({ path: `${path}.julesApiKey`, message: "Expected a string" });
-  }
 
   const providers = value.providers;
+  const providerConfigIds = isRecord(providers) ? new Set(Object.keys(providers)) : new Set<string>();
+  if (value.provider !== null && typeof value.provider === "string" && providerConfigIds.size > 0 && !providerConfigIds.has(value.provider)) {
+    issues.push({ path: `${path}.provider`, message: "Expected an existing provider config id" });
+  }
   if (!isRecord(providers)) {
     issues.push({ path: `${path}.providers`, message: "Expected an object" });
   } else {
-    for (const id of PROVIDER_IDS) {
-      if (id in providers) {
-        validateProviderSettings(providers[id], `${path}.providers.${id}`, issues);
-      } else {
-        issues.push({ path: `${path}.providers.${id}`, message: "Missing provider settings" });
-      }
+    if (Object.keys(providers).length === 0) {
+      issues.push({ path: `${path}.providers`, message: "Expected at least one provider config" });
+    }
+    for (const [providerConfigId, providerSettings] of Object.entries(providers)) {
+      validateProviderSettings(providerSettings, `${path}.providers.${providerConfigId}`, issues);
     }
   }
 
@@ -132,15 +144,19 @@ const validateAiProvider = (
       if (typeof route.strategy !== "string" || !PROVIDER_STRATEGIES.includes(route.strategy as ProviderStrategy)) {
         issues.push({ path: `${routePath}.strategy`, message: `Expected one of: ${PROVIDER_STRATEGIES.join(", ")}` });
       }
-      if (route.provider !== null && (typeof route.provider !== "string" || !PROVIDER_IDS.includes(route.provider as ProviderId))) {
-        issues.push({ path: `${routePath}.provider`, message: `Expected null or one of: ${PROVIDER_IDS.join(", ")}` });
+      if (route.provider !== null && typeof route.provider !== "string") {
+        issues.push({ path: `${routePath}.provider`, message: "Expected null or a provider config id string" });
+      } else if (typeof route.provider === "string" && providerConfigIds.size > 0 && !providerConfigIds.has(route.provider)) {
+        issues.push({ path: `${routePath}.provider`, message: "Expected an existing provider config id" });
       }
       if (!Array.isArray(route.allowedProviders)) {
         issues.push({ path: `${routePath}.allowedProviders`, message: "Expected an array" });
       } else {
         route.allowedProviders.forEach((provider, index) => {
-          if (typeof provider !== "string" || !PROVIDER_IDS.includes(provider as ProviderId)) {
-            issues.push({ path: `${routePath}.allowedProviders[${index}]`, message: `Expected one of: ${PROVIDER_IDS.join(", ")}` });
+          if (typeof provider !== "string") {
+            issues.push({ path: `${routePath}.allowedProviders[${index}]`, message: "Expected a provider config id string" });
+          } else if (providerConfigIds.size > 0 && !providerConfigIds.has(provider)) {
+            issues.push({ path: `${routePath}.allowedProviders[${index}]`, message: "Expected an existing provider config id" });
           }
         });
       }
@@ -149,10 +165,6 @@ const validateAiProvider = (
         continue;
       }
       for (const [providerId, override] of Object.entries(route.providers)) {
-        if (!PROVIDER_IDS.includes(providerId as ProviderId)) {
-          issues.push({ path: `${routePath}.providers.${providerId}`, message: `Expected provider id to be one of: ${PROVIDER_IDS.join(", ")}` });
-          continue;
-        }
         if (!isRecord(override)) {
           issues.push({ path: `${routePath}.providers.${providerId}`, message: "Expected an object" });
           continue;
@@ -214,16 +226,17 @@ const validateCiIntelligence = (
   }
   if (typeof value.enabled !== "boolean") issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
   if (typeof value.enableLivePrMonitoring !== "boolean") issues.push({ path: `${path}.enableLivePrMonitoring`, message: "Expected a boolean" });
-  if (typeof value.waitForCiBeforeMainMerge !== "boolean") issues.push({ path: `${path}.waitForCiBeforeMainMerge`, message: "Expected a boolean" });
   if (typeof value.resolveAllCommentsBeforeMainMerge !== "boolean") issues.push({ path: `${path}.resolveAllCommentsBeforeMainMerge`, message: "Expected a boolean" });
   if (typeof value.resolveMainMergeConflicts !== "boolean") issues.push({ path: `${path}.resolveMainMergeConflicts`, message: "Expected a boolean" });
-  if (typeof value.waitForCiBeforeFeatureMerge !== "boolean") issues.push({ path: `${path}.waitForCiBeforeFeatureMerge`, message: "Expected a boolean" });
   if (typeof value.resolveAllCommentsBeforeFeatureMerge !== "boolean") issues.push({ path: `${path}.resolveAllCommentsBeforeFeatureMerge`, message: "Expected a boolean" });
   if (typeof value.resolveMergeConflicts !== "boolean") issues.push({ path: `${path}.resolveMergeConflicts`, message: "Expected a boolean" });
   if (typeof value.waitForJulesCiAutofix !== "boolean") issues.push({ path: `${path}.waitForJulesCiAutofix`, message: "Expected a boolean" });
   if (typeof value.julesCiAutofixMaxRetries !== "number") issues.push({ path: `${path}.julesCiAutofixMaxRetries`, message: "Expected a number" });
   if (typeof value.featurePrAutoMergeMode !== "string" || !FEATURE_PR_AUTOMERGE_MODES.includes(value.featurePrAutoMergeMode as FeaturePrAutoMergeMode)) {
     issues.push({ path: `${path}.featurePrAutoMergeMode`, message: `Expected one of: ${FEATURE_PR_AUTOMERGE_MODES.join(", ")}` });
+  }
+  if (typeof value.mainBranchAutoMergeMode !== "string" || !FEATURE_PR_AUTOMERGE_MODES.includes(value.mainBranchAutoMergeMode as FeaturePrAutoMergeMode)) {
+    issues.push({ path: `${path}.mainBranchAutoMergeMode`, message: `Expected one of: ${FEATURE_PR_AUTOMERGE_MODES.join(", ")}` });
   }
 };
 
@@ -280,10 +293,12 @@ const validateCliWorkflow = (
   if (typeof value.containerMountGeminiAuth !== "boolean") issues.push({ path: `${path}.containerMountGeminiAuth`, message: "Expected a boolean" });
   if (typeof value.containerMountCodexAuth !== "boolean") issues.push({ path: `${path}.containerMountCodexAuth`, message: "Expected a boolean" });
   if (typeof value.containerMountClaudeCodeAuth !== "boolean") issues.push({ path: `${path}.containerMountClaudeCodeAuth`, message: "Expected a boolean" });
+  if (typeof value.containerMountQwenCodeAuth !== "boolean") issues.push({ path: `${path}.containerMountQwenCodeAuth`, message: "Expected a boolean" });
   if (typeof value.containerGithubAuthPath !== "string") issues.push({ path: `${path}.containerGithubAuthPath`, message: "Expected a string" });
   if (typeof value.containerGeminiAuthPath !== "string") issues.push({ path: `${path}.containerGeminiAuthPath`, message: "Expected a string" });
   if (typeof value.containerCodexAuthPath !== "string") issues.push({ path: `${path}.containerCodexAuthPath`, message: "Expected a string" });
   if (typeof value.containerClaudeCodeAuthPath !== "string") issues.push({ path: `${path}.containerClaudeCodeAuthPath`, message: "Expected a string" });
+  if (typeof value.containerQwenCodeAuthPath !== "string") issues.push({ path: `${path}.containerQwenCodeAuthPath`, message: "Expected a string" });
 };
 
 const validateSprintPreview = (
@@ -300,7 +315,6 @@ const validateSprintPreview = (
   if (typeof value.autoStartOnRunningSprint !== "boolean") issues.push({ path: `${path}.autoStartOnRunningSprint`, message: "Expected a boolean" });
   if (typeof value.rebuildOnTaskCompletion !== "boolean") issues.push({ path: `${path}.rebuildOnTaskCompletion`, message: "Expected a boolean" });
   if (typeof value.rebuildOnSprintCompletion !== "boolean") issues.push({ path: `${path}.rebuildOnSprintCompletion`, message: "Expected a boolean" });
-  if (typeof value.pullLatestOnRebuild !== "boolean") issues.push({ path: `${path}.pullLatestOnRebuild`, message: "Expected a boolean" });
   if (typeof value.autoStopOnTerminalSprint !== "boolean") issues.push({ path: `${path}.autoStopOnTerminalSprint`, message: "Expected a boolean" });
   if (typeof value.maxConcurrentContainers !== "number") issues.push({ path: `${path}.maxConcurrentContainers`, message: "Expected a number" });
   if (typeof value.hostPortRangeStart !== "number") issues.push({ path: `${path}.hostPortRangeStart`, message: "Expected a number" });

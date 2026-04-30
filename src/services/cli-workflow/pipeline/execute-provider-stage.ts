@@ -7,6 +7,12 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     invocation: "task_coding",
     task: ctx.task,
   }).providers[ctx.provider];
+  const providerMountAuth = "mountAuth" in providerSettings
+    ? providerSettings.mountAuth
+    : providerSettings.providerMountAuth;
+  const providerAuthPath = "authPath" in providerSettings
+    ? providerSettings.authPath
+    : providerSettings.providerAuthPath;
 
   const taskRun = ctx.taskRunId && ctx.deps.executionRepository
     ? ctx.deps.executionRepository.getTaskRun(ctx.taskRunId)
@@ -33,6 +39,13 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     cwd: ctx.worktreePath,
     model: providerSettings.model,
     apiKey: providerSettings.apiKey,
+    qwenAuthMode: providerSettings.qwenAuthMode,
+    qwenRegion: providerSettings.qwenRegion,
+    qwenBaseUrl: providerSettings.qwenBaseUrl,
+    qwenEnvKey: providerSettings.qwenEnvKey,
+    qwenProtocol: providerSettings.qwenProtocol,
+    providerMountAuth,
+    providerAuthPath,
     sessionId: ctx.sessionId,
     workflowSettings: ctx.workflowSettings,
     repoPath: ctx.repoPath,

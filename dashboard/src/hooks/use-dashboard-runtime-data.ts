@@ -51,15 +51,21 @@ export interface UseDashboardRuntimeDataResult {
   tasksWithLiveActivities: DashboardStatus["subtasks"];
 }
 
-export const useDashboardRuntimeData = (projectIdHint: string | null = null): UseDashboardRuntimeDataResult => {
+export const useDashboardRuntimeData = (projectIdHint: string | null = null, enabled = true): UseDashboardRuntimeDataResult => {
   const fetchResource = useCallback(async (signal?: AbortSignal) => {
+    if (!enabled) {
+      return {
+        ...EMPTY_LIVE_SNAPSHOT,
+        projectId: projectIdHint,
+      };
+    }
     try {
       // API currently doesn't accept signal, but could be added
       return await fetchLivePayload(projectIdHint);
     } catch (err) {
       throw new Error("Unable to connect to Orchestrator API");
     }
-  }, [projectIdHint]);
+  }, [enabled, projectIdHint]);
 
   // Use reference equality as the API and event updates provide new references
   const isEqual = useCallback((_prev: ProjectLiveDashboardSnapshot, _next: ProjectLiveDashboardSnapshot) => false, []);
@@ -100,7 +106,7 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null): Us
       eventType: "project.live.updated",
       updateDirectlyFromEvent: true,
     } : undefined,
-    isAlreadyLoaded: false,
+    isAlreadyLoaded: !enabled,
   });
 
   const { tasksWithLiveActivities, stats } = useMemo(() => {

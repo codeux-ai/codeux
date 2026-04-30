@@ -1,11 +1,13 @@
 import {
   queryExecutionInvocation,
   queryProviderInvocationUsage,
-  queryLatestProviderInvocationUsageBySession
+  queryLatestProviderInvocationUsageBySession,
+  queryRunningProviderInvocationUsages,
 } from "./execution/execution-invocation-query.js";
 import {
   queryExecutionInvocations,
-  queryExecutionInvocationMessages
+  queryExecutionInvocationMessages,
+  queryExecutionInvocationsByProviderInvocationId,
 } from "./execution/execution-invocations-query.js";
 import { randomUUID } from "crypto";
 import { DatabaseAdapter } from "./db/database-adapter.js";
@@ -238,6 +240,10 @@ function cloneUsageTotals(input?: ExecutionUsageTotals | null): ExecutionUsageTo
 
 export class ExecutionRepository {
   private readonly db: DatabaseAdapter;
+  private readonly taskWallTimeCache = new Map<string, { finishedMs: number, hasActive: boolean }>();
+  private readonly sprintRunWallTimeCache = new Map<string, { finishedMs: number, hasActive: boolean }>();
+  private readonly pendingRealtimeProjectRefreshes = new Map<string, { includeOverview: boolean }>();
+  private realtimeProjectRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly storage: AppDbStorage = new AppDbStorage(),
@@ -333,7 +339,7 @@ export class ExecutionRepository {
         record.updatedAt
     );
 
-    this.realtimeNotifier?.scheduleProjectExecutionRefresh(record.projectId, { includeOverview: true });
+    this.notifyRealtime(record.projectId, true);
     return record;
   }
 
@@ -403,7 +409,7 @@ export class ExecutionRepository {
       const stmt = this.db.prepare(sql);
       stmt.run(...values);
 
-      this.realtimeNotifier?.scheduleProjectExecutionRefresh(existing.projectId, { includeOverview: true });
+      this.notifyRealtime(existing.projectId, true);
     }
 
     return existing;
@@ -472,7 +478,7 @@ export class ExecutionRepository {
     `);
     updateStmt.run(now, now, invocationId);
 
-    this.realtimeNotifier?.scheduleProjectExecutionRefresh(invocation.projectId, { includeOverview: false });
+    this.notifyRealtime(invocation.projectId, false);
     return record;
   }
 
@@ -800,6 +806,8 @@ export class ExecutionRepository {
     );
 
     const created = requireTaskRun((id) => this.getTaskRun(id), id);
+    if (created.taskId) this.taskWallTimeCache.delete(created.taskId);
+    if (created.sprintRunId) this.sprintRunWallTimeCache.delete(created.sprintRunId);
     this.notifyRealtime(created.projectId, false);
     return created;
   }
@@ -827,10 +835,10 @@ export class ExecutionRepository {
     this.db.prepare(`
       INSERT INTO provider_invocations (
         id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id, task_run_id, attention_item_id,
-        session_id, provider, purpose, status, model, native_session_id, started_at, finished_at, duration_ms,
+        session_id, provider, purpose, status, model, execution_mode, native_session_id, started_at, finished_at, duration_ms,
         prompt_chars, transcript_chars, input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens,
         total_tokens, usage_source, raw_usage_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.projectId,
@@ -845,6 +853,7 @@ export class ExecutionRepository {
       input.purpose,
       input.status || "running",
       input.model ?? null,
+      input.executionMode ?? null,
       input.nativeSessionId ?? null,
       input.startedAt || now,
       null,
@@ -872,13 +881,14 @@ export class ExecutionRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE provider_invocations
-      SET status = ?, model = ?, native_session_id = ?, finished_at = ?, duration_ms = ?, transcript_chars = ?,
+      SET status = ?, model = ?, execution_mode = ?, native_session_id = ?, finished_at = ?, duration_ms = ?, transcript_chars = ?,
         input_tokens = ?, cached_input_tokens = ?, output_tokens = ?, reasoning_output_tokens = ?, total_tokens = ?,
         usage_source = ?, raw_usage_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.status || current.status,
       input.model === undefined ? current.model : input.model,
+      input.executionMode === undefined ? current.executionMode : input.executionMode,
       input.nativeSessionId === undefined ? current.nativeSessionId : input.nativeSessionId,
       input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
       input.durationMs === undefined ? current.durationMs : input.durationMs,
@@ -919,6 +929,14 @@ export class ExecutionRepository {
     purpose?: ProviderInvocationUsageRecord["purpose"],
   ): ProviderInvocationUsageRecord | null {
     return queryLatestProviderInvocationUsageBySession(this.db, sessionId, purpose);
+  }
+
+  listRunningProviderInvocationUsages(providers?: string[]): ProviderInvocationUsageRecord[] {
+    return queryRunningProviderInvocationUsages(this.db, providers);
+  }
+
+  listExecutionInvocationsByProviderInvocationId(providerInvocationId: string): ExecutionInvocationRecord[] {
+    return queryExecutionInvocationsByProviderInvocationId(this.db, providerInvocationId);
   }
 
   getLatestTaskRunBySessionId(sessionId: string): TaskRunRecord | null {
@@ -979,7 +997,12 @@ export class ExecutionRepository {
 
   getProjectExecutionSnapshot(projectId: string): ExecutionDashboardSnapshot {
     requireProject(this.db, projectId);
-    return queryProjectExecutionSnapshot(this.db, this.storage, projectId);
+    return queryProjectExecutionSnapshot(this.db, this.storage, projectId, {
+      getUsageTotalsByTaskIds: (pId, tIds) => this.getUsageTotalsByTaskIds(pId, tIds),
+      getUsageTotalsBySprintRunIds: (pId, sIds) => this.getUsageTotalsBySprintRunIds(pId, sIds),
+      getWallTimeTotalsByTaskIds: (pId, tIds, now) => this.getWallTimeTotalsByTaskIds(pId, tIds, now),
+      getWallTimeTotalsBySprintRunIds: (pId, sIds, now) => this.getWallTimeTotalsBySprintRunIds(pId, sIds, now),
+    });
   }
 
   getProjectStatsSnapshot(
@@ -992,9 +1015,6 @@ export class ExecutionRepository {
       getWallTimeTotalsBySprintRunIdsForRange: (id, start, end, now) => this.getWallTimeTotalsBySprintRunIdsForRange(id, start, end, now),
       getTaskMetadata: (id) => this.getTaskMetadata(id),
       getSprintMetadata: (id) => this.getSprintMetadata(id),
-      mapProviderInvocationUsageRow: (row: any) => mapProviderInvocationUsageRow(row as any),
-      mergeUsageTotals: (target, source) => this.mergeUsageTotals(target, source),
-      mergeUsageMap: (map, key, source) => this.mergeUsageMap(map, key, source),
       updateLastActivity: (map, key, date) => this.updateLastActivity(map, key, date),
     });
   }
@@ -1043,6 +1063,8 @@ export class ExecutionRepository {
       taskRunId
     );
     const updated = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
+    if (updated.taskId) this.taskWallTimeCache.delete(updated.taskId);
+    if (updated.sprintRunId) this.sprintRunWallTimeCache.delete(updated.sprintRunId);
     this.notifyRealtime(updated.projectId, false);
     return updated;
   }
@@ -1086,6 +1108,8 @@ export class ExecutionRepository {
     options?: { createdAt?: string; sourceEventKey?: string | null },
   ): boolean {
     const taskRun = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
+    if (taskRun.taskId) this.taskWallTimeCache.delete(taskRun.taskId);
+    if (taskRun.sprintRunId) this.sprintRunWallTimeCache.delete(taskRun.sprintRunId);
     const result = this.db.prepare(`
       INSERT OR IGNORE INTO task_run_events (id, task_run_id, event_type, originator, payload_json, source_event_key, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1349,88 +1373,214 @@ export class ExecutionRepository {
   }
 
 
-  private withWallTime(usage: ExecutionUsageTotals | undefined, wallTimeMs: number): ExecutionUsageTotals {
-    const next = cloneUsageTotals(usage);
-    next.wallTimeMs = wallTimeMs;
-    return next;
-  }
-
-  private mergeUsageMap(
-    map: Map<string, ExecutionUsageTotals>,
-    key: string | null | undefined,
-    invocation: ProviderInvocationUsageRecord,
-  ): void {
-    if (!key) {
-      return;
-    }
-    const existing = map.get(key) || createEmptyUsageTotals();
-    this.mergeUsageTotals(existing, invocation);
-    map.set(key, existing);
-  }
-
-  private mergeUsageTotals(target: ExecutionUsageTotals, invocation: ProviderInvocationUsageRecord): void {
-    target.invocationCount += 1;
-    target.activeTimeMs += invocation.durationMs || 0;
-    target.inputTokens += invocation.inputTokens;
-    target.cachedInputTokens += invocation.cachedInputTokens;
-    target.outputTokens += invocation.outputTokens;
-    target.reasoningOutputTokens += invocation.reasoningOutputTokens;
-    target.totalTokens += invocation.totalTokens;
-    switch (invocation.usageSource) {
-      case "reported":
-        target.reportedInvocationCount += 1;
-        break;
-      case "estimated":
-        target.estimatedInvocationCount += 1;
-        break;
-      case "unsupported":
-        target.unsupportedInvocationCount += 1;
-        break;
-      default:
-        target.unavailableInvocationCount += 1;
-        break;
-    }
-  }
-
   private getUsageTotalsByTaskIds(projectId: string, taskIds: string[]): Map<string, ExecutionUsageTotals> {
     if (taskIds.length === 0) {
       return new Map();
     }
-    const rows = this.storage.executeChunkedInQuery<ProviderInvocationUsageRow>({
-      sqlPrefix: "SELECT * FROM provider_invocations WHERE project_id = ? AND task_id",
+    const rows = this.storage.executeChunkedInQuery<any>({
+      sqlPrefix: `
+        SELECT
+          task_id,
+          COUNT(*) as invocationCount,
+          SUM(COALESCE(duration_ms, 0)) as activeTimeMs,
+          SUM(input_tokens) as inputTokens,
+          SUM(cached_input_tokens) as cachedInputTokens,
+          SUM(output_tokens) as outputTokens,
+          SUM(reasoning_output_tokens) as reasoningOutputTokens,
+          SUM(total_tokens) as totalTokens,
+          SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
+          SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
+          SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
+          SUM(CASE WHEN usage_source NOT IN ('reported', 'estimated', 'unsupported') THEN 1 ELSE 0 END) as unavailableInvocationCount
+        FROM provider_invocations
+        WHERE project_id = ? AND task_id`,
       items: taskIds,
       bindParamsBefore: [projectId],
+      sqlSuffix: "GROUP BY task_id"
     });
-    return this.groupUsageBy(rows.map((row) => mapProviderInvocationUsageRow(row)), (row) => row.taskId);
+
+    const map = new Map<string, ExecutionUsageTotals>();
+    for (const row of rows) {
+      map.set(row.task_id, {
+        invocationCount: toNumber(row.invocationCount),
+        activeTimeMs: toNumber(row.activeTimeMs),
+        wallTimeMs: 0,
+        inputTokens: toNumber(row.inputTokens),
+        cachedInputTokens: toNumber(row.cachedInputTokens),
+        outputTokens: toNumber(row.outputTokens),
+        reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
+        totalTokens: toNumber(row.totalTokens),
+        reportedInvocationCount: toNumber(row.reportedInvocationCount),
+        estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
+        unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),
+        unavailableInvocationCount: toNumber(row.unavailableInvocationCount),
+      });
+    }
+    return map;
   }
 
   private getUsageTotalsBySprintRunIds(projectId: string, sprintRunIds: string[]): Map<string, ExecutionUsageTotals> {
     if (sprintRunIds.length === 0) {
       return new Map();
     }
-    const rows = this.storage.executeChunkedInQuery<ProviderInvocationUsageRow>({
-      sqlPrefix: "SELECT * FROM provider_invocations WHERE project_id = ? AND sprint_run_id",
+    const rows = this.storage.executeChunkedInQuery<any>({
+      sqlPrefix: `
+        SELECT
+          sprint_run_id,
+          COUNT(*) as invocationCount,
+          SUM(COALESCE(duration_ms, 0)) as activeTimeMs,
+          SUM(input_tokens) as inputTokens,
+          SUM(cached_input_tokens) as cachedInputTokens,
+          SUM(output_tokens) as outputTokens,
+          SUM(reasoning_output_tokens) as reasoningOutputTokens,
+          SUM(total_tokens) as totalTokens,
+          SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
+          SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
+          SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
+          SUM(CASE WHEN usage_source NOT IN ('reported', 'estimated', 'unsupported') THEN 1 ELSE 0 END) as unavailableInvocationCount
+        FROM provider_invocations
+        WHERE project_id = ? AND sprint_run_id`,
       items: sprintRunIds,
       bindParamsBefore: [projectId],
+      sqlSuffix: "GROUP BY sprint_run_id"
     });
-    return this.groupUsageBy(rows.map((row) => mapProviderInvocationUsageRow(row)), (row) => row.sprintRunId);
-  }
 
-  private groupUsageBy(
-    rows: ProviderInvocationUsageRecord[],
-    keySelector: (row: ProviderInvocationUsageRecord) => string | null,
-  ): Map<string, ExecutionUsageTotals> {
     const map = new Map<string, ExecutionUsageTotals>();
     for (const row of rows) {
-      const key = keySelector(row);
-      if (!key) {
-        continue;
-      }
-      const current = map.get(key) || createEmptyUsageTotals();
-      this.mergeUsageTotals(current, row);
-      map.set(key, current);
+      map.set(row.sprint_run_id, {
+        invocationCount: toNumber(row.invocationCount),
+        activeTimeMs: toNumber(row.activeTimeMs),
+        wallTimeMs: 0,
+        inputTokens: toNumber(row.inputTokens),
+        cachedInputTokens: toNumber(row.cachedInputTokens),
+        outputTokens: toNumber(row.outputTokens),
+        reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
+        totalTokens: toNumber(row.totalTokens),
+        reportedInvocationCount: toNumber(row.reportedInvocationCount),
+        estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
+        unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),
+        unavailableInvocationCount: toNumber(row.unavailableInvocationCount),
+      });
     }
     return map;
+  }
+
+  private getWallTimeTotalsByTaskIds(projectId: string, taskIds: string[], nowIso: string): Map<string, number> {
+    if (taskIds.length === 0) return new Map();
+    const result = new Map<string, number>();
+    const missingTaskIds: string[] = [];
+    const activeTaskIds: string[] = [];
+
+    for (const taskId of taskIds) {
+      if (this.taskWallTimeCache.has(taskId)) {
+        const cache = this.taskWallTimeCache.get(taskId)!;
+        result.set(taskId, cache.finishedMs);
+        if (cache.hasActive) {
+          activeTaskIds.push(taskId);
+        }
+      } else {
+        missingTaskIds.push(taskId);
+      }
+    }
+
+    if (missingTaskIds.length > 0) {
+      const activeRows = this.storage.executeChunkedInQuery<{ task_id: string; c: number | string }>({
+        sqlPrefix: `SELECT task_id, COUNT(*) as c FROM task_runs WHERE finished_at IS NULL AND started_at IS NOT NULL AND task_id`,
+        sqlSuffix: "GROUP BY task_id",
+        items: missingTaskIds,
+      });
+      const activeMap = new Set(activeRows.map(r => r.task_id));
+
+      const finishedRows = this.storage.executeChunkedInQuery<{ task_id: string; total_duration_ms: number | string }>({
+        sqlPrefix: `SELECT task_id, SUM(CASE WHEN duration_ms IS NOT NULL AND duration_ms > 0 THEN duration_ms ELSE 0 END) AS total_duration_ms FROM task_runs WHERE task_id`,
+        sqlSuffix: "GROUP BY task_id",
+        items: missingTaskIds,
+      });
+      const finishedMap = new Map(finishedRows.map(r => [r.task_id, Math.max(0, Number(r.total_duration_ms) || 0)]));
+
+      for (const taskId of missingTaskIds) {
+        const finishedMs = finishedMap.get(taskId) || 0;
+        const hasActive = activeMap.has(taskId);
+        this.taskWallTimeCache.set(taskId, { finishedMs, hasActive });
+        result.set(taskId, finishedMs);
+        if (hasActive) {
+          activeTaskIds.push(taskId);
+        }
+      }
+    }
+
+    if (activeTaskIds.length > 0) {
+      const activeTimeRows = this.storage.executeChunkedInQuery<{ task_id: string; total_duration_ms: number | string }>({
+        sqlPrefix: `SELECT task_id, SUM(CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER)) AS total_duration_ms FROM task_runs WHERE finished_at IS NULL AND started_at IS NOT NULL AND task_id`,
+        sqlSuffix: "GROUP BY task_id",
+        items: activeTaskIds,
+        bindParamsBefore: [nowIso]
+      });
+      for (const row of activeTimeRows) {
+        result.set(row.task_id, (result.get(row.task_id) || 0) + Math.max(0, Number(row.total_duration_ms) || 0));
+      }
+    }
+
+    return result;
+  }
+
+  private getWallTimeTotalsBySprintRunIds(projectId: string, sprintRunIds: string[], nowIso: string): Map<string, number> {
+    if (sprintRunIds.length === 0) return new Map();
+    const result = new Map<string, number>();
+    const missingIds: string[] = [];
+    const activeIds: string[] = [];
+
+    for (const sprintRunId of sprintRunIds) {
+      if (this.sprintRunWallTimeCache.has(sprintRunId)) {
+        const cache = this.sprintRunWallTimeCache.get(sprintRunId)!;
+        result.set(sprintRunId, cache.finishedMs);
+        if (cache.hasActive) {
+          activeIds.push(sprintRunId);
+        }
+      } else {
+        missingIds.push(sprintRunId);
+      }
+    }
+
+    if (missingIds.length > 0) {
+      const activeRows = this.storage.executeChunkedInQuery<{ sprint_run_id: string; c: number | string }>({
+        sqlPrefix: `SELECT sprint_run_id, COUNT(*) as c FROM task_runs WHERE finished_at IS NULL AND started_at IS NOT NULL AND sprint_run_id`,
+        sqlSuffix: "GROUP BY sprint_run_id",
+        items: missingIds,
+      });
+      const activeMap = new Set(activeRows.map(r => r.sprint_run_id));
+
+      const finishedRows = this.storage.executeChunkedInQuery<{ sprint_run_id: string; total_duration_ms: number | string }>({
+        sqlPrefix: `SELECT sprint_run_id, SUM(CASE WHEN duration_ms IS NOT NULL AND duration_ms > 0 THEN duration_ms ELSE 0 END) AS total_duration_ms FROM task_runs WHERE sprint_run_id`,
+        sqlSuffix: "GROUP BY sprint_run_id",
+        items: missingIds,
+      });
+      const finishedMap = new Map(finishedRows.map(r => [r.sprint_run_id, Math.max(0, Number(r.total_duration_ms) || 0)]));
+
+      for (const sprintRunId of missingIds) {
+        const finishedMs = finishedMap.get(sprintRunId) || 0;
+        const hasActive = activeMap.has(sprintRunId);
+        this.sprintRunWallTimeCache.set(sprintRunId, { finishedMs, hasActive });
+        result.set(sprintRunId, finishedMs);
+        if (hasActive) {
+          activeIds.push(sprintRunId);
+        }
+      }
+    }
+
+    if (activeIds.length > 0) {
+      const activeTimeRows = this.storage.executeChunkedInQuery<{ sprint_run_id: string; total_duration_ms: number | string }>({
+        sqlPrefix: `SELECT sprint_run_id, SUM(CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER)) AS total_duration_ms FROM task_runs WHERE finished_at IS NULL AND started_at IS NOT NULL AND sprint_run_id`,
+        sqlSuffix: "GROUP BY sprint_run_id",
+        items: activeIds,
+        bindParamsBefore: [nowIso]
+      });
+      for (const row of activeTimeRows) {
+        result.set(row.sprint_run_id, (result.get(row.sprint_run_id) || 0) + Math.max(0, Number(row.total_duration_ms) || 0));
+      }
+    }
+
+    return result;
   }
 
   private getWallTimeTotalsByTaskIdsForRange(projectId: string, rangeStartIso: string, rangeEndIso: string, nowIso: string): Map<string, number> {
@@ -1736,7 +1886,40 @@ export class ExecutionRepository {
   }
 
   private notifyRealtime(projectId: string, includeOverview: boolean): void {
-    this.realtimeNotifier?.scheduleProjectExecutionRefresh(projectId, { includeOverview });
+    const normalizedProjectId = String(projectId || "").trim();
+    if (!normalizedProjectId || !this.realtimeNotifier) {
+      return;
+    }
+
+    const existing = this.pendingRealtimeProjectRefreshes.get(normalizedProjectId);
+    this.pendingRealtimeProjectRefreshes.set(normalizedProjectId, {
+      includeOverview: Boolean(existing?.includeOverview) || includeOverview,
+    });
+
+    if (this.realtimeProjectRefreshTimer) {
+      return;
+    }
+
+    this.realtimeProjectRefreshTimer = setTimeout(() => {
+      this.realtimeProjectRefreshTimer = null;
+      this.flushPendingRealtimeProjectRefreshes();
+    }, 0);
+  }
+
+  private flushPendingRealtimeProjectRefreshes(): void {
+    if (!this.realtimeNotifier || this.pendingRealtimeProjectRefreshes.size === 0) {
+      this.pendingRealtimeProjectRefreshes.clear();
+      return;
+    }
+
+    const pendingEntries = [...this.pendingRealtimeProjectRefreshes.entries()];
+    this.pendingRealtimeProjectRefreshes.clear();
+
+    for (const [projectId, options] of pendingEntries) {
+      this.realtimeNotifier.scheduleProjectExecutionRefresh(projectId, {
+        includeOverview: options.includeOverview,
+      });
+    }
   }
 
   private shouldPublishSprintRunUpdate(input: UpdateSprintRunInput): boolean {

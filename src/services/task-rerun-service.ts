@@ -19,6 +19,11 @@ export interface TaskRerunOptions {
   resetDependents?: boolean;
 }
 
+export interface TaskRerunSprintRunResolution {
+  sprintRunId: string;
+  created: boolean;
+}
+
 export interface TaskRerunServiceDependencies {
   resolveTaskContext: (taskId: string) => TaskRerunContext | null;
   listSprintTaskDependencies?: (projectId: string, sprintId: string) => Array<{ taskId: string; dependsOnTaskIds: string[] }>;
@@ -28,7 +33,7 @@ export interface TaskRerunServiceDependencies {
     sprintId: string;
     sprintNumber: number;
     featureBranch: string;
-  }) => Promise<string>;
+  }) => Promise<TaskRerunSprintRunResolution>;
   startTask: (args: {
     task: Subtask;
     projectId: string;
@@ -50,6 +55,7 @@ export interface TaskRerunServiceDependencies {
     sprintRunId: string;
     reason: "task_rerun_reset" | "dependent_task_reset";
   }) => Promise<void>;
+  resumeSprintRun?: (sprintRunId: string) => Promise<void>;
   resolveTaskAttention?: (args: { taskId: string; projectId: string }) => Promise<void>;
   updateTaskExecutorOverride?: (taskId: string, provider: ProviderId) => void;
   cancelActiveDispatch?: (taskId: string, projectId: string) => Promise<void>;
@@ -65,7 +71,7 @@ export class TaskRerunService {
       throw new Error("Cannot rerun task: sprint context is incomplete. Run orchestration/status first.");
     }
 
-    const sprintRunId = await this.deps.resolveSprintRunId({
+    const sprintRun = await this.deps.resolveSprintRunId({
       projectId: context.projectId,
       sprintId: context.sprintId,
       sprintNumber: context.sprintNumber,
@@ -80,7 +86,7 @@ export class TaskRerunService {
     for (const dependentContext of downstreamContexts) {
       await this.resetTaskForFreshRun(dependentContext, {
         clearWorktree: options?.clearWorktree,
-        sprintRunId,
+        sprintRunId: sprintRun.sprintRunId,
         startTask: false,
         reason: "dependent_task_reset",
       });
@@ -89,9 +95,10 @@ export class TaskRerunService {
     return await this.resetTaskForFreshRun(context, {
       provider: options?.provider,
       clearWorktree: options?.clearWorktree,
-      sprintRunId,
+      sprintRunId: sprintRun.sprintRunId,
       startTask: true,
       reason: "task_rerun_reset",
+      resumeSprintRun: sprintRun.created,
     });
   }
 
@@ -146,6 +153,7 @@ export class TaskRerunService {
       clearWorktree?: boolean;
       sprintRunId: string;
       startTask: boolean;
+      resumeSprintRun?: boolean;
       reason: "task_rerun_reset" | "dependent_task_reset";
     },
   ): Promise<Subtask> {
@@ -245,6 +253,18 @@ export class TaskRerunService {
           ? session.provider
           : undefined,
     };
+    if (options.resumeSprintRun && this.deps.resumeSprintRun) {
+      try {
+        await this.deps.resumeSprintRun(options.sprintRunId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.deps.logger?.warn("Failed to resume sprint orchestration after task rerun", {
+          taskId,
+          sprintRunId: options.sprintRunId,
+          message,
+        });
+      }
+    }
     return restartedTask;
   }
 }

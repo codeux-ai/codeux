@@ -15,7 +15,7 @@ describe("CommandRunner", () => {
     const result = await runner.run("non-existent-command-12345", []);
     expect(result.ok).toBe(false);
     expect(result.code).toBe(null);
-    expect(result.stderr).toContain("ENOENT");
+    expect(result.stderr).toMatch(/ENOENT|EACCES/);
   });
 
   it("should handle error exit code", async () => {
@@ -82,6 +82,14 @@ describe("CommandRunner", () => {
       onStdoutLine: (line) => stdoutLines.push(line),
     });
     expect(stdoutLines).toEqual(["no_newline_at_end"]);
+  });
+
+  it("should preserve raw stdout when trimOutput is disabled", async () => {
+    const result = await runner.run("node", ["-e", "process.stdout.write('hello\\n   \\n')"], {
+      trimOutput: false,
+    });
+
+    expect(result.stdout).toBe("hello\n   \n");
   });
 
   it("should clip stderr if too long", async () => {

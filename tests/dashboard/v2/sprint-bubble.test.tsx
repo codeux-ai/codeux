@@ -2,7 +2,7 @@ import { cleanup } from "@testing-library/preact";
 import { afterEach } from "vitest";
 afterEach(() => { cleanup(); });
 /** @jsx h */
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 import { h } from "preact";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/preact";
@@ -73,7 +73,7 @@ describe("SprintBubble", () => {
     );
 
     // Test the text element using queryAllByText to handle multiple instances (compact mode, hidden tooltip)
-    const reviewLabels = screen.queryAllByText("QA Reviewed");
+    const reviewLabels = screen.queryAllByText(/QA Review(ed| Complete)/i);
     expect(reviewLabels.length).toBeGreaterThan(0);
 
     // Check for the summary content

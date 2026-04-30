@@ -84,6 +84,10 @@ export const sanitizeCliWorkflow = (
       cliInput.containerMountClaudeCodeAuth,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountClaudeCodeAuth
     ),
+    containerMountQwenCodeAuth: readBoolean(
+      cliInput.containerMountQwenCodeAuth,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountQwenCodeAuth
+    ),
     containerGithubAuthPath: readString(
       cliInput.containerGithubAuthPath,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerGithubAuthPath
@@ -100,6 +104,10 @@ export const sanitizeCliWorkflow = (
       cliInput.containerClaudeCodeAuthPath,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerClaudeCodeAuthPath
     ).trim() || DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerClaudeCodeAuthPath,
+    containerQwenCodeAuthPath: readString(
+      cliInput.containerQwenCodeAuthPath,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerQwenCodeAuthPath
+    ).trim() || DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerQwenCodeAuthPath,
     maxPlanningJsonRetries: Math.max(0, Math.min(10, readInteger(
       cliInput.maxPlanningJsonRetries,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.maxPlanningJsonRetries

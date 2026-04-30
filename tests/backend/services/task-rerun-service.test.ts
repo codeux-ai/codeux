@@ -10,6 +10,7 @@ describe("TaskRerunService", () => {
   const startTask = vi.fn();
   const persistMergedFlag = vi.fn();
   const createResetTaskRun = vi.fn();
+  const resumeSprintRun = vi.fn();
   const resolveTaskAttention = vi.fn();
   const cancelActiveDispatch = vi.fn();
   const clearTaskWorktree = vi.fn();
@@ -60,6 +61,7 @@ describe("TaskRerunService", () => {
       extractSessionId: (session) => session.id,
       persistMergedFlag,
       createResetTaskRun,
+      resumeSprintRun,
       resolveTaskAttention,
       cancelActiveDispatch,
       clearTaskWorktree,
@@ -67,7 +69,7 @@ describe("TaskRerunService", () => {
   });
 
   it("resets task state and starts a fresh session", async () => {
-    resolveSprintRunId.mockResolvedValue("run-1");
+    resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-1", created: false });
     startTask.mockResolvedValue({
       id: "new-session",
       name: "sessions/new-session",
@@ -88,6 +90,7 @@ describe("TaskRerunService", () => {
       sprintNumber: 7,
       featureBranch: "feature/sprint7-implementation",
     });
+    expect(resumeSprintRun).not.toHaveBeenCalled();
     expect(startTask).toHaveBeenCalledWith({
       task: expect.objectContaining({
         id: "01-task",
@@ -120,7 +123,7 @@ describe("TaskRerunService", () => {
   });
 
   it("marks the task failed when fresh session start fails", async () => {
-    resolveSprintRunId.mockResolvedValue("run-1");
+    resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-1", created: false });
     startTask.mockRejectedValue(new Error("provider unavailable"));
 
     await expect(service.rerunTask("01-task")).rejects.toThrow("provider unavailable");
@@ -129,7 +132,7 @@ describe("TaskRerunService", () => {
 
   it("still reruns when merged-flag persistence fails", async () => {
     persistMergedFlag.mockRejectedValue(new Error("disk error"));
-    resolveSprintRunId.mockResolvedValue("run-1");
+    resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-1", created: false });
     startTask.mockResolvedValue({
       id: "new-session",
       name: "sessions/new-session",
@@ -180,7 +183,7 @@ describe("TaskRerunService", () => {
       { taskId: "task-record-1", dependsOnTaskIds: [] },
       { taskId: "task-record-2", dependsOnTaskIds: ["task-record-1"] },
     ]);
-    resolveSprintRunId.mockResolvedValue("run-1");
+    resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-1", created: false });
     startTask.mockResolvedValue({
       id: "new-session",
       name: "sessions/new-session",
@@ -233,5 +236,19 @@ describe("TaskRerunService", () => {
     expect(resolveSprintRunId).not.toHaveBeenCalled();
     expect(startTask).not.toHaveBeenCalled();
     expect(updateTaskPlanningStatus).not.toHaveBeenCalled();
+  });
+
+  it("resumes sprint orchestration when rerun creates a fresh sprint run", async () => {
+    resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-created", created: true });
+    startTask.mockResolvedValue({
+      id: "new-session",
+      name: "sessions/new-session",
+      prompt: "",
+      provider: "gemini",
+    });
+
+    await service.rerunTask("task-record-1");
+
+    expect(resumeSprintRun).toHaveBeenCalledWith("run-created");
   });
 });

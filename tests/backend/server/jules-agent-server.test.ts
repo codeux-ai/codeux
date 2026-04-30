@@ -11,25 +11,47 @@ vi.mock("../../../src/app/lifecycle/mcp-lifecycle-service.js", () => ({
   bootMcpHttpTransport: vi.fn().mockResolvedValue(null)
 }));
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
 import { JulesAgentServer } from "../../../src/server/jules-agent-server.js";
 import { loadAppConfig } from "../../../src/config/app-config.js";
 import axios from "axios";
 import path from "path";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { DefaultRuntimeContext } from "../../../src/app/runtime-context.js";
+
+const stopServer = async (server: JulesAgentServer): Promise<void> => {
+  const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+  try {
+    await (server as any).handleSigint?.().catch?.(() => undefined);
+  } finally {
+    exitSpy.mockRestore();
+  }
+};
 
 describe("JulesAgentServer", () => {
   let server: JulesAgentServer;
+  let sharedSessionTracking: unknown;
+  let sharedActivityCacheService: unknown;
   const projectRoot = path.resolve(process.cwd());
   const appConfig = loadAppConfig([], projectRoot);
 
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeAll(() => {
     server = new JulesAgentServer({ projectRoot, appConfig });
+    sharedSessionTracking = (server as any).sessionTracking;
+    sharedActivityCacheService = (server as any).activityCacheService;
   });
 
-  afterEach(async () => {
-    await (server as any).handleSigint?.().catch?.(() => undefined);
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    (server as any).runtimeContext = new DefaultRuntimeContext();
+    (server as any).sessionTracking = sharedSessionTracking;
+    (server as any).activityCacheService = sharedActivityCacheService;
+    (server as any).completedSprints = new Set();
+  });
+
+  afterAll(async () => {
+    await stopServer(server);
   });
 
   it("should be defined", () => {
@@ -153,7 +175,7 @@ describe("JulesAgentServer", () => {
       const runtimeContext = (server as any).runtimeContext;
       runtimeContext.dashboardSettings = {
         ...DEFAULT_DASHBOARD_SETTINGS,
-        ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, waitForCiBeforeFeatureMerge: true }
+        ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, featurePrAutoMergeMode: "WHEN_GREEN" }
       };
       vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue(null);
       vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectLiveStatus").mockReturnValue({
@@ -170,7 +192,7 @@ describe("JulesAgentServer", () => {
       const runtimeContext = (server as any).runtimeContext;
       runtimeContext.dashboardSettings = {
         ...DEFAULT_DASHBOARD_SETTINGS,
-        ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, waitForCiBeforeFeatureMerge: true }
+        ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, featurePrAutoMergeMode: "WHEN_GREEN" }
       };
       vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue("project-1");
       vi.spyOn((server as any).settingsRepository, "resolveProjectDashboardSettings").mockReturnValue({
@@ -179,7 +201,6 @@ describe("JulesAgentServer", () => {
           ciIntelligence: {
             ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
             enabled: true,
-            waitForCiBeforeFeatureMerge: false,
           },
         },
         sources: {},
@@ -728,12 +749,22 @@ describe("JulesAgentServer", () => {
   });
 
   describe("run", () => {
+    let runServer: JulesAgentServer;
+
+    beforeEach(() => {
+      runServer = new JulesAgentServer({ projectRoot, appConfig });
+    });
+
+    afterEach(async () => {
+      await stopServer(runServer);
+    });
+
     it("should initialize lifecycle services and perform recovery", async () => {
       const { bootSettings } = await import("../../../src/app/lifecycle/settings-lifecycle-service.js");
       const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
       const { bootMcpTransport, bootMcpHttpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
 
-      (server as any).runtimeStartupRecoveryService = {
+      (runServer as any).runtimeStartupRecoveryService = {
         recover: vi.fn().mockResolvedValue({
           recoveredCliSessionIds: ["1", "2", "3", "4", "5", "6"],
           reconciledLocalDispatchIds: [],
@@ -742,16 +773,16 @@ describe("JulesAgentServer", () => {
         }),
       };
 
-      const refreshJulesApiKeySpy = vi.spyOn(server as any, "refreshJulesApiKey").mockImplementation(() => {});
+      const refreshJulesApiKeySpy = vi.spyOn(runServer as any, "refreshJulesApiKey").mockImplementation(() => {});
 
-      await server.run();
+      await runServer.run();
 
       expect(bootSettings).toHaveBeenCalled();
       expect(bootDashboard).toHaveBeenCalled();
       expect(bootMcpTransport).toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalled();
       expect(refreshJulesApiKeySpy).toHaveBeenCalled();
-      expect((server as any).runtimeStartupRecoveryService.recover).toHaveBeenCalled();
+      expect((runServer as any).runtimeStartupRecoveryService.recover).toHaveBeenCalled();
 
       refreshJulesApiKeySpy.mockRestore();
     }, 30000);
@@ -761,7 +792,7 @@ describe("JulesAgentServer", () => {
       const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
       const { bootMcpTransport, bootMcpHttpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
 
-      (server as any).runtimeStartupRecoveryService = {
+      (runServer as any).runtimeStartupRecoveryService = {
         recover: vi.fn().mockResolvedValue({
           recoveredCliSessionIds: [],
           reconciledLocalDispatchIds: [],
@@ -770,16 +801,16 @@ describe("JulesAgentServer", () => {
         }),
       };
 
-      const refreshJulesApiKeySpy = vi.spyOn(server as any, "refreshJulesApiKey").mockImplementation(() => {});
+      const refreshJulesApiKeySpy = vi.spyOn(runServer as any, "refreshJulesApiKey").mockImplementation(() => {});
 
-      await server.run();
+      await runServer.run();
 
       expect(bootSettings).toHaveBeenCalled();
       expect(bootDashboard).toHaveBeenCalled();
       expect(bootMcpTransport).toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalled();
       expect(refreshJulesApiKeySpy).toHaveBeenCalled();
-      expect((server as any).runtimeStartupRecoveryService.recover).toHaveBeenCalled();
+      expect((runServer as any).runtimeStartupRecoveryService.recover).toHaveBeenCalled();
 
       refreshJulesApiKeySpy.mockRestore();
     }, 30000);
@@ -796,7 +827,7 @@ describe("JulesAgentServer", () => {
       const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
       const { bootMcpTransport, bootMcpHttpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
 
-      (server as any).runtimeStartupRecoveryService = {
+      (runServer as any).runtimeStartupRecoveryService = {
         recover: vi.fn().mockResolvedValue({
           recoveredCliSessionIds: [],
           reconciledLocalDispatchIds: [],
@@ -805,14 +836,14 @@ describe("JulesAgentServer", () => {
         }),
       };
 
-      (server as any).activityCacheService = {
+      (runServer as any).activityCacheService = {
         getGitStatus: vi.fn().mockResolvedValue({}),
         getLiveActivitiesForActiveTasks: vi.fn().mockResolvedValue({})
       };
 
-      vi.spyOn(server as any, "refreshJulesApiKey").mockImplementation(() => {});
+      vi.spyOn(runServer as any, "refreshJulesApiKey").mockImplementation(() => {});
 
-      await server.run();
+      await runServer.run();
 
       expect(bootDashboard).toHaveBeenCalled();
       const bootDashboardCalls = (bootDashboard as any).mock.calls;

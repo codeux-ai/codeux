@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 import { h, Fragment } from "preact";
 /** @jsx h */
 /** @jsxFrag Fragment */
@@ -112,8 +112,8 @@ describe("useDashboardRuntimeData", () => {
       realtimeCallback({
         type: "snapshot_required",
       });
-      // Allow the internal silent refresh promise to settle
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      // Allow the internal silent refresh promise to settle and debounce timeout to trigger
+      await new Promise((resolve) => setTimeout(resolve, 200));
     });
 
     // Validates the fallback strategy triggered the REST fetch properly

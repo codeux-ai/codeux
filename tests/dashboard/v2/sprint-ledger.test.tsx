@@ -4,12 +4,30 @@
  */
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
+import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintLedger } from "../../../dashboard/src/v2/components/sprints/SprintLedger.js";
 import type { Sprint } from "../../../dashboard/src/types.js";
 
 expect.extend(matchers);
+
+vi.mock("gsap", () => ({
+  default: {
+    fromTo: (_el: any, _from: any, to: any) => {
+      if (to.onComplete) to.onComplete();
+      return { revert: () => {} };
+    },
+    to: (_el: any, to: any) => {
+      if (to.onComplete) to.onComplete();
+      return { revert: () => {} };
+    },
+    context: (cb: any) => {
+      cb();
+      return { revert: () => {} };
+    },
+    set: () => {},
+  },
+}));
 
 const mockSprints: Sprint[] = [
   {
@@ -100,6 +118,7 @@ describe("SprintLedger Component", () => {
       // Check rows render
       expect(screen.getByText("Alpha Design")).toBeInTheDocument();
       expect(screen.getByText("Beta API")).toBeInTheDocument();
+      expect(screen.getAllByText("Not reviewed").length).toBeGreaterThan(0);
     });
 
     // Type in search
@@ -124,13 +143,13 @@ describe("SprintLedger Component", () => {
 
     const checkboxes = screen.getAllByRole("button").filter(b => b.innerHTML.includes("lucide-square"));
 
-    // Initial state: bulk actions not present
-    expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
+    // Initial state: bulk actions not present (or at least no selection shown)
+    expect(screen.queryByText(/1 of 2 selected/)).not.toBeInTheDocument();
 
     // Click first row's checkbox
     fireEvent.click(checkboxes[1]); // This checks "Beta API" due to initial descending sort (date)
     await waitFor(() => {
-      expect(screen.getByText("1 selected")).toBeInTheDocument();
+      expect(screen.getByText(/1 of 2 selected/)).toBeInTheDocument();
     });
 
     // Perform bulk start
@@ -141,19 +160,38 @@ describe("SprintLedger Component", () => {
     // Perform bulk delete
     const bulkDeleteBtn = screen.getAllByText("Delete")[0];
     fireEvent.click(bulkDeleteBtn);
+    
+    // Wait for Confirm Dialog and perform destructive hold
+    await waitFor(() => {
+      expect(screen.getByText("Delete Sprints?")).toBeInTheDocument();
+    });
+    
+    const confirmBtn = screen.getByRole("button", { name: /Hold to Delete Sprints|Delete Sprints/ });
+    
+    // Simulate hold-to-confirm
+    vi.useFakeTimers();
+    fireEvent.pointerDown(confirmBtn);
+    
+    await act(async () => {
+      vi.advanceTimersByTime(1100);
+      // Wait for any promises to resolve
+      await Promise.resolve();
+    });
+    
     expect(defaultProps.onBulkDelete).toHaveBeenCalledWith(["sprint-2"]);
+    vi.useRealTimers();
 
     // Actually, calling clear selection makes the bar vanish.
     // However, clicking Delete above also calls deselectAll internally!
     // That means the Clear button is gone already. Let's select it again to test clear:
     fireEvent.click(checkboxes[1]);
     await waitFor(() => {
-      expect(screen.getByText("1 selected")).toBeInTheDocument();
+      expect(screen.getByText(/1 of 2 selected/)).toBeInTheDocument();
     });
     const clearBtn = screen.getAllByText("Clear")[0];
     fireEvent.click(clearBtn);
     await waitFor(() => {
-      expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
+      expect(screen.queryByText(/1 of 2 selected/)).not.toBeInTheDocument();
     });
   });
 

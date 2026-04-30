@@ -27,6 +27,11 @@ describe("WorkspaceManager", () => {
     expect(result).toMatch(/^docker-volume:\/\/sprint-os-project-[a-f0-9]{12}-session-1$/);
   });
 
+  it("builds host worktree paths when host execution mode is selected", () => {
+    const result = manager.buildWorktreePath("/repo/project", "session-1", "HOST");
+    expect(result).toBe("/repo/project/.worktrees/session-1");
+  });
+
   it("resolves a resumable workspace when the Docker volume exists", async () => {
     vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "[]", stderr: "", code: 0, signal: null } as any);
 
@@ -34,6 +39,14 @@ describe("WorkspaceManager", () => {
 
     expect(result).toMatch(/^docker-volume:\/\/sprint-os-project-[a-f0-9]{12}-session-1$/);
     expect(runCommandStrict).toHaveBeenCalledWith("docker", expect.arrayContaining(["volume", "inspect"]), expect.any(String));
+  });
+
+  it("resolves a resumable host workspace when the directory exists", async () => {
+    vi.mocked(fs.access).mockResolvedValue(undefined);
+
+    const result = await manager.resolveResumeWorktreePath("/repo/project", "session-1", "HOST");
+
+    expect(result).toBe("/repo/project/.worktrees/session-1");
   });
 
   it("creates a fresh snapshot workspace volume", async () => {
@@ -50,11 +63,22 @@ describe("WorkspaceManager", () => {
     const workspace = await manager.createSnapshotWorkspace("/repo/project", "session-1");
 
     expect(workspace).toMatch(/^docker-volume:\/\/sprint-os-project-[a-f0-9]{12}-session-1-snapshot$/);
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", expect.arrayContaining(["volume", "create"]), expect.any(String));
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining(["volume", "create", "--label", "sprint-os.workspace=true"]),
+      expect.any(String),
+    );
     expect(runCommandStrict).toHaveBeenCalledWith("git", ["bundle", "create", "/tmp/sprint-os-bundle-123/repo.bundle", "--all"], "/repo/project");
     const bootstrapCall = vi.mocked(runCommandStrict).mock.calls.find((call) => call[0] === "bash");
     const bootstrapCommand = bootstrapCall?.[1]?.join(" ") || "";
     expect(bootstrapCommand).toContain("--entrypoint sh");
+    expect(bootstrapCommand).toContain("git init /workspace");
+    expect(bootstrapCommand).toContain("git -C /workspace symbolic-ref HEAD refs/heads/sprint-os-bootstrap-$$");
+    expect(bootstrapCommand).toContain("git -C /workspace fetch origin");
+    expect(bootstrapCommand).toContain("+refs/*:refs/*");
+    expect(bootstrapCommand).toContain("git -C /workspace config user.name");
+    expect(bootstrapCommand).toContain("git -C /workspace config user.email");
+    expect(bootstrapCommand).not.toContain("git clone");
     if (typeof process.getuid === "function" && typeof process.getgid === "function") {
       expect(bootstrapCommand).toContain("chown -R");
       expect(bootstrapCommand).toContain(`${process.getuid()}:${process.getgid()}`);
@@ -76,19 +100,22 @@ describe("WorkspaceManager", () => {
 
     await manager.runWorkspaceCommand("docker-volume://workspace-1", "git", ["status", "--short"]);
 
-    expect(runCommandStrict).toHaveBeenCalledWith(
-      "docker",
-      expect.arrayContaining([
-        "run",
-        "--entrypoint",
-        "git",
-        "alpine/git",
-        "status",
-        "--short",
-      ]),
-      expect.any(String),
-      expect.any(Object),
-      expect.any(Object),
-    );
+    const call = vi.mocked(runCommandStrict).mock.calls[0];
+    expect(call?.[0]).toBe("docker");
+    expect(call?.[1]).toEqual(expect.arrayContaining([
+      "run",
+      "--entrypoint",
+      "git",
+      "alpine/git",
+      "status",
+      "--short",
+    ]));
+
+    if (typeof process.getuid === "function" && typeof process.getgid === "function") {
+      expect(call?.[1]).toEqual(expect.arrayContaining([
+        "--user",
+        `${process.getuid()}:${process.getgid()}`,
+      ]));
+    }
   });
 });

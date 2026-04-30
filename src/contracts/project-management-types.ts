@@ -38,6 +38,7 @@ export interface SprintReviewSummary {
   status: string;
   outcome: string | null;
   summary: string | null;
+  findings: string[];
   reviewer: string | null;
   finishedAt: string | null;
 }
@@ -213,4 +214,19 @@ export interface SprintMarkdownExportBundle {
     fileName: string;
     markdown: string;
   }>;
+}
+
+export interface PlannedTaskDraft {
+  key: string;
+  title: string;
+  description: string;
+  promptMarkdown: string;
+  priority?: TaskPriority;
+  executorType?: TaskExecutorType;
+  dependsOn?: string[];
+}
+
+export interface PlannedSprintPayload {
+  goal: string;
+  tasks: PlannedTaskDraft[];
 }

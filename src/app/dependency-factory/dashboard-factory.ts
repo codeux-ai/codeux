@@ -181,7 +181,7 @@ export function createDashboardDependencies(
     resolveSprintRunId: async ({ projectId, sprintId }) => {
       const existing = executionRepository.findActiveSprintRun(projectId, sprintId);
       if (existing) {
-        return existing.id;
+        return { sprintRunId: existing.id, created: false };
       }
 
       const created = executionRepository.createSprintRun({
@@ -197,7 +197,7 @@ export function createDashboardDependencies(
         startedAt: new Date().toISOString(),
         lastHeartbeatAt: new Date().toISOString(),
       });
-      return created.id;
+      return { sprintRunId: created.id, created: true };
     },
     startTask: ({ task, projectId, sprintId, sprintRunId, sourceId, featureBranch, repoPath, sprintNumber }) =>
       sprintTaskDispatchService.startTask({
@@ -235,6 +235,14 @@ export function createDashboardDependencies(
         reason,
       }, {
         sourceEventKey: `task-reset:${taskId}:${sprintRunId}:${reason}`,
+      });
+    },
+    resumeSprintRun: async (sprintRunId) => {
+      void sprintOrchestrator.recoverSprintRun(sprintRunId).catch((error) => {
+        logger.warn("Failed to resume sprint orchestration after task rerun", {
+          sprintRunId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
     },
     clearTaskWorktree: async ({ taskId, repoPath }) => {

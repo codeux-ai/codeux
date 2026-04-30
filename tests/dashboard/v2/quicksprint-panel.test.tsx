@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, fireEvent, waitFor } from "@testing-library/preact";
 import { h } from "preact";
@@ -12,6 +12,7 @@ vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
     set: vi.fn(),
+    killTweensOf: vi.fn(),
     context: (fn: () => void) => {
       fn();
       return { revert: vi.fn() };

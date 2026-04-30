@@ -37,9 +37,16 @@ interface ChatThreadRuntimeServiceDependencies {
 
 export interface ThreadRouteResolution {
   mode: "VIRTUAL";
-  providerId?: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+  providerId?: Exclude<ProviderId, "jules">;
   model?: string;
   apiKey?: string;
+  qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+  qwenRegion?: "china" | "international";
+  qwenBaseUrl?: string;
+  qwenEnvKey?: string;
+  qwenProtocol?: "openai" | "anthropic" | "gemini";
+  providerMountAuth?: boolean;
+  providerAuthPath?: string;
   thinkingMode?: string;
 }
 
@@ -75,11 +82,18 @@ export class ChatThreadRuntimeService {
         providerId,
         model: runtimeState.modelLabel || providerSettings.model,
         apiKey: providerSettings.apiKey,
+      qwenAuthMode: providerSettings.qwenAuthMode,
+      qwenRegion: providerSettings.qwenRegion,
+      qwenBaseUrl: providerSettings.qwenBaseUrl,
+      qwenEnvKey: providerSettings.qwenEnvKey,
+      qwenProtocol: providerSettings.qwenProtocol,
+        providerMountAuth: providerSettings.mountAuth,
+        providerAuthPath: providerSettings.authPath,
         thinkingMode: providerSettings.thinkingMode,
       };
     }
 
-    const providerId = route.provider as Extract<ProviderId, "gemini" | "codex" | "claude-code"> | undefined;
+    const providerId = route.provider as Exclude<ProviderId, "jules"> | undefined;
     if (!providerId) {
       throw new Error("Dashboard replies require an enabled CLI provider, but no eligible provider was resolved.");
     }
@@ -93,6 +107,13 @@ export class ChatThreadRuntimeService {
       providerId,
       model: providerSettings.model,
       apiKey: providerSettings.apiKey,
+      qwenAuthMode: providerSettings.qwenAuthMode,
+      qwenRegion: providerSettings.qwenRegion,
+      qwenBaseUrl: providerSettings.qwenBaseUrl,
+      qwenEnvKey: providerSettings.qwenEnvKey,
+      qwenProtocol: providerSettings.qwenProtocol,
+      providerMountAuth: providerSettings.mountAuth,
+      providerAuthPath: providerSettings.authPath,
       thinkingMode: providerSettings.thinkingMode,
     };
   }
@@ -107,7 +128,7 @@ export class ChatThreadRuntimeService {
       if (!input.virtualProvider) {
         throw new Error("virtualProvider is required for virtual route.");
       }
-      const validProviders = ["gemini", "codex", "claude-code"];
+      const validProviders = ["gemini", "codex", "claude-code", "qwen-code"];
       if (!validProviders.includes(input.virtualProvider)) {
         throw new Error(`Virtual provider is not configured or unavailable: ${input.virtualProvider}`);
       }
@@ -296,6 +317,13 @@ export class ChatThreadRuntimeService {
         provider,
         model,
         apiKey,
+      qwenAuthMode: route.qwenAuthMode,
+      qwenRegion: route.qwenRegion,
+      qwenBaseUrl: route.qwenBaseUrl,
+      qwenEnvKey: route.qwenEnvKey,
+      qwenProtocol: route.qwenProtocol,
+        providerMountAuth: route.providerMountAuth,
+        providerAuthPath: route.providerAuthPath,
         sessionId: continueSessionId || thread.id,
         settings: dashboardSettings,
         prompt: finalPrompt,
@@ -371,8 +399,8 @@ export class ChatThreadRuntimeService {
     }
   }
 
-  private isVirtualProvider(value: string | undefined | null): value is Extract<ProviderId, "gemini" | "codex" | "claude-code"> {
-    return value === "gemini" || value === "codex" || value === "claude-code";
+  private isVirtualProvider(value: string | undefined | null): value is Exclude<ProviderId, "jules"> {
+    return value === "gemini" || value === "codex" || value === "claude-code" || value === "qwen-code";
   }
 
   private async generateThreadCompaction(
@@ -419,6 +447,13 @@ export class ChatThreadRuntimeService {
         cwd: repoPath,
         model,
         apiKey,
+      qwenAuthMode: route.qwenAuthMode,
+      qwenRegion: route.qwenRegion,
+      qwenBaseUrl: route.qwenBaseUrl,
+      qwenEnvKey: route.qwenEnvKey,
+      qwenProtocol: route.qwenProtocol,
+        providerMountAuth: route.providerMountAuth,
+        providerAuthPath: route.providerAuthPath,
         sessionId: `${thread.id}:compaction`,
         workflowSettings,
         repoPath,

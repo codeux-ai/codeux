@@ -8,13 +8,10 @@ import {
   ProjectExecutionStatsSnapshot,
 } from "../../contracts/app-types.js";
 import { DatabaseAdapter as Database } from "../db/database-adapter.js";
-import { AppDbStorage } from "../app-db-storage.js";
 import {
   ExecutionUsageTotals,
 } from "../../contracts/app-types.js";
-import { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { toNumber } from "./execution-utils.js";
-import { ProviderInvocationUsageRow } from "./execution-repository-types.js";
 import { StatsEntityMetadata, ProjectStatsQueryDependencies } from "./execution-stats-types.js";
 
 export function queryProjectStatsSnapshot(
@@ -33,32 +30,12 @@ export function queryProjectStatsSnapshot(
   const normalized = normalizeProjectStatsQuery(db, projectId, input, now);
   const rangeStartIso = normalized.range.from;
   const rangeEndIso = normalized.range.to;
-  const invocations = db.prepare(`
-    SELECT *
-    FROM provider_invocations
-    WHERE project_id = ?
-      AND started_at >= ?
-      AND started_at < ?
-    ORDER BY started_at ASC, id ASC
-  `).all(projectId, rangeStartIso, rangeEndIso) as unknown as ProviderInvocationUsageRow[];
   const nowIso = now.toISOString();
   const wallTimeByTaskId = deps.getWallTimeTotalsByTaskIdsForRange(projectId, rangeStartIso, rangeEndIso, nowIso);
   const wallTimeBySprintRunId = deps.getWallTimeTotalsBySprintRunIdsForRange(projectId, rangeStartIso, rangeEndIso, nowIso);
   const buckets = createUsageBuckets(normalized.range, normalized.bucketSizeMs);
   const taskMeta = deps.getTaskMetadata(projectId);
   const sprintMeta = deps.getSprintMetadata(projectId);
-  const usage = createEmptyUsageTotals();
-  const taskUsage = new Map<string, ExecutionUsageTotals>();
-  const sprintUsage = new Map<string, ExecutionUsageTotals>();
-  const providerUsage = new Map<string, ExecutionUsageTotals>();
-  const purposeUsage = new Map<string, ExecutionUsageTotals>();
-  const tokenSourceCounts = new Map<string, number>();
-  const taskLastActivity = new Map<string, string>();
-  const sprintLastActivity = new Map<string, string>();
-  const providerLastActivity = new Map<string, string>();
-  const purposeLastActivity = new Map<string, string>();
-
-  const mappedInvocations = invocations.map(row => deps.mapProviderInvocationUsageRow(row));
   const firstBucketStartMs = buckets.length > 0 ? buckets[0].bucketStartMs : 0;
 
   const { totals: gitTotals, buckets: gitBuckets, taskUsage: gitTaskUsage, sprintUsage: gitSprintUsage } = queryProjectGitStats(
@@ -71,28 +48,127 @@ export function queryProjectStatsSnapshot(
     firstBucketStartMs
   );
 
-  for (const invocation of mappedInvocations) {
-    deps.mergeUsageTotals(usage, invocation);
-    deps.mergeUsageMap(taskUsage, invocation.taskId, invocation);
-    deps.mergeUsageMap(sprintUsage, invocation.sprintRunId || invocation.sprintId, invocation);
-    deps.mergeUsageMap(providerUsage, invocation.provider, invocation);
-    deps.mergeUsageMap(purposeUsage, invocation.purpose, invocation);
-    const activityAt = invocation.finishedAt || invocation.startedAt;
-    deps.updateLastActivity(taskLastActivity, invocation.taskId, activityAt);
-    deps.updateLastActivity(sprintLastActivity, invocation.sprintRunId || invocation.sprintId, activityAt);
-    deps.updateLastActivity(providerLastActivity, invocation.provider, activityAt);
-    deps.updateLastActivity(purposeLastActivity, invocation.purpose, activityAt);
-    tokenSourceCounts.set(invocation.usageSource, (tokenSourceCounts.get(invocation.usageSource) || 0) + 1);
+  const usageFields = `
+    COUNT(*) as invocationCount,
+    SUM(COALESCE(duration_ms, 0)) as activeTimeMs,
+    SUM(input_tokens) as inputTokens,
+    SUM(cached_input_tokens) as cachedInputTokens,
+    SUM(output_tokens) as outputTokens,
+    SUM(reasoning_output_tokens) as reasoningOutputTokens,
+    SUM(total_tokens) as totalTokens,
+    SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
+    SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
+    SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
+    SUM(CASE WHEN usage_source NOT IN ('reported', 'estimated', 'unsupported') THEN 1 ELSE 0 END) as unavailableInvocationCount
+  `;
 
-    if (buckets.length > 0) {
-      const bucketIndex = Math.floor((new Date(invocation.startedAt).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
-      if (bucketIndex >= 0 && bucketIndex < buckets.length) {
-        const bucket = buckets[bucketIndex]!;
-        deps.mergeUsageTotals(bucket.usage, invocation);
-        bucket.providerTokens.set(invocation.provider, (bucket.providerTokens.get(invocation.provider) || 0) + invocation.totalTokens);
-        bucket.purposeTime.set(invocation.purpose, (bucket.purposeTime.get(invocation.purpose) || 0) + (invocation.durationMs || 0));
-        bucket.purposeInvocations.set(invocation.purpose, (bucket.purposeInvocations.get(invocation.purpose) || 0) + 1);
-      }
+  const mapAggregatedUsage = (row: any): ExecutionUsageTotals => ({
+    invocationCount: toNumber(row.invocationCount),
+    activeTimeMs: toNumber(row.activeTimeMs),
+    wallTimeMs: 0,
+    inputTokens: toNumber(row.inputTokens),
+    cachedInputTokens: toNumber(row.cachedInputTokens),
+    outputTokens: toNumber(row.outputTokens),
+    reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
+    totalTokens: toNumber(row.totalTokens),
+    reportedInvocationCount: toNumber(row.reportedInvocationCount),
+    estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
+    unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),
+    unavailableInvocationCount: toNumber(row.unavailableInvocationCount),
+  });
+
+  const mergeAggregatedUsage = (target: ExecutionUsageTotals, source: ExecutionUsageTotals) => {
+    target.invocationCount += source.invocationCount;
+    target.activeTimeMs += source.activeTimeMs;
+    target.inputTokens += source.inputTokens;
+    target.cachedInputTokens += source.cachedInputTokens;
+    target.outputTokens += source.outputTokens;
+    target.reasoningOutputTokens += source.reasoningOutputTokens;
+    target.totalTokens += source.totalTokens;
+    target.reportedInvocationCount += source.reportedInvocationCount;
+    target.estimatedInvocationCount += source.estimatedInvocationCount;
+    target.unsupportedInvocationCount += source.unsupportedInvocationCount;
+    target.unavailableInvocationCount += source.unavailableInvocationCount;
+  };
+
+  const usage = createEmptyUsageTotals();
+  const taskUsage = new Map<string, ExecutionUsageTotals>();
+  const sprintUsage = new Map<string, ExecutionUsageTotals>();
+  const providerUsage = new Map<string, ExecutionUsageTotals>();
+  const purposeUsage = new Map<string, ExecutionUsageTotals>();
+  const tokenSourceCounts = new Map<string, number>();
+  const taskLastActivity = new Map<string, string>();
+  const sprintLastActivity = new Map<string, string>();
+  const providerLastActivity = new Map<string, string>();
+  const purposeLastActivity = new Map<string, string>();
+
+  // 1. Task aggregations
+  const taskAggs = db.prepare(`
+    SELECT task_id, MAX(COALESCE(finished_at, started_at)) as lastActivityAt, ${usageFields}
+    FROM provider_invocations
+    WHERE project_id = ? AND started_at >= ? AND started_at < ? AND task_id IS NOT NULL
+    GROUP BY task_id
+  `).all(projectId, rangeStartIso, rangeEndIso) as any[];
+
+  for (const row of taskAggs) {
+    const u = mapAggregatedUsage(row);
+    taskUsage.set(row.task_id, u);
+    taskLastActivity.set(row.task_id, row.lastActivityAt);
+  }
+
+  // 2. Sprint aggregations
+  const sprintAggs = db.prepare(`
+    SELECT COALESCE(sprint_run_id, sprint_id) as sprint_key, MAX(COALESCE(finished_at, started_at)) as lastActivityAt, ${usageFields}
+    FROM provider_invocations
+    WHERE project_id = ? AND started_at >= ? AND started_at < ? AND (sprint_run_id IS NOT NULL OR sprint_id IS NOT NULL)
+    GROUP BY sprint_key
+  `).all(projectId, rangeStartIso, rangeEndIso) as any[];
+
+  for (const row of sprintAggs) {
+    const u = mapAggregatedUsage(row);
+    sprintUsage.set(row.sprint_key, u);
+    sprintLastActivity.set(row.sprint_key, row.lastActivityAt);
+  }
+
+  // 3. Bucket/Provider/Purpose/Source aggregations
+  const bucketQuery = buckets.length > 0 ? `
+    CAST((julianday(started_at) - julianday(?)) * 86400000 / ? AS INTEGER) as bucketIndex,
+  ` : "-1 as bucketIndex,";
+  const bucketParams = buckets.length > 0 ? [rangeStartIso, normalized.bucketSizeMs] : [];
+
+  const mainAggs = db.prepare(`
+    SELECT ${bucketQuery} provider, purpose, usage_source, MAX(COALESCE(finished_at, started_at)) as lastActivityAt, ${usageFields}
+    FROM provider_invocations
+    WHERE project_id = ? AND started_at >= ? AND started_at < ?
+    GROUP BY bucketIndex, provider, purpose, usage_source
+  `).all(...bucketParams, projectId, rangeStartIso, rangeEndIso) as any[];
+
+  for (const row of mainAggs) {
+    const u = mapAggregatedUsage(row);
+    mergeAggregatedUsage(usage, u);
+
+    // Provider usage
+    const pU = providerUsage.get(row.provider) || createEmptyUsageTotals();
+    mergeAggregatedUsage(pU, u);
+    providerUsage.set(row.provider, pU);
+    deps.updateLastActivity(providerLastActivity, row.provider, row.lastActivityAt);
+
+    // Purpose usage
+    const purU = purposeUsage.get(row.purpose) || createEmptyUsageTotals();
+    mergeAggregatedUsage(purU, u);
+    purposeUsage.set(row.purpose, purU);
+    deps.updateLastActivity(purposeLastActivity, row.purpose, row.lastActivityAt);
+
+    // Token sources
+    tokenSourceCounts.set(row.usage_source, (tokenSourceCounts.get(row.usage_source) || 0) + row.invocationCount);
+
+    // Buckets
+    if (buckets.length > 0 && row.bucketIndex >= 0 && row.bucketIndex < buckets.length) {
+      const bucket = buckets[row.bucketIndex];
+      mergeAggregatedUsage(bucket.usage, u);
+      bucket.providerTokens.set(row.provider, (bucket.providerTokens.get(row.provider) || 0) + u.totalTokens);
+      bucket.purposeTime.set(row.purpose, (bucket.purposeTime.get(row.purpose) || 0) + u.activeTimeMs);
+      bucket.purposeInvocations.set(row.purpose, (bucket.purposeInvocations.get(row.purpose) || 0) + u.invocationCount);
     }
   }
 

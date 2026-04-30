@@ -7,7 +7,7 @@ import {
 } from "lucide-preact";
 import type { AgentPreset } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
-import { AgentAvatarScene } from "./AgentAvatarScene.js";
+import { LazyAgentAvatarScene } from "./LazyAgentAvatarScene.js";
 import { SHOWCASE_EXPRESSIONS, getAccentHex } from "../../lib/agent-avatar.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
@@ -69,7 +69,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
 
       {/* ── Avatar stage ── */}
       <div className="relative h-56 w-full overflow-hidden bg-gradient-to-b from-slate-50 to-slate-100 dark:from-void-800 dark:to-void-900 md:h-72">
-        <AgentAvatarScene config={preset.avatarConfig} expression={activeExpression} className="h-full w-full" />
+        <LazyAgentAvatarScene config={preset.avatarConfig} expression={activeExpression} className="h-full w-full" />
 
         {/* Bottom gradient */}
         <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-white via-white/70 to-transparent dark:from-void-900 dark:via-void-900/70" />

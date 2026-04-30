@@ -15,6 +15,10 @@ const createRepo = async (): Promise<{ repo: SettingsRepository; dbPath: string;
 };
 
 afterEach(async () => {
+  const cacheResetDir = await fs.mkdtemp(path.join(os.tmpdir(), "jules-settings-reset-"));
+  tempDirs.push(cacheResetDir);
+  const repo = new SettingsRepository(path.join(cacheResetDir, "settings.db"));
+  repo.resetAllData();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
@@ -97,10 +101,8 @@ describe("SettingsRepository", () => {
         ciIntelligence: {
           enabled: true,
           enableLivePrMonitoring: true,
-          waitForCiBeforeMainMerge: true,
           resolveAllCommentsBeforeMainMerge: true,
           resolveMainMergeConflicts: false,
-          waitForCiBeforeFeatureMerge: true,
           resolveAllCommentsBeforeFeatureMerge: true,
           resolveMergeConflicts: false,
           waitForJulesCiAutofix: false,
@@ -325,10 +327,8 @@ describe("SettingsRepository", () => {
       ciIntelligence: {
         enabled: true,
         enableLivePrMonitoring: true,
-        waitForCiBeforeMainMerge: false,
         resolveAllCommentsBeforeMainMerge: false,
         resolveMainMergeConflicts: false,
-        waitForCiBeforeFeatureMerge: false,
         resolveAllCommentsBeforeFeatureMerge: false,
         resolveMergeConflicts: false,
         waitForJulesCiAutofix: true,

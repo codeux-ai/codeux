@@ -1,5 +1,5 @@
 /** @jsx h */
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";

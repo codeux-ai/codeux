@@ -16,8 +16,17 @@ export interface StructuredRequestArgs<T> {
   provider: ProviderId;
   model: string;
   apiKey: string;
+  qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+  qwenRegion?: "china" | "international";
+  qwenBaseUrl?: string;
+  qwenEnvKey?: string;
+  qwenProtocol?: "openai" | "anthropic" | "gemini";
+  providerMountAuth?: boolean;
+  providerAuthPath?: string;
   providerPrompt: string;
   repoPath: string;
+  cwd?: string;
+  workspaceSessionId?: string;
   settings: DashboardSettings;
   parseFn: (text: string) => T;
   buildRetryPrompt: (error: Error) => string;
@@ -62,25 +71,22 @@ export class StructuredAgentRequestService {
         startedAt: new Date().toISOString(),
       });
       invocationId = invocation?.id;
-
-      if (invocationId && args.systemRoutingMessage) {
-        this.deps.executionRepository?.appendExecutionInvocationMessage(invocationId, {
-          role: "system",
-          contentMarkdown: args.systemRoutingMessage,
-          metadata: {
-            provider: args.provider,
-            model: args.model,
-            routeKind: "virtual",
-          },
-        });
-      }
     } else {
       this.deps.executionRepository?.updateExecutionInvocation(invocationId, {
         provider: args.provider,
         model: args.model,
       });
+    }
 
-      if (args.systemRoutingMessage) {
+    if (invocationId && args.systemRoutingMessage) {
+      const existingMessages = this.deps.executionRepository?.listExecutionInvocationMessages(invocationId) || [];
+      const hasRouteMessage = existingMessages.some(
+        msg => msg.role === "system" &&
+               msg.contentMarkdown === args.systemRoutingMessage &&
+               msg.metadata?.routeKind === "virtual"
+      );
+
+      if (!hasRouteMessage) {
         this.deps.executionRepository?.appendExecutionInvocationMessage(invocationId, {
           role: "system",
           contentMarkdown: args.systemRoutingMessage,
@@ -103,9 +109,18 @@ export class StructuredAgentRequestService {
       type: args.type,
       provider: args.provider as VirtualWorkerProvider,
       prompt: args.providerPrompt,
+      cwd: args.cwd,
       model: args.model,
       apiKey: args.apiKey,
+      qwenAuthMode: args.qwenAuthMode,
+      qwenRegion: args.qwenRegion,
+      qwenBaseUrl: args.qwenBaseUrl,
+      qwenEnvKey: args.qwenEnvKey,
+      qwenProtocol: args.qwenProtocol,
+      providerMountAuth: args.providerMountAuth,
+      providerAuthPath: args.providerAuthPath,
       sessionId,
+      workspaceSessionId: args.workspaceSessionId,
       workflowSettings: args.settings.cliWorkflow,
       repoPath: args.repoPath,
       githubToken: args.githubToken,

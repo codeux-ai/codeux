@@ -28,9 +28,12 @@ export const StrategySelector: FunctionComponent<StrategySelectorProps> = ({
     <label className="block space-y-2">
       <span className="text-xs text-slate-400">Manual Default Provider</span>
       <AvantgardeSelect
-        value={provider}
+        value={provider || ""}
         onChange={(val) => onProviderChange(val as DashboardSettings["aiProvider"]["provider"])}
-        options={providerOptions}
+        options={providerOptions.filter((option) => option.value !== null).map((option) => ({
+          value: String(option.value),
+          label: option.label,
+        }))}
         disabled={strategy !== "MANUAL"}
       />
       <p className="text-[11px] text-slate-500">

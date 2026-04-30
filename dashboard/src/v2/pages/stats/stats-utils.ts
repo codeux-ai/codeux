@@ -5,6 +5,19 @@ import type {
   ProjectExecutionStatsSnapshot,
   SegmentDefinition,
 } from "../../types.js";
+import {
+  Brain,
+  Code2,
+  ShieldCheck,
+  Sparkles,
+  Search,
+  Wand2,
+  Zap,
+  Activity,
+  Lightbulb,
+} from "lucide-preact";
+import type { ComponentType } from "preact";
+import type { StatsCardAccent } from "./components/StatsCard.js";
 
 export const EMPTY_USAGE: ExecutionUsageTotals = {
   invocationCount: 0,
@@ -192,4 +205,20 @@ export function createStatsSegments(stats: ProjectExecutionStatsSnapshot | null,
   ].filter((segment) => segment.value > 0);
 
   return { providerSegments, sourceSegments, tokenSegments };
+}
+
+
+export const PURPOSE_MAPPING: Record<string, { icon: ComponentType<any>; accent: StatsCardAccent }> = {
+  planning: { icon: Brain, accent: "rose" },
+  code_generation: { icon: Code2, accent: "signal" },
+  testing: { icon: ShieldCheck, accent: "emerald" },
+  analysis: { icon: Search, accent: "cyan" },
+  refactor: { icon: Wand2, accent: "amber" },
+  optimization: { icon: Zap, accent: "amber" },
+  review: { icon: Activity, accent: "emerald" },
+  brainstorming: { icon: Lightbulb, accent: "amber" },
+};
+
+export function getPurposeConfig(purposeId: string): { icon: ComponentType<any>; accent: StatsCardAccent } {
+  return PURPOSE_MAPPING[purposeId] || { icon: Sparkles, accent: "default" };
 }

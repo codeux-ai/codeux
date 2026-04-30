@@ -1,7 +1,7 @@
 /* eslint-disable */
 import * as React from "preact/compat";
 /**
- * @vitest-environment jsdom
+ * @vitest-environment happy-dom
  */
 import { h, Fragment } from "preact";
 import { describe, it, expect, vi, afterEach } from "vitest";

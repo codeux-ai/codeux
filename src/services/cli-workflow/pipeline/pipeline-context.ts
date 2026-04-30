@@ -27,11 +27,18 @@ export interface PipelineContext {
   workerBranch: string;
   featureBranch: string;
   task: Subtask;
-  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+  provider: Exclude<ProviderId, "jules">;
   providerSettingsOverride?: {
     model: string;
     thinkingMode: ThinkingMode;
     apiKey: string;
+    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+    qwenRegion?: "china" | "international";
+    qwenBaseUrl?: string;
+    qwenEnvKey?: string;
+    qwenProtocol?: "openai" | "anthropic" | "gemini";
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
   };
   title: string;
   repoPath: string;

@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+.card {
+  @apply relative overflow-hidden flex flex-col justify-between transition-all duration-300;
+  background: var(--stats-card-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--stats-card-border);
+  border-radius: var(--stats-card-radius);
+  padding: var(--stats-card-padding);
+  box-shadow: var(--stats-card-shadow);
+}
+
+.card:hover {
+  @apply -translate-y-0.5;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+}
+
+.dark .card:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.header {
+  @apply relative z-10 flex items-center justify-between mb-6;
+}
+
+.titleGroup {
+  @apply flex items-center gap-2;
+}
+
+.title {
+  @apply text-xs font-medium uppercase tracking-widest transition-colors duration-300;
+  color: var(--stats-label-color);
+}
+
+.iconContainer {
+  @apply flex items-center justify-center w-6 h-6 rounded-lg transition-colors duration-300;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.dark .iconContainer {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.valueContainer {
+  @apply relative z-10;
+}
+
+.valueRow {
+  @apply flex items-end justify-between mb-1;
+}
+
+.value {
+  @apply text-[2.25rem] font-semibold font-mono tracking-tighter leading-none;
+  color: var(--stats-value-color);
+}
+
+.secondaryValue {
+  @apply flex-shrink-0;
+}
+
+.description {
+  @apply text-sm leading-relaxed mt-2;
+  color: var(--stats-detail-color);
+}
+
+.trendContainer {
+  @apply flex items-center;
+}
+
+/* Accent Tints */
+.tint {
+  @apply absolute inset-0 opacity-0 transition-opacity duration-500 pointer-events-none;
+}
+
+.card:hover .tint {
+  @apply opacity-[0.03];
+}
+
+/* Variants */
+.accentSignal .tint { background-color: var(--stats-accent-signal); }
+.accentAmber .tint { background-color: var(--stats-accent-amber); }
+.accentCyan .tint { background-color: var(--stats-accent-cyan); }
+.accentRose .tint { background-color: var(--stats-accent-rose); }
+.accentEmerald .tint { background-color: var(--stats-accent-emerald); }
+
+.card.accentSignal:hover .title { color: var(--stats-accent-signal); }
+.card.accentAmber:hover .title { color: var(--stats-accent-amber); }
+.card.accentCyan:hover .title { color: var(--stats-accent-cyan); }
+.card.accentRose:hover .title { color: var(--stats-accent-rose); }
+.card.accentEmerald:hover .title { color: var(--stats-accent-emerald); }
+
+.accentSignal .iconContainer { color: var(--stats-accent-signal); }
+.accentAmber .iconContainer { color: var(--stats-accent-amber); }
+.accentCyan .iconContainer { color: var(--stats-accent-cyan); }
+.accentRose .iconContainer { color: var(--stats-accent-rose); }
+.accentEmerald .iconContainer { color: var(--stats-accent-emerald); }

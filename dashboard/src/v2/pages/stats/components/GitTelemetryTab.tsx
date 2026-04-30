@@ -6,12 +6,13 @@ import type { ExecutionGitStatsEntitySummary, ExecutionGitStatsSummary } from ".
 import {
   CHIP_CLASS,
   INPUT_CLASS,
-  LEDGER_ROW_CLASS,
+  LEDGER_ROW_MODERN_CLASS,
   PANEL_CLASS,
   SUBPANEL_CLASS,
   SignalMetricCard,
   SortButton,
   TokenChip,
+  ChurnFlowBar,
 } from "./StatsShared.js";
 
 type GitLedgerSortKey = "insertions" | "deletions" | "filesChanged" | "prCount" | "mergedCount" | "name";
@@ -122,31 +123,52 @@ export const GitTelemetryLedger: FunctionComponent<{
             <div className="space-y-3">
               {visibleItems.map((item, index) => {
                 return (
-                  <div key={item.id} className={LEDGER_ROW_CLASS}>
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/75 text-sm font-black text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
-                        {index + 1}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                  <div key={item.id} className={LEDGER_ROW_MODERN_CLASS}>
+                    <div className="flex flex-col gap-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex min-w-0 items-start gap-4">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-white/75 text-sm font-black text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
+                            {index + 1}
+                          </div>
                           <div className="min-w-0">
                             <div className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white">{item.label}</div>
-                            <div className="mt-1 flex flex-wrap gap-2">
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
                               {item.secondaryLabel ? (
-                                <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
                                   {item.secondaryLabel}
                                 </span>
                               ) : null}
                             </div>
                           </div>
                         </div>
+                      </div>
 
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <TokenChip icon={PlusSquare} label="Insertions" value={`+${item.metrics.insertions}`} tone="border-emerald-500/16 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400" />
-                          <TokenChip icon={MinusSquare} label="Deletions" value={`-${item.metrics.deletions}`} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
-                          <TokenChip icon={FileEdit} label="Files" value={item.metrics.filesChanged} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
-                          <TokenChip icon={GitPullRequest} label="PRs" value={item.metrics.prCount} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
-                          <TokenChip icon={GitMerge} label="Merged" value={item.metrics.mergedCount} tone="border-indigo-500/16 bg-indigo-500/8 text-indigo-600 dark:text-indigo-400" />
+                      <div className="grid grid-cols-3 gap-6">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Total Churn</div>
+                          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{(item.metrics.insertions + item.metrics.deletions).toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">PRs Opened</div>
+                          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.prCount.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merged</div>
+                          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.mergedCount.toLocaleString()}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-3">
+                        <ChurnFlowBar 
+                          insertions={item.metrics.insertions}
+                          deletions={item.metrics.deletions}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <TokenChip icon={PlusSquare} label="Insertions" value={`+${item.metrics.insertions.toLocaleString()}`} tone="border-emerald-500/16 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400" />
+                          <TokenChip icon={MinusSquare} label="Deletions" value={`-${item.metrics.deletions.toLocaleString()}`} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
+                          <TokenChip icon={FileEdit} label="Files" value={item.metrics.filesChanged.toLocaleString()} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
+                          <TokenChip icon={GitPullRequest} label="PRs" value={item.metrics.prCount.toLocaleString()} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
+                          <TokenChip icon={GitMerge} label="Merged" value={item.metrics.mergedCount.toLocaleString()} tone="border-indigo-500/16 bg-indigo-500/8 text-indigo-600 dark:text-indigo-400" />
                         </div>
                       </div>
                     </div>

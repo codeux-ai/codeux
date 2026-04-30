@@ -1,5 +1,14 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { computeOverviewStats, buildEmptyTrend, extractTokensTrend, extractSprintsTrend, extractOpenTasksTrend, extractCompletedTasksTrend } from "../../../dashboard/src/v2/lib/overview-stats.js";
+import { 
+  computeOverviewStats, 
+  buildEmptyTrend, 
+  extractTokensTrend, 
+  extractSprintsTrend, 
+  extractOpenTasksTrend, 
+  extractCompletedTasksTrend,
+  getDateWindow,
+  getTrendIndex
+} from "../../../dashboard/src/v2/lib/overview-stats.js";
 
 describe("overview-stats", () => {
   const fakeNow = new Date("2024-03-10T12:00:00Z");
@@ -132,6 +141,52 @@ describe("overview-stats", () => {
       // Mar 8(idx4): 2
       // Mar 10(idx6): 1
       expect(trend).toEqual([0, 0, 0, 0, 2, 0, 1]);
+    });
+  });
+
+  describe("new helpers and edge cases", () => {
+    it("getDateWindow returns correct window", () => {
+      const { windowStart, startOfToday } = getDateWindow(7);
+      expect(startOfToday.toISOString()).toContain("2024-03-10");
+      expect(windowStart.toISOString()).toContain("2024-03-04");
+    });
+
+    it("getTrendIndex handles various dates correctly", () => {
+      const { windowStart } = getDateWindow(7);
+      
+      // Before window
+      expect(getTrendIndex("2024-03-03T23:59:59Z", windowStart, 7)).toBe(-2);
+      
+      // First day of window
+      expect(getTrendIndex("2024-03-04T00:00:01Z", windowStart, 7)).toBe(0);
+      
+      // Last day of window (today)
+      expect(getTrendIndex("2024-03-10T10:00:00Z", windowStart, 7)).toBe(6);
+      
+      // Future date
+      expect(getTrendIndex("2024-03-11T10:00:00Z", windowStart, 7)).toBe(-1);
+      
+      // Invalid date
+      expect(getTrendIndex("invalid", windowStart, 7)).toBe(-1);
+      
+      // Undefined
+      expect(getTrendIndex(undefined, windowStart, 7)).toBe(-1);
+    });
+
+    it("computeOverviewStats handles mixed-status tasks and invalid dates gracefully", () => {
+      const stats = computeOverviewStats(
+        [], [],
+        [
+          { status: "completed", createdAt: "invalid", updatedAt: "2024-03-08T10:00:00Z" },
+          { status: "in_progress", createdAt: "2024-03-08T10:00:00Z" },
+          { status: "pending", createdAt: "2024-03-11T10:00:00Z" }, // Future
+        ] as any
+      );
+
+      expect(stats.completedTasks).toBe(1);
+      expect(stats.openTasks).toBe(2);
+      expect(stats.completedTasksTrend).toEqual([0, 0, 0, 0, 1, 0, 0]);
+      expect(stats.openTasksTrend).toEqual([0, 0, 0, 0, 1, 1, 1]); // Future task ignored for trend but counted in totals
     });
   });
 });

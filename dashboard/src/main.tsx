@@ -16,8 +16,11 @@ import { useProjectEffectiveSettings } from "./v2/hooks/use-project-effective-se
 import { SkeletonPanel } from "./v2/components/ui/ListSkeletons.js";
 import { DashboardV2 } from "./v2/DashboardV2.js";
 import { LiveSessionPage } from "./v2/LiveSessionPage.js";
-import { DeepOceanBackground } from "./v2/components/chat/DeepOceanBackground.js";
 import "./styles.css";
+
+const DeepOceanBackground = lazy(() => import("./v2/components/chat/DeepOceanBackground.js").then((module) => ({
+  default: module.DeepOceanBackground,
+})));
 
 // 0. AppLayout extracted to use context hooks
 const AppLayout = () => {
@@ -95,7 +98,9 @@ const AppLayout = () => {
         <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:px-4 focus:py-2 focus:bg-white focus:text-slate-900 focus:font-bold focus:rounded-br-lg ">
           Skip to main content
         </a>
-        <DeepOceanBackground />
+        <Suspense fallback={null}>
+          <DeepOceanBackground />
+        </Suspense>
 
         <div className="flex-1 flex flex-col h-full relative z-10 overflow-hidden">
           <TopNav isDark={isDark} toggleTheme={toggleTheme} onMenuToggle={() => setIsMobileSidebarOpen(prev => !prev)} isMobile={isMobile} />

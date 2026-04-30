@@ -154,6 +154,7 @@ export class QuicksprintService {
     const sprint = this.createSprint(projectId, {
       name: sprintName,
       goal: sprintGoal,
+      showcasePinned: true,
     });
 
     const autoStart = input.submitMode === "plan_and_start";

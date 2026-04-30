@@ -84,7 +84,6 @@ describe("sprint-orchestrator", () => {
             ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
             enabled: true,
             enableLivePrMonitoring: true,
-            waitForCiBeforeMainMerge: true,
             mainBranchAutoMergeMode: "WHEN_GREEN",
         };
         const getCiStatusForScope = vi.fn()

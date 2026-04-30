@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState, useMemo } from "preact/hooks";
 import gsap from "gsap";
-import { X, Plus, FolderOpen, GitBranch, FolderInput, Link2 } from "lucide-preact";
+import { X, Plus, FolderOpen, GitBranch, FolderInput, Link2, Loader2 } from "lucide-preact";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
@@ -22,10 +22,23 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [localPath, setLocalPath] = useState('');
     const [gitUrl, setGitUrl]       = useState('');
     const [cloneDir, setCloneDir]   = useState('');
-    const [error, setError]         = useState<string | null>(null);
+    const [submitError, setSubmitError] = useState<string | null>(null);
 
     const reducedMotion = useReducedMotion();
-    const isSubmitting = useRef(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isClosing, setIsClosing] = useState(false);
+    const [touched, setTouched] = useState({ name: false, path: false });
+
+    const validationErrors = useMemo(() => {
+        const errors: Record<string, string> = {};
+        if (!name.trim()) errors.name = "Project Name is required.";
+
+        const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
+        if (!path) {
+            errors.path = sourceType === 'local' ? "Directory Path is required." : "Repository URL is required.";
+        }
+        return errors;
+    }, [name, localPath, gitUrl, sourceType]);
 
     useLayoutEffect(() => {
         const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
@@ -46,44 +59,44 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     }, [reducedMotion]);
 
     const handleClose = () => {
-        if (isSubmitting.current) return;
+        if (isSubmitting) return;
+        setIsClosing(true);
 
         const duration = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
         gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration, ease: MODAL_MOTION.exit.ease });
         gsap.to(backdropRef.current, { opacity: 0, duration, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
     };
 
-    const backdropRef = useFocusTrap(true, { onClose: handleClose, restoreFocus: true });
+    const backdropRef = useFocusTrap(!isClosing, { onClose: handleClose, restoreFocus: true });
 
     const handleBackdropClick = (e: PointerEvent) => {
         if (e.target === backdropRef.current) handleClose();
     };
 
-    const handleSubmit = (e: Event) => {
+    const handleSubmit = async (e: Event) => {
         e.preventDefault();
-        isSubmitting.current = true;
+
+        if (Object.keys(validationErrors).length > 0) {
+            setTouched({ name: true, path: true });
+            return;
+        }
+
         const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
 
-        if (!name.trim()) {
-            setError("Project Name is required.");
-            isSubmitting.current = false;
-            return;
+        setIsSubmitting(true);
+        setSubmitError(null);
+        try {
+            await Promise.resolve(onAdd({
+                name: name.trim(),
+                type: sourceType,
+                path,
+                ...(sourceType === 'git' && cloneDir.trim() ? { cloneDir: cloneDir.trim() } : {}),
+            }));
+            handleClose();
+        } catch (err) {
+            setIsSubmitting(false);
+            setSubmitError(err instanceof Error ? err.message : String(err));
         }
-
-        if (!path) {
-            setError(sourceType === 'local' ? "Directory Path is required." : "Repository URL is required.");
-            isSubmitting.current = false;
-            return;
-        }
-
-        setError(null);
-        onAdd({
-            name: name.trim(),
-            type: sourceType,
-            path,
-            ...(sourceType === 'git' && cloneDir.trim() ? { cloneDir: cloneDir.trim() } : {}),
-        });
-        handleClose();
     };
 
     // Re-animate fields when source type changes
@@ -160,10 +173,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     <form onSubmit={handleSubmit} className="flex flex-col flex-1">
                         <div ref={fieldsRef} className="flex flex-col gap-6 flex-1">
 
-                            {error && (
+                            {submitError && (
                                 // form errors demand immediate user attention to proceed.
                                 <div role="alert" aria-live="assertive" id="project-form-error" className="text-status-red text-sm font-medium">
-                                    {error}
+                                    {submitError}
                                 </div>
                             )}
 
@@ -178,15 +191,17 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     value={name}
                                     onInput={(e) => {
                                         setName((e.target as HTMLInputElement).value);
-                                        if (error) setError(null);
+                                        if (submitError) setSubmitError(null);
                                     }}
                                     placeholder="My Awesome Project"
                                     className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-[1.6rem] font-black text-slate-900 dark:text-white placeholder-slate-200 dark:placeholder-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 transition-colors font-display tracking-tight leading-none"
                                     required
                                     autoFocus
-                                    aria-invalid={!!error && !name.trim()}
-                                    aria-describedby={error && !name.trim() ? "project-form-error" : undefined}
+                                    aria-invalid={!!validationErrors.name && touched.name}
+                                    aria-describedby={validationErrors.name && touched.name ? "project-name-error" : undefined}
+                                    onBlur={() => setTouched(prev => ({ ...prev, name: true }))}
                                 />
+                                {validationErrors.name && touched.name && <div id="project-name-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.name}</div>}
                             </div>
 
                             {/* Source Type Toggle */}
@@ -228,14 +243,16 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         value={localPath}
                                         onInput={(e) => {
                                             setLocalPath((e.target as HTMLInputElement).value);
-                                            if (error) setError(null);
+                                            if (submitError) setSubmitError(null);
                                         }}
                                         placeholder="/home/user/projects/my-project"
                                         className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 transition-colors"
                                         required
-                                        aria-invalid={!!error && !localPath.trim()}
-                                        aria-describedby={error && !localPath.trim() ? "project-form-error" : undefined}
+                                        aria-invalid={!!validationErrors.path && touched.path}
+                                        aria-describedby={validationErrors.path && touched.path ? "project-path-error" : undefined}
+                                        onBlur={() => setTouched(prev => ({ ...prev, path: true }))}
                                     />
+                                    {validationErrors.path && touched.path && <div id="project-path-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.path}</div>}
                                 </div>
                             ) : (
                                 <>
@@ -249,14 +266,16 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             value={gitUrl}
                                             onInput={(e) => {
                                                 setGitUrl((e.target as HTMLInputElement).value);
-                                                if (error) setError(null);
+                                                if (submitError) setSubmitError(null);
                                             }}
                                             placeholder="https://github.com/user/repo.git"
                                             className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 transition-colors"
                                             required
-                                            aria-invalid={!!error && !gitUrl.trim()}
-                                            aria-describedby={error && !gitUrl.trim() ? "project-form-error" : undefined}
+                                            aria-invalid={!!validationErrors.path && touched.path}
+                                            aria-describedby={validationErrors.path && touched.path ? "project-git-error" : undefined}
+                                            onBlur={() => setTouched(prev => ({ ...prev, path: true }))}
                                         />
+                                        {validationErrors.path && touched.path && <div id="project-git-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.path}</div>}
                                     </div>
                                     <div className="group/field">
                                         <label htmlFor="add-project-clone-dir" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
@@ -289,10 +308,15 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 </button>
                                 <button
                                     type="submit"
-                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] active:scale-95 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
+                                    disabled={isSubmitting}
+                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] disabled:shadow-none active:scale-95 disabled:active:scale-100 hover:-translate-y-px disabled:hover:-translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                                 >
-                                    <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
-                                    Add Project
+                                    {isSubmitting ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
+                                    )}
+                                    {isSubmitting ? "Adding..." : "Add Project"}
                                 </button>
                             </div>
                         </div>

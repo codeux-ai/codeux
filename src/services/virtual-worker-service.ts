@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { DashboardSettings, JulesSession, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
+import type { CliWorkflowSettings, DashboardSettings, JulesSession, ProviderId, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
 import type { WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
@@ -16,17 +16,23 @@ import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-mana
 import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
 import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
+import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { WorkerTaskDispatchService } from "./worker-task-dispatch-service.js";
 import { CliWorkflowService } from "./cli-workflow-service.js";
-import { resolveProviderForInvocation } from "./provider-routing.js";
+import { resolveProviderForInvocation, resolveWorkerModelForProvider } from "./provider-routing.js";
 import { resolveEffectiveDashboardSettings } from "./settings-resolution-service.js";
 import type { WorkerInboxReplyService } from "./worker-inbox-reply-service.js";
 import type { InstructionService } from "../instructions/instruction-template-service.js";
 import type { SprintExecutionStateService } from "./sprint-execution-state-service.js";
+import type { MemoryService } from "./memory-service.js";
+import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
+import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
+import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
+import { DockerService } from "./docker-service.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
@@ -81,12 +87,16 @@ export interface VirtualWorkerServiceDependencies {
   instructionService: InstructionService;
   approveSessionPlan: (sessionId: string) => Promise<unknown>;
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
+  memoryService?: MemoryService;
+  agentPresetSyncService?: Pick<AgentPresetSyncService, "getOptionalWorkerAgentForRepoPath">;
   logger?: Logger;
 }
 
 export class VirtualWorkerService {
   private readonly workspaceManager = new WorkspaceManager();
   private readonly workspaceArtifactService = new WorkspaceArtifactService(this.workspaceManager);
+  private readonly dockerService = new DockerService();
+  private readonly prService = new PrService();
 
   private readonly providerRunner = new ProviderRunner(new DockerRunner());
 
@@ -201,9 +211,10 @@ export class VirtualWorkerService {
 
   private async runProjectCycle(projectId: string, reason: string): Promise<void> {
     const cycleSettings = this.resolveCycleSettings(projectId);
+    const cycleProviderType = cycleSettings.aiProvider.providers[cycleSettings.workers.virtualWorkerProvider]?.provider || "codex";
     const endpoint = this.deps.workerEndpointRepository.createVirtualEndpoint({
       endpointKey: `virtual:${projectId}:${Date.now().toString(36)}:${sanitizeToken(randomUUID().slice(0, 8))}`,
-      displayName: `Virtual ${this.getProviderLabel(cycleSettings.workers.virtualWorkerProvider)} Worker`,
+      displayName: `Virtual ${this.getProviderLabel(cycleProviderType)} Worker`,
       status: "connected",
       transport: "internal",
       capabilities: {
@@ -265,8 +276,9 @@ export class VirtualWorkerService {
 
   private async handleTaskDispatch(workerEndpointId: string, claim: WorkerTaskDispatchClaim): Promise<void> {
     const settings = this.resolveDashboardSettings(claim.project.id, claim.sprint.id);
-    const provider = settings.workers.virtualWorkerProvider;
-    const providerSettings = settings.aiProvider.providers[provider];
+    const providerConfigId = settings.workers.virtualWorkerProvider;
+    const providerSettings = settings.aiProvider.providers[providerConfigId];
+    const provider = providerSettings.provider as Exclude<ProviderId, "jules">;
     const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(claim.dispatch.id);
     if (!taskRun) {
       throw new Error(`Task run not found for dispatch ${claim.dispatch.id}`);
@@ -275,11 +287,20 @@ export class VirtualWorkerService {
     const session = await this.deps.cliWorkflowService.startTask({
       provider,
       providerSettingsOverride: {
-        model: settings.workers.model && settings.workers.model !== "default"
-          ? settings.workers.model
-          : providerSettings.model,
+        model: resolveWorkerModelForProvider(
+          provider,
+          settings.workers.model,
+          providerSettings.model,
+        ),
         thinkingMode: providerSettings.thinkingMode,
         apiKey: providerSettings.apiKey,
+      qwenAuthMode: providerSettings.qwenAuthMode,
+      qwenRegion: providerSettings.qwenRegion,
+      qwenBaseUrl: providerSettings.qwenBaseUrl,
+      qwenEnvKey: providerSettings.qwenEnvKey,
+      qwenProtocol: providerSettings.qwenProtocol,
+        providerMountAuth: providerSettings.mountAuth,
+        providerAuthPath: providerSettings.authPath,
       },
       task: {
         record_id: claim.task.id,
@@ -493,10 +514,11 @@ export class VirtualWorkerService {
         is_independent: true,
         status: "PENDING",
       },
-      providerPool: ["gemini", "codex", "claude-code"],
+      providerPool: ["gemini", "codex", "claude-code", "qwen-code"],
     });
-    const provider = route.provider as DashboardSettings["workers"]["virtualWorkerProvider"];
-    const providerSettings = route.providers[provider];
+    const provider = route.provider as Exclude<ProviderId, "jules">;
+    const providerConfigId = route.providerConfigId || route.provider;
+    const providerSettings = route.providers[providerConfigId];
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
@@ -511,6 +533,13 @@ export class VirtualWorkerService {
     const title = item.title;
     let succeeded = false;
     let initialHead = "";
+    const workerAgent = await this.deps.agentPresetSyncService?.getOptionalWorkerAgentForRepoPath(repoPath).catch(() => null);
+    const memoryContext = workerAgent?.id
+      ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
+      : undefined;
+    const memoryInstructions = settings.memory?.enabled && settings.memory.autoCaptureSprint
+      ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
+      : "";
 
     this.deps.sessionTracking.createSession({
       id: sessionId,
@@ -530,30 +559,68 @@ export class VirtualWorkerService {
 
     let cleanedUp = false;
     try {
-      const prepared = await this.workspaceManager.prepareWorktree(repoPath, worktreePath, sourceBranch, sourceBranch);
+      const effectiveWorkflowSettings = await this.resolveVirtualWorkerWorkflowSettings({
+        workflowSettings,
+        sessionId,
+        repoPath,
+        purpose: "merge_conflict",
+      });
+      const prepared = await this.workspaceManager.prepareWorktree(
+        repoPath,
+        this.workspaceManager.buildWorktreePath(repoPath, sessionId, effectiveWorkflowSettings.executionMode),
+        sourceBranch,
+        sourceBranch,
+      );
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
       initialHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
       const hasConflicts = await this.runMergeIntoSource(finalWorktreePath, targetBranch, sessionId);
       if (hasConflicts) {
         const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
-        const providerPrompt = buildProviderPrompt(this.buildMergeConflictPrompt(item, sourceBranch, targetBranch, workspaceGuidance), providerSettings.thinkingMode);
+        const providerPrompt = buildProviderPrompt(
+          this.buildMergeConflictPrompt(
+            item,
+            sourceBranch,
+            targetBranch,
+            workspaceGuidance,
+            memoryContext,
+            memoryInstructions,
+          ),
+          providerSettings.thinkingMode,
+        );
         await this.runProviderWithRetry({
           provider,
           providerPrompt,
-          workflowSettings,
+          workflowSettings: effectiveWorkflowSettings,
           repoPath,
           worktreePath: finalWorktreePath,
-        sessionId,
-        attentionItem: item,
-        purpose: "merge_conflict",
-        model: providerSettings.model,
-        apiKey: providerSettings.apiKey,
-        githubToken: settings.git.githubToken,
-      });
+          sessionId,
+          attentionItem: item,
+          purpose: "merge_conflict",
+          model: providerSettings.model,
+          apiKey: providerSettings.apiKey,
+          qwenAuthMode: providerSettings.qwenAuthMode,
+          qwenRegion: providerSettings.qwenRegion,
+          qwenBaseUrl: providerSettings.qwenBaseUrl,
+          qwenEnvKey: providerSettings.qwenEnvKey,
+          qwenProtocol: providerSettings.qwenProtocol,
+          providerMountAuth: providerSettings.mountAuth,
+          providerAuthPath: providerSettings.authPath,
+          githubToken: settings.git.githubToken,
+        });
       }
       await this.ensureMergeConflictResolved(finalWorktreePath);
       await this.finalizeMergeCommit(finalWorktreePath, sourceBranch, targetBranch);
+      await this.ensureTargetMergedIntoSource(finalWorktreePath, targetBranch);
+      if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
+        await this.captureMemoriesFromWorkspace(
+          item.projectId,
+          item.sprintId || undefined,
+          workerAgent?.id || null,
+          finalWorktreePath,
+          item.id,
+        );
+      }
       const patchText = await this.workspaceArtifactService.exportBinaryPatch(finalWorktreePath, initialHead);
       const applyResult = await this.workspaceArtifactService.applyPatchToBranch({
         repoPath,
@@ -561,12 +628,31 @@ export class VirtualWorkerService {
         workerBranch: sourceBranch,
         patchText,
         commitMessage: `fix(merge): resolve ${targetBranch} into ${sourceBranch}`,
+        parentRefs: [`origin/${targetBranch}`],
       });
-      const headSha = applyResult.commitSha || initialHead;
+      let hasUnpushed = applyResult.hasChanges;
+      let hasAhead = applyResult.hasChanges;
+      if (!applyResult.hasChanges) {
+        hasUnpushed = await this.prService.hasUnpushedCommits(repoPath, sourceBranch, targetBranch);
+        hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(repoPath, sourceBranch, targetBranch);
+        if (hasUnpushed) {
+          await runCommandStrict(
+            "git",
+            ["push", "-u", "origin", `refs/heads/${sourceBranch}:refs/heads/${sourceBranch}`],
+            repoPath,
+          );
+        }
+      }
+      const headSha = applyResult.commitSha
+        || ((hasUnpushed || hasAhead)
+          ? (await runCommandStrict("git", ["rev-parse", `refs/heads/${sourceBranch}`], repoPath)).stdout.trim()
+          : initialHead);
       this.deps.sessionTracking.updateSession(sessionId, { state: "COMPLETED" });
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
-        description: `Pushed resolved merge conflict to ${sourceBranch} at ${headSha}.`,
+        description: hasUnpushed || applyResult.hasChanges
+          ? `Pushed resolved merge conflict to ${sourceBranch} at ${headSha}.`
+          : `Resolved merge-conflict run completed on ${sourceBranch} at ${headSha}.`,
       });
       this.deps.projectAttentionService.resolveItem(item.id, {
         status: "resolved",
@@ -634,10 +720,11 @@ export class VirtualWorkerService {
         is_independent: true,
         status: "PENDING",
       },
-      providerPool: ["gemini", "codex", "claude-code"],
+      providerPool: ["gemini", "codex", "claude-code", "qwen-code"],
     });
-    const provider = route.provider as DashboardSettings["workers"]["virtualWorkerProvider"];
-    const providerSettings = route.providers[provider];
+    const provider = route.provider as Exclude<ProviderId, "jules">;
+    const providerConfigId = route.providerConfigId || route.provider;
+    const providerSettings = route.providers[providerConfigId];
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
@@ -648,6 +735,9 @@ export class VirtualWorkerService {
       payload.workerBranch ?? payload.branchName,
       "branchName",
     );
+    const compareBaseBranch = typeof payload.featureBranch === "string" && payload.featureBranch.trim().length > 0
+      ? payload.featureBranch.trim()
+      : (settings.git.defaultBranch || "main");
 
     const retryKey = item.taskId || item.id;
     const retryCount = this.ciAutofixRetryCounts.get(retryKey) || 0;
@@ -659,10 +749,23 @@ export class VirtualWorkerService {
     }
 
     const sessionId = `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-    let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);
+    const resumeTarget = this.deps.sessionTracking.findLatestCliSessionForBranch({
+      repoPath,
+      workerBranch: branchName,
+      providers: [provider],
+    });
+    const workspaceOwnerSessionId = resumeTarget?.sessionId || sessionId;
+    let worktreePath = this.workspaceManager.buildWorkspaceRef(repoPath, workspaceOwnerSessionId, workflowSettings.executionMode);
     const title = item.title;
     let succeeded = false;
     let initialHead = "";
+    const workerAgent = await this.deps.agentPresetSyncService?.getOptionalWorkerAgentForRepoPath(repoPath).catch(() => null);
+    const memoryContext = workerAgent?.id
+      ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
+      : undefined;
+    const memoryInstructions = settings.memory?.enabled && settings.memory.autoCaptureSprint
+      ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
+      : "";
 
     this.deps.sessionTracking.createSession({
       id: sessionId,
@@ -682,17 +785,38 @@ export class VirtualWorkerService {
 
     let cleanedUp = false;
     try {
-      const prepared = await this.workspaceManager.prepareWorktree(repoPath, worktreePath, branchName, branchName);
+      const effectiveWorkflowSettings = await this.resolveVirtualWorkerWorkflowSettings({
+        workflowSettings,
+        sessionId,
+        repoPath,
+        purpose: "ci_fix",
+      });
+      const prepared = await this.workspaceManager.prepareWorktree(
+        repoPath,
+        this.workspaceManager.buildWorkspaceRef(repoPath, workspaceOwnerSessionId, effectiveWorkflowSettings.executionMode),
+        branchName,
+        branchName,
+        resumeTarget?.sessionId,
+      );
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
       initialHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
 
       const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
-      const providerPrompt = buildProviderPrompt(this.buildCiFixPrompt(item, branchName, workspaceGuidance), providerSettings.thinkingMode);
+      const providerPrompt = buildProviderPrompt(
+        this.buildCiFixPrompt(
+          item,
+          branchName,
+          workspaceGuidance,
+          memoryContext,
+          memoryInstructions,
+        ),
+        providerSettings.thinkingMode,
+      );
       await this.runProviderWithRetry({
         provider,
         providerPrompt,
-        workflowSettings,
+        workflowSettings: effectiveWorkflowSettings,
         repoPath,
         worktreePath: finalWorktreePath,
         sessionId,
@@ -700,8 +824,25 @@ export class VirtualWorkerService {
         purpose: "ci_fix",
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
+        qwenAuthMode: providerSettings.qwenAuthMode,
+        qwenRegion: providerSettings.qwenRegion,
+        qwenBaseUrl: providerSettings.qwenBaseUrl,
+        qwenEnvKey: providerSettings.qwenEnvKey,
+        qwenProtocol: providerSettings.qwenProtocol,
+        providerMountAuth: providerSettings.mountAuth,
+        providerAuthPath: providerSettings.authPath,
         githubToken: settings.git.githubToken,
       });
+
+      if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
+        await this.captureMemoriesFromWorkspace(
+          item.projectId,
+          item.sprintId || undefined,
+          workerAgent?.id || null,
+          finalWorktreePath,
+          item.id,
+        );
+      }
 
       const patchText = await this.workspaceArtifactService.exportBinaryPatch(finalWorktreePath, initialHead);
       const applyResult = await this.workspaceArtifactService.applyPatchToBranch({
@@ -711,11 +852,29 @@ export class VirtualWorkerService {
         patchText,
         commitMessage: `fix(ci): resolve failing checks on ${branchName}`,
       });
-      const headSha = applyResult.commitSha || initialHead;
+      let hasUnpushed = applyResult.hasChanges;
+      let hasAhead = applyResult.hasChanges;
+      if (!applyResult.hasChanges) {
+        hasUnpushed = await this.prService.hasUnpushedCommits(repoPath, branchName, compareBaseBranch);
+        hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(repoPath, branchName, compareBaseBranch);
+        if (hasUnpushed) {
+          await runCommandStrict(
+            "git",
+            ["push", "-u", "origin", `refs/heads/${branchName}:refs/heads/${branchName}`],
+            repoPath,
+          );
+        }
+      }
+      const headSha = applyResult.commitSha
+        || ((hasUnpushed || hasAhead)
+          ? (await runCommandStrict("git", ["rev-parse", `refs/heads/${branchName}`], repoPath)).stdout.trim()
+          : initialHead);
       this.deps.sessionTracking.updateSession(sessionId, { state: "COMPLETED" });
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
-        description: `Pushed CI fix to ${branchName} at ${headSha}.`,
+        description: hasUnpushed || applyResult.hasChanges
+          ? `Pushed CI fix to ${branchName} at ${headSha}.`
+          : `CI fix run completed on ${branchName} at ${headSha}.`,
       });
 
       this.ciAutofixRetryCounts.set(retryKey, retryCount + 1);
@@ -772,10 +931,43 @@ export class VirtualWorkerService {
     }
   }
 
+  private async resolveVirtualWorkerWorkflowSettings(args: {
+    workflowSettings: CliWorkflowSettings;
+    sessionId: string;
+    repoPath: string;
+    purpose: "ci_fix" | "merge_conflict";
+  }): Promise<CliWorkflowSettings> {
+    if (args.workflowSettings.executionMode !== "DOCKER") {
+      return args.workflowSettings;
+    }
+
+    const dockerAvailable = await this.dockerService.isAvailable();
+    if (dockerAvailable) {
+      return args.workflowSettings;
+    }
+
+    if (args.purpose === "merge_conflict") {
+      throw new Error(
+        "Docker is unavailable, and merge-conflict resolution requires isolated container execution. Fix Docker availability and retry.",
+      );
+    }
+
+    this.deps.sessionTracking.appendActivity(args.sessionId, {
+      originator: "system",
+      description: "Docker is unavailable. Falling back to HOST execution mode for virtual worker CI autofix.",
+    });
+    return {
+      ...args.workflowSettings,
+      executionMode: "HOST",
+    };
+  }
+
   private buildCiFixPrompt(
     item: ProjectAttentionItemRecord,
     branchName: string,
     workspaceGuidance: string,
+    memoryContext?: string,
+    memoryInstructions?: string,
   ): string {
     const payload = item.payload || {};
     const failedChecks = Array.isArray(payload.failedChecks) ? payload.failedChecks as string[] : [];
@@ -788,6 +980,8 @@ export class VirtualWorkerService {
     return [
       `CI checks have failed for PR #${prNumber} on branch \`${branchName}\`.`,
       prUrl ? `PR URL: ${prUrl}` : null,
+      "",
+      memoryContext?.trim() || null,
       "",
       "Failed checks: " + (failedChecks.length > 0 ? failedChecks.join(", ") : "unknown"),
       failedJobLabels.length > 0 ? "Failed jobs: " + failedJobLabels.join(", ") : null,
@@ -804,6 +998,10 @@ export class VirtualWorkerService {
       "",
       taskPrompt ? "Original task prompt:\n" + taskPrompt : null,
       "",
+      "## LEARNINGS CAPTURE (Required)",
+      memoryInstructions?.trim()
+        || `Before you finish, write key durable learnings and pitfalls from this CI fix to \`${LEARNINGS_FILENAME}\`.`,
+      "",
       "Original attention summary:",
       item.summaryMarkdown.trim(),
       "",
@@ -813,7 +1011,7 @@ export class VirtualWorkerService {
 
   private async runMergeIntoSource(worktreePath: string, targetBranch: string, sessionId: string): Promise<boolean> {
     try {
-      await runCommandStrict("git", ["merge", "--no-ff", "--no-commit", `origin/${targetBranch}`], worktreePath);
+      await this.runWorkspaceCommand(worktreePath, "git", ["merge", "--no-ff", "--no-commit", `origin/${targetBranch}`]);
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
         description: `Prepared merge of origin/${targetBranch} into the source branch without conflicts.`,
@@ -833,7 +1031,7 @@ export class VirtualWorkerService {
   }
 
   private async runProviderWithRetry(args: {
-    provider: DashboardSettings["workers"]["virtualWorkerProvider"];
+    provider: Exclude<ProviderId, "jules">;
     providerPrompt: string;
     workflowSettings: DashboardSettings["cliWorkflow"];
     repoPath: string;
@@ -843,6 +1041,13 @@ export class VirtualWorkerService {
     purpose: "ci_fix" | "merge_conflict";
     model: string;
     apiKey: string;
+    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+    qwenRegion?: "china" | "international";
+    qwenBaseUrl?: string;
+    qwenEnvKey?: string;
+    qwenProtocol?: "openai" | "anthropic" | "gemini";
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
     githubToken: string;
   }): Promise<void> {
     const result = await this.providerExecutionService.executeProvider({
@@ -859,6 +1064,13 @@ export class VirtualWorkerService {
       cwd: args.worktreePath,
       model: args.model,
       apiKey: args.apiKey,
+      qwenAuthMode: args.qwenAuthMode,
+      qwenRegion: args.qwenRegion,
+      qwenBaseUrl: args.qwenBaseUrl,
+      qwenEnvKey: args.qwenEnvKey,
+      qwenProtocol: args.qwenProtocol,
+      providerMountAuth: args.providerMountAuth,
+      providerAuthPath: args.providerAuthPath,
       sessionId: args.sessionId,
       workflowSettings: args.workflowSettings,
       repoPath: args.repoPath,
@@ -904,6 +1116,14 @@ export class VirtualWorkerService {
     }
   }
 
+  private async ensureTargetMergedIntoSource(worktreePath: string, targetBranch: string): Promise<void> {
+    try {
+      await this.runWorkspaceCommand(worktreePath, "git", ["merge-base", "--is-ancestor", `origin/${targetBranch}`, "HEAD"]);
+    } catch {
+      throw new Error(`Merge verification failed: origin/${targetBranch} is not contained in the resolved source branch.`);
+    }
+  }
+
   private async hasMergeHead(worktreePath: string): Promise<boolean> {
     try {
       await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
@@ -918,6 +1138,8 @@ export class VirtualWorkerService {
     sourceBranch: string,
     targetBranch: string,
     workspaceGuidance: string,
+    memoryContext?: string,
+    memoryInstructions?: string,
   ): string {
     const payload = item.payload || {};
     const mergedTaskPrompts = this.extractMergeConflictTaskPrompts(
@@ -934,6 +1156,8 @@ export class VirtualWorkerService {
       `Source branch: ${sourceBranch}`,
       `Target branch: ${targetBranch}`,
       "",
+      memoryContext?.trim() || null,
+      "",
       "Requirements:",
       "- Preserve the intended work from both branches.",
       "- Resolve only the conflict and any directly related fallout.",
@@ -944,6 +1168,10 @@ export class VirtualWorkerService {
       currentTaskPrompt || null,
       mergedTaskPrompts.length > 0 ? "\nMerged task prompts already present on the target branch:" : null,
       mergedTaskPrompts.length > 0 ? mergedTaskPrompts.join("\n\n") : null,
+      "",
+      "## LEARNINGS CAPTURE (Required)",
+      memoryInstructions?.trim()
+        || `Before you finish, write key durable learnings and pitfalls from this merge-conflict resolution to \`${LEARNINGS_FILENAME}\`.`,
       "",
       "Original attention summary:",
       item.summaryMarkdown.trim(),
@@ -1032,10 +1260,12 @@ export class VirtualWorkerService {
     }
   }
 
-  private getProviderLabel(provider: DashboardSettings["workers"]["virtualWorkerProvider"]): string {
+  private getProviderLabel(provider: ProviderId): string {
     switch (provider) {
       case "claude-code":
         return "Claude Code";
+      case "qwen-code":
+        return "Qwen Code";
       case "gemini":
         return "Gemini";
       case "codex":
@@ -1056,6 +1286,73 @@ export class VirtualWorkerService {
     return value && typeof value === "object" && !Array.isArray(value)
       ? value as Record<string, unknown>
       : null;
+  }
+
+  private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {
+    const memoryService = this.deps.memoryService;
+    if (!memoryService) {
+      return undefined;
+    }
+
+    try {
+      const longTerm = memoryService.listLongTermByAgent(projectId, agentPresetId, 10);
+      const shortTerm = sprintId
+        ? memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, 10)
+        : [];
+
+      if (longTerm.length === 0 && shortTerm.length === 0) {
+        return undefined;
+      }
+
+      const sections: string[] = ["## PROJECT CONTEXT FROM MEMORY"];
+      if (longTerm.length > 0) {
+        sections.push("### Long-Term Knowledge");
+        for (const memory of longTerm) {
+          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
+        }
+      }
+      if (shortTerm.length > 0) {
+        sections.push("### Recent Sprint Learnings");
+        for (const memory of shortTerm) {
+          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
+        }
+      }
+      return sections.join("\n");
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async captureMemoriesFromWorkspace(
+    projectId: string,
+    sprintId: string | undefined,
+    agentPresetId: string | null,
+    worktreePath: string,
+    originId: string,
+  ): Promise<number> {
+    if (!this.deps.memoryService) {
+      return 0;
+    }
+    if (worktreePath.startsWith("docker-volume://")) {
+      const raw = await this.workspaceManager.readWorkspaceFile(worktreePath, LEARNINGS_FILENAME);
+      if (!raw) {
+        return 0;
+      }
+      return await this.deps.memoryService.captureMemoriesFromContent(
+        projectId,
+        sprintId,
+        agentPresetId,
+        raw,
+        originId,
+      );
+    }
+    return await this.deps.memoryService.captureMemoriesFromWorktree(
+      projectId,
+      sprintId,
+      agentPresetId,
+      worktreePath,
+      originId,
+    );
   }
 
   private async runWorkspaceCommand(worktreePath: string, command: string, args: string[]) {

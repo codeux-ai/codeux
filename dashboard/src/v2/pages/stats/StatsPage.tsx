@@ -8,13 +8,17 @@ import {
   createSeries,
 } from "./stats-utils.js";
 import { useStatsPageData } from "./use-stats-page-data.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { StatsPageHero } from "./components/StatsPageHero.js";
 import { AnalysisStudioSection } from "./components/AnalysisStudioSection.js";
 import { SignalMetricCard } from "./components/StatsShared.js";
+import styles from "./StatsPage.module.css";
 
 export const StatsPage: FunctionComponent = () => {
   const rootRef = useRef<HTMLDivElement>(null);
+  const hasAnimated = useRef(false);
   const { selectedProject } = useProjectData();
+  const reducedMotion = useReducedMotion();
   const {
     stats,
     loading,
@@ -41,18 +45,21 @@ export const StatsPage: FunctionComponent = () => {
   } = useStatsPageData(selectedProject?.id || null);
 
   useLayoutEffect(() => {
-    if (!rootRef.current) {
+    if (!rootRef.current || reducedMotion || !stats || hasAnimated.current) {
       return;
     }
+
+    hasAnimated.current = true;
+    gsap.killTweensOf(rootRef.current.children);
     gsap.fromTo(
       rootRef.current.children,
       { opacity: 0, y: 28 },
       { opacity: 1, y: 0, duration: 0.8, stagger: 0.08, ease: "power4.out" },
     );
-  }, []);
+  }, [stats, reducedMotion]);
 
   return (
-    <div ref={rootRef} className="mx-auto flex max-w-[2400px] flex-col gap-16 px-8 py-20 md:px-20">
+    <div ref={rootRef} className={`mx-auto flex max-w-[2400px] flex-col gap-16 px-8 py-20 md:px-20 ${styles.pageRoot}`}>
       <StatsPageHero
         selectedProject={selectedProject}
         stats={stats}
@@ -79,7 +86,7 @@ export const StatsPage: FunctionComponent = () => {
         </div>
       ) : stats ? (
         <>
-          <section className="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-5">
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
             <SignalMetricCard
               label="Total Tokens"
               value={formatTokens(usage.totalTokens)}
@@ -108,19 +115,6 @@ export const StatsPage: FunctionComponent = () => {
               signalLabel="Task Scope"
             />
             <SignalMetricCard
-              label="Planning Usage"
-              value={formatTokens((planningUsage?.usage?.totalTokens || 0))}
-              detail={
-                (planningUsage?.usage?.totalTokens || 0) > 0
-                  ? `${formatDuration((planningUsage?.usage?.activeTimeMs || 0))} spent in sprint planning`
-                  : "Planning usage will land here once virtual planning runs execute."
-              }
-              accentHex="#F43F5E"
-              hoverTint="group-hover:bg-rose-500/[0.03]"
-              sparkline={createSeries(stats.buckets, (bucket) => bucket.usage.invocationCount)}
-              signalLabel="Planning"
-            />
-            <SignalMetricCard
               label="Telemetry Confidence"
               value={completionConfidence}
               detail={`${usage.unavailableInvocationCount + usage.unsupportedInvocationCount} invocations could not expose authoritative counts`}
@@ -131,16 +125,27 @@ export const StatsPage: FunctionComponent = () => {
             />
           </section>
 
-          <AnalysisStudioSection
-            stats={stats}
-            planningUsage={planningUsage}
-            providerSegments={providerSegments}
-            tokenSegments={tokenSegments}
-            sourceSegments={sourceSegments}
-            visualMode={visualMode}
-            setVisualMode={setVisualMode}
-            chartState={chartState}
-          />
+          <section className={styles.telemetryStack}>
+
+
+            <AnalysisStudioSection
+              stats={stats}
+              planningUsage={planningUsage}
+              providerSegments={providerSegments}
+              tokenSegments={tokenSegments}
+              sourceSegments={sourceSegments}
+              visualMode={visualMode}
+              setVisualMode={setVisualMode}
+              chartState={chartState}
+              activeWindow={activeQuery.window}
+              customFrom={customFrom}
+              customTo={customTo}
+              applyPresetWindow={applyPresetWindow}
+              setCustomFrom={setCustomFrom}
+              setCustomTo={setCustomTo}
+              applyCustomRange={applyCustomRange}
+            />
+          </section>
 
                   </>
       ) : null}

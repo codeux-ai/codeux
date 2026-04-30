@@ -19,7 +19,11 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
 
   router.post("/api/projects/:projectId/sprints", syncRoute((req, res) => {
     try {
-      res.status(201).json(deps.createSprint(requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateSprintInput));
+      const payload = req.body as CreateSprintInput;
+      if (payload.showcasePinned === undefined) {
+        payload.showcasePinned = true;
+      }
+      res.status(201).json(deps.createSprint(requireTrimmedString(req.params.projectId, "projectId"), payload));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to create sprint"));
     }

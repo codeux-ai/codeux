@@ -62,7 +62,7 @@ describe("ChatThreadRuntimeService", () => {
     deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
     deps.taskService.resolveInvocationProvider.mockReturnValue({
       provider: "claude-code",
-      providers: { "claude-code": { model: "claude-3", apiKey: "key", thinkingMode: "HIGH" } }
+      providers: { "claude-code": { model: "claude-3", apiKey: "key", thinkingMode: "HIGH", mountAuth: true, authPath: "~/.claude" } }
     });
     deps.connectionChatRepository.listMessages.mockReturnValue([
       { authorType: "dashboard_user", bodyMarkdown: "first" },
@@ -77,6 +77,8 @@ describe("ChatThreadRuntimeService", () => {
       expect.objectContaining({
         provider: "claude-code",
         sessionId: "t1", // Fallback to thread id when no active session
+        providerMountAuth: true,
+        providerAuthPath: "~/.claude",
       })
     );
     expect(deps.connectionChatRepository.updateThread).toHaveBeenCalledWith("t1", expect.objectContaining({
@@ -240,7 +242,7 @@ describe("ChatThreadRuntimeService", () => {
     deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
     deps.taskService.resolveInvocationProvider.mockReturnValue({
       provider: "claude-code",
-      providers: { "claude-code": { model: "claude-3", apiKey: "key", thinkingMode: "HIGH" } },
+      providers: { "claude-code": { model: "claude-3", apiKey: "key", thinkingMode: "HIGH", mountAuth: true, authPath: "~/.claude" } },
     });
     deps.agentPresetSyncService.getWorkerAgent.mockResolvedValue({ instructionMarkdown: "" });
     deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-compact" });
@@ -264,6 +266,8 @@ describe("ChatThreadRuntimeService", () => {
       provider: "claude-code",
       continueSessionId: null,
       sessionId: "t1:compaction",
+      providerMountAuth: true,
+      providerAuthPath: "~/.claude",
     }));
     expect(updated.runtimeState).toMatchObject({
       replayRequired: true,

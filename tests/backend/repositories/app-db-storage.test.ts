@@ -68,6 +68,71 @@ describe("AppDbStorage", () => {
     expect(resolveAppDbPath(dbPath)).toBe(dbPath);
   });
 
+  it("backfills estimated Docker CLI usage from persisted character counts", async () => {
+    const dbPath = await createTempDbPath();
+    const storage = new AppDbStorage(dbPath);
+    const db = storage.getDatabase();
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO projects (id, slug, name, base_dir, repo_url, source_id, default_branch, feature_branch_prefix, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("project-usage", "project-usage", "Project Usage", "/tmp/project-usage", null, null, "main", "feature/", "idle", now, now);
+
+    db.prepare(`
+      INSERT INTO provider_invocations (
+        id, project_id, session_id, provider, purpose, status, model, execution_mode, started_at,
+        prompt_chars, transcript_chars, input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens,
+        total_tokens, usage_source, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "usage-1",
+      "project-usage",
+      "session-1",
+      "codex",
+      "task_coding",
+      "completed",
+      "default",
+      "DOCKER",
+      now,
+      9,
+      5,
+      0,
+      0,
+      0,
+      0,
+      0,
+      "unavailable",
+      now,
+      now,
+    );
+
+    // Re-opening the storage runs migrations against existing data.
+    new AppDbStorage(dbPath);
+
+    const row = db.prepare(`
+      SELECT input_tokens, output_tokens, total_tokens, usage_source, raw_usage_json
+      FROM provider_invocations
+      WHERE id = ?
+    `).get("usage-1") as {
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+      usage_source: string;
+      raw_usage_json: string;
+    };
+
+    expect(row).toMatchObject({
+      input_tokens: 3,
+      output_tokens: 2,
+      total_tokens: 5,
+      usage_source: "estimated",
+    });
+    expect(JSON.parse(row.raw_usage_json)).toMatchObject({
+      source: "migration:estimated-docker-cli-usage",
+    });
+  });
+
   it("resets all application tables while preserving the schema", async () => {
     const dbPath = await createTempDbPath();
     const storage = new AppDbStorage(dbPath);

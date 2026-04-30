@@ -111,10 +111,8 @@ const createMockContext = (): PipelineContext => {
       ciIntelligence: {
         enabled: true,
         enableLivePrMonitoring: false,
-        waitForCiBeforeMainMerge: false,
         resolveAllCommentsBeforeMainMerge: false,
         resolveMainMergeConflicts: false,
-        waitForCiBeforeFeatureMerge: false,
         resolveAllCommentsBeforeFeatureMerge: false,
         resolveMergeConflicts: false,
         waitForJulesCiAutofix: false,
@@ -443,6 +441,37 @@ describe("executeGitFinalizeStage", () => {
     });
     expect(ctx.workspaceArtifactService.applyPatchToBranch).toHaveBeenCalledTimes(1);
     expect(ctx.runCommand).not.toHaveBeenCalled();
+  });
+
+  it("pushes an existing local worker-branch commit when the provider committed directly in the workspace", async () => {
+    const ctx = createMockContext();
+
+    vi.mocked(ctx.prService.hasUnpushedCommits).mockResolvedValue(true);
+    vi.mocked(ctx.prService.hasWorkerBranchCommitsAgainstFeature).mockResolvedValue(true);
+    vi.mocked(ctx.runCommand)
+      .mockResolvedValueOnce({ ok: true, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: true, stdout: "feedbeef\n", stderr: "" });
+
+    const result = await executeGitFinalizeStage(ctx);
+
+    expect(ctx.runCommand).toHaveBeenNthCalledWith(
+      1,
+      "git",
+      ["push", "-u", "origin", "refs/heads/worker-branch:refs/heads/worker-branch"],
+      "/repo",
+    );
+    expect(ctx.runCommand).toHaveBeenNthCalledWith(
+      2,
+      "git",
+      ["rev-parse", "refs/heads/worker-branch"],
+      "/repo",
+    );
+    expect(result).toEqual({
+      hasChanges: true,
+      committedChanges: true,
+      pushedBranch: "worker-branch",
+      commitSha: "feedbeef",
+    });
   });
 });
 

@@ -1,11 +1,103 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 /** @jsx h */
 import { h } from "preact";
+import { useState } from "preact/hooks";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { StatsPage } from "../../../dashboard/src/v2/pages/stats/StatsPage.js";
 import { useStatsPageData } from "../../../dashboard/src/v2/pages/stats/use-stats-page-data.js";
+import { useReducedMotion } from "../../../dashboard/src/v2/hooks/use-reduced-motion.js";
+import gsap from "gsap";
+
+vi.mock("gsap", () => ({
+  default: {
+    fromTo: vi.fn(),
+    killTweensOf: vi.fn(),
+  },
+}));
+
+vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useReducedMotion: vi.fn(),
+}));
+
+vi.mock("../../../dashboard/src/v2/pages/stats/components/StatsPageHero.js", () => ({
+  StatsPageHero: ({
+    selectedProject,
+    stats,
+    applyPresetWindow,
+  }: {
+    selectedProject: { name: string } | null;
+    stats: { activeSprint?: { sprintNumber?: number } } | null;
+    applyPresetWindow: (window: string) => void;
+  }) => (
+    <section>
+      <h1>Statistics.</h1>
+      <div>{selectedProject?.name}</div>
+      <div>{stats?.activeSprint?.sprintNumber ? `Live sprint ${stats.activeSprint.sprintNumber}` : "No live sprint"}</div>
+      <button type="button" onClick={() => applyPresetWindow("all")}>All time</button>
+    </section>
+  ),
+}));
+
+vi.mock("../../../dashboard/src/v2/pages/stats/components/StatsShared.js", () => ({
+  SignalMetricCard: ({ label }: { label: string }) => <div>{label}</div>,
+}));
+
+vi.mock("../../../dashboard/src/v2/pages/stats/components/AnalysisStudioSection.js", () => ({
+  AnalysisStudioSection: ({
+    stats,
+    visualMode,
+    setVisualMode,
+  }: {
+    stats: { tasks: Array<{ label: string }>; sprints: Array<{ label: string }> };
+    visualMode: "trend" | "composition" | "reliability" | "ledgers";
+    setVisualMode: (mode: "trend" | "composition" | "reliability" | "ledgers") => void;
+  }) => {
+    const [taskSearch, setTaskSearch] = useState("");
+    const filteredTasks = stats.tasks.filter((task) => task.label.toLowerCase().includes(taskSearch.toLowerCase()));
+
+    return (
+      <section>
+        <button type="button" onClick={() => setVisualMode("trend")}>Trend</button>
+        <button type="button" onClick={() => setVisualMode("composition")}>Composition</button>
+        <button type="button" onClick={() => setVisualMode("reliability")}>Reliability</button>
+        <button type="button" onClick={() => setVisualMode("ledgers")}>Ledgers</button>
+
+        {visualMode === "trend" ? <div>Trend analysis</div> : null}
+        {visualMode === "composition" ? (
+          <div>
+            <div>Composition analysis</div>
+            <div>Provider Share</div>
+            <div>Token Anatomy</div>
+          </div>
+        ) : null}
+        {visualMode === "reliability" ? (
+          <div>
+            <div>Reliability analysis</div>
+            <div>Telemetry Source Mix</div>
+            <div>Confidence Board</div>
+          </div>
+        ) : null}
+        {visualMode === "ledgers" ? (
+          <div>
+            <div>Task Telemetry</div>
+            <div>Sprint Telemetry</div>
+            <input
+              placeholder="Search"
+              value={taskSearch}
+              onInput={(event) => setTaskSearch((event.currentTarget as HTMLInputElement).value)}
+            />
+            {filteredTasks.length > 0
+              ? filteredTasks.map((task) => <div key={task.label}>{task.label}</div>)
+              : <div>No task telemetry landed in this window yet.</div>}
+            {stats.sprints.map((sprint) => <div key={sprint.label}>{sprint.label}</div>)}
+          </div>
+        ) : null}
+      </section>
+    );
+  },
+}));
 
 // Mock the context
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
@@ -28,7 +120,10 @@ const baseStats = {
       chartSeries: [{ id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, data: [10] }],
   buckets: [{ bucketStart: "2023-01-01", bucketEnd: "2023-01-01", label: "B1", usage: { invocationCount: 1, activeTimeMs: 1, reportedInvocationCount: 1, totalTokens: 1, inputTokens: 1, outputTokens: 1, cachedInputTokens: 1, reasoningOutputTokens: 1, wallTimeMs: 1, unparseableInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, executionCount: 1, successCount: 1, failureCount: 1 } }],
   sources: [],
-  purposes: [],
+  purposes: [
+    { id: "p1", label: "task_coding", usage: { invocationCount: 1, totalTokens: 200, inputTokens: 120, outputTokens: 80, cachedInputTokens: 0, reasoningOutputTokens: 0, activeTimeMs: 4000, wallTimeMs: 5000, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 }, lastActivityAt: "2023" },
+    { id: "p2", label: "planning", usage: { invocationCount: 1, totalTokens: 120, inputTokens: 70, outputTokens: 50, cachedInputTokens: 0, reasoningOutputTokens: 0, activeTimeMs: 2500, wallTimeMs: 3100, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 }, lastActivityAt: "2023" },
+  ],
   providers: [],
   tokenSources: [],
   usage: { totalTokens: 1000, activeTimeMs: 5000, invocationCount: 12, reportedInvocationCount: 10, estimatedInvocationCount: 2, wallTimeMs: 60000, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, inputTokens: 500, outputTokens: 500, cachedInputTokens: 0, reasoningOutputTokens: 0 },
@@ -84,13 +179,52 @@ expect.extend(matchers);
 
 beforeEach(() => {
   cleanup();
-  if (typeof window !== "undefined") {
-    window.SVGElement.prototype.getTotalLength = () => 100;
-  }
+  vi.clearAllMocks();
   vi.mocked(useStatsPageData).mockReturnValue(baseMockValue as any);
+  vi.mocked(useReducedMotion).mockReturnValue(false);
 });
 
 describe("StatsPage Shell", () => {
+  it("does not animate if stats are loading", () => {
+    vi.mocked(useStatsPageData).mockReturnValue({
+      ...baseMockValue,
+      stats: null,
+      loading: true,
+    } as any);
+    render(<StatsPage />);
+    expect(gsap.fromTo).not.toHaveBeenCalled();
+    expect(screen.getByText(/Loading the telemetry field/i)).toBeInTheDocument();
+  });
+
+  it("does not animate if there is an error and stats are null", () => {
+    vi.mocked(useStatsPageData).mockReturnValue({
+      ...baseMockValue,
+      stats: null,
+      error: "Something went wrong",
+    } as any);
+    render(<StatsPage />);
+    expect(gsap.fromTo).not.toHaveBeenCalled();
+    expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+  });
+
+  it("does not animate if reduced motion is enabled", () => {
+    vi.mocked(useReducedMotion).mockReturnValue(true);
+    render(<StatsPage />);
+    expect(gsap.fromTo).not.toHaveBeenCalled();
+    expect(screen.getByText("Statistics.")).toBeInTheDocument();
+  });
+
+  it("animates once when stats load and reduced motion is false", () => {
+    const { rerender } = render(<StatsPage />);
+    expect(gsap.killTweensOf).toHaveBeenCalledTimes(1);
+    expect(gsap.fromTo).toHaveBeenCalledTimes(1);
+
+    // Rerender with the same data to ensure it doesn't trigger again
+    rerender(<StatsPage />);
+    expect(gsap.killTweensOf).toHaveBeenCalledTimes(1);
+    expect(gsap.fromTo).toHaveBeenCalledTimes(1);
+  });
+
   it("renders the hero content and range controls", () => {
     render(<StatsPage />);
     expect(screen.getByText("Statistics.")).toBeInTheDocument();
@@ -105,6 +239,8 @@ describe("StatsPage Shell", () => {
     expect(screen.getByText("Active AI Time")).toBeInTheDocument();
     expect(screen.getByText("Wall Runtime")).toBeInTheDocument();
   });
+
+
 
   it("renders the analysis studio section with view toggle above it", () => {
     render(<StatsPage />);

@@ -116,7 +116,7 @@ export class MainMergeGateService {
 
     if (!mainMergePr) {
       return {
-        text: `\nℹ️ **Main CI Gate:** No open PR \`${featureBranch} -> ${defaultBranch}\` found. Create the PR and wait for CI.\n`,
+        text: `\nℹ️ **Main Merge Gate:** No open PR \`${featureBranch} -> ${defaultBranch}\` found. Create the PR before finalizing the sprint.\n`,
         state: "missing_pr",
         prNumber: null,
         prUrl: null,
@@ -133,17 +133,26 @@ export class MainMergeGateService {
     const failedChecks = checks
       .filter((check) => isCiFailure(check.status, check.conclusion))
       .map((check) => check.name);
-    const waitForMainCi = ciIntelligence.waitForCiBeforeMainMerge;
+    const waitForMainCi = ciIntelligence.mainBranchAutoMergeMode === "WHEN_GREEN";
     const resolveAllCommentsBeforeMainMerge = ciIntelligence.resolveAllCommentsBeforeMainMerge;
     const hasMergeConflict = mainMergePr.mergeStateStatus === "DIRTY";
     const hasFailedChecks = waitForMainCi && failedChecks.length > 0;
     const hasPendingChecks = waitForMainCi && (checks.length === 0 || checks.some((check) => isCiPending(check.status, check.conclusion)));
     const hasReviewBlockers = resolveAllCommentsBeforeMainMerge
       && (mainMergePr.reviewDecision === "CHANGES_REQUESTED" || mainMergePr.comments > 0);
+    const checkStatusLabel = hasMergeConflict
+      ? "DIRTY"
+      : hasFailedChecks
+        ? "FAILED"
+        : hasPendingChecks
+          ? "PENDING"
+          : waitForMainCi
+            ? "SUCCESS"
+            : "NOT_REQUIRED";
 
     let text = `\n### Main Merge CI Gate\n`;
     text += `- PR: ${mainMergePr.url}\n`;
-    text += `- Check Status: \`${hasMergeConflict ? "DIRTY" : hasFailedChecks ? "FAILED" : hasPendingChecks ? "PENDING" : "SUCCESS"}\`\n`;
+    text += `- Check Status: \`${checkStatusLabel}\`\n`;
     text += `- Review Status: \`reviewDecision=${mainMergePr.reviewDecision || "NONE"}\`, comments=${mainMergePr.comments}\n`;
     text += `- Check live: \`gh pr checks ${mainMergePr.number} --watch\`\n`;
     if (mainMergePr.mergeStateStatus) {
@@ -202,9 +211,8 @@ export class MainMergeGateService {
       return feedback;
     }
 
-    const waitForCi = context.ciIntelligence.waitForCiBeforeMainMerge;
-    const shouldAutoMergeAlways = mode === "ALWAYS" && !waitForCi;
-    const shouldAutoMergeWhenGreen = mode === "WHEN_GREEN" || (mode === "ALWAYS" && waitForCi);
+    const shouldAutoMergeAlways = mode === "ALWAYS";
+    const shouldAutoMergeWhenGreen = mode === "WHEN_GREEN";
 
     if (shouldAutoMergeAlways && !feedback.hasReviewBlockers && !feedback.hasMergeConflict) {
       return this.executeMainAutoMerge(feedback, context, "always");

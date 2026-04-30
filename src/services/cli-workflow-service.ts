@@ -56,11 +56,18 @@ interface CliWorkflowServiceDependencies {
 }
 
 interface StartCliTaskInput {
-  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+  provider: Exclude<ProviderId, "jules">;
   providerSettingsOverride?: {
     model: string;
     thinkingMode: ThinkingMode;
     apiKey: string;
+    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+    qwenRegion?: "china" | "international";
+    qwenBaseUrl?: string;
+    qwenEnvKey?: string;
+    qwenProtocol?: "openai" | "anthropic" | "gemini";
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
   };
   task: Subtask;
   repoPath: string;
@@ -69,6 +76,42 @@ interface StartCliTaskInput {
   settingsScope?: DashboardSettingsScope;
   dispatchId?: string;
   taskRunId?: string;
+}
+
+function isNonRecoverableGitWorkflowError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return [
+    "could not read username for",
+    "authentication failed",
+    "repository not found",
+    "permission denied to",
+    "could not authenticate to github",
+    "gh auth login",
+    "gh auth status",
+    "gh token",
+    "github token",
+    "no git credentials",
+    "remote: invalid username or token",
+    "support for password authentication was removed",
+  ].some((pattern) => normalized.includes(pattern));
+}
+
+function isNonRecoverableExecutionEnvironmentError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return [
+    "the command 'docker' could not be found in this wsl 2 distro",
+    "cannot connect to the docker daemon",
+    "docker: command not found",
+    "failed to create shim task",
+  ].some((pattern) => normalized.includes(pattern));
 }
 
 export class CliWorkflowService {
@@ -371,6 +414,28 @@ export class CliWorkflowService {
           retryAfterIso: error.retryAfterIso,
           message,
         });
+      } else if (isNonRecoverableGitWorkflowError(message) || isNonRecoverableExecutionEnvironmentError(message)) {
+        this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Workflow blocked by unrecoverable execution environment error: ${message}`,
+        });
+        this.updateExecutionState(args, {
+          state: "BLOCKED",
+          finishedAt,
+          dispatchStatus: "blocked",
+          errorMessage: message,
+        });
+        this.appendExecutionEvent(args, "cli_workflow_blocked", {
+          provider: args.provider,
+          category: isNonRecoverableGitWorkflowError(message) ? "git_configuration" : "execution_environment",
+          errorMessage: message,
+        });
+        this.deps.logger?.error("CLI workflow blocked by unrecoverable execution environment error", {
+          sessionId: args.sessionId,
+          provider: args.provider,
+          message,
+        });
       } else {
         this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
         this.deps.sessionTracking.appendActivity(args.sessionId, {
@@ -448,7 +513,7 @@ export class CliWorkflowService {
   private updateExecutionState(
     args: { taskRunId?: string; sessionId: string; workerBranch: string },
     input: {
-      state: "COMPLETED" | "FAILED" | "QUOTA";
+      state: "COMPLETED" | "FAILED" | "QUOTA" | "BLOCKED";
       finishedAt: string;
       prUrl?: string;
       workerBranch?: string;
@@ -472,7 +537,11 @@ export class CliWorkflowService {
     };
     this.deps.executionRepository.updateTaskRun(taskRun.id, taskRunUpdate);
     this.deps.projectManagementRepository?.updateTask(taskRun.taskId, {
-      status: input.state === "COMPLETED" ? "coding_completed" : input.state === "FAILED" ? "pending" : "in_progress",
+      status: input.state === "COMPLETED"
+        ? "coding_completed"
+        : input.state === "QUOTA"
+          ? "in_progress"
+          : "pending",
     });
 
     if (taskRun.dispatchId) {

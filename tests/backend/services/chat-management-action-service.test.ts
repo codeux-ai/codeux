@@ -65,6 +65,8 @@ describe("ChatManagementActionService", () => {
       provider: "claude-code",
       model: "claude-3",
       apiKey: "test-key",
+      providerMountAuth: true,
+      providerAuthPath: "~/.claude",
       sessionId: "sess1",
       settings: mockSettings,
       prompt: "Update sprint",
@@ -91,6 +93,10 @@ describe("ChatManagementActionService", () => {
 
     expect(executionRepository.createExecutionInvocation).toHaveBeenCalled();
     expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith("exec-123", { status: "completed", finishedAt: expect.any(String) });
+    expect(structuredProviderResponseService.executeAndParse).toHaveBeenCalledWith(expect.objectContaining({
+      providerMountAuth: true,
+      providerAuthPath: "~/.claude",
+    }));
 
     // Verify full conversation is tracked: user prompt, assistant response, action proposed, action result
     const calls = executionRepository.appendExecutionInvocationMessage.mock.calls;
@@ -238,6 +244,8 @@ describe("ChatManagementActionService", () => {
         provider: "gemini",
         model: "gemini-2",
         apiKey: "test-key",
+        providerMountAuth: true,
+        providerAuthPath: "~/.gemini",
         sessionId: "sess1",
         settings: mockSettings,
         prompt: "List sprints",
@@ -258,6 +266,8 @@ describe("ChatManagementActionService", () => {
           mcpConnection,
           expectTextOutput: true,
           provider: "gemini",
+          providerMountAuth: true,
+          providerAuthPath: "~/.gemini",
         })
       );
 

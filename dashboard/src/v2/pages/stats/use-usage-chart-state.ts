@@ -26,7 +26,28 @@ export function useUsageChartState(
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
   const [dragCurrentIndex, setDragCurrentIndex] = useState<number | null>(null);
-  const [enabledSeries, setEnabledSeries] = useState<Record<string, boolean>>({});
+  
+  const [enabledSeries, setEnabledSeries] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('jules_stats_enabled_series');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      // ignore
+    }
+    return {};
+  });
+
+  useEffect(() => {
+    if (Object.keys(enabledSeries).length > 0) {
+      try {
+        localStorage.setItem('jules_stats_enabled_series', JSON.stringify(enabledSeries));
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [enabledSeries]);
 
   // Reconcile and initialize series on stats load
   useEffect(() => {
@@ -77,16 +98,6 @@ export function useUsageChartState(
     setHoveredIndex(null);
     setDragStartIndex(null);
     setDragCurrentIndex(null);
-    if (stats) {
-       const initialSeries = stats.chartSeries.reduce((acc, s) => {
-          acc[s.id] = s.defaultEnabled;
-          return acc;
-        }, {} as Record<string, boolean>);
-
-        setEnabledSeries(initialSeries);
-    } else {
-        setEnabledSeries({});
-    }
   }, [projectId, currentRangeKey]);
 
   return {

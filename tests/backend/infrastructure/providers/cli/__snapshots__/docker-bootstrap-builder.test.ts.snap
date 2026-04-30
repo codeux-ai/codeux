@@ -2,9 +2,11 @@
 
 exports[`DockerBootstrapBuilder > should build a complete script with default options 1`] = `
 "set -euo pipefail
-mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini"
+mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini" "$HOME/.qwen"
 sync_dir_contents() { local source="$1"; local destination="$2"; local label="$3"; mkdir -p "$destination"; if ! cp -r "$source/." "$destination/"; then echo "provider-runner: warning: failed to copy $label credentials" >&2; fi; }
 copy_if_present() { local source="$1"; local destination="$2"; local label="$3"; if [ -e "$source" ]; then mkdir -p "$(dirname "$destination")"; if ! cp -f "$source" "$destination"; then echo "provider-runner: warning: failed to copy $label" >&2; fi; fi; }
+merge_json_file() { local source="$1"; local destination="$2"; local label="$3"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if ! node -e 'const fs=require("fs"); const [source,destination]=process.argv.slice(1); const read=(file)=>{ try { return JSON.parse(fs.readFileSync(file,"utf8")); } catch { return {}; } }; const sourceJson=read(source); const destinationJson=read(destination); const merged={...destinationJson,...sourceJson}; if (destinationJson.mcpServers || sourceJson.mcpServers) merged.mcpServers={...(destinationJson.mcpServers||{}), ...(sourceJson.mcpServers||{})}; fs.writeFileSync(destination, \`\${JSON.stringify(merged, null, 2)}\\n\`);' "$source" "$destination"; then echo "provider-runner: warning: failed to merge $label" >&2; fi; }
+append_if_missing_literal() { local source="$1"; local destination="$2"; local literal="$3"; local label="$4"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if [ -f "$destination" ] && grep -Fq "$literal" "$destination"; then return 0; fi; if [ -s "$destination" ]; then printf '\\n' >> "$destination"; fi; if ! cat "$source" >> "$destination"; then echo "provider-runner: warning: failed to append $label" >&2; fi; }
 ensure_json_file() { local destination="$1"; local content="$2"; mkdir -p "$(dirname "$destination")"; if [ ! -f "$destination" ]; then printf '%s\\n' "$content" > "$destination"; fi; }
 if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; fi
 if [ -d "/opt/credentials/codex" ]; then [ -f "/opt/credentials/codex/auth.json" ] && cp -f "/opt/credentials/codex/auth.json" "$HOME/.codex/auth.json"; [ -f "/opt/credentials/codex/config.toml" ] && cp -f "/opt/credentials/codex/config.toml" "$HOME/.codex/config.toml"; fi
@@ -17,8 +19,8 @@ export pnpm_config_store_dir="$PNPM_STORE_DIR"
 mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
-if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install claude" >&2; fi ;; esac; fi
-copy_if_present "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
+if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install claude" >&2; fi ;;     qwen) npm install -g @qwen-code/qwen-code ;; esac; fi
+merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
 if [ "$1" = "gemini" ]; then
   mkdir -p "$HOME/.gemini/tmp" "$HOME/.gemini/history" "$HOME/.gemini/memory"
   ensure_json_file "$HOME/.gemini/projects.json" '{"projects":{}}'
@@ -28,21 +30,27 @@ if [ "$1" = "gemini" ]; then
   copy_if_present "/opt/credentials/gemini/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"
   copy_if_present "/opt/credentials/gemini/state.json" "$HOME/.gemini/state.json" "gemini state.json"
   copy_if_present "/opt/credentials/gemini/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"
-  copy_if_present "/opt/provider-config/gemini-settings.json" "$HOME/.gemini/settings.json" "gemini mcp settings.json"
+  merge_json_file "/opt/provider-config/gemini-settings.json" "$HOME/.gemini/settings.json" "gemini mcp settings.json"
 fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
 fi
-copy_if_present "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "codex mcp config"
+if [ "$1" = "qwen" ]; then
+  if [ -d "/opt/credentials/qwen-code" ]; then sync_dir_contents "/opt/credentials/qwen-code" "$HOME/.qwen" "qwen"; fi
+  merge_json_file "/opt/provider-config/qwen-settings.json" "$HOME/.qwen/settings.json" "qwen settings.json"
+fi
+append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]" "codex mcp config"
 exec "$@""
 `;
 
 exports[`DockerBootstrapBuilder > should handle claude specific auth 1`] = `
 "set -euo pipefail
-mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini"
+mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini" "$HOME/.qwen"
 sync_dir_contents() { local source="$1"; local destination="$2"; local label="$3"; mkdir -p "$destination"; if ! cp -r "$source/." "$destination/"; then echo "provider-runner: warning: failed to copy $label credentials" >&2; fi; }
 copy_if_present() { local source="$1"; local destination="$2"; local label="$3"; if [ -e "$source" ]; then mkdir -p "$(dirname "$destination")"; if ! cp -f "$source" "$destination"; then echo "provider-runner: warning: failed to copy $label" >&2; fi; fi; }
+merge_json_file() { local source="$1"; local destination="$2"; local label="$3"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if ! node -e 'const fs=require("fs"); const [source,destination]=process.argv.slice(1); const read=(file)=>{ try { return JSON.parse(fs.readFileSync(file,"utf8")); } catch { return {}; } }; const sourceJson=read(source); const destinationJson=read(destination); const merged={...destinationJson,...sourceJson}; if (destinationJson.mcpServers || sourceJson.mcpServers) merged.mcpServers={...(destinationJson.mcpServers||{}), ...(sourceJson.mcpServers||{})}; fs.writeFileSync(destination, \`\${JSON.stringify(merged, null, 2)}\\n\`);' "$source" "$destination"; then echo "provider-runner: warning: failed to merge $label" >&2; fi; }
+append_if_missing_literal() { local source="$1"; local destination="$2"; local literal="$3"; local label="$4"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if [ -f "$destination" ] && grep -Fq "$literal" "$destination"; then return 0; fi; if [ -s "$destination" ]; then printf '\\n' >> "$destination"; fi; if ! cat "$source" >> "$destination"; then echo "provider-runner: warning: failed to append $label" >&2; fi; }
 ensure_json_file() { local destination="$1"; local content="$2"; mkdir -p "$(dirname "$destination")"; if [ ! -f "$destination" ]; then printf '%s\\n' "$content" > "$destination"; fi; }
 if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; fi
 if [ -d "/opt/credentials/codex" ]; then [ -f "/opt/credentials/codex/auth.json" ] && cp -f "/opt/credentials/codex/auth.json" "$HOME/.codex/auth.json"; [ -f "/opt/credentials/codex/config.toml" ] && cp -f "/opt/credentials/codex/config.toml" "$HOME/.codex/config.toml"; fi
@@ -55,8 +63,8 @@ export pnpm_config_store_dir="$PNPM_STORE_DIR"
 mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
-if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install claude" >&2; fi ;; esac; fi
-copy_if_present "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
+if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install claude" >&2; fi ;;     qwen) npm install -g @qwen-code/qwen-code ;; esac; fi
+merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
 if [ "$1" = "gemini" ]; then
   mkdir -p "$HOME/.gemini/tmp" "$HOME/.gemini/history" "$HOME/.gemini/memory"
   ensure_json_file "$HOME/.gemini/projects.json" '{"projects":{}}'
@@ -66,21 +74,27 @@ if [ "$1" = "gemini" ]; then
   copy_if_present "/opt/credentials/gemini/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"
   copy_if_present "/opt/credentials/gemini/state.json" "$HOME/.gemini/state.json" "gemini state.json"
   copy_if_present "/opt/credentials/gemini/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"
-  copy_if_present "/opt/provider-config/gemini-settings.json" "$HOME/.gemini/settings.json" "gemini mcp settings.json"
+  merge_json_file "/opt/provider-config/gemini-settings.json" "$HOME/.gemini/settings.json" "gemini mcp settings.json"
 fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
 fi
-copy_if_present "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "codex mcp config"
+if [ "$1" = "qwen" ]; then
+  if [ -d "/opt/credentials/qwen-code" ]; then sync_dir_contents "/opt/credentials/qwen-code" "$HOME/.qwen" "qwen"; fi
+  merge_json_file "/opt/provider-config/qwen-settings.json" "$HOME/.qwen/settings.json" "qwen settings.json"
+fi
+append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]" "codex mcp config"
 exec "$@""
 `;
 
 exports[`DockerBootstrapBuilder > should include fallback install cases for specified providers 1`] = `
 "set -euo pipefail
-mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini"
+mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini" "$HOME/.qwen"
 sync_dir_contents() { local source="$1"; local destination="$2"; local label="$3"; mkdir -p "$destination"; if ! cp -r "$source/." "$destination/"; then echo "provider-runner: warning: failed to copy $label credentials" >&2; fi; }
 copy_if_present() { local source="$1"; local destination="$2"; local label="$3"; if [ -e "$source" ]; then mkdir -p "$(dirname "$destination")"; if ! cp -f "$source" "$destination"; then echo "provider-runner: warning: failed to copy $label" >&2; fi; fi; }
+merge_json_file() { local source="$1"; local destination="$2"; local label="$3"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if ! node -e 'const fs=require("fs"); const [source,destination]=process.argv.slice(1); const read=(file)=>{ try { return JSON.parse(fs.readFileSync(file,"utf8")); } catch { return {}; } }; const sourceJson=read(source); const destinationJson=read(destination); const merged={...destinationJson,...sourceJson}; if (destinationJson.mcpServers || sourceJson.mcpServers) merged.mcpServers={...(destinationJson.mcpServers||{}), ...(sourceJson.mcpServers||{})}; fs.writeFileSync(destination, \`\${JSON.stringify(merged, null, 2)}\\n\`);' "$source" "$destination"; then echo "provider-runner: warning: failed to merge $label" >&2; fi; }
+append_if_missing_literal() { local source="$1"; local destination="$2"; local literal="$3"; local label="$4"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if [ -f "$destination" ] && grep -Fq "$literal" "$destination"; then return 0; fi; if [ -s "$destination" ]; then printf '\\n' >> "$destination"; fi; if ! cat "$source" >> "$destination"; then echo "provider-runner: warning: failed to append $label" >&2; fi; }
 ensure_json_file() { local destination="$1"; local content="$2"; mkdir -p "$(dirname "$destination")"; if [ ! -f "$destination" ]; then printf '%s\\n' "$content" > "$destination"; fi; }
 if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; fi
 if [ -d "/opt/credentials/codex" ]; then [ -f "/opt/credentials/codex/auth.json" ] && cp -f "/opt/credentials/codex/auth.json" "$HOME/.codex/auth.json"; [ -f "/opt/credentials/codex/config.toml" ] && cp -f "/opt/credentials/codex/config.toml" "$HOME/.codex/config.toml"; fi
@@ -94,7 +108,7 @@ mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
 if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;; esac; fi
-copy_if_present "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
+merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
 if [ "$1" = "gemini" ]; then
   mkdir -p "$HOME/.gemini/tmp" "$HOME/.gemini/history" "$HOME/.gemini/memory"
   ensure_json_file "$HOME/.gemini/projects.json" '{"projects":{}}'
@@ -104,21 +118,27 @@ if [ "$1" = "gemini" ]; then
   copy_if_present "/opt/credentials/gemini/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"
   copy_if_present "/opt/credentials/gemini/state.json" "$HOME/.gemini/state.json" "gemini state.json"
   copy_if_present "/opt/credentials/gemini/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"
-  copy_if_present "/opt/provider-config/gemini-settings.json" "$HOME/.gemini/settings.json" "gemini mcp settings.json"
+  merge_json_file "/opt/provider-config/gemini-settings.json" "$HOME/.gemini/settings.json" "gemini mcp settings.json"
 fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
 fi
-copy_if_present "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "codex mcp config"
+if [ "$1" = "qwen" ]; then
+  if [ -d "/opt/credentials/qwen-code" ]; then sync_dir_contents "/opt/credentials/qwen-code" "$HOME/.qwen" "qwen"; fi
+  merge_json_file "/opt/provider-config/qwen-settings.json" "$HOME/.qwen/settings.json" "qwen settings.json"
+fi
+append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]" "codex mcp config"
 exec "$@""
 `;
 
 exports[`DockerBootstrapBuilder > should not include fallback install if no providers specified 1`] = `
 "set -euo pipefail
-mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini"
+mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini" "$HOME/.qwen"
 sync_dir_contents() { local source="$1"; local destination="$2"; local label="$3"; mkdir -p "$destination"; if ! cp -r "$source/." "$destination/"; then echo "provider-runner: warning: failed to copy $label credentials" >&2; fi; }
 copy_if_present() { local source="$1"; local destination="$2"; local label="$3"; if [ -e "$source" ]; then mkdir -p "$(dirname "$destination")"; if ! cp -f "$source" "$destination"; then echo "provider-runner: warning: failed to copy $label" >&2; fi; fi; }
+merge_json_file() { local source="$1"; local destination="$2"; local label="$3"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if ! node -e 'const fs=require("fs"); const [source,destination]=process.argv.slice(1); const read=(file)=>{ try { return JSON.parse(fs.readFileSync(file,"utf8")); } catch { return {}; } }; const sourceJson=read(source); const destinationJson=read(destination); const merged={...destinationJson,...sourceJson}; if (destinationJson.mcpServers || sourceJson.mcpServers) merged.mcpServers={...(destinationJson.mcpServers||{}), ...(sourceJson.mcpServers||{})}; fs.writeFileSync(destination, \`\${JSON.stringify(merged, null, 2)}\\n\`);' "$source" "$destination"; then echo "provider-runner: warning: failed to merge $label" >&2; fi; }
+append_if_missing_literal() { local source="$1"; local destination="$2"; local literal="$3"; local label="$4"; if [ ! -e "$source" ]; then return 0; fi; mkdir -p "$(dirname "$destination")"; if [ -f "$destination" ] && grep -Fq "$literal" "$destination"; then return 0; fi; if [ -s "$destination" ]; then printf '\\n' >> "$destination"; fi; if ! cat "$source" >> "$destination"; then echo "provider-runner: warning: failed to append $label" >&2; fi; }
 ensure_json_file() { local destination="$1"; local content="$2"; mkdir -p "$(dirname "$destination")"; if [ ! -f "$destination" ]; then printf '%s\\n' "$content" > "$destination"; fi; }
 if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; fi
 if [ -d "/opt/credentials/codex" ]; then [ -f "/opt/credentials/codex/auth.json" ] && cp -f "/opt/credentials/codex/auth.json" "$HOME/.codex/auth.json"; [ -f "/opt/credentials/codex/config.toml" ] && cp -f "/opt/credentials/codex/config.toml" "$HOME/.codex/config.toml"; fi
@@ -131,7 +151,7 @@ export pnpm_config_store_dir="$PNPM_STORE_DIR"
 mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
-copy_if_present "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
+merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
 if [ "$1" = "gemini" ]; then
   mkdir -p "$HOME/.gemini/tmp" "$HOME/.gemini/history" "$HOME/.gemini/memory"
   ensure_json_file "$HOME/.gemini/projects.json" '{"projects":{}}'
@@ -141,12 +161,16 @@ if [ "$1" = "gemini" ]; then
   copy_if_present "/opt/credentials/gemini/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"
   copy_if_present "/opt/credentials/gemini/state.json" "$HOME/.gemini/state.json" "gemini state.json"
   copy_if_present "/opt/credentials/gemini/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"
-  copy_if_present "/opt/provider-config/gemini-settings.json" "$HOME/.gemini/settings.json" "gemini mcp settings.json"
+  merge_json_file "/opt/provider-config/gemini-settings.json" "$HOME/.gemini/settings.json" "gemini mcp settings.json"
 fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
 fi
-copy_if_present "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "codex mcp config"
+if [ "$1" = "qwen" ]; then
+  if [ -d "/opt/credentials/qwen-code" ]; then sync_dir_contents "/opt/credentials/qwen-code" "$HOME/.qwen" "qwen"; fi
+  merge_json_file "/opt/provider-config/qwen-settings.json" "$HOME/.qwen/settings.json" "qwen settings.json"
+fi
+append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]" "codex mcp config"
 exec "$@""
 `;

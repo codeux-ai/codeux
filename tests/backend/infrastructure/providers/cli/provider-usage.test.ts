@@ -31,6 +31,7 @@ describe("collectProviderUsageTelemetry", () => {
             input: 120,
             cached: 18,
             candidates: 42,
+            thoughts: 7,
           },
         },
       }),
@@ -41,11 +42,76 @@ describe("collectProviderUsageTelemetry", () => {
       inputTokens: 120,
       cachedInputTokens: 18,
       outputTokens: 42,
-      totalTokens: 162,
+      reasoningOutputTokens: 7,
+      totalTokens: 169,
       usageSource: "reported",
       transcriptText: "Applied the edit.",
       nativeSessionId: "gemini-session-1",
     });
+  });
+
+  it("parses provider-reported Gemini usage across model stats", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "default",
+      prompt: "Summarize the diff.",
+      cwd: "/workspace/repo",
+      stdout: JSON.stringify({
+        response: "ok",
+        stats: {
+          models: {
+            router: {
+              tokens: {
+                input: 57,
+                cached: 2859,
+                candidates: 33,
+                thoughts: 123,
+              },
+            },
+            main: {
+              tokens: {
+                input: 12265,
+                cached: 0,
+                candidates: 1,
+                thoughts: 79,
+              },
+            },
+          },
+        },
+      }),
+      stderr: "",
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 12322,
+      cachedInputTokens: 2859,
+      outputTokens: 34,
+      reasoningOutputTokens: 202,
+      totalTokens: 12558,
+      usageSource: "reported",
+      transcriptText: "ok",
+    });
+  });
+
+  it("estimates Gemini token usage when structured stats are unavailable", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "default",
+      prompt: "Summarize the diff.",
+      cwd: "/workspace/repo",
+      stdout: "Applied the edit without JSON stats.",
+      stderr: "",
+    });
+
+    expect(result).toMatchObject({
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
+      usageSource: "estimated",
+      transcriptText: "Applied the edit without JSON stats.",
+    });
+    expect(result.inputTokens).toBeGreaterThan(0);
+    expect(result.outputTokens).toBeGreaterThan(0);
+    expect(result.totalTokens).toBe(result.inputTokens + result.outputTokens);
   });
 
   it("parses provider-reported Codex token usage from JSONL output", async () => {
@@ -151,6 +217,41 @@ describe("collectProviderUsageTelemetry", () => {
       usageSource: "reported",
       transcriptText: "Implemented the requested fix.",
       nativeSessionId: sessionId,
+    });
+  });
+
+  it("parses Claude container session artifacts for reported usage", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "claude-code",
+      model: "claude-sonnet-4-6",
+      prompt: "Resolve the merge conflict.",
+      cwd: "docker-volume://workspace-1",
+      stdout: "",
+      stderr: "",
+      nativeSessionId: "container-native-1",
+      claudeSessionJsonl: [
+        JSON.stringify({
+          message: {
+            usage: {
+              input_tokens: 44,
+              cache_creation_input_tokens: 5,
+              cache_read_input_tokens: 6,
+              output_tokens: 22,
+            },
+            content: [{ type: "text", text: "Container fix complete." }],
+          },
+        }),
+      ].join("\n"),
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 44,
+      cachedInputTokens: 11,
+      outputTokens: 22,
+      totalTokens: 66,
+      usageSource: "reported",
+      transcriptText: "Container fix complete.",
+      nativeSessionId: "container-native-1",
     });
   });
 });

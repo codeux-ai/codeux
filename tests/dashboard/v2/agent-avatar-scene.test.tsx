@@ -23,7 +23,7 @@ Object.defineProperty(window, "matchMedia", {
 });
 
 // vi.mock is hoisted — all helper classes must be declared inline
-vi.mock("three", () => {
+vi.mock("../../../dashboard/src/lib/three-lite.js", () => {
   const mockVec = () => ({ x: 0, y: 0, z: 0, set: vi.fn(), copy: vi.fn() });
   const mockEuler = () => ({ x: 0, y: 0, z: 0, set: vi.fn(), copy: vi.fn() });
   const mockScale = () => ({ x: 1, y: 1, z: 1, set: vi.fn(), setY: vi.fn(), copy: vi.fn() });

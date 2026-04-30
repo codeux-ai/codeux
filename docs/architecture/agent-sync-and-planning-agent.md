@@ -113,6 +113,14 @@ Behavior:
 5. the worker (or virtual provider) processes the request and generates the reply.
 6. Sprint OS captures the reply in the invocation, parses the payload, and applies the result. During parsing, Sprint OS utilizes a shared `src/services/structured-provider-response-service.ts` to execute virtual provider runs and automatically retry parsing using corrective prompts if the shape is malformed. The payload extraction leverages `src/services/planning-json-extractor.ts` to recursively search noisy, markdown-wrapped, or nested provider responses for the canonical JSON payload.
 
+When memory is enabled, planning prompts also include:
+
+- the planning agent's current long-term memory for the project
+- the current sprint's short-term learnings for that same planning agent when a sprint scope exists
+- the effective learnings-capture instruction, using the agent-specific memory template override when configured
+
+In Docker execution mode, planning runs against a snapshot workspace and captures `.task-learnings.md` back out of that snapshot volume so memory capture still works even though the provider never writes directly into the host repo path.
+
 ### Prompt Lineage
 
 Sprint OS stores the complete lineage of a sprint's evolution:
@@ -150,21 +158,21 @@ Existing sprints can be explicitly replanned. When the `replan` flag is set, Spr
 
 ### Planning Contracts
 
-The planning contract is now intentionally strict so the planner emits database-ready tasks without improvising formatting:
+The planning contract is now strictly enforced by the `PlanningPayloadValidator` during ingestion. The validator ensures that the planner emits database-ready tasks without improvising formatting, and triggers automatic JSON retries with explicit error guidance if the contract is violated:
 
 - task keys should use `T01`, `T02`, `T03`, ... in topological order
 - the `tasks` array itself is the DAG order
-- dependencies may only point backward to earlier task keys
+- dependencies must only reference keys defined earlier in the task list (forward references are rejected)
 - every task must include `title`, `description`, `promptMarkdown`, `priority`, `executorType`, and `dependsOn`
-- `promptMarkdown` is standardized to five sections in this order:
+- `priority` and `executorType` are validated against allowed enum values
+- `promptMarkdown` is standardized to five sections in this exact order:
   - `## Objective`
   - `## Scope`
   - `## Implementation Requirements`
   - `## Constraints`
   - `## Verification`
-- the default built-in Planning agent instructions now include canonical multi-task JSON examples so virtual and connected planning workers follow the same output shape more reliably
 
-This keeps planning quality deterministic across providers and reduces executor ambiguity when Sprint OS converts the plan into DB task records.
+This strict validation occurs before any tasks are written to the repository, ensuring that partial or malformed plans never reach the database. This keeps planning quality deterministic across providers and reduces executor ambiguity.
 
 ### Provider Throttling And Quota Recovery
 

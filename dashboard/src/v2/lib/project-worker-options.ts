@@ -1,13 +1,12 @@
 import type {
   ExecutionDashboardSnapshot,
   ExecutionAssignedWorkerSummary,
-  VirtualWorkerProvider,
 } from "../../types.js";
 
 const LIVE_WORKER_STATUSES = new Set(["connected", "listening", "idle", "paused"]);
 
 export const VIRTUAL_WORKER_OPTIONS: Array<{
-  id: VirtualWorkerProvider;
+  id: string;
   label: string;
   subLabel: string;
 }> = [
@@ -30,7 +29,7 @@ export const VIRTUAL_WORKER_OPTIONS: Array<{
 
 export interface WorkerRoutingPreference {
   executionMode: "VIRTUAL";
-  virtualWorkerProvider: VirtualWorkerProvider;
+  virtualWorkerProvider: string;
 }
 
 export interface WorkerOption {
@@ -44,7 +43,7 @@ export interface WorkerOption {
   connectionId?: string | null;
   workerEndpointId?: string | null;
   workerEndpointKey?: string | null;
-  providerId?: VirtualWorkerProvider;
+  providerId?: string;
 }
 
 export interface ProjectWorkerOptionsResult {

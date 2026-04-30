@@ -109,12 +109,12 @@ Sprint orchestrator calls instruction templates by ID for:
 ## CI Intelligence
 Added settings group:
 - `ciIntelligence.enabled`
-- `ciIntelligence.waitForCiBeforeMainMerge`
 - `ciIntelligence.resolveAllCommentsBeforeMainMerge`
-- `ciIntelligence.waitForCiBeforeFeatureMerge`
 - `ciIntelligence.resolveAllCommentsBeforeFeatureMerge`
+- `ciIntelligence.featurePrAutoMergeMode`
+- `ciIntelligence.mainBranchAutoMergeMode`
 
-These toggles influence generated orchestration protocol instructions for both feature-branch merges and final main-branch merge guidance.
+These settings influence generated orchestration protocol instructions for both feature-branch merges and final main-branch merge guidance. Merge modes now own CI waiting semantics: `WHEN_GREEN` waits for CI and `ALWAYS` does not.
 
 ## Sprint Loop Steps
 Added settings group:

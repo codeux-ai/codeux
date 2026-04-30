@@ -9,6 +9,11 @@ export const WorkerPanel: FunctionComponent<{
   update: (patch: Partial<ProjectSettings>) => void;
   getBadge: (path: string) => string | undefined;
 }> = ({ settings, update, getBadge }) => {
+  const workerProvider = settings.aiProvider.providers[settings.workers.virtualWorkerProvider];
+  const workerProviderType = workerProvider?.provider || "codex";
+  const workerProviderEntries = Object.entries(settings.aiProvider.providers)
+    .filter(([, provider]) => provider.provider !== "jules");
+
   return (
         <div className="grid gap-4 lg:grid-cols-2 mb-4">
           <Row label="Worker mode" description="Worker automation is now always virtual and containerized." badge={getBadge("workers.executionMode")}>
@@ -29,11 +34,10 @@ export const WorkerPanel: FunctionComponent<{
                     model: "default",
                   },
                 })}
-                options={[
-                  { value: "gemini", label: "Gemini" },
-                  { value: "codex", label: "Codex" },
-                  { value: "claude-code", label: "Claude Code" },
-                ]}
+                options={workerProviderEntries.map(([providerConfigId, provider]) => ({
+                  value: providerConfigId,
+                  label: `${provider.name} · ${provider.provider}`,
+                }))}
               />
             </Row>
           }
@@ -48,8 +52,8 @@ export const WorkerPanel: FunctionComponent<{
                   },
                 })}
                 options={[
-                  { value: "default", label: `Default (${settings.aiProvider.providers[settings.workers.virtualWorkerProvider].model})` },
-                  ...getProviderModelOptions(settings.workers.virtualWorkerProvider),
+                  { value: "default", label: `Default (${workerProvider?.model || "default"})` },
+                  ...getProviderModelOptions(workerProviderType),
                 ]}
               />
             </Row>

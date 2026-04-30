@@ -22,6 +22,7 @@ describe("execution-read-model-mappers", () => {
       purpose: "test_purpose",
       status: "success",
       model: "gpt-4",
+      execution_mode: null,
       native_session_id: "ns-1",
       usage_source: "agent",
       prompt_chars: "100",
@@ -106,7 +107,7 @@ describe("execution-read-model-mappers", () => {
       reasoningOutputTokens: 0,
       totalTokens: 30,
       activeTimeMs: 1000,
-      costCents: 0,
+      wallTimeMs: 0,
     };
 
     const record = mapExecutionSprintRunSummaryRow(row, null, usage);
@@ -149,9 +150,6 @@ describe("queryProjectStatsSnapshot", () => {
       getWallTimeTotalsBySprintRunIdsForRange: vi.fn().mockReturnValue(new Map()),
       getTaskMetadata: vi.fn().mockReturnValue(new Map()),
       getSprintMetadata: vi.fn().mockReturnValue(new Map()),
-      mapProviderInvocationUsageRow: vi.fn(),
-      mergeUsageTotals: vi.fn(),
-      mergeUsageMap: vi.fn(),
       updateLastActivity: vi.fn(),
     };
 

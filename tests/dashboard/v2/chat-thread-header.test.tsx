@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 /** @jsx h */
 import { describe, it, expect, vi } from "vitest";
 import { h } from "preact";

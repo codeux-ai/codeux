@@ -10,6 +10,7 @@ import type { IProviderRunner } from "../infrastructure/providers/cli/provider-r
 import { ProviderExecutionService } from "./provider-execution-service.js";
 import type { DashboardSettings, DashboardSettingsScope, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { TaskRunRecord } from "../contracts/execution-types.js";
+import type { ExecutionInvocationRecord } from "../contracts/invocation-types.js";
 import type { TaskPriority } from "../contracts/project-management-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
@@ -21,8 +22,9 @@ import type { Logger } from "../shared/logging/logger.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import type { MemoryService } from "./memory-service.js";
+import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 
-type CliQaProvider = Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+type CliQaProvider = Exclude<ProviderId, "jules">;
 
 interface QaReviewResultPayload {
   verdict?: unknown;
@@ -61,6 +63,11 @@ interface NormalizedQaReviewResult {
   followUpTasks: NormalizedQaFollowUpTask[];
   raw: Record<string, unknown>;
 }
+
+const SPRINT_RUN_KEEPALIVE_MS = 30_000;
+const SPRINT_LEASE_EXTENSION_MS = 5 * 60 * 1000;
+const QA_RUN_START_TIMEOUT_MS = 60_000;
+const RECOVERED_STALE_QA_SUMMARY_PREFIX = "Recovered stale QA review run";
 
 export interface TaskQaReviewOutcome {
   reviewed: boolean;
@@ -132,6 +139,26 @@ export class QualityAssuranceService {
         structuredProviderResponseService,
         logger: deps.logger,
       });
+    }
+  }
+
+  private async syncRemoteBranchesIfNeeded(
+    repoPath: string,
+    branch: string | undefined,
+    scope: DashboardSettingsScope,
+    contextLabel: string,
+  ): Promise<void> {
+    const settings = this.deps.getDashboardSettings(scope);
+    if (settings.git.githubMode !== "REMOTE") {
+      return;
+    }
+
+    try {
+      await syncRemoteBranchIfAvailable(repoPath, branch);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const branchLabel = branch?.trim() || settings.git.defaultBranch || "the requested branch";
+      throw new Error(`Failed to refresh origin before ${contextLabel} on ${branchLabel}: ${message}`);
     }
   }
 
@@ -351,7 +378,7 @@ export class QualityAssuranceService {
       return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
     }
 
-    const latestRun = this.deps.qaReviewRepository.getLatestSprintRun(args.sprintId);
+    const latestRun = this.reconcileRunningQaRun(this.deps.qaReviewRepository.getLatestSprintRun(args.sprintId));
     const maxRuns = qaSettings.maxTaskReviewRuns;
     const latestTaskSnapshot = readSprintQaSnapshot(latestRun);
     const currentTaskSnapshot = buildSprintQaSnapshot(args.subtasks);
@@ -365,6 +392,7 @@ export class QualityAssuranceService {
         ? latestTaskSnapshot !== currentTaskSnapshot
         : hasTaskUpdatesSinceLatestRun)
       : true;
+    const recoveredStaleLatestRun = this.isRecoveredStaleQaRun(latestRun);
     const retriesExhausted = typeof latestRun?.runIndex === "number" && latestRun.runIndex >= maxRuns;
 
     if (latestRun?.status === "running") {
@@ -381,7 +409,11 @@ export class QualityAssuranceService {
     if (retriesExhausted) {
       return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
     }
-    if ((latestRun?.outcome === "changes_requested" || latestRun?.status === "failed") && !hasMeaningfulChangesSinceLatestRun) {
+    if (
+      (latestRun?.outcome === "changes_requested" || latestRun?.status === "failed")
+      && !hasMeaningfulChangesSinceLatestRun
+      && !recoveredStaleLatestRun
+    ) {
       return {
         reviewed: false,
         blockedCompletion: true,
@@ -562,7 +594,7 @@ export class QualityAssuranceService {
       };
     }
 
-    const latestRun = this.deps.qaReviewRepository.getLatestTaskRun(taskId);
+    const latestRun = this.reconcileRunningQaRun(this.deps.qaReviewRepository.getLatestTaskRun(taskId));
     const runsUsed = this.deps.qaReviewRepository.countTaskRuns(taskId);
     const maxRuns = qaSettings.maxTaskReviewRuns;
 
@@ -644,73 +676,249 @@ export class QualityAssuranceService {
     sprintRunId: string | null;
     agentPresetId: string | null;
   }): Promise<NormalizedQaReviewResult> {
-    const pseudoTask: Subtask = args.currentTask || {
-      id: "SPRINT",
-      title: "Sprint completion review",
-      prompt: args.sprintGoal,
-      depends_on: [],
-      is_independent: true,
-      status: "COMPLETED",
-    };
-    const route = this.deps.taskService.resolveInvocationProvider("qa_review", pseudoTask, {
-      scope: args.scope,
-      cliOnly: true,
-    });
-    const provider = route.provider as CliQaProvider;
+    return await this.withSprintRunKeepAlive(args.sprintRunId, args.scope.sprintId, async () => {
+      await this.syncRemoteBranchesIfNeeded(
+        args.repoPath,
+        args.currentTask?.worker_branch || args.taskRun?.workerBranch || undefined,
+        args.scope,
+        "running QA review",
+      );
 
-    const prompt = this.buildReviewPrompt(args);
-    const providerPrompt = buildProviderPrompt(prompt, route.providers[provider].thinkingMode);
-    const settings = this.deps.getDashboardSettings(args.scope);
-
-    let result;
-    try {
-      result = await this.structuredAgentRequestService.executeRequest<NormalizedQaReviewResult>({
-        projectId: args.scope.projectId!,
-        sprintId: args.scope.sprintId,
-        taskId: args.taskRun?.taskId,
-        sprintRunId: args.sprintRunId,
-        taskRunId: args.taskRun?.id,
-        purpose: "qa_review",
-        type: "qa_review",
-        provider,
-        model: route.providers[provider].model,
-        apiKey: route.providers[provider].apiKey,
-        providerPrompt,
-        repoPath: args.repoPath,
-        settings: {
-          ...settings,
-          cliWorkflow: {
-            ...DEFAULT_CLI_WORKFLOW_SETTINGS,
-            ...settings.cliWorkflow,
-          },
-        },
-        parseFn: (text) => normalizeQaReviewResult(text),
-        buildRetryPrompt: (error) => [
-          "Your previous response failed validation with this error:",
-          error.message,
-          "",
-          "Please provide a valid JSON object matching the requested schema exactly.",
-        ].join("\n"),
-        providerLabel: "QA",
-        sessionIdPrefix: "qa-review",
-        systemRoutingMessage: args.agentInstructions.trim(),
-        onActivity: () => undefined,
+      const pseudoTask: Subtask = args.currentTask || {
+        id: "SPRINT",
+        title: "Sprint completion review",
+        prompt: args.sprintGoal,
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+      };
+      const route = this.deps.taskService.resolveInvocationProvider("qa_review", pseudoTask, {
+        scope: args.scope,
+        cliOnly: true,
       });
-    } finally {
-      if (settings.memory?.enabled && settings.memory.autoCaptureSprint && this.deps.memoryService && result) {
-        const worktreePath = await this.workspaceManager.resolveResumeWorktreePath(
-          args.repoPath,
-          result.sessionId,
-          settings.cliWorkflow.executionMode,
-        ).catch(() => undefined);
+      const provider = route.provider as CliQaProvider;
+      const providerConfigId = route.providerConfigId || route.provider;
+      const providerSettings = route.providers[providerConfigId];
 
-        if (worktreePath) {
-          await this.deps.memoryService.captureMemoriesFromWorktree(args.scope.projectId!, args.scope.sprintId || undefined, args.agentPresetId || null, worktreePath, result.invocationId);
+      const memoryContext = args.agentPresetId
+        ? this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, args.agentPresetId)
+        : undefined;
+      const prompt = this.buildReviewPrompt({
+        ...args,
+        memoryContext,
+      });
+      const providerPrompt = buildProviderPrompt(prompt, providerSettings.thinkingMode);
+      const settings = this.deps.getDashboardSettings(args.scope);
+      const workflowSettings = {
+        ...DEFAULT_CLI_WORKFLOW_SETTINGS,
+        ...settings.cliWorkflow,
+      };
+      let snapshotWorkspace = args.repoPath;
+      let shouldCleanupSnapshot = false;
+      if (workflowSettings.executionMode === "DOCKER") {
+        try {
+          snapshotWorkspace = await this.workspaceManager.createSnapshotWorkspace(
+            args.repoPath,
+            `qa-review-${provider}-${Date.now().toString(36)}`,
+          );
+          shouldCleanupSnapshot = true;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.deps.logger?.warn("Failed to create QA snapshot workspace, falling back to repository path", {
+            projectId: args.scope.projectId,
+            sprintId: args.scope.sprintId,
+            repoPath: args.repoPath,
+            error: message,
+          });
         }
       }
+
+      let result;
+      try {
+        result = await this.structuredAgentRequestService.executeRequest<NormalizedQaReviewResult>({
+          projectId: args.scope.projectId!,
+          sprintId: args.scope.sprintId,
+          taskId: args.taskRun?.taskId,
+          sprintRunId: args.sprintRunId,
+          taskRunId: args.taskRun?.id,
+          purpose: "qa_review",
+          type: "qa_review",
+          provider,
+          model: providerSettings.model,
+          apiKey: providerSettings.apiKey,
+        qwenAuthMode: providerSettings.qwenAuthMode,
+        qwenRegion: providerSettings.qwenRegion,
+        qwenBaseUrl: providerSettings.qwenBaseUrl,
+        qwenEnvKey: providerSettings.qwenEnvKey,
+        qwenProtocol: providerSettings.qwenProtocol,
+          providerMountAuth: providerSettings.mountAuth,
+          providerAuthPath: providerSettings.authPath,
+          providerPrompt,
+          repoPath: args.repoPath,
+          cwd: snapshotWorkspace,
+          workspaceSessionId: `${args.scope.projectId || "project"}-qa-snapshot`,
+          settings: {
+            ...settings,
+            cliWorkflow: workflowSettings,
+          },
+          parseFn: (text) => normalizeQaReviewResult(text),
+          buildRetryPrompt: (error) => [
+            "Your previous response failed validation with this error:",
+            error.message,
+            "",
+            "Please provide a valid JSON object matching the requested schema exactly.",
+          ].join("\n"),
+          providerLabel: "QA",
+          sessionIdPrefix: "qa-review",
+          systemRoutingMessage: args.agentInstructions.trim(),
+          onActivity: () => {
+            this.touchSprintRunHeartbeat(args.sprintRunId, args.scope.sprintId);
+          },
+        });
+      } finally {
+        if (settings.memory?.enabled && settings.memory.autoCaptureSprint && this.deps.memoryService && result) {
+          const memoryCaptureWorkspace = shouldCleanupSnapshot ? snapshotWorkspace : args.repoPath;
+          if (memoryCaptureWorkspace) {
+            await this.deps.memoryService.captureMemoriesFromWorktree(
+              args.scope.projectId!,
+              args.scope.sprintId || undefined,
+              args.agentPresetId || null,
+              memoryCaptureWorkspace,
+              result.invocationId,
+            );
+          }
+        }
+        if (shouldCleanupSnapshot) {
+          await this.workspaceManager.removeWorktree(args.repoPath, snapshotWorkspace).catch(() => undefined);
+        }
+      }
+
+      return result.parsed;
+    });
+  }
+
+  private reconcileRunningQaRun(run: QaReviewRunRecord | null): QaReviewRunRecord | null {
+    if (!run || run.status !== "running") {
+      return run;
     }
 
-    return result.parsed;
+    const latestInvocation = this.findLatestQaExecutionInvocation(run);
+    if (latestInvocation?.status === "running" || latestInvocation?.status === "paused") {
+      return run;
+    }
+
+    const runStartedAtMs = Date.parse(run.startedAt);
+    const ageMs = Number.isFinite(runStartedAtMs) ? Date.now() - runStartedAtMs : 0;
+    if (!latestInvocation && ageMs < QA_RUN_START_TIMEOUT_MS) {
+      return run;
+    }
+
+    return this.deps.qaReviewRepository.updateRun(run.id, {
+      status: "failed",
+      summaryMarkdown: latestInvocation
+        ? `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation ${latestInvocation.status}. Sprint OS will retry the review.`
+        : `${RECOVERED_STALE_QA_SUMMARY_PREFIX} that never started its backing invocation. Sprint OS will retry the review.`,
+      finishedAt: latestInvocation?.finishedAt || new Date().toISOString(),
+    });
+  }
+
+  private isRecoveredStaleQaRun(run: QaReviewRunRecord | null): boolean {
+    return typeof run?.summaryMarkdown === "string" && run.summaryMarkdown.startsWith(RECOVERED_STALE_QA_SUMMARY_PREFIX);
+  }
+
+  private findLatestQaExecutionInvocation(run: QaReviewRunRecord): ExecutionInvocationRecord | null {
+    const executionRepository = this.deps.executionRepository as Partial<ExecutionRepository>;
+    if (typeof executionRepository.listExecutionInvocations !== "function") {
+      return null;
+    }
+
+    const invocations = run.taskRunId
+      ? executionRepository.listExecutionInvocations({
+          projectId: run.projectId,
+          taskRunId: run.taskRunId,
+          limit: 20,
+        })
+      : run.sprintRunId
+        ? executionRepository.listExecutionInvocations({
+            projectId: run.projectId,
+            sprintRunId: run.sprintRunId,
+            limit: 20,
+          })
+        : [];
+
+    return invocations.find((invocation) => (
+      invocation.type === "qa_review"
+      && Date.parse(invocation.startedAt) >= Date.parse(run.startedAt)
+    )) || null;
+  }
+
+  private async withSprintRunKeepAlive<T>(
+    sprintRunId: string | null,
+    sprintId: string | null | undefined,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    if (!sprintRunId || !sprintId) {
+      return await action();
+    }
+
+    this.touchSprintRunHeartbeat(sprintRunId, sprintId);
+    const timer = setInterval(() => {
+      this.touchSprintRunHeartbeat(sprintRunId, sprintId);
+    }, SPRINT_RUN_KEEPALIVE_MS);
+    timer.unref?.();
+
+    try {
+      return await action();
+    } finally {
+      clearInterval(timer);
+      this.touchSprintRunHeartbeat(sprintRunId, sprintId);
+    }
+  }
+
+  private touchSprintRunHeartbeat(sprintRunId: string | null, sprintId: string | null | undefined): void {
+    if (!sprintRunId || !sprintId) {
+      return;
+    }
+
+    const executionRepository = this.deps.executionRepository as Partial<ExecutionRepository>;
+    if (
+      typeof executionRepository.getSprintRun !== "function"
+      || typeof executionRepository.updateSprintRun !== "function"
+      || typeof executionRepository.getLease !== "function"
+      || typeof executionRepository.renewLease !== "function"
+    ) {
+      return;
+    }
+
+    const sprintRun = executionRepository.getSprintRun(sprintRunId);
+    if (!sprintRun || sprintRun.status !== "running") {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    executionRepository.updateSprintRun(sprintRunId, {
+      lastHeartbeatAt: now,
+    });
+
+    const lease = executionRepository.getLease("sprint", sprintId);
+    if (!lease) {
+      return;
+    }
+
+    try {
+      executionRepository.renewLease({
+        scopeType: "sprint",
+        scopeId: sprintId,
+        leaseToken: lease.leaseToken,
+        expiresAt: new Date(Date.now() + SPRINT_LEASE_EXTENSION_MS).toISOString(),
+      });
+    } catch (error) {
+      this.deps.logger?.warn("Failed to renew sprint lease during QA review", {
+        sprintRunId,
+        sprintId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private buildReviewPrompt(args: {
@@ -718,6 +926,7 @@ export class QualityAssuranceService {
     projectName: string;
     sprintGoal: string;
     agentInstructions: string;
+    memoryContext?: string;
     subtasks: Subtask[];
     currentTask: Subtask | null;
   }): string {
@@ -759,6 +968,7 @@ export class QualityAssuranceService {
     return [
       "## QUALITY ASSURANCE AGENT INSTRUCTIONS",
       args.agentInstructions.trim(),
+      args.memoryContext?.trim() || "",
       "",
       "## REVIEW MODE",
       `Trigger: ${args.triggerType}`,
@@ -905,6 +1115,13 @@ export class QualityAssuranceService {
       throw new Error(`Cannot continue CLI QA fixes for ${args.task.id}: worker branch is missing.`);
     }
 
+    await this.syncRemoteBranchesIfNeeded(
+      args.repoPath,
+      workerBranch,
+      args.scope,
+      "continuing QA follow-up",
+    );
+
     const worktreePath = await this.workspaceManager.resolveResumeWorktreePath(args.repoPath, args.sessionId, workflowSettings.executionMode)
       || this.workspaceManager.buildWorktreePath(args.repoPath, args.sessionId, workflowSettings.executionMode);
     const existed = await this.workspacePathExists(worktreePath);
@@ -912,21 +1129,32 @@ export class QualityAssuranceService {
       await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch);
     }
 
-    const workerInstructions = (await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath))
-      ?.instructionMarkdown
-      ?.trim() || "";
+    const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath);
+    const workerInstructions = workerAgent?.instructionMarkdown?.trim() || "";
+    const workerMemoryInstructions = resolveAgentMemoryInstructions(
+      workerAgent || {},
+      settings.memory?.workerLearningsInstruction,
+    );
+    const workerMemoryContext = workerAgent?.id
+      ? this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, workerAgent.id)
+      : undefined;
     const promptBody = [
       workerInstructions
         ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerInstructions}`
         : "",
+      workerMemoryContext?.trim() || "",
       "## ORIGINAL SUBTASK",
       args.task.prompt,
       "",
       "## QA FOLLOW-UP",
       args.followUpPrompt,
+      workerMemoryInstructions
+        ? `## LEARNINGS CAPTURE (Required)\n\n${workerMemoryInstructions}`
+        : "",
     ].filter(Boolean).join("\n\n");
     const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(args.followUpPrompt, worktreePath);
-    const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, settings.aiProvider.providers[args.provider].thinkingMode);
+    const followUpProviderSettings = settings.aiProvider.providers[args.provider];
+    const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, followUpProviderSettings.thinkingMode);
     const previousInvocation = this.deps.executionRepository.getLatestProviderInvocationUsageBySession(args.sessionId, "task_coding");
     const initialHead = (await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
     this.deps.sessionTracking.updateSession(args.sessionId, { state: "RUNNING" });
@@ -947,8 +1175,15 @@ export class QualityAssuranceService {
       provider: args.provider,
       prompt: providerPrompt,
       cwd: worktreePath,
-      model: settings.aiProvider.providers[args.provider].model,
-      apiKey: settings.aiProvider.providers[args.provider].apiKey,
+      model: followUpProviderSettings.model,
+      apiKey: followUpProviderSettings.apiKey,
+      qwenAuthMode: followUpProviderSettings.qwenAuthMode,
+      qwenRegion: followUpProviderSettings.qwenRegion,
+      qwenBaseUrl: followUpProviderSettings.qwenBaseUrl,
+      qwenEnvKey: followUpProviderSettings.qwenEnvKey,
+      qwenProtocol: followUpProviderSettings.qwenProtocol,
+      providerMountAuth: followUpProviderSettings.mountAuth,
+      providerAuthPath: followUpProviderSettings.authPath,
       sessionId: args.sessionId,
       workflowSettings,
       repoPath: args.repoPath,
@@ -963,6 +1198,16 @@ export class QualityAssuranceService {
       throw new Error(result.stderr || result.stdout || "CLI QA follow-up failed.");
     }
 
+    if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
+      await this.captureMemoriesFromWorkspace(
+        args.scope.projectId!,
+        args.scope.sprintId || undefined,
+        workerAgent?.id || null,
+        worktreePath,
+        args.taskRun?.id || args.sessionId,
+      );
+    }
+
     const patchText = await this.workspaceArtifactService.exportBinaryPatch(worktreePath, initialHead);
     const applyResult = await this.workspaceArtifactService.applyPatchToBranch({
       repoPath: args.repoPath,
@@ -972,8 +1217,19 @@ export class QualityAssuranceService {
       commitMessage: `fix(task ${args.task.id}): address qa review via ${args.provider}`,
     });
 
-    const hasUnpushed = applyResult.hasChanges || await this.prService.hasUnpushedCommits(args.repoPath, workerBranch, args.featureBranch);
-    const hasAhead = applyResult.hasChanges || await this.prService.hasWorkerBranchCommitsAgainstFeature(args.repoPath, workerBranch, args.featureBranch);
+    let hasUnpushed = applyResult.hasChanges;
+    let hasAhead = applyResult.hasChanges;
+    if (!applyResult.hasChanges) {
+      hasUnpushed = await this.prService.hasUnpushedCommits(args.repoPath, workerBranch, args.featureBranch);
+      hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(args.repoPath, workerBranch, args.featureBranch);
+      if (hasUnpushed) {
+        await runCommandStrict(
+          "git",
+          ["push", "-u", "origin", `refs/heads/${workerBranch}:refs/heads/${workerBranch}`],
+          args.repoPath,
+        );
+      }
+    }
 
     let prUrl = args.task.pr_url || args.taskRun?.prUrl || null;
     if (hasUnpushed || hasAhead) {
@@ -1045,6 +1301,73 @@ export class QualityAssuranceService {
       return this.workspaceManager.runWorkspaceCommand(worktreePath, command, args);
     }
     return runCommandStrict(command, args, worktreePath);
+  }
+
+  private async captureMemoriesFromWorkspace(
+    projectId: string,
+    sprintId: string | undefined,
+    agentPresetId: string | null,
+    worktreePath: string,
+    originId: string,
+  ): Promise<number> {
+    if (!this.deps.memoryService) {
+      return 0;
+    }
+    if (worktreePath.startsWith("docker-volume://")) {
+      const raw = await this.workspaceManager.readWorkspaceFile(worktreePath, ".task-learnings.md");
+      if (!raw) {
+        return 0;
+      }
+      return await this.deps.memoryService.captureMemoriesFromContent(
+        projectId,
+        sprintId,
+        agentPresetId,
+        raw,
+        originId,
+      );
+    }
+    return await this.deps.memoryService.captureMemoriesFromWorktree(
+      projectId,
+      sprintId,
+      agentPresetId,
+      worktreePath,
+      originId,
+    );
+  }
+
+  private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {
+    const memoryService = this.deps.memoryService;
+    if (!memoryService) {
+      return undefined;
+    }
+
+    try {
+      const longTerm = memoryService.listLongTermByAgent(projectId, agentPresetId, 10);
+      const shortTerm = sprintId
+        ? memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, 10)
+        : [];
+
+      if (longTerm.length === 0 && shortTerm.length === 0) {
+        return undefined;
+      }
+
+      const sections: string[] = ["## PROJECT CONTEXT FROM MEMORY"];
+      if (longTerm.length > 0) {
+        sections.push("### Long-Term Knowledge");
+        for (const memory of longTerm) {
+          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
+        }
+      }
+      if (shortTerm.length > 0) {
+        sections.push("### Recent Sprint Learnings");
+        for (const memory of shortTerm) {
+          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
+        }
+      }
+      return sections.join("\n");
+    } catch {
+      return undefined;
+    }
   }
 
   private resolveTaskTriggerType(

@@ -42,9 +42,13 @@ describe("cli-docker-utils", () => {
     });
 
     it("pickContainerEnv", () => {
-        const env = { GEMINI_API_KEY: "key", UNKNOWN: "u", HTTP_PROXY: "proxy" };
+        const env = { GEMINI_API_KEY: "key", GEMINI_CLI_TRUST_WORKSPACE: "true", UNKNOWN: "u", HTTP_PROXY: "proxy" };
         const res = pickContainerEnv(env);
-        expect(res).toEqual([{ key: "GEMINI_API_KEY", value: "key" }, { key: "HTTP_PROXY", value: "proxy" }]);
+        expect(res).toEqual([
+            { key: "GEMINI_API_KEY", value: "key" },
+            { key: "GEMINI_CLI_TRUST_WORKSPACE", value: "true" },
+            { key: "HTTP_PROXY", value: "proxy" },
+        ]);
     });
 
     it("mapPathPrefix", () => {
@@ -65,6 +69,7 @@ describe("cli-docker-utils", () => {
     it("getProviderFallbackInstallCommand", () => {
         expect(getProviderFallbackInstallCommand("gemini")).toBe("npm install -g @google/gemini-cli");
         expect(getProviderFallbackInstallCommand("codex")).toBe("npm install -g @openai/codex");
+        expect(getProviderFallbackInstallCommand("qwen")).toBe("npm install -g @qwen-code/qwen-code");
         expect(getProviderFallbackInstallCommand("claude")).toContain("curl -fsSL");
         expect(getProviderFallbackInstallCommand("unknown")).toBeUndefined();
     });

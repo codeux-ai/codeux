@@ -134,6 +134,8 @@ Retry is currently limited to terminal dispatches.
 
 Retry uses the existing task rerun flow instead of inventing a dispatch-only executor path. That keeps retry semantics aligned with normal task restarts.
 
+When a dashboard task rerun has to create a fresh `running` sprint run because no active run exists, Sprint OS now resumes the watch loop automatically after launching the new task dispatch. That keeps post-task CI, merge-conflict handling, and sprint completion logic moving without requiring a second manual `orchestrate` click after the rerun finishes.
+
 ## Remaining Limitation
 
 Sprint OS now has cooperative stop behavior for local CLI work and connected workers, while Jules uses an immediate close-message path:

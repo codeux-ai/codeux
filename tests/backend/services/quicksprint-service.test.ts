@@ -262,6 +262,7 @@ describe("QuicksprintService", () => {
       expect(createSprintMock).toHaveBeenCalledWith(projectId, {
         name: `QS: ${BUILTIN_QUICKSPRINT_TEMPLATES[0].name}`,
         goal: `${BUILTIN_QUICKSPRINT_TEMPLATES[0].agentInstructionMarkdown}\n\nProduce exactly 3 subtasks.`,
+        showcasePinned: true,
       });
 
       expect(planSprintMock).toHaveBeenCalledWith(projectId, sprint.id, {

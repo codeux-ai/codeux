@@ -15,6 +15,24 @@ describe("DockerService", () => {
   });
 
   describe("listContainers", () => {
+    it("should report docker availability when docker ps succeeds", async () => {
+      vi.mocked(runCommandStrict).mockResolvedValue({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+        durationMs: 10,
+      } as any);
+
+      await expect(dockerService.isAvailable()).resolves.toBe(true);
+      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["ps", "-q"], process.cwd());
+    });
+
+    it("should report docker as unavailable when docker ps fails", async () => {
+      vi.mocked(runCommandStrict).mockRejectedValue(new Error("Cannot connect to the Docker daemon"));
+
+      await expect(dockerService.isAvailable()).resolves.toBe(false);
+    });
+
     it("should return an empty array if docker daemon is unavailable", async () => {
       vi.mocked(runCommandStrict).mockRejectedValue(new Error("Cannot connect to the Docker daemon"));
 

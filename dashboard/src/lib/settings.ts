@@ -16,6 +16,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
       gemini: { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini },
       codex: { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex },
       "claude-code": { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"] },
+      "qwen-code": { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["qwen-code"] },
     },
   },
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
@@ -47,34 +48,25 @@ export const applyExternalSettingsHints = (
   ...settings,
   aiProvider: {
     ...settings.aiProvider,
-    julesApiKey: settings.aiProvider.julesApiKey.trim().length > 0 ? settings.aiProvider.julesApiKey : hints.resolved.julesApiKey,
-    providers: {
-      ...settings.aiProvider.providers,
-      jules: {
-        ...settings.aiProvider.providers.jules,
-        apiKey: settings.aiProvider.providers.jules.apiKey.trim().length > 0
-          ? settings.aiProvider.providers.jules.apiKey
-          : hints.resolved.julesApiKey,
-      },
-      gemini: {
-        ...settings.aiProvider.providers.gemini,
-        apiKey: settings.aiProvider.providers.gemini.apiKey.trim().length > 0
-          ? settings.aiProvider.providers.gemini.apiKey
-          : hints.resolved.geminiApiKey,
-      },
-      codex: {
-        ...settings.aiProvider.providers.codex,
-        apiKey: settings.aiProvider.providers.codex.apiKey.trim().length > 0
-          ? settings.aiProvider.providers.codex.apiKey
-          : hints.resolved.codexApiKey,
-      },
-      "claude-code": {
-        ...settings.aiProvider.providers["claude-code"],
-        apiKey: settings.aiProvider.providers["claude-code"].apiKey.trim().length > 0
-          ? settings.aiProvider.providers["claude-code"].apiKey
-          : hints.resolved.claudeCodeApiKey,
-      },
-    },
+    providers: Object.fromEntries(
+      Object.entries(settings.aiProvider.providers).map(([providerConfigId, provider]) => [
+        providerConfigId,
+        {
+          ...provider,
+          apiKey: (provider.apiKey || "").trim().length > 0
+            ? provider.apiKey
+            : provider.provider === "jules"
+              ? hints.resolved.julesApiKey
+              : provider.provider === "gemini"
+                ? hints.resolved.geminiApiKey
+                : provider.provider === "codex"
+                  ? hints.resolved.codexApiKey
+                  : provider.provider === "claude-code"
+                    ? hints.resolved.claudeCodeApiKey
+                    : hints.resolved.qwenCodeApiKey,
+        },
+      ]),
+    ),
   },
   git: {
     ...settings.git,

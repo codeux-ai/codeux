@@ -2,13 +2,14 @@
   "name": "jules-subagents",
   "version": "1.2.0",
   "description": "Model Context Protocol server for the Jules Agent API.",
+  "packageManager": "pnpm@10.33.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "jules-subagents": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc && tsc -p dashboard/tsconfig.json --noEmit && vite build",
+    "build": "tsc --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo && tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo && vite build",
     "start": "node dist/index.js",
     "dev": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' src/index.ts",
     "test": "vitest run",
@@ -17,21 +18,22 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:backend:coverage": "vitest run tests/backend --coverage",
-    "lint": "echo 'linting...' && tsc --noEmit",
-    "typecheck": "tsc --noEmit",
-    "ci": "npm run lint && npm test",
+    "lint": "tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo",
+    "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo",
+    "ci": "pnpm run lint && pnpm run test:backend:coverage && pnpm run test:dashboard && pnpm run build",
+    "audit": "pnpm audit --audit-level=high",
     "smoke-test": "node dist/index.js --help",
-    "build:server": "tsc",
-    "build:dashboard": "tsc -p dashboard/tsconfig.json --noEmit && vite build",
+    "build:server": "tsc --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo",
+    "build:dashboard": "tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo && vite build",
     "dev:dashboard": "vite",
-    "typecheck:dashboard": "tsc -p dashboard/tsconfig.json --noEmit"
+    "typecheck:dashboard": "tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo"
   },
   "dependencies": {
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@tanstack/react-router": "1.166.2",
     "ajv": "^8.18.0",
-    "axios": "^1.13.5",
+    "axios": "^1.15.0",
     "colord": "^2.9.3",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
@@ -44,8 +46,14 @@
     "preact": "^10.29.0",
     "three": "^0.183.2"
   },
-  "overrides": {
-    "hono": "^4.12.7"
+  "pnpm": {
+    "overrides": {
+      "express-rate-limit": "^8.3.2",
+      "hono": "^4.12.7",
+      "path-to-regexp": "^8.4.2",
+      "@rollup/pluginutils@4.2.1>picomatch": "2.3.2",
+      "@rollup/pluginutils@5.3.0>picomatch": "4.0.4"
+    }
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.5",
@@ -58,9 +66,10 @@
     "@types/node": "^25.3.2",
     "@types/supertest": "^7.2.0",
     "@types/three": "^0.183.1",
-    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/coverage-v8": "^4.1.4",
     "happy-dom": "^20.8.9",
     "jsdom": "^29.0.1",
+    "playwright": "^1.59.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-is": "^19.2.4",
@@ -68,7 +77,7 @@
     "tailwindcss": "^4.2.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
-    "vite": "^8.0.5",
-    "vitest": "^4.1.2"
+    "vite": "^8.0.8",
+    "vitest": "^4.1.4"
   }
 }

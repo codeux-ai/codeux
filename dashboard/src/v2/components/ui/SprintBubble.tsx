@@ -120,15 +120,15 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
       ref={bubbleRef}
       onMouseEnter={handleHoverEnter}
       onMouseLeave={handleHoverLeave}
-      className={`group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80 ${isCompleted ? "opacity-80" : ""}`}
+      className={`group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80`}
     >
       <div
-        className={`pointer-events-none absolute inset-0 rounded-[1.75rem] shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-all duration-700 dark:shadow-[0_24px_48px_rgba(0,0,0,0.5)] ${animationClass}`}
+        className={`pointer-events-none absolute inset-0 rounded-[1.75rem] shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-all duration-700 dark:shadow-[0_24px_48px_rgba(0,0,0,0.5)] ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
 
       />
 
       <div
-        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-white/70 bg-white/55 backdrop-blur-3xl transition-all duration-700 transform-gpu dark:border-white/[0.06] dark:bg-void-800/65 ${animationClass}`}
+        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-white/70 bg-white/55 backdrop-blur-3xl transition-all duration-700 transform-gpu dark:border-white/[0.06] dark:bg-void-800/65 ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
         style={{
 
           WebkitMaskImage: "-webkit-radial-gradient(white, black)",
@@ -142,6 +142,12 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
           <div
             className={`absolute inset-0 rounded-[1.75rem] border-2 bg-transparent pointer-events-none mix-blend-screen scale-105 animate-[spin_5s_linear_infinite] ${state.ring}`}
             style={{ clipPath: "inset(-10px)" }}
+          />
+        )}
+        {sprint.latestReview?.status === 'running' && (
+          <div
+            className="absolute inset-0 rounded-[1.75rem] border-2 border-signal-500/30 pointer-events-none animate-ping"
+            style={{ animationDuration: '2s' }}
           />
         )}
       </div>
@@ -164,7 +170,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
         </div>
 
         {(humanIntervention || sprint.latestReview) && (
-          <div className="absolute right-6 top-6 flex items-center gap-2">
+          <div className="absolute right-7 top-7 flex items-center gap-2 z-[60]">
             {sprint.latestReview && (
               <SprintReviewBadge summary={sprint.latestReview} compact align="right" />
             )}
@@ -179,9 +185,11 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
           {formatSprintKey(sprint)}
         </div>
 
-        <h3 className="mt-4 w-full px-4 font-display text-2xl font-black leading-tight tracking-tight text-slate-900 transition-transform duration-300 group-hover:-translate-y-3 dark:text-white">
-          {sprint.name}
-        </h3>
+        <div className="mt-4 flex w-full flex-col items-center justify-center gap-3 px-4 transition-transform duration-300 group-hover:-translate-y-3">
+          <h3 className="font-display text-2xl font-black leading-tight tracking-tight text-slate-900 dark:text-white">
+            {sprint.name}
+          </h3>
+        </div>
 
         <div className="mt-6 flex items-center justify-center gap-7 text-center transition-transform duration-300 group-hover:-translate-y-3">
           <div className="flex flex-col items-center">

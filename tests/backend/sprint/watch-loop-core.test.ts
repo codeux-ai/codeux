@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { WatchLoopRunner, evaluateSprintRunState } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
+import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "../../../src/domain/sprint/orchestrator/watch-loop-policies.js";
 import { buildMockSettings } from "../../builders/settings-builder.js";
 import { buildMockSubtask } from "../../builders/subtask-builder.js";
 
 const buildDeps = () => ({
   renderInstruction: vi.fn().mockResolvedValue("instruction"),
+  sleep: vi.fn().mockResolvedValue(undefined),
   updateLastStatus: vi.fn(),
   getDashboardSettings: () => buildMockSettings(),
   completedSprints: new Set<string>(),
@@ -18,6 +20,8 @@ const buildDeps = () => ({
     appendSprintRunEvent: vi.fn(),
     finalizeSprintRunCancellationIfIdle: vi.fn().mockReturnValue(null),
     getSprintRun: vi.fn().mockReturnValue({ status: "running" }),
+    listTaskDispatches: vi.fn().mockReturnValue([]),
+    getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
     updateSprintRun: vi.fn(),
     renewLease: vi.fn(),
   },
@@ -181,6 +185,75 @@ describe("WatchLoopRunner", () => {
 
     expect(result).toContain("Sprint Execution Finished");
     nowSpy.mockRestore();
+  });
+
+  it("cleans up terminal sprint CLI workspaces on completion", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const resolveResumeWorktreePath = vi.spyOn(
+      (await import("../../../src/infrastructure/providers/cli/workspace-manager.js")).WorkspaceManager.prototype,
+      "resolveResumeWorktreePath",
+    ).mockResolvedValue("/tmp/repo/.worktrees/session-1");
+    const removeWorktree = vi.spyOn(
+      (await import("../../../src/infrastructure/providers/cli/workspace-manager.js")).WorkspaceManager.prototype,
+      "removeWorktree",
+    ).mockResolvedValue(undefined);
+
+    deps.executionRepository.listTaskDispatches.mockReturnValue([
+      { id: "dispatch-1", executorType: "docker_cli" },
+    ]);
+    deps.executionRepository.getTaskRunByDispatchId.mockReturnValue({
+      sessionId: "session-1",
+    });
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "INST",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
+    await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp/repo",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp/repo",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(resolveResumeWorktreePath).toHaveBeenCalledWith("/tmp/repo", "session-1", expect.anything());
+    expect(removeWorktree).toHaveBeenCalledWith("/tmp/repo", "/tmp/repo/.worktrees/session-1");
   });
 
   it("handles RUNNING transition properly by waiting and continuing the loop", async () => {
@@ -1357,7 +1430,411 @@ describe("WatchLoopRunner", () => {
   });
 });
 
+describe("Watch Loop Policies", () => {
+  describe("decideMainMergeWaitOrPause", () => {
+    it("returns pause exit decision if main merge is blocked", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Conflict",
+          state: "merge_conflict",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: true,
+          mergeStateStatus: "DIRTY",
+          hasFailedChecks: false,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision).toEqual({
+        status: "exit",
+        reportModifier: expect.stringContaining("Sprint Paused"),
+        terminalState: "paused",
+        pauseReason: "main_merge_blocked",
+        pausePayload: {
+          sprintNumber: 5,
+          mainMergeState: "merge_conflict",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: true,
+          attentionItemIds: [],
+          attentionTypes: [],
+        },
+      });
+    });
+
+    it("returns wait decision if main merge mode is WHEN_GREEN and state is pending_checks", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "",
+          state: "pending_checks",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "CLEAN",
+          hasFailedChecks: false,
+          hasPendingChecks: true,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision).toEqual({
+        status: "wait",
+        reportModifier: expect.stringContaining("Sprint Still Active"),
+      });
+    });
+
+    it("returns null if not blocked and mainMergeMode is OFF", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "",
+          state: "ready_for_merge",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "CLEAN",
+          hasFailedChecks: false,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [],
+        mainMergeMode: "OFF",
+        sprintNumber: 5,
+      });
+
+      expect(decision).toBeNull();
+    });
+  });
+
+  describe("decideTerminalCompletion", () => {
+    it("returns failed decision if there are failed tasks", () => {
+      const decision = decideTerminalCompletion({
+        subtasks: [buildMockSubtask({ status: "FAILED" })],
+        manualMergeTasks: [],
+      });
+
+      expect(decision).toEqual({
+        status: "continue",
+        terminalState: "failed",
+        failedTaskCount: 1,
+      });
+    });
+
+    it("returns paused decision if there are manual merge tasks", () => {
+      const decision = decideTerminalCompletion({
+        subtasks: [buildMockSubtask({ status: "COMPLETED" })],
+        manualMergeTasks: [buildMockSubtask({ status: "COMPLETED" })],
+      });
+
+      expect(decision).toEqual({
+        status: "continue",
+        terminalState: "paused",
+        pauseReason: "awaiting_merge",
+        pausePayload: {
+          awaitingMergeCount: 1,
+        },
+      });
+    });
+
+    it("returns cancelled decision if subtasks list is empty", () => {
+      const decision = decideTerminalCompletion({
+        subtasks: [],
+        manualMergeTasks: [],
+      });
+
+      expect(decision).toEqual({
+        status: "continue",
+        terminalState: "cancelled",
+        pauseReason: "empty",
+      });
+    });
+
+    it("returns manual attention pause if no other state applies", () => {
+      const subtask = buildMockSubtask({ status: "RUNNING" });
+      const decision = decideTerminalCompletion({
+        subtasks: [subtask],
+        manualMergeTasks: [],
+      });
+
+      expect(decision).toEqual({
+        status: "continue",
+        terminalState: "paused",
+        pauseReason: "manual_attention",
+        pausePayload: {
+          runningTaskIds: [subtask.id],
+          readyTaskIds: [],
+          blockedTaskIds: [],
+        },
+      });
+    });
+  });
+});
+
+describe("Sprint Run Heartbeat", () => {
+  it("renews heartbeat and lease in RUNNING branch when state is active", async () => {
+    const deps = buildDeps();
+    deps.executionRepository.getSprintRun.mockReturnValue({ status: "running" });
+    const cycleRunner = buildCycleRunner();
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "RUNNING" })],
+        reportText: "REPORT",
+        statusTable: "TABLE",
+        instructions: "INST",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+        reportText: "REPORT",
+        statusTable: "TABLE",
+        instructions: "INST",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      });
+
+    const renderMainMergeFeedback = vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMainMergeFeedback);
+    await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+      leaseToken: "test-token",
+    });
+
+    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "running", lastHeartbeatAt: expect.any(String) })
+    );
+    expect(deps.executionRepository.renewLease).toHaveBeenCalledWith(
+      expect.objectContaining({ scopeId: "sprint-1", leaseToken: "test-token" })
+    );
+  });
+
+  it("renews heartbeat and lease in CHECKPOINT branch when output interval is reached but not all finished", async () => {
+    const deps = buildDeps();
+    deps.executionRepository.getSprintRun.mockReturnValue({ status: "running" });
+    const cycleRunner = buildCycleRunner();
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "RUNNING" })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "INST",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    const nowSpy = vi.spyOn(Date, "now");
+    // Start at 0, handleCycle transition at 1000, then checkpoint check is true (elapsed >= 60000)
+    // so it enters CHECKPOINT, calls sleep, then in sleep it returns so Date.now() happens.
+    nowSpy.mockReturnValueOnce(0).mockReturnValueOnce(1000).mockReturnValueOnce(61000).mockReturnValueOnce(62000);
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
+
+    // We expect it to run and loop, we'll just check if updateSprintRun and renewLease were called
+    // But since loop is infinite if it doesn't exit, we need a terminal condition in cycleRunner
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "RUNNING" })],
+        reportText: "REPORT",
+        statusTable: "TABLE",
+        instructions: "INST",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+        reportText: "REPORT",
+        statusTable: "TABLE",
+        instructions: "INST",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      });
+
+    await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+      leaseToken: "test-token",
+    });
+
+    nowSpy.mockRestore();
+
+    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "running", lastHeartbeatAt: expect.any(String) })
+    );
+    expect(deps.executionRepository.renewLease).toHaveBeenCalledWith(
+      expect.objectContaining({ scopeId: "sprint-1", leaseToken: "test-token" })
+    );
+  });
+
+  it("skips renewal when run state is terminal", async () => {
+    const deps = buildDeps();
+    deps.executionRepository.getSprintRun.mockReturnValue({ status: "paused" });
+    const cycleRunner = buildCycleRunner();
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "RUNNING" })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "INST",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
+    await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+      leaseToken: "test-token",
+    });
+
+    expect(deps.executionRepository.updateSprintRun).not.toHaveBeenCalled();
+    expect(deps.executionRepository.renewLease).not.toHaveBeenCalled();
+  });
+});
+
 describe("evaluateSprintRunState", () => {
+  it("evaluates mixed terminal and non-terminal task states correctly", () => {
+    const result = evaluateSprintRunState({
+      subtasks: [
+        buildMockSubtask({ status: "COMPLETED", is_merged: true }),
+        buildMockSubtask({ status: "PENDING", is_merged: false }),
+        buildMockSubtask({ status: "FAILED", is_merged: false }),
+      ],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+      activeProjectAttentionItems: [],
+      sprintRunId: "run-1",
+    });
+    expect(result.allTerminal).toBe(false);
+    expect(result.allFinished).toBe(false);
+    expect(result.noMoreActionPossible).toBe(false);
+  });
+
+  it("identifies QA pending tasks and prevents noMoreActionPossible", () => {
+    // A QA_PENDING task is not "settled" if it has merge evidence but is not merged.
+    const result = evaluateSprintRunState({
+      subtasks: [buildMockSubtask({ status: "CODING_COMPLETED", merge_indicator: "QA_PENDING", worker_branch: "test-branch", pr_url: "https://pr", is_merged: false })],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+      activeProjectAttentionItems: [],
+      sprintRunId: "run-1",
+    });
+    expect(result.qaPendingTasks.length).toBe(1);
+    expect(result.noMoreActionPossible).toBe(false);
+    expect(result.allFinished).toBe(false);
+  });
+
+  it("identifies QUOTA tasks and prevents noMoreActionPossible", () => {
+    const result = evaluateSprintRunState({
+      subtasks: [buildMockSubtask({ status: "QUOTA" })],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+      activeProjectAttentionItems: [],
+      sprintRunId: "run-1",
+    });
+    expect(result.quotaTasks.length).toBe(1);
+    expect(result.noMoreActionPossible).toBe(false);
+    expect(result.allFinished).toBe(false);
+  });
+
+  it("prioritizes waiting on worker attention over manual merge for allFinished", () => {
+    const result = evaluateSprintRunState({
+      subtasks: [
+        buildMockSubtask({ status: "COMPLETED", is_merged: false }),
+        buildMockSubtask({ status: "BLOCKED", is_merged: false })
+      ],
+      manualMergeTasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+      workerEscalatedMergeConflictTasks: [buildMockSubtask({ status: "BLOCKED", is_merged: false })],
+      activeProjectAttentionItems: [{ ownerType: "worker", attentionType: "merge_conflict", sprintRunId: "run-1" } as any],
+      sprintRunId: "run-1",
+    });
+    expect(result.needsManualMerge).toBe(true);
+    expect(result.waitingOnWorkerAttention).toBe(true);
+    expect(result.allFinished).toBe(false); // worker attention prevents finished
+  });
+
   it("identifies when all tasks are terminal", () => {
     const result = evaluateSprintRunState({
       subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],

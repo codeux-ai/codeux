@@ -1,15 +1,13 @@
-import type { FunctionComponent, ComponentChildren } from "preact";
+import type { FunctionComponent } from "preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
-import { NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
-import type { ProjectSettings, ProviderId, InvocationRoutingId } from "../../../../types.js";
+import type { ProjectSettings } from "../../../../types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { ExternalLink } from "lucide-preact";
+import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
 
-  export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
+export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
     activeScope,
-    selectedProject,
     editableSettings,
     projectSources,
     updateEditableSettings,
@@ -18,12 +16,93 @@ import { ExternalLink } from "lucide-preact";
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
   const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path);
 
-    if (!editableSettings) {
-      return null;
-    }
+  if (!editableSettings) {
+    return null;
+  }
 
-    return (
-      <div className="flex flex-col gap-5">
+  return (
+    <div className="flex flex-col gap-5">
+      <SectionCard title="Git Flow" watermark="GIT" badge={getBadge("git")}>
+        <Row label="Git mode" description="Remote enables PR and CI-aware automation. Local keeps orchestration repo-local only." badge={getFieldBadge("git.githubMode")}>
+          <PillChoiceGroup
+            value={editableSettings.git.githubMode}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              git: {
+                ...current.git,
+                githubMode: value as ProjectSettings["git"]["githubMode"],
+              },
+            }))}
+            options={[
+              { value: "REMOTE", label: "Remote", hint: "PRs, CI, and remote branch sync stay enabled." },
+              { value: "LOCAL", label: "Local", hint: "Disable remote PR orchestration and stay repo-local." },
+            ]}
+          />
+        </Row>
+        <Row label="Default branch" description="Base branch used for sprint branch creation and merge targets." badge={getFieldBadge("git.defaultBranch")}>
+          <TextInput
+            value={editableSettings.git.defaultBranch}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              git: {
+                ...current.git,
+                defaultBranch: value,
+              },
+            }))}
+            mono
+          />
+        </Row>
+        <Row label="Feature branch prefix" description="Prefix used when worker feature branches are generated automatically." badge={getFieldBadge("git.featureBranchPrefix")}>
+          <TextInput
+            value={editableSettings.git.featureBranchPrefix}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              git: {
+                ...current.git,
+                featureBranchPrefix: value,
+              },
+            }))}
+            mono
+          />
+        </Row>
+        <Row
+          label="Branch name scheme"
+          description="Template used when naming sprint branches."
+          badge={getFieldBadge("git.sprintBranchScheme")}
+          info={<InfoIconPopover items={[
+            { key: "{sprint}", desc: "Sprint identifier slug" },
+            { key: "{sprintNumber}", desc: "Sprint sequence number" },
+            { key: "{sprintName}", desc: "Sprint name" },
+            { key: "{date}", desc: "Current date" },
+            { key: "{taskCount}", desc: "Number of tasks in the sprint" },
+          ]} />}
+        >
+          <TextInput
+            value={editableSettings.git.sprintBranchScheme}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              git: {
+                ...current.git,
+                sprintBranchScheme: value,
+              },
+            }))}
+            mono
+          />
+        </Row>
+        <Row label="Auto-create PRs" description="Open pull requests automatically for remote git workflows." badge={getFieldBadge("git.autoCreatePr")} last>
+          <Toggle
+            value={editableSettings.git.autoCreatePr}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              git: {
+                ...current.git,
+                autoCreatePr: !current.git.autoCreatePr,
+              },
+            }))}
+          />
+        </Row>
+      </SectionCard>
+
         <SectionCard title="Merge Gates" watermark="CI" badge={getBadge("ciIntelligence")}>
           <Row label="CI intelligence enabled" description="Let orchestration react to CI state instead of treating CI as passive metadata." badge={getFieldBadge("ciIntelligence.enabled")}>
             <Toggle
@@ -49,18 +128,6 @@ import { ExternalLink } from "lucide-preact";
               }))}
             />
           </Row>
-          <Row label="Wait for CI before main merge" description="Hold main-branch merge completion until CI is green." badge={getFieldBadge("ciIntelligence.waitForCiBeforeMainMerge")}>
-            <Toggle
-              value={editableSettings.ciIntelligence.waitForCiBeforeMainMerge}
-              onChange={() => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  waitForCiBeforeMainMerge: !current.ciIntelligence.waitForCiBeforeMainMerge,
-                },
-              }))}
-            />
-          </Row>
           <Row label="Resolve comments before main merge" description="Require review comments to be resolved before finishing the main merge." badge={getFieldBadge("ciIntelligence.resolveAllCommentsBeforeMainMerge")}>
             <Toggle
               value={editableSettings.ciIntelligence.resolveAllCommentsBeforeMainMerge}
@@ -81,18 +148,6 @@ import { ExternalLink } from "lucide-preact";
                 ciIntelligence: {
                   ...current.ciIntelligence,
                   resolveMainMergeConflicts: !current.ciIntelligence.resolveMainMergeConflicts,
-                },
-              }))}
-            />
-          </Row>
-          <Row label="Wait for CI before feature merge" description="Require green CI before merging feature branches back into sprint or main flow." badge={getFieldBadge("ciIntelligence.waitForCiBeforeFeatureMerge")}>
-            <Toggle
-              value={editableSettings.ciIntelligence.waitForCiBeforeFeatureMerge}
-              onChange={() => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  waitForCiBeforeFeatureMerge: !current.ciIntelligence.waitForCiBeforeFeatureMerge,
                 },
               }))}
             />
@@ -474,6 +529,6 @@ import { ExternalLink } from "lucide-preact";
           </Row>
         </SectionCard>
 
-      </div>
-    );
-  };
+    </div>
+  );
+};

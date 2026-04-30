@@ -19,7 +19,7 @@ Some log text after.
     expect(extractJsonLikeBlock(input)).toEqual(payload);
   });
 
-  it("extracts payload from nested envelopes like Gemini response", () => {
+  it("handles wrapped response objects", () => {
     const actualPayload = JSON.stringify({ goal: "test", tasks: [] });
     const envelope = JSON.stringify({
       session_id: "123",
@@ -37,7 +37,7 @@ Some log text after.
     expect(extractJsonLikeBlock(envelope)).toEqual(actualPayload);
   });
 
-  it("extracts top-level arrays of tasks", () => {
+  it("handles top-level task arrays", () => {
     const payload = JSON.stringify([
       { title: "Task 1", prompt: "Prompt 1" },
       { title: "Task 2", prompt: "Prompt 2" }
@@ -55,7 +55,7 @@ ${validPayload}
     expect(extractJsonLikeBlock(input)).toEqual(validPayload);
   });
 
-  it("ignores embedded code fences inside promptMarkdown", () => {
+  it("handles embedded fenced code in string literals", () => {
     const payload = JSON.stringify({
       goal: "test",
       tasks: [
@@ -90,4 +90,46 @@ Some outro.
     expect(extractJsonLikeBlock(input)).toEqual(validPayload);
   });
 
+  it("picks direct payload over wrapped fallback when multiple valid blocks exist", () => {
+    const fallbackPayload = JSON.stringify({ response: JSON.stringify({ goal: "fallback", tasks: [] }) });
+    const directPayload = JSON.stringify({ goal: "direct", tasks: [] });
+    const input = `
+Here is a fallback block:
+\`\`\`json
+${fallbackPayload}
+\`\`\`
+
+Here is the direct block:
+\`\`\`json
+${directPayload}
+\`\`\`
+`;
+    expect(extractJsonLikeBlock(input)).toEqual(directPayload);
+  });
+
+  it("handles large markdown responses", () => {
+    // Generate a markdown response with many small balanced bracket/brace pairs
+    let input = "";
+    for (let i = 0; i < 100; i++) {
+      input += `Some text { "noise": ${i} } more noise [ ${i} ]\n`;
+    }
+    const directPayload = JSON.stringify({ goal: "direct", tasks: [] });
+    input += `
+\`\`\`json
+${directPayload}
+\`\`\`
+`;
+    for (let i = 100; i < 200; i++) {
+      input += `Some text { "noise": ${i} } more noise [ ${i} ]\n`;
+    }
+
+    const start = Date.now();
+    const result = extractJsonLikeBlock(input);
+    const end = Date.now();
+
+    // The Direct Payload should still be found (it's in fenced code, which is scanned before braces).
+    expect(result).toEqual(directPayload);
+    // Parsing should be fast
+    expect(end - start).toBeLessThan(100);
+  });
 });

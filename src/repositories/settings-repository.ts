@@ -21,6 +21,9 @@ import {
 import { DEFAULT_VIRTUAL_WORKER_MODELS } from "./settings-defaults.js";
 
 export class SettingsRepository {
+  private static systemSettingsCache: SystemSettings | null = null;
+  private static hasMigratedLegacySettings = false;
+
   private readonly storage: SettingsDbStorage;
   private readonly externalHints: ExternalSettingsHints | undefined;
 
@@ -30,27 +33,42 @@ export class SettingsRepository {
   }
 
   getSystemSettings(): SystemSettings {
-    this.migrateLegacySettingsIfNeeded();
+    if (!SettingsRepository.hasMigratedLegacySettings) {
+      this.migrateLegacySettingsIfNeeded();
+      SettingsRepository.hasMigratedLegacySettings = true;
+    }
+
+    if (SettingsRepository.systemSettingsCache) {
+      return SettingsRepository.systemSettingsCache;
+    }
+
     const payload = this.storage.readSystemPayload();
     if (!payload) {
-      return buildDefaultSystemSettings(this.externalHints);
+      SettingsRepository.systemSettingsCache = buildDefaultSystemSettings(this.externalHints);
+      return SettingsRepository.systemSettingsCache;
     }
 
     try {
-      return sanitizeSystemSettings(JSON.parse(payload), this.externalHints);
+      SettingsRepository.systemSettingsCache = sanitizeSystemSettings(JSON.parse(payload), this.externalHints);
+      return SettingsRepository.systemSettingsCache;
     } catch {
-      return buildDefaultSystemSettings(this.externalHints);
+      SettingsRepository.systemSettingsCache = buildDefaultSystemSettings(this.externalHints);
+      return SettingsRepository.systemSettingsCache;
     }
   }
 
   saveSystemSettings(input: SystemSettings): SystemSettings {
     const normalized = sanitizeSystemSettings(input, this.externalHints);
     this.storage.writeSystemPayload(JSON.stringify(normalized));
+    SettingsRepository.systemSettingsCache = normalized;
     return normalized;
   }
 
   getProjectSettings(projectId: string): ProjectSettingsOverride {
-    this.migrateLegacySettingsIfNeeded();
+    if (!SettingsRepository.hasMigratedLegacySettings) {
+      this.migrateLegacySettingsIfNeeded();
+      SettingsRepository.hasMigratedLegacySettings = true;
+    }
     const payload = this.storage.readProjectPayload(projectId);
     if (!payload) {
       return {};
@@ -64,7 +82,10 @@ export class SettingsRepository {
   }
 
   getProjectSettingsBatch(projectIds: string[]): Map<string, ProjectSettingsOverride> {
-    this.migrateLegacySettingsIfNeeded();
+    if (!SettingsRepository.hasMigratedLegacySettings) {
+      this.migrateLegacySettingsIfNeeded();
+      SettingsRepository.hasMigratedLegacySettings = true;
+    }
     const result = new Map<string, ProjectSettingsOverride>();
 
     const rows = executeChunkedInQuery<{ project_id: string; payload: string }>(
@@ -109,7 +130,10 @@ export class SettingsRepository {
   }
 
   getSprintSettings(sprintId: string): SprintSettingsOverride {
-    this.migrateLegacySettingsIfNeeded();
+    if (!SettingsRepository.hasMigratedLegacySettings) {
+      this.migrateLegacySettingsIfNeeded();
+      SettingsRepository.hasMigratedLegacySettings = true;
+    }
     const payload = this.storage.readSprintPayload(sprintId);
     if (!payload) {
       return {};
@@ -134,6 +158,8 @@ export class SettingsRepository {
 
   resetAllData(): void {
     this.storage.resetAllData();
+    SettingsRepository.systemSettingsCache = null;
+    SettingsRepository.hasMigratedLegacySettings = false;
   }
 
   createScopedResolver(): ScopedEffectiveSettingsResolver {
@@ -182,7 +208,7 @@ export class SettingsRepository {
           enableDebugLogFile: legacySettings.enableDebugLogFile,
         },
         integrations: {
-          julesApiKey: legacySettings.aiProvider?.providers?.jules?.apiKey || legacySettings.aiProvider?.julesApiKey || "",
+          julesApiKey: legacySettings.aiProvider?.providers?.jules?.apiKey || "",
           geminiApiKey: legacySettings.aiProvider?.providers?.gemini?.apiKey || "",
           codexApiKey: legacySettings.aiProvider?.providers?.codex?.apiKey || "",
           claudeCodeApiKey: legacySettings.aiProvider?.providers?.["claude-code"]?.apiKey || "",
@@ -250,6 +276,9 @@ export class SettingsRepository {
 
       this.storage.writeSystemPayload(JSON.stringify(systemSettings));
       this.storage.deleteLegacyPayload();
+
+      // Warm up the cache with the migrated settings
+      SettingsRepository.systemSettingsCache = systemSettings;
     } catch {
       // Ignore migration failures and fall back to new defaults.
     }

@@ -133,6 +133,7 @@ describe("StructuredAgentRequestService", () => {
       createExecutionInvocation: vi.fn().mockReturnValue({ id: "new-invocation-123" }),
       appendExecutionInvocationMessage: vi.fn(),
       updateExecutionInvocation: vi.fn(),
+      listExecutionInvocationMessages: vi.fn().mockReturnValue([]),
     };
 
     const mockProviderExecutionService = {
@@ -190,6 +191,7 @@ describe("StructuredAgentRequestService", () => {
       createExecutionInvocation: vi.fn(),
       appendExecutionInvocationMessage: vi.fn(),
       updateExecutionInvocation: vi.fn(),
+      listExecutionInvocationMessages: vi.fn().mockReturnValue([]),
     };
 
     const mockProviderExecutionService = {
@@ -287,5 +289,189 @@ describe("StructuredAgentRequestService", () => {
     const calls = vi.mocked(mockProviderExecutionService.executeProvider).mock.calls;
     expect(calls[1]?.[0].prompt).toBe("Fix schema: Missing goal property");
     expect(calls[1]?.[0].continueSessionId).toMatch(/test-claude-code-/); // Uses fallback generated session ID if no native session
+  });
+
+  it("re-throws ProviderTransportError correctly", async () => {
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: false,
+        stderr: "network error",
+      }),
+    } as unknown as ProviderExecutionService;
+
+    const structuredProviderResponseService = new StructuredProviderResponseService({
+      providerExecutionService: mockProviderExecutionService,
+    });
+    const service = new StructuredAgentRequestService({
+      structuredProviderResponseService,
+    });
+
+    await expect(service.executeRequest({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      prompt: "initial prompt",
+      model: "model-1",
+      apiKey: "test-key",
+      sessionId: "session-1",
+      settings: {} as any,
+      maxRetries: 1,
+      providerPrompt: "initial prompt",
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+    })).rejects.toThrow("Virtual Claude worker failed: network error");
+  });
+
+  it("re-throws ProviderEmptyOutputError correctly", async () => {
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: true,
+        text: "",
+      }),
+    } as unknown as ProviderExecutionService;
+
+    const structuredProviderResponseService = new StructuredProviderResponseService({
+      providerExecutionService: mockProviderExecutionService,
+    });
+    const service = new StructuredAgentRequestService({
+      structuredProviderResponseService,
+    });
+
+    await expect(service.executeRequest({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      prompt: "initial prompt",
+      model: "model-1",
+      apiKey: "test-key",
+      sessionId: "session-1",
+      settings: {} as any,
+      maxRetries: 1,
+      providerPrompt: "initial prompt",
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+    })).rejects.toThrow("Virtual Claude worker returned empty output.");
+  });
+
+    it("reuses invocationId and does not append duplicate system routing message", async () => {
+    const mockExecutionRepository = {
+      createExecutionInvocation: vi.fn(),
+      appendExecutionInvocationMessage: vi.fn(),
+      updateExecutionInvocation: vi.fn(),
+      listExecutionInvocationMessages: vi.fn().mockReturnValue([
+        {
+          role: "system",
+          contentMarkdown: "System route message",
+          metadata: { routeKind: "virtual" }
+        }
+      ]),
+    };
+
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: true,
+        text: '{"result": "ok"}',
+        nativeSessionId: null,
+      }),
+    };
+
+    const structuredProviderResponseService = new StructuredProviderResponseService({
+      providerExecutionService: mockProviderExecutionService as any,
+    });
+
+    const service = new StructuredAgentRequestService({
+      executionRepository: mockExecutionRepository as any,
+      structuredProviderResponseService,
+    });
+
+    const result = await service.executeRequest({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      model: "model-1",
+      apiKey: "test-key",
+      providerPrompt: "test prompt",
+      repoPath: "/repo",
+      settings: {} as any,
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+      invocationId: "existing-invocation-123",
+      systemRoutingMessage: "System route message",
+    });
+
+    expect(mockExecutionRepository.updateExecutionInvocation).toHaveBeenCalledWith("existing-invocation-123", {
+      provider: "claude-code",
+      model: "model-1",
+    });
+
+    // Should not append because message already exists
+    expect(mockExecutionRepository.appendExecutionInvocationMessage).not.toHaveBeenCalled();
+
+    expect(result.parsed).toEqual({ result: "ok" });
+    expect(result.invocationId).toBe("existing-invocation-123");
+  });
+
+  it("appends system message on invocation reuse if it does not already exist", async () => {
+    const mockExecutionRepository = {
+      createExecutionInvocation: vi.fn(),
+      appendExecutionInvocationMessage: vi.fn(),
+      updateExecutionInvocation: vi.fn(),
+      listExecutionInvocationMessages: vi.fn().mockReturnValue([
+        {
+          role: "system",
+          contentMarkdown: "Different route message",
+          metadata: { routeKind: "virtual" }
+        }
+      ]),
+    };
+
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: true,
+        text: '{"result": "ok"}',
+        nativeSessionId: null,
+      }),
+    };
+
+    const structuredProviderResponseService = new StructuredProviderResponseService({
+      providerExecutionService: mockProviderExecutionService as any,
+    });
+
+    const service = new StructuredAgentRequestService({
+      executionRepository: mockExecutionRepository as any,
+      structuredProviderResponseService,
+    });
+
+    await service.executeRequest({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      model: "model-1",
+      apiKey: "test-key",
+      providerPrompt: "test prompt",
+      repoPath: "/repo",
+      settings: {} as any,
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+      invocationId: "existing-invocation-123",
+      systemRoutingMessage: "System route message",
+    });
+
+    expect(mockExecutionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("existing-invocation-123", expect.objectContaining({
+      role: "system",
+      contentMarkdown: "System route message",
+    }));
   });
 });

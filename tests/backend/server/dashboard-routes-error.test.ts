@@ -1,760 +1,226 @@
-import express from "express";
+import express, { type Express } from "express";
+import request from "supertest";
 import { describe, expect, it } from "vitest";
+import { registerConversationRoutes } from "../../../src/server/conversation-routes.js";
+import { registerExecutionControlRoutes } from "../../../src/server/execution-control-routes.js";
+import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
+import { registerPlanningRoutes } from "../../../src/server/planning-routes.js";
 import { registerProjectRoutes } from "../../../src/server/project-routes.js";
+import { registerRuntimeRoutes } from "../../../src/server/runtime-routes.js";
+import { toErrorResponse } from "../../../src/server/route-utils.js";
 import { registerSprintRoutes } from "../../../src/server/sprint-routes.js";
 import { registerTaskRoutes } from "../../../src/server/task-routes.js";
-import { registerRuntimeRoutes } from "../../../src/server/runtime-routes.js";
-import { registerExecutionControlRoutes } from "../../../src/server/execution-control-routes.js";
-import { registerConversationRoutes } from "../../../src/server/conversation-routes.js";
-import { registerPlanningRoutes } from "../../../src/server/planning-routes.js";
-import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
 
-// We need an express router to expose _router, but app does expose _router after the first route is added sometimes, but wait, `app._router` is internal.
-// A better way is to send real HTTP requests using supertest, but supertest isn't standard here.
-// Let's use `fetch` against a real running server just like the other tests.
+const createApp = (...registrars: Array<(app: Express) => void>): Express => {
+  const app = express();
+  app.use(express.json());
+  for (const register of registrars) {
+    register(app);
+  }
+  return app;
+};
 
-import type { Server } from "http";
-import * as http from "http";
-
-describe("Dashboard Route Error Handlers", () => {
-  it("catches errors in project routes", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      listProjects: () => { throw new Error("Mock Error"); },
-      createProject: () => { throw new Error("Mock Error"); },
-      updateProject: () => { throw new Error("Mock Error"); },
-      deleteProject: () => { throw new Error("Mock Error"); },
-      selectProject: () => { throw new Error("Mock Error"); },
-      selectSprint: () => { throw new Error("Mock Error"); },
-      getProjectSettings: () => { throw new Error("Mock Error"); },
-      saveProjectSettings: () => { throw new Error("Mock Error"); },
-      resetProjectSettings: () => { throw new Error("Mock Error"); },
-      getProjectEffectiveSettings: () => { throw new Error("Mock Error"); },
+describe("dashboard route handlers", () => {
+  it("covers project route errors, success branches, and 404 handling", async () => {
+    const projectDeps = {
+      listProjects: () => [{ id: "project-1" }],
+      createProject: () => { throw new Error("project create"); },
+      getProject: (projectId: string) => projectId === "project-1" ? { id: projectId } : null,
+      getProjectSettings: () => { throw new Error("project settings"); },
+      saveProjectSettings: () => { throw new Error("project save"); },
+      resetProjectSettings: () => { throw new Error("project reset"); },
+      getProjectEffectiveSettings: () => { throw new Error("project effective"); },
+      updateProject: () => { throw new Error("project update"); },
+      deleteProject: () => { throw new Error("project delete"); },
+      selectProject: () => "project-1",
+      selectSprint: () => "sprint-1",
     } as unknown as DashboardDependencies;
 
-    registerProjectRoutes(app, options);
+    const app = createApp((router) => registerProjectRoutes(router, projectDeps));
 
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1", "PATCH", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1", "DELETE")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/select", "PUT")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/selected-sprint", "PUT", { sprintId: "2" })).status).toBe(400);
-    expect((await testUrl("/api/projects/1/settings", "GET")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/settings", "PUT", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/settings", "DELETE")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/settings/effective", "GET")).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    expect((await request(app).get("/api/projects")).status).toBe(200);
+    expect((await request(app).post("/api/projects").send({})).status).toBe(400);
+    expect((await request(app).get("/api/projects/project-1")).status).toBe(200);
+    expect((await request(app).get("/api/projects/missing")).status).toBe(404);
+    expect((await request(app).get("/api/projects/project-1/settings")).status).toBe(400);
+    expect((await request(app).put("/api/projects/project-1/settings").send({})).status).toBe(400);
+    expect((await request(app).delete("/api/projects/project-1/settings")).status).toBe(400);
+    expect((await request(app).get("/api/projects/project-1/settings/effective")).status).toBe(400);
+    expect((await request(app).patch("/api/projects/project-1").send({})).status).toBe(400);
+    expect((await request(app).delete("/api/projects/project-1")).status).toBe(400);
+    expect((await request(app).put("/api/projects/project-1/select")).status).toBe(200);
+    expect((await request(app).put("/api/projects/project-1/selected-sprint").send({ sprintId: "sprint-1" })).status).toBe(200);
+    expect((await request(app).put("/api/projects/project-1/selected-sprint").send({})).status).toBe(200);
   });
 
-  it("catches errors in sprint routes", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      listSprints: () => { throw new Error("Mock Error"); },
-      createSprint: () => { throw new Error("Mock Error"); },
-      importSprintFromMarkdown: () => { throw new Error("Mock Error"); },
-      exportSprintToMarkdown: () => { throw new Error("Mock Error"); },
-      updateSprint: () => { throw new Error("Mock Error"); },
-      deleteSprint: () => { throw new Error("Mock Error"); },
-      getSprintSettings: () => { throw new Error("Mock Error"); },
-      saveSprintSettings: () => { throw new Error("Mock Error"); },
-      resetSprintSettings: () => { throw new Error("Mock Error"); },
-      getSprintEffectiveSettings: () => { throw new Error("Mock Error"); },
-    } as unknown as DashboardDependencies;
-
-    registerSprintRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/1/sprints")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints/import", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints/1/export")).status).toBe(400);
-    expect((await testUrl("/api/sprints/1", "PATCH", {})).status).toBe(400);
-    expect((await testUrl("/api/sprints/1", "DELETE")).status).toBe(400);
-    expect((await testUrl("/api/sprints/1/settings")).status).toBe(400);
-    expect((await testUrl("/api/sprints/1/settings", "PUT", { projectId: "1" })).status).toBe(400);
-    expect((await testUrl("/api/sprints/1/settings", "DELETE")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints/1/settings/effective")).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-  it("catches errors in task routes", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      listTasks: () => { throw new Error("Mock Error"); },
-      createTask: () => { throw new Error("Mock Error"); },
-      updateTask: () => { throw new Error("Mock Error"); },
-      deleteTask: () => { throw new Error("Mock Error"); },
-    } as unknown as DashboardDependencies;
-
-    registerTaskRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/1/tasks")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/tasks", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/tasks/1", "PATCH", {})).status).toBe(400);
-    expect((await testUrl("/api/tasks/1", "DELETE")).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-});
-
-  it("hits success paths to cover non-error branches", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      listProjects: () => [{ id: "1" }],
-      createProject: () => ({ id: "1" }),
-      getProjectSettings: () => ({}),
-      saveProjectSettings: () => ({}),
-      resetProjectSettings: () => ({ ok: true }),
-      getProjectEffectiveSettings: () => ({ settings: {}, sources: {} }),
-      updateProject: () => ({ id: "1" }),
-      deleteProject: () => {},
-      selectProject: () => "1",
-      selectSprint: () => "2",
-
+  it("covers sprint route errors, success branches, and validation", async () => {
+    const sprintDeps = {
       listSprints: () => ({ sprints: [] }),
-      createSprint: () => ({ id: "1" }),
-      importSprintFromMarkdown: () => ({ id: "1" }),
-      exportSprintToMarkdown: () => ({ markdown: "" }),
-      updateSprint: () => ({ id: "1" }),
-      deleteSprint: () => {},
-      getSprintSettings: () => ({}),
-      saveSprintSettings: () => ({}),
-      resetSprintSettings: () => ({ ok: true }),
-      getSprintEffectiveSettings: () => ({ settings: {}, sources: {} }),
-
-      listTasks: () => [],
-      createTask: () => ({ id: "1" }),
-      updateTask: () => ({ id: "1" }),
-      deleteTask: () => {},
-    } as unknown as DashboardDependencies;
-
-    registerProjectRoutes(app, options);
-    registerSprintRoutes(app, options);
-    registerTaskRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/sprints")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/tasks")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/tasks?sprintId=2")).status).toBe(200);
-
-    expect((await testUrl("/api/projects", "POST", {})).status).toBe(201);
-    expect((await testUrl("/api/projects/1/sprints", "POST", {})).status).toBe(201);
-    expect((await testUrl("/api/projects/1/sprints/import", "POST", {})).status).toBe(201);
-    expect((await testUrl("/api/projects/1/tasks", "POST", {})).status).toBe(201);
-
-    expect((await testUrl("/api/projects/1", "PATCH", {})).status).toBe(200);
-    expect((await testUrl("/api/sprints/1", "PATCH", {})).status).toBe(200);
-    expect((await testUrl("/api/tasks/1", "PATCH", {})).status).toBe(200);
-
-    expect((await testUrl("/api/projects/1/settings", "PUT", {})).status).toBe(200);
-    expect((await testUrl("/api/sprints/1/settings", "PUT", { projectId: "1" })).status).toBe(200);
-    expect((await testUrl("/api/sprints/1/settings", "DELETE")).status).toBe(200);
-
-    expect((await testUrl("/api/projects/1/select", "PUT")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/selected-sprint", "PUT", { sprintId: "2" })).status).toBe(200);
-
-    expect((await testUrl("/api/projects/1/settings/effective")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/sprints/1/settings/effective")).status).toBe(200);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-  it("hits missing handlers (404) or specific cases", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      getProject: () => null,
-    } as unknown as DashboardDependencies;
-
-    registerProjectRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/2")).status).toBe(404);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-  it("handles sprint settings save without projectId", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {} as unknown as DashboardDependencies;
-
-    registerSprintRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/sprints/1/settings", "PUT", {})).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-  it("hits missing project selection logic", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      selectProject: () => "1",
-      selectSprint: () => "2",
-    } as unknown as DashboardDependencies;
-
-    registerProjectRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/1/select", "PUT")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/selected-sprint", "PUT", {})).status).toBe(200);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-  it("hits missing handlers (404) or specific cases for tasks and sprints", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      deleteTask: () => { throw new Error("task delete"); },
-      updateTask: () => { throw new Error("task patch"); },
-      deleteSprint: () => { throw new Error("sprint delete"); },
+      createSprint: () => { throw new Error("sprint create"); },
+      importSprintFromMarkdown: () => ({ id: "sprint-1" }),
+      exportSprintToMarkdown: () => ({ markdown: "# sprint" }),
       updateSprint: () => { throw new Error("sprint update"); },
-    } as unknown as DashboardDependencies;
-
-    registerSprintRoutes(app, options);
-    registerTaskRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/tasks/1", "DELETE")).status).toBe(400);
-    expect((await testUrl("/api/tasks/1", "PATCH", {})).status).toBe(400);
-    expect((await testUrl("/api/sprints/1", "DELETE")).status).toBe(400);
-    expect((await testUrl("/api/sprints/1", "PATCH", {})).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-
-  it("hits missing project settings effective logic", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      getSprintSettings: () => { throw new Error("error"); },
-      getSprintEffectiveSettings: () => { throw new Error("error"); },
-    } as unknown as DashboardDependencies;
-
-    registerSprintRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/sprints/1/settings")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints/1/settings/effective")).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-  it("handles empty lists correctly", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      listTasks: () => { throw new Error("error"); },
-    } as unknown as DashboardDependencies;
-
-    registerTaskRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/1/tasks")).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-
-  it("hits missing error paths", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      selectProject: () => { throw new Error(); },
-      selectSprint: () => { throw new Error(); },
-      getSprintEffectiveSettings: () => { throw new Error(); },
-      getSprintSettings: () => { throw new Error(); },
-      saveSprintSettings: () => { throw new Error(); },
-      resetSprintSettings: () => { throw new Error(); },
-    } as unknown as DashboardDependencies;
-
-    registerProjectRoutes(app, options);
-    registerSprintRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/1/select", "PUT", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/selected-sprint", "PUT", {})).status).toBe(400);
-    expect((await testUrl("/api/sprints/1/settings", "PUT", { projectId: "1" })).status).toBe(400);
-    expect((await testUrl("/api/sprints/1/settings", "DELETE", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints/1/settings/effective", "GET")).status).toBe(400);
-    expect((await testUrl("/api/sprints/1/settings", "GET")).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-
-  it("hits missing success branches", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      getProject: () => ({ id: "2" }),
-    } as unknown as DashboardDependencies;
-
-    registerProjectRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/2")).status).toBe(200);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-
-  it("hits edge cases", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {} as unknown as DashboardDependencies;
-
-    registerProjectRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/1/select", "PUT", {})).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-
-  it("hits missing project stats catch", async () => {
-    // wait I didn't extract the stats route. It's not project-routes, it's execution and stats.
-    // The missing coverage might be in dashboard-server.ts.
-    const app = express();
-    app.use(express.json());
-    const options = {
-      listTasks: () => { throw new Error("error"); },
-    } as unknown as DashboardDependencies;
-
-    registerTaskRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/1/tasks")).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-
-
-import { toErrorResponse } from "../../../src/server/route-utils.js";
-
-describe("toErrorResponse helper", () => {
-  it("formats Error objects", () => {
-    expect(toErrorResponse(new Error("Test error"), "Prefix")).toEqual({ error: "Prefix: Test error" });
-  });
-
-  it("formats string errors", () => {
-    expect(toErrorResponse("String error", "Prefix")).toEqual({ error: "Prefix: String error" });
-  });
-});
-
-describe("More success/edge cases", () => {
-  it("hits success paths on edge endpoints", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      importSprintFromMarkdown: () => ({ id: "1" }),
-      exportSprintToMarkdown: () => ({ markdown: "" }),
+      getSprintSettings: () => { throw new Error("sprint settings"); },
+      saveSprintSettings: () => ({ ok: true }),
+      resetSprintSettings: () => { throw new Error("sprint reset"); },
       getSprintEffectiveSettings: () => ({ settings: {}, sources: {} }),
-      getProjectEffectiveSettings: () => ({ settings: {}, sources: {} }),
+      deleteSprint: () => { throw new Error("sprint delete"); },
     } as unknown as DashboardDependencies;
 
-    registerProjectRoutes(app, options);
-    registerSprintRoutes(app, options);
+    const app = createApp((router) => registerSprintRoutes(router, sprintDeps));
 
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
+    expect((await request(app).get("/api/projects/project-1/sprints")).status).toBe(200);
+    expect((await request(app).post("/api/projects/project-1/sprints").send({})).status).toBe(400);
+    expect((await request(app).post("/api/projects/project-1/sprints/import").send({})).status).toBe(201);
+    expect((await request(app).get("/api/projects/project-1/sprints/sprint-1/export")).status).toBe(200);
+    expect((await request(app).patch("/api/sprints/sprint-1").send({})).status).toBe(400);
+    expect((await request(app).get("/api/sprints/sprint-1/settings")).status).toBe(400);
+    expect((await request(app).put("/api/sprints/sprint-1/settings").send({})).status).toBe(400);
+    expect((await request(app).put("/api/sprints/sprint-1/settings").send({ projectId: "project-1" })).status).toBe(200);
+    expect((await request(app).delete("/api/sprints/sprint-1/settings")).status).toBe(400);
+    expect((await request(app).get("/api/projects/project-1/sprints/sprint-1/settings/effective")).status).toBe(200);
+    expect((await request(app).delete("/api/sprints/sprint-1")).status).toBe(400);
+  });
 
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  it("covers task route errors and query parsing", async () => {
+    const taskDeps = {
+      listTasks: (_projectId: string, sprintId?: string | null) => [{ id: sprintId ?? "task-1" }],
+      createTask: () => { throw new Error("task create"); },
+      updateTask: () => { throw new Error("task update"); },
+      deleteTask: () => { throw new Error("task delete"); },
+    } as unknown as DashboardDependencies;
 
-    expect((await testUrl("/api/projects/1/sprints/1/export")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/sprints/import", "POST", {})).status).toBe(201);
+    const app = createApp((router) => registerTaskRoutes(router, taskDeps));
 
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    expect((await request(app).get("/api/projects/project-1/tasks")).status).toBe(200);
+    expect((await request(app).get("/api/projects/project-1/tasks?sprintId=sprint-1")).status).toBe(200);
+    expect((await request(app).get("/api/projects/project-1/tasks?sprintId=%20%20%20")).status).toBe(200);
+    expect((await request(app).post("/api/projects/project-1/tasks").send({})).status).toBe(400);
+    expect((await request(app).patch("/api/tasks/task-1").send({})).status).toBe(400);
+    expect((await request(app).delete("/api/tasks/task-1")).status).toBe(400);
+  });
+
+  it("covers runtime routes, stats parsing, and optional feature guards", async () => {
+    const runtimeDeps = {
+      getStatus: () => ({ ok: true }),
+      getExecutionSnapshot: () => ({ projectId: null }),
+      getLiveSnapshot: async () => ({ projectId: null }),
+      getOverviewTelemetrySnapshot: () => ({ updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: "project-1" }),
+      getProjectStatsSnapshot: (_projectId: string, query: { window: string; from?: string; to?: string }) => query,
+      setPreferredWorker: (_projectId: string, payload: unknown) => payload,
+      claimAttentionItem: (_projectId: string, _attentionItemId: string, payload: unknown) => payload,
+      resolveAttentionItem: (_projectId: string, _attentionItemId: string, payload: unknown) => payload,
+    } as unknown as DashboardDependencies;
+
+    const disabledDeps = {} as DashboardDependencies;
+
+    const app = createApp(
+      (router) => registerRuntimeRoutes(router, runtimeDeps),
+      (router) => registerRuntimeRoutes(router, disabledDeps),
+    );
+
+    expect((await request(app).get("/api/status")).status).toBe(200);
+    expect((await request(app).get("/api/execution")).status).toBe(200);
+    expect((await request(app).get("/api/live")).status).toBe(200);
+    expect((await request(app).get("/api/telemetry/overview")).status).toBe(200);
+    expect((await request(app).get("/api/projects/project-1/execution")).status).toBe(200);
+    expect((await request(app).get("/api/projects/project-1/stats?window=24h")).status).toBe(200);
+    expect((await request(app).get("/api/projects/project-1/stats?window=custom")).status).toBe(400);
+    expect((await request(app).put("/api/projects/project-1/preferred-worker").send({ workerEndpointId: "worker-1" })).status).toBe(200);
+    expect((await request(app).post("/api/projects/project-1/attention-items/item-1/claim").send({ claimReason: "test" })).status).toBe(200);
+    expect((await request(app).post("/api/projects/project-1/attention-items/item-1/resolve").send({ status: "resolved" })).status).toBe(200);
+
+    const disabledApp = createApp((router) => registerRuntimeRoutes(router, disabledDeps));
+    expect((await request(disabledApp).put("/api/projects/project-1/preferred-worker").send({})).status).toBe(501);
+    expect((await request(disabledApp).post("/api/projects/project-1/attention-items/item-1/claim").send({})).status).toBe(501);
+    expect((await request(disabledApp).post("/api/projects/project-1/attention-items/item-1/resolve").send({})).status).toBe(501);
+  });
+
+  it("covers execution control routes and body validation", async () => {
+    const controlDeps = {
+      rerunTask: async () => ({ id: "task-1" }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      forceCancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      forceCancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+    } as unknown as DashboardDependencies;
+
+    const app = createApp((router) => registerExecutionControlRoutes(router, controlDeps));
+
+    expect((await request(app).post("/api/tasks/task-1/rerun").send({ provider: "jules" })).status).toBe(200);
+    expect((await request(app).post("/api/tasks/task-1/rerun").send(null)).status).toBe(400);
+    expect((await request(app).post("/api/projects/project-1/sprints/sprint-1/orchestrate")).status).toBe(202);
+    expect((await request(app).post("/api/sprint-runs/run-1/pause")).status).toBe(200);
+    expect((await request(app).post("/api/sprint-runs/run-1/cancel")).status).toBe(200);
+    expect((await request(app).post("/api/sprint-runs/run-1/force-cancel")).status).toBe(200);
+    expect((await request(app).post("/api/task-dispatches/dispatch-1/cancel")).status).toBe(200);
+    expect((await request(app).post("/api/task-dispatches/dispatch-1/force-cancel")).status).toBe(200);
+    expect((await request(app).post("/api/task-dispatches/dispatch-1/retry")).status).toBe(200);
+  });
+
+  it("covers conversation routes, validation, and optional feature guards", async () => {
+    const conversationDeps = {
+      listConversationThreads: () => [],
+      createConversationThread: () => ({ id: "thread-1" }),
+      updateConversationThread: () => ({ id: "thread-1" }),
+      updateThreadRoute: () => ({ id: "thread-1" }),
+      compactThreadSession: async () => ({ ok: true }),
+      deleteConversationThread: () => undefined,
+      listConversationMessages: () => [],
+      postConversationMessage: () => ({ id: "message-1" }),
+    } as unknown as DashboardDependencies;
+
+    const app = createApp((router) => registerConversationRoutes(router, conversationDeps));
+
+    expect((await request(app).get("/api/projects/project-1/conversations/threads")).status).toBe(200);
+    expect((await request(app).post("/api/projects/project-1/conversations/threads").send({ title: "Thread" })).status).toBe(201);
+    expect((await request(app).post("/api/projects/project-1/conversations/threads").send({ title: "   " })).status).toBe(400);
+    expect((await request(app).post("/api/projects/project-1/conversations/threads").send({ title: "Thread", scope: "invalid" })).status).toBe(400);
+    expect((await request(app).patch("/api/conversations/threads/thread-1").send({ connectionId: null })).status).toBe(200);
+    expect((await request(app).patch("/api/conversations/threads/thread-1").send(null)).status).toBe(400);
+    expect((await request(app).put("/api/conversations/threads/thread-1/route").send({ routeKind: "worker", workerEndpointId: "worker-1" })).status).toBe(200);
+    expect((await request(app).put("/api/conversations/threads/thread-1/route").send({ routeKind: "invalid" })).status).toBe(400);
+    expect((await request(app).post("/api/conversations/threads/thread-1/compact")).status).toBe(200);
+    expect((await request(app).delete("/api/conversations/threads/thread-1")).status).toBe(200);
+    expect((await request(app).get("/api/conversations/threads/thread-1/messages")).status).toBe(200);
+    expect((await request(app).post("/api/projects/project-1/conversations/messages").send({ bodyMarkdown: "Hello" })).status).toBe(201);
+    expect((await request(app).post("/api/projects/project-1/conversations/messages").send({ bodyMarkdown: "   " })).status).toBe(400);
+
+    const disabledApp = createApp((router) => registerConversationRoutes(router, {} as DashboardDependencies));
+    expect((await request(disabledApp).put("/api/conversations/threads/thread-1/route").send({ routeKind: "worker" })).status).toBe(404);
+    expect((await request(disabledApp).post("/api/conversations/threads/thread-1/compact")).status).toBe(404);
+  });
+
+  it("covers planning routes, validation, and optional feature guards", async () => {
+    const planningDeps = {
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
+    } as unknown as DashboardDependencies;
+
+    const app = createApp((router) => registerPlanningRoutes(router, planningDeps));
+
+    expect((await request(app).post("/api/projects/project-1/planning/improve-sprint-prompt").send({ name: "Sprint", goal: "Ship it" })).status).toBe(202);
+    expect((await request(app).post("/api/projects/project-1/planning/improve-sprint-prompt").send(null)).status).toBe(400);
+    expect((await request(app).post("/api/projects/project-1/sprints/sprint-1/plan").send({ autoStart: true })).status).toBe(202);
+    expect((await request(app).post("/api/projects/project-1/sprints/sprint-1/plan").send(null)).status).toBe(400);
+
+    const disabledApp = createApp((router) => registerPlanningRoutes(router, {} as DashboardDependencies));
+    expect((await request(disabledApp).post("/api/projects/project-1/planning/improve-sprint-prompt").send({})).status).toBe(404);
+    expect((await request(disabledApp).post("/api/projects/project-1/sprints/sprint-1/plan").send({})).status).toBe(404);
   });
 });
 
-describe("Full Branch/Function Coverage Hits", () => {
-  it("hits all error and edge branches directly", async () => {
-    const app = express();
-    app.use(express.json());
-
-    // Fill every required option to run the setup but immediately throw or return values to hit edge cases
-    const options = {
-      listTasks: () => [{ id: "task1" }],
-      createTask: () => { throw new Error("Mock Error"); },
-      updateTask: () => { throw new Error("Mock Error"); },
-      deleteTask: () => { throw new Error("Mock Error"); },
-
-      listSprints: () => ({ sprints: [] }),
-      createSprint: () => { throw new Error("Mock Error"); },
-      importSprintFromMarkdown: () => { throw new Error("Mock Error"); },
-      exportSprintToMarkdown: () => { throw new Error("Mock Error"); },
-      updateSprint: () => { throw new Error("Mock Error"); },
-      deleteSprint: () => { throw new Error("Mock Error"); },
-      getSprintSettings: () => { throw new Error("Mock Error"); },
-      saveSprintSettings: () => { throw new Error("Mock Error"); },
-      resetSprintSettings: () => { throw new Error("Mock Error"); },
-      getSprintEffectiveSettings: () => { throw new Error("Mock Error"); },
-
-      listProjects: () => ({ projects: [] }),
-      createProject: () => { throw new Error("Mock Error"); },
-      getProject: () => null,
-      updateProject: () => { throw new Error("Mock Error"); },
-      deleteProject: () => { throw new Error("Mock Error"); },
-      selectProject: () => { throw new Error("Mock Error"); },
-      selectSprint: () => { throw new Error("Mock Error"); },
-      getProjectSettings: () => { throw new Error("Mock Error"); },
-      saveProjectSettings: () => { throw new Error("Mock Error"); },
-      resetProjectSettings: () => { throw new Error("Mock Error"); },
-      getProjectEffectiveSettings: () => { throw new Error("Mock Error"); },
-
-      orchestrateSprint: () => { throw new Error("Mock Error"); },
-      getStatus: () => { throw new Error("Mock Error"); },
-      getExecutionSnapshot: () => { throw new Error("Mock Error"); },
-      getLiveSnapshot: () => { throw new Error("Mock Error"); },
-      getOverviewTelemetrySnapshot: () => { throw new Error("Mock Error"); },
-      getProjectExecutionSnapshot: () => { throw new Error("Mock Error"); },
-      getProjectStatsSnapshot: () => { throw new Error("Mock Error"); },
-      setPreferredWorker: () => { throw new Error("Mock Error"); },
-      claimAttentionItem: () => { throw new Error("Mock Error"); },
-      resolveAttentionItem: () => { throw new Error("Mock Error"); },
-      rerunTask: () => { throw new Error("Mock Error"); },
-      pauseSprintRun: () => { throw new Error("Mock Error"); },
-      cancelSprintRun: () => { throw new Error("Mock Error"); },
-      forceCancelSprintRun: () => { throw new Error("Mock Error"); },
-      cancelTaskDispatch: () => { throw new Error("Mock Error"); },
-      forceCancelTaskDispatch: () => { throw new Error("Mock Error"); },
-      retryTaskDispatch: () => { throw new Error("Mock Error"); },
-      improveSprintPrompt: () => { throw new Error("Mock Error"); },
-      planSprint: () => { throw new Error("Mock Error"); },
-      createConversationThread: () => { throw new Error("Mock Error"); },
-      updateConversationThread: () => { throw new Error("Mock Error"); },
-      updateThreadRoute: () => { throw new Error("Mock Error"); },
-      postConversationMessage: () => { throw new Error("Mock Error"); },
-    } as unknown as DashboardDependencies;
-
-    registerProjectRoutes(app, options);
-    registerSprintRoutes(app, options);
-    registerTaskRoutes(app, options);
-    registerRuntimeRoutes(app, options);
-    registerExecutionControlRoutes(app, options);
-    registerConversationRoutes(app, options);
-    registerPlanningRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects")).status).toBe(200);
-    expect((await testUrl("/api/projects", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1")).status).toBe(404);
-    expect((await testUrl("/api/projects/1/settings")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/settings", "PUT", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/settings", "DELETE")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/settings/effective")).status).toBe(400);
-    expect((await testUrl("/api/projects/1", "PATCH", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1", "DELETE")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/select", "PUT")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/selected-sprint", "PUT")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/selected-sprint", "PUT", { sprintId: "x" })).status).toBe(400);
-
-    expect((await testUrl("/api/projects/1/sprints")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/sprints", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints/import", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints/1/export")).status).toBe(400);
-    expect((await testUrl("/api/sprints/1", "PATCH", {})).status).toBe(400);
-    expect((await testUrl("/api/sprints/1/settings")).status).toBe(400);
-    expect((await testUrl("/api/sprints/1/settings", "PUT", {})).status).toBe(400);
-    expect((await testUrl("/api/sprints/1/settings", "PUT", { projectId: "x" })).status).toBe(400);
-    expect((await testUrl("/api/sprints/1/settings", "DELETE")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints/1/settings/effective")).status).toBe(400);
-    expect((await testUrl("/api/sprints/1", "DELETE")).status).toBe(400);
-
-    expect((await testUrl("/api/projects/1/tasks")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/tasks?sprintId=x")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/tasks", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/tasks/1", "PATCH", {})).status).toBe(400);
-    expect((await testUrl("/api/tasks/1", "DELETE")).status).toBe(400);
-
-    expect((await testUrl("/api/status")).status).toBe(400);
-    expect((await testUrl("/api/execution")).status).toBe(400);
-    expect((await testUrl("/api/live")).status).toBe(400);
-    expect((await testUrl("/api/telemetry/overview")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/execution")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/stats")).status).toBe(400);
-    expect((await testUrl("/api/projects/1/preferred-worker", "PUT", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/attention-items/1/claim", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/attention-items/1/resolve", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/tasks/1/rerun", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints/1/orchestrate", "POST")).status).toBe(400);
-    expect((await testUrl("/api/sprint-runs/1/pause", "POST")).status).toBe(400);
-    expect((await testUrl("/api/sprint-runs/1/cancel", "POST")).status).toBe(400);
-    expect((await testUrl("/api/sprint-runs/1/force-cancel", "POST")).status).toBe(400);
-    expect((await testUrl("/api/task-dispatches/1/cancel", "POST")).status).toBe(400);
-    expect((await testUrl("/api/task-dispatches/1/force-cancel", "POST")).status).toBe(400);
-    expect((await testUrl("/api/task-dispatches/1/retry", "POST")).status).toBe(400);
-
-    // Conversation and new route error testing
-    expect((await testUrl("/api/projects/1/conversations/threads", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/conversations/threads", "POST", { title: "  " })).status).toBe(400);
-    expect((await testUrl("/api/projects/1/conversations/threads", "POST", { title: "Valid", scope: "invalid" })).status).toBe(400);
-    expect((await testUrl("/api/conversations/threads/1", "PATCH", null)).status).toBe(400);
-    expect((await testUrl("/api/projects/1/conversations/messages", "POST", {})).status).toBe(400);
-    expect((await testUrl("/api/projects/1/conversations/messages", "POST", { bodyMarkdown: "  " })).status).toBe(400);
-    expect((await testUrl("/api/conversations/threads/1/route", "PUT", { routeKind: "invalid" })).status).toBe(400);
-
-    // Other parses tests
-    expect((await testUrl("/api/projects/1/planning/improve-sprint-prompt", "POST", null)).status).toBe(400);
-    expect((await testUrl("/api/projects/1/sprints/1/plan", "POST", null)).status).toBe(400);
-    expect((await testUrl("/api/tasks/1/rerun", "POST", null)).status).toBe(400);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-});
-
-describe("More success/edge cases for dashboard server", () => {
-  it("hits success paths on more edge endpoints", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      importAgentPresetFromMarkdown: () => ({ id: "1" }),
-      syncAllAgentPresetsFromMarkdown: () => [{ id: "1" }],
-      updateThreadRoute: () => ({ id: "1" }),
-      compactThreadSession: () => ({ id: "1" }),
-      quicksprintService: {
-        listTemplates: () => [],
-        getTemplate: () => ({ id: "1" }),
-        createCustomTemplate: () => ({ id: "1" }),
-        updateCustomTemplate: () => ({ id: "1" }),
-        deleteCustomTemplate: () => {},
-        executeQuicksprint: () => ({ id: "1" })
-      },
-      improveSprintPrompt: () => ({ goal: "new" }),
-      planSprint: () => ({ id: "1" }),
-      pauseSprintRun: () => ({ id: "1" }),
-      cancelSprintRun: () => ({ id: "1" }),
-      forceCancelSprintRun: () => ({ id: "1" }),
-      cancelTaskDispatch: () => ({ id: "1" }),
-      forceCancelTaskDispatch: () => ({ id: "1" }),
-      retryTaskDispatch: () => ({ id: "1" }),
-    } as unknown as DashboardDependencies;
-
-    // We only need to check that these are hit in the main file if there were any, but we moved them? No, we didn't move them! They are still in dashboard-server.ts.
-    // Let's actually import and test the main server! We already have tests for it, they just aren't hitting the error paths.
-  });
-});
-
-describe("toErrorResponse helper details", () => {
-  it("formats string errors", () => {
-    expect(toErrorResponse("A plain string", "Prefix")).toEqual({ error: "Prefix: A plain string" });
+describe("toErrorResponse", () => {
+  it("formats Error values", () => {
+    expect(toErrorResponse(new Error("boom"), "Prefix")).toEqual({ error: "Prefix: boom" });
   });
 
-  it("formats object errors", () => {
-    expect(toErrorResponse({ message: "Internal" }, "Prefix")).toEqual({ error: "Prefix: [object Object]" });
-  });
-});
-
-
-describe("More explicit logic coverage hits", () => {
-  it("hits explicit error branches", async () => {
-    const app = express();
-    app.use(express.json());
-
-    // We can directly call the registered routes to hit branches that are hard to hit via fetch,
-    // but fetch is easier. Actually let's just make fetch calls to things we know have branches.
-    const options = {
-      createSprint: () => ({ id: "sprint" }),
-      updateSprint: () => ({ id: "sprint" }),
-      importSprintFromMarkdown: () => ({ id: "sprint" }),
-      exportSprintToMarkdown: () => ({ markdown: "text" }),
-      getSprintEffectiveSettings: () => ({ settings: {}, sources: {} }),
-      getSprintSettings: () => ({}),
-      saveSprintSettings: () => ({}),
-      resetSprintSettings: () => ({ ok: true }),
-      deleteSprint: () => {},
-      listSprints: () => ({ sprints: [] }),
-
-      listTasks: () => [],
-      createTask: () => ({ id: "task" }),
-      updateTask: () => ({ id: "task" }),
-      deleteTask: () => {},
-
-      getProjectSettings: () => ({}),
-      saveProjectSettings: () => ({}),
-      resetProjectSettings: () => ({ ok: true }),
-      getProjectEffectiveSettings: () => ({ settings: {}, sources: {} }),
-      updateProject: () => ({ id: "project" }),
-      deleteProject: () => {},
-      selectProject: () => "project",
-      selectSprint: () => "sprint",
-      getProject: () => ({ id: "project" }),
-      listProjects: () => ({ projects: [] }),
-      createProject: () => ({ id: "project" }),
-    } as unknown as DashboardDependencies;
-
-    registerProjectRoutes(app, options);
-    registerSprintRoutes(app, options);
-    registerTaskRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/1/select", "PUT", {})).status).toBe(200);
-    expect((await testUrl("/api/projects/1/selected-sprint", "PUT", { sprintId: "x" })).status).toBe(200);
-    expect((await testUrl("/api/projects/1/selected-sprint", "PUT", {})).status).toBe(200);
-    expect((await testUrl("/api/sprints/1/settings", "PUT", { projectId: "1" })).status).toBe(200);
-    expect((await testUrl("/api/sprints/1/settings", "PUT", {})).status).toBe(400); // Missing projectId
-    expect((await testUrl("/api/sprints/1/settings", "DELETE")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/sprints/1/settings/effective")).status).toBe(200);
-    expect((await testUrl("/api/sprints/1/settings")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/tasks?sprintId=x")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/tasks")).status).toBe(200);
-    expect((await testUrl("/api/projects/1")).status).toBe(200);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  });
-});
-
-describe("Task route branches", () => {
-  it("hits task query branches", async () => {
-    const app = express();
-    app.use(express.json());
-    const options = {
-      listTasks: () => [],
-    } as unknown as DashboardDependencies;
-
-    registerTaskRoutes(app, options);
-
-    const server = await new Promise<Server>((resolve) => {
-      const s = app.listen(0, "127.0.0.1", () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-
-    const testUrl = (path: string, method: string = "GET", body?: any) =>
-      fetch(`http://127.0.0.1:${port}${path}`, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-
-    expect((await testUrl("/api/projects/1/tasks?sprintId=   ")).status).toBe(200);
-    expect((await testUrl("/api/projects/1/tasks?sprintId=foo")).status).toBe(200);
-
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+  it("formats non-Error values", () => {
+    expect(toErrorResponse("boom", "Prefix")).toEqual({ error: "Prefix: boom" });
+    expect(toErrorResponse({ message: "boom" }, "Prefix")).toEqual({ error: "Prefix: [object Object]" });
   });
 });

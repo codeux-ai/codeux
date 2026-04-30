@@ -12,6 +12,7 @@ import type { CliWorkflowService } from "./cli-workflow-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { buildTaskRunTag } from "./task-run-key.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 
 export interface TaskServiceDependencies {
   julesApi: JulesApiClient;
@@ -34,6 +35,50 @@ export interface TaskAgentSessionArgs {
 export class TaskService {
   constructor(private readonly deps: TaskServiceDependencies) {}
 
+  private resolveProviderConfigIdForProvider(
+    route: ResolvedProviderRoute,
+    provider: ProviderId,
+  ): string {
+    if (route.providers[route.providerConfigId]?.provider === provider) {
+      return route.providerConfigId;
+    }
+
+    const enabledMatch = route.enabledProviders.find((providerConfigId) => (
+      route.providers[providerConfigId]?.provider === provider
+    ));
+    if (enabledMatch) {
+      return enabledMatch;
+    }
+
+    const configuredMatch = Object.entries(route.providers).find(([, providerSettings]) => (
+      providerSettings.provider === provider
+    ))?.[0];
+    if (configuredMatch) {
+      return configuredMatch;
+    }
+
+    throw new Error(`Task requested provider ${provider}, but no matching provider settings were available.`);
+  }
+
+  private async syncRemoteBranchesIfNeeded(
+    repoPath: string,
+    branch: string | undefined,
+    scope?: DashboardSettingsScope,
+  ): Promise<void> {
+    const settings = this.deps.getDashboardSettings(scope);
+    if (settings.git.githubMode !== "REMOTE") {
+      return;
+    }
+
+    try {
+      await syncRemoteBranchIfAvailable(repoPath, branch);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const branchLabel = branch?.trim() || settings.git.defaultBranch || "the requested branch";
+      throw new Error(`Failed to refresh origin before starting work from ${branchLabel}: ${message}`);
+    }
+  }
+
   resolveInvocationProvider(
     invocation: InvocationRoutingId,
     task: Subtask,
@@ -49,12 +94,17 @@ export class TaskService {
       task,
       providerPool,
     });
+    const getEnabledProviderTypes = (resolvedRoute: ResolvedProviderRoute): ProviderId[] => (
+      resolvedRoute.enabledProviders
+        .map((providerConfigId) => resolvedRoute.providers[providerConfigId]?.provider)
+        .filter((providerId): providerId is ProviderId => Boolean(providerId))
+    );
 
     const pooledProviders = options?.providerPool;
     let resolved = buildRoute(pooledProviders);
 
     if (resolved.provider === "jules" && !this.deps.isJulesApiConfigured()) {
-      const fallbackPool = resolved.enabledProviders.filter((provider) => provider !== "jules");
+      const fallbackPool = getEnabledProviderTypes(resolved).filter((providerId) => providerId !== "jules");
       if (fallbackPool.length > 0) {
         resolved = buildRoute(fallbackPool);
       }
@@ -63,7 +113,7 @@ export class TaskService {
     const requiresCli = options?.cliOnly || settings.git.githubMode === "LOCAL";
 
     if (requiresCli && resolved.provider === "jules") {
-      const fallbackPool = resolved.enabledProviders.filter((provider) => provider !== "jules");
+      const fallbackPool = getEnabledProviderTypes(resolved).filter((providerId) => providerId !== "jules");
       if (fallbackPool.length > 0) {
         resolved = buildRoute(fallbackPool);
       }
@@ -108,6 +158,8 @@ export class TaskService {
   }
 
   async createTaskAgentSession(args: TaskAgentSessionArgs): Promise<JulesSession> {
+    await this.syncRemoteBranchesIfNeeded(args.repo_path, args.branch);
+
     const pseudoTask: Subtask = {
       id: `adhoc-${Date.now().toString(36)}`,
       title: args.title || "Adhoc Task",
@@ -118,14 +170,23 @@ export class TaskService {
     };
     const route = this.resolveInvocationProvider("task_coding", pseudoTask);
     const provider = route.provider;
+    const selectedProviderConfigId = route.providerConfigId || route.provider;
+    const selectedProviderSettings = route.providers[selectedProviderConfigId];
 
     if (provider !== "jules") {
       return await this.deps.cliWorkflowService.startTask({
         provider,
         providerSettingsOverride: {
-          model: route.providers[provider].model,
-          thinkingMode: route.providers[provider].thinkingMode,
-          apiKey: route.providers[provider].apiKey,
+          model: selectedProviderSettings.model,
+          thinkingMode: selectedProviderSettings.thinkingMode,
+          apiKey: selectedProviderSettings.apiKey,
+          qwenAuthMode: selectedProviderSettings.qwenAuthMode,
+          qwenRegion: selectedProviderSettings.qwenRegion,
+          qwenBaseUrl: selectedProviderSettings.qwenBaseUrl,
+          qwenEnvKey: selectedProviderSettings.qwenEnvKey,
+          qwenProtocol: selectedProviderSettings.qwenProtocol,
+          providerMountAuth: selectedProviderSettings.mountAuth,
+          providerAuthPath: selectedProviderSettings.authPath,
         },
         task: {
           ...pseudoTask,
@@ -172,17 +233,30 @@ export class TaskService {
     dispatchId?: string,
     taskRunId?: string,
   ): Promise<JulesSession> {
+    await this.syncRemoteBranchesIfNeeded(repoPath, baseBranch, settingsScope);
+
     // Respect task.provider if already set (e.g. from a rerun with provider override)
     const route = this.resolveInvocationProvider("task_coding", task, { scope: settingsScope });
     const provider = task.provider || route.provider;
+    const selectedProviderConfigId = task.provider
+      ? this.resolveProviderConfigIdForProvider(route, task.provider)
+      : route.providerConfigId;
+    const selectedProviderSettings = route.providers[selectedProviderConfigId];
 
     if (provider !== "jules") {
       const session = await this.deps.cliWorkflowService.startTask({
         provider,
         providerSettingsOverride: {
-          model: route.providers[provider].model,
-          thinkingMode: route.providers[provider].thinkingMode,
-          apiKey: route.providers[provider].apiKey,
+          model: selectedProviderSettings.model,
+          thinkingMode: selectedProviderSettings.thinkingMode,
+          apiKey: selectedProviderSettings.apiKey,
+          qwenAuthMode: selectedProviderSettings.qwenAuthMode,
+          qwenRegion: selectedProviderSettings.qwenRegion,
+          qwenBaseUrl: selectedProviderSettings.qwenBaseUrl,
+          qwenEnvKey: selectedProviderSettings.qwenEnvKey,
+          qwenProtocol: selectedProviderSettings.qwenProtocol,
+          providerMountAuth: selectedProviderSettings.mountAuth,
+          providerAuthPath: selectedProviderSettings.authPath,
         },
         task,
         repoPath,

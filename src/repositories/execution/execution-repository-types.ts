@@ -106,6 +106,7 @@ export interface ProviderInvocationUsageRow {
   purpose: string;
   status: string;
   model: string | null;
+  execution_mode: string | null;
   native_session_id: string | null;
   started_at: string;
   finished_at: string | null;

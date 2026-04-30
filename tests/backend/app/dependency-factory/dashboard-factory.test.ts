@@ -318,9 +318,9 @@ describe("Dashboard Factory", () => {
     );
 
     const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
-    const sprintRunId = await taskRerunArgs.resolveSprintRunId({ projectId: "project-1", sprintId: "sprint-1" });
+    const sprintRun = await taskRerunArgs.resolveSprintRunId({ projectId: "project-1", sprintId: "sprint-1" });
 
-    expect(sprintRunId).toBe("run-created");
+    expect(sprintRun).toEqual({ sprintRunId: "run-created", created: true });
     expect(mockCoreDeps.executionRepository.createSprintRun).toHaveBeenCalledWith({
       projectId: "project-1",
       sprintId: "sprint-1",
@@ -337,6 +337,37 @@ describe("Dashboard Factory", () => {
         lastHeartbeatAt: expect.any(String),
       }),
     );
+  });
+
+  it("resolveSprintRunId reports reused active sprint runs without creating a new one", async () => {
+    mockCoreDeps.executionRepository.findActiveSprintRun.mockReturnValue({ id: "run-active" });
+
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+    const sprintRun = await taskRerunArgs.resolveSprintRunId({ projectId: "project-1", sprintId: "sprint-1" });
+
+    expect(sprintRun).toEqual({ sprintRunId: "run-active", created: false });
+    expect(mockCoreDeps.executionRepository.createSprintRun).not.toHaveBeenCalled();
+  });
+
+  it("resumeSprintRun delegates to sprint recovery after rerun-created runs", async () => {
+    mockSprintDeps.sprintOrchestrator.recoverSprintRun = vi.fn().mockResolvedValue({ ok: true });
+
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+    await taskRerunArgs.resumeSprintRun("run-created");
+
+    expect(mockSprintDeps.sprintOrchestrator.recoverSprintRun).toHaveBeenCalledWith("run-created");
   });
 
   it("clearTaskWorktree removes the session worktree when a latest task run exists", async () => {

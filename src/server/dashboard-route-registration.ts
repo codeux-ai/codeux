@@ -1,0 +1,36 @@
+import type { Express } from "express";
+import type { DashboardDependencies } from "./dashboard-server.js";
+
+import { registerProjectRoutes } from "./project-routes.js";
+import { registerSprintRoutes } from "./sprint-routes.js";
+import { registerTaskRoutes } from "./task-routes.js";
+import { registerConversationRoutes } from "./conversation-routes.js";
+import { registerPlanningRoutes } from "./planning-routes.js";
+import { registerPreviewRoutes } from "./preview-routes.js";
+import { registerRuntimeRoutes } from "./runtime-routes.js";
+import { registerExecutionControlRoutes } from "./execution-control-routes.js";
+import { registerSettingsRoutes } from "./settings-routes.js";
+import { registerConnectionRoutes } from "./connection-routes.js";
+import { registerAgentPresetRoutes } from "./agent-preset-routes.js";
+import { registerExecutionInvocationRoutes } from "./execution-invocation-routes.js";
+import { registerQuicksprintRoutes } from "./quicksprint-routes.js";
+
+export const registerDashboardRoutes = (
+  app: Express,
+  deps: DashboardDependencies,
+  liveActivityCacheMs: number
+): void => {
+  registerProjectRoutes(app, deps);
+  registerSprintRoutes(app, deps);
+  registerTaskRoutes(app, deps);
+  registerConversationRoutes(app, deps);
+  registerPlanningRoutes(app, deps);
+  registerPreviewRoutes(app, deps);
+  registerRuntimeRoutes(app, deps);
+  registerExecutionControlRoutes(app, deps);
+  registerSettingsRoutes(app, deps, liveActivityCacheMs);
+  registerConnectionRoutes(app, deps);
+  registerAgentPresetRoutes(app, deps);
+  registerExecutionInvocationRoutes(app, deps);
+  registerQuicksprintRoutes(app, deps);
+};

@@ -11,14 +11,18 @@ import { extractPathHints } from "../../../services/cli-workflow-text-utils.js";
 const WORKSPACE_HANDLE_PREFIX = "docker-volume://";
 const CONTAINER_WORKSPACE_ROOT = "/workspace";
 const WORKSPACE_HELPER_IMAGE = "alpine/git";
+const WORKSPACE_VOLUME_LABEL = "sprint-os.workspace=true";
+const WORKSPACE_SESSION_LABEL_PREFIX = "sprint-os.workspace-session=";
 
 export interface WorkspaceCommandOptions {
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
+  trimOutput?: boolean;
 }
 
 export interface IWorkspaceManager {
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string;
+  buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   createSnapshotWorkspace(repoPath: string, sessionId: string): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
   prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string): Promise<{ worktreePath: string; resumed: boolean }>;
@@ -57,11 +61,18 @@ const getWorkspaceOwnerSpec = (): string | undefined => {
 export class WorkspaceManager implements IWorkspaceManager {
   private readonly repoLocks = new Map<string, Promise<void>>();
 
-  buildWorktreePath(repoPath: string, sessionId: string, _executionMode: CliWorkflowSettings["executionMode"]): string {
+  buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string {
+    return this.buildWorkspaceRef(repoPath, sessionId, executionMode);
+  }
+
+  buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string {
+    if (executionMode !== "DOCKER") {
+      return path.join(path.resolve(repoPath), ".worktrees", sanitizeToken(workspaceKey) || "workspace");
+    }
     const normalizedRepoPath = path.resolve(repoPath);
     const repoName = sanitizeToken(path.basename(normalizedRepoPath)) || "repo";
     const repoHash = createHash("sha256").update(normalizedRepoPath).digest("hex").slice(0, 12);
-    const volumeName = `sprint-os-${repoName}-${repoHash}-${sanitizeToken(sessionId)}`;
+    const volumeName = `sprint-os-${repoName}-${repoHash}-${sanitizeToken(workspaceKey)}`;
     return `${WORKSPACE_HANDLE_PREFIX}${volumeName}`;
   }
 
@@ -104,29 +115,48 @@ export class WorkspaceManager implements IWorkspaceManager {
         return;
       }
 
-      await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
-      await this.createVolume(workspaceRef);
-      await this.seedWorkspaceFromBundle(repoPath, workspaceRef);
-
       const startRef = await this.resolveWorktreeStartRef(repoPath, featureBranch);
-      await this.runWorkspaceCommand(workspaceRef, "git", ["checkout", "-B", workerBranch, startRef]);
+      await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
+      if (isWorkspaceHandle(workspaceRef)) {
+        await this.createVolume(workspaceRef);
+        await this.seedWorkspaceFromBundle(repoPath, workspaceRef);
+        await this.runWorkspaceCommand(workspaceRef, "git", ["checkout", "-B", workerBranch, startRef]);
+      } else {
+        await fs.mkdir(path.dirname(workspaceRef), { recursive: true });
+        try {
+          await runCommandStrict("git", ["worktree", "add", "--force", "-B", workerBranch, workspaceRef, startRef], repoPath);
+        } catch {
+          await runCommandStrict("git", ["worktree", "prune"], repoPath).catch(() => undefined);
+          await fs.rm(workspaceRef, { recursive: true, force: true }).catch(() => undefined);
+          await runCommandStrict("git", ["worktree", "add", "--force", "-B", workerBranch, workspaceRef, startRef], repoPath);
+        }
+      }
     });
 
     return { worktreePath: workspaceRef, resumed };
   }
 
-  async removeWorktree(_repoPath: string, worktreePath: string): Promise<void> {
-    if (!await this.workspaceExists(worktreePath)) {
+  async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
+    if (isWorkspaceHandle(worktreePath)) {
+      if (!await this.workspaceExists(worktreePath)) {
+        return;
+      }
+      const { volumeName } = parseWorkspaceHandle(worktreePath);
+      await runCommandStrict("docker", ["volume", "rm", "-f", volumeName], process.cwd()).catch(() => undefined);
       return;
     }
-    const { volumeName } = parseWorkspaceHandle(worktreePath);
-    await runCommandStrict("docker", ["volume", "rm", "-f", volumeName], process.cwd()).catch(() => undefined);
+
+    await runCommandStrict("git", ["worktree", "remove", "--force", worktreePath], repoPath).catch(() => undefined);
+    await fs.rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
+    await runCommandStrict("git", ["worktree", "prune"], repoPath).catch(() => undefined);
   }
 
   async buildWorkspaceGuidance(taskPrompt: string, worktreePath: string): Promise<string> {
     const hints = extractPathHints(taskPrompt).slice(0, 10);
-    const hintStatuses = await Promise.all(
-      hints.map(async (hint) => {
+    const isDockerWorkspace = isWorkspaceHandle(worktreePath);
+    const workspaceRoot = isDockerWorkspace ? CONTAINER_WORKSPACE_ROOT : path.resolve(worktreePath);
+    const hintStatuses = await Promise.all(hints.map(async (hint) => {
+      if (isDockerWorkspace) {
         const safePath = pathPosix.normalize(pathPosix.join(CONTAINER_WORKSPACE_ROOT, hint));
         if (!safePath.startsWith(`${CONTAINER_WORKSPACE_ROOT}/`) && safePath !== CONTAINER_WORKSPACE_ROOT) {
           return `- ${hint}: outside-workspace`;
@@ -137,8 +167,19 @@ export class WorkspaceManager implements IWorkspaceManager {
           ["-lc", `if [ -e ${shellQuote(safePath)} ]; then echo exists; else echo not-found; fi`],
         );
         return `- ${hint}: ${probe.stdout.trim() || "not-found"}`;
-      }),
-    );
+      }
+
+      const safePath = path.resolve(worktreePath, hint);
+      if (!safePath.startsWith(`${workspaceRoot}${path.sep}`) && safePath !== workspaceRoot) {
+        return `- ${hint}: outside-workspace`;
+      }
+      try {
+        await fs.access(safePath);
+        return `- ${hint}: exists`;
+      } catch {
+        return `- ${hint}: not-found`;
+      }
+    }));
 
     const hintSection = hintStatuses.length > 0
       ? [
@@ -149,8 +190,8 @@ export class WorkspaceManager implements IWorkspaceManager {
 
     return [
       "## Workspace Context (Headless Session)",
-      `Repository root: ${CONTAINER_WORKSPACE_ROOT}`,
-      `Current working directory: ${CONTAINER_WORKSPACE_ROOT}`,
+      `Repository root: ${workspaceRoot}`,
+      `Current working directory: ${workspaceRoot}`,
       "",
       "Path safety requirements:",
       "- Before any read_file call, discover exact paths first (glob/grep/find).",
@@ -168,7 +209,14 @@ export class WorkspaceManager implements IWorkspaceManager {
     args: string[],
     options: WorkspaceCommandOptions = {},
   ): Promise<CommandResult> {
+    if (!isWorkspaceHandle(worktreePath)) {
+      return await runCommandStrict(command, args, worktreePath, options.env ?? process.env, {
+        signal: options.signal,
+        trimOutput: options.trimOutput,
+      });
+    }
     const { volumeName } = parseWorkspaceHandle(worktreePath);
+    const ownerSpec = getWorkspaceOwnerSpec();
     const dockerArgs = [
       "run",
       "--rm",
@@ -184,10 +232,28 @@ export class WorkspaceManager implements IWorkspaceManager {
       WORKSPACE_HELPER_IMAGE,
       ...args,
     ];
-    return await runCommandStrict("docker", dockerArgs, process.cwd(), options.env ?? process.env, { signal: options.signal });
+    if (ownerSpec) {
+      dockerArgs.splice(dockerArgs.length - args.length - 1, 0, "--user", ownerSpec);
+    }
+    return await runCommandStrict("docker", dockerArgs, process.cwd(), options.env ?? process.env, {
+      signal: options.signal,
+      trimOutput: options.trimOutput,
+    });
   }
 
   async readWorkspaceFile(worktreePath: string, relativePath: string): Promise<string | null> {
+    if (!isWorkspaceHandle(worktreePath)) {
+      const workspaceRoot = path.resolve(worktreePath);
+      const resolved = path.resolve(worktreePath, relativePath);
+      if (!resolved.startsWith(`${workspaceRoot}${path.sep}`) && resolved !== workspaceRoot) {
+        return null;
+      }
+      try {
+        return await fs.readFile(resolved, "utf8");
+      } catch {
+        return null;
+      }
+    }
     const normalized = pathPosix.normalize(pathPosix.join(CONTAINER_WORKSPACE_ROOT, relativePath));
     if (!normalized.startsWith(`${CONTAINER_WORKSPACE_ROOT}/`)) {
       return null;
@@ -201,6 +267,14 @@ export class WorkspaceManager implements IWorkspaceManager {
   }
 
   async workspaceExists(worktreePath: string): Promise<boolean> {
+    if (!isWorkspaceHandle(worktreePath)) {
+      try {
+        await fs.access(worktreePath);
+        return true;
+      } catch {
+        return false;
+      }
+    }
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     try {
       await runCommandStrict("docker", ["volume", "inspect", volumeName], process.cwd());
@@ -210,13 +284,26 @@ export class WorkspaceManager implements IWorkspaceManager {
     }
   }
 
-  getWorkspaceDirectory(_worktreePath: string): string {
-    return CONTAINER_WORKSPACE_ROOT;
+  getWorkspaceDirectory(worktreePath: string): string {
+    return isWorkspaceHandle(worktreePath) ? CONTAINER_WORKSPACE_ROOT : path.resolve(worktreePath);
   }
 
   private async createVolume(worktreePath: string): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
-    await runCommandStrict("docker", ["volume", "create", volumeName], process.cwd());
+    const sessionKey = volumeName.match(/^sprint-os-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
+    await runCommandStrict(
+      "docker",
+      [
+        "volume",
+        "create",
+        "--label",
+        WORKSPACE_VOLUME_LABEL,
+        "--label",
+        `${WORKSPACE_SESSION_LABEL_PREFIX}${sessionKey}`,
+        volumeName,
+      ],
+      process.cwd(),
+    );
   }
 
   private async seedWorkspaceFromBundle(repoPath: string, worktreePath: string): Promise<void> {
@@ -233,11 +320,16 @@ export class WorkspaceManager implements IWorkspaceManager {
         "tmp=$(mktemp)",
         "cat > \"$tmp\"",
         "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true",
-        "git clone \"$tmp\" /workspace >/dev/null",
+        "git init /workspace >/dev/null",
+        "git -C /workspace symbolic-ref HEAD refs/heads/sprint-os-bootstrap-$$",
+        "git -C /workspace remote add origin \"$tmp\"",
+        "git -C /workspace fetch origin '+refs/*:refs/*' >/dev/null",
         "rm -f \"$tmp\"",
         originUrl
           ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`
           : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
+        "git -C /workspace config user.name \"Sprint OS\"",
+        "git -C /workspace config user.email \"sprint-os@local\"",
         "mkdir -p /workspace/.sprint-os-home",
         ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
@@ -318,4 +410,8 @@ export class WorkspaceManager implements IWorkspaceManager {
       }
     }
   }
+}
+
+export function isDockerWorkspaceRef(value: string): boolean {
+  return isWorkspaceHandle(value);
 }

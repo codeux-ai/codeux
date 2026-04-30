@@ -3,6 +3,7 @@ import type {
   SubtaskStatus,
   SubtaskMergeIndicator,
   ProviderId,
+  ProviderConfigId,
   InvocationRoutingId,
   VirtualWorkerProvider,
   ProviderStrategy,
@@ -54,10 +55,12 @@ import type {
 } from "../../src/contracts/app-types.js";
 import type {
   EffectiveSettingsResponse,
+  ProjectProviderSettings,
   ProjectSettings,
   ProjectSettingsOverride,
   SettingsValueSource,
   SprintSettingsOverride,
+  SystemProviderCredentialSettings,
   SystemSettings,
 } from "../../src/contracts/settings-scope-types.js";
 
@@ -66,6 +69,7 @@ export type {
   SubtaskStatus,
   SubtaskMergeIndicator,
   ProviderId,
+  ProviderConfigId,
   InvocationRoutingId,
   VirtualWorkerProvider,
   ProviderStrategy,
@@ -115,10 +119,12 @@ export type {
   GitTrackingStatus,
   ExternalSettingsHints,
   EffectiveSettingsResponse,
+  ProjectProviderSettings,
   ProjectSettings,
   ProjectSettingsOverride,
   SettingsValueSource,
   SprintSettingsOverride,
+  SystemProviderCredentialSettings,
   SystemSettings,
 };
 

@@ -6,16 +6,14 @@ describe("MainMergeGateService", () => {
   const defaultCiSettings: CiIntelligenceSettings = {
     enabled: true,
     enableLivePrMonitoring: true,
-    waitForCiBeforeMainMerge: true,
     resolveAllCommentsBeforeMainMerge: true,
     resolveMainMergeConflicts: false,
-    waitForCiBeforeFeatureMerge: true,
     resolveAllCommentsBeforeFeatureMerge: true,
     resolveMergeConflicts: false,
     waitForJulesCiAutofix: false,
     julesCiAutofixMaxRetries: 0,
     featurePrAutoMergeMode: "OFF",
-    mainBranchAutoMergeMode: "OFF",
+    mainBranchAutoMergeMode: "WHEN_GREEN",
   };
 
   const defaultContext: MergeFeedbackContext = {
@@ -86,7 +84,6 @@ describe("MainMergeGateService", () => {
       ...defaultContext,
       ciIntelligence: {
         ...defaultCiSettings,
-        waitForCiBeforeMainMerge: false,
         mainBranchAutoMergeMode: "ALWAYS",
       },
     });
@@ -225,7 +222,6 @@ describe("MainMergeGateService", () => {
       ...defaultContext,
       ciIntelligence: {
         ...defaultCiSettings,
-        waitForCiBeforeMainMerge: false,
         resolveAllCommentsBeforeMainMerge: false,
         mainBranchAutoMergeMode: "ALWAYS",
       },
@@ -364,11 +360,65 @@ describe("MainMergeGateService", () => {
       const autoMergePr = vi.fn().mockResolvedValue({ ok: true, merged: true });
       const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
         ...greenPrContext,
-        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "ALWAYS", waitForCiBeforeMainMerge: false },
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "ALWAYS" },
         autoMergeMainBranchPr: autoMergePr,
       });
 
       expect(autoMergePr).toHaveBeenCalled();
+      expect(result.state).toBe("automerge_succeeded");
+    });
+
+    it("auto-merges when ALWAYS even if checks are absent", async () => {
+      const noChecksContext: MergeFeedbackContext = {
+        ...greenPrContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "ALWAYS" },
+        gitStatus: {
+          ...greenPrContext.gitStatus!,
+          openPullRequests: [
+            {
+              ...greenPrContext.gitStatus!.openPullRequests[0],
+              checks: [],
+            } as any,
+          ],
+        },
+      };
+      const feedback = MainMergeGateService.evaluateMergeFeedback(noChecksContext);
+      const autoMergePr = vi.fn().mockResolvedValue({ ok: true, merged: true });
+      const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
+        ...noChecksContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "ALWAYS" },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(feedback.state).toBe("ready_for_merge");
+      expect(autoMergePr).toHaveBeenCalledWith({ repoPath: "/repo", prNumber: 101 });
+      expect(result.state).toBe("automerge_succeeded");
+    });
+
+    it("auto-merges when ALWAYS even if checks are pending", async () => {
+      const pendingContext: MergeFeedbackContext = {
+        ...greenPrContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "ALWAYS" },
+        gitStatus: {
+          ...greenPrContext.gitStatus!,
+          openPullRequests: [
+            {
+              ...greenPrContext.gitStatus!.openPullRequests[0],
+              checks: [{ name: "test", status: "in_progress", conclusion: null }],
+            } as any,
+          ],
+        },
+      };
+      const feedback = MainMergeGateService.evaluateMergeFeedback(pendingContext);
+      const autoMergePr = vi.fn().mockResolvedValue({ ok: true, merged: true });
+      const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
+        ...pendingContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "ALWAYS" },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(feedback.state).toBe("ready_for_merge");
+      expect(autoMergePr).toHaveBeenCalledWith({ repoPath: "/repo", prNumber: 101 });
       expect(result.state).toBe("automerge_succeeded");
     });
 

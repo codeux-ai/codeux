@@ -1,5 +1,11 @@
 import type { FunctionComponent, ComponentProps } from "preact";
 import { memo } from "preact/compat";
+import { useCallback, useRef } from "preact/hooks";
+import { Check, X, Loader2 } from "lucide-preact";
+import { useActionFeedback } from "../../hooks/use-action-feedback.js";
+import { useMagnetic } from "../../hooks/use-magnetic.js";
+
+export const SHARED_INTERACTION_CLASSES = "transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-60 disabled:cursor-not-allowed motion-safe:hover:-translate-y-px disabled:hover:translate-y-0 motion-safe:active:scale-95 disabled:active:scale-100 touch-target";
 
 export interface ButtonProps extends ComponentProps<"button"> {
   pending?: boolean;
@@ -28,25 +34,75 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   size = "md",
   pending = false,
   disabled,
+  onClick,
   ...props
 }) => {
-  const baseClasses = "group/btn inline-flex items-center justify-center gap-2 font-bold transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-60 disabled:cursor-not-allowed hover:-translate-y-px disabled:hover:translate-y-0 active:scale-95 disabled:active:scale-100 touch-target";
+  const { feedback, setPending, setSuccess, setError } = useActionFeedback(1500);
+
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  useMagnetic(buttonRef, contentRef, { enabled: variant === "primary" || variant === "signal" });
+
+  const handleClick = useCallback(
+    (e: any) => {
+      if (!onClick) return;
+
+      const result = (onClick as any)(e);
+      if (result && typeof result === "object" && "then" in result && typeof result.then === "function") {
+        setPending("");
+        result
+          .then(() => setSuccess(""))
+          .catch((err: unknown) => {
+            setError("");
+            throw err;
+          });
+      }
+      return result;
+    },
+    [onClick, setPending, setSuccess, setError]
+  );
+
+  const baseClasses = `group/btn inline-flex items-center justify-center gap-2 font-bold ${SHARED_INTERACTION_CLASSES}`;
   const variantClasses = VARIANTS[variant];
   const sizeClasses = SIZES[size];
+
+  const isPending = pending || feedback.status === "pending";
+  const isSuccess = feedback.status === "success";
+  const isError = feedback.status === "error";
+
+  let overrideClasses = "";
+  if (isSuccess) overrideClasses = "!bg-status-green !text-white !border-transparent";
+  else if (isError) overrideClasses = "!bg-status-red !text-white !border-transparent";
+
+  const childrenOpacity = (isPending || isSuccess || isError) ? "opacity-0" : "opacity-100";
 
   return (
     <button
       {...props}
-      disabled={disabled || pending}
-      className={`${baseClasses} ${variantClasses} ${sizeClasses} relative overflow-hidden ${className}`}
+      ref={buttonRef}
+      onClick={handleClick}
+      disabled={disabled || isPending}
+      className={`${baseClasses} ${variantClasses} ${sizeClasses} ${overrideClasses} relative overflow-hidden ${className}`}
     >
-      <div className={`flex items-center justify-center gap-2 transition-opacity duration-200 ${pending ? "opacity-0" : "opacity-100"}`}>
+      <div ref={contentRef} className={`flex items-center justify-center gap-2 transition-opacity duration-200 ${childrenOpacity}`}>
         {children}
       </div>
 
-      {pending && (
-        <div className="absolute inset-0 flex items-center justify-center bg-inherit rounded-inherit">
-          <div className="w-4 h-4 rounded-full border-2 border-current/20 border-t-current animate-spin" />
+      {isPending && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
+      )}
+
+      {isSuccess && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Check className="w-5 h-5" />
+        </div>
+      )}
+
+      {isError && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <X className="w-5 h-5" />
         </div>
       )}
     </button>

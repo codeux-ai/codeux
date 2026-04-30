@@ -8,7 +8,7 @@ export type Runner = (command: string, args: string[], cwd: string, env?: NodeJS
 export interface IPrService {
   resolveOrCreateFeaturePr(args: {
     taskId: string;
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+    provider: Exclude<ProviderId, "jules">;
     title: string;
     featureBranch: string;
     workerBranch: string;
@@ -24,7 +24,7 @@ export class PrService implements IPrService {
   async resolveOrCreateFeaturePr(
     args: {
       taskId: string;
-      provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+      provider: Exclude<ProviderId, "jules">;
       title: string;
       featureBranch: string;
       workerBranch: string;

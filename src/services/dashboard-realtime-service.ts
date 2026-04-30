@@ -50,6 +50,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
   private readonly projectExecutionPublishedAt = new Map<string, number>();
   private readonly projectRuntimeStatusPublishedAt = new Map<string, number>();
   private readonly projectStructurePublishedAt = new Map<string, number>();
+  private readonly lastPayloadFingerprints = new Map<string, string>();
   private pendingProjects = false;
   private pendingOverview = false;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -256,6 +257,18 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         (async () => {
           try {
             const snapshot = await Promise.resolve(loaders.getProjectLiveSnapshot(projectId));
+            const fingerprint = this.getFingerprint(snapshot);
+            const cacheKey = `project:${projectId}:project.live.updated`;
+
+            if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
+              this.logger.debug("skipping_duplicate_realtime_snapshot", {
+                type: "project.live.updated",
+                projectId,
+              });
+              this.projectLivePublishedAt.set(projectId, now);
+              return;
+            }
+
             const payloadSizeBytes = Buffer.byteLength(JSON.stringify(snapshot), "utf8");
             this.publishRawEvent({
               scopeType: "project",
@@ -268,6 +281,8 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
               payload: snapshot,
               replayable: false,
             });
+            this.lastPayloadFingerprints.set(cacheKey, fingerprint);
+
             this.logger.info("realtime_snapshot_published", {
               type: "project.live.updated",
               sizeBytes: payloadSizeBytes,
@@ -298,6 +313,18 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         (async () => {
           try {
             const snapshot = await Promise.resolve(loaders.getProjectExecutionSnapshot(projectId));
+            const fingerprint = this.getFingerprint(snapshot);
+            const cacheKey = `project:${projectId}:project.execution.updated`;
+
+            if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
+              this.logger.debug("skipping_duplicate_realtime_snapshot", {
+                type: "project.execution.updated",
+                projectId,
+              });
+              this.projectExecutionPublishedAt.set(projectId, now);
+              return;
+            }
+
             this.publishRawEvent({
               scopeType: "project",
               scopeId: projectId,
@@ -308,6 +335,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
               payload: snapshot,
               replayable: false,
             });
+            this.lastPayloadFingerprints.set(cacheKey, fingerprint);
             this.projectExecutionPublishedAt.set(projectId, now);
           } catch (error) {
             this.logger.error("Failed to publish project execution realtime snapshot", {
@@ -399,6 +427,17 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
           (async () => {
             try {
               const telemetry = await Promise.resolve(loaders.getOverviewTelemetrySnapshot());
+              const fingerprint = this.getFingerprint(telemetry);
+              const cacheKey = `overview:overview:overview.telemetry.updated`;
+
+              if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
+                this.logger.debug("skipping_duplicate_realtime_snapshot", {
+                  type: "overview.telemetry.updated",
+                });
+                this.overviewPublishedAt = now;
+                return;
+              }
+
               this.publishRawEvent({
                 scopeType: "overview",
                 scopeId: "overview",
@@ -408,6 +447,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
                 payload: telemetry,
                 replayable: false,
               });
+              this.lastPayloadFingerprints.set(cacheKey, fingerprint);
               this.logger.info("realtime_background_refresh", { type: "overview" });
               this.overviewPublishedAt = now;
             } catch (error) {
@@ -439,6 +479,15 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       return candidateDelayMs;
     }
     return Math.min(currentDelayMs, candidateDelayMs);
+  }
+
+  private getFingerprint(payload: unknown): string {
+    return JSON.stringify(payload, (key, value) => {
+      if (key === "updatedAt" || key === "timestamp") {
+        return undefined;
+      }
+      return value;
+    });
   }
 
   private broadcast(event: DashboardRealtimeEvent): void {

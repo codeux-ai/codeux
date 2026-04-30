@@ -3,16 +3,33 @@ import type {
   EffectiveSettingsResponse,
   ExternalSettingsHints,
   McpToolToggle,
+  ProviderConfigId,
   ProviderId,
+  ProjectProviderSettings,
   ProjectSettings,
   SettingsValueSource,
   SkillToggle,
+  SystemProviderCredentialSettings,
   SystemSettings,
   ThinkingMode,
 } from "../../types.js";
 
 const cloneSkills = (skills: SkillToggle[]): SkillToggle[] => skills.map((skill) => ({ ...skill }));
 const cloneMcpTools = (tools: McpToolToggle[]): McpToolToggle[] => tools.map((tool) => ({ ...tool }));
+const cloneProjectProviders = (
+  providers: ProjectSettings["aiProvider"]["providers"],
+): ProjectSettings["aiProvider"]["providers"] => (
+  Object.fromEntries(
+    Object.entries(providers).map(([providerConfigId, provider]) => [providerConfigId, { ...provider }]),
+  )
+);
+const cloneIntegrationProviders = (
+  providers: SystemSettings["integrations"]["providers"],
+): SystemSettings["integrations"]["providers"] => (
+  Object.fromEntries(
+    Object.entries(providers).map(([providerConfigId, provider]) => [providerConfigId, { ...provider }]),
+  )
+);
 const cloneInvocationRouting = (
   routing: ProjectSettings["aiProvider"]["invocationRouting"],
 ): ProjectSettings["aiProvider"]["invocationRouting"] => (
@@ -39,36 +56,20 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   aiProvider: {
     provider: settings.aiProvider.provider,
     strategy: settings.aiProvider.strategy,
-    providers: {
-      jules: {
-        enabled: settings.aiProvider.providers.jules.enabled,
-        model: settings.aiProvider.providers.jules.model,
-        weight: settings.aiProvider.providers.jules.weight,
-        thinkingMode: settings.aiProvider.providers.jules.thinkingMode,
-        maxConcurrentTasks: settings.aiProvider.providers.jules.maxConcurrentTasks,
-      },
-      gemini: {
-        enabled: settings.aiProvider.providers.gemini.enabled,
-        model: settings.aiProvider.providers.gemini.model,
-        weight: settings.aiProvider.providers.gemini.weight,
-        thinkingMode: settings.aiProvider.providers.gemini.thinkingMode,
-        maxConcurrentTasks: settings.aiProvider.providers.gemini.maxConcurrentTasks,
-      },
-      codex: {
-        enabled: settings.aiProvider.providers.codex.enabled,
-        model: settings.aiProvider.providers.codex.model,
-        weight: settings.aiProvider.providers.codex.weight,
-        thinkingMode: settings.aiProvider.providers.codex.thinkingMode,
-        maxConcurrentTasks: settings.aiProvider.providers.codex.maxConcurrentTasks,
-      },
-      "claude-code": {
-        enabled: settings.aiProvider.providers["claude-code"].enabled,
-        model: settings.aiProvider.providers["claude-code"].model,
-        weight: settings.aiProvider.providers["claude-code"].weight,
-        thinkingMode: settings.aiProvider.providers["claude-code"].thinkingMode,
-        maxConcurrentTasks: settings.aiProvider.providers["claude-code"].maxConcurrentTasks,
-      },
-    },
+    providers: Object.fromEntries(
+      Object.entries(settings.aiProvider.providers).map(([providerConfigId, provider]) => [
+        providerConfigId,
+        {
+          provider: provider.provider,
+          name: provider.name,
+          enabled: provider.enabled,
+          model: provider.model,
+          weight: provider.weight,
+          thinkingMode: provider.thinkingMode,
+          maxConcurrentTasks: provider.maxConcurrentTasks,
+        },
+      ]),
+    ),
     invocationRouting: cloneInvocationRouting(settings.aiProvider.invocationRouting),
   },
   git: {
@@ -117,12 +118,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   aiProvider: {
     provider: settings.aiProvider.provider,
     strategy: settings.aiProvider.strategy,
-    providers: {
-      jules: { ...settings.aiProvider.providers.jules },
-      gemini: { ...settings.aiProvider.providers.gemini },
-      codex: { ...settings.aiProvider.providers.codex },
-      "claude-code": { ...settings.aiProvider.providers["claude-code"] },
-    },
+    providers: cloneProjectProviders(settings.aiProvider.providers),
     invocationRouting: cloneInvocationRouting(settings.aiProvider.invocationRouting),
   },
   git: {
@@ -164,6 +160,7 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   },
   integrations: {
     ...settings.integrations,
+    providers: cloneIntegrationProviders(settings.integrations.providers),
   },
   defaults: cloneProjectSettings(settings.defaults),
   mcpTools: cloneMcpTools(settings.mcpTools),
@@ -180,16 +177,25 @@ export const applyEffectiveProjectSettings = (effectiveProject: EffectiveSetting
 export const applyExternalHintsToSystemSettings = (
   settings: SystemSettings,
   hints: ExternalSettingsHints,
-): SystemSettings => ({
-  ...cloneSystemSettings(settings),
-  integrations: {
-    julesApiKey: settings.integrations.julesApiKey || hints.resolved.julesApiKey || "",
-    geminiApiKey: settings.integrations.geminiApiKey || hints.resolved.geminiApiKey || "",
-    codexApiKey: settings.integrations.codexApiKey || hints.resolved.codexApiKey || "",
-    claudeCodeApiKey: settings.integrations.claudeCodeApiKey || hints.resolved.claudeCodeApiKey || "",
-    githubToken: settings.integrations.githubToken || hints.resolved.githubToken || "",
-  },
-});
+): SystemSettings => {
+  const nextProviders = cloneIntegrationProviders(settings.integrations.providers);
+  for (const [providerConfigId, provider] of Object.entries(nextProviders)) {
+    if (!provider.apiKey.trim()) {
+      nextProviders[providerConfigId] = {
+        ...provider,
+        apiKey: getHintApiKey(provider.provider, hints),
+      };
+    }
+  }
+
+  return {
+    ...cloneSystemSettings(settings),
+    integrations: {
+      providers: nextProviders,
+      githubToken: settings.integrations.githubToken || hints.resolved.githubToken || "",
+    },
+  };
+};
 
 export const getSectionSource = (
   sources: Record<string, SettingsValueSource>,
@@ -232,12 +238,71 @@ export const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> 
   { value: "HIGH", label: "High" },
 ];
 
-export const providerLabels: Record<keyof ProjectSettings["aiProvider"]["providers"], string> = {
+export const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",
   gemini: "Gemini",
   codex: "Codex",
   "claude-code": "Claude Code",
+  "qwen-code": "Qwen Code",
 };
+
+export const getProviderTypeLabel = (providerId: ProviderId): string => providerLabels[providerId];
+
+export const createProjectProviderDraft = (
+  providerId: ProviderId,
+  name: string,
+): ProjectProviderSettings => ({
+  provider: providerId,
+  name,
+  enabled: providerId !== "claude-code" && providerId !== "qwen-code",
+  model: providerId === "codex" ? "gpt-5.3-codex" : providerId === "qwen-code" ? "qwen3-coder-plus" : "default",
+  weight: providerId === "jules" ? 60 : providerId === "claude-code" || providerId === "qwen-code" ? 0 : 20,
+  thinkingMode: providerId === "codex" || providerId === "claude-code" || providerId === "qwen-code" ? "HIGH" : "MEDIUM",
+  maxConcurrentTasks: providerId === "jules" ? 15 : 0,
+});
+
+export const createSystemProviderDraft = (
+  providerId: ProviderId,
+  name: string,
+): SystemProviderCredentialSettings => ({
+  provider: providerId,
+  name,
+  apiKey: "",
+  mountAuth: false,
+  authPath: providerId === "gemini"
+    ? "~/.gemini"
+    : providerId === "codex"
+      ? "~/.codex"
+      : providerId === "claude-code"
+        ? "~/.claude"
+        : providerId === "qwen-code"
+          ? "~/.qwen"
+        : "",
+  ...(providerId === "qwen-code" ? {
+    qwenAuthMode: "LOCAL_AUTH" as const,
+    qwenRegion: "international" as const,
+    qwenBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    qwenEnvKey: "DASHSCOPE_API_KEY",
+    qwenProtocol: "openai" as const,
+    qwenAdditionalModelProviders: [],
+  } : {}),
+});
+
+export const sortProviderConfigEntries = <T extends { provider: ProviderId; name: string }>(
+  entries: Array<[ProviderConfigId, T]>,
+): Array<[ProviderConfigId, T]> => (
+  [...entries].sort((left, right) => {
+    const providerCompare = getProviderTypeLabel(left[1].provider).localeCompare(getProviderTypeLabel(right[1].provider));
+    if (providerCompare !== 0) {
+      return providerCompare;
+    }
+    return left[1].name.localeCompare(right[1].name);
+  })
+);
+
+export const getProviderInstanceLabel = (provider: { provider: ProviderId; name: string }): string => (
+  `${provider.name} · ${getProviderTypeLabel(provider.provider)}`
+);
 
 export const getFieldSource = (
   sources: Record<string, SettingsValueSource>,
@@ -299,6 +364,16 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
     "gpt-5-codex-mini",
     "gpt-5",
   ],
+  "qwen-code": [
+    "qwen3-coder-plus",
+    "qwen3.5-plus",
+    "qwen3-coder-next",
+    "qwen3-max",
+    "qwen3-max-2026-01-23",
+    "qwen-plus",
+    "qwen-max",
+    "local-model",
+  ],
 };
 
 const PROVIDER_MODEL_LABEL_OVERRIDES: Partial<Record<ProviderId, Record<string, string>>> = {
@@ -309,41 +384,132 @@ const PROVIDER_MODEL_LABEL_OVERRIDES: Partial<Record<ProviderId, Record<string, 
   },
 };
 
-const hasProviderApiKey = (
+const getHintApiKey = (
+  providerId: ProviderId,
+  hints: ExternalSettingsHints | null,
+): string => {
+  if (providerId === "jules") {
+    return hints?.resolved.julesApiKey || "";
+  }
+  if (providerId === "gemini") {
+    return hints?.resolved.geminiApiKey || "";
+  }
+  if (providerId === "codex") {
+    return hints?.resolved.codexApiKey || "";
+  }
+  if (providerId === "claude-code") {
+    return hints?.resolved.claudeCodeApiKey || "";
+  }
+  return hints?.resolved.qwenCodeApiKey || "";
+};
+
+const getLegacyIntegrationApiKey = (
+  systemSettings: SystemSettings | null,
+  providerId: ProviderId,
+): string => {
+  const integrations = (systemSettings?.integrations || {}) as Record<string, unknown>;
+  if (providerId === "jules") {
+    return typeof integrations.julesApiKey === "string" ? integrations.julesApiKey : "";
+  }
+  if (providerId === "gemini") {
+    return typeof integrations.geminiApiKey === "string" ? integrations.geminiApiKey : "";
+  }
+  if (providerId === "codex") {
+    return typeof integrations.codexApiKey === "string" ? integrations.codexApiKey : "";
+  }
+  if (providerId === "claude-code") {
+    return typeof integrations.claudeCodeApiKey === "string" ? integrations.claudeCodeApiKey : "";
+  }
+  return typeof integrations.qwenCodeApiKey === "string" ? integrations.qwenCodeApiKey : "";
+};
+
+const getSystemIntegrationProviders = (
+  systemSettings: SystemSettings | null,
+): Record<ProviderConfigId, SystemProviderCredentialSettings> => {
+  const providers = systemSettings?.integrations?.providers;
+  if (providers && Object.keys(providers).length > 0) {
+    return providers;
+  }
+
+  const fallback: Record<ProviderConfigId, SystemProviderCredentialSettings> = {};
+  for (const providerId of ["jules", "gemini", "codex", "claude-code", "qwen-code"] as ProviderId[]) {
+    const apiKey = getLegacyIntegrationApiKey(systemSettings, providerId);
+    fallback[providerId] = {
+      provider: providerId,
+      name: getProviderTypeLabel(providerId),
+      apiKey,
+      mountAuth: false,
+      authPath: providerId === "gemini"
+        ? "~/.gemini"
+        : providerId === "codex"
+          ? "~/.codex"
+          : providerId === "claude-code"
+            ? "~/.claude"
+            : providerId === "qwen-code"
+              ? "~/.qwen"
+            : "",
+      ...(providerId === "qwen-code" ? {
+        qwenAuthMode: "LOCAL_AUTH" as const,
+        qwenRegion: "international" as const,
+        qwenBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        qwenEnvKey: "DASHSCOPE_API_KEY",
+        qwenProtocol: "openai" as const,
+        qwenAdditionalModelProviders: [],
+      } : {}),
+    };
+  }
+  return fallback;
+};
+
+const inferProviderTypeFromConfigId = (providerConfigId: ProviderConfigId): ProviderId | null => {
+  if (providerConfigId === "jules" || providerConfigId.startsWith("jules-")) {
+    return "jules";
+  }
+  if (providerConfigId === "gemini" || providerConfigId.startsWith("gemini-")) {
+    return "gemini";
+  }
+  if (providerConfigId === "codex" || providerConfigId.startsWith("codex-")) {
+    return "codex";
+  }
+  if (providerConfigId === "claude-code" || providerConfigId.startsWith("claude-code-") || providerConfigId.startsWith("claude-")) {
+    return "claude-code";
+  }
+  if (providerConfigId === "qwen-code" || providerConfigId.startsWith("qwen-code-") || providerConfigId.startsWith("qwen-")) {
+    return "qwen-code";
+  }
+  return null;
+};
+
+export const getSystemProvidersByType = (
+  systemSettings: SystemSettings | null,
+  providerId: ProviderId,
+): Array<[ProviderConfigId, SystemProviderCredentialSettings]> => (
+  Object.entries(getSystemIntegrationProviders(systemSettings))
+    .filter(([, provider]) => provider.provider === providerId)
+);
+
+export const getProjectProvidersByType = (
+  settings: ProjectSettings,
+  providerId: ProviderId,
+): Array<[ProviderConfigId, ProjectProviderSettings]> => (
+  Object.entries(settings.aiProvider.providers)
+    .filter(([providerConfigId, provider]) => (provider.provider || inferProviderTypeFromConfigId(providerConfigId)) === providerId)
+);
+
+export const hasProviderInstanceApiKey = (
+  providerConfigId: ProviderConfigId,
+  systemSettings: SystemSettings | null,
+): boolean => Boolean(getSystemIntegrationProviders(systemSettings)[providerConfigId]?.apiKey?.trim());
+
+const hasAnyProviderApiKey = (
   providerId: ProviderId,
   systemSettings: SystemSettings | null,
   hints: ExternalSettingsHints | null,
-): boolean => {
-  if (providerId === "jules") {
-    return Boolean(systemSettings?.integrations.julesApiKey?.trim() || hints?.resolved.julesApiKey?.trim());
-  }
-  if (providerId === "gemini") {
-    return Boolean(systemSettings?.integrations.geminiApiKey?.trim() || hints?.resolved.geminiApiKey?.trim());
-  }
-  if (providerId === "codex") {
-    return Boolean(systemSettings?.integrations.codexApiKey?.trim() || hints?.resolved.codexApiKey?.trim());
-  }
-  if (providerId === "claude-code") {
-    return Boolean(systemSettings?.integrations.claudeCodeApiKey?.trim() || hints?.resolved.claudeCodeApiKey?.trim());
-  }
-  return false;
-};
-
-const hasProviderLocalAuth = (
-  providerId: ProviderId,
-  hints: ExternalSettingsHints | null,
-): boolean => {
-  if (providerId === "gemini") {
-    return Boolean(hints?.providerAvailability.gemini?.hasLocalAuth);
-  }
-  if (providerId === "codex") {
-    return Boolean(hints?.providerAvailability.codex?.hasLocalAuth);
-  }
-  if (providerId === "claude-code") {
-    return Boolean(hints?.providerAvailability.claudeCode?.hasLocalAuth);
-  }
-  return false;
-};
+): boolean => (
+  getSystemProvidersByType(systemSettings, providerId).some(([, provider]) => provider.apiKey.trim().length > 0)
+  || Boolean(getLegacyIntegrationApiKey(systemSettings, providerId).trim())
+  || Boolean(getHintApiKey(providerId, hints).trim())
+);
 
 export const providerSupportsModelSelection = (providerId: ProviderId): boolean => providerId !== "jules";
 
@@ -353,65 +519,94 @@ export const isProviderAvailable = (
   providerId: ProviderId,
   systemSettings: SystemSettings | null,
   hints: ExternalSettingsHints | null,
-  mountAuthEnabled = false,
 ): boolean => (
-  hasProviderApiKey(providerId, systemSettings, hints)
-  || hasProviderLocalAuth(providerId, hints)
-  || (providerId !== "jules" && mountAuthEnabled)
+  hasAnyProviderApiKey(providerId, systemSettings, hints)
+  || (providerId !== "jules" && getSystemProvidersByType(systemSettings, providerId).some(([, provider]) => provider.mountAuth))
 );
+
+export const isProviderInstanceAvailable = (
+  providerConfigId: ProviderConfigId,
+  systemSettings: SystemSettings | null,
+): boolean => {
+  const providerConfig = getSystemIntegrationProviders(systemSettings)[providerConfigId];
+  const providerType = providerConfig?.provider;
+  if (!providerType) {
+    return false;
+  }
+  return hasProviderInstanceApiKey(providerConfigId, systemSettings)
+    || (providerType !== "jules" && providerConfig.mountAuth);
+};
+
+export const getProviderInstanceAuthLabel = (
+  providerConfigId: ProviderConfigId,
+  systemSettings: SystemSettings | null,
+  dockerExecutionEnabled: boolean,
+): string | null => {
+  const providerConfig = getSystemIntegrationProviders(systemSettings)[providerConfigId];
+  const providerType = providerConfig?.provider;
+  if (!providerType) {
+    return null;
+  }
+  const hasApiKey = hasProviderInstanceApiKey(providerConfigId, systemSettings);
+  const hasMountedAuth = providerType !== "jules" && providerConfig.mountAuth;
+
+  if (providerType === "jules") {
+    return hasApiKey ? "API key" : null;
+  }
+
+  if (hasMountedAuth && hasApiKey) {
+    return dockerExecutionEnabled ? "Auth mount + API key" : "Mount config + API key";
+  }
+  if (hasMountedAuth) {
+    return dockerExecutionEnabled ? "Auth mount enabled" : "Mount config enabled";
+  }
+  return hasApiKey ? "API key" : null;
+};
 
 export const getProviderAuthLabel = (
   providerId: ProviderId,
   systemSettings: SystemSettings | null,
   hints: ExternalSettingsHints | null,
   dockerExecutionEnabled: boolean,
-  mountAuthEnabled: boolean,
 ): string | null => {
-  const hasApiKey = hasProviderApiKey(providerId, systemSettings, hints);
-  const hasLocalAuth = hasProviderLocalAuth(providerId, hints);
-  const hasMountedAuth = providerId !== "jules" && mountAuthEnabled && dockerExecutionEnabled;
-
-  if (providerId === "jules") {
-    return hasApiKey ? "API key" : null;
+  const systemProviders = getSystemProvidersByType(systemSettings, providerId);
+  if (systemProviders.length > 0) {
+    const labels = systemProviders
+      .map(([providerConfigId]) => getProviderInstanceAuthLabel(providerConfigId, systemSettings, dockerExecutionEnabled))
+      .filter((label): label is string => Boolean(label));
+    if (labels.length > 0) {
+      return labels.length === 1 ? labels[0] : `${labels.length} credentials`;
+    }
   }
-
-  if (hasMountedAuth && hasApiKey) {
-    return "Auth mount + API key";
-  }
-  if (hasMountedAuth && hasLocalAuth) {
-    return "Auth mount + local auth";
-  }
-  if (hasMountedAuth) {
-    return "Auth mount enabled";
-  }
-  if (hasLocalAuth && hasApiKey) {
-    return "Local auth + API key";
-  }
-  if (hasLocalAuth) {
-    return "Local auth";
-  }
-  return hasApiKey ? "API key" : null;
+  return hasAnyProviderApiKey(providerId, systemSettings, hints) ? "API key" : null;
 };
 
 export const getEligibleProviders = (
   systemSettings: SystemSettings | null,
   editableSettings: ProjectSettings,
   hints: ExternalSettingsHints | null,
-): ProviderId[] => {
-  const visibleProviders = Object.entries(editableSettings.aiProvider.providers).filter(([providerId]) => {
-    const mountAuthEnabled = providerId === "gemini"
-      ? editableSettings.cliWorkflow.containerMountGeminiAuth
-      : providerId === "codex"
-        ? editableSettings.cliWorkflow.containerMountCodexAuth
-        : providerId === "claude-code"
-          ? editableSettings.cliWorkflow.containerMountClaudeCodeAuth
-          : false;
-    return isProviderAvailable(providerId as ProviderId, systemSettings, hints, mountAuthEnabled);
-  });
+): ProviderConfigId[] => (
+  Object.entries(editableSettings.aiProvider.providers)
+    .filter(([providerConfigId, provider]) => {
+      const providerType = provider.provider || inferProviderTypeFromConfigId(providerConfigId);
+      if (!providerType) {
+        return false;
+      }
+      return provider.enabled && (isProviderInstanceAvailable(providerConfigId, systemSettings)
+        || Boolean(getHintApiKey(providerType, hints)));
+    })
+    .map(([providerConfigId]) => providerConfigId)
+);
 
-  return visibleProviders
-    .filter(([providerId, provider]) => provider.enabled)
-    .map(([providerId]) => providerId as ProviderId);
+export const countConnectedProviders = (
+  providerId: ProviderId,
+  systemSettings: SystemSettings | null,
+  hints: ExternalSettingsHints | null,
+): number => {
+  const stored = getSystemProvidersByType(systemSettings, providerId)
+    .filter(([, provider]) => provider.apiKey.trim().length > 0 || (provider.provider !== "jules" && provider.mountAuth))
+    .length;
+  return Math.max(stored, hints && getHintApiKey(providerId, hints).trim() ? 1 : 0);
 };
 
 export const getProviderModelOptions = (
@@ -463,6 +658,15 @@ export const PROVIDER_CARD_TOKENS: Record<ProviderId, {
   "claude-code": {
     watermark: "CLD",
     logoLabel: "C",
+    badgeLabel: "CLI",
+    badgeClassName: "border-black/[0.08] bg-black/[0.035] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
+    glowClassName: "bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.03),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.025),transparent_34%)]",
+    railClassName: "bg-black/[0.12] dark:bg-white/[0.14]",
+    noteClassName: "border-black/[0.08] bg-black/[0.03] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
+  },
+  "qwen-code": {
+    watermark: "QWN",
+    logoLabel: "Q",
     badgeLabel: "CLI",
     badgeClassName: "border-black/[0.08] bg-black/[0.035] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
     glowClassName: "bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.03),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.025),transparent_34%)]",

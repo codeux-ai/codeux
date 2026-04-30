@@ -24,6 +24,7 @@ import {
   CLAUDE_CODE_MCP_CONFIG_MOUNT,
   CODEX_MCP_CONFIG_MOUNT,
   GEMINI_MCP_SETTINGS_MOUNT,
+  QWEN_CODE_SETTINGS_MOUNT,
 } from "./docker-bootstrap-builder.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
@@ -45,9 +46,11 @@ export interface IDockerRunner {
     cwd: string;
     providerEnv: NodeJS.ProcessEnv;
     sessionId: string;
-    providerLabel: "gemini" | "codex" | "claude-code";
+    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code";
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     mcpConnection?: McpConnectionInfo | null;
@@ -86,9 +89,11 @@ export class DockerRunner implements IDockerRunner {
     cwd: string;
     providerEnv: NodeJS.ProcessEnv;
     sessionId: string;
-    providerLabel: "gemini" | "codex" | "claude-code";
+    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code";
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     mcpConnection?: McpConnectionInfo | null;
@@ -168,7 +173,16 @@ export class DockerRunner implements IDockerRunner {
         dockerArgs.push("--mount", toDockerMountArg({ source: setupScriptSource, destination: CONTAINER_SETUP_SCRIPT, readonly: true }));
       }
 
-      const credentialMounts = await new DockerCredentialMountBuilder().build(workflowSettings, repoPath, onActivity);
+      const credentialMounts = await new DockerCredentialMountBuilder().build(
+        workflowSettings,
+        repoPath,
+        onActivity,
+        {
+          provider: providerLabel,
+          enabled: Boolean(input.providerMountAuth),
+          path: input.providerAuthPath || "",
+        },
+      );
       const mcpMounts = input.mcpConnection
         ? await this.buildProviderMcpMounts(input.mcpConnection, providerLabel, tempRoot)
         : [];
@@ -300,7 +314,7 @@ export class DockerRunner implements IDockerRunner {
 
   private async buildProviderMcpMounts(
     conn: McpConnectionInfo,
-    provider: "gemini" | "codex" | "claude-code",
+    provider: "gemini" | "codex" | "claude-code" | "qwen-code",
     tempRoot: string,
   ): Promise<ContainerMount[]> {
     const headers: Record<string, string> = {};
@@ -333,6 +347,19 @@ export class DockerRunner implements IDockerRunner {
         },
       }, null, 2));
       return [{ source: filePath, destination: GEMINI_MCP_SETTINGS_MOUNT, readonly: true }];
+    }
+
+    if (provider === "qwen-code") {
+      const filePath = path.join(tempRoot, "qwen-settings.json");
+      await fs.writeFile(filePath, JSON.stringify({
+        mcpServers: {
+          sprint_os: {
+            httpUrl: conn.url,
+            ...(Object.keys(headers).length > 0 ? { headers } : {}),
+          },
+        },
+      }, null, 2));
+      return [{ source: filePath, destination: QWEN_CODE_SETTINGS_MOUNT, readonly: true }];
     }
 
     const filePath = path.join(tempRoot, "codex-config.toml");

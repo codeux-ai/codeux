@@ -21,6 +21,9 @@ describe("external-settings", () => {
     process.env.OPENAI_API_KEY = "";
     process.env.ANTHROPIC_API_KEY = "";
     process.env.CLAUDE_API_KEY = "";
+    process.env.DASHSCOPE_API_KEY = "";
+    process.env.BAILIAN_CODING_PLAN_API_KEY = "";
+    process.env.QWEN_API_KEY = "";
     process.env.GH_TOKEN = "";
     process.env.GITHUB_TOKEN = "";
   });
@@ -71,11 +74,13 @@ describe("external-settings", () => {
 
     // Testing GitHub aliases
     process.env.GH_TOKEN = "gh-token";
+    process.env.DASHSCOPE_API_KEY = "dashscope-key";
 
     const hints = loadExternalSettingsHints(MOCK_PROJECT_ROOT);
 
     expect(hints.resolved.julesApiKey).toBe("jules-key-alt");
     expect(hints.resolved.claudeCodeApiKey).toBe("anthropic-key");
+    expect(hints.resolved.qwenCodeApiKey).toBe("dashscope-key");
     expect(hints.resolved.githubToken).toBe("gh-token");
   });
 
@@ -107,11 +112,13 @@ describe("external-settings", () => {
     expect(hints.providerAvailability.gemini).toEqual({ hasApiKey: false, hasLocalAuth: false });
     expect(hints.providerAvailability.codex).toEqual({ hasApiKey: false, hasLocalAuth: false });
     expect(hints.providerAvailability.claudeCode).toEqual({ hasApiKey: false, hasLocalAuth: false });
+    expect(hints.providerAvailability.qwenCode).toEqual({ hasApiKey: false, hasLocalAuth: false });
   });
 
   it("should correctly report hasApiKey when keys are available", () => {
     process.env.JULES_API_KEY = "env-jules-key";
     process.env.ANTHROPIC_API_KEY = "env-claude-key";
+    process.env.BAILIAN_CODING_PLAN_API_KEY = "env-qwen-key";
 
     vi.spyOn(fs, "existsSync").mockReturnValue(false);
 
@@ -121,12 +128,16 @@ describe("external-settings", () => {
     expect(hints.providerAvailability.gemini).toEqual({ hasApiKey: false, hasLocalAuth: false });
     expect(hints.providerAvailability.codex).toEqual({ hasApiKey: false, hasLocalAuth: false });
     expect(hints.providerAvailability.claudeCode).toEqual({ hasApiKey: true, hasLocalAuth: false });
+    expect(hints.providerAvailability.qwenCode).toEqual({ hasApiKey: true, hasLocalAuth: false });
   });
 
   it("should correctly report hasLocalAuth when auth files exist", () => {
     vi.spyOn(fs, "existsSync").mockImplementation((p: string) => {
       // Mock true for a specific gemini path
       if (p.endsWith(path.join(".gemini", "settings.json"))) {
+        return true;
+      }
+      if (p.endsWith(path.join(".qwen", "settings.json"))) {
         return true;
       }
       return false;
@@ -138,5 +149,6 @@ describe("external-settings", () => {
     expect(hints.providerAvailability.gemini).toEqual({ hasApiKey: false, hasLocalAuth: true });
     expect(hints.providerAvailability.codex).toEqual({ hasApiKey: false, hasLocalAuth: false });
     expect(hints.providerAvailability.claudeCode).toEqual({ hasApiKey: false, hasLocalAuth: false });
+    expect(hints.providerAvailability.qwenCode).toEqual({ hasApiKey: false, hasLocalAuth: true });
   });
 });

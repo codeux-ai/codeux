@@ -2,8 +2,10 @@ import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import {
   AlertTriangle,
+  CheckCircle2,
   CheckSquare,
   Heart,
+  Loader2,
   Maximize2,
   MoreVertical,
   Play,
@@ -64,23 +66,26 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   onSprintToggle,
   onOpenRowMenu,
 }) => {
-  const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
+  const pendingToggleActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
   const pinActionId = `sprint-showcase:${sprint.id}`;
   const deleteActionId = `sprint-delete:${sprint.id}`;
   const isCompleted = sprint.status === "completed";
 
-  const isRowPending = pendingActionIds.has(pendingActionId) || pendingActionIds.has(pinActionId) || pendingActionIds.has(deleteActionId);
+  const isTogglePending = pendingActionIds.has(pendingToggleActionId);
+  const isPinPending = pendingActionIds.has(pinActionId);
+  const isDeletePending = pendingActionIds.has(deleteActionId);
+  const isRowPending = isTogglePending || isPinPending || isDeletePending;
 
   // Polished stripe depth
   const rowBg = isSelected
-    ? "bg-signal-jade/[0.1] dark:bg-slate-500/[0.08]"
+    ? "bg-black/[0.04] dark:bg-white/[0.04]"
     : isEven
       ? "bg-white/80 dark:bg-slate-900/40"
       : "bg-slate-50/80 dark:bg-slate-800/40";
 
   return (
     <tr
-      className={`group border-b border-black/[0.06] transition-colors hover:bg-gradient-to-r hover:from-transparent hover:via-slate-500/[0.04] hover:to-transparent focus-within:bg-white/[0.03] dark:border-white/[0.06] dark:hover:via-slate-500/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`}
+      className={`group border-b border-black/[0.06] transition-colors hover:bg-gradient-to-r hover:from-transparent hover:to-transparent focus-within:bg-white/[0.03] dark:border-white/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`}
     >
       <td className="px-4 py-3 pl-6 align-middle">
         <button
@@ -98,14 +103,18 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         <button
           type="button"
           onClick={() => onToggleShowcase(sprint)}
-          disabled={pendingActionIds.has(pinActionId)}
+          disabled={isPinPending}
           className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
             sprint.showcasePinned
               ? "border-status-red/20 bg-status-red/10 text-status-red"
               : "border-black/[0.06] bg-black/[0.03] text-slate-400 hover:text-status-red dark:border-white/[0.06] dark:bg-white/[0.03]"
           } disabled:cursor-not-allowed disabled:opacity-50`}
         >
-          <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
+          {isPinPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
+          ) : (
+            <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
+          )}
         </button>
       </td>
       <td className="px-4 py-3 min-w-[8rem] align-middle">
@@ -115,7 +124,12 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         </div>
       </td>
       <td className="px-4 py-3 min-w-0 max-w-full align-middle">
-        <div className={`font-display text-lg font-black tracking-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"}`}>{sprint.name}</div>
+        <div className="flex items-center gap-3">
+          <div className={`font-display text-lg font-black tracking-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"}`}>{sprint.name}</div>
+          {sprint.latestReview && (
+            <SprintReviewBadge summary={sprint.latestReview} compact align="left" />
+          )}
+        </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
           <span>Updated {formatMetaDate(sprint.updatedAt)}</span>
           <span>·</span>
@@ -124,11 +138,6 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         {humanIntervention && (
           <div className="mt-3">
             <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="left" />
-          </div>
-        )}
-        {sprint.latestReview && (
-          <div className="mt-3">
-            <SprintReviewBadge summary={sprint.latestReview} compact align="left" />
           </div>
         )}
         {sprint.goal ? (
@@ -168,21 +177,42 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       <td className="px-4 py-3 align-middle">
         <div className="font-medium text-slate-700 dark:text-slate-200">{formatTableDate(sprint.createdAt)}</div>
         <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">created</div>
+        <div className="mt-1.5 inline-flex items-center gap-1">
+          {sprint.latestReview?.status === 'running' ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 text-signal-500 animate-spin" strokeWidth={2.2} />
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 animate-pulse">Reviewing</span>
+            </>
+          ) : sprint.latestReview?.status === 'completed' || sprint.latestReview?.status === 'reviewed' ? (
+            <>
+              <CheckCircle2 className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500">Reviewed</span>
+            </>
+          ) : (
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Not reviewed</span>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3 pr-6 align-middle">
         <div className="flex items-center justify-end gap-2 whitespace-nowrap">
           <button
             type="button"
             onClick={() => onSprintToggle(sprint.id)}
-            disabled={pendingActionIds.has(pendingActionId)}
+            disabled={isTogglePending}
             className={`inline-flex h-10 min-w-[5.5rem] items-center justify-center gap-2 rounded-full border px-4 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
               activeRun
                 ? "border-status-red/20 bg-status-red/[0.1] text-status-red hover:bg-status-red/[0.14]"
                 : "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
             } disabled:cursor-not-allowed disabled:opacity-50`}
           >
-            {activeRun ? <Square className="h-3.5 w-3.5" fill="currentColor" /> : <Play className="h-3.5 w-3.5" fill="currentColor" />}
-            {activeRun ? "Stop" : "Start"}
+            {isTogglePending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} />
+            ) : activeRun ? (
+              <Square className="h-3.5 w-3.5" fill="currentColor" />
+            ) : (
+              <Play className="h-3.5 w-3.5" fill="currentColor" />
+            )}
+            {isTogglePending ? (activeRun ? "Stopping" : "Starting") : activeRun ? "Stop" : "Start"}
           </button>
           <a
             href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
@@ -197,7 +227,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             disabled={isRowPending}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <MoreVertical className="h-3.5 w-3.5" />
+            {isRowPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2.2} />
+            ) : (
+              <MoreVertical className="h-3.5 w-3.5" />
+            )}
           </button>
         </div>
       </td>

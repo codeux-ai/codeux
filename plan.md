@@ -1,25 +1,27 @@
-1. **Create `src/repositories/execution/task-dispatch-claim-query.ts`**:
-   - Write a new query helper `queryNextTaskDispatchIdToClaim` to find the highest-priority eligible dispatch ID.
-   - The query will sort by `priority DESC, queued_at ASC, created_at ASC` and use `LIMIT 1`.
-   - The query needs to filter by `project_id`, `executor_type = ?`, `status = 'queued'`, and optionally `sprint_id` and `sprint_run_id`.
-   - Then implement a function `claimNextTaskDispatch` in this helper file to wrap the process in a transaction.
-   - It will find the dispatch ID, and then attempt to update it to `status = 'claimed'` WHERE `id = ? AND status = 'queued'`.
+1. **Create `src/services/planning-task-persistence.ts`**:
+   - Create a module that exposes a function (e.g., `persistPlannedTasks`) taking `projectId`, `sprintId`, `tasks` (from `PlannedSprintPayload`), and the `ProjectManagementRepository`.
+   - The function will encapsulate the task creation loop logic: iteration, dependency resolution, `dependsOnTaskIds` population, `isIndependent` determination, and `createTask` calls.
+   - It will return an object with `{ createdTaskIds: string[], taskIdsByKey: Map<string, string> }`.
+   - It should not mutate the incoming `tasks` array. It should maintain the required defaults (e.g., `priority: "medium"`, `executorType: "auto"`, `status: "pending"`).
+   - Any dependency not found in previously defined keys should throw a clear error message.
 
-2. **Update `src/repositories/execution-repository.ts`**:
-   - In `claimNextTaskDispatch()`, use the transaction-based helper from the new file rather than `listTaskDispatches` which loads everything into memory.
-   - Remove the `listTaskDispatches().filter(...)` call in `claimNextTaskDispatch()`.
-   - Read the updated record to return using `this.requireTaskDispatch(updatedId)`. Let the transaction ensure atomic claiming.
+2. **Refactor `src/services/planning-agent-service.ts`**:
+   - Import the new helper function in `src/services/planning-agent-service.ts`.
+   - Replace the task creation loop in `planSprint` (lines 284-307) with a call to this new helper function.
+   - Use the returned `createdTaskIds` to populate the `PlanSprintResult`.
+   - Ensure the repository and all required dependencies are correctly passed.
 
-3. **Update `tests/backend/repositories/execution-repository.test.ts`**:
-   - Add new tests in a dedicated `describe("claimNextTaskDispatch")` block.
-   - Test priority ordering (ensure a higher priority task is claimed before a lower one).
-   - Test sprint/run filtering.
-   - Test that double claims are prevented (e.g. queue one task, attempt to claim twice, verify the second claim returns null).
-   - Test claiming when queue is empty returns null.
+3. **Create `tests/backend/services/planning-task-persistence.test.ts`**:
+   - Write tests for the newly created `persistPlannedTasks` function.
+   - Include tests for mapping tasks properly, dependency resolution correctness, throwing errors on missing dependencies, duplicate key rejection (if applicable/enforced in persistence), and maintaining the correct sort order and `isIndependent` flag.
+   - Use a mock `ProjectManagementRepository` or use the existing in-memory/DB ones used in other tests.
 
-4. **Verify Constraints**:
-   - Ensure `npm run typecheck` passes.
-   - Ensure `npx vitest run tests/backend/repositories/execution-repository.test.ts` passes.
-   - Verify `listTaskDispatches()` is no longer used in `claimNextTaskDispatch`.
+4. **Run Verification Gates**:
+   - Run `pnpm vitest tests/backend/services/planning-task-persistence.test.ts`.
+   - Run `pnpm vitest tests/backend/services/planning-agent-service.test.ts`.
+   - Verify type checking (`pnpm run typecheck`) and linting (`pnpm run lint`).
 
-5. **Pre-commit**: Use `pre_commit_instructions` tool to execute pre commit verifications.
+5. **Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.**
+
+6. **Submit**:
+   - Submit the change with an appropriate commit message.

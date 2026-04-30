@@ -1,8 +1,19 @@
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
+import { LEARNINGS_FILENAME } from "../../../contracts/memory-types.js";
 import { runCommandStrict } from "../../../services/cli-process-runner.js";
 import type { IWorkspaceManager } from "./workspace-manager.js";
+
+const PROTECTED_EXPORT_PATH_PREFIXES = [
+  ".sprint-os-home",
+];
+
+function isProtectedExportPath(candidate: string): boolean {
+  return PROTECTED_EXPORT_PATH_PREFIXES.some((protectedPath) => (
+    candidate === protectedPath || candidate.startsWith(`${protectedPath}/`)
+  ));
+}
 
 export interface AppliedWorkspacePatchResult {
   hasChanges: boolean;
@@ -18,8 +29,75 @@ export class WorkspaceArtifactService {
   constructor(private readonly workspaceManager: IWorkspaceManager) {}
 
   async exportBinaryPatch(workspaceRef: string, baseRef: string): Promise<string> {
-    const result = await this.workspaceManager.runWorkspaceCommand(workspaceRef, "git", ["diff", "--binary", baseRef]);
-    return result.stdout;
+    const diffArgs = [
+      "diff",
+      "--binary",
+      baseRef,
+      "--",
+      ".",
+      `:(exclude)${LEARNINGS_FILENAME}`,
+      ":(exclude).sprint-os-home",
+      ":(exclude).sprint-os-home/**",
+    ];
+    const untrackedResult = await this.workspaceManager.runWorkspaceCommand(
+      workspaceRef,
+      "git",
+      ["ls-files", "--others", "--exclude-standard", "-z"],
+      { trimOutput: false },
+    );
+    const untrackedPaths = untrackedResult.stdout
+      .split("\0")
+      .filter((candidate) => (
+        candidate.length > 0
+        && candidate !== LEARNINGS_FILENAME
+        && !isProtectedExportPath(candidate)
+      ));
+
+    // Git patch payloads are whitespace-sensitive. Preserve raw command output so
+    // EOF-only whitespace lines and no-newline markers survive host-side apply.
+    if (untrackedPaths.length === 0) {
+      const result = await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        diffArgs,
+        { trimOutput: false },
+      );
+      return result.stdout;
+    }
+
+    const tempIndexPath = `.sprint-os-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
+    const tempIndexEnv = {
+      ...process.env,
+      GIT_INDEX_FILE: tempIndexPath,
+    };
+
+    try {
+      await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        ["read-tree", "HEAD"],
+        { env: tempIndexEnv },
+      );
+      await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        ["add", "--intent-to-add", "--", ...untrackedPaths],
+        { env: tempIndexEnv },
+      );
+      const result = await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        diffArgs,
+        { env: tempIndexEnv, trimOutput: false },
+      );
+      return result.stdout;
+    } finally {
+      await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "rm",
+        ["-f", tempIndexPath],
+      ).catch(() => undefined);
+    }
   }
 
   async applyPatchToBranch(args: {
@@ -28,6 +106,7 @@ export class WorkspaceArtifactService {
     workerBranch: string;
     patchText: string;
     commitMessage: string;
+    parentRefs?: string[];
   }): Promise<AppliedWorkspacePatchResult> {
     if (!args.patchText.trim()) {
       return { hasChanges: false };
@@ -55,9 +134,14 @@ export class WorkspaceArtifactService {
         return { hasChanges: false };
       }
 
+      const parentArgs = [
+        "-p",
+        args.baseRef,
+        ...(args.parentRefs || []).flatMap((parentRef) => ["-p", parentRef]),
+      ];
       const commitSha = (await runCommandStrict(
         "git",
-        ["commit-tree", treeSha, "-p", args.baseRef, "-m", args.commitMessage],
+        ["commit-tree", treeSha, ...parentArgs, "-m", args.commitMessage],
         args.repoPath,
       )).stdout.trim();
 

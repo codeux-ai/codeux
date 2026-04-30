@@ -127,6 +127,7 @@ export function createSprintDependencies(
     getGithubToken: () => context.getEffectiveGithubToken(),
     sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
     logger: logger.child({ component: "quality-assurance-service" }),
+    memoryService: coreDeps.memoryService,
   });
 
   const virtualWorkerService = new VirtualWorkerService({
@@ -166,6 +167,8 @@ export function createSprintDependencies(
     instructionService,
     approveSessionPlan: (sessionId) => julesApi.approveSessionPlan(sessionId),
     sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
+    memoryService: coreDeps.memoryService,
+    agentPresetSyncService,
     logger: logger.child({ component: "virtual-worker-service" }),
   });
 

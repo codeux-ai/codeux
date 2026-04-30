@@ -19,6 +19,17 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     patchText,
     commitMessage: `feat(task ${ctx.task.id}): implement via ${ctx.provider}`,
   });
+
+  if (applied.hasChanges) {
+    return {
+      hasChanges: true,
+      committedChanges: true,
+      pushedBranch: ctx.workerBranch,
+      commitSha: applied.commitSha,
+      stats: applied.stats,
+    };
+  }
+
   const hasUnpushed = await ctx.prService.hasUnpushedCommits(ctx.repoPath, ctx.workerBranch, ctx.featureBranch);
   const hasAhead = await ctx.prService.hasWorkerBranchCommitsAgainstFeature(ctx.repoPath, ctx.workerBranch, ctx.featureBranch);
 
@@ -29,7 +40,7 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     return { hasChanges: false, committedChanges: false };
   }
 
-  if (!applied.hasChanges && hasUnpushed) {
+  if (hasUnpushed) {
     await ctx.runCommand(
       "git",
       ["push", "-u", "origin", `refs/heads/${ctx.workerBranch}:refs/heads/${ctx.workerBranch}`],
@@ -37,11 +48,17 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     );
   }
 
+  const headResult = await ctx.runCommand(
+    "git",
+    ["rev-parse", `refs/heads/${ctx.workerBranch}`],
+    ctx.repoPath,
+  );
+  const branchHeadSha = headResult.stdout.trim() || undefined;
+
   return {
-    hasChanges: applied.hasChanges || hasAhead || hasUnpushed,
-    committedChanges: applied.hasChanges || hasAhead || hasUnpushed,
+    hasChanges: hasAhead || hasUnpushed,
+    committedChanges: hasAhead || hasUnpushed,
     pushedBranch: ctx.workerBranch,
-    commitSha: applied.commitSha,
-    stats: applied.stats,
+    commitSha: branchHeadSha,
   };
 }

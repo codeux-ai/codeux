@@ -21,6 +21,7 @@ const PROVIDER_LOCAL_AUTH_MAP = {
   ],
   codex: [".codex/auth.json", ".codex/config.toml"],
   claudeCode: [".claude/.credentials.json", ".claude.json"],
+  qwenCode: [".qwen/settings.json", ".qwen/.env"],
 } as const;
 
 /**
@@ -31,6 +32,7 @@ const PROVIDER_KEY_MAP = {
   geminiApiKey: ["geminiApiKey", "GEMINI_API_KEY"],
   codexApiKey: ["codexApiKey", "OPENAI_API_KEY"],
   claudeCodeApiKey: ["claudeCodeApiKey", "ANTHROPIC_API_KEY", "claudeApiKey", "CLAUDE_API_KEY"],
+  qwenCodeApiKey: ["qwenCodeApiKey", "DASHSCOPE_API_KEY", "BAILIAN_CODING_PLAN_API_KEY", "QWEN_API_KEY"],
   githubToken: ["githubToken", "GITHUB_TOKEN", "GH_TOKEN"],
 } as const;
 
@@ -94,6 +96,7 @@ export const loadExternalSettingsHints = (projectRoot: string): ExternalSettings
     gemini: { hasApiKey: false, hasLocalAuth: false },
     codex: { hasApiKey: false, hasLocalAuth: false },
     claudeCode: { hasApiKey: false, hasLocalAuth: false },
+    qwenCode: { hasApiKey: false, hasLocalAuth: false },
   };
 
   const keyToProvider: Record<string, keyof ExternalSettingsHints["providerAvailability"]> = {
@@ -101,6 +104,7 @@ export const loadExternalSettingsHints = (projectRoot: string): ExternalSettings
     geminiApiKey: "gemini",
     codexApiKey: "codex",
     claudeCodeApiKey: "claudeCode",
+    qwenCodeApiKey: "qwenCode",
   };
 
   for (const [key, provider] of Object.entries(keyToProvider)) {

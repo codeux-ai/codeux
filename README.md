@@ -237,7 +237,7 @@ If you want to contribute or run from source:
     ```bash
     git clone https://github.com/numnx/jules-subagents-mcp.git
     cd jules-subagents-mcp
-    npm install
+    pnpm install
     ```
 2.  **Environment Setup**:
     ```bash
@@ -246,7 +246,7 @@ If you want to contribute or run from source:
     ```
 3.  **Build**:
     ```bash
-    npm run build
+    pnpm run build
     ```
 4.  **Verification**:
     Test if the server starts correctly on stdio:
@@ -255,7 +255,7 @@ If you want to contribute or run from source:
     ```
 5.  **Global Link**:
     ```bash
-    npm link
+    pnpm link --global
     ```
 6.  **Add to Gemini CLI (Manual Build)**:
     Once linked, you can use the `jules-subagents` command globally:
@@ -284,6 +284,6 @@ If you want to contribute or run from source:
 
 ---
 
-## 📄 License
+## 📄 License 
 
 This project is licensed under the **ISC License**.

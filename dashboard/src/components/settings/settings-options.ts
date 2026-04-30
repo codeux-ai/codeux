@@ -11,6 +11,7 @@ export const providerOptions: Array<{ value: DashboardSettings["aiProvider"]["pr
   { value: "gemini", label: "Gemini CLI" },
   { value: "codex", label: "Codex CLI" },
   { value: "claude-code", label: "Claude Code" },
+  { value: "qwen-code", label: "Qwen Code" },
 ];
 
 export const providerStrategyOptions: Array<{ value: DashboardSettings["aiProvider"]["strategy"]; label: string }> = [

@@ -8,6 +8,23 @@ export interface LedgerSort {
   direction: SprintTableSortDirection;
 }
 
+export type SprintShowcaseFilter = "all" | "pinned" | "unpinned";
+export type SprintQaFilter = "all" | "missing" | "running" | "reviewed";
+
+export interface LedgerFilters {
+  query: string;
+  status: Set<SprintStatus> | "all";
+  showcase: SprintShowcaseFilter;
+  qa: SprintQaFilter;
+}
+
+export const DEFAULT_LEDGER_FILTERS: LedgerFilters = {
+  query: "",
+  status: "all",
+  showcase: "all",
+  qa: "all",
+};
+
 const STATUS_LABELS: Record<SprintStatus, string> = {
   running: "Running",
   paused: "Paused",
@@ -40,13 +57,33 @@ const compareString = (left: string, right: string): number => (
  * Filter sprints by a search query. Matches against sprint key,
  * name, status label, and goal text (case-insensitive).
  */
-export function filterSprints(sprints: Sprint[], query: string): Sprint[] {
-  const trimmed = query.trim();
+export function filterSprints(sprints: Sprint[], filters: LedgerFilters): Sprint[] {
+  let filtered = sprints;
+
+  if (filters.status !== "all" && filters.status.size > 0) {
+    filtered = filtered.filter((s) => (filters.status as Set<SprintStatus>).has(s.status));
+  }
+
+  if (filters.showcase === "pinned") {
+    filtered = filtered.filter((s) => s.showcasePinned);
+  } else if (filters.showcase === "unpinned") {
+    filtered = filtered.filter((s) => !s.showcasePinned);
+  }
+
+  if (filters.qa === "missing") {
+    filtered = filtered.filter((s) => !s.latestReview);
+  } else if (filters.qa === "running") {
+    filtered = filtered.filter((s) => s.latestReview?.status === "running");
+  } else if (filters.qa === "reviewed") {
+    filtered = filtered.filter((s) => s.latestReview && s.latestReview.status !== "running");
+  }
+
+  const trimmed = filters.query.trim();
   if (!trimmed) {
-    return sprints;
+    return filtered;
   }
   const lower = trimmed.toLowerCase();
-  return sprints.filter((sprint) => {
+  return filtered.filter((sprint) => {
     const key = formatSprintKey(sprint).toLowerCase();
     const name = sprint.name.toLowerCase();
     const statusLabel = STATUS_LABELS[sprint.status].toLowerCase();
@@ -97,8 +134,8 @@ export function sortSprints(sprints: Sprint[], sort: LedgerSort): Sprint[] {
 /**
  * Filter then sort sprints for ledger display.
  */
-export function getLedgerSprints(sprints: Sprint[], query: string, sort: LedgerSort): Sprint[] {
-  return sortSprints(filterSprints(sprints, query), sort);
+export function getLedgerSprints(sprints: Sprint[], filters: LedgerFilters, sort: LedgerSort): Sprint[] {
+  return sortSprints(filterSprints(sprints, filters), sort);
 }
 
 /**

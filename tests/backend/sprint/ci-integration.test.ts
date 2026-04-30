@@ -60,10 +60,8 @@ describe("SprintOrchestrator - CI & Merge Gates", () => {
       ciIntelligence: {
         enabled: true,
         enableLivePrMonitoring: true,
-        waitForCiBeforeMainMerge: true,
         resolveAllCommentsBeforeMainMerge: true,
         resolveMainMergeConflicts: false,
-        waitForCiBeforeFeatureMerge: true,
         resolveAllCommentsBeforeFeatureMerge: true,
         resolveMergeConflicts: false,
         waitForJulesCiAutofix: true,
@@ -139,10 +137,8 @@ describe("SprintOrchestrator - CI & Merge Gates", () => {
       ciIntelligence: {
         enabled: true,
         enableLivePrMonitoring: true,
-        waitForCiBeforeMainMerge: true,
         resolveAllCommentsBeforeMainMerge: true,
         resolveMainMergeConflicts: false,
-        waitForCiBeforeFeatureMerge: true,
         resolveAllCommentsBeforeFeatureMerge: true,
         resolveMergeConflicts: false,
         waitForJulesCiAutofix: true,

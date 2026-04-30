@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { useMessageCache } from "../../../dashboard/src/v2/hooks/useMessageCache.js";

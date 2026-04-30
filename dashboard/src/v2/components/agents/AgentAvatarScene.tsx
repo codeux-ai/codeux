@@ -5,7 +5,7 @@
  */
 import { h } from "preact";
 import { useEffect, useRef, useState, useCallback } from "preact/hooks";
-import * as THREE from "three";
+import * as THREE from "../../../lib/three-lite.js";
 import type { AgentAvatarConfig } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { DEFAULT_AGENT_AVATAR_CONFIG, getAccentHex, ROBOT_BASE_COLOR_OPTIONS } from "../../lib/agent-avatar.js";

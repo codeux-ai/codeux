@@ -169,7 +169,8 @@ For `action=status`:
 - Feature-branch merge instructions can require CI wait and comment resolution.
 - Final merge-to-main instructions can require CI wait and comment resolution.
 - When a task finishes provider work but its feature PR is still missing, pending, failing, or review-blocked, the CI gate now persists that task back to in-progress state in project task records so dashboard task lists do not incorrectly show it as finished.
-- Feature-PR auto-merge no longer bypasses pending/failed checks when `waitForCiBeforeFeatureMerge` is enabled; in that configuration Sprint OS waits for a green gate before attempting the merge.
+- Feature-PR auto-merge mode `WHEN_GREEN` waits for a green gate before attempting the merge.
+- Main-branch auto-merge mode `ALWAYS` intentionally bypasses the main CI wait gate and attempts the final `feature -> default` merge as soon as the PR is not conflicted or review-blocked.
 - If `waitForJulesCiAutofix` is enabled and feature PR checks fail, the sprint loop notifies the Jules session with failed-check context, matched failed run ids/URLs, failed job names, and failed-job log excerpts (when available), then keeps the task in work state.
 - CI autofix retries are capped by `julesCiAutofixMaxRetries`; once exhausted, the task is escalated as intervention-needed with exact task id, PR URL, failed check names, failed run summary, and failed job names (focus: fix CI before merge).
 - Worker-owned CI autofix attempts are de-duplicated across watch-loop cycles. While a matching `ci_fix_required` attention item is still open or claimed, Sprint OS treats that attempt as in-flight, keeps the task in `RUNNING`, and does not consume another retry until the worker attempt resolves.

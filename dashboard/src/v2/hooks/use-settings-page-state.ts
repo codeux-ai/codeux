@@ -18,6 +18,7 @@ import {
 } from "../lib/settings-view-models.js";
 import type {
   InvocationRoutingId,
+  ProviderConfigId,
   ProjectSettings,
   ProviderId,
   SettingsValueSource,
@@ -43,11 +44,12 @@ interface Category {
 
 
 
-const providerLabels: Record<keyof ProjectSettings["aiProvider"]["providers"], string> = {
+const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",
   gemini: "Gemini",
   codex: "Codex",
   "claude-code": "Claude Code",
+  "qwen-code": "Qwen Code",
 };
 
 const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
@@ -75,7 +77,7 @@ const routingProfileOptions = [
   { value: "WORKER", label: "Worker defaults" },
 ];
 
-type IntegrationId = "jules" | "gemini" | "codex" | "claude-code" | "github";
+type IntegrationId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "github";
 
 interface IntegrationDefinition {
   id: IntegrationId;
@@ -88,6 +90,7 @@ const INTEGRATIONS: IntegrationDefinition[] = [
   { id: "gemini", label: "Gemini", description: "Hosted execution provider and future worker endpoint" },
   { id: "codex", label: "Codex", description: "Hosted execution provider and future worker endpoint" },
   { id: "claude-code", label: "Claude Code", description: "Hosted execution provider and future worker endpoint" },
+  { id: "qwen-code", label: "Qwen Code", description: "Qwen CLI with OAuth, Alibaba Coding Plan, and custom model providers" },
   { id: "github", label: "GitHub", description: "Repository, pull request, branch, and CI integration" },
 ];
 
@@ -172,7 +175,7 @@ export const useSettingsPageState = (
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationId | null>(null);
   const [selectedAgentTemplate, setSelectedAgentTemplate] = useState<AgentInstructionTemplateId>("planningMissing");
   const [activeInvocationRoute, setActiveInvocationRoute] = useState<InvocationRoutingId>("task_coding");
-  const [activeProviderPanel, setActiveProviderPanel] = useState<ProviderId>("gemini");
+  const [activeProviderPanel, setActiveProviderPanel] = useState<ProviderConfigId | null>(null);
   const [settingsSearch, setSettingsSearch] = useState("");
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [savedSystemSettings, setSavedSystemSettings] = useState<SystemSettings | null>(null);

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/preact";
 import { useSettingsPageState } from "../../../dashboard/src/v2/hooks/use-settings-page-state.js";
@@ -6,6 +6,7 @@ import { CATEGORIES, CATEGORY_SEARCH_HINTS } from "../../../dashboard/src/v2/com
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
 import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
 
@@ -26,12 +27,27 @@ let mockResetDatabase;
 let mockFetchExternal;
 let mockFetchAgentPresets;
 
+const cloneDashboardSettings = () => JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS));
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSaveSystem = vi.spyOn(settingsApi, 'saveSystemSettings').mockResolvedValue({ defaults: {}, runtime: {} } as any);
+  mockSaveSystem = vi.spyOn(settingsApi, 'saveSystemSettings').mockResolvedValue({ defaults: cloneDashboardSettings(), runtime: {} } as any);
   mockSaveProject = vi.spyOn(settingsApi, 'saveProjectSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
-  mockFetchSystem = vi.spyOn(settingsApi, 'fetchSystemSettings').mockResolvedValue({ defaults: {}, runtime: {} } as any);
-  mockFetchProject = vi.spyOn(settingsApi, 'fetchProjectEffectiveSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
+  mockFetchSystem = vi.spyOn(settingsApi, 'fetchSystemSettings').mockResolvedValue({
+    runtime: { dashboardPort: 4444, enableDebugLogFile: false },
+    integrations: {
+      providers: {
+        jules: { provider: "jules", name: "Jules Primary", apiKey: "" },
+        gemini: { provider: "gemini", name: "Gemini Primary", apiKey: "" },
+        codex: { provider: "codex", name: "Codex Primary", apiKey: "" },
+        "claude-code": { provider: "claude-code", name: "Claude Primary", apiKey: "" },
+      },
+      githubToken: "",
+    },
+    defaults: cloneDashboardSettings(),
+    mcpTools: [],
+  } as any);
+  mockFetchProject = vi.spyOn(settingsApi, 'fetchProjectEffectiveSettings').mockResolvedValue({ settings: cloneDashboardSettings(), sources: {} } as any);
   mockResetProject = vi.spyOn(settingsApi, 'resetProjectSettings').mockResolvedValue();
   mockResetDatabase = vi.spyOn(settingsApi, 'resetSystemDatabase').mockResolvedValue();
   mockFetchAgentPresets = vi.spyOn(agentPresetApi, 'fetchAgentPresets').mockResolvedValue([
@@ -72,52 +88,21 @@ describe("useSettingsPageState", () => {
   });
 
   it("sorts QA-tagged agent presets ahead of other presets", async () => {
-    const routing = {
-      task_coding: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-      planning: { provider: "gemini", allowedProviders: ["jules", "gemini"], providers: {} },
-      dashboard_reply: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-      clarification_reply: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-      qa_review: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-      ci_fix: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-      merge_conflict: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-    };
-    const dashboardSettings = {
-      automationLevel: "high",
-      automationInterventions: {},
-      aiProvider: {
-        providers: {
-          gemini: { enabled: true, model: "pro", weight: 1, thinkingMode: "MEDIUM" },
-          jules: { enabled: true, model: "auto", weight: 1, thinkingMode: "SMALL" },
-          codex: { enabled: false, model: "gpt-4", weight: 1, thinkingMode: "SMALL" },
-          "claude-code": { enabled: false, model: "claude-3-5", weight: 1, thinkingMode: "SMALL" },
-        },
-        provider: "gemini",
-        strategy: "single",
-        invocationRouting: routing,
-      },
-      git: { githubMode: "oauth", defaultBranch: "main", autoCreatePr: true, featureBranchPrefix: "feat", sprintBranchScheme: "short" },
-      ciIntelligence: {},
-      sprintLoopSteps: {},
-      cliWorkflow: {},
-      sprintPreview: {},
-      workers: {},
-      agents: {
-        saveToProjectDirectory: true,
-        instructionTemplates: {},
-        qualityAssurance: {
-          enabled: false,
-          maxTaskReviewRuns: 1,
-          taskCompletion: { enabled: true, agentPresetId: null },
-          sprintCompletion: { enabled: true, agentPresetId: null },
-          completedTaskWithoutPr: { enabled: true, agentPresetId: null },
-        },
-      },
-      skills: [],
-      memory: {},
-    };
+    const dashboardSettings = cloneDashboardSettings();
+    dashboardSettings.aiProvider.provider = "gemini";
+    dashboardSettings.aiProvider.providers.gemini.model = "gemini-2.5-pro";
 
     mockFetchSystem.mockResolvedValue({
-      runtime: { nodeEnvironment: "development" },
+      runtime: { dashboardPort: 4444, enableDebugLogFile: false },
+      integrations: {
+        providers: {
+          jules: { provider: "jules", name: "Jules Primary", apiKey: "" },
+          gemini: { provider: "gemini", name: "Gemini Primary", apiKey: "" },
+          codex: { provider: "codex", name: "Codex Primary", apiKey: "" },
+          "claude-code": { provider: "claude-code", name: "Claude Primary", apiKey: "" },
+        },
+        githubToken: "",
+      },
       defaults: dashboardSettings,
       mcpTools: [],
     } as any);

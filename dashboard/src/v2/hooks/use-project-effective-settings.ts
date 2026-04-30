@@ -1,8 +1,16 @@
-import { useCallback, useMemo } from "preact/hooks";
+import { useCallback, useMemo, useRef } from "preact/hooks";
 import type { EffectiveSettingsResponse } from "../../types.js";
 import { fetchProjectEffectiveSettings } from "../lib/settings-api.js";
 import { useRealtimeResource } from "../../hooks/use-realtime-resource.js";
 import { isEqualEffectiveSettings, stabilizeEffectiveSettings } from "../lib/resource-equality.js";
+
+const effectiveSettingsCache = new Map<string, EffectiveSettingsResponse>();
+const effectiveSettingsInflightRequests = new Map<string, Promise<EffectiveSettingsResponse>>();
+
+export const clearEffectiveSettingsCacheForTests = (): void => {
+  effectiveSettingsCache.clear();
+  effectiveSettingsInflightRequests.clear();
+};
 
 export function useProjectEffectiveSettings(projectId: string | null): {
   data: EffectiveSettingsResponse | null;
@@ -10,15 +18,39 @@ export function useProjectEffectiveSettings(projectId: string | null): {
   error: string | null;
   refresh: () => Promise<void>;
 } {
+  const cachedSettings = projectId ? effectiveSettingsCache.get(projectId) || null : null;
+  const projectCacheEntryRef = useRef<{ projectId: string | null; hadInitialCache: boolean }>({
+    projectId: null,
+    hadInitialCache: false,
+  });
+
+  if (projectCacheEntryRef.current.projectId !== projectId) {
+    projectCacheEntryRef.current = {
+      projectId,
+      hadInitialCache: !!cachedSettings,
+    };
+  }
+
   const fetchResource = useCallback(async (signal?: AbortSignal) => {
     if (!projectId) {
       return null;
     }
-    return await fetchProjectEffectiveSettings(projectId, { signal });
+    let request = effectiveSettingsInflightRequests.get(projectId);
+    if (!request) {
+      request = fetchProjectEffectiveSettings(projectId, { signal }).finally(() => {
+        effectiveSettingsInflightRequests.delete(projectId);
+      });
+      effectiveSettingsInflightRequests.set(projectId, request);
+    }
+    const nextSettings = await request;
+    const cached = effectiveSettingsCache.get(projectId) || null;
+    const stabilized = stabilizeEffectiveSettings(cached, nextSettings) || nextSettings;
+    effectiveSettingsCache.set(projectId, stabilized);
+    return stabilized;
   }, [projectId]);
 
   const { data, loading, error, refetch } = useRealtimeResource<EffectiveSettingsResponse | null>({
-    initialData: null,
+    initialData: cachedSettings,
     fetchResource,
     isEqual: isEqualEffectiveSettings,
     stabilizeNext: stabilizeEffectiveSettings,
@@ -26,6 +58,8 @@ export function useProjectEffectiveSettings(projectId: string | null): {
       scopes: projectId ? [`project:${projectId}`] : [],
       eventType: "project.structure.updated",
     },
+    isAlreadyLoaded: projectCacheEntryRef.current.hadInitialCache || !projectId,
+    refreshOnMount: false,
   });
 
   return useMemo(

@@ -10,7 +10,6 @@ import type {
   ProjectSettings,
   ProjectSettingsOverride,
   SprintSettingsOverride,
-  SystemIntegrationSettings,
   SystemSettings,
   SettingsValueSource,
 } from "../contracts/settings-scope-types.js";
@@ -21,6 +20,11 @@ import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitize
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
+import {
+  buildDashboardProviderSettings,
+  buildDefaultIntegrationProviders,
+  normalizeSystemIntegrationProviders,
+} from "../domain/settings/provider-config-utils.js";
 import { sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
@@ -272,9 +276,6 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
     rebuildOnSprintCompletion: typeof input.rebuildOnSprintCompletion === "boolean"
       ? input.rebuildOnSprintCompletion
       : defaults.rebuildOnSprintCompletion,
-    pullLatestOnRebuild: typeof input.pullLatestOnRebuild === "boolean"
-      ? input.pullLatestOnRebuild
-      : defaults.pullLatestOnRebuild,
     autoStopOnTerminalSprint: typeof input.autoStopOnTerminalSprint === "boolean"
       ? input.autoStopOnTerminalSprint
       : defaults.autoStopOnTerminalSprint,
@@ -293,8 +294,13 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
 }
 
 export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHints): ProjectSettings {
-  const aiProvider = sanitizeAiProvider(DEFAULT_DASHBOARD_SETTINGS, externalHints);
+  const integrationProviders = buildDefaultIntegrationProviders(externalHints);
+  const aiProvider = sanitizeAiProvider(DEFAULT_DASHBOARD_SETTINGS, {
+    externalHints,
+    integrationProviders,
+  });
   const git = sanitizeGit(DEFAULT_DASHBOARD_SETTINGS, externalHints);
+  const workers = sanitizeWorkers(DEFAULT_DASHBOARD_SETTINGS, { providers: aiProvider.providers });
 
   return {
     appearance: { ...DEFAULT_DASHBOARD_SETTINGS.appearance },
@@ -305,36 +311,20 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     aiProvider: {
       provider: aiProvider.provider,
       strategy: aiProvider.strategy,
-      providers: {
-        jules: {
-          enabled: aiProvider.providers.jules.enabled,
-          model: aiProvider.providers.jules.model,
-          weight: aiProvider.providers.jules.weight,
-          thinkingMode: aiProvider.providers.jules.thinkingMode,
-          maxConcurrentTasks: aiProvider.providers.jules.maxConcurrentTasks,
-        },
-        gemini: {
-          enabled: aiProvider.providers.gemini.enabled,
-          model: aiProvider.providers.gemini.model,
-          weight: aiProvider.providers.gemini.weight,
-          thinkingMode: aiProvider.providers.gemini.thinkingMode,
-          maxConcurrentTasks: aiProvider.providers.gemini.maxConcurrentTasks,
-        },
-        codex: {
-          enabled: aiProvider.providers.codex.enabled,
-          model: aiProvider.providers.codex.model,
-          weight: aiProvider.providers.codex.weight,
-          thinkingMode: aiProvider.providers.codex.thinkingMode,
-          maxConcurrentTasks: aiProvider.providers.codex.maxConcurrentTasks,
-        },
-        "claude-code": {
-          enabled: aiProvider.providers["claude-code"].enabled,
-          model: aiProvider.providers["claude-code"].model,
-          weight: aiProvider.providers["claude-code"].weight,
-          thinkingMode: aiProvider.providers["claude-code"].thinkingMode,
-          maxConcurrentTasks: aiProvider.providers["claude-code"].maxConcurrentTasks,
-        },
-      },
+      providers: Object.fromEntries(
+        Object.entries(aiProvider.providers).map(([providerConfigId, provider]) => [
+          providerConfigId,
+          {
+            provider: provider.provider,
+            name: provider.name,
+            enabled: provider.enabled,
+            model: provider.model,
+            weight: provider.weight,
+            thinkingMode: provider.thinkingMode,
+            maxConcurrentTasks: provider.maxConcurrentTasks,
+          },
+        ]),
+      ),
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
     git: {
@@ -348,7 +338,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     sprintLoopSteps: sanitizeSprintLoopSteps(DEFAULT_DASHBOARD_SETTINGS),
     cliWorkflow: sanitizeCliWorkflow(DEFAULT_DASHBOARD_SETTINGS),
     sprintPreview: { ...DEFAULT_DASHBOARD_SETTINGS.sprintPreview },
-    workers: sanitizeWorkers(DEFAULT_DASHBOARD_SETTINGS),
+    workers,
     agents: {
       saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
       instructionTemplates: cloneInstructionTemplates(DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates),
@@ -366,10 +356,7 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
       enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
     },
     integrations: {
-      julesApiKey: externalHints?.resolved.julesApiKey || "",
-      geminiApiKey: externalHints?.resolved.geminiApiKey || "",
-      codexApiKey: externalHints?.resolved.codexApiKey || "",
-      claudeCodeApiKey: externalHints?.resolved.claudeCodeApiKey || "",
+      providers: buildDefaultIntegrationProviders(externalHints),
       githubToken: externalHints?.resolved.githubToken || "",
     },
     defaults: buildDefaultProjectSettings(externalHints),
@@ -379,6 +366,9 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
 
 export function sanitizeProjectSettings(value: unknown, externalHints?: ExternalSettingsHints): ProjectSettings {
   const input = toRecord(value);
+  const integrationProviders = input.integrations && typeof input.integrations === "object"
+    ? normalizeSystemIntegrationProviders(input.integrations, externalHints)
+    : buildDefaultIntegrationProviders(externalHints);
   const aiInput = {
     ...DEFAULT_DASHBOARD_SETTINGS,
     aiProvider: deepMerge(DEFAULT_DASHBOARD_SETTINGS.aiProvider, input.aiProvider),
@@ -388,8 +378,15 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     git: deepMerge(DEFAULT_DASHBOARD_SETTINGS.git, input.git),
   };
   const git = sanitizeGit(gitInput, externalHints);
-  const aiProvider = sanitizeAiProvider(aiInput, externalHints);
+  const aiProvider = sanitizeAiProvider(aiInput, {
+    externalHints,
+    integrationProviders,
+  });
   const appearanceInput = toRecord(input.appearance);
+  const workers = sanitizeWorkers({
+    ...DEFAULT_DASHBOARD_SETTINGS,
+    workers: deepMerge(DEFAULT_DASHBOARD_SETTINGS.workers, input.workers),
+  }, { providers: aiProvider.providers });
 
   return {
     appearance: {
@@ -407,36 +404,20 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     aiProvider: {
       provider: aiProvider.provider,
       strategy: aiProvider.strategy,
-      providers: {
-        jules: {
-          enabled: aiProvider.providers.jules.enabled,
-          model: aiProvider.providers.jules.model,
-          weight: aiProvider.providers.jules.weight,
-          thinkingMode: aiProvider.providers.jules.thinkingMode,
-          maxConcurrentTasks: aiProvider.providers.jules.maxConcurrentTasks,
-        },
-        gemini: {
-          enabled: aiProvider.providers.gemini.enabled,
-          model: aiProvider.providers.gemini.model,
-          weight: aiProvider.providers.gemini.weight,
-          thinkingMode: aiProvider.providers.gemini.thinkingMode,
-          maxConcurrentTasks: aiProvider.providers.gemini.maxConcurrentTasks,
-        },
-        codex: {
-          enabled: aiProvider.providers.codex.enabled,
-          model: aiProvider.providers.codex.model,
-          weight: aiProvider.providers.codex.weight,
-          thinkingMode: aiProvider.providers.codex.thinkingMode,
-          maxConcurrentTasks: aiProvider.providers.codex.maxConcurrentTasks,
-        },
-        "claude-code": {
-          enabled: aiProvider.providers["claude-code"].enabled,
-          model: aiProvider.providers["claude-code"].model,
-          weight: aiProvider.providers["claude-code"].weight,
-          thinkingMode: aiProvider.providers["claude-code"].thinkingMode,
-          maxConcurrentTasks: aiProvider.providers["claude-code"].maxConcurrentTasks,
-        },
-      },
+      providers: Object.fromEntries(
+        Object.entries(aiProvider.providers).map(([providerConfigId, provider]) => [
+          providerConfigId,
+          {
+            provider: provider.provider,
+            name: provider.name,
+            enabled: provider.enabled,
+            model: provider.model,
+            weight: provider.weight,
+            thinkingMode: provider.thinkingMode,
+            maxConcurrentTasks: provider.maxConcurrentTasks,
+          },
+        ]),
+      ),
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
     },
     git: {
@@ -459,10 +440,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       cliWorkflow: deepMerge(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow, input.cliWorkflow),
     }),
     sprintPreview: sanitizeSprintPreviewSettings(deepMerge(DEFAULT_DASHBOARD_SETTINGS.sprintPreview, input.sprintPreview)),
-    workers: sanitizeWorkers({
-      ...DEFAULT_DASHBOARD_SETTINGS,
-      workers: deepMerge(DEFAULT_DASHBOARD_SETTINGS.workers, input.workers),
-    }),
+    workers,
     agents: {
       saveToProjectDirectory: typeof toRecord(input.agents).saveToProjectDirectory === "boolean"
         ? Boolean(toRecord(input.agents).saveToProjectDirectory)
@@ -479,12 +457,22 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   const defaults = buildDefaultSystemSettings(externalHints);
   const input = toRecord(value);
   const runtime = toRecord(input.runtime);
-  const integrations = toRecord(input.integrations);
+  const integrations = normalizeSystemIntegrationProviders(input.integrations, externalHints);
 
   const dashboardPort = typeof runtime.dashboardPort === "number" ? runtime.dashboardPort : defaults.runtime.dashboardPort;
   const enableDebugLogFile = typeof runtime.enableDebugLogFile === "boolean"
     ? runtime.enableDebugLogFile
     : defaults.runtime.enableDebugLogFile;
+
+  const defaultsInput = sanitizeProjectSettings({
+    ...toRecord(input.defaults),
+    integrations: {
+      providers: integrations,
+      githubToken: typeof toRecord(input.integrations).githubToken === "string"
+        ? toRecord(input.integrations).githubToken
+        : defaults.integrations.githubToken,
+    },
+  }, externalHints);
 
   return {
     runtime: {
@@ -492,13 +480,12 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       enableDebugLogFile,
     },
     integrations: {
-      julesApiKey: typeof integrations.julesApiKey === "string" ? integrations.julesApiKey : defaults.integrations.julesApiKey,
-      geminiApiKey: typeof integrations.geminiApiKey === "string" ? integrations.geminiApiKey : defaults.integrations.geminiApiKey,
-      codexApiKey: typeof integrations.codexApiKey === "string" ? integrations.codexApiKey : defaults.integrations.codexApiKey,
-      claudeCodeApiKey: typeof integrations.claudeCodeApiKey === "string" ? integrations.claudeCodeApiKey : defaults.integrations.claudeCodeApiKey,
-      githubToken: typeof integrations.githubToken === "string" ? integrations.githubToken : defaults.integrations.githubToken,
+      providers: integrations,
+      githubToken: typeof toRecord(input.integrations).githubToken === "string"
+        ? toRecord(input.integrations).githubToken as string
+        : defaults.integrations.githubToken,
     },
-    defaults: sanitizeProjectSettings(input.defaults, externalHints),
+    defaults: defaultsInput,
     mcpTools: sanitizeMcpToolToggles(input.mcpTools ?? defaults.mcpTools).map((tool) => ({ ...tool })),
   };
 }
@@ -509,30 +496,13 @@ export function systemSettingsToDashboardSettings(settings: SystemSettings): Das
   }).settings;
 }
 
-function applyIntegrations(settings: ProjectSettings, integrations: SystemIntegrationSettings): DashboardSettings["aiProvider"] {
+function applyIntegrations(settings: ProjectSettings, integrations: SystemSettings["integrations"]): DashboardSettings["aiProvider"] {
+  const integrationProviders = normalizeSystemIntegrationProviders(integrations);
   return {
     provider: settings.aiProvider.provider,
     strategy: settings.aiProvider.strategy,
-    providers: {
-      jules: {
-        ...settings.aiProvider.providers.jules,
-        apiKey: integrations.julesApiKey,
-      },
-      gemini: {
-        ...settings.aiProvider.providers.gemini,
-        apiKey: integrations.geminiApiKey,
-      },
-      codex: {
-        ...settings.aiProvider.providers.codex,
-        apiKey: integrations.codexApiKey,
-      },
-      "claude-code": {
-        ...settings.aiProvider.providers["claude-code"],
-        apiKey: integrations.claudeCodeApiKey,
-      },
-    },
+    providers: buildDashboardProviderSettings(settings.aiProvider.providers, integrationProviders),
     invocationRouting: cloneInvocationRouting(settings.aiProvider.invocationRouting),
-    julesApiKey: integrations.julesApiKey,
   };
 }
 
@@ -540,7 +510,7 @@ export function resolveProjectSettings(
   systemSettings: SystemSettings,
   projectOverride?: ProjectSettingsOverride | null,
 ): ProjectSettings {
-  return sanitizeProjectSettings(deepMerge(systemSettings.defaults, projectOverride || {}));
+  return sanitizeProjectSettings(deepMerge(systemSettings.defaults, projectOverride || {}), undefined);
 }
 
 export function resolveSprintProjectSettings(
@@ -549,7 +519,7 @@ export function resolveSprintProjectSettings(
   sprintOverride?: SprintSettingsOverride | null,
 ): ProjectSettings {
   const projectSettings = resolveProjectSettings(systemSettings, projectOverride);
-  return sanitizeProjectSettings(deepMerge(projectSettings, sprintOverride || {}));
+  return sanitizeProjectSettings(deepMerge(projectSettings, sprintOverride || {}), undefined);
 }
 
 export function resolveEffectiveDashboardSettings(
@@ -596,19 +566,24 @@ export function resolveDashboardSettings(args: {
     memory: { ...sprintSettings.memory },
   };
 
-  const sources = flattenSources(args.systemSettings.runtime, "system");
-  flattenSources(args.systemSettings.mcpTools, "system", "mcpTools", sources);
-  flattenSources(baseProject, "system", "", sources);
-  if (args.projectOverride) {
-    Object.assign(sources, flattenSources(args.projectOverride, "project"));
-  }
-  if (args.sprintOverride) {
-    Object.assign(sources, flattenSources(args.sprintOverride, "sprint"));
-  }
+  let sourcesCache: Record<string, SettingsValueSource> | undefined;
 
   return {
     settings: dashboardSettings,
-    sources,
+    get sources() {
+      if (!sourcesCache) {
+        sourcesCache = flattenSources(args.systemSettings.runtime, "system");
+        flattenSources(args.systemSettings.mcpTools, "system", "mcpTools", sourcesCache);
+        flattenSources(baseProject, "system", "", sourcesCache);
+        if (args.projectOverride) {
+          Object.assign(sourcesCache, flattenSources(args.projectOverride, "project"));
+        }
+        if (args.sprintOverride) {
+          Object.assign(sourcesCache, flattenSources(args.sprintOverride, "sprint"));
+        }
+      }
+      return sourcesCache;
+    },
   };
 }
 

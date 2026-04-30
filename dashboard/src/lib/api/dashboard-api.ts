@@ -58,8 +58,22 @@ export const saveDashboardSettings = async (settings: DashboardSettings): Promis
   });
 };
 
+let externalSettingsHintsCache: ExternalSettingsHints | null = null;
+let externalSettingsHintsInflightRequest: Promise<ExternalSettingsHints> | null = null;
+
 export const fetchExternalSettingsHints = async (): Promise<ExternalSettingsHints> => {
-  return fetchJson<ExternalSettingsHints>("/api/settings/import-sources");
+  if (externalSettingsHintsCache) {
+    return externalSettingsHintsCache;
+  }
+  if (!externalSettingsHintsInflightRequest) {
+    externalSettingsHintsInflightRequest = fetchJson<ExternalSettingsHints>("/api/settings/import-sources").then((hints) => {
+      externalSettingsHintsCache = hints;
+      return hints;
+    }).finally(() => {
+      externalSettingsHintsInflightRequest = null;
+    });
+  }
+  return externalSettingsHintsInflightRequest;
 };
 
 export interface RerunTaskOptions {

@@ -97,6 +97,87 @@ describe("CliWorkflowService unpushed commit detection", () => {
     expect(deps.logger.error).toHaveBeenCalled();
   });
 
+  it("blocks unrecoverable git credential failures instead of leaving the task retryable", async () => {
+    const executionRepository = {
+      getTaskRun: vi.fn().mockReturnValue({
+        id: "run-1",
+        dispatchId: "dispatch-1",
+        startedAt: "2026-03-10T00:00:00.000Z",
+        prUrl: null,
+        workerBranch: null,
+        taskId: "task-1",
+      }),
+      getLatestTaskRunBySessionId: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+    };
+    const deps = {
+      sessionTracking: {
+        findLatestFailedCliSessionForTask: vi.fn().mockReturnValue(null),
+        createSession: vi.fn().mockImplementation((input) => ({ ...input, name: `sessions/${input.id}`, outputs: [] })),
+        appendActivity: vi.fn(),
+        updateSession: vi.fn(),
+      },
+      getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  " } }),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
+      getGithubToken: vi.fn().mockReturnValue(undefined),
+      executionRepository,
+      projectManagementRepository: {
+        updateTask: vi.fn(),
+      },
+      logger: { error: vi.fn() },
+    };
+    const service = new CliWorkflowService(deps as any);
+
+    const { executePrepareStage } = await import("../../../src/services/cli-workflow/pipeline/prepare-stage.js");
+    const { executeCleanupStage } = await import("../../../src/services/cli-workflow/pipeline/cleanup-stage.js");
+
+    vi.mocked(executePrepareStage).mockRejectedValue(
+      new Error("fatal: could not read Username for 'https://github.com': No such device or address"),
+    );
+    vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: false });
+
+    await (service as any).runTaskWorkflow({
+      provider: "gemini",
+      task: { id: "T1", prompt: "prompt", title: "title" },
+      repoPath: "/repo",
+      featureBranch: "main",
+      sprintNumber: 1,
+      sessionId: "sess-1",
+      taskRunId: "run-1",
+      workerBranch: "worker-1",
+      title: "Title",
+    });
+
+    expect(executionRepository.updateTaskRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ state: "BLOCKED" }),
+    );
+    expect(executionRepository.updateTaskDispatch).toHaveBeenCalledWith(
+      "dispatch-1",
+      expect.objectContaining({
+        status: "blocked",
+        errorMessage: "fatal: could not read Username for 'https://github.com': No such device or address",
+      }),
+    );
+    expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith(
+      "task-1",
+      { status: "pending" },
+    );
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenNthCalledWith(
+      2,
+      "run-1",
+      "cli_workflow_blocked",
+      "system",
+      expect.objectContaining({
+        category: "git_configuration",
+        errorMessage: "fatal: could not read Username for 'https://github.com': No such device or address",
+      }),
+      expect.objectContaining({ sourceEventKey: undefined }),
+    );
+  });
+
 
   it("runs task workflow pipeline successfully", async () => {
     const executionRepository = {

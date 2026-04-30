@@ -46,14 +46,13 @@ describe("dashboard settings updater helpers", () => {
     expect(next.aiProvider.providers.jules).toBe(settings.aiProvider.providers.jules);
   });
 
-  it("syncs aiProvider.julesApiKey when jules provider api key changes", () => {
+  it("updates the Jules provider api key without mutating the original settings", () => {
     const settings = cloneDefaultSettings();
 
     const next = updateProviderConfig(settings, "jules", { apiKey: "jules-key" });
 
     expect(next.aiProvider.providers.jules.apiKey).toBe("jules-key");
-    expect(next.aiProvider.julesApiKey).toBe("jules-key");
-    expect(settings.aiProvider.julesApiKey).toBe("");
+    expect(settings.aiProvider.providers.jules.apiKey).toBe("");
   });
 
   it("updates git settings and keeps git manager skills in sync with github mode", () => {
