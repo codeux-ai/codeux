@@ -29,6 +29,7 @@ import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js
 import { LaunchContainerPanel } from "./components/browser/LaunchContainerPanel.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
+import { InteractionMessages, getErrorMessage } from "./lib/copy/interaction-messages.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
@@ -156,7 +157,7 @@ export const BrowserPage: FunctionComponent = () => {
       return;
     }
     let cancelled = false;
-    browserFeedback.setPending("Loading script...");
+    browserFeedback.setPending(InteractionMessages.scriptLoadPending);
     void fetchPreviewScript(selectedProject.id, scriptTargetSprint.id)
       .then((data) => {
         if (cancelled) {
@@ -164,13 +165,13 @@ export const BrowserPage: FunctionComponent = () => {
         }
         setScript(data);
         setScriptDraft(data.content);
-        browserFeedback.setSuccess("Script loaded successfully");
+        browserFeedback.setSuccess(InteractionMessages.scriptLoaded);
       })
       .catch((fetchError) => {
         if (cancelled) {
           return;
         }
-        browserFeedback.setError(`Failed to load script: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+        browserFeedback.setError(InteractionMessages.scriptLoadError(getErrorMessage(fetchError)));
       });
     return () => {
       cancelled = true;
@@ -257,20 +258,20 @@ export const BrowserPage: FunctionComponent = () => {
   const handleStart = async (sprintId = launchSprintId) => {
     if (!selectedProject || !sprintId) return;
     if (!previewEnabled) {
-      setError("Browser Preview is disabled for this project.");
+      setError(InteractionMessages.browserPreviewDisabled);
       return;
     }
     setLaunching(true);
-    browserFeedback.setPending("Launching container...");
+    browserFeedback.setPending(InteractionMessages.containerLaunchPending);
     try {
       const session = await startPreviewSession(selectedProject.id, sprintId);
       setActiveSessionId(session.id);
       await refreshSessions(true);
       setFrameSrc(`${buildPreviewOrigin(session.id)}${normalizePath(currentPathRef.current)}`);
 
-      browserFeedback.setSuccess("Container launched successfully");
+      browserFeedback.setSuccess(InteractionMessages.containerLaunched);
     } catch (actionError) {
-      browserFeedback.setError(`Failed to launch container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+      browserFeedback.setError(InteractionMessages.containerLaunchError(getErrorMessage(actionError)));
     } finally {
       setLaunching(false);
     }
@@ -279,18 +280,18 @@ export const BrowserPage: FunctionComponent = () => {
   const handleRebuild = async () => {
     if (!visibleSelectedSession) return;
     if (!previewEnabled) {
-      setError("Browser Preview is disabled for this project.");
+      setError(InteractionMessages.browserPreviewDisabled);
       return;
     }
     setSessionActionPending(true);
-    browserFeedback.setPending("Rebuilding container...");
+    browserFeedback.setPending(InteractionMessages.containerRebuildPending);
     try {
       await rebuildPreviewSession(visibleSelectedSession.id);
       await refreshSessions(true);
       reloadFrame();
-      browserFeedback.setSuccess("Container rebuilt successfully");
+      browserFeedback.setSuccess(InteractionMessages.containerRebuilt);
     } catch (actionError) {
-      browserFeedback.setError(`Failed to rebuild container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+      browserFeedback.setError(InteractionMessages.containerRebuildError(getErrorMessage(actionError)));
     } finally {
       setSessionActionPending(false);
     }
@@ -299,13 +300,13 @@ export const BrowserPage: FunctionComponent = () => {
   const handleStop = async () => {
     if (!visibleSelectedSession) return;
     setSessionActionPending(true);
-    browserFeedback.setPending("Stopping container...");
+    browserFeedback.setPending(InteractionMessages.containerStopPending);
     try {
       await stopPreviewSession(visibleSelectedSession.id);
       await refreshSessions(true);
-      browserFeedback.setSuccess("Container stopped successfully");
+      browserFeedback.setSuccess(InteractionMessages.containerStopped);
     } catch (actionError) {
-      browserFeedback.setError(`Failed to stop container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+      browserFeedback.setError(InteractionMessages.containerStopError(getErrorMessage(actionError)));
     } finally {
       setSessionActionPending(false);
     }
@@ -326,7 +327,7 @@ export const BrowserPage: FunctionComponent = () => {
       await removePreviewSession(sessionId);
       await refreshSessions(true);
     } catch (actionError) {
-      browserFeedback.setError(`Failed to save script: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+      browserFeedback.setError(InteractionMessages.genericError(getErrorMessage(actionError)));
     } finally {
       setRemovingSessionIds((current) => current.filter((id) => id !== sessionId));
     }
@@ -335,14 +336,14 @@ export const BrowserPage: FunctionComponent = () => {
   const handleSaveScript = async () => {
     if (!selectedProject || !scriptTargetSprint) return;
     setSavingScript(true);
-    browserFeedback.setPending("Saving script...");
+    browserFeedback.setPending(InteractionMessages.scriptSavePending);
     try {
       const nextScript = await savePreviewScript(selectedProject.id, scriptTargetSprint.id, scriptDraft);
       setScript(nextScript);
       setShowScriptEditor(false);
-      browserFeedback.setSuccess("Script saved successfully");
+      browserFeedback.setSuccess(InteractionMessages.scriptSaved);
     } catch (actionError) {
-      setActionFeedback({status: 'error', message: `Failed to launch container: ${actionError instanceof Error ? actionError.message : String(actionError)}`});
+      setActionFeedback({status: 'error', message: InteractionMessages.scriptSaveError(getErrorMessage(actionError))});
     } finally {
       setSavingScript(false);
     }
