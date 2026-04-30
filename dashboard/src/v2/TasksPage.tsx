@@ -650,10 +650,11 @@ export const TasksPage: FunctionComponent = () => {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 -mt-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 -mt-4">
         <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} />
 
         <FilterStrip
+          label="Status"
           options={[
             { value: "all", label: "All" },
             { value: "in_progress", label: "Running" },
@@ -662,11 +663,13 @@ export const TasksPage: FunctionComponent = () => {
           ]}
           active={statusFilter}
           onChange={(val) => setStatusFilter(val as StatusFilter)}
+          onClear={() => setStatusFilter("all")}
         />
 
         <FilterStrip
+          label="Priority"
           options={[
-            { value: "all", label: "Any Priority" },
+            { value: "all", label: "Any" },
             { value: "critical", label: "Critical" },
             { value: "high", label: "High" },
             { value: "medium", label: "Medium" },
@@ -674,6 +677,7 @@ export const TasksPage: FunctionComponent = () => {
           ]}
           active={priorityFilter}
           onChange={(val) => setPriorityFilter(val as PriorityFilter)}
+          onClear={() => setPriorityFilter("all")}
         />
 
         <div className="ml-auto">

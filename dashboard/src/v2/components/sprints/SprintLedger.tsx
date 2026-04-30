@@ -31,6 +31,7 @@ import {
 import { SprintLedgerHeader } from "./SprintLedgerHeader.js";
 import { SprintLedgerBulkActions } from "./SprintLedgerBulkActions.js";
 import { SprintLedgerRow } from "./SprintLedgerRow.js";
+import { Pagination } from "../navigation/Pagination.js";
 
 export interface SprintLedgerProps {
   sprints: Sprint[];
@@ -68,6 +69,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   const [filters, setFilters] = useState<LedgerFilters>(DEFAULT_LEDGER_FILTERS);
   const [sort, setSort] = useState<LedgerSort>({ key: "createdAt", direction: "desc" });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
   const { isOpen, options, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
 
   const filteredSprints = useMemo(
@@ -80,10 +82,18 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     [filteredSprints, sort],
   );
 
+  const limit = useMemo(() => resolveListWindow(listWindow, ledgerSprints.length), [listWindow, ledgerSprints.length]);
+  const totalPages = Math.ceil(ledgerSprints.length / limit);
+
   const windowedSprints = useMemo(() => {
-    const limit = resolveListWindow(listWindow, ledgerSprints.length);
-    return sliceLedgerSprints(ledgerSprints, limit);
-  }, [ledgerSprints, listWindow]);
+    const start = (currentPage - 1) * limit;
+    return ledgerSprints.slice(start, start + limit);
+  }, [ledgerSprints, currentPage, limit]);
+
+  // Reset page when filters or limit changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, limit]);
 
   // Prune selection when filter changes
   useEffect(() => {
@@ -367,6 +377,16 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex justify-center border-t border-black/[0.04] p-6 dark:border-white/[0.04]">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
+        </div>
+      )}
     </div>
   );
 };

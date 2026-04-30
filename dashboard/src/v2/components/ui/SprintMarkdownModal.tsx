@@ -113,7 +113,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     <div
       ref={backdropRef}
       onClick={handleBackdropClick}
-      className="fixed inset-0 z-[220] flex items-center justify-center px-6 bg-black/55 dark:bg-black/75 backdrop-blur-xl"
+      className="fixed inset-0 z-[220] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
     >
       <div
         ref={cardRef}

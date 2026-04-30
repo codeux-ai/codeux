@@ -1,7 +1,7 @@
 /** @jsx h */
 // @vitest-environment jsdom
 import { h } from "preact";
-import { render, screen, fireEvent, cleanup, act } from "@testing-library/preact";
+import { render, screen, fireEvent, cleanup, act, waitFor } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ConfirmDialog } from "../../../src/v2/components/ui/ConfirmDialog.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
@@ -55,6 +55,13 @@ describe("ConfirmDialog", () => {
     expect(screen.getByText("This action cannot be undone.")).toBeInTheDocument();
   });
 
+  it("explicitly states consequence copy for destructive actions", () => {
+    render(
+      <ConfirmDialog isOpen={true} options={defaultOptions} onConfirm={vi.fn()} onCancel={vi.fn()} />
+    );
+    expect(screen.getByText("⚠️ This action is permanent and cannot be undone.")).toBeInTheDocument();
+  });
+
   it("calls onConfirm when confirm button is held (destructive)", async () => {
     vi.useFakeTimers();
     const handleConfirm = vi.fn();
@@ -70,6 +77,47 @@ describe("ConfirmDialog", () => {
     });
     
     expect(handleConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables buttons and shows pending state when resolving a promise", async () => {
+    vi.useFakeTimers();
+    let resolvePromise: any;
+    const handleConfirm = vi.fn().mockImplementation(() => {
+      return new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+    });
+
+    render(
+      <ConfirmDialog isOpen={true} options={defaultOptions} onConfirm={handleConfirm} onCancel={vi.fn()} />
+    );
+
+    const confirmBtn = screen.getByRole("button", { name: /Hold to Delete|Delete/ });
+    const cancelBtn = screen.getByRole("button", { name: "Cancel" });
+
+    fireEvent.pointerDown(confirmBtn);
+
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
+
+    expect(handleConfirm).toHaveBeenCalledTimes(1);
+
+    // Check if it's disabled
+    await waitFor(() => {
+      expect(confirmBtn).toBeDisabled();
+      expect(cancelBtn).toBeDisabled();
+    });
+
+    // Resolve it
+    act(() => {
+      resolvePromise();
+    });
+
+    // Wait for promise resolution to clear pending state
+    await waitFor(() => {
+      expect(confirmBtn).not.toBeDisabled();
+    });
   });
 
   it("calls onConfirm when confirm button is clicked (non-destructive)", () => {
@@ -102,5 +150,19 @@ describe("ConfirmDialog", () => {
     );
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(handleCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores focus after unmount", async () => {
+    vi.useFakeTimers();
+    render(
+      <div>
+        <button id="trigger">Trigger</button>
+        <ConfirmDialog isOpen={false} options={defaultOptions} onConfirm={vi.fn()} onCancel={vi.fn()} />
+      </div>
+    );
+
+    const trigger = document.getElementById("trigger")!;
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
   });
 });

@@ -26,6 +26,7 @@ import { SprintMarkdownModal } from "../../components/ui/SprintMarkdownModal.js"
 import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsOverrideModal.js";
 import { SprintImportMenu } from "../../components/sprints/SprintImportMenu.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
+import { SectionNav } from "../../components/navigation/SectionNav.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { useProgressiveList } from "../../hooks/use-progressive-list.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
@@ -314,9 +315,21 @@ export const SprintsPage: FunctionComponent = () => {
           </div>
         </div>
 
+        {selectedProject && (
+          <div className="-mt-12 flex justify-center">
+            <SectionNav
+              items={[
+                { id: "showcase", label: "Showcase" },
+                { id: "ledger", label: "Ledger" },
+              ]}
+              activeId="showcase"
+            />
+          </div>
+        )}
+
         {selectedProject ? (
           <>
-            <div ref={createStageRef} className="relative">
+            <div ref={createStageRef} className="relative" id="showcase">
               <div
                 className={`transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                   showCreateComposer || editingSprint || showQuicksprint
@@ -443,7 +456,7 @@ export const SprintsPage: FunctionComponent = () => {
               </div>
             </div>
 
-            <div className="rounded-[2.2rem] border border-black/[0.06] bg-white/70 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
+            <div id="ledger" className="rounded-[2.2rem] border border-black/[0.06] bg-white/70 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
               <SprintLedger
                 sprints={progressiveSprints}
                 isLoading={loading}

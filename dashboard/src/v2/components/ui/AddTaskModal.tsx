@@ -154,7 +154,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-task-modal-title"
-      className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/55 dark:bg-black/75 backdrop-blur-xl"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
     >
       <div
         ref={cardRef}

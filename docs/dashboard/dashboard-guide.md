@@ -229,6 +229,7 @@ Legacy runtime:
 - Tasks and sprints now refresh silently on background realtime invalidation, so opening the Tasks page no longer repeatedly flashes loading state when project metadata or structure updates arrive
 - Tasks board is now scoped to the active sprint selection when one is set, filtering the view to only tasks for that sprint
 - Tasks page stores explicit task executor preference (`auto`, `docker_cli`, `jules`)
+- Shared v2 filter tabs now use explicit active indicators, keyboard navigation (`ArrowLeft`/`ArrowRight`/`Home`/`End`), and disabled semantics for consistent context switching across major views
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
 - Stats page is project-scoped and visualizes tracked token, time, and Git usage (insertions, deletions, PRs) for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
