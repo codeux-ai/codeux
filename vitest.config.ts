@@ -9,6 +9,7 @@ export default defineConfig({
     testTimeout: 15000,
     // Default environment is node, specific UI tests handle this via @vitest-environment jsdom pragmas
     environment: "node",
+    server: { deps: { inline: ["react-hook-form"] } },
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html", "json-summary"],
@@ -43,6 +44,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "react": "preact/compat",
+
       "react-dom/test-utils": "preact/test-utils",
       "react-dom": "preact/compat",
       "react/jsx-runtime": "preact/jsx-runtime",
