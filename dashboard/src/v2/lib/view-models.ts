@@ -1,21 +1,6 @@
 import type { Source, Sprint, SprintRecord, Task, TaskRecord } from "../types.js";
-import type { Subtask } from "../../types.js";
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-
-export function toSubtask(task: Task): Subtask {
-  return {
-    id: task.id,
-    record_id: task.recordId,
-    title: task.title,
-    status: task.status.toUpperCase() as any,
-    depends_on: task.dependsOnTaskIds,
-    is_independent: task.isIndependent,
-    is_merged: task.isMerged,
-    merge_indicator: (task.mergeIndicator || undefined) as any,
-    prompt: task.promptMarkdown || "",
-  };
-}
 
 export function toSprintViewModel(sprint: SprintRecord): Sprint {
   return {

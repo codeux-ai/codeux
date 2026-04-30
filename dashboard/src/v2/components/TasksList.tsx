@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useMemo, useRef, useState, useCallback } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Flip } from "gsap/Flip";
 
@@ -9,13 +9,6 @@ import { FilterStrip } from "./ui/FilterStrip.js";
 import { SkeletonRow } from "./ui/ListSkeletons.js";
 import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../lib/overview-streams.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
-import { useTaskMutations, type TaskMutationDraft } from "../hooks/use-task-mutations.js";
-import { ActionFeedbackRegion } from "./ui/ActionFeedbackRegion.js";
-import { TaskComposer } from "./ui/TaskComposer.js";
-import { RerunTaskModal } from "./ui/RerunTaskModal.js";
-import { toSubtask } from "../lib/view-models.js";
-import type { Task } from "../types.js";
-
 type TaskFilter = "All Tasks" | "Running" | "Queued" | "Completed";
 
 const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
@@ -39,20 +32,9 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
         setActiveFilter("All Tasks");
     };
     const reducedMotion = useReducedMotion();
-    const { sprints, tasks, isLoading, refetch } = pageData;
+    const { sprints, tasks, isLoading } = pageData;
 
-    const onMutationSuccess = useCallback(async () => {
-        await refetch();
-    }, [refetch]);
 
-    const { create, update, remove, rerun, pendingActionIds } = useTaskMutations({
-        projectId: pageData.projectId || null,
-        onSuccess: onMutationSuccess,
-    });
-
-    const [editingTask, setEditingTask] = useState<Task | null>(null);
-    const [rerunningTask, setRerunningTask] = useState<Task | null>(null);
-    const composerRef = useRef<HTMLDivElement>(null);
 
     const activeSprintIds = useMemo(() => deriveActiveSprintIds(sprints), [sprints]);
     const activeTasks = useMemo(() => filterTasksToActiveSprints(tasks, activeSprintIds), [tasks, activeSprintIds]);
@@ -94,32 +76,6 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
         }
     }, [activeFilter, reducedMotion, filteredTasks]);
 
-    const handleEditClick = useCallback((task: Task) => {
-        setEditingTask(task);
-        setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-    }, []);
-
-    const handleDeleteClick = useCallback(async (task: Task) => {
-        await remove.execute(task.recordId);
-        setEditingTask(prev => prev?.recordId === task.recordId ? null : prev);
-    }, [remove]);
-
-    const handleRerunClick = useCallback((task: Task) => {
-        setRerunningTask(task);
-    }, []);
-
-    const handleTaskSubmit = useCallback(async (draft: TaskMutationDraft) => {
-        if (!editingTask) return;
-        await update.execute(editingTask.recordId, draft);
-        setEditingTask(null);
-    }, [editingTask, update]);
-
-    const handleRerunConfirm = useCallback(async (options: Parameters<typeof rerun.execute>[1]) => {
-        if (!rerunningTask) return;
-        await rerun.execute(rerunningTask.recordId, options);
-        setRerunningTask(null);
-    }, [rerunningTask, rerun]);
-
     return (
         <div className="w-full relative z-10 px-2">
             {/* Section Header */}
@@ -141,48 +97,6 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                 </div>
             </div>
 
-            <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[300] w-full max-w-xl px-6 pointer-events-none">
-                <div className="pointer-events-auto flex flex-col gap-2">
-                    <ActionFeedbackRegion
-                        status={update.feedback.status}
-                        message={update.feedback.message}
-                        onDismiss={update.reset}
-                    />
-                    <ActionFeedbackRegion
-                        status={remove.feedback.status}
-                        message={remove.feedback.message}
-                        onDismiss={remove.reset}
-                    />
-                    <ActionFeedbackRegion
-                        status={rerun.feedback.status}
-                        message={rerun.feedback.message}
-                        onDismiss={rerun.reset}
-                    />
-                </div>
-            </div>
-
-            {rerunningTask && (
-                <RerunTaskModal
-                    task={toSubtask(rerunningTask)}
-                    allTasks={tasks.map(toSubtask)}
-                    onClose={() => setRerunningTask(null)}
-                    onConfirm={handleRerunConfirm}
-                />
-            )}
-
-            {editingTask && (
-                <div ref={composerRef} className="mb-8 scroll-mt-8">
-                    <TaskComposer
-                        key={editingTask.recordId}
-                        sprints={sprints}
-                        availableTasks={tasks}
-                        initialTask={editingTask}
-                        onClose={() => setEditingTask(null)}
-                        onSubmit={handleTaskSubmit}
-                    />
-                </div>
-            )}
-
             {/* Task rows */}
             <div ref={listRef} className="flex flex-col w-full space-y-3">
                 {isLoading ? (
@@ -195,15 +109,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                     </>
                 ) : filteredTasks.length > 0 ? (
                     filteredTasks.map((task) => (
-                        <div key={task.id} data-flip-id={task.id} className="task-flip-item">
-                            <TaskRow 
-                                task={task} 
-                                isPending={pendingActionIds.has(task.recordId)}
-                                onEdit={handleEditClick}
-                                onDelete={handleDeleteClick}
-                                onRerun={handleRerunClick}
-                            />
-                        </div>
+                        <div key={task.id} data-flip-id={task.id} className="task-flip-item"><TaskRow task={task} /></div>
                     ))
                 ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">

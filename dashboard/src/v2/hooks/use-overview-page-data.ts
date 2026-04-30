@@ -9,7 +9,7 @@ export function useOverviewPageData() {
   const projectId = selectedProject?.id || null;
 
   const { data: sprints, loading: sprintsLoading } = useSprints(projectId);
-  const { tasks, loading: tasksLoading, refresh: refreshTasks } = useProjectTasks(projectId, projects, sprints);
+  const { tasks, loading: tasksLoading } = useProjectTasks(projectId, projects, sprints);
   const { stats, loading: statsLoading } = useProjectStats(projectId, "7d");
 
   const isLoading = projectsLoading || sprintsLoading || tasksLoading || statsLoading;
@@ -17,11 +17,9 @@ export function useOverviewPageData() {
   return useMemo(() => ({
     projects,
     selectedProject,
-    projectId,
     sprints,
     tasks,
     stats,
-    isLoading,
-    refetch: refreshTasks,
-  }), [projects, selectedProject, projectId, sprints, tasks, stats, isLoading, refreshTasks]);
+    isLoading
+  }), [projects, selectedProject, sprints, tasks, stats, isLoading]);
 }
