@@ -1,3 +1,5 @@
+import { afterEach } from "vitest";
+import { cleanup } from "@testing-library/preact";
 /** @jsx h */
 // @vitest-environment jsdom
 import { h } from "preact";
@@ -8,6 +10,8 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
 describe("ActionFeedbackRegion", () => {
+  afterEach(() => { cleanup(); });
+
   it("renders nothing when status is idle", () => {
     const { container } = render(<ActionFeedbackRegion status="idle" message="Hidden" />);
     expect(container.firstChild).toBeNull();
