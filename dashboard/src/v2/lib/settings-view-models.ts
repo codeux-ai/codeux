@@ -243,6 +243,7 @@ export const providerLabels: Record<ProviderId, string> = {
   gemini: "Gemini",
   codex: "Codex",
   "claude-code": "Claude Code",
+  "qwen-code": "Qwen Code",
 };
 
 export const getProviderTypeLabel = (providerId: ProviderId): string => providerLabels[providerId];
@@ -253,10 +254,10 @@ export const createProjectProviderDraft = (
 ): ProjectProviderSettings => ({
   provider: providerId,
   name,
-  enabled: providerId !== "claude-code",
-  model: providerId === "codex" ? "gpt-5.3-codex" : "default",
-  weight: providerId === "jules" ? 60 : providerId === "claude-code" ? 0 : 20,
-  thinkingMode: providerId === "codex" || providerId === "claude-code" ? "HIGH" : "MEDIUM",
+  enabled: providerId !== "claude-code" && providerId !== "qwen-code",
+  model: providerId === "codex" ? "gpt-5.3-codex" : providerId === "qwen-code" ? "qwen3-coder-plus" : "default",
+  weight: providerId === "jules" ? 60 : providerId === "claude-code" || providerId === "qwen-code" ? 0 : 20,
+  thinkingMode: providerId === "codex" || providerId === "claude-code" || providerId === "qwen-code" ? "HIGH" : "MEDIUM",
   maxConcurrentTasks: providerId === "jules" ? 15 : 0,
 });
 
@@ -274,7 +275,17 @@ export const createSystemProviderDraft = (
       ? "~/.codex"
       : providerId === "claude-code"
         ? "~/.claude"
+        : providerId === "qwen-code"
+          ? "~/.qwen"
         : "",
+  ...(providerId === "qwen-code" ? {
+    qwenAuthMode: "LOCAL_AUTH" as const,
+    qwenRegion: "international" as const,
+    qwenBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    qwenEnvKey: "DASHSCOPE_API_KEY",
+    qwenProtocol: "openai" as const,
+    qwenAdditionalModelProviders: [],
+  } : {}),
 });
 
 export const sortProviderConfigEntries = <T extends { provider: ProviderId; name: string }>(
@@ -353,6 +364,16 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
     "gpt-5-codex-mini",
     "gpt-5",
   ],
+  "qwen-code": [
+    "qwen3-coder-plus",
+    "qwen3.5-plus",
+    "qwen3-coder-next",
+    "qwen3-max",
+    "qwen3-max-2026-01-23",
+    "qwen-plus",
+    "qwen-max",
+    "local-model",
+  ],
 };
 
 const PROVIDER_MODEL_LABEL_OVERRIDES: Partial<Record<ProviderId, Record<string, string>>> = {
@@ -376,7 +397,10 @@ const getHintApiKey = (
   if (providerId === "codex") {
     return hints?.resolved.codexApiKey || "";
   }
-  return hints?.resolved.claudeCodeApiKey || "";
+  if (providerId === "claude-code") {
+    return hints?.resolved.claudeCodeApiKey || "";
+  }
+  return hints?.resolved.qwenCodeApiKey || "";
 };
 
 const getLegacyIntegrationApiKey = (
@@ -393,7 +417,10 @@ const getLegacyIntegrationApiKey = (
   if (providerId === "codex") {
     return typeof integrations.codexApiKey === "string" ? integrations.codexApiKey : "";
   }
-  return typeof integrations.claudeCodeApiKey === "string" ? integrations.claudeCodeApiKey : "";
+  if (providerId === "claude-code") {
+    return typeof integrations.claudeCodeApiKey === "string" ? integrations.claudeCodeApiKey : "";
+  }
+  return typeof integrations.qwenCodeApiKey === "string" ? integrations.qwenCodeApiKey : "";
 };
 
 const getSystemIntegrationProviders = (
@@ -405,7 +432,7 @@ const getSystemIntegrationProviders = (
   }
 
   const fallback: Record<ProviderConfigId, SystemProviderCredentialSettings> = {};
-  for (const providerId of ["jules", "gemini", "codex", "claude-code"] as ProviderId[]) {
+  for (const providerId of ["jules", "gemini", "codex", "claude-code", "qwen-code"] as ProviderId[]) {
     const apiKey = getLegacyIntegrationApiKey(systemSettings, providerId);
     fallback[providerId] = {
       provider: providerId,
@@ -418,7 +445,17 @@ const getSystemIntegrationProviders = (
           ? "~/.codex"
           : providerId === "claude-code"
             ? "~/.claude"
+            : providerId === "qwen-code"
+              ? "~/.qwen"
             : "",
+      ...(providerId === "qwen-code" ? {
+        qwenAuthMode: "LOCAL_AUTH" as const,
+        qwenRegion: "international" as const,
+        qwenBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        qwenEnvKey: "DASHSCOPE_API_KEY",
+        qwenProtocol: "openai" as const,
+        qwenAdditionalModelProviders: [],
+      } : {}),
     };
   }
   return fallback;
@@ -436,6 +473,9 @@ const inferProviderTypeFromConfigId = (providerConfigId: ProviderConfigId): Prov
   }
   if (providerConfigId === "claude-code" || providerConfigId.startsWith("claude-code-") || providerConfigId.startsWith("claude-")) {
     return "claude-code";
+  }
+  if (providerConfigId === "qwen-code" || providerConfigId.startsWith("qwen-code-") || providerConfigId.startsWith("qwen-")) {
+    return "qwen-code";
   }
   return null;
 };
@@ -618,6 +658,15 @@ export const PROVIDER_CARD_TOKENS: Record<ProviderId, {
   "claude-code": {
     watermark: "CLD",
     logoLabel: "C",
+    badgeLabel: "CLI",
+    badgeClassName: "border-black/[0.08] bg-black/[0.035] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
+    glowClassName: "bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.03),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.025),transparent_34%)]",
+    railClassName: "bg-black/[0.12] dark:bg-white/[0.14]",
+    noteClassName: "border-black/[0.08] bg-black/[0.03] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
+  },
+  "qwen-code": {
+    watermark: "QWN",
+    logoLabel: "Q",
     badgeLabel: "CLI",
     badgeClassName: "border-black/[0.08] bg-black/[0.035] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
     glowClassName: "bg-[radial-gradient(circle_at_top_right,rgba(15,23,42,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.03),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.045),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.025),transparent_34%)]",

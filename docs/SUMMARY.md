@@ -48,6 +48,7 @@
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)
+- [Qwen Code Integration](./settings/qwen-code-integration.md)
 - [Operations Runbook](./operations/runbook.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [Testing and Quality](./development/testing-and-quality.md)

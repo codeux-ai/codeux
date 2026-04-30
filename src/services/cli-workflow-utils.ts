@@ -18,10 +18,12 @@ export const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
   containerMountGeminiAuth: false,
   containerMountCodexAuth: false,
   containerMountClaudeCodeAuth: false,
+  containerMountQwenCodeAuth: false,
   containerGithubAuthPath: "~/.config/gh",
   containerGeminiAuthPath: "~/.gemini",
   containerCodexAuthPath: "~/.codex",
   containerClaudeCodeAuthPath: "~/.claude",
+  containerQwenCodeAuthPath: "~/.qwen",
   maxPlanningJsonRetries: 3,
   maxQuotaRetriesWithoutTimer: 5,
 };

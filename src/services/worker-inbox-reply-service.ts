@@ -35,7 +35,7 @@ export interface GenerateDashboardReplyInput {
 
 export interface GenerateDashboardReplyResult {
   bodyMarkdown: string;
-  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+  provider: Exclude<ProviderId, "jules">;
   model: string;
 }
 
@@ -130,6 +130,11 @@ export class WorkerInboxReplyService {
         repoPath: project.baseDir,
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
+        qwenAuthMode: providerSettings.qwenAuthMode,
+        qwenRegion: providerSettings.qwenRegion,
+        qwenBaseUrl: providerSettings.qwenBaseUrl,
+        qwenEnvKey: providerSettings.qwenEnvKey,
+        qwenProtocol: providerSettings.qwenProtocol,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
         githubToken: this.deps.getGithubToken(),
@@ -281,6 +286,11 @@ export class WorkerInboxReplyService {
         repoPath: project.baseDir,
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
+        qwenAuthMode: providerSettings.qwenAuthMode,
+        qwenRegion: providerSettings.qwenRegion,
+        qwenBaseUrl: providerSettings.qwenBaseUrl,
+        qwenEnvKey: providerSettings.qwenEnvKey,
+        qwenProtocol: providerSettings.qwenProtocol,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
         githubToken: this.deps.getGithubToken(),
@@ -345,7 +355,7 @@ export class WorkerInboxReplyService {
   private resolveProviderRoute(
     invocation: "dashboard_reply" | "clarification_reply",
     bodyMarkdown: string,
-  ): ResolvedProviderRoute & { provider: Extract<ProviderId, "gemini" | "codex" | "claude-code"> } {
+  ): ResolvedProviderRoute & { provider: Exclude<ProviderId, "jules"> } {
     const pseudoTask: Subtask = {
       id: "dashboard-reply",
       title: "Dashboard reply",
@@ -368,16 +378,21 @@ export class WorkerInboxReplyService {
     return {
       ...route,
       providerConfigId,
-      provider: route.provider as Extract<ProviderId, "gemini" | "codex" | "claude-code">,
+      provider: route.provider as Exclude<ProviderId, "jules">,
     };
   }
 
   private async runProvider(input: {
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+    provider: Exclude<ProviderId, "jules">;
     prompt: string;
     repoPath: string;
     model: string;
     apiKey: string;
+    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+    qwenRegion?: "china" | "international";
+    qwenBaseUrl?: string;
+    qwenEnvKey?: string;
+    qwenProtocol?: "openai" | "anthropic" | "gemini";
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     githubToken?: string;
@@ -390,6 +405,11 @@ export class WorkerInboxReplyService {
       cwd: input.repoPath,
       model: input.model,
       apiKey: input.apiKey,
+      qwenAuthMode: input.qwenAuthMode,
+      qwenRegion: input.qwenRegion,
+      qwenBaseUrl: input.qwenBaseUrl,
+      qwenEnvKey: input.qwenEnvKey,
+      qwenProtocol: input.qwenProtocol,
       providerMountAuth: input.providerMountAuth,
       providerAuthPath: input.providerAuthPath,
       sessionId: "worker-reply-" + randomUUID(),

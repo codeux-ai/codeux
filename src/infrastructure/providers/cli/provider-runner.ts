@@ -21,7 +21,9 @@ export interface ProviderRunResult extends CommandResult {
   text?: string;
 }
 
-export const providerSpecs: Record<Extract<ProviderId, "gemini" | "codex" | "claude-code">, ProviderCommandSpec> = {
+export type CliProviderId = Extract<ProviderId, "gemini" | "codex" | "claude-code" | "qwen-code">;
+
+export const providerSpecs: Record<CliProviderId, ProviderCommandSpec> = {
   "gemini": (model: string, prompt: string) => ({
     command: "gemini",
     args: ["--yolo", "--output-format", "json", "--p", prompt]
@@ -37,15 +39,26 @@ export const providerSpecs: Record<Extract<ProviderId, "gemini" | "codex" | "cla
     if (model && model !== "default") args.push("--model", model);
     args.push(prompt);
     return { command: "codex", args };
-  }
+  },
+  "qwen-code": (model: string, prompt: string) => {
+    const args = ["--yolo"];
+    if (model && model !== "default") args.push("--model", model);
+    args.push("-p", prompt);
+    return { command: "qwen", args };
+  },
 };
 
 export interface ProviderRunInput {
-  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+  provider: CliProviderId;
   prompt: string;
   cwd: string;
   model: string;
   apiKey: string;
+  qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+  qwenRegion?: "china" | "international";
+  qwenBaseUrl?: string;
+  qwenEnvKey?: string;
+  qwenProtocol?: "openai" | "anthropic" | "gemini";
   providerMountAuth?: boolean;
   providerAuthPath?: string;
   sessionId: string;
@@ -136,11 +149,16 @@ export class ProviderRunner implements IProviderRunner {
   }
 
   private async runProviderInternal(input: {
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+    provider: CliProviderId;
     prompt: string;
     cwd: string;
     model: string;
     apiKey: string;
+    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+    qwenRegion?: "china" | "international";
+    qwenBaseUrl?: string;
+    qwenEnvKey?: string;
+    qwenProtocol?: "openai" | "anthropic" | "gemini";
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     sessionId: string;
@@ -154,11 +172,11 @@ export class ProviderRunner implements IProviderRunner {
     mcpConnection?: McpConnectionInfo | null;
   }): Promise<ProviderRunResult> {
     const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
-    const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken, providerMountAuth);
+    const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken, providerMountAuth, input);
     const nativeSessionId = input.continueSessionId || (provider === "claude-code" ? randomUUID() : null);
 
     const continueSession = !!input.continueSessionId;
-    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath, nativeSessionId, continueSession, !!input.mcpConnection);
+    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath, nativeSessionId, continueSession, !!input.mcpConnection, input.qwenAuthMode, input.qwenProtocol);
     const { command, args } = spec;
 
     const localMcpCleanup: Array<{ path: string; originalContent: string | null }> = [];
@@ -265,13 +283,15 @@ export class ProviderRunner implements IProviderRunner {
   }
 
   private buildCommandSpec(
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">,
+    provider: CliProviderId,
     model: string,
     prompt: string,
     codexOutputPath?: string | null,
     nativeSessionId?: string | null,
     continueSession?: boolean,
     mcpNative?: boolean,
+    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER",
+    qwenProtocol?: "openai" | "anthropic" | "gemini",
   ): { command: string; args: string[] } {
     if (provider === "codex" && codexOutputPath) {
       // `codex exec resume --last` continues the most recent session in the cwd
@@ -311,6 +331,16 @@ export class ProviderRunner implements IProviderRunner {
       };
     }
 
+    if (provider === "qwen-code") {
+      const authType = qwenAuthMode === "LOCAL_AUTH" ? "qwen-oauth" : (qwenProtocol || "openai");
+      const args = ["--auth-type", authType, "--yolo"];
+      if (model && model !== "default") {
+        args.push("--model", model);
+      }
+      args.push("-p", prompt);
+      return { command: "qwen", args };
+    }
+
     const providerSpec = providerSpecs[provider];
     if (!providerSpec) {
       throw new Error(`Unsupported CLI provider: ${provider}`);
@@ -326,6 +356,7 @@ export class ProviderRunner implements IProviderRunner {
     workflowSettings: CliWorkflowSettings,
     githubToken?: string,
     providerMountAuth?: boolean,
+    qwenConfig?: Pick<ProviderRunInput, "qwenAuthMode" | "qwenRegion" | "qwenBaseUrl" | "qwenEnvKey" | "qwenProtocol">,
   ): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...process.env };
     const useContainerMounts = workflowSettings.executionMode === "DOCKER";
@@ -345,6 +376,27 @@ export class ProviderRunner implements IProviderRunner {
     } else if (provider === "codex") {
       if (model && model !== "default") env.CODEX_MODEL = model;
       if (apiKey && !useProviderMount) env.OPENAI_API_KEY = apiKey;
+    } else if (provider === "qwen-code") {
+      if (apiKey && !useProviderMount) {
+        const envKey = qwenConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"
+          ? "BAILIAN_CODING_PLAN_API_KEY"
+          : qwenConfig?.qwenEnvKey || "DASHSCOPE_API_KEY";
+        env[envKey] = apiKey;
+        env.DASHSCOPE_API_KEY ||= apiKey;
+        env.BAILIAN_CODING_PLAN_API_KEY ||= apiKey;
+        env.QWEN_API_KEY ||= apiKey;
+        if ((qwenConfig?.qwenProtocol || "openai") === "openai") {
+          env.OPENAI_API_KEY ||= apiKey;
+        }
+      }
+      const baseUrl = qwenConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"
+        ? qwenConfig.qwenRegion === "china"
+          ? "https://coding.dashscope.aliyuncs.com/v1"
+          : "https://coding-intl.dashscope.aliyuncs.com/v1"
+        : qwenConfig?.qwenBaseUrl;
+      if (baseUrl) {
+        env.OPENAI_BASE_URL = baseUrl;
+      }
     }
     return env;
   }
@@ -354,7 +406,7 @@ export class ProviderRunner implements IProviderRunner {
     return text.includes("stream disconnected before completion") || text.includes("error sending request for url") || text.includes("channel closed");
   }
 
-  private shouldSuppressStructuredStdout(provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">, line: string): boolean {
+  private shouldSuppressStructuredStdout(provider: CliProviderId, line: string): boolean {
     if (provider !== "gemini" && provider !== "codex") {
       return false;
     }
@@ -373,7 +425,7 @@ export class ProviderRunner implements IProviderRunner {
   private async writeLocalMcpConfig(
     conn: McpConnectionInfo,
     cwd: string,
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">
+    provider: CliProviderId
   ): Promise<Array<{ path: string; originalContent: string | null }>> {
     const headers: Record<string, string> = {};
     if (conn.authToken) {
@@ -395,8 +447,8 @@ export class ProviderRunner implements IProviderRunner {
       const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
       await fs.writeFile(configPath, JSON.stringify(config, null, 2));
       created.push({ path: configPath, originalContent });
-    } else if (provider === "gemini") {
-      const dirPath = path.join(cwd, ".gemini");
+    } else if (provider === "gemini" || provider === "qwen-code") {
+      const dirPath = path.join(cwd, provider === "gemini" ? ".gemini" : ".qwen");
       await fs.mkdir(dirPath, { recursive: true });
       const configPath = path.join(dirPath, "settings.json");
       const mcpServers = {

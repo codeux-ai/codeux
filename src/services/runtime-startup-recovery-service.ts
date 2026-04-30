@@ -9,7 +9,7 @@ import type { Logger } from "../shared/logging/logger.js";
 const ACTIVE_SPRINT_RUN_STATUSES = ["queued", "running"] as const;
 const ACTIVE_DISPATCH_STATUSES = ["queued", "claimed", "running", "cancel_requested"] as const;
 const TERMINAL_TASK_RUN_STATES = new Set(["COMPLETED", "FAILED", "BLOCKED", "QUOTA"]);
-const CLI_PROVIDERS = new Set<ProviderId>(["gemini", "codex", "claude-code"]);
+const CLI_PROVIDERS = new Set<ProviderId>(["gemini", "codex", "claude-code", "qwen-code"]);
 
 export interface RuntimeStartupRecoveryResult {
   recoveredCliSessionIds: string[];

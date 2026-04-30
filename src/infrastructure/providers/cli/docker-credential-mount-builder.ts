@@ -8,6 +8,7 @@ import {
   GEMINI_CREDENTIALS_MOUNT,
   CLAUDE_CODE_CREDENTIALS_MOUNT,
   CLAUDE_CODE_AUTH_JSON_MOUNT,
+  QWEN_CODE_CREDENTIALS_MOUNT,
   GITCONFIG_CREDENTIALS_MOUNT,
 } from "./docker-bootstrap-builder.js";
 
@@ -17,7 +18,7 @@ export class DockerCredentialMountBuilder {
     repoPath: string,
     onActivity: (desc: string) => void,
     providerAuthOverride?: {
-      provider: "gemini" | "codex" | "claude-code";
+      provider: "gemini" | "codex" | "claude-code" | "qwen-code";
       enabled: boolean;
       path: string;
     },
@@ -77,6 +78,12 @@ export class DockerCredentialMountBuilder {
         onActivity(`Optional credential mount for Claude Code auth JSON not found: ${claudeAuthJsonPath}`);
       }
     }
+    await addMount(
+      providerAuthOverride?.provider === "qwen-code" ? providerAuthOverride.enabled : workflowSettings.containerMountQwenCodeAuth,
+      providerAuthOverride?.provider === "qwen-code" ? providerAuthOverride.path : workflowSettings.containerQwenCodeAuthPath,
+      QWEN_CODE_CREDENTIALS_MOUNT,
+      "Qwen Code",
+    );
 
     if (mounts.length === 0) {
       onActivity("No container credential mounts were enabled or resolved.");

@@ -3,7 +3,7 @@ import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
-import type { IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
+import type { CliProviderId, IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
 import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
@@ -16,8 +16,6 @@ export interface ProviderExecutionServiceDeps {
   logger?: Logger;
   getGithubToken?: () => string | undefined;
 }
-
-type CliProviderId = "gemini" | "codex" | "claude-code";
 
 export interface ExecutionProviderRunArgs {
   projectId: string;
@@ -36,6 +34,11 @@ export interface ExecutionProviderRunArgs {
   cwd?: string;
   model: string;
   apiKey: string;
+  qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+  qwenRegion?: "china" | "international";
+  qwenBaseUrl?: string;
+  qwenEnvKey?: string;
+  qwenProtocol?: "openai" | "anthropic" | "gemini";
   providerMountAuth?: boolean;
   providerAuthPath?: string;
   sessionId: string;
@@ -127,6 +130,11 @@ export class ProviderExecutionService {
         cwd: args.cwd || args.repoPath,
         model: args.model,
         apiKey: args.apiKey,
+        qwenAuthMode: args.qwenAuthMode,
+        qwenRegion: args.qwenRegion,
+        qwenBaseUrl: args.qwenBaseUrl,
+        qwenEnvKey: args.qwenEnvKey,
+        qwenProtocol: args.qwenProtocol,
         providerMountAuth: args.providerMountAuth,
         providerAuthPath: args.providerAuthPath,
         sessionId: args.sessionId,

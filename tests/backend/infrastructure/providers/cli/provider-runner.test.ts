@@ -88,6 +88,32 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it("builds Qwen Code commands with Coding Plan auth metadata", async () => {
+    await runner.runProvider({
+      provider: "qwen-code",
+      prompt: "ship it",
+      cwd: "/repo",
+      model: "qwen3-coder-plus",
+      apiKey: "sk-sp-test",
+      qwenAuthMode: "ALIBABA_CODING_PLAN",
+      qwenRegion: "international",
+      qwenProtocol: "openai",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
+      command: "qwen",
+      args: ["--auth-type", "openai", "--yolo", "--model", "qwen3-coder-plus", "-p", "ship it"],
+      providerEnv: expect.objectContaining({
+        BAILIAN_CODING_PLAN_API_KEY: "sk-sp-test",
+        OPENAI_BASE_URL: "https://coding-intl.dashscope.aliyuncs.com/v1",
+      }),
+    }));
+  });
+
   it("captures Codex text output from the isolated workspace", async () => {
     const result = await runner.runProviderForText({
       provider: "codex",

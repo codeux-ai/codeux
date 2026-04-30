@@ -69,6 +69,7 @@ describe("cli-docker-utils", () => {
     it("getProviderFallbackInstallCommand", () => {
         expect(getProviderFallbackInstallCommand("gemini")).toBe("npm install -g @google/gemini-cli");
         expect(getProviderFallbackInstallCommand("codex")).toBe("npm install -g @openai/codex");
+        expect(getProviderFallbackInstallCommand("qwen")).toBe("npm install -g @qwen-code/qwen-code");
         expect(getProviderFallbackInstallCommand("claude")).toContain("curl -fsSL");
         expect(getProviderFallbackInstallCommand("unknown")).toBeUndefined();
     });

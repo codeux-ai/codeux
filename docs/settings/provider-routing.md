@@ -43,9 +43,10 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
   - sparse per-provider-instance overrides for `enabled`, `model`, `weight`, and `thinkingMode`
 
 Provider instances are first-class routing targets:
-- the default built-in instances use ids `jules`, `gemini`, `codex`, and `claude-code`
+- the default built-in instances use ids `jules`, `gemini`, `codex`, `claude-code`, and `qwen-code`
 - additional instances can be added under the same provider type, such as multiple Codex credentials with different names and weights
-- each CLI instance also carries its own optional Docker auth-copy source (`mountAuth` + `authPath`), so routing one Codex instance vs another can change both credentials and local auth mount source
+- each CLI instance also carries its own optional Docker auth-copy source (`mountAuth` + `authPath`), so routing one Codex or Qwen instance vs another can change both credentials and local auth mount source
+- Qwen Code instances additionally carry auth mode metadata for local OAuth cache copying, Alibaba Cloud Coding Plan, or custom `modelProviders`-style endpoints
 - `MANUAL` selects one exact instance
 - `WEIGHTED` distributes across enabled instances, even when several share the same provider type
 - `ORCHESTRATOR` picks a provider type first, then selects a matching enabled instance within that type
@@ -112,6 +113,7 @@ The v2 settings page exposes:
 - per-route provider-instance subset selection
 - per-route model and thinking-mode overrides
 - per-instance API-key and local-auth configuration in Integrations
+- Qwen Code setup panels for local auth, Alibaba Cloud Coding Plan, and custom endpoints
 - restored Git Flow controls plus GitHub auth-copy controls in the live panel set
 - quick category search with `/` focus
 - a compact provider deck that edits one named provider instance in a focused detail panel

@@ -32,7 +32,7 @@ export const DEFAULT_SKILLS: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => 
   isInternal: true,
 }));
 
-export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code"];
+export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code"];
 export const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
 export const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "ORCHESTRATOR"];
 export const INVOCATION_ROUTING_PROFILES: InvocationRoutingProfile[] = ["GLOBAL", "WORKER"];
@@ -48,24 +48,27 @@ export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
 export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["DOCKER", "HOST"];
 export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "CREATE_PR", "WHEN_GREEN", "ALWAYS"];
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["VIRTUAL"];
-export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code"];
+export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code"];
 export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> = {
   jules: "jules",
   gemini: "gemini",
   codex: "codex",
   "claude-code": "claude-code",
+  "qwen-code": "qwen-code",
 };
 export const DEFAULT_PROVIDER_CONFIG_NAMES: Record<ProviderId, string> = {
   jules: "Jules Primary",
   gemini: "Gemini Primary",
   codex: "Codex Primary",
   "claude-code": "Claude Primary",
+  "qwen-code": "Qwen Primary",
 };
 export const DEFAULT_PROVIDER_AUTH_PATHS: Record<ProviderId, string> = {
   jules: "",
   gemini: "~/.gemini",
   codex: "~/.codex",
   "claude-code": "~/.claude",
+  "qwen-code": "~/.qwen",
 };
 
 // AI Models catalog — available model identifiers per virtual worker provider
@@ -109,16 +112,29 @@ export const CODEX_MODELS: string[] = [
   "gpt-5",
 ];
 
+export const QWEN_MODELS: string[] = [
+  "qwen3-coder-plus",
+  "qwen3.5-plus",
+  "qwen3-coder-next",
+  "qwen3-max",
+  "qwen3-max-2026-01-23",
+  "qwen-plus",
+  "qwen-max",
+  "local-model",
+];
+
 export const AI_MODEL_CATALOG: Record<string, string[]> = {
   gemini: GEMINI_MODELS,
   "claude-code": CLAUDE_MODELS,
   codex: CODEX_MODELS,
+  "qwen-code": QWEN_MODELS,
 };
 
 export const DEFAULT_VIRTUAL_WORKER_MODELS: Record<string, string> = {
   gemini: "auto",
   "claude-code": "default",
   codex: "gpt-5.3-codex",
+  "qwen-code": "qwen3-coder-plus",
 };
 
 export const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
@@ -175,6 +191,18 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     apiKey: "",
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["claude-code"],
+    maxConcurrentTasks: 0,
+  },
+  "qwen-code": {
+    provider: "qwen-code",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES["qwen-code"],
+    enabled: false,
+    model: "qwen3-coder-plus",
+    weight: 0,
+    thinkingMode: "HIGH",
+    apiKey: "",
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS["qwen-code"],
     maxConcurrentTasks: 0,
   },
 };
@@ -330,10 +358,12 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerMountGeminiAuth: false,
     containerMountCodexAuth: false,
     containerMountClaudeCodeAuth: false,
+    containerMountQwenCodeAuth: false,
     containerGithubAuthPath: "~/.config/gh",
     containerGeminiAuthPath: "~/.gemini",
     containerCodexAuthPath: "~/.codex",
     containerClaudeCodeAuthPath: "~/.claude",
+    containerQwenCodeAuthPath: "~/.qwen",
     maxPlanningJsonRetries: 3,
     maxQuotaRetriesWithoutTimer: 5,
   },

@@ -62,7 +62,7 @@ function tokenizeWithCodexModel(model: string | null | undefined, text: string):
   }
 }
 
-function estimateTextTokens(provider: "gemini" | "codex" | "claude-code", model: string | null | undefined, text: string): number {
+function estimateTextTokens(provider: "gemini" | "codex" | "claude-code" | "qwen-code", model: string | null | undefined, text: string): number {
   if (!text.trim()) {
     return 0;
   }
@@ -78,7 +78,7 @@ function estimateTextTokens(provider: "gemini" | "codex" | "claude-code", model:
   return Math.ceil(text.length / 4);
 }
 
-function estimateTelemetry(provider: "gemini" | "codex" | "claude-code", model: string | null | undefined, inputText: string, outputText: string): ProviderUsageTelemetry {
+function estimateTelemetry(provider: "gemini" | "codex" | "claude-code" | "qwen-code", model: string | null | undefined, inputText: string, outputText: string): ProviderUsageTelemetry {
   const inputTokens = estimateTextTokens(provider, model, inputText);
   const outputTokens = estimateTextTokens(provider, model, outputText);
   return {
@@ -265,7 +265,7 @@ function parseClaudeSessionJsonl(
 }
 
 export async function collectProviderUsageTelemetry(args: {
-  provider: "gemini" | "codex" | "claude-code";
+  provider: "gemini" | "codex" | "claude-code" | "qwen-code";
   model: string;
   prompt: string;
   cwd: string;

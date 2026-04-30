@@ -85,6 +85,9 @@ const inferProviderTypeFromConfigId = (providerConfigId: ProviderConfigId): Prov
   if (providerConfigId === "claude-code" || providerConfigId.startsWith("claude-code-") || providerConfigId.startsWith("claude-")) {
     return "claude-code";
   }
+  if (providerConfigId === "qwen-code" || providerConfigId.startsWith("qwen-code-") || providerConfigId.startsWith("qwen-")) {
+    return "qwen-code";
+  }
   return null;
 };
 

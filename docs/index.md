@@ -51,7 +51,8 @@ Use this page as the main entrypoint.
 33. [Instruction Template System](./instructions/markdown-template-system.md)
 34. [Configuration and Storage](./settings/configuration-and-storage.md)
 35. [Provider Routing](./settings/provider-routing.md)
-36. [Dashboard Resource Layer](./architecture/dashboard-resource-layer.md)
+36. [Qwen Code Integration](./settings/qwen-code-integration.md)
+37. [Dashboard Resource Layer](./architecture/dashboard-resource-layer.md)
 
 ### Path 3: MCP integrator (tool contracts and runtime expectations)
 1. [Quickstart](./getting-started/quickstart.md)
@@ -109,6 +110,7 @@ Use this page as the main entrypoint.
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)
+- [Qwen Code Integration](./settings/qwen-code-integration.md)
 - [Operations Runbook](./operations/runbook.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [Testing and Quality](./development/testing-and-quality.md)

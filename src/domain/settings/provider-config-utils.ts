@@ -39,7 +39,10 @@ export const getHintApiKeyForProvider = (
   if (providerId === "codex") {
     return externalHints?.resolved.codexApiKey || "";
   }
-  return externalHints?.resolved.claudeCodeApiKey || "";
+  if (providerId === "claude-code") {
+    return externalHints?.resolved.claudeCodeApiKey || "";
+  }
+  return externalHints?.resolved.qwenCodeApiKey || "";
 };
 
 export const buildDefaultIntegrationProviders = (
@@ -73,6 +76,19 @@ export const buildDefaultIntegrationProviders = (
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["claude-code"],
   },
+  [DEFAULT_PROVIDER_CONFIG_IDS["qwen-code"]]: {
+    provider: "qwen-code",
+    name: DEFAULT_PROVIDER_CONFIG_NAMES["qwen-code"],
+    apiKey: getHintApiKeyForProvider("qwen-code", externalHints),
+    mountAuth: false,
+    authPath: DEFAULT_PROVIDER_AUTH_PATHS["qwen-code"],
+    qwenAuthMode: "LOCAL_AUTH",
+    qwenRegion: "international",
+    qwenBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    qwenEnvKey: "DASHSCOPE_API_KEY",
+    qwenProtocol: "openai",
+    qwenAdditionalModelProviders: [],
+  },
 });
 
 const normalizeProviderId = (value: unknown): ProviderId | null => (
@@ -102,6 +118,20 @@ const normalizeProviderAuthPath = (providerId: ProviderId, value: unknown): stri
   return DEFAULT_PROVIDER_AUTH_PATHS[providerId];
 };
 
+const normalizeQwenAuthMode = (value: unknown): SystemProviderCredentialSettings["qwenAuthMode"] => (
+  value === "ALIBABA_CODING_PLAN" || value === "MODEL_PROVIDER" || value === "LOCAL_AUTH"
+    ? value
+    : "LOCAL_AUTH"
+);
+
+const normalizeQwenRegion = (value: unknown): SystemProviderCredentialSettings["qwenRegion"] => (
+  value === "china" || value === "international" ? value : "international"
+);
+
+const normalizeQwenProtocol = (value: unknown): NonNullable<SystemProviderCredentialSettings["qwenProtocol"]> => (
+  value === "anthropic" || value === "gemini" || value === "openai" ? value : "openai"
+);
+
 export const normalizeSystemIntegrationProviders = (
   integrationsInput: unknown,
   externalHints?: ExternalSettingsHints,
@@ -125,6 +155,31 @@ export const normalizeSystemIntegrationProviders = (
       apiKey: typeof rawValue.apiKey === "string" ? rawValue.apiKey : "",
       mountAuth: providerId === "jules" ? false : typeof rawValue.mountAuth === "boolean" ? rawValue.mountAuth : false,
       authPath: normalizeProviderAuthPath(providerId, rawValue.authPath),
+      ...(providerId === "qwen-code" ? {
+        qwenAuthMode: normalizeQwenAuthMode(rawValue.qwenAuthMode),
+        qwenRegion: normalizeQwenRegion(rawValue.qwenRegion),
+        qwenBaseUrl: typeof rawValue.qwenBaseUrl === "string" && rawValue.qwenBaseUrl.trim().length > 0
+          ? rawValue.qwenBaseUrl.trim()
+          : "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        qwenEnvKey: typeof rawValue.qwenEnvKey === "string" && rawValue.qwenEnvKey.trim().length > 0
+          ? rawValue.qwenEnvKey.trim()
+          : "DASHSCOPE_API_KEY",
+        qwenProtocol: normalizeQwenProtocol(rawValue.qwenProtocol),
+        qwenAdditionalModelProviders: Array.isArray(rawValue.qwenAdditionalModelProviders)
+          ? rawValue.qwenAdditionalModelProviders
+            .filter(isRecord)
+            .map((entry) => ({
+              id: typeof entry.id === "string" ? entry.id.trim() : "",
+              name: typeof entry.name === "string" ? entry.name.trim() : "",
+              authType: normalizeQwenProtocol(entry.authType),
+              envKey: typeof entry.envKey === "string" ? entry.envKey.trim() : "",
+              apiKey: typeof entry.apiKey === "string" ? entry.apiKey : "",
+              baseUrl: typeof entry.baseUrl === "string" ? entry.baseUrl.trim() : "",
+              description: typeof entry.description === "string" ? entry.description.trim() : undefined,
+            }))
+            .filter((entry) => entry.id && entry.envKey)
+          : [],
+      } : {}),
     };
   }
 
@@ -133,6 +188,7 @@ export const normalizeSystemIntegrationProviders = (
     ["gemini", input.geminiApiKey],
     ["codex", input.codexApiKey],
     ["claude-code", input.claudeCodeApiKey],
+    ["qwen-code", input.qwenCodeApiKey],
   ];
 
   for (const [providerId, legacyApiKey] of legacyEntries) {
@@ -235,6 +291,13 @@ export const buildDashboardProviderSettings = (
             || false,
           authPath: integrationProviders[providerConfigId]?.authPath
             || DEFAULT_PROVIDER_AUTH_PATHS[providerId],
+          ...(providerId === "qwen-code" ? {
+            qwenAuthMode: integrationProviders[providerConfigId]?.qwenAuthMode,
+            qwenRegion: integrationProviders[providerConfigId]?.qwenRegion,
+            qwenBaseUrl: integrationProviders[providerConfigId]?.qwenBaseUrl,
+            qwenEnvKey: integrationProviders[providerConfigId]?.qwenEnvKey,
+            qwenProtocol: integrationProviders[providerConfigId]?.qwenProtocol,
+          } : {}),
         },
       ];
     }),

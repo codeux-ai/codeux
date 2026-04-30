@@ -24,7 +24,7 @@ import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import type { MemoryService } from "./memory-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 
-type CliQaProvider = Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+type CliQaProvider = Exclude<ProviderId, "jules">;
 
 interface QaReviewResultPayload {
   verdict?: unknown;
@@ -746,6 +746,11 @@ export class QualityAssuranceService {
           provider,
           model: providerSettings.model,
           apiKey: providerSettings.apiKey,
+        qwenAuthMode: providerSettings.qwenAuthMode,
+        qwenRegion: providerSettings.qwenRegion,
+        qwenBaseUrl: providerSettings.qwenBaseUrl,
+        qwenEnvKey: providerSettings.qwenEnvKey,
+        qwenProtocol: providerSettings.qwenProtocol,
           providerMountAuth: providerSettings.mountAuth,
           providerAuthPath: providerSettings.authPath,
           providerPrompt,
@@ -1172,6 +1177,11 @@ export class QualityAssuranceService {
       cwd: worktreePath,
       model: followUpProviderSettings.model,
       apiKey: followUpProviderSettings.apiKey,
+      qwenAuthMode: followUpProviderSettings.qwenAuthMode,
+      qwenRegion: followUpProviderSettings.qwenRegion,
+      qwenBaseUrl: followUpProviderSettings.qwenBaseUrl,
+      qwenEnvKey: followUpProviderSettings.qwenEnvKey,
+      qwenProtocol: followUpProviderSettings.qwenProtocol,
       providerMountAuth: followUpProviderSettings.mountAuth,
       providerAuthPath: followUpProviderSettings.authPath,
       sessionId: args.sessionId,

@@ -176,6 +176,7 @@ const PROVIDER_PATTERNS: Record<string, ErrorPattern[]> = {
   gemini: GEMINI_PATTERNS,
   "claude-code": CLAUDE_CODE_PATTERNS,
   codex: CODEX_PATTERNS,
+  "qwen-code": CODEX_PATTERNS,
 };
 
 const PROVIDER_NOT_FOUND_PATTERNS: RegExp[] = [
@@ -188,6 +189,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   gemini: "Gemini",
   "claude-code": "Claude Code",
   codex: "Codex",
+  "qwen-code": "Qwen Code",
 };
 
 function isGeminiRuntimeStorageError(text: string): boolean {
@@ -234,7 +236,7 @@ function buildUserMessage(
 }
 
 export function classifyProviderError(
-  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">,
+  provider: Exclude<ProviderId, "jules">,
   result: CommandResult,
 ): ProviderErrorClassification {
   const combined = `${result.stdout}\n${result.stderr}`;

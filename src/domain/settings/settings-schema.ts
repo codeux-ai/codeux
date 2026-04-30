@@ -293,10 +293,12 @@ const validateCliWorkflow = (
   if (typeof value.containerMountGeminiAuth !== "boolean") issues.push({ path: `${path}.containerMountGeminiAuth`, message: "Expected a boolean" });
   if (typeof value.containerMountCodexAuth !== "boolean") issues.push({ path: `${path}.containerMountCodexAuth`, message: "Expected a boolean" });
   if (typeof value.containerMountClaudeCodeAuth !== "boolean") issues.push({ path: `${path}.containerMountClaudeCodeAuth`, message: "Expected a boolean" });
+  if (typeof value.containerMountQwenCodeAuth !== "boolean") issues.push({ path: `${path}.containerMountQwenCodeAuth`, message: "Expected a boolean" });
   if (typeof value.containerGithubAuthPath !== "string") issues.push({ path: `${path}.containerGithubAuthPath`, message: "Expected a string" });
   if (typeof value.containerGeminiAuthPath !== "string") issues.push({ path: `${path}.containerGeminiAuthPath`, message: "Expected a string" });
   if (typeof value.containerCodexAuthPath !== "string") issues.push({ path: `${path}.containerCodexAuthPath`, message: "Expected a string" });
   if (typeof value.containerClaudeCodeAuthPath !== "string") issues.push({ path: `${path}.containerClaudeCodeAuthPath`, message: "Expected a string" });
+  if (typeof value.containerQwenCodeAuthPath !== "string") issues.push({ path: `${path}.containerQwenCodeAuthPath`, message: "Expected a string" });
 };
 
 const validateSprintPreview = (

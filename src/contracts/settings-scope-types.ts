@@ -83,11 +83,27 @@ export interface SystemProviderCredentialSettings {
   apiKey: string;
   mountAuth: boolean;
   authPath: string;
+  qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+  qwenRegion?: "china" | "international";
+  qwenBaseUrl?: string;
+  qwenEnvKey?: string;
+  qwenProtocol?: "openai" | "anthropic" | "gemini";
+  qwenAdditionalModelProviders?: QwenModelProviderSettings[];
 }
 
 export interface SystemIntegrationSettings {
   providers: Record<ProviderConfigId, SystemProviderCredentialSettings>;
   githubToken: string;
+}
+
+export interface QwenModelProviderSettings {
+  id: string;
+  name: string;
+  authType: "openai" | "anthropic" | "gemini";
+  envKey: string;
+  apiKey: string;
+  baseUrl: string;
+  description?: string;
 }
 
 export interface SystemSettings {

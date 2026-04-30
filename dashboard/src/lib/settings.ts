@@ -16,6 +16,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
       gemini: { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini },
       codex: { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex },
       "claude-code": { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"] },
+      "qwen-code": { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["qwen-code"] },
     },
   },
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
@@ -52,7 +53,7 @@ export const applyExternalSettingsHints = (
         providerConfigId,
         {
           ...provider,
-          apiKey: provider.apiKey.trim().length > 0
+          apiKey: (provider.apiKey || "").trim().length > 0
             ? provider.apiKey
             : provider.provider === "jules"
               ? hints.resolved.julesApiKey
@@ -60,7 +61,9 @@ export const applyExternalSettingsHints = (
                 ? hints.resolved.geminiApiKey
                 : provider.provider === "codex"
                   ? hints.resolved.codexApiKey
-                  : hints.resolved.claudeCodeApiKey,
+                  : provider.provider === "claude-code"
+                    ? hints.resolved.claudeCodeApiKey
+                    : hints.resolved.qwenCodeApiKey,
         },
       ]),
     ),

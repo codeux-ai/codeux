@@ -294,6 +294,11 @@ export class VirtualWorkerService {
         ),
         thinkingMode: providerSettings.thinkingMode,
         apiKey: providerSettings.apiKey,
+      qwenAuthMode: providerSettings.qwenAuthMode,
+      qwenRegion: providerSettings.qwenRegion,
+      qwenBaseUrl: providerSettings.qwenBaseUrl,
+      qwenEnvKey: providerSettings.qwenEnvKey,
+      qwenProtocol: providerSettings.qwenProtocol,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
       },
@@ -509,7 +514,7 @@ export class VirtualWorkerService {
         is_independent: true,
         status: "PENDING",
       },
-      providerPool: ["gemini", "codex", "claude-code"],
+      providerPool: ["gemini", "codex", "claude-code", "qwen-code"],
     });
     const provider = route.provider as Exclude<ProviderId, "jules">;
     const providerConfigId = route.providerConfigId || route.provider;
@@ -594,6 +599,11 @@ export class VirtualWorkerService {
           purpose: "merge_conflict",
           model: providerSettings.model,
           apiKey: providerSettings.apiKey,
+          qwenAuthMode: providerSettings.qwenAuthMode,
+          qwenRegion: providerSettings.qwenRegion,
+          qwenBaseUrl: providerSettings.qwenBaseUrl,
+          qwenEnvKey: providerSettings.qwenEnvKey,
+          qwenProtocol: providerSettings.qwenProtocol,
           providerMountAuth: providerSettings.mountAuth,
           providerAuthPath: providerSettings.authPath,
           githubToken: settings.git.githubToken,
@@ -710,7 +720,7 @@ export class VirtualWorkerService {
         is_independent: true,
         status: "PENDING",
       },
-      providerPool: ["gemini", "codex", "claude-code"],
+      providerPool: ["gemini", "codex", "claude-code", "qwen-code"],
     });
     const provider = route.provider as Exclude<ProviderId, "jules">;
     const providerConfigId = route.providerConfigId || route.provider;
@@ -814,6 +824,11 @@ export class VirtualWorkerService {
         purpose: "ci_fix",
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
+        qwenAuthMode: providerSettings.qwenAuthMode,
+        qwenRegion: providerSettings.qwenRegion,
+        qwenBaseUrl: providerSettings.qwenBaseUrl,
+        qwenEnvKey: providerSettings.qwenEnvKey,
+        qwenProtocol: providerSettings.qwenProtocol,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
         githubToken: settings.git.githubToken,
@@ -1026,6 +1041,11 @@ export class VirtualWorkerService {
     purpose: "ci_fix" | "merge_conflict";
     model: string;
     apiKey: string;
+    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+    qwenRegion?: "china" | "international";
+    qwenBaseUrl?: string;
+    qwenEnvKey?: string;
+    qwenProtocol?: "openai" | "anthropic" | "gemini";
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     githubToken: string;
@@ -1044,6 +1064,11 @@ export class VirtualWorkerService {
       cwd: args.worktreePath,
       model: args.model,
       apiKey: args.apiKey,
+      qwenAuthMode: args.qwenAuthMode,
+      qwenRegion: args.qwenRegion,
+      qwenBaseUrl: args.qwenBaseUrl,
+      qwenEnvKey: args.qwenEnvKey,
+      qwenProtocol: args.qwenProtocol,
       providerMountAuth: args.providerMountAuth,
       providerAuthPath: args.providerAuthPath,
       sessionId: args.sessionId,
@@ -1239,6 +1264,8 @@ export class VirtualWorkerService {
     switch (provider) {
       case "claude-code":
         return "Claude Code";
+      case "qwen-code":
+        return "Qwen Code";
       case "gemini":
         return "Gemini";
       case "codex":

@@ -66,7 +66,16 @@ interface PlanningResultContext {
   provider: Exclude<ProviderId, "jules">;
   sessionId: string;
   workflowSettings: CliWorkflowSettings;
-  providerSettings: { model: string; apiKey: string; thinkingMode?: unknown };
+  providerSettings: {
+    model: string;
+    apiKey: string;
+    thinkingMode?: unknown;
+    qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+    qwenRegion?: "china" | "international";
+    qwenBaseUrl?: string;
+    qwenEnvKey?: string;
+    qwenProtocol?: "openai" | "anthropic" | "gemini";
+  };
   memoryCaptureWorkspacePath: string;
   cleanupWorkspace?: () => Promise<void>;
 }
@@ -406,7 +415,7 @@ export class PlanningAgentService {
     const route = resolveProviderForInvocation(args.settings, {
       invocation: "planning",
       task: routingTask,
-      providerPool: ["gemini", "codex", "claude-code"],
+      providerPool: ["gemini", "codex", "claude-code", "qwen-code"],
     });
     const providerConfigId = args.overrides?.virtualProvider
       ? Object.entries(route.providers).find(([, candidate]) => candidate.provider === args.overrides?.virtualProvider)?.[0] || route.providerConfigId
@@ -449,6 +458,11 @@ export class PlanningAgentService {
         provider,
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
+        qwenAuthMode: providerSettings.qwenAuthMode,
+        qwenRegion: providerSettings.qwenRegion,
+        qwenBaseUrl: providerSettings.qwenBaseUrl,
+        qwenEnvKey: providerSettings.qwenEnvKey,
+        qwenProtocol: providerSettings.qwenProtocol,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
         providerPrompt: args.rawPrompt,
@@ -488,6 +502,11 @@ export class PlanningAgentService {
         providerSettings: {
           model: providerSettings.model,
           apiKey: providerSettings.apiKey,
+          qwenAuthMode: providerSettings.qwenAuthMode,
+          qwenRegion: providerSettings.qwenRegion,
+          qwenBaseUrl: providerSettings.qwenBaseUrl,
+          qwenEnvKey: providerSettings.qwenEnvKey,
+          qwenProtocol: providerSettings.qwenProtocol,
           thinkingMode: providerSettings.thinkingMode,
         },
       };
@@ -525,6 +544,8 @@ export class PlanningAgentService {
         return "Gemini";
       case "claude-code":
         return "Claude Code";
+      case "qwen-code":
+        return "Qwen Code";
       case "codex":
       default:
         return "Codex";

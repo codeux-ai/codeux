@@ -35,7 +35,7 @@ interface SessionIdRow {
 
 interface TrackedCliSessionRow {
   id: string;
-  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+  provider: Exclude<ProviderId, "jules">;
   state: string;
   repoPath: string | null;
   updateTime: string;
@@ -227,7 +227,7 @@ export class SessionTrackingRepository {
         repo_path AS repoPath,
         update_time AS updateTime
       FROM provider_sessions
-      WHERE provider IN ('gemini', 'codex', 'claude-code')
+      WHERE provider IN ('gemini', 'codex', 'claude-code', 'qwen-code')
         AND id LIKE 'cli-%'
       ORDER BY update_time DESC
     `).all() as unknown as TrackedCliSessionRow[];
@@ -266,7 +266,7 @@ export class SessionTrackingRepository {
   }
 
   findLatestFailedCliSessionForTask(args: {
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+    provider: Exclude<ProviderId, "jules">;
     taskId: string;
     featureBranch: string;
     repoPath: string;
@@ -302,11 +302,11 @@ export class SessionTrackingRepository {
   findLatestCliSessionForBranch(args: {
     repoPath: string;
     workerBranch: string;
-    providers?: Array<Extract<ProviderId, "gemini" | "codex" | "claude-code">>;
+    providers?: Array<Exclude<ProviderId, "jules">>;
   }): CliSessionWorkspaceTarget | null {
     const providers = (args.providers && args.providers.length > 0)
       ? args.providers
-      : ["gemini", "codex", "claude-code"];
+      : ["gemini", "codex", "claude-code", "qwen-code"];
     const placeholders = providers.map(() => "?").join(", ");
     const row = this.db.prepare(`
       SELECT id, worker_branch, state
@@ -339,7 +339,7 @@ export class SessionTrackingRepository {
       SELECT id
       FROM provider_sessions
       WHERE state = 'RUNNING'
-        AND provider IN ('gemini', 'codex', 'claude-code')
+        AND provider IN ('gemini', 'codex', 'claude-code', 'qwen-code')
         AND id LIKE 'cli-%'
       ORDER BY create_time ASC
     `).all() as unknown as SessionIdRow[];

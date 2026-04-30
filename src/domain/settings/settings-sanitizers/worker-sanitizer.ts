@@ -10,7 +10,7 @@ import {
 } from "../provider-config-utils.js";
 
 interface SanitizeWorkersOptions {
-  providers?: Record<string, { provider: "jules" | "gemini" | "codex" | "claude-code" }>;
+  providers?: Record<string, { provider: "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" }>;
 }
 
 export const sanitizeWorkers = (

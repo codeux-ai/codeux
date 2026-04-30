@@ -4,7 +4,7 @@ import gsap from "gsap";
 import { ArrowLeft, Plus, Settings2, Trash2 } from "lucide-preact";
 import type { SettingsPageState, IntegrationId } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel, ActionButton } from "../SettingsSurface.js";
-import { ProviderLogo, Row, TextInput, Toggle } from "../SettingsFormFields.js";
+import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
 import type { ProjectSettings, ProviderConfigId, ProviderId, SystemSettings } from "../../../../types.js";
 import {
   countConnectedProviders,
@@ -18,7 +18,86 @@ import {
 } from "../../../lib/settings-view-models.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 
-const PROVIDER_TYPES: ProviderId[] = ["jules", "gemini", "codex", "claude-code"];
+const PROVIDER_TYPES: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code"];
+
+const getProviderWatermark = (providerId: ProviderId): string => (
+  providerId === "jules" ? "JLS"
+    : providerId === "gemini" ? "GMN"
+      : providerId === "codex" ? "CDX"
+        : providerId === "qwen-code" ? "QWN"
+          : "CLD"
+);
+
+const qwenAuthModeOptions = [
+  { value: "LOCAL_AUTH", label: "Local auth", hint: "Copy ~/.qwen OAuth cache" },
+  { value: "ALIBABA_CODING_PLAN", label: "Coding Plan", hint: "Alibaba Cloud key + region" },
+  { value: "MODEL_PROVIDER", label: "Custom endpoint", hint: "modelProviders settings" },
+];
+
+const qwenProtocolOptions = [
+  { value: "openai", label: "OpenAI-compatible" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "gemini", label: "Gemini" },
+];
+
+const qwenRegionOptions = [
+  { value: "international", label: "International" },
+  { value: "china", label: "China" },
+];
+
+const getQwenEndpointForRegion = (region: string | undefined): string => (
+  region === "china"
+    ? "https://coding.dashscope.aliyuncs.com/v1"
+    : "https://coding-intl.dashscope.aliyuncs.com/v1"
+);
+
+const maskSecret = (value: string): string => value.trim() ? "********" : "";
+
+const buildQwenSettingsPreview = (
+  provider: SystemSettings["integrations"]["providers"][ProviderConfigId],
+  model: string,
+): string => {
+  const authMode = provider.qwenAuthMode || "LOCAL_AUTH";
+  const envKey = authMode === "ALIBABA_CODING_PLAN"
+    ? "BAILIAN_CODING_PLAN_API_KEY"
+    : provider.qwenEnvKey || "DASHSCOPE_API_KEY";
+  const baseUrl = authMode === "ALIBABA_CODING_PLAN"
+    ? getQwenEndpointForRegion(provider.qwenRegion)
+    : provider.qwenBaseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1";
+  const protocol = provider.qwenProtocol || "openai";
+  const primaryProvider = {
+    id: model || "qwen3-coder-plus",
+    name: provider.name,
+    baseUrl,
+    description: authMode === "ALIBABA_CODING_PLAN" ? "Qwen via Alibaba Cloud Coding Plan" : "Qwen custom model provider",
+    envKey,
+  };
+  const additional = (provider.qwenAdditionalModelProviders || []).map((entry) => ({
+    id: entry.id,
+    name: entry.name || entry.id,
+    baseUrl: entry.baseUrl,
+    description: entry.description,
+    envKey: entry.envKey,
+  }));
+  return JSON.stringify({
+    modelProviders: {
+      [protocol]: [primaryProvider, ...additional],
+    },
+    env: {
+      [envKey]: maskSecret(provider.apiKey),
+      ...Object.fromEntries((provider.qwenAdditionalModelProviders || []).map((entry) => [entry.envKey, maskSecret(entry.apiKey)])),
+    },
+    security: {
+      auth: {
+        selectedType: protocol,
+      },
+    },
+    model: {
+      name: model || "qwen3-coder-plus",
+    },
+    ...(authMode === "ALIBABA_CODING_PLAN" ? { codingPlan: { region: provider.qwenRegion || "international" } } : {}),
+  }, null, 2);
+};
 
 const buildProviderConfigId = (providerId: ProviderId): ProviderConfigId => (
   `${providerId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -326,7 +405,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       return (
         <>
           {backButton}
-          <SectionCard title={`${getProviderTypeLabel(providerId)} Integration`} watermark={providerId === "jules" ? "JLS" : providerId === "gemini" ? "GMN" : providerId === "codex" ? "CDX" : "CLD"}>
+          <SectionCard title={`${getProviderTypeLabel(providerId)} Integration`} watermark={getProviderWatermark(providerId)}>
             <NoticePanel title="System-owned credentials">
               Provider credentials and auth-copy mounts are managed per instance at system scope. This keeps multiple named providers independent across every route.
             </NoticePanel>
@@ -341,7 +420,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     return (
       <>
         {backButton}
-        <SectionCard title={`${getProviderTypeLabel(providerId)} Credentials`} watermark={providerId === "jules" ? "JLS" : providerId === "gemini" ? "GMN" : providerId === "codex" ? "CDX" : "CLD"}>
+        <SectionCard title={`${getProviderTypeLabel(providerId)} Credentials`} watermark={getProviderWatermark(providerId)}>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.3rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
             <div>
               <div className="text-sm font-semibold text-slate-900 dark:text-white">{getProviderTypeLabel(providerId)} instances</div>
@@ -357,7 +436,9 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
               Add a {getProviderTypeLabel(providerId)} instance to make it available for routing.
             </NoticePanel>
           ) : (
-            providerEntries.map(([providerConfigId, provider], index) => (
+            providerEntries.map(([providerConfigId, provider], index) => {
+              const providerModel = systemSettings.defaults.aiProvider.providers[providerConfigId]?.model || "qwen3-coder-plus";
+              return (
               <div key={providerConfigId} className="rounded-[1.45rem] border border-black/[0.06] bg-white/82 p-4 dark:border-white/[0.06] dark:bg-white/[0.04]">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
                   <div className="flex items-start gap-3">
@@ -384,7 +465,71 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                 <Row label="API key" description="Stored for this named provider instance.">
                   <TextInput value={provider.apiKey} onChange={(value) => updateProviderInstance(providerConfigId, { apiKey: value })} mono />
                 </Row>
-                {provider.provider !== "jules" ? (
+                {provider.provider === "qwen-code" ? (
+                  <>
+                    <Row label="Authentication mode" description="Choose how this Qwen instance should authenticate and generate its runtime settings.">
+                      <PillChoiceGroup
+                        value={provider.qwenAuthMode || "LOCAL_AUTH"}
+                        onChange={(value) => updateProviderInstance(providerConfigId, { qwenAuthMode: value as SystemSettings["integrations"]["providers"][ProviderConfigId]["qwenAuthMode"] })}
+                        options={qwenAuthModeOptions}
+                      />
+                    </Row>
+                    {(provider.qwenAuthMode || "LOCAL_AUTH") === "LOCAL_AUTH" ? (
+                      <>
+                        <Row label="Mount Qwen auth" description="Copy local Qwen OAuth/cache files into Docker for browser-authenticated Qwen Code runs.">
+                          <Toggle
+                            value={provider.mountAuth}
+                            onChange={() => updateProviderInstance(providerConfigId, { mountAuth: !provider.mountAuth })}
+                          />
+                        </Row>
+                        <Row label="Qwen auth path" description="Usually `~/.qwen`; contains settings.json, .env, and cached OAuth state.">
+                          <TextInput value={provider.authPath} onChange={(value) => updateProviderInstance(providerConfigId, { authPath: value })} disabled={!provider.mountAuth} mono />
+                        </Row>
+                      </>
+                    ) : null}
+                    {(provider.qwenAuthMode || "LOCAL_AUTH") === "ALIBABA_CODING_PLAN" ? (
+                      <>
+                        <Row label="Coding Plan region" description="Controls the dedicated Alibaba Cloud Coding Plan endpoint.">
+                          <SelectInput
+                            value={provider.qwenRegion || "international"}
+                            onChange={(value) => updateProviderInstance(providerConfigId, {
+                              qwenRegion: value as "china" | "international",
+                              qwenBaseUrl: getQwenEndpointForRegion(value),
+                              qwenEnvKey: "BAILIAN_CODING_PLAN_API_KEY",
+                              qwenProtocol: "openai",
+                            })}
+                            options={qwenRegionOptions}
+                          />
+                        </Row>
+                        <Row label="Coding Plan endpoint" description="Generated from the selected region and written into Qwen modelProviders.">
+                          <TextInput value={getQwenEndpointForRegion(provider.qwenRegion)} onChange={() => undefined} disabled mono />
+                        </Row>
+                      </>
+                    ) : null}
+                    {(provider.qwenAuthMode || "LOCAL_AUTH") === "MODEL_PROVIDER" ? (
+                      <>
+                        <Row label="Provider protocol" description="Qwen Code groups modelProviders by API protocol.">
+                          <SelectInput
+                            value={provider.qwenProtocol || "openai"}
+                            onChange={(value) => updateProviderInstance(providerConfigId, { qwenProtocol: value as "openai" | "anthropic" | "gemini" })}
+                            options={qwenProtocolOptions}
+                          />
+                        </Row>
+                        <Row label="Environment key" description="Variable name Qwen reads for this instance's API key.">
+                          <TextInput value={provider.qwenEnvKey || "DASHSCOPE_API_KEY"} onChange={(value) => updateProviderInstance(providerConfigId, { qwenEnvKey: value })} mono />
+                        </Row>
+                        <Row label="Base URL" description="OpenAI-compatible, Anthropic, Gemini, or local endpoint used by this model entry.">
+                          <TextInput value={provider.qwenBaseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1"} onChange={(value) => updateProviderInstance(providerConfigId, { qwenBaseUrl: value })} mono />
+                        </Row>
+                      </>
+                    ) : null}
+                    <Row label="Generated settings preview" description="Masked Qwen settings.json fragment produced for Docker runtime." last={index === providerEntries.length - 1}>
+                      <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+                        {buildQwenSettingsPreview(provider, providerModel)}
+                      </pre>
+                    </Row>
+                  </>
+                ) : provider.provider !== "jules" ? (
                   <>
                     <Row label="Mount local auth" description={`Use a copied host auth directory for ${getProviderTypeLabel(provider.provider)} instead of, or alongside, an API key.`}>
                       <Toggle
@@ -407,7 +552,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   </Row>
                 )}
               </div>
-            ))
+              );
+            })
           )}
 
           <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">

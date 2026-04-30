@@ -29,7 +29,7 @@ export function backfillEstimatedDockerCliUsage(db: DatabaseAdapter): void {
       usage_source = 'estimated',
       raw_usage_json = COALESCE(raw_usage_json, ?),
       updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
-    WHERE provider IN ('gemini', 'codex', 'claude-code')
+    WHERE provider IN ('gemini', 'codex', 'claude-code', 'qwen-code')
       AND execution_mode = 'DOCKER'
       AND usage_source = 'unavailable'
       AND status IN ('completed', 'failed')
