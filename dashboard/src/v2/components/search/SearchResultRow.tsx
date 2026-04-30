@@ -74,7 +74,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
             aria-label={`${categoryType} result: ${title}`}
             role="option"
             aria-selected={isFocused}
-            className={`group relative flex items-center justify-between w-full text-left px-4 py-3 rounded-[1.25rem] transition-all duration-200 overflow-hidden outline-none ${
+            className={`group relative flex items-center justify-between w-full text-left px-4 py-3 rounded-[1.25rem] transition-all duration-150 overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 focus-visible:z-10 ${
                 isFocused
                     ? 'bg-signal-500/8 dark:bg-signal-500/10 border-signal-500/20 shadow-[0_0_20px_rgba(0,224,160,0.08)] backdrop-blur-2xl'
                     : 'bg-white/50 dark:bg-void-800/40 hover:bg-white/80 dark:hover:bg-void-700/60 border-black/5 dark:border-white/5 backdrop-blur-xl'
@@ -86,7 +86,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
             )}
 
             <div className="flex items-center gap-4 relative z-10 w-full overflow-hidden">
-                <div className={`p-2 rounded-xl transition-colors duration-200 shrink-0 ${
+                <div className={`p-2 rounded-xl transition-colors duration-150 shrink-0 ${
                     isFocused ? 'bg-signal-500/15 text-signal-500' : 'bg-black/5 dark:bg-white/5 text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
                 }`}>
                     <Icon className="w-5 h-5" strokeWidth={isFocused ? 2 : 1.5} />
@@ -97,7 +97,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                         <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500 shrink-0">
                             {itemId}
                         </span>
-                        <span className={`font-semibold truncate transition-colors duration-200 ${
+                        <span className={`font-semibold truncate transition-colors duration-150 ${
                             isFocused ? 'text-signal-600 dark:text-signal-400' : 'text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white'
                         }`}>
                             {title}
@@ -124,7 +124,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                     </div>
                 </div>
 
-                <div className={`shrink-0 transition-all duration-300 ${
+                <div className={`shrink-0 transition-all duration-150 ${
                     isFocused ? 'opacity-100 translate-x-0 text-signal-500' : 'opacity-0 -translate-x-2 text-slate-400'
                 }`}>
                     <ArrowRight className="w-5 h-5" strokeWidth={2} />

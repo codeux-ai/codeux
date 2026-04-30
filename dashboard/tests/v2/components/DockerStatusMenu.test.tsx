@@ -1,8 +1,8 @@
 /** @jsx h */
 // @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { h } from "preact";
 import { render, screen, waitFor, fireEvent, cleanup, act } from "@testing-library/preact";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { DockerStatusMenu } from "../../../src/v2/components/DockerStatusMenu.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
@@ -121,7 +121,7 @@ describe("DockerStatusMenu", () => {
     });
 
     // Dialog should appear
-    expect(screen.getByRole("dialog", { name: "Active Docker Containers" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Active Docker Containers" })).toBeInTheDocument());
 
     // Wait for fetch and render
     await waitFor(() => {

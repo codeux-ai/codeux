@@ -1,8 +1,8 @@
 /** @jsx h */
 // @vitest-environment jsdom
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { h } from "preact";
 import { render, screen, fireEvent, within, cleanup } from "@testing-library/preact";
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { ActionFeedbackRegion } from "../../../src/v2/components/ui/ActionFeedbackRegion.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
