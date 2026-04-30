@@ -120,7 +120,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
         <div
             ref={backdropRef}
             onClick={(e) => { if (e.target === backdropRef.current) handleClose(); }}
-            className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 px-6 py-8 backdrop-blur-md dark:bg-black/70"
+            className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
         >
             <div
                 ref={cardRef}

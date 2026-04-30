@@ -116,6 +116,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     const workerDropdownRef = useRef<HTMLDivElement>(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [isSearchPending, setIsSearchPending] = useState(false);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
@@ -206,9 +207,15 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
 
     useEffect(() => {
-        const timer = setTimeout(() => setDebouncedQuery(searchQuery), 200);
+        if (searchQuery !== debouncedQuery) {
+            setIsSearchPending(true);
+        }
+        const timer = setTimeout(() => {
+            setDebouncedQuery(searchQuery);
+            setIsSearchPending(false);
+        }, 300);
         return () => clearTimeout(timer);
-    }, [searchQuery]);
+    }, [searchQuery, debouncedQuery]);
 
     const searchResults = useMemo(() => {
         if (!debouncedQuery.trim()) {
@@ -765,6 +772,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 results={searchResults}
+                isPending={isSearchPending}
             />
         </>
     );

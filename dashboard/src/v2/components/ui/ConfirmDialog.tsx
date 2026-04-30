@@ -1,19 +1,19 @@
 import { h } from "preact";
-import { useLayoutEffect, useRef, useState, useEffect, useCallback } from "preact/hooks";
-import gsap from "gsap";
-import { useFocusTrap } from "../../hooks/use-focus-trap.js";
-import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { useRef, useState, useEffect, useCallback } from "preact/hooks";
+import { Loader2 } from "lucide-preact";
 import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle } from "./Dialog.js";
 
 function DestructiveConfirmButton({
   onConfirm,
   label,
-  className
+  className,
+  disabled = false
 }: {
   onConfirm: () => void;
   label: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const [isHolding, setIsHolding] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -36,7 +36,7 @@ function DestructiveConfirmButton({
   }, []);
 
   const startHold = () => {
-    if (isHolding) return;
+    if (disabled || isHolding) return;
     setIsHolding(true);
     setProgress(0);
     setIsShaking(false);
@@ -65,6 +65,7 @@ function DestructiveConfirmButton({
   };
 
   const cancelHold = () => {
+    if (disabled) return;
     if (isHolding) {
       setIsShaking(true);
       setTimeout(() => setIsShaking(false), 400);
@@ -76,7 +77,7 @@ function DestructiveConfirmButton({
   };
 
   const handlePointerDown = (e: h.JSX.TargetedPointerEvent<HTMLButtonElement>) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || disabled) return;
     if (typeof e.currentTarget.setPointerCapture === "function") {
       e.currentTarget.setPointerCapture(e.pointerId);
     }
@@ -84,6 +85,7 @@ function DestructiveConfirmButton({
   };
 
   const handlePointerUp = (e: h.JSX.TargetedPointerEvent<HTMLButtonElement>) => {
+    if (disabled) return;
     if (typeof e.currentTarget.releasePointerCapture === "function") {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
@@ -91,6 +93,7 @@ function DestructiveConfirmButton({
   };
 
   const handleKeyDown = (e: h.JSX.TargetedKeyboardEvent<HTMLButtonElement>) => {
+    if (disabled) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       startHold();
@@ -98,6 +101,7 @@ function DestructiveConfirmButton({
   };
 
   const handleKeyUp = (e: h.JSX.TargetedKeyboardEvent<HTMLButtonElement>) => {
+    if (disabled) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       cancelHold();
@@ -105,6 +109,7 @@ function DestructiveConfirmButton({
   };
 
   const handlePointerLeave = () => {
+    if (disabled) return;
     if (isHolding) {
       setIsHolding(false);
       setProgress(0);
@@ -120,16 +125,17 @@ function DestructiveConfirmButton({
   return (
     <button
       type="button"
+      disabled={disabled}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
       onPointerLeave={handlePointerLeave}
       onContextMenu={(e) => e.preventDefault()}
-      className={`relative overflow-hidden ${className} ${isShaking ? "animate-shake" : ""}`}
+      className={`relative overflow-hidden flex items-center justify-center ${className} ${isShaking ? "animate-shake" : ""} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
     >
-      {isHolding && (
+      {isHolding && !disabled && (
         <div
           className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left"
           style={{
@@ -139,9 +145,13 @@ function DestructiveConfirmButton({
         />
       )}
 
-      <span className="relative z-10">
-        {isHolding ? `Hold to ${label}` : label}
-      </span>
+      {disabled ? (
+        <Loader2 className="w-4 h-4 animate-spin relative z-10" />
+      ) : (
+        <span className="relative z-10">
+          {isHolding ? `Hold to ${label}` : label}
+        </span>
+      )}
     </button>
   );
 }
@@ -149,113 +159,41 @@ function DestructiveConfirmButton({
 interface ConfirmDialogProps {
   isOpen: boolean;
   options: ConfirmDialogOptions | null;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
 }
 
 export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmDialogProps) {
-  const [shouldRender, setShouldRender] = useState(isOpen);
-  const [isClosing, setIsClosing] = useState(false);
-
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const trapRef = useFocusTrap(shouldRender && !isClosing, () => handleClose(onCancel));
-  const reducedMotion = useReducedMotion();
+  const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      setShouldRender(true);
-      setIsClosing(false);
-    } else if (shouldRender) {
-      setIsClosing(true);
+    if (!isOpen) {
+      setIsPending(false);
     }
-  }, [isOpen, shouldRender]);
+  }, [isOpen]);
 
-  useLayoutEffect(() => {
-    if (shouldRender && !isClosing) {
-      const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
-      const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+  if (!options) return null;
 
-      if (backdropRef.current) {
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
-      }
-
-      if (cardRef.current) {
-        gsap.fromTo(cardRef.current,
-          { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
-          { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease }
-        );
+  const handleConfirm = async () => {
+    if (isPending) return;
+    const result = onConfirm();
+    if (result instanceof Promise) {
+      setIsPending(true);
+      try {
+        await result;
+      } finally {
+        setIsPending(false);
       }
     }
-  }, [shouldRender, isClosing, reducedMotion]);
-
-  const pendingCallback = useRef<(() => void) | null>(null);
-
-  const handleClose = (callback: () => void) => {
-    if (isClosing) return;
-    pendingCallback.current = callback;
-    setIsClosing(true);
   };
-
-  useEffect(() => {
-    if (isClosing) {
-      const d = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
-
-      if (cardRef.current) {
-        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
-      }
-
-      if (backdropRef.current) {
-        gsap.to(backdropRef.current, {
-          opacity: 0,
-          duration: d,
-          delay: reducedMotion ? 0 : 0.05,
-          onComplete: () => {
-            setShouldRender(false);
-            setIsClosing(false);
-            if (pendingCallback.current) {
-              pendingCallback.current();
-              pendingCallback.current = null;
-            }
-          }
-        });
-      } else {
-        setShouldRender(false);
-        setIsClosing(false);
-        if (pendingCallback.current) {
-          pendingCallback.current();
-          pendingCallback.current = null;
-        }
-      }
-    }
-  }, [isClosing, reducedMotion]);
-
-  if (!shouldRender || !options) return null;
 
   const { title, body, confirmLabel = "Confirm", cancelLabel = "Cancel", destructive = false } = options;
 
   return (
-    <div
-      ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-void-900/50 backdrop-blur-sm p-4"
-    >
-      <div
-        ref={(el) => {
-          if (el) {
-            trapRef.current = el;
-            cardRef.current = el;
-          }
-        }}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
-        aria-describedby="confirm-dialog-body"
-        className="bg-white dark:bg-void-800 w-full max-w-md rounded-[1.75rem] shadow-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.06] flex flex-col"
-      >
-        <div className="p-6 pb-4">
-          <h2 id="confirm-dialog-title" className="text-xl font-semibold text-void-900 dark:text-white">
-            {title}
-          </h2>
+    <Dialog isOpen={isOpen} onClose={onCancel} preventOutsideClose={isPending}>
+      <DialogContent ariaLabelledBy="confirm-dialog-title" ariaDescribedBy="confirm-dialog-body">
+        <DialogHeader>
+          <DialogTitle id="confirm-dialog-title">{title}</DialogTitle>
           <p id="confirm-dialog-body" className="mt-3 text-sm text-void-600 dark:text-void-300">
             {body}
           </p>
@@ -266,32 +204,35 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
               </p>
             </div>
           )}
-        </div>
-        <div className="flex items-center justify-end gap-3 p-4 bg-void-50 dark:bg-void-900/30 border-t border-black/[0.06] dark:border-white/[0.06]">
+        </DialogHeader>
+        <DialogFooter>
           <button
             type="button"
-            onClick={() => handleClose(onCancel)}
-            className="px-4 py-2 text-sm font-medium rounded-[1rem] border border-black/[0.06] dark:border-white/[0.06] hover:bg-black/5 dark:hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 transition-all duration-200"
+            onClick={onCancel}
+            disabled={isPending}
+            className={`px-4 py-2 text-sm font-medium rounded-[1rem] border border-black/[0.06] dark:border-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 transition-all duration-200 ${isPending ? "opacity-50 cursor-not-allowed" : "hover:bg-black/5 dark:hover:bg-white/5"}`}
           >
             {cancelLabel}
           </button>
           {destructive ? (
             <DestructiveConfirmButton
-              onConfirm={() => handleClose(onConfirm)}
+              onConfirm={handleConfirm}
+              disabled={isPending}
               label={confirmLabel}
-              className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-status-red text-white hover:opacity-90 shadow-[0_4px_12px_rgba(211,47,47,0.25)]"
+              className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-status-red text-white hover:opacity-90 shadow-[0_4px_12px_rgba(211,47,47,0.25)] min-w-[100px]"
             />
           ) : (
             <button
               type="button"
-              onClick={() => handleClose(onConfirm)}
-              className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-signal-500 text-white hover:bg-signal-600 dark:hover:bg-signal-400 shadow-[0_4px_12px_rgba(0,224,160,0.25)]"
+              onClick={handleConfirm}
+              disabled={isPending}
+              className={`px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-signal-500 text-white shadow-[0_4px_12px_rgba(0,224,160,0.25)] flex items-center justify-center min-w-[100px] ${isPending ? "opacity-50 cursor-not-allowed" : "hover:bg-signal-600 dark:hover:bg-signal-400"}`}
             >
-              {confirmLabel}
+              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : confirmLabel}
             </button>
           )}
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

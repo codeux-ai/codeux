@@ -129,7 +129,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
           onClose();
         }
       }}
-      className="fixed inset-0 z-[240] flex items-center justify-center bg-black/55 px-6 py-8 backdrop-blur-xl dark:bg-black/75"
+      className="fixed inset-0 z-[240] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
     >
       <div
         ref={cardRef}

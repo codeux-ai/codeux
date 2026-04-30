@@ -1,7 +1,7 @@
 /** @jsx h */
 // @vitest-environment jsdom
 import { h } from "preact";
-import { render, screen, fireEvent, cleanup } from "@testing-library/preact";
+import { render, screen, fireEvent, within, cleanup } from "@testing-library/preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ActionFeedbackRegion } from "../../../src/v2/components/ui/ActionFeedbackRegion.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
@@ -23,30 +23,34 @@ describe("ActionFeedbackRegion", () => {
   });
 
   it("displays the correct message and status", () => {
-    render(<ActionFeedbackRegion status="success" message="Saved successfully" />);
-    expect(screen.getByText("Saved successfully")).toBeInTheDocument();
-    const region = screen.getByRole("status");
+    const { container } = render(<ActionFeedbackRegion status="success" message="Saved successfully" />);
+    expect(within(container as HTMLElement).getByText("Saved successfully")).toBeInTheDocument();
+
+    // Find within the container since test runner might leak DOM
+    const region = within(container as HTMLElement).getByRole("status");
     expect(region).toHaveAttribute("aria-live", "polite");
   });
 
   it("uses assertive aria-live for errors", () => {
-    render(<ActionFeedbackRegion status="error" message="Failed to save" />);
-    const region = screen.getByRole("status");
+    const { container } = render(<ActionFeedbackRegion status="error" message="Failed to save" />);
+
+    // Find within the container since test runner might leak DOM
+    const region = within(container as HTMLElement).getByRole("status");
     expect(region).toHaveAttribute("aria-live", "assertive");
   });
 
   it("calls onDismiss when dismiss button is clicked", () => {
     const handleDismiss = vi.fn();
-    render(<ActionFeedbackRegion status="warning" message="Watch out" onDismiss={handleDismiss} />);
-    const dismissBtn = screen.getByRole("button", { name: "Dismiss message" });
+    const { container } = render(<ActionFeedbackRegion status="warning" message="Watch out" onDismiss={handleDismiss} />);
+    const dismissBtn = within(container as HTMLElement).getByRole("button", { name: "Dismiss message" });
     fireEvent.click(dismissBtn);
     expect(handleDismiss).toHaveBeenCalledTimes(1);
   });
 
   it("renders retry action and executes it on click", () => {
     const handleRetry = vi.fn();
-    render(<ActionFeedbackRegion status="error" message="Failed to load" retryAction={handleRetry} retryLabel="Try Again" />);
-    const retryBtn = screen.getByRole("button", { name: "Try Again" });
+    const { container } = render(<ActionFeedbackRegion status="error" message="Failed to load" retryAction={handleRetry} retryLabel="Try Again" />);
+    const retryBtn = within(container as HTMLElement).getByRole("button", { name: "Try Again" });
     fireEvent.click(retryBtn);
     expect(handleRetry).toHaveBeenCalledTimes(1);
   });
