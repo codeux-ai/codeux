@@ -46,7 +46,7 @@ export interface JulesActivity {
   [key: string]: unknown;
 }
 
-export type SubtaskStatus = "PENDING" | "RUNNING" | "CODING_COMPLETED" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA";
+export type SubtaskStatus = "PENDING" | "RUNNING" | "CODING_COMPLETED" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA" | "QA_REVIEW_FAILED";
 export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | "PR_ONLY" | "QA_PENDING";
 export type ProviderId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode";
 export type ProviderConfigId = string;
@@ -83,6 +83,10 @@ export interface Subtask {
   pr_url?: string;
   activities?: JulesActivity[];
   is_independent: boolean;
+  qa_review?: {
+    error_reason?: string;
+    [key: string]: any;
+  };
   is_merged?: boolean;
   merge_indicator?: SubtaskMergeIndicator;
   intervention_owner?: InterventionOwner;
