@@ -1,9 +1,9 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useMemo, useRef } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { memo } from "preact/compat";
 import { Activity, CheckCircle2, Clock3, GitBranch, Sparkles, Timer, Workflow } from "lucide-preact";
 import type { ExecutionTaskDispatchSummary, Subtask } from "../../types.js";
-import { buildSprintDagModel, getSprintDagFocusNodeIds, type SprintDagEdgeModel, type SprintDagNodeModel } from "../lib/sprint-dag.js";
+import { buildSprintDagModel, type SprintDagEdgeModel, type SprintDagNodeModel } from "../lib/sprint-dag.js";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
 
@@ -284,7 +284,11 @@ const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x
 
 export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches, hasSprintContext }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const focusSignatureRef = useRef<string>("");
+  const isDraggingRef = useRef(false);
+  const startPosRef = useRef({ x: 0, y: 0 });
+  const startScrollRef = useRef({ left: 0, top: 0 });
+  const [isDraggingState, setIsDraggingState] = useState(false);
+
   const model = useMemo(() => buildSprintDagModel(tasks), [tasks]);
 
   const dispatchByTaskId = useMemo(() => {
@@ -328,47 +332,29 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
     }));
   }, [model.columns, maxDepth]);
 
-  const focusNodeIds = useMemo(() => getSprintDagFocusNodeIds(model), [model]);
+  const handlePointerDown = (e: preact.JSX.TargetedPointerEvent<HTMLDivElement>) => {
+    if (!scrollRef.current) return;
+    isDraggingRef.current = true;
+    setIsDraggingState(true);
+    startPosRef.current = { x: e.pageX, y: e.pageY };
+    startScrollRef.current = {
+      left: scrollRef.current.scrollLeft,
+      top: scrollRef.current.scrollTop,
+    };
+  };
 
-  useEffect(() => {
-    const viewport = scrollRef.current;
-    if (!viewport || !hasSprintContext || positionedNodes.length === 0 || focusNodeIds.length === 0) {
-      return;
-    }
+  const handlePointerMove = (e: preact.JSX.TargetedPointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current || !scrollRef.current) return;
+    const dx = e.pageX - startPosRef.current.x;
+    const dy = e.pageY - startPosRef.current.y;
+    scrollRef.current.scrollLeft = startScrollRef.current.left - dx;
+    scrollRef.current.scrollTop = startScrollRef.current.top - dy;
+  };
 
-    const focusNodes = focusNodeIds
-      .map((taskId) => positionedNodeById.get(taskId))
-      .filter((node): node is NonNullable<typeof node> => Boolean(node));
-    if (focusNodes.length === 0) {
-      return;
-    }
-
-    const signature = focusNodes.map((node) => `${node.task.id}:${node.depth}:${node.row}:${node.phase}`).join("|");
-    if (focusSignatureRef.current === signature) {
-      return;
-    }
-    focusSignatureRef.current = signature;
-
-    const centerX = focusNodes.reduce((sum, node) => sum + node.x + NODE_W / 2, 0) / focusNodes.length;
-    const centerY = focusNodes.reduce((sum, node) => sum + node.y + NODE_H / 2, 0) / focusNodes.length;
-
-    const nextLeft = Math.max(0, Math.min(
-      centerX - viewport.clientWidth / 2,
-      viewport.scrollWidth - viewport.clientWidth,
-    ));
-    const nextTop = Math.max(0, Math.min(
-      centerY - viewport.clientHeight / 2,
-      viewport.scrollHeight - viewport.clientHeight,
-    ));
-
-    if (typeof viewport.scrollTo === 'function') {
-      viewport.scrollTo({
-        left: nextLeft,
-        top: nextTop,
-        behavior: "smooth",
-      });
-    }
-  }, [focusNodeIds, hasSprintContext, positionedNodeById, positionedNodes]);
+  const handlePointerUpOrLeave = () => {
+    isDraggingRef.current = false;
+    setIsDraggingState(false);
+  };
 
   if (!hasSprintContext || tasks.length === 0) {
     return (
@@ -469,9 +455,16 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
 
           <div
             ref={scrollRef}
-            className="dag-scroll-shell h-[38rem] overflow-auto rounded-[1.35rem] border border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(249,248,244,0.56))] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:border-white/[0.04] dark:bg-[linear-gradient(180deg,rgba(24,20,17,0.88),rgba(8,6,5,0.76))] md:h-[46rem]"
+            className={`dag-scroll-shell h-[38rem] overflow-auto rounded-[1.35rem] border border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(249,248,244,0.56))] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:border-white/[0.04] dark:bg-[linear-gradient(180deg,rgba(24,20,17,0.88),rgba(8,6,5,0.76))] md:h-[46rem] ${
+              isDraggingState ? "cursor-grabbing select-none" : "cursor-grab"
+            }`}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUpOrLeave}
+            onPointerLeave={handlePointerUpOrLeave}
+            onPointerCancel={handlePointerUpOrLeave}
           >
-            <div className="relative" style={{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }}>
+            <div className="relative pointer-events-none" style={{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }}>
               <svg
                 className="absolute inset-0"
                 width={canvasWidth}
@@ -635,7 +628,11 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
               {positionedNodes.map((node) => {
                 const tone = getNodeTone(node);
                 const dispatch = dispatchByTaskId.get(node.task.record_id || "") || dispatchByTaskId.get(node.task.id);
-                return <DagNode key={node.task.id} node={node} dispatch={dispatch} tone={tone} />;
+                return (
+                  <div key={node.task.id} className="pointer-events-auto">
+                    <DagNode node={node} dispatch={dispatch} tone={tone} />
+                  </div>
+                );
               })}
             </div>
           </div>

@@ -361,6 +361,15 @@
     animation: dag-running-ring 2.4s ease-in-out infinite;
   }
 
+  .dag-scroll-shell {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .dag-scroll-shell::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Text overflow breaking utilities */
   .break-words {
     word-break: break-word;
