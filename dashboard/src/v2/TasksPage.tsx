@@ -36,10 +36,9 @@ import { FilterStrip } from "./components/ui/FilterStrip.js";
 import { formatSprintDisplay } from "./lib/format-sprint.js";
 import { KanbanTaskCard } from "./components/tasks/KanbanTaskCard.js";
 import { STATUS_CFG } from "./lib/tasks-constants.js";
+import { buildTaskCardViewModel } from "./lib/tasks/task-card-view-model.js";
 
 const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "coding_completed", "completed"];
-
-const EMPTY_DEPENDENTS: DependentTaskMetadata[] = [];
 
 type StatusFilter = "all" | TaskStatus;
 type PriorityFilter = "all" | TaskPriority;
@@ -303,11 +302,19 @@ export const TasksPage: FunctionComponent = () => {
   }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId, loading, showSkeletons, isFadingOut]);
 
   const allTasks = useMemo(() => [...optimisticTasks, ...tasks], [optimisticTasks, tasks]);
-  const dependenciesMap = useMemo(() => buildDependentTasksMap(allTasks), [allTasks]);
+  const taskLookup = useMemo(() => new Map(allTasks.map(t => [t.recordId, t])), [allTasks]);
 
   const { filteredTasks, visibleTasks, stats, columns } = useMemo(() => {
     return deriveTaskBoardState(allTasks, statusFilter, priorityFilter, listWindow);
   }, [allTasks, statusFilter, priorityFilter, listWindow]);
+
+  const taskViewModels = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof buildTaskCardViewModel>>();
+    allTasks.forEach(task => {
+      map.set(task.recordId, buildTaskCardViewModel(task, taskLookup));
+    });
+    return map;
+  }, [allTasks, taskLookup]);
 
   const selectedSprintModel = taskScopeSprintId ? sprints.find((sprint: Sprint) => sprint.id === taskScopeSprintId) || null : null;
 
@@ -557,17 +564,21 @@ export const TasksPage: FunctionComponent = () => {
                   {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
                 </div>
               ) : !loading && !isFadingOut ? (
-                columnTasks.map((task, index) => (
-                  <div key={task.recordId} className="task-card-entry">
-                    <KanbanTaskCard
-                      task={task}
-                      dependents={dependenciesMap[task.recordId] ?? EMPTY_DEPENDENTS}
-                      index={index}
-                      onEdit={handleEditClick}
-                      onDelete={handleDeleteTask}
-                    />
-                  </div>
-                ))
+                columnTasks.map((task, index) => {
+                  const viewModel = taskViewModels.get(task.recordId);
+                  if (!viewModel) return null;
+
+                  return (
+                    <div key={task.recordId} className="task-card-entry">
+                      <KanbanTaskCard
+                        viewModel={viewModel}
+                        index={index}
+                        onEdit={handleEditClick}
+                        onDelete={handleDeleteTask}
+                      />
+                    </div>
+                  );
+                })
               ) : null}
             </div>
           </div>

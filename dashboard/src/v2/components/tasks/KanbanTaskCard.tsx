@@ -1,23 +1,25 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useRef } from "preact/hooks";
-import { FolderGit2, Clock, Target, Settings, Trash2 } from "lucide-preact";
+import { FolderGit2, Settings, Trash2 } from "lucide-preact";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import type { Task } from "../../types.js";
-import type { DependentTaskMetadata } from "../../lib/task-relations.js";
-import { PRIORITY_CFG, STATUS_CFG, EXECUTOR_LABEL, timeAgo } from "../../lib/tasks-constants.js";
+import { PRIORITY_CFG, STATUS_CFG } from "../../lib/tasks-constants.js";
 import { useTaskCardMotion } from "../../lib/motion/task-card-motion.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import type { TaskCardViewModel } from "../../lib/tasks/task-card-view-model.js";
+import { DependencyStatusIndicators } from "./DependencyStatusIndicators.js";
+import { TaskExecutionMeta } from "./TaskExecutionMeta.js";
 import './kanban-task-card.css';
 
 export const KanbanTaskCard: FunctionComponent<{
-  task: Task;
-  dependents: DependentTaskMetadata[];
+  viewModel: TaskCardViewModel;
   index?: number;
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
-}> = memo(({ task, dependents, index = 0, onEdit, onDelete }) => {
+}> = memo(({ viewModel, index = 0, onEdit, onDelete }) => {
+  const { task, humanizedCreatedAt, dependencyIndicators } = viewModel;
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
   const isReducedMotion = useReducedMotion();
@@ -50,11 +52,11 @@ export const KanbanTaskCard: FunctionComponent<{
         {task.title}
       </h4>
 
-      <div className="relative z-10 mb-4 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
-        <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1">
-          {EXECUTOR_LABEL[task.executorType]}
-        </span>
-      </div>
+      <TaskExecutionMeta
+        executorType={task.executorType}
+        time={humanizedCreatedAt}
+        className="mb-4 relative z-10"
+      />
 
       <div className="flex items-center gap-3 mt-auto relative z-10">
         <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
@@ -74,39 +76,7 @@ export const KanbanTaskCard: FunctionComponent<{
         </div>
       </div>
 
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-black/[0.04] dark:border-white/[0.04] relative z-10">
-        <div className="flex items-center gap-1.5 text-[10px] text-slate-300 dark:text-slate-600">
-          <Clock className="w-3 h-3" strokeWidth={2} />
-          <span className="font-mono">{task.time}</span>
-        </div>
-        <span className="text-[9px] font-mono text-slate-300 dark:text-slate-700">{timeAgo(task.createdAt)}</span>
-      </div>
-
-      {task.dependsOnTaskIds.length > 0 && (
-        <div className="relative z-10 mt-3 text-[10px] uppercase tracking-[0.14em] text-slate-400">
-          Depends on {task.dependsOnTaskIds.length} task{task.dependsOnTaskIds.length > 1 ? "s" : ""}
-        </div>
-      )}
-
-      {dependents.length > 0 && (
-        <div className="relative z-10 mt-3 flex flex-wrap gap-1.5">
-          {dependents.map((dep) => (
-            <div
-              key={dep.recordId}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[9px] font-bold uppercase tracking-[0.14em] ${
-                dep.status === "completed"
-                  ? "bg-status-green/[0.08] border-status-green/20 text-status-green"
-                  : dep.status === "coding_completed" || dep.status === "in_progress"
-                  ? "bg-signal-500/[0.08] border-signal-500/20 text-signal-500"
-                  : "bg-slate-400/[0.08] border-slate-400/20 text-slate-500"
-              }`}
-            >
-              <Target className="w-2.5 h-2.5" strokeWidth={2.5} />
-              <span>{dep.id}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <DependencyStatusIndicators indicators={dependencyIndicators} />
 
       <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-within:opacity-100 focus-within:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
         <button
@@ -129,11 +99,21 @@ export const KanbanTaskCard: FunctionComponent<{
     </div>
   );
 }, (prev, next) => {
-  return prev.task.recordId === next.task.recordId &&
-         prev.task.status === next.task.status &&
-         prev.task.priority === next.task.priority &&
-         prev.task.title === next.task.title &&
-         prev.dependents === next.dependents &&
+  const prevTask = prev.viewModel.task;
+  const nextTask = next.viewModel.task;
+
+  const tasksEqual = prevTask.recordId === nextTask.recordId &&
+         prevTask.status === nextTask.status &&
+         prevTask.priority === nextTask.priority &&
+         prevTask.title === nextTask.title;
+
+  const depsEqual = prev.viewModel.dependencyIndicators.length === next.viewModel.dependencyIndicators.length &&
+         prev.viewModel.dependencyIndicators.every((dep, i) =>
+           dep.status === next.viewModel.dependencyIndicators[i].status &&
+           dep.recordId === next.viewModel.dependencyIndicators[i].recordId
+         );
+
+  return tasksEqual && depsEqual &&
          prev.onEdit === next.onEdit &&
          prev.onDelete === next.onDelete;
 });
