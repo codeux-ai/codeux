@@ -1,9 +1,9 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useMemo, useRef } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { memo } from "preact/compat";
 import { Activity, AlertTriangle, CheckCircle2, Clock3, Code2, GitBranch, Hourglass, Sparkles, Timer, Workflow, XCircle } from "lucide-preact";
 import type { ExecutionTaskDispatchSummary, Subtask } from "../../types.js";
-import { buildSprintDagModel, getSprintDagFocusNodeIds, type SprintDagEdgeModel, type SprintDagNodeModel } from "../lib/sprint-dag.js";
+import { buildSprintDagModel, type SprintDagEdgeModel, type SprintDagNodeModel } from "../lib/sprint-dag.js";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
 import { Tooltip } from "./ui/Tooltip.js";
@@ -251,7 +251,7 @@ const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x
         className="whitespace-normal w-full h-full text-left"
         content={renderDagNodeTooltipContent(node)}
       >
-        <div className={`relative h-full rounded-[1.4rem] border ${tone.card} p-5 backdrop-blur-2xl transition-transform duration-500`}>
+        <div className={`relative h-full rounded-[1.4rem] border ${tone.card} p-5 backdrop-blur-2xl dag-node-transition`}>
         <div
           className="absolute left-[-7px] top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border border-white/70 dark:border-white/15"
           style={{ backgroundColor: `${tone.accent}CC`, boxShadow: `0 0 18px ${tone.accent}50` }}
@@ -341,7 +341,11 @@ const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x
 
 export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches, hasSprintContext }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const focusSignatureRef = useRef<string>("");
+  const isDraggingRef = useRef(false);
+  const startPosRef = useRef({ x: 0, y: 0 });
+  const startScrollRef = useRef({ left: 0, top: 0 });
+  const [isDraggingState, setIsDraggingState] = useState(false);
+
   const model = useMemo(() => buildSprintDagModel(tasks), [tasks]);
 
   const dispatchByTaskId = useMemo(() => {
@@ -385,47 +389,29 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
     }));
   }, [model.columns, maxDepth]);
 
-  const focusNodeIds = useMemo(() => getSprintDagFocusNodeIds(model), [model]);
+  const handlePointerDown = (e: preact.JSX.TargetedPointerEvent<HTMLDivElement>) => {
+    if (!scrollRef.current) return;
+    isDraggingRef.current = true;
+    setIsDraggingState(true);
+    startPosRef.current = { x: e.pageX, y: e.pageY };
+    startScrollRef.current = {
+      left: scrollRef.current.scrollLeft,
+      top: scrollRef.current.scrollTop,
+    };
+  };
 
-  useEffect(() => {
-    const viewport = scrollRef.current;
-    if (!viewport || !hasSprintContext || positionedNodes.length === 0 || focusNodeIds.length === 0) {
-      return;
-    }
+  const handlePointerMove = (e: preact.JSX.TargetedPointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current || !scrollRef.current) return;
+    const dx = e.pageX - startPosRef.current.x;
+    const dy = e.pageY - startPosRef.current.y;
+    scrollRef.current.scrollLeft = startScrollRef.current.left - dx;
+    scrollRef.current.scrollTop = startScrollRef.current.top - dy;
+  };
 
-    const focusNodes = focusNodeIds
-      .map((taskId) => positionedNodeById.get(taskId))
-      .filter((node): node is NonNullable<typeof node> => Boolean(node));
-    if (focusNodes.length === 0) {
-      return;
-    }
-
-    const signature = focusNodes.map((node) => `${node.task.id}:${node.depth}:${node.row}:${node.phase}`).join("|");
-    if (focusSignatureRef.current === signature) {
-      return;
-    }
-    focusSignatureRef.current = signature;
-
-    const centerX = focusNodes.reduce((sum, node) => sum + node.x + NODE_W / 2, 0) / focusNodes.length;
-    const centerY = focusNodes.reduce((sum, node) => sum + node.y + NODE_H / 2, 0) / focusNodes.length;
-
-    const nextLeft = Math.max(0, Math.min(
-      centerX - viewport.clientWidth / 2,
-      viewport.scrollWidth - viewport.clientWidth,
-    ));
-    const nextTop = Math.max(0, Math.min(
-      centerY - viewport.clientHeight / 2,
-      viewport.scrollHeight - viewport.clientHeight,
-    ));
-
-    if (typeof viewport.scrollTo === 'function') {
-      viewport.scrollTo({
-        left: nextLeft,
-        top: nextTop,
-        behavior: "smooth",
-      });
-    }
-  }, [focusNodeIds, hasSprintContext, positionedNodeById, positionedNodes]);
+  const handlePointerUpOrLeave = () => {
+    isDraggingRef.current = false;
+    setIsDraggingState(false);
+  };
 
   if (!hasSprintContext || tasks.length === 0) {
     return (
@@ -526,9 +512,16 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
 
           <div
             ref={scrollRef}
-            className="dag-scroll-shell h-[38rem] overflow-auto rounded-[1.35rem] border border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(249,248,244,0.56))] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:border-white/[0.04] dark:bg-[linear-gradient(180deg,rgba(24,20,17,0.88),rgba(8,6,5,0.76))] md:h-[46rem]"
+            className={`dag-scroll-shell h-[38rem] overflow-auto rounded-[1.35rem] border border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(249,248,244,0.56))] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:border-white/[0.04] dark:bg-[linear-gradient(180deg,rgba(24,20,17,0.88),rgba(8,6,5,0.76))] md:h-[46rem] ${
+              isDraggingState ? "cursor-grabbing select-none" : "cursor-grab"
+            }`}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUpOrLeave}
+            onPointerLeave={handlePointerUpOrLeave}
+            onPointerCancel={handlePointerUpOrLeave}
           >
-            <div className="relative" style={{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }}>
+            <div className="relative pointer-events-none" style={{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }}>
               <svg
                 className="absolute inset-0"
                 width={canvasWidth}
@@ -582,6 +575,43 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
                   </g>
                 ))}
 
+                {model.adjacencies.map((adjacency) => {
+                  const source = positionedNodeById.get(adjacency.from);
+                  const target = positionedNodeById.get(adjacency.to);
+                  if (!source || !target) {
+                    return null;
+                  }
+
+                  const sourceX = source.x + NODE_W / 2;
+                  const sourceY = source.y + NODE_H;
+                  const targetX = target.x + NODE_W / 2;
+                  const targetY = target.y;
+
+                  const isSettled = source.phase === "COMPLETED" && target.phase === "COMPLETED";
+                  const isActive = (source.phase === "RUNNING" || source.phase === "CODING_COMPLETED") &&
+                                   (target.phase === "RUNNING" || target.phase === "CODING_COMPLETED");
+
+                  const strokeColor = isActive ? "rgba(0,224,160,0.4)" : isSettled ? "rgba(0,171,132,0.3)" : "rgba(100,116,139,0.2)";
+                  const strokeWidth = isActive ? 2 : isSettled ? 1.5 : 1;
+                  const strokeDasharray = isActive ? undefined : isSettled ? "6 6" : "4 8";
+
+                  return (
+                    <g key={adjacency.id}>
+                      <line
+                        className="dag-edge-transition"
+                        x1={sourceX}
+                        y1={sourceY}
+                        x2={targetX}
+                        y2={targetY}
+                        stroke={strokeColor}
+                        strokeWidth={strokeWidth}
+                        strokeDasharray={strokeDasharray}
+                        strokeLinecap="round"
+                      />
+                    </g>
+                  );
+                })}
+
                 {model.edges.map((edge) => {
                   const source = positionedNodeById.get(edge.from);
                   const target = positionedNodeById.get(edge.to);
@@ -607,6 +637,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
                   return (
                     <g key={edge.id}>
                       <path
+                        className="dag-edge-transition"
                         d={path}
                         stroke="rgba(15,23,42,0.07)"
                         strokeWidth={tone.width + 6}
@@ -615,6 +646,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
                       />
                       {edge.state === "active" && (
                         <path
+                          className="dag-edge-transition"
                           d={path}
                           stroke="url(#dag-edge-active-soft)"
                           strokeWidth={tone.width + 10}
@@ -625,6 +657,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
                       )}
                       <path
                         id={`dag-path-${edge.id}`}
+                        className="dag-edge-transition"
                         d={path}
                         stroke={stroke}
                         strokeWidth={tone.width}
@@ -692,7 +725,11 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
               {positionedNodes.map((node) => {
                 const tone = getNodeTone(node);
                 const dispatch = dispatchByTaskId.get(node.task.record_id || "") || dispatchByTaskId.get(node.task.id);
-                return <DagNode key={node.task.id} node={node} dispatch={dispatch} tone={tone} />;
+                return (
+                  <div key={node.task.id} className="pointer-events-auto">
+                    <DagNode node={node} dispatch={dispatch} tone={tone} />
+                  </div>
+                );
               })}
             </div>
           </div>
