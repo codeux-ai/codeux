@@ -11,6 +11,10 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
     const pathRef = useRef<SVGPathElement>(null);
     const svgRef  = useRef<SVGSVGElement>(null);
 
+    if (!Array.isArray(points) || points.length === 0) {
+        return null;
+    }
+
     const max = Math.max(...points);
     const min = Math.min(...points);
     const range = max - min || 1;

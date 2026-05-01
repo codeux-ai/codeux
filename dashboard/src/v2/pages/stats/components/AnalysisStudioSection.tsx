@@ -7,7 +7,7 @@ import {
   ViewToggle,
   TrendStudio,
   CompositionStudio,
-  ReliabilityStudio,
+  ProvidersStudio,
   StudioHeader,
   PANEL_CLASS,
 } from "./StatsShared.js";
@@ -75,8 +75,8 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
         <CompositionStudio stats={stats} providerSegments={providerSegments} tokenSegments={tokenSegments} />
       ) : null}
 
-      {visualMode === "reliability" ? (
-        <ReliabilityStudio stats={stats} providerSegments={providerSegments} sourceSegments={sourceSegments} />
+      {visualMode === "providers" ? (
+        <ProvidersStudio stats={stats} providerSegments={providerSegments} sourceSegments={sourceSegments} />
       ) : null}
 
       {visualMode === "ledgers" ? (

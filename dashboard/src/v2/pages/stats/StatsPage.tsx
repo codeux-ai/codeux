@@ -2,18 +2,11 @@ import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useProjectData } from "../../context/project-data.js";
-import {
-  formatTokens,
-  formatDuration,
-  createSeries,
-} from "./stats-utils.js";
 import { useStatsPageData } from "./use-stats-page-data.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { StatsPageHero } from "./components/StatsPageHero.js";
 import { AnalysisStudioSection } from "./components/AnalysisStudioSection.js";
-import { StatsMetricCard } from "../../components/stats/StatsMetricCard.js";
-import { STATS_COLORS } from "../../lib/stats/color-tokens.js";
-import { buildMetricSeries } from "../../lib/stats/series-builders.js";
+import { StatsTopCardsGrid } from "../../components/stats/StatsTopCardsGrid.js";
 import styles from "./StatsPage.module.css";
 
 export const StatsPage: FunctionComponent = () => {
@@ -45,13 +38,6 @@ export const StatsPage: FunctionComponent = () => {
     applyCustomRange,
     completionConfidence,
   } = useStatsPageData(selectedProject?.id || null);
-
-
-  const taskCodingTokens = stats?.purposes.find((p) => p.id === "task_coding")?.usage.totalTokens || 0;
-  const ciFixTokens = stats?.purposes.find((p) => p.id === "ci_fix")?.usage.totalTokens || 0;
-  const qaReviewTokens = stats?.purposes.find((p) => p.id === "qa_review")?.usage.totalTokens || 0;
-  const planningTokens = stats?.purposes.find((p) => p.id === "planning")?.usage.totalTokens || 0;
-  const metricSeries = buildMetricSeries(stats);
 
   useLayoutEffect(() => {
     if (!rootRef.current || reducedMotion || !stats || hasAnimated.current) {
@@ -95,53 +81,17 @@ export const StatsPage: FunctionComponent = () => {
         </div>
       ) : stats ? (
         <>
-
-          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 w-full">
-            <StatsMetricCard
-              label="Task Coding"
-              value={formatTokens(taskCodingTokens)}
-              detail="Total tokens utilized for core code generation tasks"
-              accentHex={STATS_COLORS.taskCoding}
-              sparkline={metricSeries.taskCodingTokens}
-              signalLabel="Tokens"
-            />
-            <StatsMetricCard
-              label="CI Fix"
-              value={formatTokens(ciFixTokens)}
-              detail="Total tokens consumed by CI/CD remediation workflows"
-              accentHex={STATS_COLORS.ciFix}
-              sparkline={metricSeries.ciFixTokens}
-              signalLabel="Tokens"
-            />
-            <StatsMetricCard
-              label="QA Review"
-              value={formatTokens(qaReviewTokens)}
-              detail="Total tokens used during code review and quality audits"
-              accentHex={STATS_COLORS.qaReview}
-              sparkline={metricSeries.qaReviewTokens}
-              signalLabel="Tokens"
-            />
-            <StatsMetricCard
-              label="Planning"
-              value={formatTokens(planningTokens)}
-              detail="Total tokens allocated to project and sprint planning"
-              accentHex={STATS_COLORS.planning}
-              sparkline={metricSeries.planningTokens}
-              signalLabel="Tokens"
-            />
-            <StatsMetricCard
-              label="Wall Runtime"
-              value={formatDuration(usage.wallTimeMs)}
-              detail="Task-run wall time in the same window, including completed sprint work."
-              accentHex={STATS_COLORS.wallRuntime}
-              sparkline={metricSeries.wallRuntime}
-              signalLabel="Task Scope"
-            />
-          </section>
+          <StatsTopCardsGrid
+            stats={stats}
+            usage={usage}
+            tokenSeries={tokenSeries}
+            activeTimeSeries={activeTimeSeries}
+            wallTimeSeries={wallTimeSeries}
+            completionConfidence={completionConfidence}
+            visualMode={visualMode}
+          />
 
           <section className={styles.telemetryStack}>
-
-
             <AnalysisStudioSection
               stats={stats}
               planningUsage={planningUsage}
@@ -160,8 +110,7 @@ export const StatsPage: FunctionComponent = () => {
               applyCustomRange={applyCustomRange}
             />
           </section>
-
-                  </>
+        </>
       ) : null}
     </div>
   );
