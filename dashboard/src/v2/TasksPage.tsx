@@ -18,6 +18,7 @@ import {
   Plus,
   X,
   ArrowUpRight,
+  AlertCircle,
 } from "lucide-preact";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
@@ -47,9 +48,10 @@ const STATUS_CFG: Record<TaskStatus, { label: string; color: string; hex: string
   in_progress: { label: "In Progress", color: "text-signal-500", hex: "#00E0A0", icon: PlayCircle as typeof Circle },
   coding_completed: { label: "Coding Completed", color: "text-cyan-500", hex: "#0F9FA8", icon: CheckCircle2 as typeof Circle },
   completed: { label: "Completed", color: "text-status-green", hex: "#00AB84", icon: CheckCircle2 as typeof Circle },
+  QA_REVIEW_FAILED: { label: "QA Failed", color: "text-red-500", hex: "#ef4444", icon: AlertCircle as typeof Circle },
 };
 
-const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "coding_completed", "completed"];
+const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "coding_completed", "QA_REVIEW_FAILED", "completed"];
 const EXECUTOR_LABEL: Record<Task["executorType"], string> = {
   auto: "Auto",
   docker_cli: "CLI",

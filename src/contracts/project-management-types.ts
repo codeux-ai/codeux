@@ -5,7 +5,7 @@ import type { ProjectWorkerAssignmentRecord } from "./worker-types.js";
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
 export type ProjectSourceType = "local" | "git";
 export type SprintStatus = "running" | "paused" | "completed" | "failed" | "cancelled" | "idle";
-export type TaskStatus = "pending" | "in_progress" | "coding_completed" | "completed";
+export type TaskStatus = "pending" | "in_progress" | "coding_completed" | "completed" | "QA_REVIEW_FAILED";
 export type TaskPriority = "critical" | "high" | "medium" | "low";
 export type TaskExecutorType = "auto" | "docker_cli" | "jules";
 export type GitProvider = "github" | "gitlab" | "local";
@@ -78,6 +78,10 @@ export interface TaskRecord {
   dependsOnTaskIds: string[];
   isIndependent: boolean;
   isMerged: boolean;
+  qa_review?: {
+    error_reason?: string;
+    [key: string]: any;
+  };
   mergeIndicator: string | null;
   sourceType: string | null;
   sourcePath: string | null;

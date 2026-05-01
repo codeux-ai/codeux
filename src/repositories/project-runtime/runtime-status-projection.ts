@@ -4,7 +4,7 @@ import type { DashboardStatus, JulesActivity, Subtask, SubtaskStatus } from "../
 import { mapPlanningStatusToRuntimeStatus, toMergeIndicator } from "../../services/subtask-state-mapper.js";
 import { RuntimeContextPayload } from "./runtime-context-store.js";
 
-export type PlanningTaskStatus = "pending" | "in_progress" | "coding_completed" | "completed";
+export type PlanningTaskStatus = "pending" | "in_progress" | "coding_completed" | "completed" | "QA_REVIEW_FAILED";
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
 export type TaskRunState = Exclude<SubtaskStatus, undefined>;
 export type JulesPlan = { steps?: Array<{ title?: string }> };
