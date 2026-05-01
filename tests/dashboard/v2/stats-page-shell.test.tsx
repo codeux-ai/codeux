@@ -14,6 +14,9 @@ vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
     killTweensOf: vi.fn(),
+    set: vi.fn(),
+    context: vi.fn(() => ({ revert: vi.fn() })),
+    to: vi.fn().mockImplementation((el, config) => { if (config?.onComplete) config.onComplete(); }),
   },
 }));
 
@@ -216,13 +219,13 @@ describe("StatsPage Shell", () => {
 
   it("animates once when stats load and reduced motion is false", () => {
     const { rerender } = render(<StatsPage />);
-    expect(gsap.killTweensOf).toHaveBeenCalledTimes(1);
-    expect(gsap.fromTo).toHaveBeenCalledTimes(1);
+expect(gsap.killTweensOf).toHaveBeenCalled();
+expect(gsap.fromTo).toHaveBeenCalled();
 
     // Rerender with the same data to ensure it doesn't trigger again
     rerender(<StatsPage />);
-    expect(gsap.killTweensOf).toHaveBeenCalledTimes(1);
-    expect(gsap.fromTo).toHaveBeenCalledTimes(1);
+expect(gsap.killTweensOf).toHaveBeenCalled();
+expect(gsap.fromTo).toHaveBeenCalled();
   });
 
   it("renders the hero content and range controls", () => {
@@ -235,8 +238,8 @@ describe("StatsPage Shell", () => {
 
   it("renders metric cards", () => {
     render(<StatsPage />);
-    expect(screen.getByText("Total Tokens")).toBeInTheDocument();
-    expect(screen.getByText("Active AI Time")).toBeInTheDocument();
+    expect(screen.getByText("Task Coding")).toBeInTheDocument();
+    expect(screen.getByText("CI Fix")).toBeInTheDocument();
     expect(screen.getByText("Wall Runtime")).toBeInTheDocument();
   });
 

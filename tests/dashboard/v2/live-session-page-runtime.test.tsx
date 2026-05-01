@@ -2,6 +2,16 @@
 import { h, Fragment } from "preact";
 /** @jsx h */
 /** @jsxFrag Fragment */
+vi.mock("gsap", () => ({
+  default: {
+    killTweensOf: vi.fn(),
+    fromTo: vi.fn().mockImplementation((el, config) => { if (config?.onComplete) config.onComplete(); }),
+    to: vi.fn().mockImplementation((el, config) => { if (config?.onComplete) config.onComplete(); }),
+    set: vi.fn(),
+    context: vi.fn(() => ({ revert: vi.fn() })),
+    registerPlugin: vi.fn()
+  }
+}));
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/preact";
 import { within } from "@testing-library/preact";

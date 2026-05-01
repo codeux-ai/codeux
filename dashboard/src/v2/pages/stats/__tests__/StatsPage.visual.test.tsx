@@ -1,6 +1,17 @@
 /**
  * @vitest-environment jsdom
  */
+vi.mock("gsap", () => ({
+  default: {
+    killTweensOf: vi.fn(),
+    fromTo: vi.fn().mockImplementation((el, config) => { if (config?.onComplete) config.onComplete(); }),
+    to: vi.fn().mockImplementation((el, config) => { if (config?.onComplete) config.onComplete(); }),
+    set: vi.fn(),
+    context: vi.fn(() => ({ revert: vi.fn() })),
+    registerPlugin: vi.fn(),
+    timeline: vi.fn(() => ({ to: vi.fn().mockReturnThis(), fromTo: vi.fn().mockReturnThis(), set: vi.fn().mockReturnThis() }))
+  }
+}));
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/preact';
 import { StatsPage } from '../StatsPage.js';
@@ -76,7 +87,7 @@ describe('StatsPage visual tests', () => {
 
   it('renders StatsPage with execution purpose cards in trend mode', () => {
     const { getByText } = render(<StatsPage />);
-    expect(getByText('Total Tokens')).toBeTruthy();
-    expect(getByText('Code Generation')).toBeTruthy();
+    expect(getByText('Task Coding')).toBeTruthy();
+    expect(getByText('CI Fix')).toBeTruthy();
   });
 });
