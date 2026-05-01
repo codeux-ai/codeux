@@ -1,6 +1,12 @@
 import type { Subtask } from "../../types.js";
 import { getTaskProgressPhase, type TaskProgressPhase } from "../../lib/task-progress.js";
 
+export interface SprintDagNodeHover {
+  prompt: string;
+  dependencies: Array<{ id: string; title: string }>;
+  counters: { incoming: number; outgoing: number };
+}
+
 export interface SprintDagNodeModel {
   task: Subtask;
   phase: TaskProgressPhase;
@@ -10,6 +16,7 @@ export interface SprintDagNodeModel {
   incoming: string[];
   outgoing: string[];
   isReady: boolean;
+  hover: SprintDagNodeHover;
 }
 
 export interface SprintDagEdgeModel {
@@ -17,6 +24,12 @@ export interface SprintDagEdgeModel {
   from: string;
   to: string;
   state: "pending" | "active" | "settled" | "blocked";
+}
+
+export interface SprintDagAdjacencyModel {
+  id: string;
+  from: string;
+  to: string;
 }
 
 export interface SprintDagMetrics {
@@ -31,59 +44,12 @@ export interface SprintDagMetrics {
 export interface SprintDagModel {
   nodes: SprintDagNodeModel[];
   edges: SprintDagEdgeModel[];
+  adjacencies: SprintDagAdjacencyModel[];
   columns: SprintDagNodeModel[][];
   metrics: SprintDagMetrics;
 }
 
-export function getSprintDagFocusNodeIds(model: SprintDagModel): string[] {
-  const byPriority = (predicate: (node: SprintDagNodeModel) => boolean): string[] => (
-    model.nodes
-      .filter(predicate)
-      .sort((left, right) => {
-        if (left.depth !== right.depth) {
-          return left.depth - right.depth;
-        }
-        if (left.row !== right.row) {
-          return left.row - right.row;
-        }
-        return left.order - right.order;
-      })
-      .map((node) => node.task.id)
-  );
-
-  const running = byPriority((node) => node.phase === "RUNNING");
-  if (running.length > 0) {
-    return running;
-  }
-
-  const codingCompleted = byPriority((node) => node.phase === "CODING_COMPLETED");
-  if (codingCompleted.length > 0) {
-    return codingCompleted;
-  }
-
-  const ready = byPriority((node) => node.isReady);
-  if (ready.length > 0) {
-    return ready;
-  }
-
-  const unresolved = byPriority((node) => node.phase !== "COMPLETED");
-  if (unresolved.length > 0) {
-    return unresolved;
-  }
-
-  return model.nodes
-    .slice()
-    .sort((left, right) => {
-      if (left.depth !== right.depth) {
-        return left.depth - right.depth;
-      }
-      if (left.row !== right.row) {
-        return left.row - right.row;
-      }
-      return left.order - right.order;
-    })
-    .map((node) => node.task.id);
-}
+// auto-focus behavior removed
 
 function isSettledPhase(phase: TaskProgressPhase): boolean {
   return phase === "COMPLETED";
@@ -142,6 +108,17 @@ export function buildSprintDagModel(tasks: Subtask[]): SprintDagModel {
     const incoming = resolveIncoming(task);
     const dependencyPhases = incoming.map((dependencyId) => phaseById.get(dependencyId) || "PENDING");
 
+    const hoverPrompt = typeof task.prompt === "string" && task.prompt.trim().length > 0
+      ? task.prompt.trim()
+      : "No prompt provided";
+
+    const hoverDependencies = incoming.map((id) => ({
+      id,
+      title: tasksById.get(id)?.title || "Unknown Task",
+    }));
+
+    const outgoing = outgoingById.get(task.id) || [];
+
     return {
       task,
       phase,
@@ -149,8 +126,16 @@ export function buildSprintDagModel(tasks: Subtask[]): SprintDagModel {
       row: 0,
       order: index,
       incoming,
-      outgoing: outgoingById.get(task.id) || [],
+      outgoing,
       isReady: phase === "PENDING" && dependencyPhases.every((dependencyPhase) => isSettledPhase(dependencyPhase)),
+      hover: {
+        prompt: hoverPrompt,
+        dependencies: hoverDependencies,
+        counters: {
+          incoming: incoming.length,
+          outgoing: outgoing.length,
+        },
+      },
     } satisfies SprintDagNodeModel;
   });
 
@@ -193,9 +178,21 @@ export function buildSprintDagModel(tasks: Subtask[]): SprintDagModel {
     }
   }
 
+  const adjacencies: SprintDagAdjacencyModel[] = [];
+  for (const column of sortedColumns) {
+    for (let i = 0; i < column.length - 1; i++) {
+      adjacencies.push({
+        id: `${column[i].task.id}~${column[i + 1].task.id}`,
+        from: column[i].task.id,
+        to: column[i + 1].task.id,
+      });
+    }
+  }
+
   return {
     nodes,
     edges,
+    adjacencies,
     columns: sortedColumns,
     metrics: {
       rootCount: nodes.filter((node) => node.incoming.length === 0).length,

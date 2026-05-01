@@ -361,6 +361,23 @@
     animation: dag-running-ring 2.4s ease-in-out infinite;
   }
 
+  .dag-edge-transition {
+    transition: stroke 500ms ease, stroke-width 500ms ease, opacity 500ms ease;
+  }
+
+  .dag-node-transition {
+    transition: transform 500ms ease, background-color 500ms ease, border-color 500ms ease, box-shadow 500ms ease;
+  }
+
+  .dag-scroll-shell {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .dag-scroll-shell::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Text overflow breaking utilities */
   .break-words {
     word-break: break-word;
@@ -453,6 +470,11 @@
     .dag-grid-pan,
     .dag-running-ring {
       animation: none !important;
+      transition: none !important;
+    }
+
+    .dag-edge-transition,
+    .dag-node-transition {
       transition: none !important;
     }
   }

@@ -6,11 +6,35 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/preact";
 import { within } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
+
 expect.extend(matchers);
 
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
+
+
+
+
+
+vi.mock("gsap", () => ({
+  gsap: {
+    to: vi.fn(),
+    fromTo: vi.fn(),
+    set: vi.fn(),
+    killTweensOf: vi.fn(),
+    context: vi.fn(() => ({ revert: vi.fn() })),
+    registerPlugin: vi.fn()
+  },
+  default: {
+    to: vi.fn(),
+    fromTo: vi.fn(),
+    set: vi.fn(),
+    killTweensOf: vi.fn(),
+    context: vi.fn(() => ({ revert: vi.fn() })),
+    registerPlugin: vi.fn()
+  }
+}));
 
 vi.mock("../../../dashboard/src/hooks/use-dashboard-runtime-data.js");
 vi.mock("../../../dashboard/src/v2/context/project-data.js");
