@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workflow-utils.js";
-import { extractJsonLikeBlock } from "./planning-json-extractor.js";
+import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import { StructuredAgentRequestService } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
@@ -1460,13 +1460,12 @@ function triggerReviewModeDescription(triggerType: QaReviewTriggerType): string 
 }
 
 function normalizeQaReviewResult(bodyMarkdown: string): NormalizedQaReviewResult {
-  const rawJson = extractJsonLikeBlock(bodyMarkdown);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawJson);
-  } catch (error) {
-    throw new Error(`Invalid JSON format: ${error instanceof Error ? error.message : String(error)}`);
+  const extraction = extractJsonFromText(bodyMarkdown);
+  if (!extraction.success) {
+    throw new Error(`Invalid JSON format: ${extraction.error.message}`);
   }
+
+  const parsed = extraction.data;
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Result must be a JSON object.");

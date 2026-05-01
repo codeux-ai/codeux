@@ -23,7 +23,8 @@ import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
-import { extractJsonLikeBlock, parsePlannedSprintReply } from "./planning-json-extractor.js";
+import { parsePlannedSprintReply } from "./planning-json-extractor.js";
+import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import type { PlannedSprintPayload, PlannedTaskDraft } from "../contracts/project-management-types.js";
 import { persistPlannedTasks } from "./planning-task-persistence.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
@@ -524,18 +525,16 @@ export class PlanningAgentService {
 
 
   private parseJsonReply<T>(bodyMarkdown: string): T {
-    const rawJson = extractJsonLikeBlock(bodyMarkdown);
-
-    try {
-      return JSON.parse(rawJson) as T;
-    } catch (error) {
-      this.deps.logger?.warn("Failed to parse Planning agent reply", {
-        bodyMarkdown,
-        rawJson,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw new Error("Planning agent reply was not valid JSON.");
+    const extraction = extractJsonFromText(bodyMarkdown);
+    if (extraction.success) {
+      return extraction.data as T;
     }
+
+    this.deps.logger?.warn("Failed to parse Planning agent reply", {
+      bodyMarkdown,
+      error: extraction.error.message,
+    });
+    throw new Error("Planning agent reply was not valid JSON.");
   }
 
   private getProviderLabel(provider: ProviderId): string {

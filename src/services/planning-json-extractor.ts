@@ -1,21 +1,9 @@
 import { PlanningPayloadValidator } from "./planning-payload-validator.js";
 import type { PlannedSprintPayload } from "../contracts/project-management-types.js";
+import { findAllJsonCandidates } from "../domain/llm/json-extraction.js";
 
 export function extractJsonLikeBlock(bodyMarkdown: string): string {
   const trimmed = bodyMarkdown.trim();
-
-  // Strategy 1: Look for a fenced code block whose content looks like JSON.
-  // Skip fenced blocks that capture code examples inside JSON string values
-  // (e.g. ```ts ... ``` embedded in promptMarkdown fields).
-  const fenceRegex = /```[a-zA-Z0-9_-]*\s*([\s\S]*?)```/g;
-  let fencedMatch: RegExpExecArray | null;
-  const fencedCandidates: string[] = [];
-  while ((fencedMatch = fenceRegex.exec(trimmed)) !== null) {
-    const fencedContent = fencedMatch[1]?.trim();
-    if (fencedContent && (fencedContent.startsWith("{") || fencedContent.startsWith("["))) {
-      fencedCandidates.push(fencedContent);
-    }
-  }
 
   // Helper to check if a parsed object looks like a planning payload.
   const isPlanningPayload = (parsed: any): boolean => {
@@ -82,57 +70,7 @@ export function extractJsonLikeBlock(bodyMarkdown: string): string {
     return null;
   };
 
-
-  const MAX_CANDIDATES = 50;
-
-  // Strategy 2: Find all balanced brace/bracket blocks.
-  const findAllBalancedJson = (openChar: "{" | "[", closeChar: "}" | "]"): string[] => {
-    const candidates: string[] = [];
-    let searchFrom = 0;
-    while (searchFrom < trimmed.length && candidates.length < MAX_CANDIDATES) {
-      const start = trimmed.indexOf(openChar, searchFrom);
-      if (start < 0) break;
-
-      let depth = 0;
-      let inString = false;
-      let escaped = false;
-      let endIndex = -1;
-      for (let index = start; index < trimmed.length; index += 1) {
-        const char = trimmed[index]!;
-        if (inString) {
-          if (escaped) { escaped = false; continue; }
-          if (char === "\\") { escaped = true; continue; }
-          if (char === "\"") { inString = false; }
-          continue;
-        }
-        if (char === "\"") { inString = true; continue; }
-        if (char === openChar) { depth += 1; continue; }
-        if (char === closeChar) {
-          depth -= 1;
-          if (depth === 0) { endIndex = index; break; }
-        }
-      }
-
-      if (endIndex >= 0) {
-        const candidate = trimmed.slice(start, endIndex + 1);
-        try {
-          JSON.parse(candidate);
-          candidates.push(candidate);
-        } catch {
-          // Not valid JSON
-        }
-      }
-      searchFrom = start + 1;
-    }
-    return candidates;
-  };
-
-  const allCandidates = [
-    trimmed,
-    ...fencedCandidates,
-    ...findAllBalancedJson("{", "}"),
-    ...findAllBalancedJson("[", "]")
-  ];
+  const allCandidates = findAllJsonCandidates(trimmed);
 
   let bestCandidate: string = trimmed;
   let bestScore = -1;
