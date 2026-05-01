@@ -39,7 +39,7 @@ import {
 } from "../stats-utils.js";
 
 import type { DonutSliceGeometry, ChartPoint } from "./stats-geometry.js";
-export type StatsVisualMode = "trend" | "composition" | "reliability" | "ledgers";
+export type StatsVisualMode = "trend" | "composition" | "providers" | "ledgers";
 export type ChartSeriesId = "tokens" | "active" | "invocations";
 export type LedgerSortKey = "last" | "tokens" | "active" | "input" | "output" | "name";
 
@@ -167,7 +167,7 @@ export const ViewToggle: FunctionComponent<{
   const modes: Array<{ id: StatsVisualMode; label: string; icon: any }> = [
     { id: "trend", label: "Trend", icon: BarChart3 },
     { id: "composition", label: "Composition", icon: PieChart },
-    { id: "reliability", label: "Reliability", icon: ShieldCheck },
+    { id: "providers", label: "Providers", icon: ShieldCheck },
     { id: "ledgers", label: "Ledgers", icon: Layers3 },
   ];
 
