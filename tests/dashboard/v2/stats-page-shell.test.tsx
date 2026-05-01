@@ -54,8 +54,8 @@ vi.mock("../../../dashboard/src/v2/pages/stats/components/AnalysisStudioSection.
     setVisualMode,
   }: {
     stats: { tasks: Array<{ label: string }>; sprints: Array<{ label: string }> };
-    visualMode: "trend" | "composition" | "reliability" | "ledgers";
-    setVisualMode: (mode: "trend" | "composition" | "reliability" | "ledgers") => void;
+    visualMode: "trend" | "composition" | "providers" | "ledgers";
+    setVisualMode: (mode: "trend" | "composition" | "providers" | "ledgers") => void;
   }) => {
     const [taskSearch, setTaskSearch] = useState("");
     const filteredTasks = stats.tasks.filter((task) => task.label.toLowerCase().includes(taskSearch.toLowerCase()));
@@ -64,7 +64,7 @@ vi.mock("../../../dashboard/src/v2/pages/stats/components/AnalysisStudioSection.
       <section>
         <button type="button" onClick={() => setVisualMode("trend")}>Trend</button>
         <button type="button" onClick={() => setVisualMode("composition")}>Composition</button>
-        <button type="button" onClick={() => setVisualMode("reliability")}>Reliability</button>
+        <button type="button" onClick={() => setVisualMode("providers")}>Providers</button>
         <button type="button" onClick={() => setVisualMode("ledgers")}>Ledgers</button>
 
         {visualMode === "trend" ? <div>Trend analysis</div> : null}
@@ -75,9 +75,9 @@ vi.mock("../../../dashboard/src/v2/pages/stats/components/AnalysisStudioSection.
             <div>Token Anatomy</div>
           </div>
         ) : null}
-        {visualMode === "reliability" ? (
+        {visualMode === "providers" ? (
           <div>
-            <div>Reliability analysis</div>
+            <div>Providers analysis</div>
             <div>Telemetry Source Mix</div>
             <div>Confidence Board</div>
           </div>
@@ -249,7 +249,7 @@ expect(gsap.fromTo).toHaveBeenCalled();
     render(<StatsPage />);
     expect(screen.getByRole("button", { name: /Trend/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Composition/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Reliability/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Providers/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Ledgers/i })).toBeInTheDocument();
 
     // Default mode from mock is "trend"
@@ -287,18 +287,18 @@ expect(gsap.fromTo).toHaveBeenCalled();
     expect(screen.getByText("Token Anatomy")).toBeInTheDocument();
   });
 
-  it("renders reliability mode when active", () => {
+  it("renders providers mode when active", () => {
     vi.mocked(useStatsPageData).mockReturnValueOnce({
       ...baseMockValue,
-      visualMode: "reliability",
+      visualMode: "providers",
       chartState: {
         ...baseMockValue.chartState,
-        visualMode: "reliability",
+        visualMode: "providers",
       },
     } as any);
     
     render(<StatsPage />);
-    expect(screen.getByText("Reliability analysis")).toBeInTheDocument();
+    expect(screen.getByText("Providers analysis")).toBeInTheDocument();
     expect(screen.getByText("Telemetry Source Mix")).toBeInTheDocument();
     expect(screen.getByText("Confidence Board")).toBeInTheDocument();
   });

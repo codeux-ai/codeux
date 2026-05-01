@@ -13,33 +13,49 @@ vi.mock("../../../dashboard/src/v2/pages/stats/use-stats-page-data.js", () => ({
       range: { resolutionLabel: "hour" },
       buckets: [],
       purposes: [
-        { id: "task_coding", usage: { totalTokens: 1000 } },
-        { id: "ci_fix", usage: { totalTokens: 2000 } },
-        { id: "qa_review", usage: { totalTokens: 3000 } },
-        { id: "planning", usage: { totalTokens: 4000 } },
+        { id: "task_coding", label: "Task Coding", usage: { totalTokens: 1000 } },
+        { id: "ci_fix", label: "CI Fix", usage: { totalTokens: 2000 } },
+        { id: "qa_review", label: "QA Review", usage: { totalTokens: 3000 } },
+        { id: "planning", label: "Planning", usage: { totalTokens: 4000 } },
       ],
+      providers: [],
+      tokenSources: [],
+      usage: { totalTokens: 10000, inputTokens: 5000, outputTokens: 5000, cachedInputTokens: 0, reasoningOutputTokens: 0, reportedInvocationCount: 50, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
       chartSeries: [],
     },
     loading: false,
     error: null,
     usage: { wallTimeMs: 3600000, totalTokens: 10000, activeTimeMs: 1800000, invocationCount: 50, reportedInvocationCount: 50, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
     activeQuery: { window: "7d" },
+    visualMode: "composition",
+    tokenSeries: [],
+    activeTimeSeries: [],
+    wallTimeSeries: [],
+    completionConfidence: "High",
+    providerSegments: [],
+    tokenSegments: [],
+    sourceSegments: [],
   }),
 }));
 
 vi.mock("gsap", () => ({
   default: {
-        registerPlugin: vi.fn(),
+    registerPlugin: vi.fn(),
     killTweensOf: vi.fn(),
     set: vi.fn(),
     context: vi.fn(() => ({ revert: vi.fn() })),
     to: vi.fn().mockImplementation((el, config) => { if (config?.onComplete) config.onComplete(); }),
     fromTo: vi.fn().mockImplementation((el, config) => { if (config?.onComplete) config.onComplete(); }),
+    timeline: vi.fn(() => ({
+      fromTo: vi.fn().mockReturnThis(),
+      to: vi.fn().mockReturnThis(),
+      kill: vi.fn(),
+    })),
   }
 }));
 
 // Mock sparkline specifically because its dependency relies on DOM sizes
-vi.mock("../../../dashboard/src/components/ui/Sparkline.js", () => ({
+vi.mock("../../../dashboard/src/v2/components/ui/Sparkline.js", () => ({
   Sparkline: () => <div data-testid="mock-sparkline">Sparkline</div>,
 }));
 
@@ -63,20 +79,20 @@ describe("StatsPage Composition", () => {
     );
 
     // Assert that the composition cards exist
-    expect(screen.getByText("Task Coding")).not.toBeNull();
-    expect(screen.getByText("1.0k")).not.toBeNull();
+    expect(screen.getAllByText("Task Coding")[0]).not.toBeNull();
+    expect(screen.getAllByText("1.0k")[0]).not.toBeNull();
 
-    expect(screen.getByText("CI Fix")).not.toBeNull();
-    expect(screen.getByText("2.0k")).not.toBeNull();
+    expect(screen.getAllByText("CI Fix")[0]).not.toBeNull();
+    expect(screen.getAllByText("2.0k")[0]).not.toBeNull();
 
-    expect(screen.getByText("QA Review")).not.toBeNull();
-    expect(screen.getByText("3.0k")).not.toBeNull();
+    expect(screen.getAllByText("QA Review")[0]).not.toBeNull();
+    expect(screen.getAllByText("3.0k")[0]).not.toBeNull();
 
-    expect(screen.getByText("Planning")).not.toBeNull();
-    expect(screen.getByText("4.0k")).not.toBeNull();
+    expect(screen.getAllByText("Planning")[0]).not.toBeNull();
+    expect(screen.getAllByText("4.0k")[0]).not.toBeNull();
 
-    expect(screen.getByText("Wall Runtime")).not.toBeNull();
+    expect(screen.getAllByText("Wall Runtime")[0]).not.toBeNull();
     // 3600000 ms is 1h 0m
-    expect(screen.getByText("1h 0m")).not.toBeNull();
+    expect(screen.getAllByText("1h 0m")[0]).not.toBeNull();
   });
 });

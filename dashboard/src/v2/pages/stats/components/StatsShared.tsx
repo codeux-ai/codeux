@@ -172,7 +172,7 @@ export const CompositionStudio: FunctionComponent<{
   </section>
 );
 
-export const ReliabilityStudio: FunctionComponent<{
+export const ProvidersStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
   providerSegments: SegmentDefinition[];
   sourceSegments: SegmentDefinition[];
@@ -181,7 +181,7 @@ export const ReliabilityStudio: FunctionComponent<{
     <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
       <DonutCard
         title="Telemetry Source Mix"
-        eyebrow="Reliability"
+        eyebrow="Providers"
         description="Provider-reported versus estimated, unavailable, and unsupported usage across the selected window."
         centerValue={String(stats.tokenSources.reduce((sum, entry) => sum + entry.count, 0))}
         centerLabel="invocations"
@@ -234,9 +234,9 @@ export const ReliabilityStudio: FunctionComponent<{
             </div>
           </div>
           <div className={SUBPANEL_CLASS}>
-            <div className="text-sm font-semibold text-slate-900 dark:text-white">Reliability signal</div>
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">Providers signal</div>
             <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              Reliability mode is tuned for operational trust: how much of the window is exact, how much came from fallback, and where unsupported providers still participate in time tracking without token precision.
+              Providers mode is tuned for operational trust: how much of the window is exact, how much came from fallback, and where unsupported providers still participate in time tracking without token precision.
             </div>
           </div>
         </div>
