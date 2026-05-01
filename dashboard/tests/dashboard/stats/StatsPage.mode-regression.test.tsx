@@ -85,16 +85,24 @@ describe("TopCardsModeRenderer Mode Regression", () => {
   });
 
   it("renders reliability mode cards correctly", () => {
-    render(<TopCardsModeRenderer mode="reliability" {...defaultProps} />);
-    expect(screen.getByText("Reported Invocations")).toBeInTheDocument();
-    expect(screen.getByText("Estimated Fallbacks")).toBeInTheDocument();
-    expect(screen.getByText("Telemetry Health")).toBeInTheDocument();
-    expect(screen.getByText("Total Events")).toBeInTheDocument();
+    const propsWithProviders = {
+      ...defaultProps,
+      stats: {
+        ...defaultProps.stats,
+        providers: [
+          { id: "test-provider", label: "Test Provider", usage: { totalTokens: 100 } }
+        ] as any
+      }
+    };
+    render(<TopCardsModeRenderer mode="reliability" {...propsWithProviders} />);
+    expect(screen.getByText("Test Provider")).toBeInTheDocument();
   });
 
   it("renders ledgers mode cards correctly", () => {
     render(<TopCardsModeRenderer mode="ledgers" {...defaultProps} />);
-    expect(screen.getByText("Total Tasks")).toBeInTheDocument();
-    expect(screen.getByText("Total Invocations")).toBeInTheDocument();
+    expect(screen.getByText("Insertions")).toBeInTheDocument();
+    expect(screen.getByText("Deletions")).toBeInTheDocument();
+    expect(screen.getByText("Pull Requests")).toBeInTheDocument();
+    expect(screen.getByText("Merged Commits")).toBeInTheDocument();
   });
 });

@@ -167,7 +167,7 @@ export const ViewToggle: FunctionComponent<{
   const modes: Array<{ id: StatsVisualMode; label: string; icon: any }> = [
     { id: "trend", label: "Trend", icon: BarChart3 },
     { id: "composition", label: "Composition", icon: PieChart },
-    { id: "reliability", label: "Reliability", icon: ShieldCheck },
+    { id: "reliability", label: "Providers", icon: ShieldCheck },
     { id: "ledgers", label: "Ledgers", icon: Layers3 },
   ];
 

@@ -7,7 +7,7 @@ import { formatTokens, formatDuration, createSeries } from "../../pages/stats/st
 import { StatsMetricCard } from "./StatsMetricCard.js";
 import { STATS_COLORS } from "../../lib/stats/color-tokens.js";
 import type { StatsVisualMode } from "../../pages/stats/components/stats-ui-primitives.js";
-import { buildMetricSeries } from "../../lib/stats/series-builders.js";
+import { buildMetricSeries, extractProviderSeries } from "../../lib/stats/series-builders.js";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -127,7 +127,7 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
           value={formatTokens(stats.usage.inputTokens || 0)}
           detail="Total number of input tokens processed"
           accentHex="#00E0A0"
-          sparkline={[]}
+          sparkline={metricSeries.coreInputTokens}
           signalLabel="Composition"
         />
         <StatsMetricCard
@@ -135,7 +135,7 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
           value={formatTokens(stats.usage.outputTokens || 0)}
           detail="Total number of output tokens generated"
           accentHex="#FFB800"
-          sparkline={[]}
+          sparkline={metricSeries.coreOutputTokens}
           signalLabel="Composition"
         />
       </>
@@ -143,45 +143,24 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
   };
 
   const renderReliabilityMode = () => {
-    const reported = stats.usage.reportedInvocationCount;
-    const estimated = stats.usage.estimatedInvocationCount;
-    const total = reported + estimated + stats.usage.unavailableInvocationCount + stats.usage.unsupportedInvocationCount;
-    const reliabilityPercent = total > 0 ? Math.round((reported / total) * 100) : 0;
+    const topProviders = stats.providers?.slice(0, 4) || [];
 
     return (
       <>
-        <StatsMetricCard
-          label="Reported Invocations"
-          value={String(reported)}
-          detail="High-confidence invocations with precise telemetry"
-          accentHex="#10B981"
-          sparkline={[]}
-          signalLabel="Reliability"
-        />
-        <StatsMetricCard
-          label="Estimated Fallbacks"
-          value={String(estimated)}
-          detail="Invocations requiring token usage estimation"
-          accentHex="#FFB800"
-          sparkline={[]}
-          signalLabel="Reliability"
-        />
-        <StatsMetricCard
-          label="Telemetry Health"
-          value={`${reliabilityPercent}%`}
-          detail="Percentage of invocations with reported telemetry"
-          accentHex="#0EA5E9"
-          sparkline={[]}
-          signalLabel="Reliability"
-        />
-        <StatsMetricCard
-          label="Total Events"
-          value={String(total)}
-          detail="Total tracked telemetry events"
-          accentHex="#00E0A0"
-          sparkline={[]}
-          signalLabel="Reliability"
-        />
+        {topProviders.map((provider, index) => {
+          const colors = ["#10B981", "#0EA5E9", "#F59E0B", "#8B5CF6"];
+          return (
+            <StatsMetricCard
+              key={provider.id}
+              label={provider.label || provider.id}
+              value={formatTokens(provider.usage?.totalTokens || 0)}
+              detail={`Total tokens processed by ${provider.label || provider.id}`}
+              accentHex={colors[index % colors.length]!}
+              sparkline={extractProviderSeries(stats, provider.id)}
+              signalLabel="Providers"
+            />
+          );
+        })}
       </>
     );
   };
@@ -190,20 +169,36 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     return (
       <>
         <StatsMetricCard
-          label="Total Tasks"
-          value={String(0)}
-          detail="Number of execution tasks tracked in the ledger"
-          accentHex="#00E0A0"
-          sparkline={[]}
-          signalLabel="Ledgers"
+          label="Insertions"
+          value={formatTokens(stats.git?.totals?.insertions || 0)}
+          detail="Lines added across repositories"
+          accentHex="#10B981"
+          sparkline={metricSeries.gitInsertions}
+          signalLabel="Git Activity"
         />
         <StatsMetricCard
-          label="Total Invocations"
-          value={String(0)}
-          detail="Number of distinct API invocations recorded"
+          label="Deletions"
+          value={formatTokens(stats.git?.totals?.deletions || 0)}
+          detail="Lines removed across repositories"
+          accentHex="#EF4444"
+          sparkline={metricSeries.gitDeletions}
+          signalLabel="Git Activity"
+        />
+        <StatsMetricCard
+          label="Pull Requests"
+          value={formatTokens(stats.git?.totals?.prCount || 0)}
+          detail="Total PRs opened"
           accentHex="#0EA5E9"
-          sparkline={[]}
-          signalLabel="Ledgers"
+          sparkline={metricSeries.gitPrs}
+          signalLabel="Git Activity"
+        />
+        <StatsMetricCard
+          label="Merged Commits"
+          value={formatTokens(stats.git?.totals?.mergedCount || 0)}
+          detail="Total commits merged to main"
+          accentHex="#8B5CF6"
+          sparkline={metricSeries.gitMerges}
+          signalLabel="Git Activity"
         />
       </>
     );
