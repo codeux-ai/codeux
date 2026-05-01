@@ -73,6 +73,47 @@ describe("buildSprintDagModel", () => {
     ]);
     expect(getSprintDagFocusNodeIds(readyModel)).toEqual(["T02"]);
   });
+
+  it("generates hover payloads with prompt fallback and dependency resolution", () => {
+    const model = buildSprintDagModel([
+      makeTask({ id: "T01", title: "T01 Title", prompt: "Hello" }),
+      makeTask({ id: "T02", title: "T02 Title", prompt: "   ", depends_on: ["T01"] }),
+      makeTask({ id: "T03", title: "T03 Title", prompt: undefined as any, depends_on: ["T02"] }),
+    ]);
+
+    const t01 = model.nodes.find((n) => n.task.id === "T01");
+    const t02 = model.nodes.find((n) => n.task.id === "T02");
+    const t03 = model.nodes.find((n) => n.task.id === "T03");
+
+    expect(t01?.hover.prompt).toBe("Hello");
+    expect(t02?.hover.prompt).toBe("No prompt provided");
+    expect(t03?.hover.prompt).toBe("No prompt provided");
+
+    expect(t02?.hover.dependencies).toEqual([{ id: "T01", title: "T01 Title" }]);
+    expect(t02?.hover.counters).toEqual({ incoming: 1, outgoing: 1 });
+    expect(t01?.hover.counters).toEqual({ incoming: 0, outgoing: 1 });
+    expect(t03?.hover.counters).toEqual({ incoming: 1, outgoing: 0 });
+  });
+
+  it("generates adjacency connectors for nodes in the same depth column", () => {
+    const model = buildSprintDagModel([
+      makeTask({ id: "Root", title: "Root" }),
+      makeTask({ id: "ChildA", title: "Child A", depends_on: ["Root"] }),
+      makeTask({ id: "ChildB", title: "Child B", depends_on: ["Root"] }),
+      makeTask({ id: "ChildC", title: "Child C", depends_on: ["Root"] }),
+      makeTask({ id: "Leaf", title: "Leaf", depends_on: ["ChildB"] }),
+    ]);
+
+    expect(model.columns[0]).toHaveLength(1);
+    expect(model.columns[1]).toHaveLength(3);
+    expect(model.columns[2]).toHaveLength(1);
+
+    expect(model.adjacencies).toHaveLength(2);
+    expect(model.adjacencies[0]?.from).toBe("ChildA");
+    expect(model.adjacencies[0]?.to).toBe("ChildB");
+    expect(model.adjacencies[1]?.from).toBe("ChildB");
+    expect(model.adjacencies[1]?.to).toBe("ChildC");
+  });
 });
 
   describe("Coverage padding 6", () => {
