@@ -113,6 +113,8 @@ Behavior:
 5. the worker (or virtual provider) processes the request and generates the reply.
 6. Sprint OS captures the reply in the invocation, parses the payload, and applies the result. During parsing, Sprint OS utilizes a shared `src/services/structured-provider-response-service.ts` to execute virtual provider runs and automatically retry parsing using corrective prompts if the shape is malformed. The payload extraction leverages `src/services/planning-json-extractor.ts` to recursively search noisy, markdown-wrapped, or nested provider responses for the canonical JSON payload.
 
+Planning route cancellation is explicit. Dashboard route handlers no longer bind sprint planning or prompt improvement to the HTTP response close event, so refreshing or closing the browser does not terminate the provider run. The sprint composer attaches a `clientRequestId` to each planning request; `Cancel Active Request` posts that id to the planning cancellation endpoint, while `New Sprint` only detaches the current composer UI and leaves the server-side planning run active.
+
 When memory is enabled, planning prompts also include:
 
 - the planning agent's current long-term memory for the project

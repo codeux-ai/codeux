@@ -80,6 +80,7 @@ export const SprintsPage: FunctionComponent = () => {
     handleMarkCompleted,
     handleSubmitSprint,
     handleImprovePrompt,
+    handleCancelPlanningRequest,
     handleOpenAppendTasks,
     handleAppendTask,
     handleDeleteSprint,
@@ -409,6 +410,11 @@ export const SprintsPage: FunctionComponent = () => {
                     }}
                     onImprovePrompt={handleImprovePrompt}
                     onSubmit={onSprintSubmit}
+                    onCancelPlanningRequest={handleCancelPlanningRequest}
+                    onStartNewSprint={() => {
+                      setEditingSprint(null);
+                      setShowCreateComposer(true);
+                    }}
                     onAppendTasks={editingSprint ? () => { void handleOpenAppendTasks(editingSprint); } : undefined}
                   />
                 </div>

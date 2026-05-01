@@ -24,6 +24,7 @@ import {
   improveSprintPrompt,
   planSprint,
   updateSprint,
+  cancelPlanningRequest,
 } from "../../lib/project-api.js";
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
 import { buildTaskBundle, parseTaskBundle } from "../../lib/markdown-transfer.js";
@@ -433,6 +434,7 @@ export function useSprintsPageData() {
     routeOverride: PlanningRouteOption | null;
     modelOverride: string | null;
     planningAgentPresetId: string | null;
+    clientRequestId?: string;
     signal?: AbortSignal;
   }): Promise<void> => {
     if (!selectedProject) {
@@ -452,6 +454,7 @@ export function useSprintsPageData() {
         await planSprint(selectedProject.id, editingSprint.id, {
           autoStart: false,
           replan: payload.submitMode === "replan",
+          clientRequestId: payload.clientRequestId,
           planningAgentPresetId: payload.planningAgentPresetId || undefined,
           overrides,
         }, payload.signal);
@@ -459,6 +462,7 @@ export function useSprintsPageData() {
         await planSprint(selectedProject.id, editingSprint.id, {
           autoStart: true,
           replan: false,
+          clientRequestId: payload.clientRequestId,
           planningAgentPresetId: payload.planningAgentPresetId || undefined,
           overrides,
         }, payload.signal);
@@ -483,12 +487,14 @@ export function useSprintsPageData() {
     if (payload.submitMode === "plan_only") {
       await planSprint(selectedProject.id, created.id, {
         autoStart: false,
+        clientRequestId: payload.clientRequestId,
         planningAgentPresetId: payload.planningAgentPresetId || undefined,
         overrides,
       }, payload.signal);
     } else if (payload.submitMode === "plan_and_start") {
       await planSprint(selectedProject.id, created.id, {
         autoStart: true,
+        clientRequestId: payload.clientRequestId,
         planningAgentPresetId: payload.planningAgentPresetId || undefined,
         overrides,
       }, payload.signal);
@@ -504,6 +510,10 @@ export function useSprintsPageData() {
     const response = await improveSprintPrompt(selectedProject.id, draft, signal);
     return response.goal;
   }, [selectedProject]);
+
+  const handleCancelPlanningRequest = useCallback(async (clientRequestId: string): Promise<void> => {
+    await cancelPlanningRequest(clientRequestId);
+  }, []);
 
   const handleOpenAppendTasks = useCallback(async (sprint: Sprint) => {
     if (!selectedProject) return;
@@ -690,6 +700,7 @@ export function useSprintsPageData() {
     handleMarkCompleted,
     handleSubmitSprint,
     handleImprovePrompt,
+    handleCancelPlanningRequest,
     handleOpenAppendTasks,
     handleAppendTask,
     handleDeleteSprint,

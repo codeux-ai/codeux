@@ -153,6 +153,14 @@ export const planSprint = async (
   });
 };
 
+export const cancelPlanningRequest = async (
+  clientRequestId: string,
+): Promise<{ ok: true; cancelled: boolean }> => {
+  return fetchJson(`/api/planning-requests/${encodeURIComponent(clientRequestId)}/cancel`, {
+    method: "POST",
+  });
+};
+
 export const updateSprint = async (sprintId: string, input: UpdateSprintInput): Promise<SprintRecord> => {
   return fetchJson<SprintRecord>(`/api/sprints/${encodeURIComponent(sprintId)}`, {
     method: "PATCH",

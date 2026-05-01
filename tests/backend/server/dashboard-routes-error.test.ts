@@ -207,6 +207,7 @@ describe("dashboard route handlers", () => {
     expect((await request(app).post("/api/projects/project-1/planning/improve-sprint-prompt").send(null)).status).toBe(400);
     expect((await request(app).post("/api/projects/project-1/sprints/sprint-1/plan").send({ autoStart: true })).status).toBe(202);
     expect((await request(app).post("/api/projects/project-1/sprints/sprint-1/plan").send(null)).status).toBe(400);
+    expect((await request(app).post("/api/planning-requests/request-1/cancel")).status).toBe(202);
 
     const disabledApp = createApp((router) => registerPlanningRoutes(router, {} as DashboardDependencies));
     expect((await request(disabledApp).post("/api/projects/project-1/planning/improve-sprint-prompt").send({})).status).toBe(404);

@@ -91,22 +91,12 @@ describe("SprintComposer", () => {
     resolveSubmit!(undefined);
   });
 
-  it("shows planning overlay and aborts when cancel is clicked", async () => {
-    let rejectSubmit: (val: any) => void;
-    const submitPromise = new Promise((_, reject) => {
-      rejectSubmit = reject;
-    });
-
-    const mockOnSubmit = vi.fn(async ({ signal }) => {
-      return new Promise((resolve, reject) => {
-        if (signal) {
-          signal.addEventListener('abort', () => reject(new DOMException("Aborted", "AbortError")));
-        }
-      });
-    });
+  it("shows planning overlay and cancels through explicit request cancellation", async () => {
+    const mockOnCancelPlanningRequest = vi.fn();
+    const mockOnSubmit = vi.fn(async () => new Promise(() => undefined));
 
     const { getByText, getByPlaceholderText, queryByText, getAllByText } = render(
-      <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} />
+      <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} onCancelPlanningRequest={mockOnCancelPlanningRequest} />
     );
 
     const nameInput = getByPlaceholderText("Runtime hardening");
@@ -126,10 +116,13 @@ describe("SprintComposer", () => {
 
     expect(mockOnSubmit).toHaveBeenCalled();
 
-    // Click Cancel Request (abort via the overlay specifically)
-    const cancelBtns = getAllByText("Cancel Request");
+    // Click Cancel Active Request through the overlay specifically.
+    const cancelBtns = getAllByText("Cancel Active Request");
     // Click the one inside the overlay
     fireEvent.click(cancelBtns[0]!);
+
+    expect(mockOnCancelPlanningRequest).toHaveBeenCalledTimes(1);
+    expect(mockOnCancelPlanningRequest.mock.calls[0]?.[0]).toEqual(expect.any(String));
 
     // Overlay should disappear because state resets when not busy
     await waitFor(() => {
@@ -137,25 +130,23 @@ describe("SprintComposer", () => {
     });
   });
 
-  it("shows New Sprint secondary action and calls onClose without aborting", async () => {
+  it("shows New Sprint secondary action and opens a fresh composer without cancelling", async () => {
     let resolveSubmit: (val: any) => void;
-    let isAborted = false;
     const submitPromise = new Promise((resolve) => {
       resolveSubmit = resolve;
     });
 
-    const mockOnSubmit = vi.fn(async ({ signal }) => {
-      if (signal) {
-        signal.addEventListener('abort', () => {
-          isAborted = true;
-        });
-      }
-      return submitPromise;
-    });
-    const mockOnClose = vi.fn();
+    const mockOnSubmit = vi.fn(async () => submitPromise);
+    const mockOnCancelPlanningRequest = vi.fn();
+    const mockOnStartNewSprint = vi.fn();
 
     const { getByText, getByPlaceholderText, getAllByText } = render(
-      <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} onClose={mockOnClose} />
+      <SprintComposer
+        {...defaultProps}
+        onSubmit={mockOnSubmit}
+        onCancelPlanningRequest={mockOnCancelPlanningRequest}
+        onStartNewSprint={mockOnStartNewSprint}
+      />
     );
 
     const nameInput = getByPlaceholderText("Runtime hardening");
@@ -179,11 +170,9 @@ describe("SprintComposer", () => {
     const newSprintBtn = getByText("New Sprint");
     fireEvent.click(newSprintBtn);
 
-    // Should call onClose
-    expect(mockOnClose).toHaveBeenCalled();
-
-    // Should NOT abort
-    expect(isAborted).toBe(false);
+    expect(mockOnStartNewSprint).toHaveBeenCalled();
+    expect(mockOnCancelPlanningRequest).not.toHaveBeenCalled();
+    expect((nameInput as HTMLInputElement).value).toBe("");
 
     // Resolve the promise to cleanup
     resolveSubmit!(undefined);

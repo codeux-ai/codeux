@@ -51,6 +51,7 @@ export function parseImprovePromptInput(body: unknown): ImprovePromptInput {
   return {
     name: typeof typedBody.name === "string" ? typedBody.name.trim() : "",
     goal: typeof typedBody.goal === "string" ? typedBody.goal : "",
+    clientRequestId: typeof typedBody.clientRequestId === "string" ? typedBody.clientRequestId.trim() : undefined,
     planningAgentPresetId: typeof typedBody.planningAgentPresetId === "string" ? typedBody.planningAgentPresetId.trim() : undefined,
     overrides: typedBody.overrides as ImprovePromptInput["overrides"],
   };
@@ -64,6 +65,7 @@ export function parsePlanSprintOptions(body: unknown): PlanSprintOptions {
   return {
     autoStart: Boolean(typedBody.autoStart),
     replan: Boolean(typedBody.replan),
+    clientRequestId: typeof typedBody.clientRequestId === "string" ? typedBody.clientRequestId.trim() : undefined,
     planningAgentPresetId: typeof typedBody.planningAgentPresetId === "string" ? typedBody.planningAgentPresetId.trim() : undefined,
     overrides: typedBody.overrides as PlanSprintOptions["overrides"],
   };

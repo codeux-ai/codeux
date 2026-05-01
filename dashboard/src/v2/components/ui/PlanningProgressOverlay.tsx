@@ -202,7 +202,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
               className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-4 py-2 text-xs font-semibold text-status-red transition-colors hover:bg-status-red/[0.12] dark:border-status-red/20 dark:bg-status-red/[0.08] dark:text-status-red dark:hover:bg-status-red/[0.16]"
             >
               <X className="h-3.5 w-3.5" />
-              Cancel Request
+              Cancel Active Request
             </button>
           )}
         </div>

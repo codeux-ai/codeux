@@ -44,8 +44,11 @@ interface SprintComposerProps {
     routeOverride: PlanningRouteOption | null;
     modelOverride: string | null;
     planningAgentPresetId: string | null;
+    clientRequestId?: string;
     signal?: AbortSignal;
   }) => Promise<void> | void;
+  onCancelPlanningRequest?: (clientRequestId: string) => Promise<void> | void;
+  onStartNewSprint?: () => void;
   onAppendTasks?: () => void;
 }
 
@@ -58,11 +61,15 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   onClose,
   onImprovePrompt,
   onSubmit,
+  onCancelPlanningRequest,
+  onStartNewSprint,
   onAppendTasks,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const activeRequestRef = useRef<{ id: string; detached: boolean; cancelled: boolean } | null>(null);
+  const ignoredRequestIdsRef = useRef<Set<string>>(new Set());
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const isUnmountedRef = useRef(false);
   const [isImproving, setIsImproving] = useState(false);
@@ -72,6 +79,23 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
 
   const state = useSprintComposerState(initialSprint);
+
+  const createClientRequestId = (): string => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+    return `planning-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  };
+
+  const resetForNewSprint = (): void => {
+    state.setName("");
+    state.setGoal("");
+    state.setOriginalPrompt(null);
+    state.setSubmitMode("plan_and_start");
+    state.setRouteOverride(null);
+    state.setModelOverride(null);
+    state.setPlanningAgentPresetId(null);
+  };
 
   useEffect(() => {
     isUnmountedRef.current = false;
@@ -140,10 +164,17 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   }, [initialSprint?.id]);
 
   const handleCancel = (): void => {
+    const activeRequest = activeRequestRef.current;
+    if (activeRequest) {
+      activeRequest.cancelled = true;
+      ignoredRequestIdsRef.current.add(activeRequest.id);
+      void onCancelPlanningRequest?.(activeRequest.id);
+    }
     if (abortRef.current) {
       abortRef.current.abort();
       abortRef.current = null;
     }
+    activeRequestRef.current = null;
     setIsImproving(false);
     setIsSubmitting(false);
     clearFeedback();
@@ -153,12 +184,30 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     }
   };
 
+  const handleStartNewSprint = (): void => {
+    if (activeRequestRef.current) {
+      activeRequestRef.current.detached = true;
+      ignoredRequestIdsRef.current.add(activeRequestRef.current.id);
+    }
+    if (abortRef.current) {
+      abortRef.current = null;
+    }
+    setIsImproving(false);
+    setIsSubmitting(false);
+    setIsOverlayDismissed(true);
+    clearFeedback();
+    resetForNewSprint();
+    onStartNewSprint?.();
+  };
+
   const handleImprovePrompt = async (): Promise<void> => {
     if (!onImprovePrompt || !state.name.trim() || !state.goal.trim()) {
       return;
     }
     previousFocusRef.current = document.activeElement as HTMLElement | null;
     const rawPrompt = state.goal.trim();
+    const clientRequestId = createClientRequestId();
+    activeRequestRef.current = { id: clientRequestId, detached: false, cancelled: false };
     const controller = new AbortController();
     abortRef.current = controller;
     setIsImproving(true);
@@ -167,19 +216,35 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       const improvedGoal = await onImprovePrompt({
         name: state.name.trim(),
         goal: rawPrompt,
+        clientRequestId,
         planningAgentPresetId: state.planningAgentPresetId || undefined,
         overrides: toPlanningOverrides(state.routeOverride, state.modelOverride, state.planningAgentPresetId),
-      }, controller.signal);
-      state.setGoal(improvedGoal);
-      state.setOriginalPrompt(rawPrompt);
+      });
+      const activeRequest = activeRequestRef.current;
+      if (!activeRequest || (activeRequest.id === clientRequestId && !activeRequest.detached && !activeRequest.cancelled)) {
+        state.setGoal(improvedGoal);
+        state.setOriginalPrompt(rawPrompt);
+      }
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
+      const activeRequest = activeRequestRef.current;
+      if (
+        (error instanceof DOMException && error.name === "AbortError")
+        || ignoredRequestIdsRef.current.has(clientRequestId)
+        || (activeRequest && activeRequest.id !== clientRequestId)
+        || activeRequest?.cancelled
+        || activeRequest?.detached
+      ) return;
       if (!isUnmountedRef.current) {
         setError(error instanceof Error ? error.message : String(error), { retryAction: handleImprovePrompt, retryLabel: "Retry Improve", autoDismiss: false });
       }
     } finally {
       abortRef.current = null;
-      if (!isUnmountedRef.current) {
+      const activeRequest = activeRequestRef.current;
+      if (activeRequest?.id === clientRequestId) {
+        activeRequestRef.current = null;
+      }
+      ignoredRequestIdsRef.current.delete(clientRequestId);
+      if (!isUnmountedRef.current && (!activeRequest || activeRequest.id === clientRequestId)) {
         setIsImproving(false);
         if (previousFocusRef.current) {
           const el = previousFocusRef.current;
@@ -201,6 +266,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     }
 
     previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const clientRequestId = createClientRequestId();
+    activeRequestRef.current = { id: clientRequestId, detached: false, cancelled: false };
     const controller = new AbortController();
     abortRef.current = controller;
     setIsSubmitting(true);
@@ -214,19 +281,32 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         routeOverride: state.routeOverride,
         modelOverride: state.modelOverride,
         planningAgentPresetId: state.planningAgentPresetId,
-        signal: controller.signal,
+        clientRequestId,
       });
-      if (!isUnmountedRef.current) {
+      const activeRequest = activeRequestRef.current;
+      if (!isUnmountedRef.current && activeRequest?.id === clientRequestId && !activeRequest.detached && !activeRequest.cancelled) {
         onClose();
       }
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
+      const activeRequest = activeRequestRef.current;
+      if (
+        (error instanceof DOMException && error.name === "AbortError")
+        || ignoredRequestIdsRef.current.has(clientRequestId)
+        || (activeRequest && activeRequest.id !== clientRequestId)
+        || activeRequest?.cancelled
+        || activeRequest?.detached
+      ) return;
       if (!isUnmountedRef.current) {
         setError(error instanceof Error ? error.message : String(error), { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry Request", autoDismiss: false });
       }
     } finally {
       abortRef.current = null;
-      if (!isUnmountedRef.current) {
+      const activeRequest = activeRequestRef.current;
+      if (activeRequest?.id === clientRequestId) {
+        activeRequestRef.current = null;
+      }
+      ignoredRequestIdsRef.current.delete(clientRequestId);
+      if (!isUnmountedRef.current && (!activeRequest || activeRequest.id === clientRequestId)) {
         setIsSubmitting(false);
         if (previousFocusRef.current && document.activeElement === document.body) {
           const el = previousFocusRef.current;
@@ -277,7 +357,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         onCancel={handleCancel}
         onDismiss={() => setIsOverlayDismissed(true)}
         secondaryActionLabel="New Sprint"
-        onSecondaryAction={onClose}
+        onSecondaryAction={handleStartNewSprint}
       />
 
       <div
@@ -493,14 +573,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
           <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
             {isBusy && isOverlayDismissed && feedback && (
-              <button
-                type="button"
-                onClick={() => setIsOverlayDismissed(false)}
-                className="flex w-full items-center justify-between rounded-xl border border-signal-500/30 bg-signal-500/[0.06] p-3 text-left transition-all hover:bg-signal-500/[0.1] dark:bg-signal-500/[0.08]"
-              >
-                <div className="flex items-center gap-3">
+              <div className="flex w-full flex-col gap-3 rounded-xl border border-signal-500/30 bg-signal-500/[0.06] p-3 dark:bg-signal-500/[0.08] sm:flex-row sm:items-center sm:justify-between">
+                <button
+                  type="button"
+                  onClick={() => setIsOverlayDismissed(false)}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                >
                   <Loader2 className="h-4 w-4 animate-spin text-signal-500" />
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-xs font-bold text-signal-700 dark:text-signal-300">
                       {PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress..."}
                     </div>
@@ -508,8 +588,24 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                       {Math.floor(elapsedMs / 60000)}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed
                     </div>
                   </div>
+                </button>
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleStartNewSprint}
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                  >
+                    New Sprint
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="rounded-lg border border-status-red/20 bg-status-red/[0.06] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/[0.12]"
+                  >
+                    Cancel Active Request
+                  </button>
                 </div>
-              </button>
+              </div>
             )}
             <button
               type="submit"
