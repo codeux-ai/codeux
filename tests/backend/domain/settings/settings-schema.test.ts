@@ -248,3 +248,39 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("mcpTools[1].enabled");
   });
 });
+
+describe("maxParsingRetries validation", () => {
+  it("rejects values less than 0", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.cliWorkflow.maxParsingRetries = -1;
+    const result = validateSettingsPayload(payload);
+    expect(result.success).toBe(false);
+    expect(result.issues.map(i => i.path)).toContain("cliWorkflow.maxParsingRetries");
+  });
+
+  it("rejects values greater than 10", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.cliWorkflow.maxParsingRetries = 11;
+    const result = validateSettingsPayload(payload);
+    expect(result.success).toBe(false);
+    expect(result.issues.map(i => i.path)).toContain("cliWorkflow.maxParsingRetries");
+  });
+
+  it("rejects non-integer values", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.cliWorkflow.maxParsingRetries = 3.5;
+    const result = validateSettingsPayload(payload);
+    expect(result.success).toBe(false);
+    expect(result.issues.map(i => i.path)).toContain("cliWorkflow.maxParsingRetries");
+  });
+
+  it("accepts valid boundary values", () => {
+    const payload0 = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload0.cliWorkflow.maxParsingRetries = 0;
+    expect(validateSettingsPayload(payload0).success).toBe(true);
+
+    const payload10 = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload10.cliWorkflow.maxParsingRetries = 10;
+    expect(validateSettingsPayload(payload10).success).toBe(true);
+  });
+});

@@ -378,6 +378,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     retryOnRateLimit: true,
     rateLimitRetryDelaySeconds: 10,
     maxRateLimitRetries: 5,
+    maxParsingRetries: 3,
     resumeFailedTaskInSameWorkspace: true,
     executionMode: "DOCKER",
     containerImage: "node:24-bookworm",

@@ -405,6 +405,19 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
+          <Row label="Max Parsing Retries" description="Maximum number of retry attempts to extract valid JSON from noisy model responses." badge={getBadge("cliWorkflow.maxParsingRetries")}>
+            <NumberInput
+              value={settings.cliWorkflow.maxParsingRetries}
+              min={0}
+              max={10}
+              onChange={(value) => update({
+                cliWorkflow: {
+                  ...settings.cliWorkflow,
+                  maxParsingRetries: value,
+                },
+              })}
+            />
+          </Row>
           {[
             ["containerGithubAuthPath", "GitHub auth path"],
             ["containerGeminiAuthPath", "Gemini auth path"],

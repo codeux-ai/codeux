@@ -624,6 +624,7 @@ export interface CliWorkflowSettings {
   retryOnRateLimit: boolean;
   rateLimitRetryDelaySeconds: number;
   maxRateLimitRetries: number;
+  maxParsingRetries: number;
   resumeFailedTaskInSameWorkspace: boolean;
   executionMode: CliExecutionMode;
   containerImage: string;

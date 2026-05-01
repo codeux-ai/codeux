@@ -50,6 +50,10 @@ export const sanitizeCliWorkflow = (
       cliInput.maxRateLimitRetries,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.maxRateLimitRetries
     ))),
+    maxParsingRetries: Math.max(0, Math.min(10, readInteger(
+      cliInput.maxParsingRetries,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.maxParsingRetries
+    ))),
     resumeFailedTaskInSameWorkspace: readBoolean(
       cliInput.resumeFailedTaskInSameWorkspace,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.resumeFailedTaskInSameWorkspace
