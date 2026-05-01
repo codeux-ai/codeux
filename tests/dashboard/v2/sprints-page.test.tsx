@@ -60,7 +60,7 @@ describe("SprintsPage", () => {
     fireEvent.click(importTrigger);
 
     // Click the Markdown option
-    const markdownOption = screen.getByRole("button", { name: /markdown/i });
+    const markdownOption = screen.getByRole("menuitem", { name: /markdown/i });
     fireEvent.click(markdownOption);
 
     // Ensure the modal state is updated

@@ -2,13 +2,13 @@
 // @vitest-environment jsdom
 import { h } from "preact";
 import { cleanup, render, screen, fireEvent } from "@testing-library/preact";
-import { afterEach, describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { ActionFeedbackRegion } from "../../../src/v2/components/ui/ActionFeedbackRegion.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
 describe("ActionFeedbackRegion", () => {
-  afterEach(() => {
+  beforeEach(() => {
     cleanup();
   });
 

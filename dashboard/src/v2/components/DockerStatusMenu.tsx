@@ -26,7 +26,9 @@ export const DockerStatusMenu: FunctionComponent = () => {
     const [loading, setLoading] = useState(false);
     const [interactionState, setInteractionState] = useState<'closed' | 'hover' | 'open'>('closed');
     const menuRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const timeoutRef = useRef<number | null>(null);
+    const [menuId] = useState(() => `docker-menu-${Math.random().toString(36).substr(2, 9)}`);
 
     const trapRef = useFocusTrap(interactionState === 'open', { onClose: () => setInteractionState('closed'), restoreFocus: true });
 
@@ -42,11 +44,20 @@ export const DockerStatusMenu: FunctionComponent = () => {
             }
         };
 
-        if (interactionState === 'open') {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && interactionState !== 'closed') {
+                setInteractionState('closed');
+                containerRef.current?.querySelector("button")?.focus();
+            }
+        };
+
+        if (interactionState !== 'closed') {
+            document.addEventListener("keydown", handleKeyDown);
             document.addEventListener("mousedown", handleClickOutside);
         }
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
+            document.removeEventListener("keydown", handleKeyDown);
         };
     }, [interactionState, trapRef]);
 
@@ -98,6 +109,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
     const activeContainers = containers.filter(c => c.state === "running");
 
     return (
+      <div className="relative inline-block" ref={containerRef}>
         <div
             className="relative"
             onMouseEnter={handleMouseEnter}
@@ -109,6 +121,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                 aria-label="Docker Status"
                 aria-haspopup="dialog"
                 aria-expanded={interactionState !== 'closed'}
+                aria-controls={interactionState !== 'closed' ? menuId : undefined}
                 onClick={() => {
                     setInteractionState(prev => {
                         if (prev === 'open') return 'closed';
@@ -154,6 +167,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                 <div
                     ref={trapRef}
                     role="dialog"
+                    id={menuId}
                     aria-modal="true"
                     aria-label="Active Docker Containers"
                     className="absolute right-0 top-full mt-2 w-80 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
@@ -242,5 +256,6 @@ export const DockerStatusMenu: FunctionComponent = () => {
                 </div>
             )}
         </div>
+      </div>
     );
 };

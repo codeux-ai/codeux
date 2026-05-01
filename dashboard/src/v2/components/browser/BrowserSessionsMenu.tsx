@@ -15,6 +15,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     const [loading, setLoading] = useState(false);
     const [interactionState, setInteractionState] = useState<InteractionState>('closed');
     const containerRef = useRef<HTMLDivElement>(null);
+    const [menuId] = useState(() => `browser-menu-${Math.random().toString(36).substr(2, 9)}`);
     const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isMenuVisible = interactionState !== 'closed';
@@ -65,6 +66,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     const handleBlur = (e: FocusEvent) => {
         if (!containerRef.current?.contains(e.relatedTarget as Node)) {
             setInteractionState('closed');
+            containerRef.current?.querySelector("button")?.focus();
         }
     };
 
@@ -127,6 +129,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                 onBlur={handleBlur}
                 aria-haspopup="menu"
                 aria-expanded={isMenuVisible}
+                aria-controls={isMenuVisible ? menuId : undefined}
                 aria-label="Toggle active browser sessions"
                 className={`relative w-11 h-11 flex items-center justify-center rounded-xl transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     isMenuVisible
@@ -140,6 +143,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
             {isMenuVisible && (
                 <div
                     role="menu"
+                    id={menuId}
                     aria-label="Active Browser Sessions"
                     className="absolute right-0 top-full mt-2 w-72 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
                 >

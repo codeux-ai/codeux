@@ -30,7 +30,7 @@ describe("SprintImportMenu", () => {
 
     expect(screen.getAllByText("Jira")[0]).toBeInTheDocument();
 
-    const markdownBtn = screen.getByRole("button", { name: /markdown/i });
+    const markdownBtn = screen.getByRole("menuitem", { name: /markdown/i });
     fireEvent.click(markdownBtn);
     expect(onImport).toHaveBeenCalledTimes(1);
   });

@@ -1,0 +1,32 @@
+@layer base {
+  :root {
+    /* Motion Timing Tokens */
+    --motion-fast: 150ms;
+    --motion-standard: 300ms;
+    --motion-slow: 500ms;
+
+    /* Motion Easing Tokens */
+    --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --motion-ease-dramatic: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --motion-ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --motion-ease-linear: linear;
+
+    /* Semantic Transition Definitions */
+    --transition-hover: var(--motion-fast) var(--motion-ease-standard);
+    --transition-enter: var(--motion-standard) var(--motion-ease-dramatic);
+    --transition-exit: var(--motion-fast) var(--motion-ease-standard);
+    --transition-layout: var(--motion-slow) var(--motion-ease-standard);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --motion-fast: 0.01ms;
+      --motion-standard: 0.01ms;
+      --motion-slow: 0.01ms;
+      --transition-hover: none;
+      --transition-enter: none;
+      --transition-exit: none;
+      --transition-layout: none;
+    }
+  }
+}

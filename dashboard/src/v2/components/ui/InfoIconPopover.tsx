@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { Info, Copy, Check } from "lucide-preact";
+import { calculatePosition } from "../../lib/positioning/index.js";
 
 interface InfoIconPopoverProps {
     className?: string;
@@ -56,33 +57,22 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
 
     useLayoutEffect(() => {
         if (isVisible && wrapperRef.current && popoverRef.current) {
-            const wrapperRect = wrapperRef.current.getBoundingClientRect();
-            const popoverRect = popoverRef.current.getBoundingClientRect();
-
-            const gap = 12;
-            let top = wrapperRect.top - popoverRect.height - gap;
-            let left = wrapperRect.left + (wrapperRect.width / 2) - (popoverRect.width / 2);
-
-            // Boundary checks
-            const padding = 12;
-            if (left < padding) left = padding;
-            if (left + popoverRect.width > window.innerWidth - padding) {
-                left = window.innerWidth - popoverRect.width - padding;
-            }
-            if (top < padding) {
-                // If it doesn't fit on top, put it below
-                top = wrapperRect.bottom + gap;
-            }
-            if (top + popoverRect.height > window.innerHeight - padding) {
-                top = window.innerHeight - popoverRect.height - padding;
-            }
-
+            const { top, left } = calculatePosition({
+                triggerRect: wrapperRef.current.getBoundingClientRect(),
+                contentRect: popoverRef.current.getBoundingClientRect(),
+                position: "top",
+                align: "center",
+                gap: 12,
+                padding: 12
+            });
             setCoords({ top, left });
         }
     }, [isVisible]);
 
     useLayoutEffect(() => {
         if (!popoverRef.current) return;
+
+        gsap.killTweensOf(popoverRef.current);
 
         if (isVisible) {
             gsap.fromTo(
@@ -102,11 +92,24 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
     }, [isVisible, isRendered]);
 
     useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && isVisible) {
+                if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+                if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
+                setIsVisible(false);
+            }
+        };
+
+        if (isVisible) {
+            document.addEventListener("keydown", handleKeyDown);
+        }
+
         return () => {
+            document.removeEventListener("keydown", handleKeyDown);
             if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
             if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
         };
-    }, []);
+    }, [isVisible]);
 
     return (
         <div
@@ -117,6 +120,8 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
             onClick={handleClick}
             onFocusCapture={handleMouseEnter}
             onBlurCapture={handleMouseLeave}
+            aria-haspopup="dialog"
+            aria-expanded={isVisible}
         >
             <Info className="w-4 h-4 text-slate-400 hover:text-signal-500 transition-colors" strokeWidth={1.5} />
 
@@ -125,7 +130,8 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
                     ref={popoverRef}
                     className="fixed z-[9999] p-4 bg-white/90 dark:bg-void-700/90 backdrop-blur-2xl rounded-xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] border border-black/[0.06] dark:border-white/[0.06] w-64"
                     style={{ top: coords.top, left: coords.left }}
-                    role="tooltip"
+                    role="dialog"
+                    aria-label={title || "Information"}
                     onMouseEnter={handleMouseEnter}
                     onMouseLeave={handleMouseLeave}
                 >

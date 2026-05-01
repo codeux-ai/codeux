@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useRef, useState } from "preact/hooks";
+import { useRef, useState, useEffect } from "preact/hooks";
 import gsap from "gsap";
 import {
   Activity,
@@ -83,6 +83,37 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
 }) => {
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (menuOpen && menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && menuOpen) {
+        setMenuOpen(false);
+      }
+    };
+
+    if (menuOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (menuRef.current) {
+        gsap.killTweensOf(menuRef.current);
+    }
+  }, [menuOpen]);
   const state = statusMap[sprint.status];
   const StatusIcon = state.icon;
   const isCompleted = sprint.status === "completed";
@@ -243,15 +274,21 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
               event.stopPropagation();
               setMenuOpen((current) => !current);
             }}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
             className="touch-target flex h-9 w-9 items-center justify-center rounded-full bg-black/[0.06] text-slate-800 transition-colors hover:bg-black/10 dark:bg-white/[0.07] dark:text-white dark:hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
             title="Settings"
           >
             <MoreVertical className="h-3.5 w-3.5" />
           </button>
 
-          <div className={`absolute bottom-12 right-6 z-30 min-w-[10rem] origin-bottom-right rounded-[1.75rem] border border-black/[0.08] bg-white/92 p-2 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-xl transition-all duration-300 dark:border-white/[0.08] dark:bg-void-800/92 ${menuOpen ? "pointer-events-auto translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-3 scale-95 opacity-0"}`}>
+          <div
+            role="menu"
+            ref={menuRef}
+            className={`absolute bottom-12 right-6 z-30 min-w-[10rem] origin-bottom-right rounded-[1.75rem] border border-black/[0.08] bg-white/92 p-2 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-xl transition-all duration-300 dark:border-white/[0.08] dark:bg-void-800/92 ${menuOpen ? "pointer-events-auto translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-3 scale-95 opacity-0"}`}>
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setMenuOpen(false);
                 onEdit?.();
@@ -263,6 +300,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setMenuOpen(false);
                 onExport?.();
@@ -275,6 +313,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
             {!isCompleted && (
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   setMenuOpen(false);
                   onMarkCompleted?.();
@@ -287,6 +326,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
             )}
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setMenuOpen(false);
                 onToggleShowcase?.();
@@ -299,6 +339,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setMenuOpen(false);
                 onOverrides?.();
@@ -310,6 +351,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
             </button>
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setMenuOpen(false);
                 onDelete?.();
