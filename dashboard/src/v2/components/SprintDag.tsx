@@ -6,6 +6,7 @@ import type { ExecutionTaskDispatchSummary, Subtask } from "../../types.js";
 import { buildSprintDagModel, getSprintDagFocusNodeIds, type SprintDagEdgeModel, type SprintDagNodeModel } from "../lib/sprint-dag.js";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
+import { Tooltip } from "./ui/Tooltip.js";
 
 interface SprintDagProps {
   tasks: Subtask[];
@@ -173,6 +174,48 @@ function formatExecutor(dispatch?: ExecutionTaskDispatchSummary): string | null 
   }
 }
 
+
+function renderDagNodeTooltipContent(node: SprintDagNodeModel) {
+  const hover = node.hover;
+
+  const startedAt = (node.task as any).started_at ? new Date((node.task as any).started_at).getTime() : null;
+  const finishedAt = (node.task as any).finished_at ? new Date((node.task as any).finished_at).getTime() : null;
+  const duration = startedAt && finishedAt ? `${Math.round((finishedAt - startedAt) / 1000)}s` : null;
+
+  return (
+    <div className="flex flex-col gap-3 w-72 p-1 text-slate-200 pointer-events-none">
+      <div className="flex flex-col gap-1.5">
+        <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Prompt</h4>
+        <div className="text-xs font-mono leading-relaxed whitespace-pre-wrap text-slate-300 break-words line-clamp-6">
+          {hover?.prompt || "No prompt available."}
+        </div>
+      </div>
+
+      {(hover?.dependencies?.length || 0) > 0 && (
+        <div className="flex flex-col gap-1.5 pt-2 border-t border-white/10">
+          <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Waiting on</h4>
+          <ul className="flex flex-col gap-1">
+            {hover?.dependencies?.map((dep: { id: string, title: string }) => (
+              <li key={dep.id} className="text-[11px] flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50" />
+                <span className="truncate flex-1">{dep.title}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {duration && (
+        <div className="flex items-center gap-2 pt-2 border-t border-white/10 text-xs text-slate-400 font-mono">
+          <Clock3 className="w-3.5 h-3.5" />
+          <span>Completed in {duration}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 const areDagNodePropsEqual = (
   prevProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, tone: Tone },
   nextProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, tone: Tone }
@@ -204,7 +247,11 @@ const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x
       }}
       title={`${node.task.id} · ${node.task.title}`}
     >
-      <div className={`relative h-full rounded-[1.4rem] border ${tone.card} p-5 backdrop-blur-2xl transition-transform duration-500`}>
+      <Tooltip
+        className="whitespace-normal w-full h-full text-left"
+        content={renderDagNodeTooltipContent(node)}
+      >
+        <div className={`relative h-full rounded-[1.4rem] border ${tone.card} p-5 backdrop-blur-2xl transition-transform duration-500`}>
         <div
           className="absolute left-[-7px] top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border border-white/70 dark:border-white/15"
           style={{ backgroundColor: `${tone.accent}CC`, boxShadow: `0 0 18px ${tone.accent}50` }}
@@ -287,6 +334,7 @@ const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x
           </div>
         </div>
       </div>
+      </Tooltip>
     </div>
   );
 }, areDagNodePropsEqual);

@@ -1,3 +1,6 @@
+import { act } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 /** @vitest-environment jsdom */
 import * as React from "preact/compat";
 import { h } from "preact";
