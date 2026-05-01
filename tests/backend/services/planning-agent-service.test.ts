@@ -10,6 +10,7 @@ import { ExecutionRepository } from "../../../src/repositories/execution-reposit
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
+import { PlanningParseError } from "../../../src/services/planning-json-extractor.js";
 import type { IProviderRunner } from "../../../src/infrastructure/providers/cli/provider-runner.js";
 import { WorkspaceManager } from "../../../src/infrastructure/providers/cli/workspace-manager.js";
 import * as providerRetryPolicy from "../../../src/shared/providers/provider-retry-policy.js";
@@ -1227,5 +1228,100 @@ describe("PlanningAgentService", () => {
     expect(calls).toHaveLength(3);
     expect(calls[1]?.[0]?.continueSessionId).toBe("native-123");
     expect(calls[2]?.[0]?.continueSessionId).toBe("native-123");
+  });
+
+  it("emits planning_parse_failure_blocked event when JSON parsing fails completely", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-agent-failure-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+    const executionControlService = {
+      orchestrateSprint: vi.fn(async () => ({ ok: true })),
+    } as const;
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        nativeSessionId: null,
+        usageTelemetry: {
+          inputTokens: 10,
+          cachedInputTokens: 0,
+          outputTokens: 10,
+          reasoningOutputTokens: 0,
+          totalTokens: 20,
+          usageSource: "reported",
+          rawUsageJson: {},
+          transcriptText: "This is completely malformed text that has no JSON.",
+          nativeSessionId: null,
+        },
+        text: "This is completely malformed text that has no JSON.",
+      }),
+      invokeMcpTool: vi.fn(),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: new ConnectionChatRepository(storage),
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      settingsRepository,
+      providerRunner,
+      executionRepository,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Test Project",
+      key: "TEST",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Test failure",
+      showcasePinned: true,
+    });
+
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      triggerType: "mcp",
+      triggeredBy: "system",
+      executorMode: "mixed",
+      status: "running"
+    });
+
+    await expect(service.planSprint(project.id, sprint.id, { autoStart: false, sprintRunId: sprintRun.id })).rejects.toThrow(PlanningParseError);
+
+    const events = executionRepository.listSprintRunEvents(sprintRun.id, 10);
+    const failureEvent = events.find(e => e.eventType === "planning_parse_failure_blocked");
+    expect(failureEvent).toBeDefined();
+    expect(failureEvent?.payload).toMatchObject({
+      reason: expect.stringContaining("JSON"),
+      attempts: 0,
+      rawResponse: "This is completely malformed text that has no JSON."
+    });
   });
 });

@@ -158,6 +158,7 @@ export interface ImprovePromptInput {
 }
 
 export interface PlanSprintOptions {
+  sprintRunId?: string;
   autoStart: boolean;
   replan?: boolean;
   planningAgentPresetId?: string;
