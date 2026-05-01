@@ -29,9 +29,9 @@ type DockItem = (typeof LEFT_ITEMS)[number] | (typeof RIGHT_ITEMS)[number];
 const DockItemIcon: FunctionComponent<{ item: DockItem; isActive: boolean }> = ({ item, isActive }) => {
     return (
         <div className="relative w-full h-full flex items-center justify-center">
-            <div>
+            <div className="transition-transform duration-300 ease-out group-hover:-translate-y-2.5 group-hover:scale-[1.15] group-active:-translate-y-2.5 group-active:scale-[1.15]">
                 <item.icon
-                    className={`w-5 h-5 relative z-10 transition-all duration-300
+                    className={`w-5 h-5 relative z-10 transition-colors duration-300
                         ${isActive
                             ? item.color
                             : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-200'
