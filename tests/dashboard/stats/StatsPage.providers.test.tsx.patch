@@ -1,0 +1,10 @@
+<<<<<<< SEARCH
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+=======
+  beforeEach(() => {
+    vi.clearAllMocks();
+    document.body.innerHTML = '';
+  });
+>>>>>>> REPLACE

@@ -4,6 +4,7 @@ import { SignalMetricCard } from "../../pages/stats/components/StatsShared.js";
 import { formatTokens, formatDuration, createSeries } from "../../pages/stats/stats-utils.js";
 import type { StatsVisualMode } from "../../pages/stats/components/StatsShared.js";
 import { useGitMetricsMapper } from "../../lib/stats/ledger-metrics.js";
+import { aggregateTopProviders } from "../../lib/stats/provider-aggregation.js";
 
 interface StatsTopCardsGridProps {
   stats: ProjectExecutionStatsSnapshot;
@@ -25,6 +26,28 @@ export const StatsTopCardsGrid: FunctionComponent<StatsTopCardsGridProps> = ({
   visualMode,
 }) => {
   const gitMetrics = useGitMetricsMapper(stats.git);
+
+  if (visualMode === "providers") {
+    const topProviders = aggregateTopProviders(stats);
+    if (topProviders.length > 0) {
+      return (
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
+          {topProviders.map((provider) => (
+            <SignalMetricCard
+              key={provider.id}
+              label={provider.name}
+              value={formatTokens(provider.totalUsage)}
+              detail={`${provider.invocationCount} invocations · ${formatDuration(provider.activeTimeMs)} active time`}
+              accentHex="#00E0A0"
+              hoverTint="group-hover:bg-signal-500/[0.025]"
+              sparkline={provider.dailySeries}
+              signalLabel="Usage"
+            />
+          ))}
+        </section>
+      );
+    }
+  }
 
   if (visualMode === "ledgers" && stats.git) {
     return (

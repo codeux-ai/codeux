@@ -1,0 +1,26 @@
+<<<<<<< SEARCH
+  if (visualMode === "ledgers" && stats.git) {
+    return (
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
+        <SignalMetricCard
+          label="Insertions"
+=======
+  if (visualMode === "providers") {
+    const topProviders = aggregateTopProviders(stats);
+    if (topProviders.length > 0) {
+      return (
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
+          {topProviders.map((provider) => (
+            <ProviderUsageCard key={provider.id} provider={provider} />
+          ))}
+        </section>
+      );
+    }
+  }
+
+  if (visualMode === "ledgers" && stats.git) {
+    return (
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
+        <SignalMetricCard
+          label="Insertions"
+>>>>>>> REPLACE

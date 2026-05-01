@@ -1,0 +1,11 @@
+<<<<<<< SEARCH
+import { useGitMetricsMapper } from "../../lib/stats/ledger-metrics.js";
+
+interface StatsTopCardsGridProps {
+=======
+import { useGitMetricsMapper } from "../../lib/stats/ledger-metrics.js";
+import { aggregateTopProviders } from "../../lib/stats/provider-aggregation.js";
+import { ProviderUsageCard } from "./ProviderUsageCard.js";
+
+interface StatsTopCardsGridProps {
+>>>>>>> REPLACE

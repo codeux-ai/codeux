@@ -1,0 +1,5 @@
+<<<<<<< SEARCH
+import type { SegmentDefinition, ProjectExecutionStatsSnapshot } from "../../../types.js";
+=======
+import type { SegmentDefinition, ProjectExecutionStatsSnapshot } from "../../types.js";
+>>>>>>> REPLACE
