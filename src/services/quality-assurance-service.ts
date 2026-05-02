@@ -23,6 +23,7 @@ import { runCommandStrict } from "./cli-process-runner.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import type { MemoryService } from "./memory-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
+import { parseQaError, type QaReviewError } from "../domain/qa-review/qa-review-types.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
@@ -329,14 +330,19 @@ export class QualityAssuranceService {
         reportText: renderQaChangesRequestedReport(args.task.id, review.summary, continued.applied),
       };
     } catch (error) {
+      const qaError = parseQaError(error);
       this.deps.qaReviewRepository.updateRun(run.id, {
         status: "failed",
-        summaryMarkdown: error instanceof Error ? error.message : String(error),
+        summaryMarkdown: qaError.message,
+        payload: {
+          error_code: qaError.code,
+        },
         finishedAt: new Date().toISOString(),
       });
       this.appendTaskEvent(taskRun, "qa_review_failed", {
         triggerType,
-        error: error instanceof Error ? error.message : String(error),
+        error: qaError.message,
+        error_code: qaError.code,
         qaReviewRunId: run.id,
       });
       this.deps.logger?.warn("Task QA review failed", {
@@ -344,12 +350,13 @@ export class QualityAssuranceService {
         sprintId: args.sprintId,
         taskId,
         triggerType,
-        error: error instanceof Error ? error.message : String(error),
+        error: qaError.message,
+        error_code: qaError.code,
       });
       return {
         reviewed: false,
         reopenedTask: false,
-        mergeBlocked: existingRuns + 1 < qaSettings.maxTaskReviewRuns,
+        mergeBlocked: qaError.isRetryable && (existingRuns + 1 < qaSettings.maxTaskReviewRuns),
         reportText: renderQaReviewFailedReport(args.task.id, error),
       };
     }
@@ -542,21 +549,26 @@ export class QualityAssuranceService {
         ),
       };
     } catch (error) {
+      const qaError = parseQaError(error);
       this.deps.qaReviewRepository.updateRun(run.id, {
         status: "failed",
-        summaryMarkdown: error instanceof Error ? error.message : String(error),
+        summaryMarkdown: qaError.message,
+        payload: {
+          error_code: qaError.code,
+        },
         finishedAt: new Date().toISOString(),
       });
       this.deps.logger?.warn("Sprint QA review failed", {
         projectId: args.projectId,
         sprintId: args.sprintId,
         sprintRunId: args.sprintRunId,
-        error: error instanceof Error ? error.message : String(error),
+        error: qaError.message,
+        error_code: qaError.code,
       });
       return {
         reviewed: false,
         blockedCompletion: true,
-        mergeBlocked: true,
+        mergeBlocked: qaError.isRetryable,
         reportText: renderSprintQaFailedReport(error),
       };
     }
@@ -781,6 +793,8 @@ export class QualityAssuranceService {
             this.touchSprintRunHeartbeat(args.sprintRunId, args.scope.sprintId);
           },
         });
+      } catch (error) {
+        throw parseQaError(error);
       } finally {
         if (settings.memory?.enabled && settings.memory.autoCaptureSprint && this.deps.memoryService && result) {
           const memoryCaptureWorkspace = shouldCleanupSnapshot ? snapshotWorkspace : args.repoPath;

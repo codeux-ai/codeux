@@ -54,9 +54,11 @@ describe("QaReviewRunner", () => {
 
     expect(outcome).toEqual({
       status: "error",
-      reason: "parse_failure",
-      message: "Invalid JSON format: Failed to extract valid JSON from text.",
-      error: expect.any(Error),
+      error: expect.objectContaining({
+        code: "PARSE_FAILURE",
+        message: "Invalid JSON format: Failed to extract valid JSON from text.",
+        isRetryable: false,
+      }),
     });
   });
 
@@ -67,9 +69,11 @@ describe("QaReviewRunner", () => {
 
     expect(outcome).toEqual({
       status: "error",
-      reason: "transport_error",
-      message: "Network timeout",
-      error: expect.any(Error),
+      error: expect.objectContaining({
+        code: "API_TIMEOUT",
+        message: "Network timeout",
+        isRetryable: true,
+      }),
     });
   });
 
@@ -80,9 +84,11 @@ describe("QaReviewRunner", () => {
 
     expect(outcome).toEqual({
       status: "error",
-      reason: "api_failure",
-      message: "Unknown server error 500",
-      error: expect.any(Error),
+      error: expect.objectContaining({
+        code: "UNKNOWN",
+        message: "Unknown server error 500",
+        isRetryable: false,
+      }),
     });
   });
 });
