@@ -46,13 +46,13 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
     const triggerElementRef = useRef<HTMLElement | null>(null);
 
     const CATEGORIES: Array<{ id: string; title: string; icon: any; items: ReadonlyArray<SearchItem> }> = [
-        { id: 'sprints', title: 'Sprints', icon: Layers, items: results.sprints },
-        { id: 'tasks', title: 'Tasks', icon: Activity, items: results.tasks },
-        { id: 'agents', title: 'Agents', icon: Cpu, items: results.agents },
-        { id: 'containers', title: 'Preview Containers', icon: Box, items: results.containers }
+        { id: 'sprints', title: 'Sprints', icon: Layers, items: results?.sprints || [] },
+        { id: 'tasks', title: 'Tasks', icon: Activity, items: results?.tasks || [] },
+        { id: 'agents', title: 'Agents', icon: Cpu, items: results?.agents || [] },
+        { id: 'containers', title: 'Preview Containers', icon: Box, items: results?.containers || [] }
     ];
 
-    const allItems = CATEGORIES.flatMap(c => c.items.map(item => ({ ...item, category: c.id })));
+    const allItems = CATEGORIES.flatMap(c => c.items?.map(item => ({ ...item, category: c.id })));
     const reducedMotion = useReducedMotion();
 
     useLayoutEffect(() => {
@@ -107,10 +107,10 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
                 onClose();
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setFocusedIndex(prev => (prev < allItems.length - 1 ? prev + 1 : 0));
+                setFocusedIndex(prev => (prev < allItems?.length || 0 - 1 ? prev + 1 : 0));
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setFocusedIndex(prev => (prev > 0 ? prev - 1 : allItems.length - 1));
+                setFocusedIndex(prev => (prev > 0 ? prev - 1 : allItems?.length || 0 - 1));
             } else if (e.key === 'Enter' && focusedIndex >= 0) {
                 e.preventDefault();
                 const selectedItem = allItems[focusedIndex];
@@ -122,7 +122,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, focusedIndex, allItems.length, onClose]);
+    }, [isOpen, focusedIndex, allItems?.length || 0, onClose]);
 
     // Track active item ref to ensure it's in view
     const activeItemRef = useRef<HTMLButtonElement>(null);
@@ -190,7 +190,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
                                         {category.title}
                                     </div>
                                     <div className="flex flex-col gap-1">
-                                        {category.items.length === 0 ? (
+                                        {category.items?.length === 0 ? (
                                             <div className="flex flex-col items-center justify-center py-4 text-slate-500 dark:text-slate-400">
                                                 <Inbox className="w-5 h-5 mb-2 opacity-50" />
                                                 <span className="text-xs">No results found for '{searchQuery}'</span>

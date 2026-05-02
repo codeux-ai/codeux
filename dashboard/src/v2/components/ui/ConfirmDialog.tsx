@@ -18,6 +18,7 @@ function DestructiveConfirmButton({
   const [isHolding, setIsHolding] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isShaking, setIsShaking] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   const holdDuration = 1000;
   const holdTimerRef = useRef<number | null>(null);
@@ -126,7 +127,7 @@ function DestructiveConfirmButton({
       onPointerLeave={handlePointerLeave}
       onPointerCancel={handlePointerCancel}
       onContextMenu={(e) => e.preventDefault()}
-      className={`relative overflow-hidden ${className} ${isShaking ? "animate-shake" : ""}`}
+      className={`relative overflow-hidden ${className} ${isShaking && !reducedMotion ? "animate-shake" : ""}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
     >
       {isHolding && (
@@ -134,7 +135,7 @@ function DestructiveConfirmButton({
           className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left"
           style={{
             transform: `scaleX(${progress / 100})`,
-            transition: 'transform 0.1s linear'
+            transition: reducedMotion ? 'none' : 'transform 0.1s linear'
           }}
         />
       )}
@@ -271,7 +272,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
           <button
             type="button"
             onClick={() => handleClose(onCancel)}
-            className="px-4 py-2 text-sm font-medium rounded-[1rem] border border-black/[0.06] dark:border-white/[0.06] hover:bg-black/5 dark:hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 transition-all duration-200"
+            className="px-4 py-2 text-sm font-medium rounded-[1rem] border border-black/[0.06] dark:border-white/[0.06] hover:bg-black/5 dark:hover:bg-white/5 active:scale-95 transition-all duration-200"
           >
             {cancelLabel}
           </button>
@@ -279,13 +280,13 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
             <DestructiveConfirmButton
               onConfirm={() => handleClose(onConfirm)}
               label={confirmLabel}
-              className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-status-red text-white hover:opacity-90 shadow-[0_4px_12px_rgba(211,47,47,0.25)]"
+              className="px-4 py-2 text-sm font-medium rounded-[1rem] active:scale-95 bg-status-red text-white hover:opacity-90 shadow-[0_4px_12px_rgba(211,47,47,0.25)]"
             />
           ) : (
             <button
               type="button"
               onClick={() => handleClose(onConfirm)}
-              className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-signal-500 text-white hover:bg-signal-600 dark:hover:bg-signal-400 shadow-[0_4px_12px_rgba(0,224,160,0.25)]"
+              className="px-4 py-2 text-sm font-medium rounded-[1rem] active:scale-95 bg-signal-500 text-white hover:bg-signal-600 dark:hover:bg-signal-400 shadow-[0_4px_12px_rgba(0,224,160,0.25)]"
             >
               {confirmLabel}
             </button>
