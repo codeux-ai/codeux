@@ -239,8 +239,8 @@ function renderDagNodeTooltipContent(node: SprintDagNodeModel) {
 
 
 const areDagNodePropsEqual = (
-  prevProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, tone: Tone },
-  nextProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, tone: Tone }
+  prevProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary },
+  nextProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary }
 ) => {
   return prevProps.node.task.id === nextProps.node.task.id &&
          prevProps.node.phase === nextProps.node.phase &&
@@ -249,11 +249,15 @@ const areDagNodePropsEqual = (
          prevProps.node.outgoing.length === nextProps.node.outgoing.length &&
          prevProps.node.x === nextProps.node.x &&
          prevProps.node.y === nextProps.node.y &&
+         prevProps.node.hover.counters.incoming === nextProps.node.hover.counters.incoming &&
+         prevProps.node.hover.counters.outgoing === nextProps.node.hover.counters.outgoing &&
+         prevProps.node.hover.prompt === nextProps.node.hover.prompt &&
          prevProps.dispatch?.executorType === nextProps.dispatch?.executorType &&
          prevProps.dispatch?.provider === nextProps.dispatch?.provider;
 };
 
-const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, tone: Tone }) => {
+const DagNode = memo(({ node, dispatch }: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary }) => {
+  const tone = getNodeTone(node);
   const executorLabel = formatExecutor(dispatch);
   const mergeLabel = getMergeLabel(node.task);
   const phaseLabel = node.phase === "CODING_COMPLETED" ? "Coding Done" : tone.label;
@@ -664,7 +668,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
                         strokeDasharray={edge.state === "pending" ? "7 9" : undefined}
                         filter={edge.state === "active" ? "url(#dag-glow)" : undefined}
                       >
-                        {edge.state === "pending" && (
+                        {edge.state === "pending" && (source.isFocusMode || target.isFocusMode) && (
                           <animate attributeName="stroke-dashoffset" from="30" to="0" dur="2.8s" repeatCount="indefinite" />
                         )}
                       </path>
@@ -681,7 +685,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
                           <animate attributeName="stroke-dashoffset" from="0" to="-100" dur="1.6s" repeatCount="indefinite" />
                         </path>
                       )}
-                      {(edge.state === "active" || edge.state === "settled" || edge.state === "blocked") && (
+                      {(edge.state === "active" || ((edge.state === "settled" || edge.state === "blocked") && (source.isFocusMode || target.isFocusMode))) && (
                         <circle r={edge.state === "active" ? 4.5 : 3.2} fill={tone.stroke} opacity={edge.state === "blocked" ? 0.7 : 0.92}>
                           <animateMotion dur={edge.state === "active" ? "2.2s" : "4.8s"} repeatCount="indefinite" rotate="auto">
                             <mpath href={`#dag-path-${edge.id}`} />
@@ -721,10 +725,9 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
               ))}
 
               {positionedNodes.map((node) => {
-                const tone = getNodeTone(node);
                 const dispatch = dispatchByTaskId.get(node.task.record_id || "") || dispatchByTaskId.get(node.task.id);
                 return (
-                  <DagNode key={node.task.id} node={node} dispatch={dispatch} tone={tone} />
+                  <DagNode key={node.task.id} node={node} dispatch={dispatch} />
                 );
               })}
             </div>

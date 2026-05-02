@@ -17,6 +17,7 @@ export interface SprintDagNodeModel {
   outgoing: string[];
   isReady: boolean;
   hover: SprintDagNodeHover;
+  isFocusMode: boolean;
 }
 
 export interface SprintDagEdgeModel {
@@ -136,6 +137,7 @@ export function buildSprintDagModel(tasks: Subtask[]): SprintDagModel {
           outgoing: outgoing.length,
         },
       },
+      isFocusMode: phase === "RUNNING" || phase === "CODING_COMPLETED",
     } satisfies SprintDagNodeModel;
   });
 
