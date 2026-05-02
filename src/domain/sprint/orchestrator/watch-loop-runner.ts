@@ -5,9 +5,16 @@ import type { Subtask,
   AutomationInterventionsSettings,
   AutomationLevel,
   CiIntelligenceSettings,
+  DashboardSettings,
+  DashboardSettingsScope,
   SprintLoopStepSettings,
  } from "../../../contracts/app-types.js";
-import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orchestrator.js";
+import type { InstructionTemplateId } from "../../../instructions/instruction-template-catalog.js";
+import type { MemoryPromotionService } from "../../../services/memory-promotion-service.js";
+import type { QualityAssuranceService } from "../../../services/quality-assurance-service.js";
+import type { Logger } from "../../../shared/logging/logger.js";
+import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
+import type { ProjectAttentionService } from "../../workers/project-attention-service.js";
 import type { CycleRunner } from "./cycle-runner.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 import type { MergeFeedbackResult } from "../ci/main-merge-gate.js";
@@ -21,6 +28,23 @@ import { buildConflictSummaryMarkdown, selectMergedTaskContexts } from "./confli
 import { WorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
 import { renewSprintRunHeartbeat } from "./sprint-run-heartbeat.js";
 import { evaluateSprintRunState, isMainMergeAttentionItem } from "./sprint-state-evaluator.js";
+
+export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "finalizeSprintRunCancellationIfIdle" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "updateSprintRun" | "renewLease">;
+export type WatchLoopAttentionDependencies = Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItemsForSprintRun" | "resolveItem">;
+
+export interface WatchLoopDependencies {
+  logger: Logger;
+  completedSprints: Set<string>;
+  sleep?: (ms: number) => Promise<void>;
+  getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
+  renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
+  updateLastStatus: (status: any) => void;
+  resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
+  memoryPromotionService?: MemoryPromotionService;
+  qualityAssuranceService?: QualityAssuranceService;
+  executionRepository: WatchLoopExecutionDependencies;
+  projectAttentionService: WatchLoopAttentionDependencies;
+}
 
 export interface WatchLoopRunnerArgs {
   args: SprintAgentArgs;
@@ -44,7 +68,7 @@ export class WatchLoopRunner {
   private readonly workspaceManager = new WorkspaceManager();
 
   constructor(
-    private readonly deps: SprintOrchestratorDependencies,
+    private readonly deps: WatchLoopDependencies,
     private readonly cycleRunner: CycleRunner,
     private readonly renderMainMergeCiFeedback: (args: {
       repoPath: string;

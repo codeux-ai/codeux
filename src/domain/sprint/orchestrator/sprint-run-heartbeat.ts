@@ -1,7 +1,7 @@
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
 
 export function renewSprintRunHeartbeat(
-  executionRepository: ExecutionRepository,
+  executionRepository: Pick<ExecutionRepository, "getSprintRun" | "renewLease" | "updateSprintRun">,
   args: {
     sprintRunId: string;
     sprintId: string;
