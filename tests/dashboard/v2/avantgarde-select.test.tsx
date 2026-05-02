@@ -43,6 +43,25 @@ describe("AvantgardeSelect", () => {
     expect(onChange).toHaveBeenCalledWith("2");
   });
 
+  it("handles Tab key close and focus return", async () => {
+    const options = [{ value: "1", label: "Option 1" }, { value: "2", label: "Option 2" }];
+    const { getByRole, getByText, queryByRole } = render(
+      <AvantgardeSelect value="1" onChange={() => {}} options={options} />
+    );
+
+    const trigger = getByText("Option 1").closest("button")!;
+    fireEvent.click(trigger);
+
+    const listbox = getByRole("listbox");
+    expect(listbox).toBeDefined();
+
+    fireEvent.keyDown(listbox, { key: "Tab" });
+
+    await waitFor(() => {
+      expect(queryByRole("listbox")).toBeNull();
+    });
+  });
+
   it("handles Home, End, and Escape keys", async () => {
     const onChange = vi.fn();
     const options = [

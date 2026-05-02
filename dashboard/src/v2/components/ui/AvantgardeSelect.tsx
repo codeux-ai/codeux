@@ -226,6 +226,12 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         triggerRef.current?.focus();
         return;
       }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+        return;
+      }
       if (!options.length) return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -325,11 +331,11 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
                     triggerRef.current?.focus();
                   }}
                   className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors ${
-                    isFocused ? "bg-signal-500/10 " : ""
+                    isFocused ? "bg-slate-100 dark:bg-void-700 outline outline-2 outline-signal-500/50 -outline-offset-2 z-10 relative " : ""
                   }${
                     isSelected
-                      ? "bg-signal-500/8 font-semibold text-signal-600 dark:text-signal-400"
-                      : "text-slate-700 hover:bg-signal-500/5 dark:text-slate-300 dark:hover:bg-signal-500/5"
+                      ? "bg-signal-50/50 dark:bg-signal-900/20 font-semibold text-signal-700 dark:text-signal-300"
+                      : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-void-700"
                   }`}
                 >
                   {option.icon && <span className="flex-shrink-0">{option.icon}</span>}
