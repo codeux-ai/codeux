@@ -293,6 +293,7 @@
 
   .collapsible-content {
     overflow: hidden;
+    min-height: 0;
     opacity: 0;
     transform: translateY(-4px);
     transition: opacity 400ms ease, transform 400ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -490,7 +491,9 @@
     }
 
     .dag-edge-transition,
-    .dag-node-transition {
+    .dag-node-transition,
+    .collapsible-section,
+    .collapsible-content {
       transition: none !important;
     }
   }
@@ -523,7 +526,9 @@
   }
 
   :root[data-reduced-motion="true"] .dag-edge-transition,
-  :root[data-reduced-motion="true"] .dag-node-transition {
+  :root[data-reduced-motion="true"] .dag-node-transition,
+  :root[data-reduced-motion="true"] .collapsible-section,
+  :root[data-reduced-motion="true"] .collapsible-content {
     transition: none !important;
   }
 }

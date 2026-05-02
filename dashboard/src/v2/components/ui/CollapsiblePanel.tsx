@@ -1,11 +1,8 @@
 import type { FunctionComponent } from "preact";
-import { useState, useRef, useLayoutEffect } from "preact/hooks";
-import gsap from "gsap";
+import { useState, useId } from "preact/hooks";
 import { ChevronDown } from "lucide-preact";
 import { WaveFluid } from "./WaveFluid.js";
 import { BorderTrace } from "./BorderTrace.js";
-import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 export const CollapsiblePanel: FunctionComponent<{
     title: string;
@@ -16,35 +13,7 @@ export const CollapsiblePanel: FunctionComponent<{
     children: any;
 }> = ({ title, icon: Icon, accentHex, defaultOpen = false, badge, children }) => {
     const [open, setOpen] = useState(defaultOpen);
-    const contentRef = useRef<HTMLDivElement>(null);
-    const reducedMotion = useReducedMotion();
-    const initialMountRef = useRef(true);
-
-    useLayoutEffect(() => {
-        if (!contentRef.current) return;
-
-        gsap.killTweensOf(contentRef.current);
-
-        if (initialMountRef.current) {
-            initialMountRef.current = false;
-            gsap.set(contentRef.current, {
-                height: open ? "auto" : 0,
-                opacity: open ? 1 : 0,
-                overflow: "hidden"
-            });
-            return;
-        }
-
-        const duration = reducedMotion ? 0 : MODAL_MOTION.collapse.duration;
-
-        gsap.to(contentRef.current, {
-            height: open ? "auto" : 0,
-            opacity: open ? 1 : 0,
-            duration,
-            ease: MODAL_MOTION.collapse.ease,
-            overflow: "hidden"
-        });
-    }, [open, reducedMotion]);
+    const contentId = useId();
 
     return (
         <div className="group/collapse relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -54,6 +23,8 @@ export const CollapsiblePanel: FunctionComponent<{
             {/* Header — always visible, clickable */}
             <button
                 type="button"
+                aria-expanded={open}
+                aria-controls={contentId}
                 onClick={() => setOpen(!open)}
                 className="relative z-10 w-full flex items-center justify-between gap-3 p-5 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
             >
@@ -73,8 +44,8 @@ export const CollapsiblePanel: FunctionComponent<{
             </button>
 
             {/* Collapsible body */}
-            <div ref={contentRef}>
-                <div className="relative z-10 px-5 pb-5 pt-0">
+            <div id={contentId} className={`collapsible-section ${open ? "open" : ""}`}>
+                <div className="collapsible-content relative z-10 px-5 pb-5 pt-0">
                     {children}
                 </div>
             </div>
