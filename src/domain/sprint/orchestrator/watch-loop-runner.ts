@@ -26,8 +26,9 @@ import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "./watch-lo
 import { decideFinalizationTransition } from "./watch-loop-finalization-policy.js";
 import { buildConflictSummaryMarkdown, selectMergedTaskContexts } from "./conflict-summary-utils.js";
 import { WorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
-import { renewSprintRunHeartbeat } from "./sprint-run-heartbeat.js";
 import { evaluateSprintRunState, isMainMergeAttentionItem } from "./sprint-state-evaluator.js";
+import type { HeartbeatService } from "../../../services/heartbeat-service.js";
+
 
 export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "finalizeSprintRunCancellationIfIdle" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "updateSprintRun" | "renewLease">;
 export type WatchLoopAttentionDependencies = Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItemsForSprintRun" | "resolveItem">;
@@ -44,6 +45,7 @@ export interface WatchLoopDependencies {
   qualityAssuranceService?: QualityAssuranceService;
   executionRepository: WatchLoopExecutionDependencies;
   projectAttentionService: WatchLoopAttentionDependencies;
+  heartbeatService: HeartbeatService;
 }
 
 export interface WatchLoopRunnerArgs {
@@ -151,7 +153,9 @@ export class WatchLoopRunner {
       sourceEventKey: `watch-loop-started:${sprintRunId}`,
     });
 
-    while (!allFinished) {
+    this.deps.heartbeatService.startHeartbeat(sprintRunId, scopedExecutionContext.sprint.id, leaseToken);
+    try {
+      while (!allFinished) {
       const controlEval = this.evaluateControlIntervention(sprintRunId);
       if (controlEval.status === "exit") {
         fullReport += controlEval.report;
@@ -243,11 +247,6 @@ export class WatchLoopRunner {
             return fullReport;
           }
           if (finalizationResult.status === "wait") {
-            renewSprintRunHeartbeat(this.deps.executionRepository, {
-              sprintRunId,
-              sprintId: scopedExecutionContext.sprint.id,
-              leaseToken,
-            });
             checkpointWindowStartedAt = Date.now();
             allFinished = false;
             await this.sleep(watchLoopIntervalMs);
@@ -258,31 +257,21 @@ export class WatchLoopRunner {
         }
 
         case WatchLoopState.CHECKPOINT: {
-          renewSprintRunHeartbeat(this.deps.executionRepository, {
-            sprintRunId,
-            sprintId: scopedExecutionContext.sprint.id,
-            leaseToken,
-          });
           checkpointWindowStartedAt = Date.now();
           await this.sleep(watchLoopIntervalMs);
           break;
         }
 
         case WatchLoopState.RUNNING: {
-          const renewed = renewSprintRunHeartbeat(this.deps.executionRepository, {
-            sprintRunId,
-            sprintId: scopedExecutionContext.sprint.id,
-            leaseToken,
-          });
-          if (!renewed) {
-            continue;
-          }
           await this.sleep(watchLoopIntervalMs);
           break;
         }
       }
     }
 
+    } finally {
+      this.deps.heartbeatService.stopHeartbeat(sprintRunId);
+    }
     return fullReport;
   }
 
