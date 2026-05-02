@@ -15,6 +15,9 @@ import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
 
 export interface AnalysisStudioSectionProps {
   stats: ProjectExecutionStatsSnapshot | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
   planningUsage: ExecutionStatsEntitySummary | null;
   providerSegments: SegmentDefinition[];
   tokenSegments: SegmentDefinition[];
@@ -33,6 +36,9 @@ export interface AnalysisStudioSectionProps {
 
 export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps> = ({
   stats,
+  loading,
+  error,
+  refresh,
   planningUsage,
   providerSegments,
   tokenSegments,
@@ -59,6 +65,9 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
       {visualMode === "trend" ? (
         <TrendStudio
           stats={stats}
+          loading={loading}
+          error={error}
+          refresh={refresh}
           planningUsage={planningUsage}
           chartState={chartState}
           activeWindow={activeWindow}
@@ -72,15 +81,19 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
       ) : null}
 
       {visualMode === "composition" ? (
-        <CompositionStudio stats={stats} providerSegments={providerSegments} tokenSegments={tokenSegments} />
+        <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
+          <CompositionStudio stats={stats} providerSegments={providerSegments} tokenSegments={tokenSegments} />
+        </div>
       ) : null}
 
       {visualMode === "reliability" ? (
-        <ReliabilityStudio stats={stats} providerSegments={providerSegments} sourceSegments={sourceSegments} />
+        <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
+          <ReliabilityStudio stats={stats} providerSegments={providerSegments} sourceSegments={sourceSegments} />
+        </div>
       ) : null}
 
       {visualMode === "ledgers" ? (
-        <section className="space-y-6">
+        <section className={`space-y-6 ${loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}`}>
           <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
             <StudioHeader
               icon={Layers3}

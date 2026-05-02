@@ -6,7 +6,6 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { LivePreviewLink } from "../../../dashboard/src/v2/components/ui/LivePreviewLink.js";
 import { SearchOverlay } from "../../../dashboard/src/v2/components/search/SearchOverlay.js";
-
 vi.mock("@tanstack/react-router", async () => {
     return {
         useNavigate: () => vi.fn(),

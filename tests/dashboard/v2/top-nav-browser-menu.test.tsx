@@ -3,6 +3,7 @@
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
+import { act } from "preact/test-utils";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserSessionsMenu } from "../../../dashboard/src/v2/components/browser/BrowserSessionsMenu.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
@@ -142,5 +143,37 @@ describe("BrowserSessionsMenu", () => {
         expect(links[1]).toHaveAttribute("target", "_blank");
 
         expect(browserApi.fetchPreviewSessions).toHaveBeenCalledWith("proj-1");
+    });
+
+    it("restores focus to trigger on escape", async () => {
+        vi.useFakeTimers();
+
+        vi.mocked(useProjectData).mockReturnValue({ selectedProject: null } as any);
+
+        render(<BrowserSessionsMenu enabled={true} />);
+        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+
+        await act(async () => {
+            fireEvent.click(button);
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByRole("menu")).not.toBeNull();
+        });
+
+        await act(async () => {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByRole("menu")).toBeNull();
+        });
+
+        await act(async () => {
+            vi.runAllTimers();
+        });
+        vi.useRealTimers();
+
+        expect(document.activeElement).toBe(button);
     });
 });

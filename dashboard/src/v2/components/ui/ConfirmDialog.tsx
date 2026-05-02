@@ -22,6 +22,7 @@ function DestructiveConfirmButton({
   const [isHolding, setIsHolding] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isShaking, setIsShaking] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   const holdDuration = 1000;
   const holdTimerRef = useRef<number | null>(null);
@@ -130,7 +131,7 @@ function DestructiveConfirmButton({
       onPointerLeave={handlePointerLeave}
       onPointerCancel={handlePointerCancel}
       onContextMenu={(e) => e.preventDefault()}
-      className={`relative overflow-hidden ${className} ${isShaking ? "animate-shake" : ""}`}
+      className={`relative overflow-hidden ${className} ${isShaking && !reducedMotion ? "animate-shake" : ""}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
     >
       {isHolding && (
@@ -138,7 +139,7 @@ function DestructiveConfirmButton({
           className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left"
           style={{
             transform: `scaleX(${progress / 100})`,
-            transition: 'transform 0.1s linear'
+            transition: reducedMotion ? 'none' : 'transform 0.1s linear'
           }}
         />
       )}

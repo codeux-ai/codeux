@@ -62,6 +62,7 @@ describe('StatsPage visual tests', () => {
       } as any,
       loading: false,
       error: null,
+      refresh: vi.fn(),
       usage: {
         invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0
       },

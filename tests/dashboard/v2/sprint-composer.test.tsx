@@ -178,3 +178,94 @@ describe("SprintComposer", () => {
     resolveSubmit!(undefined);
   });
 });
+
+import { AddTaskModal } from "../../../dashboard/src/v2/components/ui/AddTaskModal.js";
+
+describe("AddTaskModal Lifecycle", () => {
+  const defaultProps = {
+    sprints: [{ id: "SPR-1", name: "Test Sprint", status: "planning", order: 0 }],
+    availableTasks: [],
+    onClose: vi.fn(),
+    onSubmit: vi.fn(),
+  };
+
+  beforeEach(() => {
+    cleanup();
+  });
+
+  it("disables cancel and close buttons during pending submit", async () => {
+    let resolveSubmit: (val: any) => void;
+    const submitPromise = new Promise((resolve) => {
+      resolveSubmit = resolve;
+    });
+    const mockOnSubmit = vi.fn(() => submitPromise);
+
+    const { getByLabelText, getByRole, getByText } = render(
+      <AddTaskModal {...defaultProps} onSubmit={mockOnSubmit} />
+    );
+
+    const sprintSelect = getByLabelText("Sprint");
+    const titleInput = getByLabelText("Title");
+
+    fireEvent.input(sprintSelect, { target: { value: "SPR-1" } });
+    fireEvent.input(titleInput, { target: { value: "A valid title" } });
+
+    const submitButton = getByRole("button", { name: "Create Task" });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(mockOnSubmit).toHaveBeenCalled();
+    });
+
+    const closeBtn = getByLabelText("Close");
+    const cancelBtn = getByText("Cancel");
+
+    expect(closeBtn).toBeDisabled();
+    expect(cancelBtn).toBeDisabled();
+    expect(submitButton).toHaveAttribute("aria-disabled", "true");
+
+    resolveSubmit!(undefined);
+  });
+
+  it("displays error in ActionFeedbackRegion without auto dismiss, and handles dismiss", async () => {
+    const mockOnSubmit = vi.fn(() => Promise.reject(new Error("API Error 500")));
+
+    const { getByLabelText, getByRole, getByText, queryByText, queryByRole } = render(
+      <AddTaskModal {...defaultProps} onSubmit={mockOnSubmit} />
+    );
+
+    const sprintSelect = getByLabelText("Sprint");
+    const titleInput = getByLabelText("Title");
+
+    fireEvent.input(sprintSelect, { target: { value: "SPR-1" } });
+    fireEvent.input(titleInput, { target: { value: "A valid title" } });
+
+    const submitButton = getByRole("button", { name: "Create Task" });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(mockOnSubmit).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(getByText("API Error 500")).toBeInTheDocument();
+    });
+
+    const errorRegion = getByRole("status");
+    expect(errorRegion).toBeInTheDocument();
+
+    const dismissBtn = getByLabelText("Dismiss message");
+
+    // Explicitly focus it to ensure focus behavior is correctly represented
+    dismissBtn.focus();
+    expect(document.activeElement).toBe(dismissBtn);
+
+    fireEvent.click(dismissBtn);
+
+    await waitFor(() => {
+      expect(queryByText("API Error 500")).not.toBeInTheDocument();
+      // focus placement after error recovery: activeElement should not be a dead reference
+      expect(document.activeElement).not.toBe(dismissBtn);
+    });
+  });
+});

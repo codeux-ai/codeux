@@ -28,6 +28,7 @@ vi.mock("gsap", () => ({
       kill: vi.fn(),
       set: vi.fn()
     }),
+    to: vi.fn(),
     set: vi.fn(),
     context: (fn: () => void) => {
       fn();
@@ -160,7 +161,7 @@ describe("InteractiveUsageChart", () => {
       setEnabledSeries: vi.fn(),
     };
 
-    render(<InteractiveUsageChart stats={stats} chartState={chartState} />);
+    render(<InteractiveUsageChart stats={stats} loading={false} error={null} refresh={vi.fn()} chartState={chartState} />);
 
     expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
   });
@@ -198,7 +199,7 @@ describe("InteractiveUsageChart", () => {
       setEnabledSeries: vi.fn(),
     };
 
-    const { rerender } = render(<InteractiveUsageChart stats={stats} chartState={chartState} />);
+    const { rerender } = render(<InteractiveUsageChart stats={stats} loading={false} error={null} refresh={vi.fn()} chartState={chartState} />);
 
     // Update stats instance with same window context and new chartSeries reference
     // This simulates a polling refresh where range stays identical but arrays are new
@@ -214,7 +215,7 @@ describe("InteractiveUsageChart", () => {
     };
 
     // ChartState is still pointing to the same zoom range and enabled series
-    rerender(<InteractiveUsageChart stats={updatedStats} chartState={chartState} />);
+    rerender(<InteractiveUsageChart stats={updatedStats} loading={false} error={null} refresh={vi.fn()} chartState={chartState} />);
 
     // We confirm that it renders using the preserved chartState correctly without crashing
     expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
@@ -223,6 +224,54 @@ describe("InteractiveUsageChart", () => {
     // ensuring the chart component isn't aggressively reinitializing it from stats
     expect(chartState.setEnabledSeries).not.toHaveBeenCalled();
     expect(chartState.setZoomRange).not.toHaveBeenCalled();
+  });
+
+  it("renders loading indicator and error states correctly", () => {
+    const stats = {
+      buckets: [
+        { label: "B1", bucketStart: "2023-01-01", bucketEnd: "2023-01-02", usage: { totalTokens: 10, activeTimeMs: 1000, invocationCount: 1 } }
+      ],
+      range: { label: "Last 7 Days", bucketCount: 1, from: "2023-01-01", to: "2023-01-02", resolution: "day" },
+      chartSeries: [{ id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, data: [100] }]
+    } as any;
+
+    const chartState = {
+      visualMode: "trend" as any, setVisualMode: vi.fn(), zoomRange: null, setZoomRange: vi.fn(),
+      hoveredIndex: null, setHoveredIndex: vi.fn(), dragStartIndex: null, setDragStartIndex: vi.fn(),
+      dragCurrentIndex: null, setDragCurrentIndex: vi.fn(), enabledSeries: { tokens: true }, setEnabledSeries: vi.fn(),
+    };
+
+    const mockRefresh = vi.fn().mockResolvedValue(undefined);
+
+    const { rerender } = render(<InteractiveUsageChart stats={stats} loading={true} error={null} refresh={mockRefresh} chartState={chartState} />);
+    expect(screen.getByText("Syncing")).toBeInTheDocument();
+
+    rerender(<InteractiveUsageChart stats={stats} loading={false} error="Network failed" refresh={mockRefresh} chartState={chartState} />);
+    expect(screen.getByText("Network failed")).toBeInTheDocument();
+
+    // Test the retry button
+    const retryButton = screen.getByRole("button", { name: "Retry" });
+    retryButton.click();
+    expect(mockRefresh).toHaveBeenCalled();
+  });
+
+  it("renders empty state with reset filters button when zero buckets", () => {
+    const stats = {
+      buckets: [],
+      range: { label: "Last 7 Days", bucketCount: 0, from: "2023-01-01", to: "2023-01-02", resolution: "day" },
+      chartSeries: []
+    } as any;
+
+    const chartState = {
+      visualMode: "trend" as any, setVisualMode: vi.fn(), zoomRange: null, setZoomRange: vi.fn(),
+      hoveredIndex: null, setHoveredIndex: vi.fn(), dragStartIndex: null, setDragStartIndex: vi.fn(),
+      dragCurrentIndex: null, setDragCurrentIndex: vi.fn(), enabledSeries: {}, setEnabledSeries: vi.fn(),
+    };
+
+    render(<InteractiveUsageChart stats={stats} loading={false} error={null} refresh={vi.fn()} chartState={chartState} />);
+
+    expect(screen.getByText("No Activity Detected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset Filters" })).toBeInTheDocument();
   });
 });
 

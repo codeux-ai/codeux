@@ -139,6 +139,7 @@ const baseMockValue = {
   stats: baseStats,
   loading: false,
   error: null,
+  refresh: vi.fn(),
   usage: baseStats.usage,
   tokenSeries: [0, 10, 5],
   activeTimeSeries: [0, 10, 5],
@@ -208,6 +209,16 @@ describe("StatsPage Shell", () => {
     render(<StatsPage />);
     expect(gsap.fromTo).not.toHaveBeenCalled();
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+  });
+
+  it("renders previous stats when loading is true but stats exist", () => {
+    vi.mocked(useStatsPageData).mockReturnValue({
+      ...baseMockValue,
+      loading: true,
+    } as any);
+    render(<StatsPage />);
+    expect(screen.queryByText(/Loading the telemetry field/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Test Project")).toBeInTheDocument();
   });
 
   it("does not animate if reduced motion is enabled", () => {

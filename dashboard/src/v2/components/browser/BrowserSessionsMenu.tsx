@@ -66,7 +66,6 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     const handleBlur = (e: FocusEvent) => {
         if (!containerRef.current?.contains(e.relatedTarget as Node)) {
             setInteractionState('closed');
-            containerRef.current?.querySelector("button")?.focus();
         }
     };
 
@@ -80,7 +79,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
             if (e.key === 'Escape' && isMenuVisible) {
                 setInteractionState('closed');
                 const triggerBtn = containerRef.current?.querySelector('button');
-                triggerBtn?.focus();
+                setTimeout(() => triggerBtn?.focus(), 0);
             }
         };
         document.addEventListener('keydown', handleKeyDown);
