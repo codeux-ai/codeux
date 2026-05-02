@@ -4,6 +4,8 @@ import gsap from "gsap";
 import { X, ListChecks, Target, Bot, Plus, AlertCircle } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { useActionFeedback } from "../../hooks/use-action-feedback.js";
+import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { Button } from "./Button.js";
@@ -55,7 +57,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [priority, setPriority] = useState<TaskPriority>(initialTask?.priority || "medium");
   const [executorType, setExecutorType] = useState<TaskExecutorType>(initialTask?.executorType || "auto");
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
-  const [error, setError] = useState<string | null>(null);
+  const { feedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
 
   const reducedMotion = useReducedMotion();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -119,7 +121,8 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     }
 
     setIsSubmitting(true);
-    setError(null);
+    clearFeedback();
+    setPending("Saving task...");
     try {
       await onSubmit({
         sprintId,
@@ -131,11 +134,13 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
         executorType,
         dependsOnTaskIds,
       });
+      setSuccess("Task saved successfully.");
       setIsSubmitting(false);
       handleClose();
     } catch (err) {
       setIsSubmitting(false);
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg, { autoDismiss: false });
     }
   };
 
@@ -194,6 +199,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <button
               onClick={handleClose}
               aria-label="Close"
+              disabled={isSubmitting}
               className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500"
             >
               <X className="w-4 h-4" />
@@ -201,13 +207,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-            {error && (
-              // form errors demand immediate user attention to proceed.
-              <div role="alert" aria-live="assertive" id="task-form-error" className="flex items-center gap-2 text-status-red text-sm font-bold bg-status-red/5 dark:bg-status-red/10 px-4 py-2.5 rounded-xl border border-status-red/20 animate-in fade-in slide-in-from-top-1">
-                <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={2.5} />
-                <span>Error: {error}</span>
-              </div>
-            )}
+            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} autoDismiss={feedback.autoDismiss} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="group/field">
                 <label htmlFor="add-task-sprint" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint</label>
@@ -216,7 +216,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   value={sprintId}
                   onInput={(event) => {
                     setSprintId((event.target as HTMLSelectElement).value);
-                    if (error) setError(null);
+                    if (feedback.status === "error") clearFeedback();
                   }}
                   className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500" aria-invalid={!!validationErrors.sprintId && touched.sprintId}
                   aria-describedby={validationErrors.sprintId && touched.sprintId ? "task-sprint-error" : undefined}
@@ -239,7 +239,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   value={title}
                   onInput={(event) => {
                     setTitle((event.target as HTMLInputElement).value);
-                    if (error) setError(null);
+                    if (feedback.status === "error") clearFeedback();
                   }}
                   className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500"
                   placeholder="Define the task scope"
@@ -398,7 +398,8 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <button
                 type="button"
                 onClick={handleClose}
-                className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded"
+                disabled={isSubmitting}
+                className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>

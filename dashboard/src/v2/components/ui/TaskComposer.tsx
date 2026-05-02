@@ -130,6 +130,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               onClick={onClose}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-all hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 active:scale-95 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
               aria-label="Close task composer"
+              disabled={state.isSubmitting}
             >
               <X className="h-4 w-4" />
             </button>
@@ -361,7 +362,8 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-5 py-3 text-sm font-semibold text-slate-500 transition-all hover:text-slate-900 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white"
+              disabled={state.isSubmitting}
+              className="rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-5 py-3 text-sm font-semibold text-slate-500 transition-all hover:text-slate-900 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-50 disabled:cursor-not-allowed dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white"
             >
               Cancel
             </button>

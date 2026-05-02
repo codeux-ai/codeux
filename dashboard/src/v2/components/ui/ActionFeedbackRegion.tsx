@@ -27,6 +27,7 @@ const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: Functi
 export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000, autoDismiss, retryAction, retryLabel }: ActionFeedbackRegionProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
+  const dismissBtnRef = useRef<HTMLButtonElement>(null);
   const reducedMotion = useReducedMotion();
 
   useLayoutEffect(() => {
@@ -89,8 +90,15 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
         )}
         {onDismiss && (
           <button
+            ref={dismissBtnRef}
             type="button"
-            onClick={onDismiss}
+            onClick={() => {
+              if (document.activeElement === dismissBtnRef.current) {
+                // attempt to restore focus contextually or drop it safely
+                dismissBtnRef.current?.blur();
+              }
+              onDismiss?.();
+            }}
             className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
             aria-label="Dismiss message"
           >
