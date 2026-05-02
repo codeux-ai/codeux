@@ -36,6 +36,7 @@ import type { MemoryPromotionService } from "../services/memory-promotion-servic
 import type { QualityAssuranceService } from "../services/quality-assurance-service.js";
 import type { TaskService } from "../services/task-service.js";
 import type { HeartbeatService } from "../services/heartbeat-service.js";
+import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 
 
 const SPRINT_ORCHESTRATOR_OWNER_KEY = `sprint_orchestrator:${process.pid}`;
@@ -105,6 +106,7 @@ export interface SprintOrchestratorDependencies {
   qualityAssuranceService?: QualityAssuranceService;
   taskService?: TaskService;
   heartbeatService: HeartbeatService;
+  workspaceManager: WorkspaceManager;
   /** Resolve the planning agent preset ID for a project (used for per-agent memory tagging). */
   resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
 }

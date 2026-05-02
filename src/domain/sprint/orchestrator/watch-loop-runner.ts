@@ -46,6 +46,7 @@ export interface WatchLoopDependencies {
   executionRepository: WatchLoopExecutionDependencies;
   projectAttentionService: WatchLoopAttentionDependencies;
   heartbeatService: HeartbeatService;
+  workspaceManager: WorkspaceManager;
 }
 
 export interface WatchLoopRunnerArgs {
@@ -67,8 +68,6 @@ export interface WatchLoopRunnerArgs {
 }
 
 export class WatchLoopRunner {
-  private readonly workspaceManager = new WorkspaceManager();
-
   constructor(
     private readonly deps: WatchLoopDependencies,
     private readonly cycleRunner: CycleRunner,
@@ -711,7 +710,7 @@ export class WatchLoopRunner {
       }
       cleanedSessionIds.add(sessionId);
 
-      const worktreePath = await this.workspaceManager.resolveResumeWorktreePath(
+      const worktreePath = await this.deps.workspaceManager.resolveResumeWorktreePath(
         args.repoPath,
         sessionId,
         executionMode,
@@ -719,7 +718,7 @@ export class WatchLoopRunner {
       if (!worktreePath) {
         continue;
       }
-      await this.workspaceManager.removeWorktree(args.repoPath, worktreePath).catch(() => undefined);
+      await this.deps.workspaceManager.removeWorktree(args.repoPath, worktreePath).catch(() => undefined);
     }
   }
 }

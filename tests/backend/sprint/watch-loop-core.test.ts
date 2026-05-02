@@ -68,6 +68,10 @@ const buildDeps = () => ({
     error: vi.fn(),
     child: vi.fn().mockReturnThis(),
   },
+  workspaceManager: {
+    resolveResumeWorktreePath: vi.fn(),
+    removeWorktree: vi.fn(),
+  },
 });
 
 const buildCycleRunner = () => ({
@@ -234,14 +238,12 @@ describe("WatchLoopRunner", () => {
   it("cleans up terminal sprint CLI workspaces on completion", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
-    const resolveResumeWorktreePath = vi.spyOn(
-      (await import("../../../src/infrastructure/providers/cli/workspace-manager.js")).WorkspaceManager.prototype,
-      "resolveResumeWorktreePath",
-    ).mockResolvedValue("/tmp/repo/.worktrees/session-1");
-    const removeWorktree = vi.spyOn(
-      (await import("../../../src/infrastructure/providers/cli/workspace-manager.js")).WorkspaceManager.prototype,
-      "removeWorktree",
-    ).mockResolvedValue(undefined);
+    const resolveResumeWorktreePath = vi.fn().mockResolvedValue("/tmp/repo/.worktrees/session-1");
+    const removeWorktree = vi.fn().mockResolvedValue(undefined);
+    deps.workspaceManager = {
+      resolveResumeWorktreePath,
+      removeWorktree,
+    };
 
     deps.executionRepository.listTaskDispatches.mockReturnValue([
       { id: "dispatch-1", executorType: "docker_cli" },
