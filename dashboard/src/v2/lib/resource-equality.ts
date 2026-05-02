@@ -124,6 +124,67 @@ export function stabilizeEffectiveSettings(prev: EffectiveSettingsResponse | nul
   };
 }
 
+export function isEqualUsageTotals(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.invocationCount === b.invocationCount &&
+         a.activeTimeMs === b.activeTimeMs &&
+         a.wallTimeMs === b.wallTimeMs &&
+         a.inputTokens === b.inputTokens &&
+         a.cachedInputTokens === b.cachedInputTokens &&
+         a.outputTokens === b.outputTokens &&
+         a.reasoningOutputTokens === b.reasoningOutputTokens &&
+         a.totalTokens === b.totalTokens &&
+         a.reportedInvocationCount === b.reportedInvocationCount &&
+         a.estimatedInvocationCount === b.estimatedInvocationCount &&
+         a.unavailableInvocationCount === b.unavailableInvocationCount &&
+         a.unsupportedInvocationCount === b.unsupportedInvocationCount;
+}
+
+export function isEqualBuckets(a: any[], b: any[]): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].bucketStart !== b[i].bucketStart ||
+        a[i].bucketEnd !== b[i].bucketEnd ||
+        a[i].label !== b[i].label ||
+        !isEqualUsageTotals(a[i].usage, b[i].usage)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function isEqualEntitySummaries(a: any[], b: any[]): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id ||
+        a[i].label !== b[i].label ||
+        a[i].secondaryLabel !== b[i].secondaryLabel ||
+        a[i].status !== b[i].status ||
+        a[i].purpose !== b[i].purpose ||
+        a[i].provider !== b[i].provider ||
+        a[i].lastActivityAt !== b[i].lastActivityAt ||
+        !isEqualUsageTotals(a[i].usage, b[i].usage)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function isEqualTokenSources(a: any[], b: any[]): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].source !== b[i].source || a[i].count !== b[i].count) return false;
+  }
+  return true;
+}
+
 export function isEqualProjectStatsSnapshot(prev: ProjectExecutionStatsSnapshot | null, next: ProjectExecutionStatsSnapshot | null): boolean {
   if (prev === next) return true;
   if (!prev || !next) return false;
@@ -133,31 +194,30 @@ export function isEqualProjectStatsSnapshot(prev: ProjectExecutionStatsSnapshot 
          prev.query === next.query &&
          // Note: we can ignore generatedAt for equality checks, or check it. But typically
          // if all the meat of the stats is the same, we consider it equal to avoid thrashing.
-         // Let's actually check deep equality on the core fields.
-         isDeepEqual(prev.usage, next.usage) &&
+         isEqualUsageTotals(prev.usage, next.usage) &&
          isDeepEqual(prev.git, next.git) &&
          isDeepEqual(prev.activeSprint, next.activeSprint) &&
-         isDeepEqual(prev.buckets, next.buckets) &&
-         isDeepEqual(prev.sprints, next.sprints) &&
-         isDeepEqual(prev.tasks, next.tasks) &&
-         isDeepEqual(prev.providers, next.providers) &&
-         isDeepEqual(prev.purposes, next.purposes) &&
-         isDeepEqual(prev.tokenSources, next.tokenSources);
+         isEqualBuckets(prev.buckets, next.buckets) &&
+         isEqualEntitySummaries(prev.sprints, next.sprints) &&
+         isEqualEntitySummaries(prev.tasks, next.tasks) &&
+         isEqualEntitySummaries(prev.providers, next.providers) &&
+         isEqualEntitySummaries(prev.purposes, next.purposes) &&
+         isEqualTokenSources(prev.tokenSources, next.tokenSources);
 }
 
 export function stabilizeProjectStatsSnapshot(prev: ProjectExecutionStatsSnapshot | null, next: ProjectExecutionStatsSnapshot | null): ProjectExecutionStatsSnapshot | null {
   if (prev === next) return prev;
   if (!prev || !next) return next;
 
-  const usageUnchanged = isDeepEqual(prev.usage, next.usage);
+  const usageUnchanged = isEqualUsageTotals(prev.usage, next.usage);
   const gitUnchanged = isDeepEqual(prev.git, next.git);
   const activeSprintUnchanged = isDeepEqual(prev.activeSprint, next.activeSprint);
-  const bucketsUnchanged = isDeepEqual(prev.buckets, next.buckets);
-  const sprintsUnchanged = isDeepEqual(prev.sprints, next.sprints);
-  const tasksUnchanged = isDeepEqual(prev.tasks, next.tasks);
-  const providersUnchanged = isDeepEqual(prev.providers, next.providers);
-  const purposesUnchanged = isDeepEqual(prev.purposes, next.purposes);
-  const tokenSourcesUnchanged = isDeepEqual(prev.tokenSources, next.tokenSources);
+  const bucketsUnchanged = isEqualBuckets(prev.buckets, next.buckets);
+  const sprintsUnchanged = isEqualEntitySummaries(prev.sprints, next.sprints);
+  const tasksUnchanged = isEqualEntitySummaries(prev.tasks, next.tasks);
+  const providersUnchanged = isEqualEntitySummaries(prev.providers, next.providers);
+  const purposesUnchanged = isEqualEntitySummaries(prev.purposes, next.purposes);
+  const tokenSourcesUnchanged = isEqualTokenSources(prev.tokenSources, next.tokenSources);
 
   if (
     prev.projectId === next.projectId &&
@@ -179,15 +239,61 @@ export function stabilizeProjectStatsSnapshot(prev: ProjectExecutionStatsSnapsho
   // Create a mixed object where unchanged nested structures keep their previous references
   const stabilized = { ...next };
 
-  if (usageUnchanged) stabilized.usage = prev.usage;
-  if (gitUnchanged) stabilized.git = prev.git;
-  if (activeSprintUnchanged) stabilized.activeSprint = prev.activeSprint;
-  if (bucketsUnchanged) stabilized.buckets = prev.buckets;
+  if (usageUnchanged) {
+    stabilized.usage = prev.usage;
+  }
+
+  if (gitUnchanged) {
+    stabilized.git = prev.git;
+  }
+
+  if (activeSprintUnchanged) {
+    stabilized.activeSprint = prev.activeSprint;
+  }
+
+  if (bucketsUnchanged) {
+    stabilized.buckets = prev.buckets;
+  } else if (prev.buckets && next.buckets) {
+    const prevMap = new Map(prev.buckets.map(b => [b.bucketStart, b]));
+    stabilized.buckets = next.buckets.map(b => {
+      const p = prevMap.get(b.bucketStart);
+      return (p && p.bucketEnd === b.bucketEnd && p.label === b.label && isEqualUsageTotals(p.usage, b.usage)) ? p : b;
+    });
+  }
+
+  const stabilizeEntities = (prevArr: any[] | undefined, nextArr: any[] | undefined): any[] | undefined => {
+    if (!prevArr || !nextArr) return nextArr;
+    const prevMap = new Map(prevArr.map(e => [e.id, e]));
+    return nextArr.map(e => {
+      const p = prevMap.get(e.id);
+      if (p && p.label === e.label && p.secondaryLabel === e.secondaryLabel && p.status === e.status && p.purpose === e.purpose && p.provider === e.provider && p.lastActivityAt === e.lastActivityAt && isEqualUsageTotals(p.usage, e.usage)) {
+        return p;
+      }
+      return e;
+    });
+  };
+
   if (sprintsUnchanged) stabilized.sprints = prev.sprints;
+  else stabilized.sprints = stabilizeEntities(prev.sprints, next.sprints) as any;
+
   if (tasksUnchanged) stabilized.tasks = prev.tasks;
+  else stabilized.tasks = stabilizeEntities(prev.tasks, next.tasks) as any;
+
   if (providersUnchanged) stabilized.providers = prev.providers;
+  else stabilized.providers = stabilizeEntities(prev.providers, next.providers) as any;
+
   if (purposesUnchanged) stabilized.purposes = prev.purposes;
-  if (tokenSourcesUnchanged) stabilized.tokenSources = prev.tokenSources;
+  else stabilized.purposes = stabilizeEntities(prev.purposes, next.purposes) as any;
+
+  if (tokenSourcesUnchanged) {
+    stabilized.tokenSources = prev.tokenSources;
+  } else if (prev.tokenSources && next.tokenSources) {
+    const prevMap = new Map(prev.tokenSources.map(s => [s.source, s]));
+    stabilized.tokenSources = next.tokenSources.map(s => {
+      const p = prevMap.get(s.source);
+      return (p && p.count === s.count) ? p : s;
+    });
+  }
 
   return stabilized;
 }
