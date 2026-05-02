@@ -44,6 +44,22 @@
 }
 
 @layer utilities {
+  .transition-base {
+    transition: all var(--transition-base);
+  }
+
+  .transition-dropdown {
+    transition: all var(--transition-dropdown);
+  }
+
+  .transition-panel {
+    transition: all var(--transition-panel);
+  }
+
+  .transition-feedback {
+    transition: all var(--transition-feedback);
+  }
+
   .expand-grid {
     display: grid;
     grid-template-rows: 0fr;
@@ -477,6 +493,38 @@
     .dag-node-transition {
       transition: none !important;
     }
+  }
+
+  /* App-level reduced motion override */
+  :root[data-reduced-motion="true"] *,
+  :root[data-reduced-motion="true"] ::before,
+  :root[data-reduced-motion="true"] ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  :root[data-reduced-motion="true"] .widget-running,
+  :root[data-reduced-motion="true"] .widget-queued,
+  :root[data-reduced-motion="true"] .ocean-wave,
+  :root[data-reduced-motion="true"] .ship-bob,
+  :root[data-reduced-motion="true"] .jules-j-glow,
+  :root[data-reduced-motion="true"] .jules-j-draw,
+  :root[data-reduced-motion="true"] .agent-float,
+  :root[data-reduced-motion="true"] .agent-orb,
+  :root[data-reduced-motion="true"] .animate-organic,
+  :root[data-reduced-motion="true"] .animate-organic-reverse,
+  :root[data-reduced-motion="true"] .dag-aurora,
+  :root[data-reduced-motion="true"] .dag-grid-pan,
+  :root[data-reduced-motion="true"] .dag-running-ring {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  :root[data-reduced-motion="true"] .dag-edge-transition,
+  :root[data-reduced-motion="true"] .dag-node-transition {
+    transition: none !important;
   }
 }
 

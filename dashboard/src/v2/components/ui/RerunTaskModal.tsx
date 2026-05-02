@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { AlertTriangle, GitBranch, RotateCcw, Trash2, X } from "lucide-preact";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import type { Subtask } from "../../../types.js";
 
 const PROVIDER_OPTIONS = [
@@ -82,19 +83,19 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     const taskAlreadyMerged = Boolean(task.is_merged) || MERGED_TASK_INDICATORS.has(task.merge_indicator || "");
 
     useLayoutEffect(() => {
-        const d_backdrop = reducedMotion ? 0 : 0.3;
-        const d_card = reducedMotion ? 0 : 0.45;
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power2.out" });
+        const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
+        const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
         gsap.fromTo(cardRef.current,
-            { y: reducedMotion ? 0 : 36, opacity: 0, scale: reducedMotion ? 1 : 0.96 },
-            { y: 0, opacity: 1, scale: 1, duration: d_card, ease: "power4.out", delay: reducedMotion ? 0 : 0.04 },
+            { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart },
+            { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, duration: d_card, ease: MODAL_MOTION.entry.ease, delay: reducedMotion ? 0 : 0.04 },
         );
     }, [reducedMotion]);
 
     const handleClose = () => {
         if (isSubmitting.current) return;
-        const duration = reducedMotion ? 0 : 0.22;
-        gsap.to(cardRef.current, { y: 18, opacity: 0, scale: 0.97, duration, ease: "power3.in" });
+        const duration = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
+        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, duration, ease: MODAL_MOTION.exit.ease });
         gsap.to(backdropRef.current, { opacity: 0, duration, delay: reducedMotion ? 0 : 0.04, onComplete: onClose });
     };
 

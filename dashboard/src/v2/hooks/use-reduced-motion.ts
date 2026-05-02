@@ -48,7 +48,16 @@ export function useReducedMotion(): boolean {
         };
     }, []);
 
-    if (preference === "REDUCE") return true;
-    if (preference === "NONE") return false;
-    return systemReducedMotion;
+    const isReducedMotion = preference === "REDUCE" || (preference !== "NONE" && systemReducedMotion);
+
+    useEffect(() => {
+        if (typeof document === "undefined") return;
+        if (isReducedMotion) {
+            document.documentElement.setAttribute("data-reduced-motion", "true");
+        } else {
+            document.documentElement.removeAttribute("data-reduced-motion");
+        }
+    }, [isReducedMotion]);
+
+    return isReducedMotion;
 }

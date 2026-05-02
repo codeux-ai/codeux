@@ -4,6 +4,7 @@ import { X, CheckCircle, AlertTriangle, XCircle, Loader2, RotateCcw } from "luci
 import gsap from "gsap";
 import type { ActionFeedbackStatus } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface ActionFeedbackRegionProps {
   status: ActionFeedbackStatus;
@@ -34,8 +35,8 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     const ctx = gsap.context(() => {
       gsap.fromTo(
         containerRef.current,
-        { y: reducedMotion ? 0 : -10, opacity: 0, scale: reducedMotion ? 1 : 0.98 },
-        { y: 0, opacity: 1, scale: 1, duration: 0.4, ease: "power3.out" }
+        { y: reducedMotion ? 0 : MODAL_MOTION.feedback.yStart, opacity: 0, scale: reducedMotion ? 1 : MODAL_MOTION.feedback.scaleStart },
+        { y: MODAL_MOTION.feedback.yEnd, opacity: 1, scale: MODAL_MOTION.feedback.scaleEnd, duration: reducedMotion ? 0 : MODAL_MOTION.feedback.duration, ease: MODAL_MOTION.feedback.ease }
       );
     });
 

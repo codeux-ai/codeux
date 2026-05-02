@@ -16,6 +16,10 @@
     --transition-enter: var(--motion-standard) var(--motion-ease-dramatic);
     --transition-exit: var(--motion-fast) var(--motion-ease-standard);
     --transition-layout: var(--motion-slow) var(--motion-ease-standard);
+    --transition-base: var(--motion-standard) var(--motion-ease-standard);
+    --transition-feedback: 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    --transition-dropdown: 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    --transition-panel: 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -27,6 +31,24 @@
       --transition-enter: none;
       --transition-exit: none;
       --transition-layout: none;
+      --transition-base: none;
+      --transition-feedback: none;
+      --transition-dropdown: none;
+      --transition-panel: none;
     }
+  }
+
+  :root[data-reduced-motion="true"] {
+    --motion-fast: 0.01ms;
+    --motion-standard: 0.01ms;
+    --motion-slow: 0.01ms;
+    --transition-hover: none;
+    --transition-enter: none;
+    --transition-exit: none;
+    --transition-layout: none;
+    --transition-base: none;
+    --transition-feedback: none;
+    --transition-dropdown: none;
+    --transition-panel: none;
   }
 }
