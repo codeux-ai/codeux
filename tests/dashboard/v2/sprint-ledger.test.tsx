@@ -212,40 +212,31 @@ describe("SprintLedger Component", () => {
     expect(screen.getByText("All sprints, fully sortable.")).toBeInTheDocument();
   });
 
-  it("respects pending lockouts for destructive and non-destructive actions", async () => {
-    const pendingSet = new Set(["sprint-delete:sprint-2"]);
+  it("locks rows properly when specific pending actions occur", async () => {
+    // 1. Partial lock: If an action is pending on a specific row, that row should be disabled,
+    // but the other rows should remain interactive.
+    // However, if ANY bulk action is pending, we disable ALL rows for bulk safety.
 
-    render(
-      <SprintLedger
-        {...defaultProps}
-        listWindow="all"
-        pendingActionIds={pendingSet}
-      />
-    );
+    // Set a bulk action pending state
+    const pendingBulkActionIds = new Set(["sprint-delete:sprint-1", "sprint-delete:sprint-2"]);
 
+    const { unmount } = render(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
+
+    // In bulk pending mode, ALL row selection buttons should be disabled
     await waitFor(() => {
-      expect(screen.getByText("Alpha Design")).toBeInTheDocument();
+      const selectAllBtn = screen.getByTitle("Select all visible");
+      expect(selectAllBtn).toBeDisabled();
     });
 
-    const checkboxes = screen.getAllByRole("button").filter(b => b.innerHTML.includes("lucide-square"));
+    unmount();
 
-    // Beta API is second row initially
-    fireEvent.click(checkboxes[1]);
+    // 2. Specific lock (non-bulk)
+    const specificPendingIds = new Set(["sprint-showcase:sprint-1"]);
+    render(<SprintLedger {...defaultProps} pendingActionIds={specificPendingIds} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/1 of 2 selected/)).toBeInTheDocument();
+      const selectAllBtn = screen.getByTitle("Select all visible");
+      expect(selectAllBtn).not.toBeDisabled();
     });
-
-    // Bulk buttons should be present.
-    const bulkStartBtn = screen.getAllByText("Start", { selector: 'button' })[0];
-    const bulkDeleteBtn = screen.getAllByText("Deleting...")[0];
-    const clearBtn = screen.getAllByText("Clear")[0];
-
-    // They should be disabled due to delete pending lock
-    expect(bulkStartBtn).toBeDisabled();
-    expect(bulkDeleteBtn).toBeDisabled();
-
-    // Clear selection should always be enabled
-    expect(clearBtn).not.toBeDisabled();
   });
 });

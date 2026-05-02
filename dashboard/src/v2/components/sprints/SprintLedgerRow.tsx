@@ -48,6 +48,7 @@ export interface SprintLedgerRowProps {
   activeRun: { id: string; status: string } | undefined;
   humanIntervention: ExecutionHumanInterventionSummary | null;
   pendingActionIds: Set<string>;
+  isAnyBulkPending?: boolean;
   onToggleRow: (id: string) => void;
   onToggleShowcase: (sprint: Sprint) => void;
   onSprintToggle: (sprintId: string) => void;
@@ -61,6 +62,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   activeRun,
   humanIntervention,
   pendingActionIds,
+  isAnyBulkPending,
   onToggleRow,
   onToggleShowcase,
   onSprintToggle,
@@ -78,22 +80,20 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 
   // Polished stripe depth
   const rowBg = isSelected
-    ? "bg-signal-500/[0.08] dark:bg-signal-500/[0.08]"
+    ? "bg-signal-500/[0.1] dark:bg-signal-500/[0.1]"
     : isEven
       ? "bg-white/80 dark:bg-slate-900/40"
       : "bg-slate-50/80 dark:bg-slate-800/40";
 
-  const deletePendingStyle = isDeletePending ? "opacity-60 grayscale-[0.5]" : "";
-
   return (
     <tr
-      className={`group border-b border-black/[0.06] transition-colors hover:bg-gradient-to-r hover:from-transparent hover:to-transparent focus-within:bg-white/[0.03] dark:border-white/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${deletePendingStyle}`}
+      className={`group border-b border-black/[0.06] transition-all duration-300 ease-in-out hover:bg-gradient-to-r hover:from-transparent hover:to-transparent focus-within:bg-white/[0.03] dark:border-white/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${isDeletePending ? "grayscale opacity-50" : ""}`}
     >
       <td className="px-4 py-3 pl-6 align-middle">
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
-          disabled={isDeletePending}
+          disabled={isRowPending || isAnyBulkPending}
           className="inline-flex items-center justify-center text-slate-400 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 transition-colors hover:text-signal-500 rounded disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSelected
@@ -226,11 +226,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <button
             type="button"
             onClick={(event) => onOpenRowMenu(event, sprint.id)}
-            disabled={isDeletePending}
+            disabled={isRowPending}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isRowPending ? (
-              <Loader2 className={`h-3.5 w-3.5 animate-spin ${isDeletePending ? "text-status-red" : "text-signal-500"}`} strokeWidth={2.2} />
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2.2} />
             ) : (
               <MoreVertical className="h-3.5 w-3.5" />
             )}

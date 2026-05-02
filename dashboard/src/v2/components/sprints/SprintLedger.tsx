@@ -111,11 +111,20 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     let pin = false;
     let del = false;
 
+    // We only care about pending actions that are part of a BULK operation
+    // against the selected set, OR a global delete that locks the table.
+    // For specific UI requests, we can just check if ANY of the selected rows
+    // are currently pending, and consider that a "bulk pending" state for those rows.
     for (const sprint of selectedFiltered) {
       const activeRun = activeRunsBySprintId.get(sprint.id);
       if (pendingActionIds.has(`sprint-start:${sprint.id}`)) start = true;
       if (activeRun && pendingActionIds.has(`sprint-stop:${activeRun.id}`)) stop = true;
       if (pendingActionIds.has(`sprint-showcase:${sprint.id}`)) pin = true;
+      if (pendingActionIds.has(`sprint-delete:${sprint.id}`)) del = true;
+    }
+
+    // Check for any ongoing deletes at all, as delete is destructive
+    for (const sprint of ledgerSprints) {
       if (pendingActionIds.has(`sprint-delete:${sprint.id}`)) del = true;
     }
 
@@ -126,7 +135,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       isBulkDeletePending: del,
       isAnyBulkPending: start || stop || pin || del
     };
-  }, [selectedFiltered, activeRunsBySprintId, pendingActionIds]);
+  }, [selectedFiltered, ledgerSprints, activeRunsBySprintId, pendingActionIds]);
 
   const allFilteredSelected = ledgerSprints.length > 0 && ledgerSprints.every((s) => selectedIds.has(s.id));
 
@@ -219,6 +228,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       <SprintLedgerBulkActions
         selectedCount={selectedFiltered.length}
         totalCount={ledgerSprints.length}
+        isAnyPending={isAnyBulkPending}
         isStartPending={isBulkStartPending}
         isDeletePending={isBulkDeletePending}
         isPinPending={isBulkPinPending}
@@ -244,7 +254,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
               <th className="px-4 py-3 pl-6 w-10">
                 <button
                   type="button"
-                  disabled={windowedSprints.length === 0}
+                  disabled={windowedSprints.length === 0 || isAnyBulkPending}
                   onClick={handleToggleSelectAll}
                   className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 rounded"
                   title={allFilteredSelected ? "Deselect all" : "Select all visible"}
@@ -356,6 +366,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   activeRun={activeRunsBySprintId.get(sprint.id)}
                   humanIntervention={interventionBySprintId.get(sprint.id) || null}
                   pendingActionIds={pendingActionIds}
+                  isAnyBulkPending={isAnyBulkPending}
                   onToggleRow={handleToggleRow}
                   onToggleShowcase={stableOnToggleShowcase}
                   onSprintToggle={stableOnSprintToggle}
