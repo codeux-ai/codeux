@@ -58,6 +58,56 @@ export const buildDeps = () => {
     updateLastStatus: vi.fn(),
     completedSprints: new Set<string>(),
     getCiStatusForScope: vi.fn().mockResolvedValue(null),
+    heartbeatService: {
+      startHeartbeat: vi.fn(),
+      stopHeartbeat: vi.fn(),
+      stopAll: vi.fn(),
+    },
+    heartbeatService: {
+      startHeartbeat: vi.fn(),
+      stopHeartbeat: vi.fn(),
+      stopAll: vi.fn(),
+    },
+    heartbeatService: {
+      startHeartbeat: vi.fn(),
+      stopHeartbeat: vi.fn(),
+      stopAll: vi.fn(),
+    },
+    heartbeatService: {
+      startHeartbeat: vi.fn(),
+      stopHeartbeat: vi.fn(),
+      stopAll: vi.fn(),
+    },
+    heartbeatService: {
+      startHeartbeat: vi.fn(),
+      stopHeartbeat: vi.fn(),
+      stopAll: vi.fn(),
+    },
+    heartbeatService: {
+      startHeartbeat: vi.fn(),
+      stopHeartbeat: vi.fn(),
+      stopAll: vi.fn(),
+    },
+    heartbeatService: {
+      startHeartbeat: vi.fn(),
+      stopHeartbeat: vi.fn(),
+      stopAll: vi.fn(),
+    },
+    heartbeatService: {
+      startHeartbeat: vi.fn(),
+      stopHeartbeat: vi.fn(),
+      stopAll: vi.fn(),
+    },
+    heartbeatService: {
+      startHeartbeat: vi.fn(),
+      stopHeartbeat: vi.fn(),
+      stopAll: vi.fn(),
+    },
+    heartbeatService: {
+      startHeartbeat: vi.fn(),
+      stopHeartbeat: vi.fn(),
+      stopAll: vi.fn(),
+    },
     isActionRequiredState: (state?: string) => state === "AWAITING_PLAN_APPROVAL" || state === "AWAITING_USER_FEEDBACK" || state === "PAUSED",
     resolveSessionName: (s: any) => s.name,
     extractSessionId: (s: any) => s.id,
