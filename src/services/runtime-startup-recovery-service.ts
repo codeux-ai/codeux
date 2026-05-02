@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import type { DashboardSettings, DashboardSettingsScope, DockerContainer, ProviderId } from "../contracts/app-types.js";
 import type { ProviderInvocationUsageRecord, TaskRunRecord } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
@@ -5,6 +7,7 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import type { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { sanitizeToken } from "./cli-workflow-utils.js";
 
 const ACTIVE_SPRINT_RUN_STATUSES = ["queued", "running"] as const;
 const ACTIVE_DISPATCH_STATUSES = ["queued", "claimed", "running", "cancel_requested"] as const;
@@ -33,6 +36,8 @@ export class RuntimeStartupRecoveryService {
   constructor(private readonly deps: RuntimeStartupRecoveryServiceDeps) {}
 
   async recover(): Promise<RuntimeStartupRecoveryResult> {
+    this.releaseStaleSprintLeases();
+    await this.identifyZombieWorkspaces();
     const cliRecovery = this.deps.sessionTracking.recoverInterruptedCliSessions();
     const recoveredCliSessionIds = cliRecovery.sessionIds;
     const reconciledLocalDispatchIds = this.reconcileInterruptedLocalDispatches(new Set(recoveredCliSessionIds));
@@ -124,6 +129,45 @@ export class RuntimeStartupRecoveryService {
     }
 
     return reconciledInvocationIds;
+  }
+
+  private async identifyZombieWorkspaces(): Promise<void> {
+    const projects = this.deps.projectManagementRepository.listProjects().projects;
+    const sessions = this.deps.sessionTracking.listTrackedCliSessions();
+    const activeSessionIds = new Set(sessions.map((s) => sanitizeToken(s.id)));
+
+    for (const project of projects) {
+      const worktreeRoot = path.join(project.baseDir, ".worktrees");
+      try {
+        const entries = await fs.promises.readdir(worktreeRoot, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) {
+            continue;
+          }
+
+          const folderName = entry.name;
+          if (!activeSessionIds.has(folderName)) {
+            const zombiePath = path.join(worktreeRoot, folderName);
+            this.deps.logger?.info(`[Recovery] Identified zombie workspace: ${zombiePath}`);
+            await fs.promises.rm(zombiePath, { recursive: true, force: true }).catch(() => undefined);
+          }
+        }
+      } catch (err: any) {
+        if (err.code !== "ENOENT") {
+          this.deps.logger?.error("Failed to clean up zombie workspaces", { error: err });
+        }
+      }
+    }
+  }
+
+  private releaseStaleSprintLeases(): void {
+    const leases = this.deps.executionRepository.listAllLeases("sprint");
+    for (const lease of leases) {
+      const projectId = this.deps.executionRepository.resolveLeaseProjectId("sprint", lease.scopeId);
+      if (projectId) {
+        this.deps.executionRepository.releaseStaleSprintLease(projectId, lease.scopeId);
+      }
+    }
   }
 
   private reconcileInterruptedLocalDispatches(recoveredCliSessionIds: ReadonlySet<string>): string[] {

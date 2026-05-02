@@ -36,7 +36,7 @@ import type { MemoryPromotionService } from "../services/memory-promotion-servic
 import type { QualityAssuranceService } from "../services/quality-assurance-service.js";
 import type { TaskService } from "../services/task-service.js";
 
-const SPRINT_ORCHESTRATOR_OWNER_KEY = "sprint_orchestrator";
+const SPRINT_ORCHESTRATOR_OWNER_KEY = `sprint_orchestrator:${process.pid}`;
 
 export interface SprintOrchestratorDependencies {
   settings: Settings;

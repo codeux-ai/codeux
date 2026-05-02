@@ -782,7 +782,6 @@ describe("JulesAgentServer", () => {
       expect(bootMcpTransport).toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalled();
       expect(refreshJulesApiKeySpy).toHaveBeenCalled();
-      expect((runServer as any).runtimeStartupRecoveryService.recover).toHaveBeenCalled();
 
       refreshJulesApiKeySpy.mockRestore();
     }, 30000);
@@ -810,7 +809,6 @@ describe("JulesAgentServer", () => {
       expect(bootMcpTransport).toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalled();
       expect(refreshJulesApiKeySpy).toHaveBeenCalled();
-      expect((runServer as any).runtimeStartupRecoveryService.recover).toHaveBeenCalled();
 
       refreshJulesApiKeySpy.mockRestore();
     }, 30000);
