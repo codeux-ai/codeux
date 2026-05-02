@@ -13,6 +13,7 @@ import {
   TrendingUp,
   WandSparkles,
   XCircle,
+  type LucideIcon,
 } from "lucide-preact";
 import type {
   DashboardStats,
@@ -33,6 +34,17 @@ import {
 import { formatTime } from "../../lib/time.js";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
+
+export interface Tone {
+  accent: string;
+  tone?: string;
+}
+
+export interface Node extends Tone {
+  label: string;
+  value: string | number;
+  icon: LucideIcon;
+}
 
 const STAGE_META: Record<LiveTaskStageKey, {
   label: string;
@@ -170,12 +182,7 @@ const DeltaValue: FunctionComponent<{
   );
 };
 
-const SummaryPill: FunctionComponent<{
-  label: string;
-  value: string;
-  icon: any;
-  accent: string;
-}> = ({ label, value, icon: Icon, accent }) => (
+const SummaryPill: FunctionComponent<Node> = ({ label, value, icon: Icon, accent }) => (
   <div className="rounded-[1.75rem] border border-black/[0.05] bg-white/65 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
     <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
       <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -187,18 +194,13 @@ const SummaryPill: FunctionComponent<{
   </div>
 );
 
-const CounterTile: FunctionComponent<{
-  label: string;
-  value: number;
-  icon: any;
-  accent: string;
-}> = ({ label, value, icon: Icon, accent }) => (
+const CounterTile: FunctionComponent<Node> = ({ label, value, icon: Icon, accent }) => (
   <div className="rounded-[1.75rem] border border-black/[0.05] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
     <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
       <Icon className="h-3.5 w-3.5" strokeWidth={1.9} />
       <span>{label}</span>
     </div>
-    <DeltaValue value={value} compact />
+    <DeltaValue value={Number(value)} compact />
   </div>
 );
 

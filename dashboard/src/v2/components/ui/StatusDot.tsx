@@ -1,8 +1,9 @@
 import type { FunctionComponent } from "preact";
-import type { SourceStatus } from "../../types.js";
+import type { SourceStatus, TaskStatus, SprintStatus } from "../../types.js";
+import type { DashboardStatus } from "../../../types.js";
 
 interface StatusDotProps {
-    status: SourceStatus;
+    status: SourceStatus | TaskStatus | SprintStatus | DashboardStatus;
     className?: string;
 }
 
