@@ -95,6 +95,7 @@ const GEMINI_PATTERNS: ErrorPattern[] = [
       /uv_os_get_passwd/i,
       /apiKeyCredentialStorage/i,
       /Config\.refreshAuth/i,
+      /invalid api key/i,
     ],
   },
   {
@@ -104,6 +105,7 @@ const GEMINI_PATTERNS: ErrorPattern[] = [
       /too many requests/i,
       /no capacity available for model/i,
       /code:\s*429\b/,
+      /Resource has been exhausted/i,
     ],
     resetTimeExtractor: (text: string): string | null => {
       const match = text.match(/retry.?after[:\s]+(\d+)/i);
@@ -120,6 +122,8 @@ const CLAUDE_CODE_PATTERNS: ErrorPattern[] = [
       /quota.*exceeded/i,
       /billing.*limit/i,
       /credit.*exhausted/i,
+      /insufficient_quota/i,
+      /Out of funds/i,
     ],
   },
   {
@@ -130,6 +134,8 @@ const CLAUDE_CODE_PATTERNS: ErrorPattern[] = [
       /unauthorized/i,
       /ANTHROPIC_API_KEY/i,
       /credentials.*expired/i,
+      /invalid_api_key/i,
+      /authentication_error/i,
     ],
   },
   {
@@ -160,6 +166,8 @@ const CODEX_PATTERNS: ErrorPattern[] = [
       /unauthorized/i,
       /OPENAI_API_KEY/i,
       /Incorrect API key/i,
+      /invalid_api_key/i,
+      /authentication_error/i,
     ],
   },
   {
@@ -168,6 +176,7 @@ const CODEX_PATTERNS: ErrorPattern[] = [
       /rate.?limit/i,
       /too many requests/i,
       /code:\s*429\b/,
+      /requests per minute/i,
     ],
   },
 ];
