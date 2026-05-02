@@ -11,6 +11,8 @@ import { useExecutions } from "../../hooks/useExecutions.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { useProjectTasks } from "../hooks/use-project-tasks.js";
 import { usePreviewSessions } from "../hooks/use-preview-sessions.js";
+import type { Task } from "../types.js";
+import type { SprintPreviewSession } from "../../types.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
 import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
@@ -226,11 +228,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
             status: s.status
         }));
 
-        const filteredTasks = tasks.filter((t: any) =>
+        const filteredTasks = tasks.filter((t: Task) =>
             t.title.toLowerCase().includes(lowerQuery) ||
             (t.recordId && t.recordId.toLowerCase().includes(lowerQuery)) ||
             (t.description && t.description.toLowerCase().includes(lowerQuery))
-        ).map((t: any) => ({
+        ).map((t: Task) => ({
             id: t.id,
             title: t.title,
             sprint: t.sprint,
@@ -246,10 +248,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
             status: 'idle'
         }));
 
-        const filteredContainers = sessions.filter((s: any) =>
+        const filteredContainers = sessions.filter((s: SprintPreviewSession) =>
             (s.containerName && s.containerName.toLowerCase().includes(lowerQuery)) ||
             (s.sprintId && s.sprintId.toLowerCase().includes(lowerQuery))
-        ).map((s: any) => ({
+        ).map((s: SprintPreviewSession) => ({
             id: s.id,
             name: s.containerName || 'Unnamed Container',
             status: s.status
@@ -513,7 +515,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                             }`}
                         >
                             {selectedSprint && (
-                                <StatusDot status={selectedSprint.status as any} />
+                                <StatusDot status={selectedSprint.status} />
                             )}
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[180px]">
                                 {sprintSwitchBusy ? "Switching..." : (sprintsLoading ? "Loading..." : formatSprintDisplay(selectedSprint))}
@@ -576,7 +578,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                                         }}
                                         className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === sprint.id ? 'bg-signal-500/8' : ''}`}
                                     >
-                                        <StatusDot status={sprint.status as any} />
+                                        <StatusDot status={sprint.status} />
                                         <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === sprint.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
                                             {formatSprintDisplay(sprint)}
                                         </span>
