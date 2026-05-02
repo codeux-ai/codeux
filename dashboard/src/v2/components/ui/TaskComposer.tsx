@@ -143,6 +143,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 onInput={(event) => state.setSprintId((event.target as HTMLSelectElement).value)}
                 onBlur={() => state.setFieldTouched('sprintId')}
                 className={`w-full bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg px-1 py-0.5 -ml-1 border ${(state.hasAttemptedSubmit || state.touchedFields.sprintId) && !state.isSprintIdValid ? 'border-red-500' : 'border-transparent'}`} aria-invalid={!state.isSprintIdValid}
+                aria-describedby={(state.hasAttemptedSubmit || state.touchedFields.sprintId) && state.sprintIdError ? "sprintId-error" : undefined}
                 required
               >
                 <option value="" disabled>Select sprint</option>
@@ -152,7 +153,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               </select>
               <div className="min-h-[20px] mt-1">
                 {(state.hasAttemptedSubmit || state.touchedFields.sprintId) && state.sprintIdError && (
-                  <div className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
+                  <div id="sprintId-error" className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
                     <AlertCircle className="w-3.5 h-3.5" />
                     {state.sprintIdError}
                   </div>
@@ -190,12 +191,13 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               onBlur={() => state.setFieldTouched('title')}
               placeholder="Fix navigation layout shift"
               className={`w-full border-0 border-b-2 bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem] ${(state.hasAttemptedSubmit || state.touchedFields.title) && !state.isTitleValid ? 'border-red-500' : 'border-black/[0.08] dark:border-white/[0.08]'}`} aria-invalid={!state.isTitleValid}
+              aria-describedby={(state.hasAttemptedSubmit || state.touchedFields.title) && state.titleError ? "title-error" : undefined}
               required
               autoFocus
             />
             <div className="min-h-[24px] mt-1">
               {(state.hasAttemptedSubmit || state.touchedFields.title) && state.titleError && (
-                <div className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
+                <div id="title-error" className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
                   <AlertCircle className="w-4 h-4" />
                   {state.titleError}
                 </div>

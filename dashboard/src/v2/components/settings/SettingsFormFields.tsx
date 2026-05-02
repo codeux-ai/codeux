@@ -121,14 +121,20 @@ export const TextInput: FunctionComponent<{
   placeholder?: string;
   mono?: boolean;
   disabled?: boolean;
-}> = ({ value, onChange, placeholder, mono, disabled }) => (
+  error?: boolean;
+  id?: string;
+  onBlur?: () => void;
+}> = ({ value, onChange, placeholder, mono, disabled, error, id, onBlur }) => (
   <input
     type="text"
+    id={id}
     value={value}
     placeholder={placeholder}
     disabled={disabled}
+    onBlur={onBlur}
+    aria-invalid={!!error}
     onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
-    className={`min-w-[220px] rounded-[1rem] border border-black/[0.06] hover:border-black/[0.12] bg-white/80 px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 ${
+    className={`min-w-[220px] rounded-[1rem] border ${error ? 'border-status-red focus:border-status-red focus-visible:outline-status-red text-status-red' : 'border-black/[0.06] hover:border-black/[0.12] focus:border-signal-500/40 focus-visible:outline-signal-500'} bg-white/80 px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/[0.05] dark:text-slate-200 ${!error ? 'dark:border-white/[0.06] dark:hover:border-white/[0.12]' : ''} ${
       mono ? "font-mono" : "font-sans"
     }`}
   />
@@ -139,13 +145,19 @@ export const TextAreaInput: FunctionComponent<{
   onChange: (value: string) => void;
   placeholder?: string;
   rows?: number;
-}> = ({ value, onChange, placeholder, rows = 12 }) => (
+  error?: boolean;
+  id?: string;
+  onBlur?: () => void;
+}> = ({ value, onChange, placeholder, rows = 12, error, id, onBlur }) => (
   <textarea
+    id={id}
     value={value}
     rows={rows}
     placeholder={placeholder}
+    onBlur={onBlur}
+    aria-invalid={!!error}
     onInput={(event) => onChange((event.currentTarget as HTMLTextAreaElement).value)}
-    className="min-h-[320px] w-full rounded-[1rem] border border-black/[0.06] hover:border-black/[0.12] bg-black/[0.04] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 transition-colors duration-200 focus:border-signal-500/40 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 focus:ring-0 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.04] dark:text-slate-200"
+    className={`min-h-[320px] w-full rounded-[1rem] border ${error ? 'border-status-red focus:border-status-red focus-visible:outline-status-red text-status-red' : 'border-black/[0.06] hover:border-black/[0.12] focus:border-signal-500/40 focus-visible:outline-signal-500'} bg-black/[0.04] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 transition-colors duration-200 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus:ring-0 dark:bg-white/[0.04] dark:text-slate-200 ${!error ? 'dark:border-white/[0.06] dark:hover:border-white/[0.12]' : ''}`}
   />
 );
 
@@ -156,16 +168,22 @@ export const NumberInput: FunctionComponent<{
   max?: number;
   step?: number;
   disabled?: boolean;
-}> = ({ value, onChange, min, max, step = 1, disabled }) => (
+  error?: boolean;
+  id?: string;
+  onBlur?: () => void;
+}> = ({ value, onChange, min, max, step = 1, disabled, error, id, onBlur }) => (
   <input
     type="number"
+    id={id}
     value={value}
     min={min}
     max={max}
     step={step}
     disabled={disabled}
+    onBlur={onBlur}
+    aria-invalid={!!error}
     onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
-    className="w-32 rounded-[1rem] border border-black/[0.06] hover:border-black/[0.12] bg-white/80 px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200"
+    className={`w-32 rounded-[1rem] border ${error ? 'border-status-red focus:border-status-red focus-visible:outline-status-red text-status-red' : 'border-black/[0.06] hover:border-black/[0.12] focus:border-signal-500/40 focus-visible:outline-signal-500'} bg-white/80 px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white/[0.05] dark:text-slate-200 ${!error ? 'dark:border-white/[0.06] dark:hover:border-white/[0.12]' : ''}`}
   />
 );
 

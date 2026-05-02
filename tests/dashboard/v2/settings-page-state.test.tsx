@@ -68,6 +68,28 @@ beforeEach(() => {
   });
 });
 
+import { TextInput } from "../../../dashboard/src/v2/components/settings/SettingsFormFields.js";
+
+describe("SettingsFormFields UI transitions", () => {
+  it("renders validation error styles when error prop is true", () => {
+    const { render, cleanup } = require("@testing-library/preact");
+
+    // Valid state
+    let res = render(<TextInput value="test" onChange={() => {}} error={false} />);
+    let input = res.container.querySelector("input");
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+    expect(input.className).not.toContain("border-status-red");
+    cleanup();
+
+    // Invalid state
+    res = render(<TextInput value="test" onChange={() => {}} error={true} />);
+    input = res.container.querySelector("input");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.className).toContain("border-status-red");
+    cleanup();
+  });
+});
+
 describe("useSettingsPageState", () => {
   it("updates editable settings for project scope", async () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));

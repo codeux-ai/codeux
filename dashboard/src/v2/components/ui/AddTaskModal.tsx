@@ -218,7 +218,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     setSprintId((event.target as HTMLSelectElement).value);
                     if (error) setError(null);
                   }}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500" aria-invalid={!!validationErrors.sprintId && touched.sprintId}
+                  className={`mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border ${!!validationErrors.sprintId && touched.sprintId ? 'border-red-500 focus:border-red-500 focus-visible:ring-red-500/50' : 'border-black/[0.08] dark:border-white/[0.08] focus:border-signal-500 focus-visible:ring-signal-500'} px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus-visible:ring-2`} aria-invalid={!!validationErrors.sprintId && touched.sprintId}
                   aria-describedby={validationErrors.sprintId && touched.sprintId ? "task-sprint-error" : undefined}
                   onBlur={() => setTouched(prev => ({ ...prev, sprintId: true }))}
                   required
@@ -241,7 +241,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     setTitle((event.target as HTMLInputElement).value);
                     if (error) setError(null);
                   }}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500"
+                  className={`mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border ${!!validationErrors.title && touched.title ? 'border-red-500 focus:border-red-500 focus-visible:ring-red-500/50' : 'border-black/[0.08] dark:border-white/[0.08] focus:border-signal-500 focus-visible:ring-signal-500'} px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus-visible:ring-2`}
                   placeholder="Define the task scope"
                   required
                   aria-invalid={!!validationErrors.title && touched.title}

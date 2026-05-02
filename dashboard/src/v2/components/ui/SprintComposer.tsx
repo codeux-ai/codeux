@@ -76,6 +76,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { feedback: actionFeedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [nameTouched, setNameTouched] = useState(false);
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
 
   const state = useSprintComposerState(initialSprint);
@@ -256,6 +258,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
+    setHasAttemptedSubmit(true);
     if (!state.name.trim()) {
       return;
     }
@@ -466,9 +469,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               type="text"
               value={state.name}
               onInput={(event) => state.setName((event.target as HTMLInputElement).value)}
+              onBlur={() => setNameTouched(true)}
               disabled={isBusy}
               placeholder="Runtime hardening"
-              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
+              aria-invalid={!state.name.trim() && (nameTouched || hasAttemptedSubmit) ? true : false}
+              className={`w-full border-0 border-b-2 bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50 dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem] ${!state.name.trim() && (nameTouched || hasAttemptedSubmit) ? 'border-red-500 focus:border-red-500 focus-visible:ring-red-500' : 'border-black/[0.08] focus:border-signal-500 dark:border-white/[0.08]'}`}
               required
               autoFocus
             />

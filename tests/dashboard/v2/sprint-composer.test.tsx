@@ -177,4 +177,31 @@ describe("SprintComposer", () => {
     // Resolve the promise to cleanup
     resolveSubmit!(undefined);
   });
+
+  describe("Validation state transitions", () => {
+    it("applies error styling when a required field is blurred without value, and clears on input", async () => {
+      const { getByPlaceholderText } = render(<SprintComposer {...defaultProps} />);
+      const nameInput = getByPlaceholderText("Runtime hardening");
+
+      // Initially valid (untouched)
+      expect(nameInput.getAttribute("aria-invalid")).toBe("false");
+      expect(nameInput.className).not.toContain("border-red-500");
+
+      // Focus and blur without typing (triggers validation error UI)
+      fireEvent.focus(nameInput);
+      fireEvent.focusOut(nameInput);
+
+      await waitFor(() => {
+        expect(nameInput.getAttribute("aria-invalid")).toBe("true");
+        expect(nameInput.className).toContain("border-red-500");
+      });
+
+      // Type valid text (clears error UI)
+      fireEvent.input(nameInput, { target: { value: "Valid sprint name" } });
+      await waitFor(() => {
+        expect(nameInput.getAttribute("aria-invalid")).toBe("false");
+        expect(nameInput.className).not.toContain("border-red-500");
+      });
+    });
+  });
 });
