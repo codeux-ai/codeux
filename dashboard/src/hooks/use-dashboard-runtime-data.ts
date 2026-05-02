@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "preact/hooks";
+import { isDeepEqual } from "../v2/lib/resource-equality.js";
 import { computeStats, processDashboardTasks } from "../lib/status.js";
 import { fetchLivePayload } from "../lib/api/dashboard-api.js";
 import type {
@@ -67,8 +68,12 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null, ena
     }
   }, [enabled, projectIdHint]);
 
-  // Use reference equality as the API and event updates provide new references
-  const isEqual = useCallback((_prev: ProjectLiveDashboardSnapshot, _next: ProjectLiveDashboardSnapshot) => false, []);
+  // Use deep equality, ignoring metadata timestamps that cause unnecessary re-renders
+  const isEqual = useCallback((prev: ProjectLiveDashboardSnapshot, next: ProjectLiveDashboardSnapshot) => {
+    const prevNoMeta = { ...prev, updatedAt: null, execution: { ...prev.execution, updatedAt: null } };
+    const nextNoMeta = { ...next, updatedAt: null, execution: { ...next.execution, updatedAt: null } };
+    return isDeepEqual(prevNoMeta, nextNoMeta);
+  }, []);
 
   // Use state to track the realtime project ID so it can be updated
   // when the snapshot is fetched and contains a different project ID

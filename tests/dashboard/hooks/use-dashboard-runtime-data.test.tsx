@@ -70,7 +70,7 @@ describe("useDashboardRuntimeData", () => {
 
     expect(result.current.transportState).toBe("connected");
 
-    // Fire realtime event for live update
+    // Fire realtime event for live update (identical semantics, different timestamp)
     act(() => {
       realtimeCallback({
         type: "event",
@@ -81,7 +81,8 @@ describe("useDashboardRuntimeData", () => {
       });
     });
 
-    expect(result.current.snapshotUpdatedAt).toBe("2024-01-02T00:00:00Z");
+    // We no longer update the state just for metadata changes to avoid re-renders
+    expect(result.current.snapshotUpdatedAt).toBe("2024-01-01T00:00:00Z");
   });
 
   it("handles snapshot_required fallback by triggering a silent refetch through the shared hook", async () => {
@@ -101,9 +102,10 @@ describe("useDashboardRuntimeData", () => {
 
     expect(api.fetchLivePayload).toHaveBeenCalledTimes(1);
 
-    // Provide a new payload for the next fetch
+    // Provide a new payload for the next fetch (with a semantic change)
     vi.mocked(api.fetchLivePayload).mockResolvedValueOnce({
         ...mockPayload,
+        status: { ...mockPayload.status, project_id: "changed" },
         updatedAt: "2025-01-01T00:00:00Z",
     } as any);
 
