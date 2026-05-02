@@ -115,6 +115,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     const dropdownRef = useRef<HTMLDivElement>(null);
     const workerDropdownRef = useRef<HTMLDivElement>(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const searchTriggerRef = useRef<HTMLInputElement>(null);
+
+
     const [searchQuery, setSearchQuery] = useState("");
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
@@ -399,7 +402,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                         placeholder="Search..."
                         value={searchQuery}
                         onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                        onFocus={() => setIsSearchOpen(true)}
+                        onClick={() => setIsSearchOpen(true)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setIsSearchOpen(true); }}
+                        ref={searchTriggerRef}
                         id="global-search-input"
                         className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] focus:border-signal-500/40 dark:focus:border-signal-500/40 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-signal-500/10 transition-all"
                     />
@@ -764,16 +769,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                 isOpen={isSearchOpen}
                 onClose={() => {
                     setIsSearchOpen(false);
-                    // Return focus to the trigger
-                    setTimeout(() => {
-                        const trigger = document.getElementById("global-search-input");
-                        if (trigger) trigger.focus();
-                    }, 0);
+                    if (searchTriggerRef.current) {
+                        searchTriggerRef.current.focus();
+                    }
                 }}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 results={searchResults}
-                isLoading={searchQuery.trim().length > 0 && searchQuery !== debouncedQuery}
+                isLoading={(searchQuery.trim().length > 0 && searchQuery !== debouncedQuery) || tasksLoading || sprintsLoading}
             />
         </>
     );

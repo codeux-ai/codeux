@@ -30,17 +30,17 @@ vi.mock("../../../dashboard/src/v2/lib/preview-origin.js", () => ({
     buildPreviewUrl: vi.fn((sessionId, path) => `http://preview-${sessionId}.localhost${path || "/"}`),
 }));
 
-const mockNavigate = vi.fn();
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
 vi.mock("@tanstack/react-router", () => {
     return {
-    Link: ({ children, to, ...props }: any) => (
-        <a href={to} data-testid="router-link" {...(props as any)}>
-            {children}
-        </a>
-    ),
-    useNavigate: () => mockNavigate,
-    useRouterState: () => ({ matches: [] }),
-  };
+        Link: ({ children, to, ...props }: any) => (
+            <a href={to} data-testid="router-link" {...(props as any)}>
+                {children}
+            </a>
+        ),
+        useNavigate: () => mockNavigate,
+        useRouterState: () => ({ matches: [] }),
+    };
 });
 
 describe("BrowserSessionsMenu", () => {

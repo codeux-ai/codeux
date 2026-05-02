@@ -3,6 +3,18 @@
 import { h } from "preact";
 import { render, screen, cleanup } from "@testing-library/preact";
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
+vi.mock("@tanstack/react-router", () => {
+    return {
+        Link: ({ children, to, ...props }: any) => (
+            <a href={to} data-testid="router-link" {...(props as any)}>
+                {children}
+            </a>
+        ),
+        useNavigate: () => mockNavigate,
+        useRouterState: () => ({ matches: [] }),
+    };
+});
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { LivePreviewLink } from "../../../dashboard/src/v2/components/ui/LivePreviewLink.js";
 import { SearchOverlay } from "../../../dashboard/src/v2/components/search/SearchOverlay.js";
