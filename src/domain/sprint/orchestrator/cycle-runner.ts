@@ -24,6 +24,7 @@ import { FeaturePrGateService } from "../ci/feature-pr-gate.js";
 import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 import type { MemoryCategory } from "../../../contracts/memory-types.js";
 import { isTaskCodeComplete } from "../task-merge-state.js";
+import pLimit from "p-limit";
 import { PROVIDER_IDS } from "../../../repositories/settings-defaults.js";
 import {
   CycleStateCoordinator,
@@ -484,6 +485,10 @@ export class CycleRunner {
       return;
     }
 
+    const limit = pLimit(5);
+    const reviewPromises: Promise<void>[] = [];
+    const isDocker = settings.cliWorkflow?.executionMode === "DOCKER";
+
     for (const task of subtasks) {
       const prev = previousStates.get(task.id);
       const qaGate = this.deps.qualityAssuranceService.getTaskMergeGateStatus({
@@ -504,30 +509,52 @@ export class CycleRunner {
         continue;
       }
 
-      const outcome = await this.deps.qualityAssuranceService.reviewCompletedTask({
-        projectId: args.executionContext.project.id,
-        sprintId: args.executionContext.sprint.id,
-        sprintRunId: args.sprintRunId,
-        repoPath: args.repoPath,
-        task,
-        subtasks,
-      });
+      const runReview = async () => {
+        try {
+          const outcome = await this.deps.qualityAssuranceService!.reviewCompletedTask({
+            projectId: args.executionContext.project.id,
+            sprintId: args.executionContext.sprint.id,
+            sprintRunId: args.sprintRunId,
+            repoPath: args.repoPath,
+            task,
+            subtasks,
+          });
 
-      if (outcome.reopenedTask) {
-        this.deps.logger.info("QA reopened completed task for follow-up fixes", {
-          projectId: args.executionContext.project.id,
-          sprintId: args.executionContext.sprint.id,
-          taskId: task.record_id || task.id,
-          taskKey: task.id,
-        });
-      } else if (outcome.mergeBlocked) {
-        this.deps.logger.info("QA blocked merge until review clears", {
-          projectId: args.executionContext.project.id,
-          sprintId: args.executionContext.sprint.id,
-          taskId: task.record_id || task.id,
-          taskKey: task.id,
-        });
+          if (outcome.reopenedTask) {
+            this.deps.logger.info("QA reopened completed task for follow-up fixes", {
+              projectId: args.executionContext.project.id,
+              sprintId: args.executionContext.sprint.id,
+              taskId: task.record_id || task.id,
+              taskKey: task.id,
+            });
+          } else if (outcome.mergeBlocked) {
+            this.deps.logger.info("QA blocked merge until review clears", {
+              projectId: args.executionContext.project.id,
+              sprintId: args.executionContext.sprint.id,
+              taskId: task.record_id || task.id,
+              taskKey: task.id,
+            });
+          }
+        } catch (error) {
+          this.deps.logger.error("QA review failed for task", {
+            projectId: args.executionContext.project.id,
+            sprintId: args.executionContext.sprint.id,
+            taskId: task.record_id || task.id,
+            taskKey: task.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      };
+
+      if (isDocker) {
+        reviewPromises.push(limit(runReview));
+      } else {
+        await runReview();
       }
+    }
+
+    if (isDocker && reviewPromises.length > 0) {
+      await Promise.all(reviewPromises);
     }
   }
 
