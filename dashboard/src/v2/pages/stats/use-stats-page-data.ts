@@ -19,7 +19,7 @@ export function useStatsPageData(projectId: string | null) {
     return today.toISOString().slice(0, 10);
   });
   
-  const { stats, loading, error } = useProjectStats(projectId, activeQuery);
+  const { stats, loading, error, refresh } = useProjectStats(projectId, activeQuery);
   const chartState = useUsageChartState(projectId, stats || null);
 
   const usage = stats?.usage || EMPTY_USAGE;
@@ -74,6 +74,7 @@ export function useStatsPageData(projectId: string | null) {
     stats,
     loading,
     error,
+    refresh,
     usage,
     tokenSeries: derivations.tokenSeries,
     activeTimeSeries: derivations.activeTimeSeries,

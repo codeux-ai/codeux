@@ -30,11 +30,14 @@ import { UsageGraphHeader } from './UsageGraphHeader.js';
 import { UsageFilterMenu } from './UsageFilterMenu.js';
 import { useUsageFilters } from '../hooks/useUsageFilters.js';
 import { UsageGraphTooltip } from './UsageGraphTooltip.js';
-import { UsageGraphEmpty } from './UsageGraphStates.js';
+import { UsageGraphEmpty, UsageGraphError } from './UsageGraphStates.js';
 import { Activity, Filter } from 'lucide-preact';
 
 export const InteractiveUsageChart: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
   chartState: UsageChartState;
   activeWindow: ProjectStatsWindow | string;
   customFrom: string;
@@ -45,6 +48,9 @@ export const InteractiveUsageChart: FunctionComponent<{
   onApplyCustom: () => void;
 }> = ({
   stats,
+  loading,
+  error,
+  refresh,
   chartState,
   activeWindow,
   customFrom,
@@ -252,6 +258,19 @@ export const InteractiveUsageChart: FunctionComponent<{
               ) : null}
             </div>
             <div ref={svgContainerRef} className="relative flex-1 min-h-[36rem] w-full">
+              {error ? (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--stats-card-bg)]/50 backdrop-blur-sm">
+                  <UsageGraphError message={error} onRetry={() => { refresh().catch(() => {}); }} />
+                </div>
+              ) : null}
+              {loading && !error ? (
+                <div className="absolute right-4 top-4 z-20 flex items-center gap-2 rounded-full bg-[var(--stats-card-bg)]/80 px-3 py-1.5 shadow-sm backdrop-blur-md border border-[var(--stats-card-border)]" aria-busy="true" aria-label="Loading new data">
+                  <Activity className="h-3.5 w-3.5 animate-pulse text-signal-500" />
+                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)]">
+                    Syncing
+                  </span>
+                </div>
+              ) : null}
               
               <UsageGraphTooltip 
                 visible={!!activeBucket}
@@ -267,9 +286,11 @@ export const InteractiveUsageChart: FunctionComponent<{
               />
 
               {buckets.length === 0 ? (
-                <UsageGraphEmpty />
+                <div className={`absolute inset-0 h-full w-full transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
+                  <UsageGraphEmpty onReset={() => onSelectPreset("7d")} />
+                </div>
               ) : (
-                <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 h-full w-full overflow-visible">
+                <svg viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
                   <defs>
                     {chartData.map((series) => (
                       <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">

@@ -53,6 +53,9 @@ export { InteractiveUsageChart };
 
 export const TrendStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
   planningUsage: ExecutionStatsEntitySummary | null;
   chartState: UsageChartState;
   activeWindow: ProjectStatsWindow | string;
@@ -64,6 +67,9 @@ export const TrendStudio: FunctionComponent<{
   onApplyCustom: () => void;
 }> = ({
   stats,
+  loading,
+  error,
+  refresh,
   planningUsage,
   chartState,
   activeWindow,
@@ -79,6 +85,9 @@ export const TrendStudio: FunctionComponent<{
 
     <InteractiveUsageChart
       stats={stats}
+      loading={loading}
+      error={error}
+      refresh={refresh}
       chartState={chartState}
       activeWindow={activeWindow}
       customFrom={customFrom}

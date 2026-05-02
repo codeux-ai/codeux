@@ -15,6 +15,7 @@ import { StatsMetricCard } from "../../components/stats/StatsMetricCard.js";
 import { TopCardsModeRenderer } from "../../components/stats/TopCardsModeRenderer.js";
 import { STATS_COLORS } from "../../lib/stats/color-tokens.js";
 import { buildMetricSeries } from "../../lib/stats/series-builders.js";
+import { Button } from "../../components/ui/Button.js";
 import styles from "./StatsPage.module.css";
 
 export const StatsPage: FunctionComponent = () => {
@@ -26,6 +27,7 @@ export const StatsPage: FunctionComponent = () => {
     stats,
     loading,
     error,
+    refresh,
     usage,
     tokenSeries,
     activeTimeSeries,
@@ -86,9 +88,12 @@ export const StatsPage: FunctionComponent = () => {
         <div className="rounded-[2rem] border border-black/[0.05] bg-white/68 px-8 py-16 text-center text-base text-slate-500 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.05] dark:bg-void-800/55 dark:text-slate-400 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
           Loading the telemetry field for {selectedProject.name}.
         </div>
-      ) : error ? (
-        <div className="rounded-[2rem] border border-red-500/20 bg-red-500/10 px-8 py-12 text-base text-red-600 dark:text-red-300">
-          {error}
+      ) : error && !stats ? (
+        <div className="flex flex-col items-center gap-4 rounded-[2rem] border border-red-500/20 bg-red-500/10 px-8 py-12 text-base text-red-600 dark:text-red-300">
+          <div>{error}</div>
+          <Button variant="danger" size="sm" onClick={() => refresh()}>
+            Retry
+          </Button>
         </div>
       ) : stats ? (
         <>
@@ -106,6 +111,9 @@ export const StatsPage: FunctionComponent = () => {
 
             <AnalysisStudioSection
               stats={stats}
+              loading={loading}
+              error={error}
+              refresh={refresh}
               planningUsage={planningUsage}
               providerSegments={providerSegments}
               tokenSegments={tokenSegments}
