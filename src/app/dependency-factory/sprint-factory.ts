@@ -8,6 +8,8 @@ import { SprintTaskDispatchService } from "../../services/sprint-task-dispatch-s
 import { WorkerTaskDispatchService } from "../../services/worker-task-dispatch-service.js";
 import { VirtualWorkerService } from "../../services/virtual-worker-service.js";
 import { SprintOrchestrator } from "../../sprint/sprint-orchestrator.js";
+import { HeartbeatService } from "../../services/heartbeat-service.js";
+
 import { WorkerInboxReplyService } from "../../services/worker-inbox-reply-service.js";
 import { QualityAssuranceService } from "../../services/quality-assurance-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
@@ -183,6 +185,11 @@ export function createSprintDependencies(
     virtualWorkerService.scheduleProject(projectId, "worker_attention_opened");
   });
 
+  const heartbeatService = new HeartbeatService({
+    executionRepository,
+    logger: logger.child({ component: "heartbeat-service" }),
+  });
+
   const sprintOrchestrator = new SprintOrchestrator({
     settings: context.runtimeContext.settings,
     dashboardPort: options.appConfig.dashboardPort,
@@ -225,6 +232,7 @@ export function createSprintDependencies(
     memoryPromotionService: coreDeps.memoryPromotionService,
     qualityAssuranceService,
     taskService,
+    heartbeatService,
     resolvePlanningAgentPresetId: async (projectId: string) => {
       try {
         const agent = await agentPresetSyncService.resolveTargetedPlanningAgent(projectId);
