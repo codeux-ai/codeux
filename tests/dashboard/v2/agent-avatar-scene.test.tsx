@@ -75,14 +75,23 @@ vi.mock("../../../dashboard/src/lib/three-lite.js", () => {
       }
     },
     MeshStandardMaterial: class { dispose() {} color = { setHex: vi.fn() }; },
+    MeshPhysicalMaterial: class { dispose() {} color = { setHex: vi.fn() }; },
     MeshBasicMaterial: class { opacity = 0; dispose() {} color = { setHex: vi.fn() }; },
     PointsMaterial: class { dispose() {} },
+    ShaderMaterial: class {
+      uniforms: any;
+      constructor(opts: any = {}) { this.uniforms = opts.uniforms || {}; }
+      dispose() {}
+    },
     SphereGeometry: class { type = "SphereGeometry"; scale() {} dispose() {} },
     CylinderGeometry: class { type = "CylinderGeometry"; dispose() {} },
     CapsuleGeometry: class { type = "CapsuleGeometry"; dispose() {} },
     BoxGeometry: class { type = "BoxGeometry"; scale() {} dispose() {} },
     TorusGeometry: class { type = "TorusGeometry"; dispose() {} },
     CircleGeometry: class { type = "CircleGeometry"; dispose() {} },
+    LatheGeometry: class { type = "LatheGeometry"; dispose() {} },
+    PlaneGeometry: class { type = "PlaneGeometry"; dispose() {} },
+    RingGeometry: class { type = "RingGeometry"; dispose() {} },
     BufferGeometry: class {
       setAttribute() {}
       getAttribute() {
@@ -90,12 +99,18 @@ vi.mock("../../../dashboard/src/lib/three-lite.js", () => {
       }
       dispose() {}
     },
-    BufferAttribute: class {},
+    BufferAttribute: class { constructor(_a?: any, _b?: any) {} },
+    Float32BufferAttribute: class { constructor(_a?: any, _b?: any) {} },
     Vector2: class { x = 0; y = 0; constructor(x?: number, y?: number) { this.x = x ?? 0; this.y = y ?? 0; } },
-    Vector3: class { x = 0; y = 0; z = 0; set() { return this; } copy() { return this; } },
+    Vector3: class { x = 0; y = 0; z = 0; constructor(x?: number, y?: number, z?: number) { this.x = x ?? 0; this.y = y ?? 0; this.z = z ?? 0; } set() { return this; } copy() { return this; } },
+    Color: class { r = 1; g = 1; b = 1; constructor(_n?: any) {} },
     CubeTexture: class { needsUpdate = false; },
     CanvasTexture: class { wrapS = 0; wrapT = 0; needsUpdate = false; },
+    Texture: class { needsUpdate = false; },
+    SpotLight: class extends Base {},
     RepeatWrapping: 1000,
+    AdditiveBlending: 2,
+    NormalBlending: 1,
     MathUtils: { lerp: (s: number, e: number, a: number) => s + (e - s) * a },
     ACESFilmicToneMapping: 0,
     WebGLRenderer: class {

@@ -39,31 +39,31 @@ export const AGENT_AVATAR_BOTTOMS = ["style1", "style2", "style3", "style4"];
 
 /* ── Robot part catalogues ── */
 export const ROBOT_CHASSIS_OPTIONS = [
-  { id: "round", label: "Sphere Bot" },
-  { id: "square", label: "Cube Bot" },
-  { id: "capsule", label: "Capsule Bot" },
-  { id: "egg", label: "Egg Bot" },
+  { id: "round", label: "Pebble" },
+  { id: "egg", label: "Companion" },
+  { id: "capsule", label: "Pod" },
+  { id: "square", label: "Bumper" },
 ] as const;
 
 export const ROBOT_EYE_OPTIONS = [
+  { id: "dual", label: "Dual" },
   { id: "visor", label: "Visor" },
-  { id: "dual", label: "Dual Round" },
   { id: "pixel", label: "Pixel" },
   { id: "cyclops", label: "Cyclops" },
 ] as const;
 
 export const ROBOT_ANTENNA_OPTIONS = [
-  { id: "single", label: "Single" },
-  { id: "dual", label: "Bunny Ears" },
-  { id: "dish", label: "Satellite Dish" },
+  { id: "single", label: "Beacon" },
+  { id: "dual", label: "Twin" },
+  { id: "dish", label: "Dish" },
   { id: "none", label: "None" },
 ] as const;
 
 export const ROBOT_WING_OPTIONS = [
-  { id: "propeller", label: "Propeller" },
-  { id: "jets", label: "Jet Wings" },
+  { id: "propeller", label: "Halo" },
+  { id: "tiny", label: "Side Pods" },
   { id: "hover", label: "Hover Rings" },
-  { id: "tiny", label: "Tiny Wings" },
+  { id: "jets", label: "Boosters" },
 ] as const;
 
 export const ROBOT_ACCENT_OPTIONS = [
