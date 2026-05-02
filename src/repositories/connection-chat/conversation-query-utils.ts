@@ -1,4 +1,5 @@
 import type { ConversationMessageRecord, ConversationThreadRecord } from "../../contracts/connection-chat-types.js";
+import { toNumber } from "../repository-utils.js";
 
 export interface ThreadRow {
   id: string;
@@ -32,13 +33,6 @@ export const HIDDEN_INTERNAL_VISIBILITY = "hidden";
 
 export function visibleConversationMessageFilter(alias: string): string {
   return `(COALESCE(json_extract(${alias}.metadata_json, '$.internalVisibility'), '') != '${HIDDEN_INTERNAL_VISIBILITY}')`;
-}
-
-export function toNumber(value: number | string | null | undefined): number {
-  if (typeof value === "number") {
-    return value;
-  }
-  return Number.parseInt(String(value ?? 0), 10) || 0;
 }
 
 export function mapThreadRow(row: ThreadRow): ConversationThreadRecord {

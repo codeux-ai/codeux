@@ -49,6 +49,30 @@ export function executeChunkedInQuery<T>(
   return results;
 }
 
+export function toNumber(value: number | string | null | undefined): number {
+  if (typeof value === "number") {
+    return value;
+  }
+  return Number.parseInt(String(value ?? 0), 10) || 0;
+}
+
+export function toBoolean(value: number | string | null | undefined): boolean {
+  return toNumber(value) > 0;
+}
+
+export function parsePayloadJson(value: string | null | undefined): Record<string, unknown> | null {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
 export function requireRecord<T>(
   record: T | null | undefined,
   entityType: string,

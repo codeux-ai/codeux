@@ -13,9 +13,9 @@ import {
   TaskRow,
   TaskRunRow,
   ProjectRow,
-  SprintRow,
-  toNumber
+  SprintRow
 } from "./project-runtime/runtime-status-projection.js";
+import { toNumber } from "./repository-utils.js";
 
 const TERMINAL_TASK_STATES = new Set<TaskRunState>(["CODING_COMPLETED", "COMPLETED", "FAILED", "BLOCKED"]);
 

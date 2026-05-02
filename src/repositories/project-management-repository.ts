@@ -18,6 +18,7 @@ import type {
 import { AppDbStorage } from "./app-db-storage.js";
 import { slugify } from "../shared/slug.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
+import { toNumber, toBoolean } from "./repository-utils.js";
 import { SettingsRepository } from "./settings-repository.js";
 import { ProjectWorkerAssignmentRepository } from "./project-worker-assignment-repository.js";
 import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.js";
@@ -911,10 +912,20 @@ export class ProjectManagementRepository {
       if (!normalized || seen.has(normalized)) {
         continue;
       }
-      this.requireTask(normalized);
       seen.add(normalized);
       output.push(normalized);
     }
+
+    if (output.length > 0) {
+      const tasks = this.getTasksByIds(output);
+      const foundTaskIds = new Set(tasks.map(t => t.id));
+      for (const normalized of output) {
+        if (!foundTaskIds.has(normalized)) {
+          throw new Error(`Task not found: ${normalized}`);
+        }
+      }
+    }
+
     return output;
   }
 
@@ -977,20 +988,6 @@ function mapEffectiveSprintStatus(
     default:
       return storedStatus;
   }
-}
-
-function toNumber(value: number | string | null | undefined): number {
-  if (typeof value === "number") {
-    return value;
-  }
-  if (typeof value === "string" && value.trim()) {
-    return Number(value);
-  }
-  return 0;
-}
-
-function toBoolean(value: number | string | null | undefined): boolean {
-  return toNumber(value) > 0;
 }
 
 function sameStringArray(left: string[], right: string[]): boolean {

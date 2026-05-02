@@ -48,6 +48,8 @@ const buildDeps = () => {
     projectManagementRepository: { updateTask: vi.fn(), getTasksByIds: vi.fn().mockReturnValue([]) },
     executionRepository: { updateSprintRun: vi.fn() },
     projectAttentionService: {
+      resolveItems: vi.fn(),
+      openItems: vi.fn(),
       openItem: vi.fn(),
       resolveItemsForTask: vi.fn(),
       resolveItemsForSprintRun: vi.fn(),

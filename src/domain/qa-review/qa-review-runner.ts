@@ -1,12 +1,13 @@
 import type { StructuredAgentRequestService } from "../../services/structured-agent-request-service.js";
-import type { NormalizedQaReviewResult } from "./qa-review-types.js";
+import type { NormalizedQaReviewResult, QaReviewError } from "./qa-review-types.js";
+import { parseQaError } from "./qa-review-types.js";
 import type { QaReviewRunRecord } from "../../repositories/qa-review-repository.js";
 import type { ProviderId } from "../../contracts/app-types.js";
 
 // Outcome types
 export type QaReviewRunnerOutcome =
   | { status: "success"; review: NormalizedQaReviewResult }
-  | { status: "error"; reason: "parse_failure" | "api_failure" | "transport_error"; message: string; error?: unknown };
+  | { status: "error"; error: QaReviewError };
 
 export interface QaReviewRunnerDependencies {
   structuredAgentRequestService: StructuredAgentRequestService;
@@ -95,28 +96,9 @@ export class QaReviewRunner {
 
       return { status: "success", review: result.parsed };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const lowerMessage = message.toLowerCase();
-      let reason: "parse_failure" | "api_failure" | "transport_error" = "api_failure";
-
-      if (
-        lowerMessage.includes("json") ||
-        lowerMessage.includes("validation") ||
-        lowerMessage.includes("failed to extract valid json") ||
-        lowerMessage.includes("must be 'pass'") ||
-        lowerMessage.includes("must be a non-empty string") ||
-        lowerMessage.includes("must be a json object")
-      ) {
-        reason = "parse_failure";
-      } else if (lowerMessage.includes("timeout") || lowerMessage.includes("network") || lowerMessage.includes("fetch")) {
-        reason = "transport_error";
-      }
-
       return {
         status: "error",
-        reason,
-        message,
-        error,
+        error: parseQaError(error),
       };
     }
   }

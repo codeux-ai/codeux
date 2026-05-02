@@ -12,6 +12,7 @@ import {
 import { randomUUID } from "crypto";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
+import { toNumber, parsePayloadJson } from "./repository-utils.js";
 import { queryProjectExecutionSnapshot } from "./execution/project-execution-snapshot-query.js";
 import {
   mapProviderInvocationUsageRow,
@@ -200,23 +201,6 @@ interface WorkerProjectAffinityRow {
   last_seen_at: string | null;
 }
 
-function toNumber(value: number | string): number {
-  return typeof value === "number" ? value : Number.parseInt(value, 10) || 0;
-}
-
-function parsePayloadJson(value: string | null): Record<string, unknown> | null {
-  if (!value || !value.trim()) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
-  } catch {
-    return null;
-  }
-}
-
 function asNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -243,6 +227,7 @@ export class ExecutionRepository {
   private readonly taskWallTimeCache = new Map<string, { finishedMs: number, hasActive: boolean }>();
   private readonly sprintRunWallTimeCache = new Map<string, { finishedMs: number, hasActive: boolean }>();
   private readonly pendingRealtimeProjectRefreshes = new Map<string, { includeOverview: boolean }>();
+  private readonly leaseProjectCache = new Map<string, string>();
   private realtimeProjectRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -1286,6 +1271,8 @@ export class ExecutionRepository {
 
   releaseLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string, leaseToken?: string): void {
     const projectId = this.resolveLeaseProjectId(scopeType, scopeId);
+    this.leaseProjectCache.delete(`${scopeType}:${scopeId}`);
+
     if (leaseToken) {
       this.db.prepare(`
         DELETE FROM execution_leases
@@ -1994,24 +1981,37 @@ export class ExecutionRepository {
   }
 
   public resolveLeaseProjectId(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): string | null {
+    const cacheKey = `${scopeType}:${scopeId}`;
+    const cached = this.leaseProjectCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    let projectId: string | null = null;
+
     if (scopeType === "sprint") {
       const row = this.db.prepare(`
         SELECT project_id
         FROM sprints
         WHERE id = ?
       `).get(scopeId) as { project_id: string } | undefined;
-      return row?.project_id || null;
-    }
-
-    if (scopeType === "task_dispatch") {
+      projectId = row?.project_id || null;
+    } else if (scopeType === "task_dispatch") {
       const row = this.db.prepare(`
         SELECT project_id
         FROM task_dispatches
         WHERE id = ?
       `).get(scopeId) as { project_id: string } | undefined;
-      return row?.project_id || null;
+      projectId = row?.project_id || null;
     }
 
-    return null;
+    if (projectId !== null) {
+      if (this.leaseProjectCache.size >= 1000) {
+        this.leaseProjectCache.delete(this.leaseProjectCache.keys().next().value!);
+      }
+      this.leaseProjectCache.set(cacheKey, projectId);
+    }
+
+    return projectId;
   }
 }

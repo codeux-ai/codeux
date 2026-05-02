@@ -13,8 +13,9 @@ import { HeartbeatService } from "../../services/heartbeat-service.js";
 import { WorkerInboxReplyService } from "../../services/worker-inbox-reply-service.js";
 import { QualityAssuranceService } from "../../services/quality-assurance-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
-import type { DashboardSettings, DashboardSettingsScope } from "../../contracts/app-types.js";
+import type { DashboardSettings, DashboardSettingsScope, DashboardStatusSnapshot } from "../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
+import { WorkspaceManager } from "../../infrastructure/providers/cli/workspace-manager.js";
 
 export interface SprintDependencies {
   cliWorkflowService: CliWorkflowService;
@@ -213,7 +214,7 @@ export function createSprintDependencies(
         task,
         ...executionArgs,
       }),
-    updateLastStatus: (status) => {
+    updateLastStatus: (status: DashboardStatusSnapshot) => {
       projectRuntimeRepository.syncDashboardStatus(status);
       context.runtimeContext.lastStatus = status;
     },
@@ -233,6 +234,7 @@ export function createSprintDependencies(
     qualityAssuranceService,
     taskService,
     heartbeatService,
+    workspaceManager: new WorkspaceManager(),
     resolvePlanningAgentPresetId: async (projectId: string) => {
       try {
         const agent = await agentPresetSyncService.resolveTargetedPlanningAgent(projectId);

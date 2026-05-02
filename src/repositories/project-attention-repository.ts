@@ -132,73 +132,96 @@ export class ProjectAttentionRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  openItems(inputs: OpenProjectAttentionItemInput[]): ProjectAttentionItemRecord[] {
+    if (inputs.length === 0) return [];
+
+    return this.db.transaction(() => {
+      const results: ProjectAttentionItemRecord[] = [];
+      const now = new Date().toISOString();
+      const updatedProjectIds = new Set<string>();
+
+      for (const input of inputs) {
+        const existing = this.findActiveDuplicate(input);
+        let itemId: string;
+
+        if (existing) {
+          this.db.prepare(`
+            UPDATE project_attention_items
+            SET severity = ?,
+                assigned_worker_endpoint_id = ?,
+                title = ?,
+                summary_markdown = ?,
+                payload_json = ?,
+                updated_at = ?
+            WHERE id = ?
+          `).run(
+            input.severity,
+            input.assignedWorkerEndpointId ?? existing.assignedWorkerEndpointId,
+            input.title.trim(),
+            input.summaryMarkdown.trim(),
+            serializePayload(input.payload),
+            now,
+            existing.id,
+          );
+          itemId = existing.id;
+        } else {
+          itemId = randomUUID();
+          this.db.prepare(`
+            INSERT INTO project_attention_items (
+              id,
+              project_id,
+              sprint_id,
+              task_id,
+              sprint_run_id,
+              dispatch_id,
+              attention_type,
+              severity,
+              owner_type,
+              status,
+              assigned_worker_endpoint_id,
+              title,
+              summary_markdown,
+              payload_json,
+              opened_at,
+              claimed_at,
+              resolved_at,
+              updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, NULL, NULL, ?)
+          `).run(
+            itemId,
+            input.projectId,
+            input.sprintId ?? null,
+            input.taskId ?? null,
+            input.sprintRunId ?? null,
+            input.dispatchId ?? null,
+            input.attentionType,
+            input.severity,
+            input.ownerType,
+            input.assignedWorkerEndpointId ?? null,
+            input.title.trim(),
+            input.summaryMarkdown.trim(),
+            serializePayload(input.payload),
+            now,
+            now,
+          );
+        }
+
+        const item = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));
+        results.push(item);
+        updatedProjectIds.add(item.projectId);
+      }
+
+      for (const projectId of updatedProjectIds) {
+        this.notifyProjectRefresh(projectId, true);
+      }
+
+      return results;
+    });
+  }
+
   openOrRefreshItem(input: OpenProjectAttentionItemInput): ProjectAttentionItemRecord {
-    const existing = this.findActiveDuplicate(input);
-    const now = new Date().toISOString();
-
-    if (existing) {
-      this.db.prepare(`
-        UPDATE project_attention_items
-        SET severity = ?,
-            assigned_worker_endpoint_id = ?,
-            title = ?,
-            summary_markdown = ?,
-            payload_json = ?,
-            updated_at = ?
-        WHERE id = ?
-      `).run(
-        input.severity,
-        input.assignedWorkerEndpointId ?? existing.assignedWorkerEndpointId,
-        input.title.trim(),
-        input.summaryMarkdown.trim(),
-        serializePayload(input.payload),
-        now,
-        existing.id,
-      );
-      return this.requireAndNotifyItem(existing.id, input.projectId, true);
-    }
-
-    const id = randomUUID();
-    this.db.prepare(`
-      INSERT INTO project_attention_items (
-        id,
-        project_id,
-        sprint_id,
-        task_id,
-        sprint_run_id,
-        dispatch_id,
-        attention_type,
-        severity,
-        owner_type,
-        status,
-        assigned_worker_endpoint_id,
-        title,
-        summary_markdown,
-        payload_json,
-        opened_at,
-        claimed_at,
-        resolved_at,
-        updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, NULL, NULL, ?)
-    `).run(
-      id,
-      input.projectId,
-      input.sprintId ?? null,
-      input.taskId ?? null,
-      input.sprintRunId ?? null,
-      input.dispatchId ?? null,
-      input.attentionType,
-      input.severity,
-      input.ownerType,
-      input.assignedWorkerEndpointId ?? null,
-      input.title.trim(),
-      input.summaryMarkdown.trim(),
-      serializePayload(input.payload),
-      now,
-      now,
-    );
-
-    return this.requireAndNotifyItem(id, input.projectId, true);
+    const results = this.openItems([input]);
+    return results[0];
   }
 
   resolveAttentionItemsForDispatch(dispatchId: string, resolution: { status?: Extract<ProjectAttentionStatus, "resolved" | "dismissed" | "expired">; reason?: string }): number {
@@ -210,45 +233,68 @@ export class ProjectAttentionRepository {
     );
   }
 
+  resolveItemsBatch(
+    inputs: Array<{ filter: ResolveProjectAttentionItemsFilter; resolution: { status?: Extract<ProjectAttentionStatus, "resolved" | "dismissed" | "expired">; reason?: string } }>,
+  ): number {
+    if (inputs.length === 0) return 0;
+
+    return this.db.transaction(() => {
+      let totalAffectedRows = 0;
+      const updatedProjectIds = new Set<string>();
+      const now = new Date().toISOString();
+
+      for (const input of inputs) {
+        const { clause, params } = this.buildResolveFilter(input.filter);
+        const rows = this.db.prepare(`
+          SELECT id, project_id
+          FROM project_attention_items
+          WHERE status IN ('open', 'claimed')
+            ${clause}
+        `).all(...params) as Array<{ id: string; project_id: string }>;
+
+        if (rows.length === 0) {
+          continue;
+        }
+
+        const status = input.resolution.status || "resolved";
+
+        executeChunkedInQuery((sql) => this.db.prepare(sql), {
+          sqlPrefix: `
+            UPDATE project_attention_items
+            SET status = ?,
+                resolved_at = ?,
+                updated_at = ?,
+                payload_json = CASE
+                  WHEN payload_json IS NULL THEN json_object('resolutionReason', ?)
+                  ELSE json_set(payload_json, '$.resolutionReason', ?)
+                END
+            WHERE id
+          `,
+          items: rows.map(r => r.id),
+          bindParamsBefore: [status, now, now, input.resolution.reason ?? null, input.resolution.reason ?? null]
+        });
+
+        totalAffectedRows += rows.length;
+        for (const row of rows) {
+          if (row.project_id) {
+            updatedProjectIds.add(row.project_id);
+          }
+        }
+      }
+
+      for (const projectId of updatedProjectIds) {
+        this.notifyProjectRefresh(projectId, true);
+      }
+
+      return totalAffectedRows;
+    });
+  }
+
   resolveAttentionItems(
     filter: ResolveProjectAttentionItemsFilter,
     resolution: { status?: Extract<ProjectAttentionStatus, "resolved" | "dismissed" | "expired">; reason?: string },
   ): number {
-    const { clause, params } = this.buildResolveFilter(filter);
-    const now = new Date().toISOString();
-    const rows = this.db.prepare(`
-      SELECT id, project_id
-      FROM project_attention_items
-      WHERE status IN ('open', 'claimed')
-        ${clause}
-    `).all(...params) as Array<{ id: string; project_id: string }>;
-
-    if (rows.length === 0) {
-      return 0;
-    }
-
-    const status = resolution.status || "resolved";
-
-    executeChunkedInQuery((sql) => this.db.prepare(sql), {
-      sqlPrefix: `
-        UPDATE project_attention_items
-        SET status = ?,
-            resolved_at = ?,
-            updated_at = ?,
-            payload_json = CASE
-              WHEN payload_json IS NULL THEN json_object('resolutionReason', ?)
-              ELSE json_set(payload_json, '$.resolutionReason', ?)
-            END
-        WHERE id
-      `,
-      items: rows.map(r => r.id),
-      bindParamsBefore: [status, now, now, resolution.reason ?? null, resolution.reason ?? null]
-    });
-
-    for (const projectId of new Set(rows.map((row) => row.project_id).filter(Boolean))) {
-      this.notifyProjectRefresh(projectId, true);
-    }
-    return rows.length;
+    return this.resolveItemsBatch([{ filter, resolution }]);
   }
 
 

@@ -942,3 +942,17 @@ export interface SprintPreviewScript {
   detectedBuildCommand: string | null;
   detectedRunCommand: string | null;
 }
+
+export interface DashboardStatusSnapshot {
+  project_id?: string;
+  sprint_id?: string;
+  sprint_number?: number;
+  source_id?: string;
+  repo_path?: string;
+  feature_branch?: string;
+  subtasks: Subtask[];
+  reportText?: string;
+  statusTable?: string;
+  instructions?: string;
+  timestamp: string | null;
+}

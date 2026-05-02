@@ -116,6 +116,9 @@ export class CycleStateCoordinator {
       .map((task) => task.record_id?.trim())
       .filter((taskId): taskId is string => Boolean(taskId));
 
+    const itemsToOpen: any[] = [];
+    const itemsToResolve: any[] = [];
+
     const mergeTaskIds = new Set<string>();
     for (const task of protocolResult.awaitingMerge) {
       const taskId = task.record_id?.trim();
@@ -132,7 +135,7 @@ export class CycleStateCoordinator {
       );
       const mergedFeatureTasks = selectMergedFeatureTaskContexts(subtasks, taskId);
 
-      this.deps.projectAttentionService.openItem(buildTaskAttentionPayload({
+      itemsToOpen.push(buildTaskAttentionPayload({
         projectId,
         sprintId,
         taskId,
@@ -167,12 +170,17 @@ export class CycleStateCoordinator {
           featureBranchTaskContexts: mergedFeatureTasks,
         },
       }));
-      this.deps.projectAttentionService.resolveItemsForTask(
-        projectId,
-        taskId,
-        [mergeConflictDetected ? "merge_required" : "merge_conflict"],
-        mergeConflictDetected ? "merge_conflict_attention_replaced" : "merge_required_attention_replaced",
-      );
+      itemsToResolve.push({
+        filter: {
+          projectId,
+          taskId,
+          attentionTypes: [mergeConflictDetected ? "merge_required" : "merge_conflict"],
+        },
+        resolution: {
+          status: "resolved",
+          reason: mergeConflictDetected ? "merge_conflict_attention_replaced" : "merge_required_attention_replaced",
+        },
+      });
     }
 
     const actionTaskIds = new Set<string>();
@@ -183,7 +191,7 @@ export class CycleStateCoordinator {
       }
       actionTaskIds.add(taskId);
       const ownerType: ProjectAttentionOwnerType = task.intervention_owner === "AGENT" ? "worker" : "human";
-      this.deps.projectAttentionService.openItem(buildTaskAttentionPayload({
+      itemsToOpen.push(buildTaskAttentionPayload({
         projectId,
         sprintId,
         taskId,
@@ -217,29 +225,51 @@ export class CycleStateCoordinator {
 
     for (const taskId of knownTaskIds) {
       if (!mergeTaskIds.has(taskId)) {
-        this.deps.projectAttentionService.resolveItemsForTask(
-          projectId,
-          taskId,
-          ["merge_required", "merge_conflict"],
-          "merge_attention_cleared",
-        );
+        itemsToResolve.push({
+          filter: {
+            projectId,
+            taskId,
+            attentionTypes: ["merge_required", "merge_conflict"],
+          },
+          resolution: {
+            status: "resolved",
+            reason: "merge_attention_cleared",
+          },
+        });
       }
       if (!actionTaskIds.has(taskId)) {
-        this.deps.projectAttentionService.resolveItemsForTask(
-          projectId,
-          taskId,
-          ["action_required"],
-          "action_required_cleared",
-        );
+        itemsToResolve.push({
+          filter: {
+            projectId,
+            taskId,
+            attentionTypes: ["action_required"],
+          },
+          resolution: {
+            status: "resolved",
+            reason: "action_required_cleared",
+          },
+        });
       }
       if (!ciFixTaskIds.has(taskId)) {
-        this.deps.projectAttentionService.resolveItemsForTask(
-          projectId,
-          taskId,
-          ["ci_fix_required"],
-          "ci_fix_attention_cleared",
-        );
+        itemsToResolve.push({
+          filter: {
+            projectId,
+            taskId,
+            attentionTypes: ["ci_fix_required"],
+          },
+          resolution: {
+            status: "resolved",
+            reason: "ci_fix_attention_cleared",
+          },
+        });
       }
+    }
+
+    if (itemsToOpen.length > 0) {
+      this.deps.projectAttentionService.openItems(itemsToOpen);
+    }
+    if (itemsToResolve.length > 0) {
+      this.deps.projectAttentionService.resolveItems(itemsToResolve);
     }
   }
 }

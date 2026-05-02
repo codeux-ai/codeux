@@ -46,12 +46,7 @@ export function findAllJsonCandidates(text: string): string[] {
 
       if (endIndex >= 0) {
         const candidate = trimmed.slice(start, endIndex + 1);
-        try {
-          JSON.parse(candidate);
-          localCandidates.push(candidate);
-        } catch {
-          // Not valid JSON
-        }
+        localCandidates.push(candidate);
       }
       searchFrom = start + 1;
     }
@@ -60,6 +55,8 @@ export function findAllJsonCandidates(text: string): string[] {
 
   candidates.push(...findAllBalancedJson("{", "}"));
   candidates.push(...findAllBalancedJson("[", "]"));
+
+  candidates.sort((a, b) => b.length - a.length);
 
   return candidates;
 }
@@ -162,6 +159,10 @@ export function extractJsonFromText(text: string): ExtractJsonResult {
         bestData = parsed;
         bestSourceText = candidate;
         bestScore = 0;
+      }
+
+      if (bestScore >= 0) {
+        break;
       }
     } catch {
       // Ignored

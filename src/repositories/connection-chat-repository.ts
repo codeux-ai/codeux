@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
-import { requireRecord } from "./repository-utils.js";
+import { requireRecord, toNumber, toBoolean } from "./repository-utils.js";
 import type {
   ConnectionInboxMessage,
   ConversationMessageRecord,
@@ -22,7 +22,6 @@ import type { DashboardRealtimeService } from "../services/dashboard-realtime-se
 import { WorkerEndpointRepository } from "./worker-endpoint-repository.js";
 import {
   HIDDEN_INTERNAL_VISIBILITY,
-  toNumber,
   visibleConversationMessageFilter,
 } from "./connection-chat/conversation-query-utils.js";
 import { requireConversationThreadQuery } from "./connection-chat/conversation-thread-query.js";
@@ -99,10 +98,6 @@ export interface ConnectionLifecycleCleanupResult {
   prunedConnectionIds: string[];
 }
 
-
-function toBoolean(value: number | string | null | undefined): boolean {
-  return value === 1 || value === "1";
-}
 
 function parseCapabilities(value: string | null): McpConnectionCapabilities {
   if (!value) {

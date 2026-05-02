@@ -3,6 +3,7 @@ import { AppDbStorage } from "../app-db-storage.js";
 import type { DashboardStatus, JulesActivity, Subtask, SubtaskStatus } from "../../contracts/app-types.js";
 import { mapPlanningStatusToRuntimeStatus, toMergeIndicator } from "../../services/subtask-state-mapper.js";
 import { RuntimeContextPayload } from "./runtime-context-store.js";
+import { toNumber, toBoolean, parsePayloadJson } from "../repository-utils.js";
 
 export type PlanningTaskStatus = "pending" | "in_progress" | "coding_completed" | "completed" | "QA_REVIEW_FAILED";
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
@@ -71,30 +72,6 @@ export interface TaskActivityRow {
 export interface MappedTask {
   row: TaskRow;
   dependsOnTaskIds: string[];
-}
-
-export function toBoolean(value: number | string | null | undefined): boolean {
-  return value === 1 || value === "1";
-}
-
-export function toNumber(value: number | string | null | undefined): number {
-  if (typeof value === "number") {
-    return value;
-  }
-  return Number.parseInt(String(value ?? 0), 10) || 0;
-}
-
-export function parsePayloadJson(value: string | null | undefined): Record<string, unknown> | null {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
-  } catch {
-    return null;
-  }
 }
 
 export function asString(value: unknown): string | undefined {

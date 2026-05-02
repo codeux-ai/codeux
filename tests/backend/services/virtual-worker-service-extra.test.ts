@@ -51,25 +51,6 @@ async function createFixture() {
 }
 
 describe("VirtualWorkerService Extra Coverage", () => {
-  it("sleep handles non-positive values", async () => {
-    const { service } = await createFixture();
-    // Access private sleep via any
-    await (service as any).constructor.name; // just to make sure service is initialized
-    const sleep = (VirtualWorkerService as any).prototype.sleep || (service as any).sleep;
-    
-    // Test direct call to the function if it's exported or accessible
-    // It's a top-level function in the file, not a class method.
-    // So we can't easily test it unless we find a method that calls it.
-    // handleTaskDispatch calls sleep.
-  });
-
-  it("extractPullRequest handles empty or null outputs", async () => {
-    const { service } = await createFixture();
-    const extractPullRequest = (service as any).constructor.__proto__.extractPullRequest; 
-    // Wait, it's a top-level function, not exported.
-    // I can't test it directly unless I use rewire or similar, but I can't.
-    // I'll test it via handleTaskDispatch.
-  });
 
   it("readRequiredString throws on various invalid values", async () => {
     const { service } = await createFixture();

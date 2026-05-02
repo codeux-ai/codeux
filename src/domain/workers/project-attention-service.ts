@@ -18,24 +18,45 @@ export class ProjectAttentionService {
     this.onWorkerAttentionOpenedCallback = callback;
   }
 
-  openItem(input: OpenProjectAttentionItemInput & { preferredWorkerEndpointId?: string | null }): ProjectAttentionItemRecord {
-    const assignedWorkerEndpointId = this.resolveAssignedWorkerEndpointId(
-      input.projectId,
-      input.sprintId ?? null,
-      input.ownerType,
-      input.preferredWorkerEndpointId,
-    );
+  openItems(inputs: Array<OpenProjectAttentionItemInput & { preferredWorkerEndpointId?: string | null }>): ProjectAttentionItemRecord[] {
+    if (inputs.length === 0) return [];
 
-    const item = this.projectAttentionRepository.openOrRefreshItem({
-      ...input,
-      assignedWorkerEndpointId,
+    const processedInputs = inputs.map((input) => {
+      const assignedWorkerEndpointId = this.resolveAssignedWorkerEndpointId(
+        input.projectId,
+        input.sprintId ?? null,
+        input.ownerType,
+        input.preferredWorkerEndpointId,
+      );
+
+      return {
+        ...input,
+        assignedWorkerEndpointId,
+      };
     });
 
-    if (input.ownerType === "worker" && item.status === "open") {
-      this.onWorkerAttentionOpenedCallback?.(input.projectId);
+    const items = this.projectAttentionRepository.openItems(processedInputs);
+
+    if (this.onWorkerAttentionOpenedCallback) {
+      const notifiedProjects = new Set<string>();
+      for (const item of items) {
+        if (item.ownerType === "worker" && item.status === "open" && !notifiedProjects.has(item.projectId)) {
+          notifiedProjects.add(item.projectId);
+          this.onWorkerAttentionOpenedCallback(item.projectId);
+        }
+      }
     }
 
-    return item;
+    return items;
+  }
+
+  openItem(input: OpenProjectAttentionItemInput & { preferredWorkerEndpointId?: string | null }): ProjectAttentionItemRecord {
+    const items = this.openItems([input]);
+    return items[0];
+  }
+
+  resolveItems(inputs: Array<{ filter: Parameters<ProjectAttentionRepository['resolveAttentionItems']>[0]; resolution: Parameters<ProjectAttentionRepository['resolveAttentionItems']>[1] }>): number {
+    return this.projectAttentionRepository.resolveItemsBatch(inputs);
   }
 
   resolveItemsForDispatch(dispatchId: string, reason?: string): number {

@@ -1,7 +1,7 @@
 import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orchestrator.js";
 import type { CycleRunner } from "./cycle-runner.js";
 import type { WatchLoopRunner } from "./watch-loop-runner.js";
-import type { AutomationInterventionsSettings, AutomationLevel, CiIntelligenceSettings, SprintLoopStepSettings, Subtask } from "../../../contracts/app-types.js";
+import type { AutomationInterventionsSettings, AutomationLevel, CiIntelligenceSettings, SprintLoopStepSettings, Subtask, DashboardStatusSnapshot } from "../../../contracts/app-types.js";
 import type { SprintAgentArgs } from "../../../sprint/sprint-types.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 
@@ -175,7 +175,7 @@ export class SprintActionRunner {
       statusTable,
       instructions,
       timestamp: new Date().toLocaleTimeString(),
-    });
+    } as DashboardStatusSnapshot);
 
     return { content: [{ type: "text", text: report }] };
   }

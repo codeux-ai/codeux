@@ -1,5 +1,6 @@
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
+import { toNumber } from "./repository-utils.js";
 import type {
   DashboardRealtimeEvent,
   DashboardRealtimeScopeType,
@@ -44,10 +45,6 @@ export interface AppendDashboardRealtimeEventInput {
   replayable?: boolean;
   payload?: unknown;
   emittedAt?: string;
-}
-
-function toNumber(value: number | string): number {
-  return typeof value === "number" ? value : Number.parseInt(value, 10) || 0;
 }
 
 function parsePayload(value: string | null): unknown {

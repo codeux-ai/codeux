@@ -6,6 +6,7 @@ import type {
   SprintPreviewStartupMode,
 } from "../contracts/app-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
+import { toNumber } from "./repository-utils.js";
 
 interface SprintPreviewSessionRow {
   id: string;
@@ -75,15 +76,6 @@ export interface UpdateSprintPreviewSessionInput {
   lastStartedAt?: string | null;
   lastStoppedAt?: string | null;
 }
-
-const toNumber = (value: number | string | null | undefined): number | null => {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-};
 
 export class SprintPreviewRepository {
   constructor(private readonly storage: AppDbStorage) {}
@@ -264,9 +256,9 @@ export class SprintPreviewRepository {
       sprintId: row.sprint_id,
       projectName: row.project_name,
       sprintName: row.sprint_name,
-      sprintNumber: toNumber(row.sprint_number),
+      sprintNumber: toNumber(row.sprint_number) || null,
       status: row.status as SprintPreviewSessionStatus,
-      hostPort: toNumber(row.host_port),
+      hostPort: toNumber(row.host_port) || null,
       containerAppPort: toNumber(row.container_app_port) || 3000,
       containerId: row.container_id,
       containerName: row.container_name,

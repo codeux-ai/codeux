@@ -140,7 +140,9 @@ export const buildDeps = () => {
       resolveItem: vi.fn(),
       resolveItemsForTask: vi.fn(),
       resolveItemsForSprintRun: vi.fn(),
-    },
+
+      openItems: vi.fn(),
+      resolveItems: vi.fn(),},
     sprintExecutionStateService: {
       resolveContext: vi.fn((args: any) => ({
         project: { id: "project-1", name: "Test Project", baseDir: args.repo_path || "/tmp/repo", defaultBranch: "main" },

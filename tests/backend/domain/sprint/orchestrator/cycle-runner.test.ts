@@ -35,6 +35,8 @@ function buildDeps(): SprintOrchestratorDependencies {
       appendTaskRunEvent: vi.fn(),
     } as any,
     projectAttentionService: {
+      resolveItems: vi.fn(),
+      openItems: vi.fn(),
       openItem: vi.fn(),
       resolveItemsForTask: vi.fn(),
       resolveItemsForSprintRun: vi.fn(),
@@ -142,7 +144,7 @@ describe("CycleRunner attention sync", () => {
     });
 
     expect(result.awaitingMerge).toHaveLength(1);
-    expect(deps.projectAttentionService.openItem).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
       projectId: "project-1",
       sprintId: "sprint-1",
       taskId: "task-1",
@@ -155,8 +157,8 @@ describe("CycleRunner attention sync", () => {
         featureBranch: "feature/sprint-1",
         workingDirectoryHint: "cd /repo/project-1",
       }),
-    }));
-    expect(deps.projectAttentionService.openItem).toHaveBeenCalledWith(expect.objectContaining({
+    })]));
+    expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
       projectId: "project-1",
       sprintId: "sprint-1",
       taskId: "task-2",
@@ -164,19 +166,13 @@ describe("CycleRunner attention sync", () => {
       attentionType: "action_required",
       ownerType: "worker",
       summaryMarkdown: "No session id available for automatic intervention.",
-    }));
-    expect(deps.projectAttentionService.resolveItemsForTask).toHaveBeenCalledWith(
-      "project-1",
-      "task-3",
-      ["merge_required", "merge_conflict"],
-      "merge_attention_cleared",
-    );
-    expect(deps.projectAttentionService.resolveItemsForTask).toHaveBeenCalledWith(
-      "project-1",
-      "task-3",
-      ["action_required"],
-      "action_required_cleared",
-    );
+    })]));
+    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
+      { filter: { projectId: "project-1", taskId: "task-3", attentionTypes: ["merge_required", "merge_conflict"] }, resolution: { status: "resolved", reason: "merge_attention_cleared" } }
+    ]));
+    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
+      { filter: { projectId: "project-1", taskId: "task-3", attentionTypes: ["action_required"] }, resolution: { status: "resolved", reason: "action_required_cleared" } }
+    ]));
   });
 
   it("opens a dedicated merge_conflict attention item with worker context when the PR is DIRTY", async () => {
@@ -267,7 +263,7 @@ describe("CycleRunner attention sync", () => {
 
     expect(result.manualMergeTasks).toEqual([]);
     expect(result.workerEscalatedMergeConflictTasks).toHaveLength(1);
-    expect(deps.projectAttentionService.openItem).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
       attentionType: "merge_conflict",
       title: "Merge conflict for T1",
       payload: expect.objectContaining({
@@ -287,13 +283,10 @@ describe("CycleRunner attention sync", () => {
         ],
       }),
       summaryMarkdown: expect.stringContaining("Merged task prompts already on the feature branch"),
-    }));
-    expect(deps.projectAttentionService.resolveItemsForTask).toHaveBeenCalledWith(
-      "project-1",
-      "task-1",
-      ["merge_required"],
-      "merge_conflict_attention_replaced",
-    );
+    })]));
+    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
+      { filter: { projectId: "project-1", taskId: "task-1", attentionTypes: ["merge_required"] }, resolution: { status: "resolved", reason: "merge_conflict_attention_replaced" } }
+    ]));
   });
 
   it("keeps an existing worker-owned merge_conflict sticky when a later PR snapshot is incomplete", async () => {
@@ -395,16 +388,13 @@ describe("CycleRunner attention sync", () => {
 
     expect(result.manualMergeTasks).toEqual([]);
     expect(result.workerEscalatedMergeConflictTasks).toHaveLength(1);
-    expect(deps.projectAttentionService.openItem).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
       attentionType: "merge_conflict",
       taskId: "task-1",
-    }));
-    expect(deps.projectAttentionService.resolveItemsForTask).toHaveBeenCalledWith(
-      "project-1",
-      "task-1",
-      ["merge_required"],
-      "merge_conflict_attention_replaced",
-    );
+    })]));
+    expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
+      { filter: { projectId: "project-1", taskId: "task-1", attentionTypes: ["merge_required"] }, resolution: { status: "resolved", reason: "merge_conflict_attention_replaced" } }
+    ]));
   });
 
   it("escalates auto-merge conflict failures to worker-owned merge_conflict attention", async () => {
@@ -490,14 +480,14 @@ describe("CycleRunner attention sync", () => {
 
     expect(result.manualMergeTasks).toEqual([]);
     expect(result.workerEscalatedMergeConflictTasks).toHaveLength(1);
-    expect(deps.projectAttentionService.openItem).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
       taskId: "task-1",
       attentionType: "merge_conflict",
       payload: expect.objectContaining({
         prNumber: 101,
         mergeIndicator: "MERGE_CONFLICT",
       }),
-    }));
+    })]));
     expect(deps.executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
       "task-run-1",
       "ci_gate_status",
@@ -675,7 +665,7 @@ describe("CycleRunner attention sync", () => {
       errorMessage: null,
     }));
 
-    vi.mocked(deps.projectAttentionService.openItem).mockClear();
+    vi.mocked(deps.projectAttentionService.openItems).mockClear();
 
     const secondResult = await runner.run(baseArgs);
 
@@ -685,10 +675,10 @@ describe("CycleRunner attention sync", () => {
     });
     expect(secondResult.subtasks[0]?.intervention_hint).toContain("already answered automatically");
     expect(deps.sendSessionMessage).toHaveBeenCalledTimes(1);
-    expect(deps.projectAttentionService.openItem).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.projectAttentionService.openItems).not.toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
       attentionType: "action_required",
       taskId: "task-1",
-    }));
+    })]));
   });
 
   it("persists CI wait status back to task records while checks are still pending", async () => {
@@ -1531,6 +1521,84 @@ describe("CycleRunner attention sync", () => {
       task: expect.objectContaining({ id: "T1" }),
     }));
   });
+
+  it("reviews multiple newly completed tasks in parallel when in DOCKER mode", async () => {
+    const deps = buildDeps();
+    let resolveTask1: () => void;
+    let resolveTask2: () => void;
+    let resolveTask3: () => void;
+
+    const taskPromises = [
+      new Promise<any>((resolve) => { resolveTask1 = () => resolve({ reviewed: true }) }),
+      new Promise<any>((resolve) => { resolveTask2 = () => resolve({ reviewed: true }) }),
+      new Promise<any>((resolve) => { resolveTask3 = () => resolve({ reviewed: true }) }),
+    ];
+
+    let callCount = 0;
+
+    deps.qualityAssuranceService = {
+      getTaskMergeGateStatus: vi.fn().mockReturnValue({
+        mergeAllowed: false,
+        reason: "pending_review",
+        summary: "QA review is required.",
+        latestRun: null,
+        runsUsed: 0,
+        maxRuns: 2,
+      }),
+      reviewCompletedTask: vi.fn().mockImplementation(() => {
+        const promise = taskPromises[callCount];
+        callCount++;
+        return promise;
+      }),
+    } as any;
+    deps.getDashboardSettings = vi.fn().mockReturnValue({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      agents: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents,
+        qualityAssurance: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+          enabled: true,
+        },
+      },
+      cliWorkflow: { executionMode: "DOCKER" },
+    });
+
+    const runner = new CycleRunner(deps);
+
+    const reviewPromise = (runner as any).reviewCompletedTasks(
+      [
+        { id: "T1", record_id: "task-1", status: "COMPLETED", provider: "codex" },
+        { id: "T2", record_id: "task-2", status: "COMPLETED", provider: "codex" },
+        { id: "T3", record_id: "task-3", status: "COMPLETED", provider: "codex" },
+      ],
+      new Map([
+        ["T1", "RUNNING"],
+        ["T2", "RUNNING"],
+        ["T3", "RUNNING"],
+      ]),
+      {
+        executionContext: {
+          project: { id: "proj-1" },
+          sprint: { id: "sprint-1" },
+        },
+        sprintRunId: "run-1",
+      } as any,
+      deps.getDashboardSettings(),
+    );
+
+    // Wait a tick to let promises start resolving
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // If execution is parallel, all 3 tasks should have been initiated without waiting for
+    // any of the promises to resolve.
+    expect(deps.qualityAssuranceService.reviewCompletedTask).toHaveBeenCalledTimes(3);
+
+    // Resolve the promises to finish the test
+    resolveTask1!();
+    resolveTask2!();
+    resolveTask3!();
+    await reviewPromise;
+  });
 });
 
   describe("CycleStateCoordinator regression tests", () => {
@@ -1616,8 +1684,14 @@ describe("CycleRunner attention sync", () => {
         sprintRunId: "run-1",
       } as any, null, new Set());
 
-      expect(deps.projectAttentionService.resolveItemsForTask).toHaveBeenCalledWith("p1", "task-1", ["merge_required", "merge_conflict"], "merge_attention_cleared");
-      expect(deps.projectAttentionService.resolveItemsForTask).toHaveBeenCalledWith("p1", "task-1", ["action_required"], "action_required_cleared");
-      expect(deps.projectAttentionService.resolveItemsForTask).toHaveBeenCalledWith("p1", "task-1", ["ci_fix_required"], "ci_fix_attention_cleared");
+      expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
+      { filter: { projectId: "p1", taskId: "task-1", attentionTypes: ["merge_required", "merge_conflict"] }, resolution: { status: "resolved", reason: "merge_attention_cleared" } }
+    ]));
+      expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
+      { filter: { projectId: "p1", taskId: "task-1", attentionTypes: ["action_required"] }, resolution: { status: "resolved", reason: "action_required_cleared" } }
+    ]));
+      expect(deps.projectAttentionService.resolveItems).toHaveBeenCalledWith(expect.arrayContaining([
+      { filter: { projectId: "p1", taskId: "task-1", attentionTypes: ["ci_fix_required"] }, resolution: { status: "resolved", reason: "ci_fix_attention_cleared" } }
+    ]));
     });
   });

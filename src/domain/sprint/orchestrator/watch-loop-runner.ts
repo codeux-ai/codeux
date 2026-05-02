@@ -8,6 +8,7 @@ import type { Subtask,
   DashboardSettings,
   DashboardSettingsScope,
   SprintLoopStepSettings,
+  DashboardStatusSnapshot,
  } from "../../../contracts/app-types.js";
 import type { InstructionTemplateId } from "../../../instructions/instruction-template-catalog.js";
 import type { MemoryPromotionService } from "../../../services/memory-promotion-service.js";
@@ -39,13 +40,14 @@ export interface WatchLoopDependencies {
   sleep?: (ms: number) => Promise<void>;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
-  updateLastStatus: (status: any) => void;
+  updateLastStatus: (status: DashboardStatusSnapshot) => void;
   resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
   memoryPromotionService?: MemoryPromotionService;
   qualityAssuranceService?: QualityAssuranceService;
   executionRepository: WatchLoopExecutionDependencies;
   projectAttentionService: WatchLoopAttentionDependencies;
   heartbeatService: HeartbeatService;
+  workspaceManager: WorkspaceManager;
 }
 
 export interface WatchLoopRunnerArgs {
@@ -67,8 +69,6 @@ export interface WatchLoopRunnerArgs {
 }
 
 export class WatchLoopRunner {
-  private readonly workspaceManager = new WorkspaceManager();
-
   constructor(
     private readonly deps: WatchLoopDependencies,
     private readonly cycleRunner: CycleRunner,
@@ -365,7 +365,7 @@ export class WatchLoopRunner {
       statusTable: cycleResult.statusTable,
       instructions: cycleResult.instructions,
       timestamp,
-    });
+    } as DashboardStatusSnapshot);
 
     return cycleResult;
   }
@@ -711,7 +711,7 @@ export class WatchLoopRunner {
       }
       cleanedSessionIds.add(sessionId);
 
-      const worktreePath = await this.workspaceManager.resolveResumeWorktreePath(
+      const worktreePath = await this.deps.workspaceManager.resolveResumeWorktreePath(
         args.repoPath,
         sessionId,
         executionMode,
@@ -719,7 +719,7 @@ export class WatchLoopRunner {
       if (!worktreePath) {
         continue;
       }
-      await this.workspaceManager.removeWorktree(args.repoPath, worktreePath).catch(() => undefined);
+      await this.deps.workspaceManager.removeWorktree(args.repoPath, worktreePath).catch(() => undefined);
     }
   }
 }
