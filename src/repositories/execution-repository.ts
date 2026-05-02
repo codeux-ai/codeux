@@ -1009,12 +1009,29 @@ export class ExecutionRepository {
     projectId: string,
     input: ProjectStatsQuery | ProjectStatsWindow = "7d",
   ): ProjectExecutionStatsSnapshot {
+    const taskMetaCache = new Map<string, StatsEntityMetadata>();
+    const sprintMetaCache = new Map<string, StatsEntityMetadata>();
+
     return queryProjectStatsSnapshot(this.db, projectId, input, {
       requireProject: (id) => requireProject(this.db, id),
       getWallTimeTotalsByTaskIdsForRange: (id, start, end, now) => this.getWallTimeTotalsByTaskIdsForRange(id, start, end, now),
       getWallTimeTotalsBySprintRunIdsForRange: (id, start, end, now) => this.getWallTimeTotalsBySprintRunIdsForRange(id, start, end, now),
-      getTaskMetadata: (id) => this.getTaskMetadata(id),
-      getSprintMetadata: (id) => this.getSprintMetadata(id),
+      getTaskMetadata: (id, ids) => {
+        const missing = ids.filter(i => !taskMetaCache.has(i));
+        if (missing.length > 0) {
+          const fresh = this.getTaskMetadata(id, missing);
+          for (const [k, v] of fresh.entries()) taskMetaCache.set(k, v);
+        }
+        return new Map(ids.filter(i => taskMetaCache.has(i)).map(i => [i, taskMetaCache.get(i)!] as const));
+      },
+      getSprintMetadata: (id, ids) => {
+        const missing = ids.filter(i => !sprintMetaCache.has(i));
+        if (missing.length > 0) {
+          const fresh = this.getSprintMetadata(id, missing);
+          for (const [k, v] of fresh.entries()) sprintMetaCache.set(k, v);
+        }
+        return new Map(ids.filter(i => sprintMetaCache.has(i)).map(i => [i, sprintMetaCache.get(i)!] as const));
+      },
       updateLastActivity: (map, key, date) => this.updateLastActivity(map, key, date),
     });
   }
@@ -1627,55 +1644,71 @@ export class ExecutionRepository {
     return new Map(rows.map((row) => [row.sprint_run_id, Math.max(0, toNumber(row.total_duration_ms))] as const));
   }
 
-  private getTaskMetadata(projectId: string): Map<string, StatsEntityMetadata> {
-    const rows = this.db.prepare(`
-      SELECT t.id, t.task_key, t.title, t.status, s.name AS sprint_name
-      FROM tasks t
-      INNER JOIN sprints s ON s.id = t.sprint_id
-      WHERE t.project_id = ?
-    `).all(projectId) as unknown as Array<{ id: string; task_key: string; title: string; status: string; sprint_name: string }>;
-    return new Map(rows.map((row) => [row.id, {
-      label: `${row.task_key} ${row.title}`.trim(),
-      secondaryLabel: row.sprint_name,
-      status: row.status,
-      provider: null,
-      purpose: null,
-      lastActivityAt: null,
-    }] as const));
-  }
-
-  private getSprintMetadata(projectId: string): Map<string, StatsEntityMetadata> {
-    const rows = this.db.prepare(`
-      SELECT s.id AS sprint_id, sr.id AS sprint_run_id, s.name, s.number, sr.status
-      FROM sprints s
-      LEFT JOIN sprint_runs sr ON sr.sprint_id = s.id
-      WHERE s.project_id = ?
-    `).all(projectId) as unknown as Array<{
-      sprint_id: string;
-      sprint_run_id: string | null;
-      name: string;
-      number: number | string | null;
-      status: string | null;
-    }>;
-
-    const map = new Map<string, StatsEntityMetadata>();
-
-    for (const row of rows) {
-      const summary = {
-        label: row.number === null ? row.name : `Sprint ${toNumber(row.number)} · ${row.name}`,
-        secondaryLabel: null,
-        status: row.status,
-        provider: null,
-        purpose: null,
-        lastActivityAt: null,
-      } as const;
-      map.set(row.sprint_id, summary);
-      if (row.sprint_run_id) {
-        map.set(row.sprint_run_id, summary);
+  private getTaskMetadata(projectId: string, ids: string[]): Map<string, StatsEntityMetadata> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const chunkMap = new Map<string, StatsEntityMetadata>();
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = this.db.prepare(`
+        SELECT t.id, t.task_key, t.title, t.status, s.name AS sprint_name
+        FROM tasks t
+        INNER JOIN sprints s ON s.id = t.sprint_id
+        WHERE t.project_id = ? AND t.id IN (${placeholders})
+      `).all(projectId, ...chunk) as unknown as Array<{ id: string; task_key: string; title: string; status: string; sprint_name: string }>;
+      for (const row of rows) {
+        chunkMap.set(row.id, {
+          label: `${row.task_key} ${row.title}`.trim(),
+          secondaryLabel: row.sprint_name,
+          status: row.status,
+          provider: null,
+          purpose: null,
+          lastActivityAt: null,
+        });
       }
     }
+    return chunkMap;
+  }
 
-    return map;
+  private getSprintMetadata(projectId: string, ids: string[]): Map<string, StatsEntityMetadata> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const chunkMap = new Map<string, StatsEntityMetadata>();
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      const placeholders = chunk.map(() => "?").join(",");
+      const rows = this.db.prepare(`
+        SELECT s.id AS sprint_id, sr.id AS sprint_run_id, s.name, s.number, sr.status
+        FROM sprints s
+        LEFT JOIN sprint_runs sr ON sr.sprint_id = s.id
+        WHERE s.project_id = ? AND (s.id IN (${placeholders}) OR sr.id IN (${placeholders}))
+      `).all(projectId, ...chunk, ...chunk) as unknown as Array<{
+        sprint_id: string;
+        sprint_run_id: string | null;
+        name: string;
+        number: number | string | null;
+        status: string | null;
+      }>;
+
+      for (const row of rows) {
+        const summary = {
+          label: row.number === null ? row.name : `Sprint ${toNumber(row.number)} · ${row.name}`,
+          secondaryLabel: null,
+          status: row.status,
+          provider: null,
+          purpose: null,
+          lastActivityAt: null,
+        } as const;
+        chunkMap.set(row.sprint_id, summary);
+        if (row.sprint_run_id) {
+          chunkMap.set(row.sprint_run_id, summary);
+        }
+      }
+    }
+    return chunkMap;
   }
 
 

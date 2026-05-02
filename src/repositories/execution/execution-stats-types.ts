@@ -15,7 +15,7 @@ export interface ProjectStatsQueryDependencies {
   requireProject: (id: string) => void;
   getWallTimeTotalsByTaskIdsForRange: (id: string, s: string, e: string, n: string) => Map<string, number>;
   getWallTimeTotalsBySprintRunIdsForRange: (id: string, s: string, e: string, n: string) => Map<string, number>;
-  getTaskMetadata: (id: string) => Map<string, StatsEntityMetadata>;
-  getSprintMetadata: (id: string) => Map<string, StatsEntityMetadata>;
+  getTaskMetadata: (id: string, ids: string[]) => Map<string, StatsEntityMetadata>;
+  getSprintMetadata: (id: string, ids: string[]) => Map<string, StatsEntityMetadata>;
   updateLastActivity: (map: Map<string, string>, key: string | null, date: string | null) => void;
 }
