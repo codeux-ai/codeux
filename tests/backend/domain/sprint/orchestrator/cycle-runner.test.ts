@@ -1521,6 +1521,84 @@ describe("CycleRunner attention sync", () => {
       task: expect.objectContaining({ id: "T1" }),
     }));
   });
+
+  it("reviews multiple newly completed tasks in parallel when in DOCKER mode", async () => {
+    const deps = buildDeps();
+    let resolveTask1: () => void;
+    let resolveTask2: () => void;
+    let resolveTask3: () => void;
+
+    const taskPromises = [
+      new Promise<any>((resolve) => { resolveTask1 = () => resolve({ reviewed: true }) }),
+      new Promise<any>((resolve) => { resolveTask2 = () => resolve({ reviewed: true }) }),
+      new Promise<any>((resolve) => { resolveTask3 = () => resolve({ reviewed: true }) }),
+    ];
+
+    let callCount = 0;
+
+    deps.qualityAssuranceService = {
+      getTaskMergeGateStatus: vi.fn().mockReturnValue({
+        mergeAllowed: false,
+        reason: "pending_review",
+        summary: "QA review is required.",
+        latestRun: null,
+        runsUsed: 0,
+        maxRuns: 2,
+      }),
+      reviewCompletedTask: vi.fn().mockImplementation(() => {
+        const promise = taskPromises[callCount];
+        callCount++;
+        return promise;
+      }),
+    } as any;
+    deps.getDashboardSettings = vi.fn().mockReturnValue({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      agents: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents,
+        qualityAssurance: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+          enabled: true,
+        },
+      },
+      cliWorkflow: { executionMode: "DOCKER" },
+    });
+
+    const runner = new CycleRunner(deps);
+
+    const reviewPromise = (runner as any).reviewCompletedTasks(
+      [
+        { id: "T1", record_id: "task-1", status: "COMPLETED", provider: "codex" },
+        { id: "T2", record_id: "task-2", status: "COMPLETED", provider: "codex" },
+        { id: "T3", record_id: "task-3", status: "COMPLETED", provider: "codex" },
+      ],
+      new Map([
+        ["T1", "RUNNING"],
+        ["T2", "RUNNING"],
+        ["T3", "RUNNING"],
+      ]),
+      {
+        executionContext: {
+          project: { id: "proj-1" },
+          sprint: { id: "sprint-1" },
+        },
+        sprintRunId: "run-1",
+      } as any,
+      deps.getDashboardSettings(),
+    );
+
+    // Wait a tick to let promises start resolving
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // If execution is parallel, all 3 tasks should have been initiated without waiting for
+    // any of the promises to resolve.
+    expect(deps.qualityAssuranceService.reviewCompletedTask).toHaveBeenCalledTimes(3);
+
+    // Resolve the promises to finish the test
+    resolveTask1!();
+    resolveTask2!();
+    resolveTask3!();
+    await reviewPromise;
+  });
 });
 
   describe("CycleStateCoordinator regression tests", () => {
