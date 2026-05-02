@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "preact/hooks";
 import type { FunctionComponent } from "preact";
+import type { LucideProps } from "lucide-preact";
 import {
   X, Plus, Trash2, ChevronLeft, Eye, EyeOff,
   Sparkles, ShieldCheck, Accessibility, Zap,
@@ -21,7 +22,7 @@ import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 
 /* ─── Icon Map ──────────────────────────────────────────────────────── */
-const IconMap: Record<string, FunctionComponent<any>> = {
+const IconMap: Record<string, FunctionComponent<LucideProps>> = {
   Sparkles, ShieldCheck, Accessibility, Zap,
   Bug, Code2, Database, FileSearch, FlaskConical,
   GitBranch, Globe, Hammer, Heart, Layers,
@@ -53,7 +54,7 @@ const getTagStyles = (colorVal: string) => {
   };
 };
 
-const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponent<any> }> = [
+const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponent<LucideProps> }> = [
   { value: "Sparkles", Icon: Sparkles },
   { value: "ShieldCheck", Icon: ShieldCheck },
   { value: "Accessibility", Icon: Accessibility },
@@ -1029,8 +1030,8 @@ const SubtaskSlider: FunctionComponent<{
       <div
         ref={trackRef}
         className="relative h-10 cursor-pointer touch-none"
-        onPointerDown={handlePointerDown as any}
-        onPointerMove={(e: any) => { if (e.buttons === 1) handlePointer(e); }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={(e: PointerEvent) => { if (e.buttons === 1) handlePointer(e); }}
       >
         {/* Background track */}
         <div className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">

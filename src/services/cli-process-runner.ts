@@ -1,6 +1,6 @@
-import { commandRunner, CommandResult, CommandOptions } from "../shared/subprocess/command-runner.js";
+import { commandRunner, type CommandResult, type CommandOptions } from "../shared/subprocess/command-runner.js";
 
-export { commandRunner, CommandResult, CommandOptions };
+export { commandRunner, type CommandResult, type CommandOptions };
 
 export interface StreamingCommandOptions {
   signal?: AbortSignal;
