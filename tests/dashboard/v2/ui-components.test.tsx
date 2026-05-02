@@ -11,6 +11,8 @@ import { ListSkeleton, StatCardSkeleton, ChatMessageSkeleton } from "../../../da
 import { AvantgardeSelect } from "../../../dashboard/src/v2/components/ui/AvantgardeSelect.js";
 import { SprintComposer } from "../../../dashboard/src/v2/components/ui/SprintComposer.js";
 import { ExecutionTimelineProvider } from "../../../dashboard/src/hooks/ExecutionTimelineContext.js";
+import { Button } from "../../../dashboard/src/v2/components/ui/Button.js";
+import { ActionButton } from "../../../dashboard/src/v2/components/settings/SettingsSurface.js";
 
 vi.mock("../../../dashboard/src/v2/lib/sprint-composer-state.js", () => ({
   useSprintComposerState: vi.fn(() => ({
@@ -132,6 +134,24 @@ describe("UI Components Coverage", () => {
       </ExecutionTimelineProvider>
     );
     expect(screen.getByText("Sprint Composer")).toBeDefined();
+  });
+
+  it("renders Button with pending attributes and styling", () => {
+    render(<Button pending>Test</Button>);
+    const btn = screen.getByRole("button", { name: "Test" });
+    expect(btn.getAttribute("aria-busy")).toBe("true");
+    expect(btn.getAttribute("aria-disabled")).toBe("true");
+    expect(btn.querySelector(".animate-spin")).toBeTruthy();
+  });
+
+  it("renders ActionButton with busy attributes and styling", () => {
+    render(<ActionButton busy label="Action" onClick={() => {}} />);
+    const btn = screen.getByRole("button", { name: "Action" });
+    expect(btn.getAttribute("aria-busy")).toBe("true");
+    expect(btn.getAttribute("aria-disabled")).toBe("true");
+    expect(btn.querySelector(".animate-spin")).toBeTruthy();
+    const labelContainer = btn.querySelector(".transition-opacity");
+    expect(labelContainer?.className).toContain("opacity-0");
   });
 
   it("renders Skeletons", () => {

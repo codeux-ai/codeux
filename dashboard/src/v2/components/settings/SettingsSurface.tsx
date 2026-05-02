@@ -1,5 +1,6 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { RefreshCw } from "lucide-preact";
+import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 
 export const NoticePanel: FunctionComponent<{
   tone?: "neutral" | "warning" | "success";
@@ -40,12 +41,26 @@ export const ActionButton: FunctionComponent<{
   return (
     <button
       type="button"
-      onClick={onClick}
-      disabled={disabled || busy}
-      className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${toneClass}`}
+      onClick={(e) => {
+        if (busy) {
+          e?.preventDefault();
+          return;
+        }
+        onClick();
+      }}
+      disabled={disabled}
+      aria-disabled={disabled || busy}
+      aria-busy={busy}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold relative overflow-hidden ${SHARED_INTERACTION_CLASSES} ${toneClass}`}
     >
-      {busy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /> : null}
-      {label}
+      <div className={`flex items-center justify-center gap-2 transition-opacity duration-200 ${busy ? "opacity-0" : "opacity-100"}`}>
+        {label}
+      </div>
+      {busy && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} />
+        </div>
+      )}
     </button>
   );
 };
