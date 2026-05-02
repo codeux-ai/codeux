@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { LivePreviewLink } from "../../../dashboard/src/v2/components/ui/LivePreviewLink.js";
 import { SearchOverlay } from "../../../dashboard/src/v2/components/search/SearchOverlay.js";
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 import { CollapsiblePanel } from "../../../dashboard/src/v2/components/ui/CollapsiblePanel.js";
 import { Search } from "lucide-preact";
 import type { SprintPreviewSession } from "../../../dashboard/src/types.js";

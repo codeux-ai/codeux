@@ -120,6 +120,17 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
     const [workerSwitchBusy, setWorkerSwitchBusy] = useState(false);
+
+    useEffect(() => {
+        const handleCmdK = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                setIsSearchOpen(true);
+            }
+        };
+        document.addEventListener('keydown', handleCmdK);
+        return () => document.removeEventListener('keydown', handleCmdK);
+    }, []);
     const [projectSwitchBusy, setProjectSwitchBusy] = useState(false);
     const [sprintSwitchBusy, setSprintSwitchBusy] = useState(false);
     const [projectFilter, setProjectFilter] = useState('');
@@ -394,14 +405,13 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
                     </div>
-                    <input
-                        type="text"
-                        placeholder="Search..."
-                        value={searchQuery}
-                        onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                        onFocus={() => setIsSearchOpen(true)}
-                        className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] focus:border-signal-500/40 dark:focus:border-signal-500/40 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-signal-500/10 transition-all"
-                    />
+                    <button
+                        type="button"
+                        onClick={() => setIsSearchOpen(true)}
+                        className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl text-sm text-left text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-all"
+                    >
+                        Search...
+                    </button>
                     <div className="absolute inset-y-0 right-0 pr-3 hidden sm:flex items-center pointer-events-none">
                         <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-400 border border-black/10 dark:border-white/10 rounded-md">
                             <Command aria-hidden="true" className="w-2.5 h-2.5" /> K
@@ -765,6 +775,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 results={searchResults}
+                isLoading={searchQuery !== debouncedQuery}
             />
         </>
     );

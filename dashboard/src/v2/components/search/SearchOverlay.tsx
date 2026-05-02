@@ -1,7 +1,8 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import gsap from "gsap";
-import { Search, X, Layers, Activity, Cpu, Box, ArrowRight } from "lucide-preact";
+import { Search, X, Layers, Activity, Cpu, Box, ArrowRight, Inbox, Loader2 } from "lucide-preact";
+import { useNavigate } from "@tanstack/react-router";
 import { SearchResultRow } from "./SearchResultRow";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
@@ -17,6 +18,7 @@ export interface SearchResults {
 }
 
 interface SearchOverlayProps {
+    isLoading?: boolean;
     isOpen: boolean;
     onClose: () => void;
     searchQuery: string;
@@ -24,11 +26,24 @@ interface SearchOverlayProps {
     results: SearchResults;
 }
 
-export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, onClose, searchQuery, onSearchChange, results }) => {
+export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, onClose, searchQuery, onSearchChange, results, isLoading }) => {
     const overlayRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const [focusedIndex, setFocusedIndex] = useState(-1);
+            const navigate = useNavigate();
+
+    const handleSelect = (selectedItem: SearchItem & { category?: string }) => {
+        if (selectedItem) {
+            if (selectedItem.category === 'sprints') navigate({ to: '/sprints', search: { sprintId: selectedItem.id } as any });
+            else if (selectedItem.category === 'tasks') navigate({ to: '/tasks', search: { taskId: selectedItem.id } as any });
+            else if (selectedItem.category === 'agents') navigate({ to: '/agents', search: { agentId: selectedItem.id } as any });
+            else if (selectedItem.category === 'containers') navigate({ to: '/browser', search: { containerId: selectedItem.id } as any });
+        }
+        onClose();
+    };
+
+    const triggerElementRef = useRef<HTMLElement | null>(null);
 
     const CATEGORIES: Array<{ id: string; title: string; icon: any; items: ReadonlyArray<SearchItem> }> = [
         { id: 'sprints', title: 'Sprints', icon: Layers, items: results.sprints },
@@ -37,7 +52,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
         { id: 'containers', title: 'Preview Containers', icon: Box, items: results.containers }
     ];
 
-    const allItems = CATEGORIES.flatMap(c => c.items);
+    const allItems = CATEGORIES.flatMap(c => c.items.map(item => ({ ...item, category: c.id })));
     const reducedMotion = useReducedMotion();
 
     useLayoutEffect(() => {
@@ -47,9 +62,14 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
         gsap.killTweensOf(containerRef.current);
 
         if (isOpen) {
+            triggerElementRef.current = document.activeElement as HTMLElement;
             gsap.set(overlayRef.current, { display: 'flex' });
 
-            const tl = gsap.timeline();
+            const tl = gsap.timeline({
+                onComplete: () => {
+                    inputRef.current?.focus();
+                }
+            });
 
             tl.fromTo(overlayRef.current,
                 { opacity: 0 },
@@ -61,17 +81,13 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
                 { y: 0, opacity: 1, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.cardEntry, ease: MODAL_MOTION.overlay.cardEntryEase },
                 reducedMotion ? 0 : "-=0.2"
             );
-
-            // Focus input after animation
-            setTimeout(() => {
-                inputRef.current?.focus();
-            }, 100);
         } else {
             const tl = gsap.timeline({
                 onComplete: () => {
                     if (overlayRef.current) {
                         gsap.set(overlayRef.current, { display: 'none' });
                     }
+                    triggerElementRef.current?.focus();
                 }
             });
 
@@ -97,8 +113,10 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
                 setFocusedIndex(prev => (prev > 0 ? prev - 1 : allItems.length - 1));
             } else if (e.key === 'Enter' && focusedIndex >= 0) {
                 e.preventDefault();
-                // Handle selection (mock for now)
-                onClose();
+                const selectedItem = allItems[focusedIndex];
+                if (selectedItem) {
+                    handleSelect(selectedItem);
+                }
             }
         };
 
@@ -110,7 +128,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
     const activeItemRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
         if (activeItemRef.current) {
-            activeItemRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            activeItemRef.current.scrollIntoView({ block: 'nearest' });
         }
     }, [focusedIndex]);
 
@@ -154,8 +172,14 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
                 {/* Results Area */}
                 <div className="flex-1 max-h-[60vh] overflow-y-auto custom-scrollbar p-2">
                     {searchQuery.length === 0 ? (
-                        <div className="py-12 text-center text-slate-500 dark:text-slate-400">
-                            Start typing to search across your workspace...
+                        <div className="flex flex-col items-center justify-center p-8">
+                                <Inbox className="w-8 h-8 mb-4 opacity-50 text-slate-500 dark:text-slate-400" />
+                                <span>Start typing to search across your workspace...</span>
+                            </div>
+                    ) : isLoading ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
+                            <Loader2 className="w-8 h-8 mb-4 animate-spin opacity-50" />
+                            <span className="text-sm">Searching...</span>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-2">
@@ -167,7 +191,10 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
                                     </div>
                                     <div className="flex flex-col gap-1">
                                         {category.items.length === 0 ? (
-                                            <div className="px-3 py-2 text-sm text-slate-400">No results found.</div>
+                                            <div className="flex flex-col items-center justify-center py-4 text-slate-500 dark:text-slate-400">
+                                                <Inbox className="w-5 h-5 mb-2 opacity-50" />
+                                                <span className="text-xs">No results found for '{searchQuery}'</span>
+                                            </div>
                                         ) : (
                                             category.items.map((item) => {
                                                 const isFocused = focusedIndex === globalItemIndex;
@@ -181,6 +208,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
                                                         isFocused={isFocused}
                                                         onFocus={() => setFocusedIndex(currentIndex)}
                                                         activeItemRef={isFocused ? activeItemRef : null}
+                                                        onClick={() => handleSelect({ ...item, category: category.id })}
                                                     />
                                                 );
                                             })
