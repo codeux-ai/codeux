@@ -5,9 +5,16 @@ import type { Subtask,
   AutomationInterventionsSettings,
   AutomationLevel,
   CiIntelligenceSettings,
+  DashboardSettings,
+  DashboardSettingsScope,
   SprintLoopStepSettings,
  } from "../../../contracts/app-types.js";
-import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orchestrator.js";
+import type { InstructionTemplateId } from "../../../instructions/instruction-template-catalog.js";
+import type { MemoryPromotionService } from "../../../services/memory-promotion-service.js";
+import type { QualityAssuranceService } from "../../../services/quality-assurance-service.js";
+import type { Logger } from "../../../shared/logging/logger.js";
+import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
+import type { ProjectAttentionService } from "../../workers/project-attention-service.js";
 import type { CycleRunner } from "./cycle-runner.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 import type { MergeFeedbackResult } from "../ci/main-merge-gate.js";
@@ -19,7 +26,27 @@ import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "./watch-lo
 import { decideFinalizationTransition } from "./watch-loop-finalization-policy.js";
 import { buildConflictSummaryMarkdown, selectMergedTaskContexts } from "./conflict-summary-utils.js";
 import { WorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
-import { renewSprintRunHeartbeat } from "./sprint-run-heartbeat.js";
+import { evaluateSprintRunState, isMainMergeAttentionItem } from "./sprint-state-evaluator.js";
+import type { HeartbeatService } from "../../../services/heartbeat-service.js";
+
+
+export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "finalizeSprintRunCancellationIfIdle" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "updateSprintRun" | "renewLease">;
+export type WatchLoopAttentionDependencies = Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItemsForSprintRun" | "resolveItem">;
+
+export interface WatchLoopDependencies {
+  logger: Logger;
+  completedSprints: Set<string>;
+  sleep?: (ms: number) => Promise<void>;
+  getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
+  renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
+  updateLastStatus: (status: any) => void;
+  resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
+  memoryPromotionService?: MemoryPromotionService;
+  qualityAssuranceService?: QualityAssuranceService;
+  executionRepository: WatchLoopExecutionDependencies;
+  projectAttentionService: WatchLoopAttentionDependencies;
+  heartbeatService: HeartbeatService;
+}
 
 export interface WatchLoopRunnerArgs {
   args: SprintAgentArgs;
@@ -43,7 +70,7 @@ export class WatchLoopRunner {
   private readonly workspaceManager = new WorkspaceManager();
 
   constructor(
-    private readonly deps: SprintOrchestratorDependencies,
+    private readonly deps: WatchLoopDependencies,
     private readonly cycleRunner: CycleRunner,
     private readonly renderMainMergeCiFeedback: (args: {
       repoPath: string;
@@ -126,7 +153,9 @@ export class WatchLoopRunner {
       sourceEventKey: `watch-loop-started:${sprintRunId}`,
     });
 
-    while (!allFinished) {
+    this.deps.heartbeatService.startHeartbeat(sprintRunId, scopedExecutionContext.sprint.id, leaseToken);
+    try {
+      while (!allFinished) {
       const controlEval = this.evaluateControlIntervention(sprintRunId);
       if (controlEval.status === "exit") {
         fullReport += controlEval.report;
@@ -218,11 +247,6 @@ export class WatchLoopRunner {
             return fullReport;
           }
           if (finalizationResult.status === "wait") {
-            renewSprintRunHeartbeat(this.deps.executionRepository, {
-              sprintRunId,
-              sprintId: scopedExecutionContext.sprint.id,
-              leaseToken,
-            });
             checkpointWindowStartedAt = Date.now();
             allFinished = false;
             await this.sleep(watchLoopIntervalMs);
@@ -233,31 +257,21 @@ export class WatchLoopRunner {
         }
 
         case WatchLoopState.CHECKPOINT: {
-          renewSprintRunHeartbeat(this.deps.executionRepository, {
-            sprintRunId,
-            sprintId: scopedExecutionContext.sprint.id,
-            leaseToken,
-          });
           checkpointWindowStartedAt = Date.now();
           await this.sleep(watchLoopIntervalMs);
           break;
         }
 
         case WatchLoopState.RUNNING: {
-          const renewed = renewSprintRunHeartbeat(this.deps.executionRepository, {
-            sprintRunId,
-            sprintId: scopedExecutionContext.sprint.id,
-            leaseToken,
-          });
-          if (!renewed) {
-            continue;
-          }
           await this.sleep(watchLoopIntervalMs);
           break;
         }
       }
     }
 
+    } finally {
+      this.deps.heartbeatService.stopHeartbeat(sprintRunId);
+    }
     return fullReport;
   }
 
@@ -776,20 +790,6 @@ function collectActiveMainMergeAttentionItems(
   ));
 }
 
-export function isMainMergeAttentionItem(item: {
-  attentionType: string;
-  payload: Record<string, unknown> | null;
-}): boolean {
-  const payload = item.payload || {};
-  const isMainMergeConflict = item.attentionType === "merge_conflict" && payload.mergeStage === "main";
-  const isMainMergeConflictHandoff = (
-    (item.attentionType === "human_escalation_required" || item.attentionType === "dashboard_reply_required")
-    && payload.sourceAttentionType === "merge_conflict"
-    && payload.mergeStage === "main"
-  );
-  return isMainMergeConflict || isMainMergeConflictHandoff;
-}
-
 function buildMainMergeConflictSummary(args: {
   repoPath: string;
   featureBranch: string;
@@ -820,74 +820,3 @@ function buildMainMergeConflictSummary(args: {
   });
 }
 
-function partitionSubtasksByStatus(subtasks: Subtask[]) {
-  const tasksByStatus = new Map<string, Subtask[]>();
-  const statusCounts: Record<string, number> = {};
-  for (const task of subtasks) {
-    const status = task.status || "UNKNOWN";
-    let list = tasksByStatus.get(status);
-    if (!list) {
-      list = [];
-      tasksByStatus.set(status, list);
-    }
-    list.push(task);
-    statusCounts[status] = (statusCounts[status] || 0) + 1;
-  }
-  return { tasksByStatus, statusCounts };
-}
-
-export function evaluateSprintRunState(params: {
-  subtasks: Subtask[];
-  manualMergeTasks: Subtask[];
-  workerEscalatedMergeConflictTasks: Subtask[];
-  activeProjectAttentionItems: ProjectAttentionItemRecord[];
-  sprintRunId: string;
-}) {
-  const { subtasks, manualMergeTasks, workerEscalatedMergeConflictTasks, activeProjectAttentionItems, sprintRunId } = params;
-
-  const { tasksByStatus, statusCounts } = partitionSubtasksByStatus(subtasks);
-
-  const runningTasks = tasksByStatus.get("RUNNING") || [];
-  const readyTasks = tasksByStatus.get("PENDING") || [];
-  const qaPendingTasks = subtasks.filter((task) => task.merge_indicator === "QA_PENDING");
-  const activeWorkerAttentionItems = activeProjectAttentionItems.filter((item) => item.ownerType === "worker");
-  const activeWorkerMergeConflictAttention = activeWorkerAttentionItems.some((item) => item.attentionType === "merge_conflict");
-  const activeMainMergeAttentionItems = activeProjectAttentionItems.filter((item) => (
-    item.sprintRunId === sprintRunId && isMainMergeAttentionItem(item)
-  ));
-
-  let settledCount = 0;
-  for (const task of subtasks) {
-    if (isCompletedTaskSettled(task)) {
-      settledCount++;
-    }
-  }
-
-  const allTerminal = subtasks.length > 0 && ((statusCounts["FAILED"] || 0) + settledCount) === subtasks.length;
-  const quotaTasks = tasksByStatus.get("QUOTA") || [];
-  const noMoreActionPossible = runningTasks.length === 0
-    && readyTasks.length === 0
-    && quotaTasks.length === 0
-    && qaPendingTasks.length === 0;
-  const needsManualMerge = manualMergeTasks.length > 0;
-  const waitingOnWorkerAttention = workerEscalatedMergeConflictTasks.length > 0
-    || activeWorkerMergeConflictAttention
-    || activeWorkerAttentionItems.length > 0;
-
-  const allFinished = allTerminal || ((needsManualMerge || noMoreActionPossible) && !waitingOnWorkerAttention);
-
-  return {
-    runningTasks,
-    readyTasks,
-    activeWorkerAttentionItems,
-    activeWorkerMergeConflictAttention,
-    activeMainMergeAttentionItems,
-    qaPendingTasks,
-    allTerminal,
-    quotaTasks,
-    noMoreActionPossible,
-    needsManualMerge,
-    waitingOnWorkerAttention,
-    allFinished,
-  };
-}

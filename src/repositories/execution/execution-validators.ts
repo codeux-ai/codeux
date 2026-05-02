@@ -1,4 +1,5 @@
 import type { DatabaseAdapter } from "../db/database-adapter.js";
+import { requireEntity, requireEntityByGetter } from "../shared/validation-utils.js";
 import type {
   ExecutionLeaseRecord,
   ProviderInvocationUsageRecord,
@@ -8,59 +9,51 @@ import type {
 } from "../../contracts/execution-types.js";
 
 export function requireProject(db: DatabaseAdapter, projectId: string): void {
-  const row = db.prepare(`SELECT id FROM projects WHERE id = ?`).get(projectId) as { id: string } | undefined;
-  if (!row) {
-    throw new Error(`Project not found: ${projectId}`);
-  }
+  requireEntity<{ id: string }>(db, "Project", "projects", projectId);
 }
 
 export function requireSprint(db: DatabaseAdapter, sprintId: string, projectId?: string): void {
-  const row = db.prepare(`
-    SELECT id, project_id
-    FROM sprints
-    WHERE id = ?
-  `).get(sprintId) as { id: string; project_id: string } | undefined;
-  if (!row) {
-    throw new Error(`Sprint not found: ${sprintId}`);
-  }
-  if (projectId && row.project_id !== projectId) {
-    throw new Error(`Sprint ${sprintId} does not belong to project ${projectId}`);
-  }
+  requireEntity<{ id: string; project_id: string }>(
+    db,
+    "Sprint",
+    "sprints",
+    sprintId,
+    "id, project_id",
+    (row) => {
+      if (projectId && row.project_id !== projectId) {
+        throw new Error(`Sprint ${sprintId} does not belong to project ${projectId}`);
+      }
+    }
+  );
 }
 
 export function requireTask(db: DatabaseAdapter, taskId: string, projectId?: string, sprintId?: string): void {
-  const row = db.prepare(`
-    SELECT id, project_id, sprint_id
-    FROM tasks
-    WHERE id = ?
-  `).get(taskId) as { id: string; project_id: string; sprint_id: string } | undefined;
-  if (!row) {
-    throw new Error(`Task not found: ${taskId}`);
-  }
-  if (projectId && row.project_id !== projectId) {
-    throw new Error(`Task ${taskId} does not belong to project ${projectId}`);
-  }
-  if (sprintId && row.sprint_id !== sprintId) {
-    throw new Error(`Task ${taskId} does not belong to sprint ${sprintId}`);
-  }
+  requireEntity<{ id: string; project_id: string; sprint_id: string }>(
+    db,
+    "Task",
+    "tasks",
+    taskId,
+    "id, project_id, sprint_id",
+    (row) => {
+      if (projectId && row.project_id !== projectId) {
+        throw new Error(`Task ${taskId} does not belong to project ${projectId}`);
+      }
+      if (sprintId && row.sprint_id !== sprintId) {
+        throw new Error(`Task ${taskId} does not belong to sprint ${sprintId}`);
+      }
+    }
+  );
 }
 
 export function requireConnection(db: DatabaseAdapter, connectionId: string): void {
-  const row = db.prepare(`SELECT id FROM mcp_connections WHERE id = ?`).get(connectionId) as { id: string } | undefined;
-  if (!row) {
-    throw new Error(`Connection not found: ${connectionId}`);
-  }
+  requireEntity<{ id: string }>(db, "Connection", "mcp_connections", connectionId);
 }
 
 export function requireSprintRun(
   getSprintRun: (id: string) => SprintRunRecord | null,
   runId: string
 ): SprintRunRecord {
-  const run = getSprintRun(runId);
-  if (!run) {
-    throw new Error(`Sprint run not found: ${runId}`);
-  }
-  return run;
+  return requireEntityByGetter("Sprint run", runId, getSprintRun);
 }
 
 export function requireSprintRunScoped(
@@ -69,43 +62,32 @@ export function requireSprintRunScoped(
   projectId: string,
   sprintId: string
 ): void {
-  const run = requireSprintRun(getSprintRun, runId);
-  if (run.projectId !== projectId || run.sprintId !== sprintId) {
-    throw new Error(`Sprint run ${runId} does not belong to ${projectId}/${sprintId}`);
-  }
+  requireEntityByGetter("Sprint run", runId, getSprintRun, (run) => {
+    if (run.projectId !== projectId || run.sprintId !== sprintId) {
+      throw new Error(`Sprint run ${runId} does not belong to ${projectId}/${sprintId}`);
+    }
+  });
 }
 
 export function requireTaskDispatch(
   getTaskDispatch: (id: string) => TaskDispatchRecord | null,
   dispatchId: string
 ): TaskDispatchRecord {
-  const dispatch = getTaskDispatch(dispatchId);
-  if (!dispatch) {
-    throw new Error(`Task dispatch not found: ${dispatchId}`);
-  }
-  return dispatch;
+  return requireEntityByGetter("Task dispatch", dispatchId, getTaskDispatch);
 }
 
 export function requireTaskRun(
   getTaskRun: (id: string) => TaskRunRecord | null,
   taskRunId: string
 ): TaskRunRecord {
-  const taskRun = getTaskRun(taskRunId);
-  if (!taskRun) {
-    throw new Error(`Task run not found: ${taskRunId}`);
-  }
-  return taskRun;
+  return requireEntityByGetter("Task run", taskRunId, getTaskRun);
 }
 
 export function requireProviderInvocationUsage(
   getProviderInvocationUsage: (id: string) => ProviderInvocationUsageRecord | null,
   invocationId: string
 ): ProviderInvocationUsageRecord {
-  const invocation = getProviderInvocationUsage(invocationId);
-  if (!invocation) {
-    throw new Error(`Provider invocation not found: ${invocationId}`);
-  }
-  return invocation;
+  return requireEntityByGetter("Provider invocation", invocationId, getProviderInvocationUsage);
 }
 
 export function requireLease(

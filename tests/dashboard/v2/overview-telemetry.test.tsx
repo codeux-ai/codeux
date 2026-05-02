@@ -239,9 +239,9 @@ describe("useOverviewTelemetry Hook", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(result.current.telemetry.updatedAt).toBe("initial");
+    expect(result.current.telemetry.updatedAt).toBe(null);
 
-    // Send a direct websocket event
+    // Send a direct websocket event with identical semantics but different timestamp
     act(() => {
       realtimeCallback({
         type: "event",
@@ -252,6 +252,7 @@ describe("useOverviewTelemetry Hook", () => {
       });
     });
 
-    expect(result.current.telemetry.updatedAt).toBe("websocket-update");
+    // Should not update since semantic data is identical
+    expect(result.current.telemetry.updatedAt).toBe(null);
   });
 });

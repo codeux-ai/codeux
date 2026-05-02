@@ -165,3 +165,17 @@ describe("classifyProviderError", () => {
     });
   });
 });
+
+  describe("new expanded patterns", () => {
+    it("detects gemini invalid api key", () => {
+      const result = makeResult("", "Error: invalid api key provided");
+      const classification = classifyProviderError("gemini", result);
+      expect(classification.category).toBe("AUTH_FAILURE");
+    });
+
+    it("detects claude out of funds", () => {
+      const result = makeResult("", "Error: Out of funds");
+      const classification = classifyProviderError("claude-code", result);
+      expect(classification.category).toBe("QUOTA_EXHAUSTED");
+    });
+  });

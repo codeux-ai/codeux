@@ -44,4 +44,21 @@ describe("SqliteDatabaseAdapter", () => {
 
     adapter.close();
   });
+
+  it("caps the prepared statement cache and evicts old statements", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "db-adapter-"));
+    const adapter = new SqliteDatabaseAdapter(path.join(dir, "app.db"));
+
+    // Prepare 600 unique statements
+    for (let i = 0; i < 600; i++) {
+      adapter.prepare(`SELECT ${i} as val`);
+    }
+
+    // The cache should not exceed 500
+    // We can't access private property directly, but we can access it via casting
+    const cache = (adapter as any).cachedStatements;
+    expect(cache.size).toBeLessThanOrEqual(500);
+
+    adapter.close();
+  });
 });

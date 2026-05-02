@@ -44,19 +44,6 @@ export const fetchGitTrackingStatus = async (): Promise<GitTrackingStatus> => {
   return fetchJson<GitTrackingStatus>("/api/git-status");
 };
 
-export const fetchDashboardSettings = async (): Promise<DashboardSettings> => {
-  return fetchJson<DashboardSettings>("/api/settings");
-};
-
-export const saveDashboardSettings = async (settings: DashboardSettings): Promise<DashboardSettings> => {
-  return fetchJson<DashboardSettings>("/api/settings", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(settings),
-  });
-};
 
 let externalSettingsHintsCache: ExternalSettingsHints | null = null;
 let externalSettingsHintsInflightRequest: Promise<ExternalSettingsHints> | null = null;

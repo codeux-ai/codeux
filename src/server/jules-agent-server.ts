@@ -891,12 +891,6 @@ export class JulesAgentServer {
     }
     let recoveredSprintRunIds: string[] = [];
     try {
-      const recoveryResult = await this.runtimeStartupRecoveryService.recover();
-      recoveredSprintRunIds = recoveryResult.resumedSprintRunIds;
-    } catch (error) {
-      this.logger.error("Failed to recover runtime state on startup", { error });
-    }
-    try {
       await new DockerAssetPruneService(
         this.sessionTracking,
         this.logger.child({ component: "docker-asset-prune-service" }),
@@ -987,6 +981,10 @@ export class JulesAgentServer {
       authToken: this.appConfig.mcpHttpAuthToken,
       logger: this.logger.child({ component: "mcp-http-transport" }),
       createServer: () => this.createMcpServerInstance("project_manager"),
+      recoveryService: this.runtimeStartupRecoveryService,
+      onRecovered: (ids) => {
+        recoveredSprintRunIds = ids;
+      },
     });
     this.mcpServiceBound = true;
     this.startRuntimeCleanupLoop();

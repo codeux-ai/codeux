@@ -9,6 +9,7 @@ export class SqliteDatabaseAdapter implements DatabaseAdapter {
   public readonly dialect: SqlDialect = SqliteDialect;
   private readonly db: DatabaseSync;
   private readonly cachedStatements = new Map<string, StatementSync>();
+  private readonly MAX_CACHE_SIZE = 500;
 
   constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -17,7 +18,18 @@ export class SqliteDatabaseAdapter implements DatabaseAdapter {
 
   prepare(sql: string): PreparedStatement {
     let stmt = this.cachedStatements.get(sql);
-    if (!stmt) {
+    if (stmt) {
+      // LRU on hit: delete and re-insert to move to the end
+      this.cachedStatements.delete(sql);
+      this.cachedStatements.set(sql, stmt);
+    } else {
+      if (this.cachedStatements.size >= this.MAX_CACHE_SIZE) {
+        // Evict the oldest (first inserted) item
+        const oldestKey = this.cachedStatements.keys().next().value;
+        if (oldestKey !== undefined) {
+          this.cachedStatements.delete(oldestKey);
+        }
+      }
       stmt = this.db.prepare(sql);
       this.cachedStatements.set(sql, stmt);
     }

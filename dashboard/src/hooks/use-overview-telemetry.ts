@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "preact/hooks";
+import { isDeepEqual } from "../v2/lib/resource-equality.js";
 import type { OverviewTelemetrySnapshot } from "../types.js";
 import { fetchOverviewTelemetry } from "../lib/api/dashboard-api.js";
 import { useRealtimeResource } from "./use-realtime-resource.js";
@@ -21,8 +22,12 @@ export function useOverviewTelemetry(pollIntervalMs: number = 30000): {
     return fetchOverviewTelemetry();
   }, []);
 
-  // Use reference equality for simplicity, assuming API updates provide new objects
-  const isEqual = useCallback((_prev: OverviewTelemetrySnapshot, _next: OverviewTelemetrySnapshot) => false, []);
+  // Use deep equality, ignoring metadata timestamps that cause unnecessary re-renders
+  const isEqual = useCallback((prev: OverviewTelemetrySnapshot, next: OverviewTelemetrySnapshot) => {
+    const prevNoMeta = { ...prev, updatedAt: null };
+    const nextNoMeta = { ...next, updatedAt: null };
+    return isDeepEqual(prevNoMeta, nextNoMeta);
+  }, []);
 
   const { data: telemetry, loading, error, refetch } = useRealtimeResource<OverviewTelemetrySnapshot>({
     initialData: EMPTY_TELEMETRY,

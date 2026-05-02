@@ -8,6 +8,7 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
 import type { Logger } from "../../shared/logging/logger.js";
 import { SPRINT_OS_DISPLAY_NAME } from "../../shared/config/sprint-os-paths.js";
+import type { RuntimeStartupRecoveryService } from "../../services/runtime-startup-recovery-service.js";
 
 export interface BootMcpTransportDeps {
   server: McpServer;
@@ -24,6 +25,8 @@ export interface BootMcpHttpTransportDeps {
   authToken: string | null;
   logger: Logger;
   createServer: () => McpServer;
+  recoveryService: RuntimeStartupRecoveryService;
+  onRecovered?: (recoveredSprintRunIds: string[]) => void;
 }
 
 export interface McpHttpTransportHandle {
@@ -104,6 +107,13 @@ export async function bootMcpTransport(deps: BootMcpTransportDeps): Promise<void
 
 export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Promise<McpHttpTransportHandle | null> {
   if (!deps.enabled || deps.port === null) {
+    try {
+      const recoveryResult = await deps.recoveryService.recover();
+      deps.logger.info("Recovery routine completed");
+      deps.onRecovered?.(recoveryResult.resumedSprintRunIds);
+    } catch (error) {
+      deps.logger.error("Failed to recover runtime state on startup", { error });
+    }
     return null;
   }
 
@@ -193,6 +203,14 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
   });
   const address = server.address() as AddressInfo | null;
   const resolvedPort = address?.port ?? deps.port;
+
+  try {
+    const recoveryResult = await deps.recoveryService.recover();
+    deps.logger.info("Recovery routine completed");
+    deps.onRecovered?.(recoveryResult.resumedSprintRunIds);
+  } catch (error) {
+    deps.logger.error("Failed to recover runtime state on startup", { error });
+  }
 
   deps.logger.info(`${SPRINT_OS_DISPLAY_NAME} MCP HTTP server running`, {
     host: deps.host,

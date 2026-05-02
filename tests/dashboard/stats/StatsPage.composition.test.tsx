@@ -43,7 +43,7 @@ vi.mock("gsap", () => ({
 }));
 
 // Mock sparkline specifically because its dependency relies on DOM sizes
-vi.mock("../../../dashboard/src/components/ui/Sparkline.js", () => ({
+vi.mock("../../../dashboard/src/v2/components/ui/Sparkline.js", () => ({
   Sparkline: () => <div data-testid="mock-sparkline">Sparkline</div>,
 }));
 

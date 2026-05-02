@@ -16,8 +16,9 @@ import { buildThreadIndex } from "../lib/chat-entity-index.js";
 import { toChatTimestampMs } from "../lib/chat-time.js";
 import { useActionFeedback } from "./use-action-feedback.js";
 import { useConfirmDialog } from "./use-confirm-dialog.js";
-import { getProjectWorkerOptions } from "../lib/project-worker-options.js";
+import { getProjectWorkerOptions, type WorkerRoutingPreference } from "../lib/project-worker-options.js";
 import type { RefObject } from "preact";
+import type { ExecutionDashboardSnapshot } from "../../types.js";
 
 export const upsertMessage = (messages: ChatMessageRecord[], nextMessage: ChatMessageRecord): ChatMessageRecord[] => {
   if (messages.some((message) => message.id === nextMessage.id)) {
@@ -81,8 +82,8 @@ export const isWorkingMessage = (
 export const useChatThreadData = (options: {
   selectedProject: { id: string } | null;
   cache: ReturnType<typeof useMessageCache>;
-  execution: any;
-  workerRouting: any;
+  execution: ExecutionDashboardSnapshot | null;
+  workerRouting: WorkerRoutingPreference | null;
   composerRef?: RefObject<HTMLTextAreaElement>;
   messagesRef?: RefObject<HTMLDivElement>;
 }) => {

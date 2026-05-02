@@ -112,7 +112,7 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
   const setData = useCallback((updater: T | ((curr: T) => T)) => {
     setDataState((prev) => {
       const base = optionsRef.current.initialData !== prevInitialDataRef.current ? optionsRef.current.initialData : prev;
-      return typeof updater === "function" ? (updater as any)(base) : updater;
+      return typeof updater === "function" ? (updater as (curr: T) => T)(base) : updater;
     });
   }, []);
 
@@ -183,8 +183,8 @@ const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal
           hasLoadedRef.current = true;
           setError(null);
         }
-      } catch (fetchError: any) {
-        if (fetchError.name === "AbortError" || abortController.signal.aborted) return;
+      } catch (fetchError: unknown) {
+        if (fetchError instanceof Error && fetchError.name === "AbortError" || abortController.signal.aborted) return;
         if (fetchIdRef.current !== currentFetchId) return;
         setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
       } finally {

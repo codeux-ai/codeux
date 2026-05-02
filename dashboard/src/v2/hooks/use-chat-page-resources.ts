@@ -113,7 +113,7 @@ export const useChatPageResources = (options: {
     const refreshMode = refreshOptions?.mode || (refreshOptions?.manual ? chatMode : "both");
 
     try {
-      const fetchPromises: Promise<any>[] = [];
+      const fetchPromises: Promise<ChatThread[] | AgentConnection[] | ExecutionInvocationRecord[]>[] = [];
       let fetchThreadsIndex = -1;
       let fetchConnectionsIndex = -1;
       let fetchInvocationsIndex = -1;

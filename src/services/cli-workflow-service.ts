@@ -395,7 +395,7 @@ export class CliWorkflowService {
           retryAfterIso: error.retryAfterIso,
           message,
         });
-      } else if (error instanceof ProviderQuotaError && error.category !== "UNKNOWN") {
+      } else if (error instanceof ProviderQuotaError && error.category === "QUOTA_EXHAUSTED") {
         this.deps.sessionTracking.updateSession(args.sessionId, { state: "QUOTA" });
         this.deps.sessionTracking.appendActivity(args.sessionId, {
           originator: "system",
@@ -418,6 +418,29 @@ export class CliWorkflowService {
           provider: args.provider,
           category: error.category,
           retryAfterIso: error.retryAfterIso,
+          message,
+        });
+      } else if (error instanceof ProviderQuotaError && (error.category === "AUTH_FAILURE" || error.category === "PROVIDER_NOT_FOUND")) {
+        this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Provider error: ${message}`,
+        });
+        this.updateExecutionState(args, {
+          state: "FAILED",
+          finishedAt,
+          dispatchStatus: "failed",
+          errorMessage: message,
+        });
+        this.appendExecutionEvent(args, "cli_workflow_failed", {
+          provider: args.provider,
+          errorMessage: message,
+          category: error.category,
+        });
+        this.deps.logger?.error("CLI workflow failed due to provider error", {
+          sessionId: args.sessionId,
+          provider: args.provider,
+          category: error.category,
           message,
         });
       } else if (isNonRecoverableGitWorkflowError(message) || isNonRecoverableExecutionEnvironmentError(message)) {

@@ -34,8 +34,6 @@ export function queryProjectStatsSnapshot(
   const wallTimeByTaskId = deps.getWallTimeTotalsByTaskIdsForRange(projectId, rangeStartIso, rangeEndIso, nowIso);
   const wallTimeBySprintRunId = deps.getWallTimeTotalsBySprintRunIdsForRange(projectId, rangeStartIso, rangeEndIso, nowIso);
   const buckets = createUsageBuckets(normalized.range, normalized.bucketSizeMs);
-  const taskMeta = deps.getTaskMetadata(projectId);
-  const sprintMeta = deps.getSprintMetadata(projectId);
   const firstBucketStartMs = buckets.length > 0 ? buckets[0].bucketStartMs : 0;
 
   const { totals: gitTotals, buckets: gitBuckets, taskUsage: gitTaskUsage, sprintUsage: gitSprintUsage } = queryProjectGitStats(
@@ -102,65 +100,67 @@ export function queryProjectStatsSnapshot(
   const providerLastActivity = new Map<string, string>();
   const purposeLastActivity = new Map<string, string>();
 
-  // 1. Task aggregations
-  const taskAggs = db.prepare(`
-    SELECT task_id, MAX(COALESCE(finished_at, started_at)) as lastActivityAt, ${usageFields}
-    FROM provider_invocations
-    WHERE project_id = ? AND started_at >= ? AND started_at < ? AND task_id IS NOT NULL
-    GROUP BY task_id
-  `).all(projectId, rangeStartIso, rangeEndIso) as any[];
-
-  for (const row of taskAggs) {
-    const u = mapAggregatedUsage(row);
-    taskUsage.set(row.task_id, u);
-    taskLastActivity.set(row.task_id, row.lastActivityAt);
-  }
-
-  // 2. Sprint aggregations
-  const sprintAggs = db.prepare(`
-    SELECT COALESCE(sprint_run_id, sprint_id) as sprint_key, MAX(COALESCE(finished_at, started_at)) as lastActivityAt, ${usageFields}
-    FROM provider_invocations
-    WHERE project_id = ? AND started_at >= ? AND started_at < ? AND (sprint_run_id IS NOT NULL OR sprint_id IS NOT NULL)
-    GROUP BY sprint_key
-  `).all(projectId, rangeStartIso, rangeEndIso) as any[];
-
-  for (const row of sprintAggs) {
-    const u = mapAggregatedUsage(row);
-    sprintUsage.set(row.sprint_key, u);
-    sprintLastActivity.set(row.sprint_key, row.lastActivityAt);
-  }
-
-  // 3. Bucket/Provider/Purpose/Source aggregations
   const bucketQuery = buckets.length > 0 ? `
     CAST((julianday(started_at) - julianday(?)) * 86400000 / ? AS INTEGER) as bucketIndex,
   ` : "-1 as bucketIndex,";
   const bucketParams = buckets.length > 0 ? [rangeStartIso, normalized.bucketSizeMs] : [];
 
+  // Single comprehensive query
   const mainAggs = db.prepare(`
-    SELECT ${bucketQuery} provider, purpose, usage_source, MAX(COALESCE(finished_at, started_at)) as lastActivityAt, ${usageFields}
+    SELECT
+      ${bucketQuery}
+      task_id,
+      COALESCE(sprint_run_id, sprint_id) as sprint_key,
+      provider,
+      purpose,
+      usage_source,
+      MAX(COALESCE(finished_at, started_at)) as lastActivityAt,
+      ${usageFields}
     FROM provider_invocations
     WHERE project_id = ? AND started_at >= ? AND started_at < ?
-    GROUP BY bucketIndex, provider, purpose, usage_source
+    GROUP BY bucketIndex, task_id, sprint_key, provider, purpose, usage_source
   `).all(...bucketParams, projectId, rangeStartIso, rangeEndIso) as any[];
 
   for (const row of mainAggs) {
     const u = mapAggregatedUsage(row);
     mergeAggregatedUsage(usage, u);
 
+    // Task aggregations
+    if (row.task_id) {
+      const tU = taskUsage.get(row.task_id) || createEmptyUsageTotals();
+      mergeAggregatedUsage(tU, u);
+      taskUsage.set(row.task_id, tU);
+      deps.updateLastActivity(taskLastActivity, row.task_id, row.lastActivityAt);
+    }
+
+    // Sprint aggregations
+    if (row.sprint_key) {
+      const sU = sprintUsage.get(row.sprint_key) || createEmptyUsageTotals();
+      mergeAggregatedUsage(sU, u);
+      sprintUsage.set(row.sprint_key, sU);
+      deps.updateLastActivity(sprintLastActivity, row.sprint_key, row.lastActivityAt);
+    }
+
     // Provider usage
-    const pU = providerUsage.get(row.provider) || createEmptyUsageTotals();
-    mergeAggregatedUsage(pU, u);
-    providerUsage.set(row.provider, pU);
-    deps.updateLastActivity(providerLastActivity, row.provider, row.lastActivityAt);
+    if (row.provider) {
+      const pU = providerUsage.get(row.provider) || createEmptyUsageTotals();
+      mergeAggregatedUsage(pU, u);
+      providerUsage.set(row.provider, pU);
+      deps.updateLastActivity(providerLastActivity, row.provider, row.lastActivityAt);
+    }
 
     // Purpose usage
-    const purU = purposeUsage.get(row.purpose) || createEmptyUsageTotals();
-    mergeAggregatedUsage(purU, u);
-    purposeUsage.set(row.purpose, purU);
-    deps.updateLastActivity(purposeLastActivity, row.purpose, row.lastActivityAt);
+    if (row.purpose) {
+      const purU = purposeUsage.get(row.purpose) || createEmptyUsageTotals();
+      mergeAggregatedUsage(purU, u);
+      purposeUsage.set(row.purpose, purU);
+      deps.updateLastActivity(purposeLastActivity, row.purpose, row.lastActivityAt);
+    }
 
     // Token sources
-    tokenSourceCounts.set(row.usage_source, (tokenSourceCounts.get(row.usage_source) || 0) + row.invocationCount);
+    if (row.usage_source) {
+      tokenSourceCounts.set(row.usage_source, (tokenSourceCounts.get(row.usage_source) || 0) + row.invocationCount);
+    }
 
     // Buckets
     if (buckets.length > 0 && row.bucketIndex >= 0 && row.bucketIndex < buckets.length) {
@@ -183,6 +183,12 @@ export function queryProjectStatsSnapshot(
     sprintUsage.set(sprintKey, total);
   }
   usage.wallTimeMs = Array.from(wallTimeByTaskId.values()).reduce((sum, value) => sum + value, 0);
+
+  const taskIds = Array.from(new Set([...taskUsage.keys(), ...gitTaskUsage.keys()]));
+  const sprintIds = Array.from(new Set([...sprintUsage.keys(), ...gitSprintUsage.keys()]));
+
+  const taskMeta = deps.getTaskMetadata(projectId, taskIds);
+  const sprintMeta = deps.getSprintMetadata(projectId, sprintIds);
 
   const activeSprintRow = db.prepare(`
     SELECT sr.sprint_id, s.name AS sprint_name, s.number AS sprint_number

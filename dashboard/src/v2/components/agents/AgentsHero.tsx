@@ -5,11 +5,13 @@ import { Bot, Plus, RefreshCw, Sparkles } from "lucide-preact";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 
+import type { Source, AgentPreset } from "../../types.js";
+
 export const AgentsHero: FunctionComponent<{
-  selectedProject: any;
+  selectedProject: Source | null;
   projectLoading?: boolean;
   loading?: boolean;
-  presets?: any[];
+  presets?: AgentPreset[];
   onCreate: () => void;
   onSyncAll: () => void;
   syncingAll: boolean;
