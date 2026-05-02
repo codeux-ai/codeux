@@ -6,14 +6,18 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 
+import { Loader2 } from "lucide-preact";
+
 function DestructiveConfirmButton({
   onConfirm,
   label,
-  className
+  className,
+  isLoading
 }: {
   onConfirm: () => void;
   label: string;
   className?: string;
+  isLoading?: boolean;
 }) {
   const [isHolding, setIsHolding] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -37,7 +41,7 @@ function DestructiveConfirmButton({
   }, []);
 
   const startHold = () => {
-    if (isHolding) return;
+    if (isHolding || isLoading) return;
     setIsHolding(true);
     setProgress(0);
     setIsShaking(false);
@@ -140,8 +144,9 @@ function DestructiveConfirmButton({
         />
       )}
 
-      <span className="relative z-10">
-        {isHolding ? `Hold to ${label}` : label}
+      <span className="relative z-10 flex items-center justify-center gap-2">
+        {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+        {isHolding ? `Hold to ${label}` : isLoading ? "Processing..." : label}
       </span>
     </button>
   );
@@ -150,13 +155,14 @@ function DestructiveConfirmButton({
 interface ConfirmDialogProps {
   isOpen: boolean;
   options: ConfirmDialogOptions | null;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
 }
 
 export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmDialogProps) {
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const backdropRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -190,12 +196,19 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
     }
   }, [shouldRender, isClosing, reducedMotion]);
 
-  const pendingCallback = useRef<(() => void) | null>(null);
+  const pendingCallback = useRef<(() => void | Promise<void>) | null>(null);
 
-  const handleClose = (callback: () => void) => {
-    if (isClosing) return;
-    pendingCallback.current = callback;
-    setIsClosing(true);
+  const handleClose = async (callback: () => void | Promise<void>) => {
+    if (isClosing || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      await callback();
+    } finally {
+      setIsProcessing(false);
+      pendingCallback.current = callback;
+      setIsClosing(true);
+    }
   };
 
   useEffect(() => {
@@ -272,7 +285,8 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
           <button
             type="button"
             onClick={() => handleClose(onCancel)}
-            className="px-4 py-2 text-sm font-medium rounded-[1rem] border border-black/[0.06] dark:border-white/[0.06] hover:bg-black/5 dark:hover:bg-white/5 active:scale-95 transition-all duration-200"
+            disabled={isProcessing}
+            className="px-4 py-2 text-sm font-medium rounded-[1rem] border border-black/[0.06] dark:border-white/[0.06] hover:bg-black/5 dark:hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {cancelLabel}
           </button>
@@ -280,15 +294,18 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
             <DestructiveConfirmButton
               onConfirm={() => handleClose(onConfirm)}
               label={confirmLabel}
-              className="px-4 py-2 text-sm font-medium rounded-[1rem] active:scale-95 bg-status-red text-white hover:opacity-90 shadow-[0_4px_12px_rgba(211,47,47,0.25)]"
+              isLoading={isProcessing}
+              className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-status-red text-white hover:opacity-90 shadow-[0_4px_12px_rgba(211,47,47,0.25)] disabled:opacity-50 disabled:cursor-not-allowed"
             />
           ) : (
             <button
               type="button"
               onClick={() => handleClose(onConfirm)}
-              className="px-4 py-2 text-sm font-medium rounded-[1rem] active:scale-95 bg-signal-500 text-white hover:bg-signal-600 dark:hover:bg-signal-400 shadow-[0_4px_12px_rgba(0,224,160,0.25)]"
+              disabled={isProcessing}
+              className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-signal-500 text-white hover:bg-signal-600 dark:hover:bg-signal-400 shadow-[0_4px_12px_rgba(0,224,160,0.25)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {confirmLabel}
+              {isProcessing && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isProcessing ? "Processing..." : confirmLabel}
             </button>
           )}
         </div>

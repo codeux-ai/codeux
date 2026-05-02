@@ -211,4 +211,32 @@ describe("SprintLedger Component", () => {
 
     expect(screen.getByText("All sprints, fully sortable.")).toBeInTheDocument();
   });
+
+  it("locks rows properly when specific pending actions occur", async () => {
+    // 1. Partial lock: If an action is pending on a specific row, that row should be disabled,
+    // but the other rows should remain interactive.
+    // However, if ANY bulk action is pending, we disable ALL rows for bulk safety.
+
+    // Set a bulk action pending state
+    const pendingBulkActionIds = new Set(["sprint-delete:sprint-1", "sprint-delete:sprint-2"]);
+
+    const { unmount } = render(<SprintLedger {...defaultProps} pendingActionIds={pendingBulkActionIds} />);
+
+    // In bulk pending mode, ALL row selection buttons should be disabled
+    await waitFor(() => {
+      const selectAllBtn = screen.getByTitle("Select all visible");
+      expect(selectAllBtn).toBeDisabled();
+    });
+
+    unmount();
+
+    // 2. Specific lock (non-bulk)
+    const specificPendingIds = new Set(["sprint-showcase:sprint-1"]);
+    render(<SprintLedger {...defaultProps} pendingActionIds={specificPendingIds} />);
+
+    await waitFor(() => {
+      const selectAllBtn = screen.getByTitle("Select all visible");
+      expect(selectAllBtn).not.toBeDisabled();
+    });
+  });
 });

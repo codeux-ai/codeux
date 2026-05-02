@@ -30,14 +30,17 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
 }) => {
   return (
     <div
-      className={`overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+      className={`overflow-hidden transition-all duration-300 ease-in-out ${
         selectedCount > 0 ? "max-h-20 opacity-100" : "max-h-0 opacity-0"
       }`}
     >
       <div className="flex items-center gap-3 border-b border-signal-500/20 bg-signal-500/10 px-6 py-3 dark:bg-signal-500/10">
-        <span className="text-xs font-bold text-signal-600 dark:text-signal-300">
-          {selectedCount} of {totalCount} selected
-        </span>
+        <div className="flex items-center gap-2">
+          {isAnyPending && <Loader2 className="h-4 w-4 animate-spin text-signal-600 dark:text-signal-300" />}
+          <span className="text-xs font-bold text-signal-600 dark:text-signal-300">
+            {selectedCount} of {totalCount} selected
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
