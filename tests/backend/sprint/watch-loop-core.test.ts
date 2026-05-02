@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { WatchLoopRunner, evaluateSprintRunState } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
+import { WatchLoopRunner } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
+import { evaluateSprintRunState } from "../../../src/domain/sprint/orchestrator/sprint-state-evaluator.js";
 import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "../../../src/domain/sprint/orchestrator/watch-loop-policies.js";
 import { buildMockSettings } from "../../builders/settings-builder.js";
 import { buildMockSubtask } from "../../builders/subtask-builder.js";
