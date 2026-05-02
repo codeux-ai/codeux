@@ -177,6 +177,7 @@ const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal
         if (!abortController.signal.aborted && fetchIdRef.current === currentFetchId) {
           setData((prev) => {
             const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextData) : nextData;
+            if (prev === stabilized) return prev;
             const checkEqual = optionsRef.current.isEqual ?? isDeepEqual;
             return checkEqual(prev, stabilized) ? prev : stabilized;
           });
@@ -278,6 +279,7 @@ const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal
             const nextPayload = message.event.payload as T;
             setData((prev) => {
               const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextPayload) : nextPayload;
+              if (prev === stabilized) return prev;
               const checkEqual = optionsRef.current.isEqual ?? isDeepEqual;
               return checkEqual(prev, stabilized) ? prev : stabilized;
             });

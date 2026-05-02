@@ -75,7 +75,7 @@ export function isEqualProjectsResponse(prev: ProjectsResponse, next: ProjectsRe
 }
 
 export function stabilizeProjectsResponse(prev: ProjectsResponse, next: ProjectsResponse): ProjectsResponse {
-  if (isEqualProjectsResponse(prev, next)) return prev;
+  if (prev === next) return prev;
 
   let projectsChanged = false;
   const newProjects = next.projects.map((nextProject, i) => {
@@ -110,7 +110,7 @@ export function isEqualEffectiveSettings(prev: EffectiveSettingsResponse | null,
 }
 
 export function stabilizeEffectiveSettings(prev: EffectiveSettingsResponse | null, next: EffectiveSettingsResponse | null): EffectiveSettingsResponse | null {
-  if (isEqualEffectiveSettings(prev, next)) return prev;
+  if (prev === next) return prev;
   if (!prev || !next) return next;
 
   const settingsUnchanged = isDeepEqual(prev.settings, next.settings);
@@ -146,21 +146,48 @@ export function isEqualProjectStatsSnapshot(prev: ProjectExecutionStatsSnapshot 
 }
 
 export function stabilizeProjectStatsSnapshot(prev: ProjectExecutionStatsSnapshot | null, next: ProjectExecutionStatsSnapshot | null): ProjectExecutionStatsSnapshot | null {
-  if (isEqualProjectStatsSnapshot(prev, next)) return prev;
+  if (prev === next) return prev;
   if (!prev || !next) return next;
+
+  const usageUnchanged = isDeepEqual(prev.usage, next.usage);
+  const gitUnchanged = isDeepEqual(prev.git, next.git);
+  const activeSprintUnchanged = isDeepEqual(prev.activeSprint, next.activeSprint);
+  const bucketsUnchanged = isDeepEqual(prev.buckets, next.buckets);
+  const sprintsUnchanged = isDeepEqual(prev.sprints, next.sprints);
+  const tasksUnchanged = isDeepEqual(prev.tasks, next.tasks);
+  const providersUnchanged = isDeepEqual(prev.providers, next.providers);
+  const purposesUnchanged = isDeepEqual(prev.purposes, next.purposes);
+  const tokenSourcesUnchanged = isDeepEqual(prev.tokenSources, next.tokenSources);
+
+  if (
+    prev.projectId === next.projectId &&
+    prev.window === next.window &&
+    prev.query === next.query &&
+    usageUnchanged &&
+    gitUnchanged &&
+    activeSprintUnchanged &&
+    bucketsUnchanged &&
+    sprintsUnchanged &&
+    tasksUnchanged &&
+    providersUnchanged &&
+    purposesUnchanged &&
+    tokenSourcesUnchanged
+  ) {
+    return prev;
+  }
 
   // Create a mixed object where unchanged nested structures keep their previous references
   const stabilized = { ...next };
 
-  if (isDeepEqual(prev.usage, next.usage)) stabilized.usage = prev.usage;
-  if (isDeepEqual(prev.git, next.git)) stabilized.git = prev.git;
-  if (isDeepEqual(prev.activeSprint, next.activeSprint)) stabilized.activeSprint = prev.activeSprint;
-  if (isDeepEqual(prev.buckets, next.buckets)) stabilized.buckets = prev.buckets;
-  if (isDeepEqual(prev.sprints, next.sprints)) stabilized.sprints = prev.sprints;
-  if (isDeepEqual(prev.tasks, next.tasks)) stabilized.tasks = prev.tasks;
-  if (isDeepEqual(prev.providers, next.providers)) stabilized.providers = prev.providers;
-  if (isDeepEqual(prev.purposes, next.purposes)) stabilized.purposes = prev.purposes;
-  if (isDeepEqual(prev.tokenSources, next.tokenSources)) stabilized.tokenSources = prev.tokenSources;
+  if (usageUnchanged) stabilized.usage = prev.usage;
+  if (gitUnchanged) stabilized.git = prev.git;
+  if (activeSprintUnchanged) stabilized.activeSprint = prev.activeSprint;
+  if (bucketsUnchanged) stabilized.buckets = prev.buckets;
+  if (sprintsUnchanged) stabilized.sprints = prev.sprints;
+  if (tasksUnchanged) stabilized.tasks = prev.tasks;
+  if (providersUnchanged) stabilized.providers = prev.providers;
+  if (purposesUnchanged) stabilized.purposes = prev.purposes;
+  if (tokenSourcesUnchanged) stabilized.tokenSources = prev.tokenSources;
 
   return stabilized;
 }
