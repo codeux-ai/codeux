@@ -20,7 +20,7 @@ interface RerunTaskModalProps {
     allTasks: Subtask[];
     currentProvider?: string | null;
     onClose: () => void;
-    onConfirm: (options: { provider?: string; clearWorktree: boolean; resetDependents: boolean }) => void;
+    onConfirm: (options: { provider?: string; clearWorktree: boolean; resetDependents: boolean }) => void | Promise<void>;
 }
 
 const MERGED_TASK_INDICATORS = new Set(["MERGED", "AUTOMERGE"]);
@@ -40,7 +40,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     const [resetDependents, setResetDependents] = useState(false);
 
     const reducedMotion = useReducedMotion();
-    const isSubmitting = useRef(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const downstreamTasks = useMemo(() => {
         const byId = new Map(allTasks.map(candidate => [candidate.id, candidate]));
@@ -93,7 +93,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     }, [reducedMotion]);
 
     const handleClose = () => {
-        if (isSubmitting.current) return;
+        if (isSubmitting) return;
         const duration = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
         gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, duration, ease: MODAL_MOTION.exit.ease });
         gsap.to(backdropRef.current, { opacity: 0, duration, delay: reducedMotion ? 0 : 0.04, onComplete: onClose });
@@ -101,18 +101,18 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
     const backdropRef = useFocusTrap(true, { onClose: handleClose, restoreFocus: true });
 
-    const handleSubmit = () => {
-        isSubmitting.current = true;
+    const handleSubmit = async () => {
+        setIsSubmitting(true);
         try {
-            onConfirm({
-            provider: provider || undefined,
-            clearWorktree,
-            resetDependents,
+            await onConfirm({
+                provider: provider || undefined,
+                clearWorktree,
+                resetDependents,
             });
-            isSubmitting.current = false;
+            setIsSubmitting(false);
             handleClose();
         } catch (err) {
-            isSubmitting.current = false;
+            setIsSubmitting(false);
             throw err;
         }
     };
@@ -183,7 +183,8 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                             id="rerun-provider"
                             value={provider}
                             onChange={(e) => setProvider((e.target as HTMLSelectElement).value)}
-                            className="w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.03] px-4 py-2.5 text-[13px] font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus:border-transparent transition-shadow"
+                            disabled={isSubmitting}
+                            className="w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.03] px-4 py-2.5 text-[13px] font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus:border-transparent transition-shadow disabled:opacity-50"
                         >
                             {PROVIDER_OPTIONS.map(opt => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -202,7 +203,8 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                                 type="checkbox"
                                 checked={resetDependents}
                                 onChange={(e) => setResetDependents((e.target as HTMLInputElement).checked)}
-                                className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-status-amber focus-visible:ring-2 focus-visible:ring-status-amber focus:ring-offset-0 cursor-pointer"
+                                disabled={isSubmitting}
+                                className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-status-amber focus-visible:ring-2 focus-visible:ring-status-amber focus:ring-offset-0 cursor-pointer disabled:opacity-50"
                             />
                             <div>
                                 <div className="flex items-center gap-1.5">
@@ -234,7 +236,8 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                             type="checkbox"
                             checked={clearWorktree}
                             onChange={(e) => setClearWorktree((e.target as HTMLInputElement).checked)}
-                            className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-status-amber focus-visible:ring-2 focus-visible:ring-status-amber focus:ring-offset-0 cursor-pointer"
+                            disabled={isSubmitting}
+                            className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-status-amber focus-visible:ring-2 focus-visible:ring-status-amber focus:ring-offset-0 cursor-pointer disabled:opacity-50"
                         />
                         <div>
                             <div className="flex items-center gap-1.5">
@@ -255,17 +258,19 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800"
+                        disabled={isSubmitting}
+                        className="px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 disabled:opacity-50"
                     >
                         Cancel
                     </button>
                     <button
                         type="button"
                         onClick={handleSubmit}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800"
+                        disabled={isSubmitting}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 disabled:opacity-50"
                     >
                         <RotateCcw className="w-3.5 h-3.5" strokeWidth={2} />
-                        Rerun Task
+                        {isSubmitting ? "Rerunning..." : "Rerun Task"}
                     </button>
                 </div>
             </div>

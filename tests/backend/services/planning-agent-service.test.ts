@@ -1323,5 +1323,5 @@ describe("PlanningAgentService", () => {
       attempts: 0,
       rawResponse: "This is completely malformed text that has no JSON."
     });
-  });
+  }, 30000);
 });

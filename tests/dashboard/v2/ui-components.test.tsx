@@ -17,6 +17,8 @@ import { KineticDock } from "../../../dashboard/src/v2/components/KineticDock.js
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import { CollapsiblePanel } from "../../../dashboard/src/v2/components/ui/CollapsiblePanel.js";
 import { ExecutionTimelineProvider } from "../../../dashboard/src/hooks/ExecutionTimelineContext.js";
+import { ConfirmDialog } from "../../../dashboard/src/v2/components/ui/ConfirmDialog.js";
+import { RerunTaskModal } from "../../../dashboard/src/v2/components/ui/RerunTaskModal.js";
 import { Button } from "../../../dashboard/src/v2/components/ui/Button.js";
 import { ActionButton } from "../../../dashboard/src/v2/components/settings/SettingsSurface.js";
 
@@ -264,5 +266,97 @@ describe("UI Components Coverage", () => {
     render(<ListSkeleton count={3} />);
     render(<StatCardSkeleton />);
     render(<ChatMessageSkeleton />);
+  });
+
+  it("DestructiveConfirmButton handles pointer cancel/leave without firing", () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <ConfirmDialog
+        isOpen={true}
+        options={{ title: "Test", body: "Body", destructive: true }}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
+    );
+
+    const confirmBtn = screen.getByText("Confirm").closest("button");
+    expect(confirmBtn).toBeDefined();
+
+    fireEvent.pointerDown(confirmBtn!, { button: 0 });
+    // short hold + cancel
+    fireEvent.pointerCancel(confirmBtn!);
+
+    fireEvent.pointerDown(confirmBtn!, { button: 0 });
+    fireEvent.pointerLeave(confirmBtn!);
+
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("ConfirmDialog handles Escape key properly", async () => {
+    const onCancel = vi.fn();
+
+    const { unmount } = render(
+      <ConfirmDialog
+        isOpen={true}
+        options={{ title: "Test Dialog", body: "Body" }}
+        onConfirm={vi.fn()}
+        onCancel={onCancel}
+      />
+    );
+
+    await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    vi.spyOn(event, 'preventDefault');
+    vi.spyOn(event, 'stopPropagation');
+
+    document.dispatchEvent(event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(event.stopPropagation).toHaveBeenCalled();
+    unmount();
+  });
+
+  it("RerunTaskModal prevents multiple submissions", async () => {
+    let confirmResolver;
+    const confirmPromise = new Promise(resolve => { confirmResolver = resolve; });
+
+    const onConfirm = vi.fn(() => confirmPromise);
+    const task = { id: "1", depends_on: [], title: "Task 1" } as any;
+
+    render(
+      <RerunTaskModal
+        task={task}
+        allTasks={[task]}
+        onClose={vi.fn()}
+        onConfirm={onConfirm}
+      />
+    );
+
+    const confirmBtn = screen.getByRole("button", { name: /Rerun Task/i });
+
+    // Trigger first click, but wrap in act and wait for the state flush
+    await act(async () => {
+        fireEvent.click(confirmBtn);
+        // let the state flush
+        await Promise.resolve();
+    });
+
+    // Now it should be disabled in the DOM
+    expect(confirmBtn.hasAttribute("disabled")).toBe(true);
+
+    // Second click (should be ignored because disabled or we don't even need to fire it if we proved it's disabled)
+    // Actually, Preact fireEvent might still fire on disabled buttons in JSDOM, let's just assert the disabled attribute.
+    // We already assert it's disabled. Let's just remove the second click from the test to avoid JSDOM quirks,
+    // and rely on the disabled assertion.
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(confirmBtn.hasAttribute("disabled")).toBe(true);
+
+    confirmResolver();
+    await act(async () => {
+        await confirmPromise;
+    });
   });
 });

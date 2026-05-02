@@ -105,12 +105,11 @@ function DestructiveConfirmButton({
   };
 
   const handlePointerLeave = () => {
-    if (isHolding) {
-      setIsHolding(false);
-      setProgress(0);
-      clearTimers();
-      startTimeRef.current = null;
-    }
+    cancelHold();
+  };
+
+  const handlePointerCancel = () => {
+    cancelHold();
   };
 
   useEffect(() => {
@@ -125,6 +124,7 @@ function DestructiveConfirmButton({
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
       onPointerLeave={handlePointerLeave}
+      onPointerCancel={handlePointerCancel}
       onContextMenu={(e) => e.preventDefault()}
       className={`relative overflow-hidden ${className} ${isShaking ? "animate-shake" : ""}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
