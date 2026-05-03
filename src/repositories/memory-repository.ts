@@ -107,6 +107,69 @@ export class MemoryRepository {
     return this.mapRow(row);
   }
 
+  createMemories(projectId: string, inputs: CreateMemoryInput[]): MemoryRecord[] {
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
+
+    if (inputs.length === 0) return [];
+
+    const now = new Date().toISOString();
+
+    return this.db.transaction(() => {
+      const stmt = this.db.prepare(`
+        INSERT INTO memories (
+          id, project_id, scope, sprint_id, agent_preset_id,
+          content, category, strength, source_json,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const createdRecords: MemoryRecord[] = [];
+
+      for (const input of inputs) {
+        const id = randomUUID();
+        const source: MemorySource = input.source ?? { type: "manual" };
+
+        const row: MemoryRow = {
+          id,
+          project_id: projectId,
+          scope: input.scope,
+          sprint_id: input.sprintId ?? null,
+          agent_preset_id: input.agentPresetId ?? null,
+          content: input.content.trim(),
+          category: input.category,
+          strength: input.strength ?? 0.5,
+          source_json: JSON.stringify(source),
+          embedding_model: null,
+          embedding_dimension: null,
+          embedding_blob: null,
+          promoted_from_id: null,
+          promotion_reason: null,
+          created_at: now,
+          updated_at: now,
+        };
+
+        stmt.run(
+          row.id,
+          row.project_id,
+          row.scope,
+          row.sprint_id,
+          row.agent_preset_id,
+          row.content,
+          row.category,
+          row.strength,
+          row.source_json,
+          row.created_at,
+          row.updated_at,
+        );
+
+        createdRecords.push(this.mapRow(row));
+      }
+
+      return createdRecords;
+    });
+  }
+
+
   getMemory(memoryId: string): MemoryRecord | null {
     const row = this.db.prepare(`
       SELECT * FROM memories WHERE id = ?
