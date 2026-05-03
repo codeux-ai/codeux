@@ -7,10 +7,10 @@ export interface EventStyle {
 
 export function buildProjectLookup(telemetry: OverviewTelemetrySnapshot): Map<string, string> {
   const lookup = new Map<string, string>();
-  for (const project of telemetry.activeProjects) {
+  for (const project of telemetry?.activeProjects || []) {
     lookup.set(project.projectId, project.projectName);
   }
-  for (const project of telemetry.attentionProjects) {
+  for (const project of telemetry?.attentionProjects || []) {
     lookup.set(project.projectId, project.projectName);
   }
   return lookup;
