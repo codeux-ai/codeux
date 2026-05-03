@@ -17,7 +17,7 @@ const buildDeps = () => ({
   getDashboardSettings: () => buildMockSettings(),
   completedSprints: new Set<string>(),
   projectAttentionService: {
-    openItem: vi.fn(),
+    openItems: vi.fn(),
     resolveItemsForSprintRun: vi.fn(),
     resolveItem: vi.fn(),
     listActiveProjectItems: vi.fn().mockReturnValue([]),
@@ -419,9 +419,9 @@ describe("WatchLoopRunner", () => {
     });
 
     expect(result).toContain("Sprint Execution Finished");
-    expect(deps.projectAttentionService.openItem).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.projectAttentionService.openItems).not.toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
       attentionType: "manual_attention",
-    }));
+    })]));
     nowSpy.mockRestore();
   });
 
@@ -608,11 +608,11 @@ describe("WatchLoopRunner", () => {
 
     expect(result).toContain("Sprint Paused");
     expect(result).not.toContain("Sprint Execution Finished");
-    expect(deps.projectAttentionService.openItem).toHaveBeenCalledWith(
-      expect.objectContaining({
+    expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({
         attentionType: "merge_conflict",
         ownerType: "worker",
-      }),
+      })]),
     );
     expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
       "run-1",
@@ -714,7 +714,7 @@ describe("WatchLoopRunner", () => {
 
     expect(result).toContain("Sprint Paused");
     expect(result).not.toContain("Sprint Execution Finished");
-    expect(deps.projectAttentionService.openItem).not.toHaveBeenCalled();
+    expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
     expect(deps.executionRepository.appendSprintRunEvent).not.toHaveBeenCalledWith(
       "run-1",
       "sprint_completed",
@@ -1131,9 +1131,9 @@ describe("WatchLoopRunner", () => {
       expect.anything(),
       expect.anything(),
     );
-    expect(deps.projectAttentionService.openItem).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.projectAttentionService.openItems).not.toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
       attentionType: "manual_attention",
-    }));
+    })]));
     nowSpy.mockRestore();
   });
 
@@ -1225,9 +1225,9 @@ describe("WatchLoopRunner", () => {
       expect.anything(),
       expect.anything(),
     );
-    expect(deps.projectAttentionService.openItem).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.projectAttentionService.openItems).not.toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({
       attentionType: "manual_attention",
-    }));
+    })]));
     nowSpy.mockRestore();
   });
 

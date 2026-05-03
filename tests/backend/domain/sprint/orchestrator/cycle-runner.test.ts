@@ -37,7 +37,6 @@ function buildDeps(): SprintOrchestratorDependencies {
     projectAttentionService: {
       resolveItems: vi.fn(),
       openItems: vi.fn(),
-      openItem: vi.fn(),
       resolveItemsForTask: vi.fn(),
       resolveItemsForSprintRun: vi.fn(),
       listActiveProjectItems: vi.fn().mockReturnValue([]),
