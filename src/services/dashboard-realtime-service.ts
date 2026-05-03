@@ -28,6 +28,7 @@ export interface DashboardRealtimeMutationNotifier {
   scheduleProjectExecutionRefresh: (projectId: string, options?: { includeOverview?: boolean; includeProjects?: boolean }) => void;
   scheduleProjectRuntimeStatusRefresh: (projectId: string) => void;
   scheduleProjectStructureRefresh: (projectId: string, options?: { includeProjects?: boolean }) => void;
+  notifyMemoriesCreated: (projectId: string) => void;
 }
 
 type DashboardRealtimeListener = (event: DashboardRealtimeEvent) => void;
@@ -182,6 +183,20 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
   scheduleOverviewRefresh(): void {
     this.pendingOverview = true;
     this.scheduleFlush();
+  }
+
+  notifyMemoriesCreated(projectId: string): void {
+    const normalizedProjectId = String(projectId || "").trim();
+    if (!normalizedProjectId) return;
+
+    this.publishRawEvent({
+      scopeType: "project",
+      scopeId: normalizedProjectId,
+      eventType: "memories_created",
+      entityType: "memory_batch",
+      entityId: normalizedProjectId,
+      projectId: normalizedProjectId,
+    });
   }
 
   scheduleProjectsRefresh(): void {

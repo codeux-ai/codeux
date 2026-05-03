@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
-import { RepositoryError } from "./repository-utils.js";
+import { RepositoryError, EntityNotFoundError } from "./repository-utils.js";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { requireRecord, executeChunkedInQuery } from "./repository-utils.js";
@@ -108,14 +108,14 @@ export class MemoryRepository {
       );
 
       return this.mapRow(row);
-      } catch (error) {
+    } catch (error) {
       if (error instanceof RepositoryError) throw error;
       this.logger.error("Operation failed", { error, projectId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
   }
 
-  createMemories(projectId: string, inputs: CreateMemoryInput[]): MemoryRecord[] {
+  createMemoriesBatch(projectId: string, inputs: CreateMemoryInput[]): MemoryRecord[] {
     try {
       requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
 
@@ -176,331 +176,118 @@ export class MemoryRepository {
 
         return createdRecords;
       });
-      } catch (error) {
+    } catch (error) {
       if (error instanceof RepositoryError) throw error;
       this.logger.error("Operation failed", { error, projectId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
   }
 
+  updateMemory(id: string, input: UpdateMemoryInput): MemoryRecord {
+    try {
+      const existing = this.getMemory(id);
+      if (!existing) {
+        throw new EntityNotFoundError(`Memory not found: ${id}`);
+      }
 
-  getMemory(memoryId: string): MemoryRecord | null {
-    const row = this.db.prepare(`
-      SELECT * FROM memories WHERE id = ?
-    `).get(memoryId) as MemoryRow | undefined;
+      const updates: string[] = [];
+      const values: any[] = [];
+      const now = new Date().toISOString();
 
+      if (input.content !== undefined) {
+        updates.push("content = ?");
+        values.push(input.content.trim());
+      }
+      if (input.category !== undefined) {
+        updates.push("category = ?");
+        values.push(input.category);
+      }
+      if (input.strength !== undefined) {
+        updates.push("strength = ?");
+        values.push(input.strength);
+      }
+
+      if (updates.length > 0) {
+        updates.push("updated_at = ?");
+        values.push(now);
+
+        const sql = `UPDATE memories SET ${updates.join(", ")} WHERE id = ?`;
+        this.db.prepare(sql).run(...values, id);
+      }
+
+      return this.getMemory(id)!;
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, id });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
+  getMemory(id: string): MemoryRecord | null {
+    const row = this.db.prepare("SELECT * FROM memories WHERE id = ?").get(id) as MemoryRow | undefined;
     return row ? this.mapRow(row) : null;
   }
 
-  getMemories(memoryIds: string[]): MemoryRecord[] {
-    const rows = executeChunkedInQuery<MemoryRow>(
-      (sql) => this.db.prepare(sql),
-      { sqlPrefix: "SELECT * FROM memories WHERE id", items: memoryIds }
-    );
+  listMemories(projectId: string, options: { scope?: MemoryScope; category?: MemoryCategory; sprintId?: string; limit?: number; offset?: number } = {}): MemoryRecord[] {
+    const clauses = ["project_id = ?"];
+    const values: any[] = [projectId];
 
-    const map = new Map<string, MemoryRecord>();
-    for (const row of rows) {
-      map.set(row.id, this.mapRow(row));
+    if (options.scope) {
+      clauses.push("scope = ?");
+      values.push(options.scope);
+    }
+    if (options.category) {
+      clauses.push("category = ?");
+      values.push(options.category);
+    }
+    if (options.sprintId) {
+      clauses.push("sprint_id = ?");
+      values.push(options.sprintId);
     }
 
-    const results: MemoryRecord[] = [];
-    for (const id of memoryIds) {
-      const mem = map.get(id);
-      if (mem) {
-        results.push(mem);
-      }
-    }
-    return results;
-  }
+    const limit = options.limit ?? 100;
+    const offset = options.offset ?? 0;
 
-  updateMemory(memoryId: string, input: UpdateMemoryInput): MemoryRecord {
-    try {
-      const current = requireRecord(this.getMemory(memoryId), "Memory", memoryId);
-      const now = new Date().toISOString();
+    const rows = this.db.prepare(`
+      SELECT * FROM memories
+      WHERE ${clauses.join(" AND ")}
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...values, limit, offset) as MemoryRow[];
 
-      const updatedContent = input.content?.trim() ?? current.content;
-      const updatedCategory = input.category ?? current.category;
-      const updatedStrength = input.strength ?? current.strength;
-
-      this.db.prepare(`
-        UPDATE memories
-        SET content = ?, category = ?, strength = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        updatedContent,
-        updatedCategory,
-        updatedStrength,
-        now,
-        memoryId,
-      );
-
-      return {
-        ...current,
-        content: updatedContent,
-        category: updatedCategory,
-        strength: updatedStrength,
-        updatedAt: now,
-      };
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, memoryId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
-  }
-
-  deleteMemory(memoryId: string): void {
-    try {
-      this.db.prepare(`DELETE FROM memories WHERE id = ?`).run(memoryId);
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, memoryId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
-  }
-
-  private listMemories(
-    filters: { projectId: string; sprintId?: string; agentPresetId?: string; scope?: string },
-    limit: number,
-    orderBy: "updated_at DESC" | "created_at DESC"
-  ): MemoryRecord[] {
-    let sql = "SELECT * FROM memories WHERE project_id = ?";
-    const params: any[] = [filters.projectId];
-
-    if (filters.scope) {
-      sql += " AND scope = ?";
-      params.push(filters.scope);
-    }
-    if (filters.sprintId) {
-      sql += " AND sprint_id = ?";
-      params.push(filters.sprintId);
-    }
-    if (filters.agentPresetId) {
-      sql += " AND agent_preset_id = ?";
-      params.push(filters.agentPresetId);
-    }
-
-    sql += ` ORDER BY ${orderBy} LIMIT ?`;
-    params.push(limit);
-
-    const rows = this.db.prepare(sql).all(...params) as unknown as MemoryRow[];
     return rows.map((row) => this.mapRow(row));
   }
 
-  listByProject(projectId: string, scope?: MemoryScope, limit = 100): MemoryRecord[] {
-    return this.listMemories({ projectId, scope }, limit, "updated_at DESC");
-  }
+  searchMemories(projectId: string, query: string, options: { limit?: number; scope?: MemoryScope } = {}): MemoryRecord[] {
+    const clauses = ["project_id = ?", "content LIKE ?"];
+    const values: any[] = [projectId, `%${query}%`];
 
-  listBySprint(projectId: string, sprintId: string, limit = 200): MemoryRecord[] {
-    return this.listMemories({ projectId, sprintId }, limit, "created_at DESC");
-  }
-
-  listByAgent(projectId: string, agentPresetId: string, limit = 100): MemoryRecord[] {
-    return this.listMemories({ projectId, agentPresetId }, limit, "created_at DESC");
-  }
-
-  /** Short-term memories for a specific agent within a specific sprint. */
-  listBySprintAndAgent(projectId: string, sprintId: string, agentPresetId: string, limit = 200): MemoryRecord[] {
-    return this.listMemories({ projectId, sprintId, agentPresetId }, limit, "created_at DESC");
-  }
-
-  /** Long-term (project-scope) memories for a specific agent. */
-  listLongTermByAgent(projectId: string, agentPresetId: string, limit = 200): MemoryRecord[] {
-    return this.listMemories({ projectId, agentPresetId, scope: 'project' }, limit, "created_at DESC");
-  }
-
-  saveEmbedding(memoryId: string, model: EmbeddingModelId, dimension: number, blob: Buffer): void {
-    const now = new Date().toISOString();
-    this.db.prepare(`
-      UPDATE memories
-      SET embedding_model = ?, embedding_dimension = ?, embedding_blob = ?, updated_at = ?
-      WHERE id = ?
-    `).run(model, dimension, blob, now, memoryId);
-  }
-
-  clearEmbeddingsForModel(projectId: string, model: EmbeddingModelId): void {
-    const now = new Date().toISOString();
-    this.db.prepare(`
-      UPDATE memories
-      SET embedding_model = NULL, embedding_dimension = NULL, embedding_blob = NULL, updated_at = ?
-      WHERE project_id = ? AND embedding_model = ?
-    `).run(now, projectId, model);
-  }
-
-  loadEmbeddingsForScope(
-    projectId: string,
-    model: EmbeddingModelId,
-    scope?: MemoryScope,
-    sprintId?: string,
-    agentPresetId?: string,
-    limit?: number,
-  ): EmbeddingRecord[] {
-    let sql = `
-      SELECT id, embedding_blob, embedding_dimension
-      FROM memories
-      WHERE project_id = ? AND embedding_model = ? AND embedding_blob IS NOT NULL
-    `;
-    const params: any[] = [projectId, model];
-
-    if (scope) {
-      sql += " AND scope = ?";
-      params.push(scope);
-    }
-    if (sprintId) {
-      sql += " AND sprint_id = ?";
-      params.push(sprintId);
-    }
-    if (agentPresetId) {
-      sql += " AND agent_preset_id = ?";
-      params.push(agentPresetId);
+    if (options.scope) {
+      clauses.push("scope = ?");
+      values.push(options.scope);
     }
 
-    if (limit !== undefined) {
-      sql += " ORDER BY created_at DESC LIMIT ?";
-      params.push(limit);
-    }
+    const limit = options.limit ?? 20;
 
-    const rows = this.db.prepare(sql).all(...params) as unknown as EmbeddingRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      embeddingBlob: row.embedding_blob,
-      embeddingDimension: row.embedding_dimension,
-    }));
-  }
-
-  countByScope(projectId: string, scope: MemoryScope): number {
-    const row = this.db.prepare(`
-      SELECT COUNT(*) as count FROM memories
-      WHERE project_id = ? AND scope = ?
-    `).get(projectId, scope) as CountRow | undefined;
-    return row?.count ?? 0;
-  }
-
-  countStaleEmbeddings(projectId: string, currentModel: EmbeddingModelId): number {
-    const row = this.db.prepare(`
-      SELECT COUNT(*) as count FROM memories
-      WHERE project_id = ? AND (embedding_model IS NULL OR embedding_model != ?)
-    `).get(projectId, currentModel) as CountRow | undefined;
-    return row?.count ?? 0;
-  }
-
-  deleteSprintMemories(projectId: string, sprintId: string): void {
-    this.db.prepare(`
-      DELETE FROM memories
-      WHERE project_id = ? AND sprint_id = ? AND scope = 'sprint'
-    `).run(projectId, sprintId);
-  }
-
-  createPromotedMemory(
-    projectId: string,
-    sourceMemory: MemoryRecord,
-    reason: string,
-  ): MemoryRecord {
-    const now = new Date().toISOString();
-    const id = randomUUID();
-    const source: MemorySource = { type: "promotion", originType: "memory", originId: sourceMemory.id };
-
-    const row: MemoryRow = {
-      id,
-      project_id: projectId,
-      scope: 'project',
-      sprint_id: null,
-      agent_preset_id: sourceMemory.agentPresetId,
-      content: sourceMemory.content,
-      category: sourceMemory.category,
-      strength: Math.min(1, sourceMemory.strength + 0.1),
-      source_json: JSON.stringify(source),
-      embedding_model: null,
-      embedding_dimension: null,
-      embedding_blob: null,
-      promoted_from_id: sourceMemory.id,
-      promotion_reason: reason,
-      created_at: now,
-      updated_at: now,
-    };
-
-    this.db.prepare(`
-      INSERT INTO memories (
-        id, project_id, scope, sprint_id, agent_preset_id,
-        content, category, strength, source_json,
-        promoted_from_id, promotion_reason,
-        created_at, updated_at
-      ) VALUES (?, ?, 'project', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      row.id,
-      row.project_id,
-      row.agent_preset_id,
-      row.content,
-      row.category,
-      row.strength,
-      row.source_json,
-      row.promoted_from_id,
-      row.promotion_reason,
-      row.created_at,
-      row.updated_at,
-    );
-
-    return this.mapRow(row);
-  }
-
-  // --- Embedding model status ---
-
-  getModelStatus(modelId: EmbeddingModelId): EmbeddingModelStatus | null {
-    const row = this.db.prepare(`
-      SELECT * FROM embedding_models WHERE id = ?
-    `).get(modelId) as EmbeddingModelRow | undefined;
-
-    return row ? this.mapModelRow(row) : null;
-  }
-
-  upsertModelStatus(
-    modelId: EmbeddingModelId,
-    update: Partial<Pick<EmbeddingModelStatus, "downloaded" | "downloading" | "downloadProgress" | "localPath" | "error">>,
-  ): void {
-    const now = new Date().toISOString();
-    const existing = this.getModelStatus(modelId);
-
-    if (!existing) {
-      this.db.prepare(`
-        INSERT INTO embedding_models (id, status, download_progress, local_path, error_message, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(
-        modelId,
-        update.downloaded ? "downloaded" : update.downloading ? "downloading" : "not_downloaded",
-        update.downloadProgress ?? 0,
-        update.localPath ?? null,
-        update.error ?? null,
-        now,
-      );
-      return;
-    }
-
-    const status = update.downloaded ? "downloaded"
-      : update.downloading ? "downloading"
-      : update.downloaded === false ? "not_downloaded"
-      : (existing.downloaded ? "downloaded" : existing.downloading ? "downloading" : "not_downloaded");
-
-    this.db.prepare(`
-      UPDATE embedding_models
-      SET status = ?, download_progress = ?, local_path = ?, error_message = ?, updated_at = ?
-      WHERE id = ?
-    `).run(
-      status,
-      update.downloadProgress ?? existing.downloadProgress,
-      update.localPath ?? existing.localPath,
-      update.error ?? existing.error,
-      now,
-      modelId,
-    );
-  }
-
-  listModelStatuses(): EmbeddingModelStatus[] {
     const rows = this.db.prepare(`
-      SELECT * FROM embedding_models ORDER BY id ASC
-    `).all() as unknown as EmbeddingModelRow[];
-    return rows.map((row) => this.mapModelRow(row));
+      SELECT * FROM memories
+      WHERE ${clauses.join(" AND ")}
+      ORDER BY strength DESC, created_at DESC
+      LIMIT ?
+    `).all(...values, limit) as MemoryRow[];
+
+    return rows.map((row) => this.mapRow(row));
   }
 
-  // --- Private helpers ---
+  deleteMemory(id: string): boolean {
+    try {
+      const result = this.db.prepare("DELETE FROM memories WHERE id = ?").run(id);
+      return (result.changes ?? 0) > 0;
+    } catch (error) {
+      this.logger.error("Operation failed", { error, id });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
 
   private mapRow(row: MemoryRow): MemoryRecord {
     return {
@@ -512,37 +299,13 @@ export class MemoryRepository {
       content: row.content,
       category: row.category as MemoryCategory,
       strength: row.strength,
-      source: this.parseSource(row.source_json),
+      source: JSON.parse(row.source_json),
       embeddingModel: row.embedding_model as EmbeddingModelId | null,
       embeddingDimension: row.embedding_dimension,
-      embeddingBlob: row.embedding_blob,
       promotedFromId: row.promoted_from_id,
       promotionReason: row.promotion_reason,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
   }
-
-  private mapModelRow(row: EmbeddingModelRow): EmbeddingModelStatus {
-    return {
-      id: row.id as EmbeddingModelId,
-      downloaded: row.status === "downloaded",
-      downloading: row.status === "downloading",
-      downloadProgress: row.download_progress,
-      localPath: row.local_path,
-      error: row.error_message,
-    };
-  }
-
-  private parseSource(json: string): MemorySource {
-    try {
-      const parsed = JSON.parse(json) as MemorySource;
-      if (parsed && typeof parsed.type === "string") {
-        return parsed;
-      }
-    } catch { /* ignore */ }
-    return { type: "manual" };
-  }
-
-
 }

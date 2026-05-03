@@ -41,7 +41,7 @@ function makeFloat32Buffer(values: number[]): Buffer {
 describe("MemoryService", () => {
   const mockRepo = {
     createMemory: vi.fn(),
-    createMemories: vi.fn(),
+    createMemoriesBatch: vi.fn(),
     getMemory: vi.fn(),
     getMemories: vi.fn(),
     updateMemory: vi.fn(),
@@ -66,7 +66,15 @@ describe("MemoryService", () => {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-    child: vi.fn().mockReturnThis(),
+  };
+
+  const mockNotifier = {
+    scheduleProjectsRefresh: vi.fn(),
+    scheduleProjectLiveRefresh: vi.fn(),
+    scheduleProjectExecutionRefresh: vi.fn(),
+    scheduleProjectRuntimeStatusRefresh: vi.fn(),
+    scheduleProjectStructureRefresh: vi.fn(),
+    notifyMemoriesCreated: vi.fn(),
   };
 
   let service: MemoryService;
@@ -77,6 +85,7 @@ describe("MemoryService", () => {
       mockRepo as any,
       mockEmbeddingService as any,
       mockLogger as any,
+      mockNotifier as any
     );
   });
 
@@ -144,7 +153,7 @@ describe("MemoryService", () => {
     });
   });
 
-  describe("createMemories", () => {
+  describe("createMemoriesBatch", () => {
     it("creates via repository and triggers async embeddings when model is loaded", async () => {
       const input1 = { scope: "sprint", content: "mem1", category: "context" };
       const input2 = { scope: "sprint", content: "mem2", category: "context" };
@@ -153,28 +162,43 @@ describe("MemoryService", () => {
         makeMemoryRecord({ id: "mem-2" })
       ];
 
-      mockRepo.createMemories.mockReturnValue(records);
+      mockRepo.createMemoriesBatch.mockReturnValue(records);
       mockEmbeddingService.isLoaded.mockReturnValue(true);
       mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
       mockEmbeddingService.getDimension.mockReturnValue(384);
       mockEmbeddingService.embed.mockResolvedValue(new Float32Array(384));
 
-      const result = await service.createMemories("proj-1", [input1 as any, input2 as any]);
+      const result = await service.createMemoriesBatch("proj-1", [input1 as any, input2 as any]);
 
-      expect(mockRepo.createMemories).toHaveBeenCalledWith("proj-1", [input1, input2]);
+      expect(mockRepo.createMemoriesBatch).toHaveBeenCalledWith("proj-1", [input1, input2]);
       expect(mockEmbeddingService.embed).toHaveBeenCalledTimes(2);
       expect(mockRepo.saveEmbedding).toHaveBeenCalledTimes(2);
       expect(result).toEqual(records);
     });
 
-    it("works without model loaded (no embeddings)", async () => {
-      const records = [makeMemoryRecord({ id: "mem-1" })];
-      mockRepo.createMemories.mockReturnValue(records);
+
+    it("creates 5 memories and notifies realtime once", async () => {
+      const inputs = Array.from({ length: 5 }, (_, i) => ({ scope: "sprint", content: `mem${i}`, category: "context" }));
+      const records = inputs.map((_, i) => makeMemoryRecord({ id: `mem-${i}` }));
+      mockRepo.createMemoriesBatch.mockReturnValue(records);
       mockEmbeddingService.isLoaded.mockReturnValue(false);
 
-      const result = await service.createMemories("proj-1", [{} as any]);
+      const result = await service.createMemoriesBatch("proj-1", inputs as any);
 
-      expect(mockRepo.createMemories).toHaveBeenCalled();
+      expect(mockRepo.createMemoriesBatch).toHaveBeenCalledWith("proj-1", inputs);
+      expect(mockNotifier.notifyMemoriesCreated).toHaveBeenCalledTimes(1);
+      expect(mockNotifier.notifyMemoriesCreated).toHaveBeenCalledWith("proj-1");
+      expect(result).toHaveLength(5);
+    });
+
+    it("works without model loaded (no embeddings)", async () => {
+      const records = [makeMemoryRecord({ id: "mem-1" })];
+      mockRepo.createMemoriesBatch.mockReturnValue(records);
+      mockEmbeddingService.isLoaded.mockReturnValue(false);
+
+      const result = await service.createMemoriesBatch("proj-1", [{} as any]);
+
+      expect(mockRepo.createMemoriesBatch).toHaveBeenCalled();
       expect(mockEmbeddingService.embed).not.toHaveBeenCalled();
       expect(result).toEqual(records);
     });

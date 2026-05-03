@@ -228,9 +228,9 @@ export class ExecutionRepository {
   private readonly db: DatabaseAdapter;
   private readonly taskWallTimeCache = new Map<string, { finishedMs: number, hasActive: boolean }>();
   private readonly sprintRunWallTimeCache = new Map<string, { finishedMs: number, hasActive: boolean }>();
-  private readonly pendingRealtimeProjectRefreshes = new Map<string, { includeOverview: boolean }>();
+  private readonly pendingRealtimeProjectRefreshes = new Map<string, { includeOverview: boolean; immediate: boolean }>();
+  private readonly realtimeProjectRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly leaseProjectCache = new Map<string, string>();
-  private realtimeProjectRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly storage: AppDbStorage = new AppDbStorage(),
@@ -406,11 +406,11 @@ export class ExecutionRepository {
         const stmt = this.db.prepare(sql);
         stmt.run(...values);
 
-        this.notifyRealtime(existing.projectId, true);
+        this.notifyRealtime(existing.projectId, true, input.status !== undefined);
       }
 
       return existing;
-      } catch (error) {
+    } catch (error) {
       if (error instanceof RepositoryError) throw error;
       this.logger.error("Operation failed", { error, id });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
@@ -518,9 +518,9 @@ export class ExecutionRepository {
       );
 
       const created = requireSprintRun((id) => this.getSprintRun(id), id);
-      this.notifyRealtime(created.projectId, true);
+      this.notifyRealtime(created.projectId, true, true);
       return created;
-      } catch (error) {
+    } catch (error) {
       if (error instanceof RepositoryError) throw error;
       this.logger.error("Operation failed", { error, projectId: input.projectId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
@@ -622,341 +622,12 @@ export class ExecutionRepository {
       );
       const updated = requireSprintRun((id) => this.getSprintRun(id), runId);
       if (this.shouldPublishSprintRunUpdate(input)) {
-        this.notifyRealtime(updated.projectId, true);
+        this.notifyRealtime(updated.projectId, true, true);
       }
       return updated;
-      } catch (error) {
+    } catch (error) {
       if (error instanceof RepositoryError) throw error;
       this.logger.error("Operation failed", { error, runId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
-  }
-
-  createTaskDispatch(input: CreateTaskDispatchInput): TaskDispatchRecord {
-    try {
-      requireProject(this.db, input.projectId);
-      requireSprint(this.db, input.sprintId, input.projectId);
-      requireTask(this.db, input.taskId, input.projectId, input.sprintId);
-      requireSprintRunScoped((id) => this.getSprintRun(id), input.sprintRunId, input.projectId, input.sprintId);
-      if (input.connectionId) {
-        requireConnection(this.db, input.connectionId);
-      }
-
-      const id = randomUUID();
-      const now = new Date().toISOString();
-      const queuedAt = input.queuedAt || now;
-      this.db.prepare(`
-        INSERT INTO task_dispatches (
-          id, project_id, sprint_id, task_id, sprint_run_id, connection_id, executor_type, status, priority,
-          queued_at, claimed_at, started_at, finished_at, last_heartbeat_at, error_message, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        input.projectId,
-        input.sprintId,
-        input.taskId,
-        input.sprintRunId,
-        input.connectionId ?? null,
-        input.executorType,
-        input.status || "queued",
-        input.priority ?? 0,
-        queuedAt,
-        null,
-        null,
-        null,
-        null,
-        null,
-        now,
-        now
-      );
-
-      const created = requireTaskDispatch((id) => this.getTaskDispatch(id), id);
-      this.notifyRealtime(created.projectId, true);
-      return created;
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, projectId: input.projectId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
-  }
-
-  listTaskDispatches(args: { projectId: string; sprintId?: string; sprintRunId?: string; taskId?: string }): TaskDispatchRecord[] {
-    requireProject(this.db, args.projectId);
-    const clauses = ["project_id = ?"];
-    const values: string[] = [args.projectId];
-    if (args.sprintId) {
-      clauses.push("sprint_id = ?");
-      values.push(args.sprintId);
-    }
-    if (args.sprintRunId) {
-      clauses.push("sprint_run_id = ?");
-      values.push(args.sprintRunId);
-    }
-    if (args.taskId) {
-      clauses.push("task_id = ?");
-      values.push(args.taskId);
-    }
-
-    const rows = this.db.prepare(`
-      SELECT *
-      FROM task_dispatches
-      WHERE ${clauses.join(" AND ")}
-      ORDER BY priority DESC, queued_at ASC, created_at ASC
-    `).all(...values) as unknown as TaskDispatchRow[];
-
-    return rows.map((row) => this.mapTaskDispatchRow(row));
-  }
-
-  listTaskDispatchesByStatus(
-    statuses: TaskDispatchStatus[],
-    options?: { projectId?: string; sprintId?: string; sprintRunId?: string; taskId?: string; executorType?: TaskDispatchRecord["executorType"] },
-  ): TaskDispatchRecord[] {
-    const normalizedStatuses = Array.from(new Set(statuses.map((status) => String(status || "").trim()).filter(Boolean)));
-    if (normalizedStatuses.length === 0) {
-      return [];
-    }
-
-    const clauses = [`status IN (${normalizedStatuses.map(() => "?").join(", ")})`];
-    const values: string[] = [...normalizedStatuses];
-
-    if (options?.projectId) {
-      requireProject(this.db, options.projectId);
-      clauses.push("project_id = ?");
-      values.push(options.projectId);
-    }
-    if (options?.sprintId) {
-      clauses.push("sprint_id = ?");
-      values.push(options.sprintId);
-    }
-    if (options?.sprintRunId) {
-      clauses.push("sprint_run_id = ?");
-      values.push(options.sprintRunId);
-    }
-    if (options?.taskId) {
-      clauses.push("task_id = ?");
-      values.push(options.taskId);
-    }
-    if (options?.executorType) {
-      clauses.push("executor_type = ?");
-      values.push(options.executorType);
-    }
-
-    const rows = this.db.prepare(`
-      SELECT *
-      FROM task_dispatches
-      WHERE ${clauses.join(" AND ")}
-      ORDER BY priority DESC, queued_at ASC, created_at ASC
-    `).all(...values) as unknown as TaskDispatchRow[];
-
-    return rows.map((row) => this.mapTaskDispatchRow(row));
-  }
-
-  listStaleCancelRequestedDispatches(cutoffIso: string): TaskDispatchRecord[] {
-    const rows = this.db.prepare(`
-      SELECT *
-      FROM task_dispatches
-      WHERE status = 'cancel_requested'
-        AND COALESCE(last_heartbeat_at, updated_at, started_at, queued_at) <= ?
-      ORDER BY COALESCE(last_heartbeat_at, updated_at, started_at, queued_at) ASC
-    `).all(cutoffIso) as unknown as TaskDispatchRow[];
-
-    return rows.map((row) => this.mapTaskDispatchRow(row));
-  }
-
-  updateTaskDispatch(dispatchId: string, input: UpdateTaskDispatchInput): TaskDispatchRecord {
-    try {
-      const current = requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
-      if (input.connectionId) {
-        requireConnection(this.db, input.connectionId);
-      }
-      const now = new Date().toISOString();
-      this.db.prepare(`
-        UPDATE task_dispatches
-        SET connection_id = ?, status = ?, claimed_at = ?, started_at = ?, finished_at = ?, last_heartbeat_at = ?, error_message = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        input.connectionId === undefined ? current.connectionId : input.connectionId,
-        input.status || current.status,
-        input.claimedAt === undefined ? current.claimedAt : input.claimedAt,
-        input.startedAt === undefined ? current.startedAt : input.startedAt,
-        input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
-        input.lastHeartbeatAt === undefined ? current.lastHeartbeatAt : input.lastHeartbeatAt,
-        input.errorMessage === undefined ? current.errorMessage : input.errorMessage,
-        now,
-        dispatchId
-      );
-      const updated = requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
-      if (this.shouldPublishTaskDispatchUpdate(input)) {
-        this.notifyRealtime(updated.projectId, true);
-      }
-      return updated;
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, dispatchId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
-  }
-
-  createTaskRun(input: CreateTaskRunInput): TaskRunRecord {
-    try {
-      requireProject(this.db, input.projectId);
-      requireSprint(this.db, input.sprintId, input.projectId);
-      requireTask(this.db, input.taskId, input.projectId, input.sprintId);
-      if (input.sprintRunId) {
-        requireSprintRunScoped((id) => this.getSprintRun(id), input.sprintRunId, input.projectId, input.sprintId);
-      }
-      if (input.dispatchId) {
-        requireTaskDispatch((id) => this.getTaskDispatch(id), input.dispatchId);
-      }
-      if (input.connectionId) {
-        requireConnection(this.db, input.connectionId);
-      }
-
-      const id = randomUUID();
-      this.db.prepare(`
-        INSERT INTO task_runs (
-          id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id, connection_id, provider, mode,
-          session_id, session_name, state, worker_branch, pr_url, started_at, finished_at, duration_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        input.projectId,
-        input.sprintId,
-        input.taskId,
-        input.sprintRunId ?? null,
-        input.dispatchId ?? null,
-        input.connectionId ?? null,
-        input.provider ?? null,
-        input.mode ?? null,
-        input.sessionId ?? null,
-        input.sessionName ?? null,
-        input.state,
-        input.workerBranch ?? null,
-        input.prUrl ?? null,
-        input.startedAt ?? null,
-        input.finishedAt ?? null,
-        input.durationMs ?? null
-      );
-
-      const created = requireTaskRun((id) => this.getTaskRun(id), id);
-      if (created.taskId) this.taskWallTimeCache.delete(created.taskId);
-      if (created.sprintRunId) this.sprintRunWallTimeCache.delete(created.sprintRunId);
-      this.notifyRealtime(created.projectId, false);
-      return created;
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, projectId: input.projectId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
-  }
-
-  createProviderInvocationUsage(input: CreateProviderInvocationUsageInput): ProviderInvocationUsageRecord {
-    try {
-      requireProject(this.db, input.projectId);
-      if (input.sprintId) {
-        requireSprint(this.db, input.sprintId, input.projectId);
-      }
-      if (input.taskId) {
-        requireTask(this.db, input.taskId, input.projectId, input.sprintId || undefined);
-      }
-      if (input.sprintRunId) {
-        requireSprintRun((id) => this.getSprintRun(id), input.sprintRunId);
-      }
-      if (input.dispatchId) {
-        requireTaskDispatch((id) => this.getTaskDispatch(id), input.dispatchId);
-      }
-      if (input.taskRunId) {
-        requireTaskRun((id) => this.getTaskRun(id), input.taskRunId);
-      }
-
-      const id = randomUUID();
-      const now = new Date().toISOString();
-      this.db.prepare(`
-        INSERT INTO provider_invocations (
-          id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id, task_run_id, attention_item_id,
-          session_id, provider, purpose, status, model, execution_mode, native_session_id, started_at, finished_at, duration_ms,
-          prompt_chars, transcript_chars, input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens,
-          total_tokens, usage_source, raw_usage_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        input.projectId,
-        input.sprintId ?? null,
-        input.taskId ?? null,
-        input.sprintRunId ?? null,
-        input.dispatchId ?? null,
-        input.taskRunId ?? null,
-        input.attentionItemId ?? null,
-        input.sessionId,
-        input.provider,
-        input.purpose,
-        input.status || "running",
-        input.model ?? null,
-        input.executionMode ?? null,
-        input.nativeSessionId ?? null,
-        input.startedAt || now,
-        null,
-        null,
-        input.promptChars ?? 0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        "unavailable",
-        null,
-        now,
-        now,
-      );
-
-      const created = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), id);
-      this.notifyRealtime(created.projectId, false);
-      return created;
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, projectId: input.projectId });
-      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
-    }
-  }
-
-  updateProviderInvocationUsage(invocationId: string, input: UpdateProviderInvocationUsageInput): ProviderInvocationUsageRecord {
-    try {
-      const current = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
-      const now = new Date().toISOString();
-      this.db.prepare(`
-        UPDATE provider_invocations
-        SET status = ?, model = ?, execution_mode = ?, native_session_id = ?, finished_at = ?, duration_ms = ?, transcript_chars = ?,
-          input_tokens = ?, cached_input_tokens = ?, output_tokens = ?, reasoning_output_tokens = ?, total_tokens = ?,
-          usage_source = ?, raw_usage_json = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        input.status || current.status,
-        input.model === undefined ? current.model : input.model,
-        input.executionMode === undefined ? current.executionMode : input.executionMode,
-        input.nativeSessionId === undefined ? current.nativeSessionId : input.nativeSessionId,
-        input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
-        input.durationMs === undefined ? current.durationMs : input.durationMs,
-        input.transcriptChars === undefined ? current.transcriptChars : input.transcriptChars,
-        input.inputTokens === undefined ? current.inputTokens : input.inputTokens,
-        input.cachedInputTokens === undefined ? current.cachedInputTokens : input.cachedInputTokens,
-        input.outputTokens === undefined ? current.outputTokens : input.outputTokens,
-        input.reasoningOutputTokens === undefined ? current.reasoningOutputTokens : input.reasoningOutputTokens,
-        input.totalTokens === undefined ? current.totalTokens : input.totalTokens,
-        input.usageSource === undefined ? current.usageSource : input.usageSource,
-        input.rawUsageJson === undefined
-          ? JSON.stringify(current.rawUsageJson)
-          : (input.rawUsageJson === null ? null : JSON.stringify(input.rawUsageJson)),
-        now,
-        invocationId,
-      );
-
-      const updated = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
-      this.notifyRealtime(updated.projectId, false);
-      return updated;
-      } catch (error) {
-      if (error instanceof RepositoryError) throw error;
-      this.logger.error("Operation failed", { error, invocationId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
   }
@@ -1133,9 +804,10 @@ export class ExecutionRepository {
       const updated = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
       if (updated.taskId) this.taskWallTimeCache.delete(updated.taskId);
       if (updated.sprintRunId) this.sprintRunWallTimeCache.delete(updated.sprintRunId);
-      this.notifyRealtime(updated.projectId, false);
+      const isImmediate = input.startedAt !== undefined || input.finishedAt !== undefined;
+      this.notifyRealtime(updated.projectId, false, isImmediate);
       return updated;
-      } catch (error) {
+    } catch (error) {
       if (error instanceof RepositoryError) throw error;
       this.logger.error("Operation failed", { error, taskRunId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
@@ -1271,7 +943,7 @@ export class ExecutionRepository {
     }
 
     const updated = requireTaskDispatch((id) => this.getTaskDispatch(id), claimedId);
-    this.notifyRealtime(updated.projectId, true);
+    this.notifyRealtime(updated.projectId, true, true);
     return updated;
   }
 
@@ -1282,36 +954,20 @@ export class ExecutionRepository {
 
   acquireLease(input: AcquireExecutionLeaseInput): ExecutionLeaseRecord {
     try {
-      const existing = this.getLease(input.scopeType, input.scopeId);
       const now = new Date().toISOString();
-
-      if (existing && existing.expiresAt > now && existing.leaseToken !== input.leaseToken) {
-        throw new ConcurrencyConflictError(`Lease already held for ${input.scopeType}:${input.scopeId}`);
-      }
-
-      if (existing) {
-        this.db.prepare(`
-          UPDATE execution_leases
-          SET owner_key = ?, lease_token = ?, acquired_at = ?, expires_at = ?, last_heartbeat_at = ?
-          WHERE scope_type = ? AND scope_id = ?
-        `).run(
-          input.ownerKey,
-          input.leaseToken,
-          now,
-          input.expiresAt,
-          now,
-          input.scopeType,
-          input.scopeId
-        );
-        const updated = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
-        this.notifyRealtimeForLease(input.scopeType, input.scopeId);
-        return updated;
-      }
-
       const id = randomUUID();
-      this.db.prepare(`
+
+      const res = this.db.prepare(`
         INSERT INTO execution_leases (id, scope_type, scope_id, owner_key, lease_token, acquired_at, expires_at, last_heartbeat_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(scope_type, scope_id) DO UPDATE SET
+          owner_key = excluded.owner_key,
+          lease_token = excluded.lease_token,
+          acquired_at = excluded.acquired_at,
+          expires_at = excluded.expires_at,
+          last_heartbeat_at = excluded.last_heartbeat_at
+        WHERE execution_leases.expires_at <= excluded.acquired_at
+           OR execution_leases.lease_token = excluded.lease_token
       `).run(
         id,
         input.scopeType,
@@ -1322,10 +978,15 @@ export class ExecutionRepository {
         input.expiresAt,
         now
       );
-      const created = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
+
+      if (res.changes === 0) {
+        throw new ConcurrencyConflictError(`Lease already held for ${input.scopeType}:${input.scopeId}`);
+      }
+
+      const updated = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
       this.notifyRealtimeForLease(input.scopeType, input.scopeId);
-      return created;
-      } catch (error) {
+      return updated;
+    } catch (error) {
       if (error instanceof RepositoryError) throw error;
       this.logger.error("Operation failed", { error, scopeType: input.scopeType, scopeId: input.scopeId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
@@ -2015,41 +1676,52 @@ export class ExecutionRepository {
     return right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id);
   }
 
-  private notifyRealtime(projectId: string, includeOverview: boolean): void {
+  private notifyRealtime(projectId: string, includeOverview: boolean, immediate: boolean = false): void {
     const normalizedProjectId = String(projectId || "").trim();
     if (!normalizedProjectId || !this.realtimeNotifier) {
       return;
     }
 
     const existing = this.pendingRealtimeProjectRefreshes.get(normalizedProjectId);
+    const isImmediate = immediate || Boolean(existing?.immediate);
+
     this.pendingRealtimeProjectRefreshes.set(normalizedProjectId, {
       includeOverview: Boolean(existing?.includeOverview) || includeOverview,
+      immediate: isImmediate,
     });
 
-    if (this.realtimeProjectRefreshTimer) {
-      return;
+    const existingTimer = this.realtimeProjectRefreshTimers.get(normalizedProjectId);
+    if (existingTimer) {
+      if (isImmediate && !existing?.immediate) {
+        clearTimeout(existingTimer);
+      } else {
+        return;
+      }
     }
 
-    this.realtimeProjectRefreshTimer = setTimeout(() => {
-      this.realtimeProjectRefreshTimer = null;
-      this.flushPendingRealtimeProjectRefreshes();
-    }, 0);
+    const delayMs = isImmediate ? 0 : 75;
+    const timer = setTimeout(() => {
+      this.realtimeProjectRefreshTimers.delete(normalizedProjectId);
+      this.flushProjectRealtime(normalizedProjectId);
+    }, delayMs);
+
+    this.realtimeProjectRefreshTimers.set(normalizedProjectId, timer);
   }
 
-  private flushPendingRealtimeProjectRefreshes(): void {
-    if (!this.realtimeNotifier || this.pendingRealtimeProjectRefreshes.size === 0) {
-      this.pendingRealtimeProjectRefreshes.clear();
+  private flushProjectRealtime(projectId: string): void {
+    if (!this.realtimeNotifier) {
       return;
     }
 
-    const pendingEntries = [...this.pendingRealtimeProjectRefreshes.entries()];
-    this.pendingRealtimeProjectRefreshes.clear();
-
-    for (const [projectId, options] of pendingEntries) {
-      this.realtimeNotifier.scheduleProjectExecutionRefresh(projectId, {
-        includeOverview: options.includeOverview,
-      });
+    const options = this.pendingRealtimeProjectRefreshes.get(projectId);
+    if (!options) {
+      return;
     }
+
+    this.pendingRealtimeProjectRefreshes.delete(projectId);
+    this.realtimeNotifier.scheduleProjectExecutionRefresh(projectId, {
+      includeOverview: options.includeOverview,
+    });
   }
 
   private shouldPublishSprintRunUpdate(input: UpdateSprintRunInput): boolean {
@@ -2075,8 +1747,40 @@ export class ExecutionRepository {
     }
   }
 
-  public resolveLeaseProjectId(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): string | null {
+    public resolveLeaseProjectId(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): string | null {
     const cacheKey = `${scopeType}:${scopeId}`;
+    const cached = this.leaseProjectCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    let projectId: string | null = null;
+
+    if (scopeType === "sprint") {
+      const row = this.db.prepare(`
+        SELECT project_id
+        FROM sprints
+        WHERE id = ?
+      `).get(scopeId) as { project_id: string } | undefined;
+      projectId = row?.project_id || null;
+    } else if (scopeType === "task_dispatch") {
+      const row = this.db.prepare(`
+        SELECT project_id
+        FROM task_dispatches
+        WHERE id = ?
+      `).get(scopeId) as { project_id: string } | undefined;
+      projectId = row?.project_id || null;
+    }
+
+    if (projectId !== null) {
+      if (this.leaseProjectCache.size >= 1000) {
+        this.leaseProjectCache.delete(this.leaseProjectCache.keys().next().value!);
+      }
+      this.leaseProjectCache.set(cacheKey, projectId);
+    }
+
+    return projectId;
+  }:${scopeId}`;
     const cached = this.leaseProjectCache.get(cacheKey);
     if (cached !== undefined) {
       return cached;

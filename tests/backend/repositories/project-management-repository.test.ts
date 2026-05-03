@@ -533,4 +533,54 @@ describe("ProjectManagementRepository", () => {
 
     expect(updated.updatedAt).toBe(task.updatedAt);
   });
+
+
+  describe("createUniqueSlug optimization", () => {
+    it("should generate incremental slugs correctly when multiple collisions exist, and only execute one query", async () => {
+      const { repository, storage } = await createRepository();
+
+      const name = "Query Optimized Project Slug";
+      const baseSlug = "query-optimized-project-slug";
+
+      const proj1 = repository.createProject({
+        name,
+        sourceType: "local",
+        sourceRef: "/path1",
+      });
+      expect(proj1.slug).toBe(baseSlug);
+
+      const proj2 = repository.createProject({
+        name,
+        sourceType: "local",
+        sourceRef: "/path2",
+      });
+      expect(proj2.slug).toBe(`${baseSlug}-2`);
+
+      const proj3 = repository.createProject({
+        name,
+        sourceType: "local",
+        sourceRef: "/path3",
+      });
+      expect(proj3.slug).toBe(`${baseSlug}-3`);
+
+      // Spy on the database prepare method to ensure it's only called once
+      // to resolve the final slug
+      const db = storage.getDatabase();
+      const prepareSpy = vi.spyOn(db, 'prepare');
+
+      const proj4 = repository.createProject({
+        name,
+        sourceType: "local",
+        sourceRef: "/path4",
+      });
+      expect(proj4.slug).toBe(`${baseSlug}-4`);
+
+      // Count queries that match our optimized select
+      const selectQueries = prepareSpy.mock.calls.filter(call => {
+        return call[0] && call[0].includes('SELECT slug') && call[0].includes('FROM projects') && call[0].includes('WHERE slug LIKE ?');
+      });
+
+      expect(selectQueries.length).toBe(1);
+    });
+  });
 });

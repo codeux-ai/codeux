@@ -192,6 +192,7 @@ export function createCoreDependencies(
     memoryRepository,
     embeddingService,
     logger.child({ component: "memory-service" }),
+    dashboardRealtimeService,
   );
   const memoryPromotionService = new MemoryPromotionService(
     memoryService,
