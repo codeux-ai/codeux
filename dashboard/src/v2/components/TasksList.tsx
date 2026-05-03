@@ -47,6 +47,18 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
         return true;
     }), [activeTasks, activeFilter]);
 
+    const prevTasksRef = useRef(filteredTasks);
+    const [renderedTasks, setRenderedTasks] = useState(filteredTasks);
+
+    // Check during render if filteredTasks changed. If so, capture Flip state before rendering the new DOM.
+    if (filteredTasks !== prevTasksRef.current) {
+        if (listRef.current) {
+            flipStateRef.current = Flip.getState(listRef.current.children);
+        }
+        prevTasksRef.current = filteredTasks;
+        setRenderedTasks(filteredTasks);
+    }
+
     const initialMountRef = useRef(true);
 
     useLayoutEffect(() => {
@@ -61,7 +73,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                     stagger: 0.02,
                     scale: true,
                     absolute: true,
-                    onEnter: (elements: Element[]) => gsap.fromTo(elements, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.02 }),
+                    onEnter: (elements: Element[]) => gsap.fromTo(elements, { opacity: 0, y: 10, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.3, stagger: 0.02, ease: "power2.out" }),
                     onLeave: (elements: Element[]) => gsap.to(elements, { opacity: 0, duration: 0.2 })
                 });
                 flipStateRef.current = null;
@@ -93,7 +105,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                     </div>
                 </div>
                 <div className="text-xs font-semibold text-slate-400 dark:text-slate-600 font-mono hidden sm:block">
-                    {filteredTasks.length} active
+                    {renderedTasks.length} active
                 </div>
             </div>
 
@@ -107,12 +119,12 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         <SkeletonRow />
                         <SkeletonRow />
                     </>
-                ) : filteredTasks.length > 0 ? (
-                    filteredTasks.map((task) => (
+                ) : renderedTasks.length > 0 ? (
+                    renderedTasks.map((task) => (
                         <div key={task.id} data-flip-id={task.id} className="task-flip-item"><TaskRow task={task} /></div>
                     ))
                 ) : (
-                    <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+                    <div data-flip-id="empty-state" className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
                         <svg className="w-12 h-12 mb-4 text-slate-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                         </svg>

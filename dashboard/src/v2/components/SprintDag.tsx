@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import gsap from "gsap";
 import { memo } from "preact/compat";
 import { Activity, AlertTriangle, CheckCircle2, Clock3, Code2, GitBranch, Hourglass, Sparkles, Timer, Workflow, XCircle } from "lucide-preact";
 import type { ExecutionTaskDispatchSummary, Subtask } from "../../types.js";
@@ -256,7 +257,7 @@ const areDagNodePropsEqual = (
          prevProps.dispatch?.provider === nextProps.dispatch?.provider;
 };
 
-const DagNode = memo(({ node, dispatch }: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary }) => {
+const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, onNodeClick?: (node: SprintDagNodeModel & { x: number; y: number; }) => void }) => {
   const tone = getNodeTone(node);
   const executorLabel = formatExecutor(dispatch);
   const mergeLabel = getMergeLabel(node.task);
@@ -264,7 +265,7 @@ const DagNode = memo(({ node, dispatch }: { node: SprintDagNodeModel & { x: numb
 
   return (
     <div
-      className={`group/dag-node pointer-events-auto absolute z-10 hover:z-50 focus-within:z-50 ${tone.glow} ${tone.dim}`}
+      className={`group/dag-node pointer-events-auto absolute z-10 hover:z-50 focus-within:z-50 ${tone.glow} ${tone.dim}`} onClick={() => onNodeClick?.(node)}
       style={{
         left: `${node.x}px`,
         top: `${node.y}px`,
@@ -428,6 +429,23 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
     }));
   }, [model.columns, maxDepth]);
 
+  const handleNodeClick = (node: SprintDagNodeModel & { x: number; y: number; }) => {
+    if (!scrollRef.current) return;
+    const containerWidth = scrollRef.current.clientWidth;
+    const containerHeight = scrollRef.current.clientHeight;
+    // Calculate the target scroll position to center the node
+    const NODE_W = 280;
+    const NODE_H = 188;
+    const targetX = node.x - containerWidth / 2 + NODE_W / 2;
+    const targetY = node.y - containerHeight / 2 + NODE_H / 2;
+
+    scrollRef.current.scrollTo({
+      left: Math.max(0, targetX),
+      top: Math.max(0, targetY),
+      behavior: 'smooth'
+    });
+  };
+
   const handlePointerDown = (e: preact.JSX.TargetedPointerEvent<HTMLDivElement>) => {
     if (!scrollRef.current) return;
     isDraggingRef.current = true;
@@ -451,6 +469,19 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
     isDraggingRef.current = false;
     setIsDraggingState(false);
   };
+
+  useLayoutEffect(() => {
+    if (hasSprintContext && safeTasks.length > 0 && scrollRef.current) {
+      const container = scrollRef.current;
+      const content = container.querySelector('.relative.pointer-events-none');
+      if (content) {
+        gsap.fromTo(content,
+          { opacity: 0, scale: 0.96 },
+          { opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" }
+        );
+      }
+    }
+  }, [hasSprintContext]);
 
   if (!hasSprintContext || safeTasks.length === 0) {
     return (
@@ -727,7 +758,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
               {positionedNodes.map((node) => {
                 const dispatch = dispatchByTaskId.get(node.task.record_id || "") || dispatchByTaskId.get(node.task.id);
                 return (
-                  <DagNode key={node.task.id} node={node} dispatch={dispatch} />
+                  <DagNode key={node.task.id} node={node} dispatch={dispatch} onNodeClick={handleNodeClick} />
                 );
               })}
             </div>

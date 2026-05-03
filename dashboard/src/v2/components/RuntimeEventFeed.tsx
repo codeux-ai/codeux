@@ -25,8 +25,8 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
 
             if (newElements.length > 0) {
                 gsap.fromTo(newElements,
-                    { opacity: 0, x: 10 },
-                    { opacity: 1, x: 0, duration: 0.3, stagger: 0.04, ease: "power2.out" }
+                    { opacity: 0, x: 10, scale: 0.98, filter: 'blur(2px)' },
+                    { opacity: 1, x: 0, scale: 1, filter: 'blur(0px)', duration: 0.4, stagger: 0.05, ease: "power3.out" }
                 );
                 newElements.forEach(el => el.setAttribute('data-entered', 'true'));
             }

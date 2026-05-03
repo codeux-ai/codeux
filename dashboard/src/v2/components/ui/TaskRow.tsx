@@ -38,7 +38,12 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
             </div>
 
             {/* Status */}
-            <div className="col-span-4 md:col-span-2 flex items-center gap-2 min-w-0">
+            <div className={`col-span-4 md:col-span-2 flex items-center gap-2 min-w-0 px-2.5 py-1 rounded-full transition-colors duration-300 w-fit ${
+                task.status === 'completed' ? 'bg-status-green/10' :
+                task.status === 'coding_completed' ? 'bg-cyan-500/10' :
+                task.status === 'in_progress' ? 'bg-signal-500/10' :
+                'bg-slate-500/5 dark:bg-slate-500/10'
+            }`}>
                 {task.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-status-green dark:text-status-green" strokeWidth={2} />}
                 {task.status === 'coding_completed' && <CheckCircle2 className="w-4 h-4 text-cyan-700 dark:text-cyan-500" strokeWidth={2} />}
                 {task.status === 'in_progress' && (
@@ -49,7 +54,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
                 )}
                 {task.status === 'pending' && <Circle className="w-4 h-4 text-slate-500 dark:text-slate-400" strokeWidth={2} />}
 
-                <span className={`text-[9px] md:text-[10px] font-bold uppercase tracking-[0.14em] ${
+                <span className={`text-[9px] md:text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 ease-in-out ${
                     task.status === 'completed'   ? 'text-status-green dark:text-status-green' :
                     task.status === 'coding_completed' ? 'text-cyan-700 dark:text-cyan-500' :
                     task.status === 'in_progress' ? 'text-signal-600 dark:text-signal-500' :
