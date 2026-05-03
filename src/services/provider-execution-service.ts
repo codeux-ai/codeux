@@ -80,6 +80,7 @@ export class ProviderExecutionService {
           projectId: args.projectId,
           sprintId: args.sprintId,
           taskId: args.taskId,
+          skipValidation: true,
           sprintRunId: args.sprintRunId,
           dispatchId: args.dispatchId,
           taskRunId: args.taskRunId,

@@ -1522,7 +1522,7 @@ describe("CycleRunner attention sync", () => {
     }));
   });
 
-  it("reviews multiple newly completed tasks in parallel when in DOCKER mode", async () => {
+  it("reviews multiple newly completed tasks in parallel", async () => {
     const deps = buildDeps();
     let resolveTask1: () => void;
     let resolveTask2: () => void;
@@ -1560,7 +1560,6 @@ describe("CycleRunner attention sync", () => {
           enabled: true,
         },
       },
-      cliWorkflow: { executionMode: "DOCKER" },
     });
 
     const runner = new CycleRunner(deps);

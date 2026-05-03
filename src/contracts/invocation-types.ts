@@ -43,6 +43,7 @@ export interface CreateExecutionInvocationInput {
   projectId: string;
   sprintId?: string | null;
   taskId?: string | null;
+  skipValidation?: boolean;
   sprintRunId?: string | null;
   dispatchId?: string | null;
   taskRunId?: string | null;

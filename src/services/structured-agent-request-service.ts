@@ -67,6 +67,7 @@ export class StructuredAgentRequestService {
     if (!invocationId) {
       const invocation = this.deps.executionRepository?.createExecutionInvocation({
         projectId: args.projectId,
+        skipValidation: true,
         sprintId: args.sprintId || null,
         taskId: args.taskId || null,
         sprintRunId: args.sprintRunId || null,

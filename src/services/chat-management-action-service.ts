@@ -58,6 +58,7 @@ export class ChatManagementActionService {
     const startedAt = new Date().toISOString();
     const execInvocationId = this.deps.executionRepository.createExecutionInvocation({
       projectId,
+      skipValidation: true,
       sprintId: null,
       taskId: null,
       sprintRunId: null,
@@ -117,6 +118,7 @@ export class ChatManagementActionService {
     const startedAt = new Date().toISOString();
     const execInvocationId = this.deps.executionRepository.createExecutionInvocation({
       projectId: args.projectId,
+      skipValidation: true,
       sprintId: null,
       taskId: null,
       sprintRunId: null,
@@ -206,6 +208,7 @@ export class ChatManagementActionService {
     // Create execution invocation specifically to track the management action exchange
     const execInvocationId = this.deps.executionRepository.createExecutionInvocation({
       projectId: args.projectId,
+      skipValidation: true,
       sprintId: null,
       taskId: null,
       sprintRunId: null,

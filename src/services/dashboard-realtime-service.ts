@@ -60,6 +60,9 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
   private overviewPublishedAt = 0;
   private snapshotLoaders: DashboardRealtimeSnapshotLoaders | null = null;
 
+  private executionRefreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private queuedExecutionRefreshProjectIds = new Set<string>();
+
   constructor(
     private readonly eventRepository: DashboardRealtimeEventRepository,
     private readonly logger: Logger,
@@ -94,6 +97,30 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     return this.eventRepository.listEventsSince(scopes, afterSequence, limit);
   }
 
+  private scheduleExecutionRefreshDebouncer(): void {
+    if (this.executionRefreshDebounceTimer) {
+      return;
+    }
+
+    this.executionRefreshDebounceTimer = setTimeout(() => {
+      this.executionRefreshDebounceTimer = null;
+      const projectIds = Array.from(this.queuedExecutionRefreshProjectIds);
+      this.queuedExecutionRefreshProjectIds.clear();
+
+      if (projectIds.length > 0) {
+        this.publishRawEvent({
+          scopeType: "projects",
+          scopeId: "projects",
+          eventType: "execution_refresh",
+          entityType: "project_collection",
+          entityId: "projects",
+          payload: { projectIds },
+          replayable: false,
+        });
+      }
+    }, 10);
+  }
+
   scheduleProjectExecutionRefresh(
     projectId: string,
     options?: { includeOverview?: boolean; includeProjects?: boolean },
@@ -112,6 +139,9 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       this.pendingOverview = true;
     }
     this.scheduleFlush();
+
+    this.queuedExecutionRefreshProjectIds.add(normalizedProjectId);
+    this.scheduleExecutionRefreshDebouncer();
   }
 
   scheduleProjectRuntimeStatusRefresh(projectId: string): void {
@@ -157,6 +187,9 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
   scheduleProjectsRefresh(): void {
     this.pendingProjects = true;
     this.scheduleFlush();
+
+    this.queuedExecutionRefreshProjectIds.add("projects");
+    this.scheduleExecutionRefreshDebouncer();
   }
 
   publishRawEvent(input: AppendDashboardRealtimeEventInput): DashboardRealtimeEvent {

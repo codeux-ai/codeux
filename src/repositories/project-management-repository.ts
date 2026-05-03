@@ -917,8 +917,12 @@ export class ProjectManagementRepository {
     }
 
     if (output.length > 0) {
-      const tasks = this.getTasksByIds(output);
-      const foundTaskIds = new Set(tasks.map(t => t.id));
+      const rows = this.storage.executeChunkedInQuery({
+        sqlPrefix: "SELECT id FROM tasks WHERE id",
+        items: output,
+      }) as { id: string }[];
+
+      const foundTaskIds = new Set(rows.map(r => r.id));
       for (const normalized of output) {
         if (!foundTaskIds.has(normalized)) {
           throw new Error(`Task not found: ${normalized}`);

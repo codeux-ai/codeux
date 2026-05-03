@@ -41,6 +41,7 @@ function makeFloat32Buffer(values: number[]): Buffer {
 describe("MemoryService", () => {
   const mockRepo = {
     createMemory: vi.fn(),
+    createMemories: vi.fn(),
     getMemory: vi.fn(),
     getMemories: vi.fn(),
     updateMemory: vi.fn(),
@@ -140,6 +141,42 @@ describe("MemoryService", () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to embed memory mem-fail"));
       expect(mockRepo.getMemory).not.toHaveBeenCalled();
       expect(result).toEqual(created);
+    });
+  });
+
+  describe("createMemories", () => {
+    it("creates via repository and triggers async embeddings when model is loaded", async () => {
+      const input1 = { scope: "sprint", content: "mem1", category: "context" };
+      const input2 = { scope: "sprint", content: "mem2", category: "context" };
+      const records = [
+        makeMemoryRecord({ id: "mem-1" }),
+        makeMemoryRecord({ id: "mem-2" })
+      ];
+
+      mockRepo.createMemories.mockReturnValue(records);
+      mockEmbeddingService.isLoaded.mockReturnValue(true);
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(384);
+      mockEmbeddingService.embed.mockResolvedValue(new Float32Array(384));
+
+      const result = await service.createMemories("proj-1", [input1 as any, input2 as any]);
+
+      expect(mockRepo.createMemories).toHaveBeenCalledWith("proj-1", [input1, input2]);
+      expect(mockEmbeddingService.embed).toHaveBeenCalledTimes(2);
+      expect(mockRepo.saveEmbedding).toHaveBeenCalledTimes(2);
+      expect(result).toEqual(records);
+    });
+
+    it("works without model loaded (no embeddings)", async () => {
+      const records = [makeMemoryRecord({ id: "mem-1" })];
+      mockRepo.createMemories.mockReturnValue(records);
+      mockEmbeddingService.isLoaded.mockReturnValue(false);
+
+      const result = await service.createMemories("proj-1", [{} as any]);
+
+      expect(mockRepo.createMemories).toHaveBeenCalled();
+      expect(mockEmbeddingService.embed).not.toHaveBeenCalled();
+      expect(result).toEqual(records);
     });
   });
 

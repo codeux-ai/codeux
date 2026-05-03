@@ -101,6 +101,35 @@ describe("DashboardRealtimeService", () => {
     });
   });
 
+  it("Confirm that firing 100 consecutive schedules synchronously results in exactly 1 emitted notification payload", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    const eventRepoMock = {
+      getLatestSequence: () => 1,
+      appendEvent: vi.fn().mockImplementation((input) => ({ sequence: 2, ...input })),
+    };
+
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+
+    let executionRefreshCount = 0;
+    service.subscribe((event) => {
+      if (event.eventType === "execution_refresh") {
+        executionRefreshCount++;
+      }
+    });
+
+    vi.useFakeTimers();
+    for (let i = 0; i < 100; i++) {
+      service.scheduleProjectExecutionRefresh(`proj-${i}`);
+    }
+
+    vi.advanceTimersByTime(100);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(executionRefreshCount).toBe(1);
+    vi.useRealTimers();
+  });
+
   it("fans execution refreshes into the unified live snapshot stream", async () => {
     const { service } = await createService();
     const eventTypes: string[] = [];
