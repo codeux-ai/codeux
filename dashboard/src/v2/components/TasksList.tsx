@@ -9,6 +9,7 @@ import { FilterStrip } from "./ui/FilterStrip.js";
 import { SkeletonRow } from "./ui/ListSkeletons.js";
 import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../lib/overview-streams.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import { VirtualizedItem } from "./ui/VirtualizedItem.js";
 type TaskFilter = "All Tasks" | "Running" | "Queued" | "Completed";
 
 const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
@@ -121,7 +122,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                     </>
                 ) : renderedTasks.length > 0 ? (
                     renderedTasks.map((task) => (
-                        <div key={task.id} data-flip-id={task.id} className="task-flip-item"><TaskRow task={task} /></div>
+                        <VirtualizedItem key={task.id} data-flip-id={task.id} className="task-flip-item" defaultHeight={84}><TaskRow task={task} /></VirtualizedItem>
                     ))
                 ) : (
                     <div data-flip-id="empty-state" className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">

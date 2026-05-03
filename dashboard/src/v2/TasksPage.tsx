@@ -28,6 +28,7 @@ import type { Sprint, Task, TaskPriority, TaskStatus } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
 import { useProjectTasks } from "./hooks/use-project-tasks.js";
+import { VirtualizedItem } from "./components/ui/VirtualizedItem.js";
 import { createTask, deleteTask, updateTask } from "./lib/project-api.js";
 import { deriveTaskBoardState } from "./lib/task-board-state.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
@@ -570,14 +571,14 @@ export const TasksPage: FunctionComponent = () => {
                   if (!viewModel) return null;
 
                   return (
-                    <div key={task.recordId} className="task-card-entry">
+                    <VirtualizedItem key={task.recordId} className="task-card-entry" defaultHeight={150}>
                       <KanbanTaskCard
                         viewModel={viewModel}
                         index={index}
                         onEdit={handleEditClick}
                         onDelete={handleDeleteTask}
                       />
-                    </div>
+                    </VirtualizedItem>
                   );
                 })
               ) : null}
