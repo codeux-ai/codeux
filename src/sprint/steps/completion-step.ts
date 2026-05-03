@@ -1,5 +1,5 @@
 import type { CiIntelligenceSettings } from "../../contracts/app-types.js";
-import type { InstructionTemplateId } from "../../instructions/instruction-template-catalog.js";
+import type { InstructionTemplateId, InstructionTemplateVariables } from "../../instructions/instruction-template-catalog.js";
 
 interface CompletionStepOptions {
   defaultBranch: string;
@@ -7,7 +7,7 @@ interface CompletionStepOptions {
   sprintNumber: number;
   githubMode: "REMOTE" | "LOCAL";
   ciIntelligence: CiIntelligenceSettings;
-  renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>) => Promise<string>;
+  renderInstruction: <T extends InstructionTemplateId>(templateId: T, variables: InstructionTemplateVariables[T]) => Promise<string>;
 }
 
 const buildMainCiWaitLine = (settings: CiIntelligenceSettings): string => {

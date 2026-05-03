@@ -10,7 +10,7 @@ import type { Subtask,
   SprintLoopStepSettings,
   DashboardStatusSnapshot,
  } from "../../../contracts/app-types.js";
-import type { InstructionTemplateId } from "../../../instructions/instruction-template-catalog.js";
+import type { InstructionTemplateId, InstructionTemplateVariables } from "../../../instructions/instruction-template-catalog.js";
 import type { MemoryPromotionService } from "../../../services/memory-promotion-service.js";
 import type { QualityAssuranceService } from "../../../services/quality-assurance-service.js";
 import type { Logger } from "../../../shared/logging/logger.js";
@@ -39,7 +39,7 @@ export interface WatchLoopDependencies {
   completedSprints: Set<string>;
   sleep?: (ms: number) => Promise<void>;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
-  renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
+  renderInstruction: <T extends InstructionTemplateId>(templateId: T, variables: InstructionTemplateVariables[T], repoPath?: string) => Promise<string>;
   updateLastStatus: (status: DashboardStatusSnapshot) => void;
   resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
   memoryPromotionService?: MemoryPromotionService;
@@ -291,9 +291,9 @@ export class WatchLoopRunner {
     });
   }
 
-  private async renderInstruction(
-    templateId: any,
-    variables: Record<string, unknown>,
+  private async renderInstruction<T extends InstructionTemplateId>(
+    templateId: T,
+    variables: InstructionTemplateVariables[T],
     repoPath?: string
   ): Promise<string> {
     return await this.deps.renderInstruction(templateId, variables, repoPath);
@@ -386,7 +386,7 @@ export class WatchLoopRunner {
     needsManualMerge: boolean;
     allTerminal: boolean;
     noMoreActionPossible: boolean;
-    activeMainMergeAttentionItems: Array<{ id: string; sprintRunId: string | null; attentionType: string; ownerType?: string; status?: string; summaryMarkdown: string; payload: Record<string, unknown> | null }>;
+    activeMainMergeAttentionItems: ProjectAttentionItemRecord[];
   }): Promise<{ status: "continue" | "exit" | "wait"; report: string }> {
     const {
       scopedExecutionContext, sprintRunId, repoPath, defaultFeatureBranch, defaultBranch,
@@ -724,22 +724,7 @@ export class WatchLoopRunner {
   }
 }
 function resolveMainMergeConflictAttentionItems(
-  projectAttentionService: {
-    listActiveProjectItems: (projectId: string) => Array<{
-      id: string;
-      sprintRunId: string | null;
-      attentionType: string;
-      summaryMarkdown: string;
-      payload: Record<string, unknown> | null;
-    }>;
-    resolveItem: (itemId: string, input?: {
-      status?: "resolved" | "dismissed" | "expired";
-      reason?: string;
-      resolutionSummaryMarkdown?: string;
-      workerEndpointId?: string | null;
-      payloadPatch?: Record<string, unknown> | null;
-    }) => unknown;
-  },
+  projectAttentionService: WatchLoopAttentionDependencies,
   projectId: string,
   sprintRunId: string,
 ): void {
@@ -765,26 +750,10 @@ function resolveMainMergeConflictAttentionItems(
 }
 
 function collectActiveMainMergeAttentionItems(
-  projectAttentionService: {
-    listActiveProjectItems: (projectId: string) => Array<{
-      id: string;
-      sprintRunId: string | null;
-      attentionType: string;
-      ownerType?: string;
-      status?: string;
-      summaryMarkdown: string;
-      payload: Record<string, unknown> | null;
-    }>;
-  },
+  projectAttentionService: WatchLoopAttentionDependencies,
   projectId: string,
   sprintRunId: string,
-): Array<{
-  id: string;
-  sprintRunId: string | null;
-  attentionType: string;
-  summaryMarkdown: string;
-  payload: Record<string, unknown> | null;
-}> {
+): ProjectAttentionItemRecord[] {
   return projectAttentionService.listActiveProjectItems(projectId).filter((item) => (
     item.sprintRunId === sprintRunId && isMainMergeAttentionItem(item)
   ));

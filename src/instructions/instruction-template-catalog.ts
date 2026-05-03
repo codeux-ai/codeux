@@ -21,6 +21,26 @@ export const INSTRUCTION_TEMPLATE_PATHS = {
 export type InstructionTemplateId = keyof typeof INSTRUCTION_TEMPLATE_PATHS;
 export const INSTRUCTION_TEMPLATE_IDS = Object.keys(INSTRUCTION_TEMPLATE_PATHS) as InstructionTemplateId[];
 
+export interface InstructionTemplateVariables {
+  branchMissing: { feature_branch: string; create_branch_step: string; push_branch_step: string; action: string };
+  planningMissing: { planning_target: string; subtasks_dir: string };
+  planningCreated: { sprint_number: number; planning_target: string; subtasks_dir: string; planning_guide_block: string };
+  mergeHeader: Record<string, never>;
+  mergeTask: { task_id: string; provider: string; git_manager_skill: string; feature_branch: string; feature_ci_wait_line: string; feature_comments_line: string; task_reference: string };
+  actionRequiredAgentHeader: Record<string, never>;
+  actionRequiredAgentTask: { task_id: string; provider: string; session_state: string; intervention_hint_line: string };
+  actionRequiredHumanHeader: Record<string, never>;
+  actionRequiredHumanTask: { task_id: string; provider: string; session_state: string; intervention_hint_line: string };
+  watchHeader: { sprint_number: number; feature_branch: string; dashboard_port: number };
+  watchMergeRequired: Record<string, never>;
+  watchNoMoreActions: Record<string, never>;
+  completionSteps: { git_manager_skill: string; feature_branch: string; default_branch: string; main_ci_wait_line: string; main_comments_line: string; next_sprint: number };
+  cleanupAllMerged: { planning_target: string };
+  cleanupFailed: { planning_target: string };
+  cleanupDeferred: Record<string, never>;
+  cleanupEmpty: Record<string, never>;
+}
+
 export const DEFAULT_INSTRUCTION_TEMPLATES: Record<InstructionTemplateId, string> = {
   branchMissing: `### 🛑 ACTION REQUIRED: Branch Configuration Missing\n\nSprint OS could not prepare the feature branch \`{{feature_branch}}\` automatically.\n\n{{create_branch_step}}{{push_branch_step}}**Important:** Once these steps are completed, run this tool again to proceed with the \`{{action}}\` phase.`,
   planningMissing: `### 🛑 ACTION REQUIRED: Sprint Planning Missing\n\nNo tasks were found for \`{{planning_target}}{{subtasks_dir}}\`. You must create or import sprint tasks before orchestration can begin.\n\n**Instruction:** Use the v2 dashboard Projects/Sprints/Tasks flow or markdown import to populate the sprint, then start or resume orchestration from the dashboard.`,
