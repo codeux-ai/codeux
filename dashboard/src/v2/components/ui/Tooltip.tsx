@@ -2,6 +2,7 @@ import type { FunctionComponent, ComponentChildren } from "preact";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
+import { tooltipMotion } from "../../utils/motion.js";
 import { calculatePosition } from "../../lib/positioning/index.js";
 
 interface TooltipProps {
@@ -77,19 +78,9 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
         gsap.killTweensOf(tooltipRef.current);
 
         if (isVisible) {
-            gsap.fromTo(
-                tooltipRef.current,
-                { opacity: 0, scale: 0.9, y: position === "bottom" ? -5 : position === "top" ? 5 : 0, x: position === "right" ? -5 : position === "left" ? 5 : 0 },
-                { opacity: 1, scale: 1, y: 0, x: 0, duration: 0.4, ease: "back.out(1.7)" }
-            );
+            tooltipMotion.enter(tooltipRef.current, position);
         } else if (isRendered) {
-            gsap.to(tooltipRef.current, {
-                opacity: 0,
-                scale: 0.95,
-                duration: 0.15,
-                ease: "power2.in",
-                onComplete: () => setIsRendered(false)
-            });
+            tooltipMotion.exit(tooltipRef.current, position, () => setIsRendered(false));
         }
     }, [isVisible, isRendered, position]);
 

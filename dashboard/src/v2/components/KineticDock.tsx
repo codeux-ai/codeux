@@ -51,6 +51,7 @@ export const KineticDock: FunctionComponent = () => {
     const dockRef    = useRef<HTMLDivElement>(null);
     const itemRefs   = useRef<(HTMLAnchorElement | null)[]>([]);
     const [indicatorState, setIndicatorState] = useState({ left: 22, initialized: false });
+    const indicatorRef = useRef<HTMLDivElement>(null);
     const { selectedProject } = useProjectData();
     const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
     const browserVisible = !selectedProject || (
@@ -72,7 +73,7 @@ export const KineticDock: FunctionComponent = () => {
 
         // Use offsetLeft to make calculation transformation-invariant (GSAP scaling won't affect it)
         const center = el.offsetLeft + (el.offsetWidth / 2);
-        setIndicatorState({ left: center - 14, initialized: true }); // 14 = half of 28px indicator
+        setIndicatorState({ left: center - 14, initialized: true });
     }, [activeIndex]);
 
     /* Entrance */
@@ -105,7 +106,7 @@ export const KineticDock: FunctionComponent = () => {
             const distance = Math.abs(mouseX - itemCenterX);
 
             // Fisheye logic: items within 100px get affected
-            const maxDistance = 100;
+            const maxDistance = 150;
             if (distance < maxDistance) {
                 // Calculate scale (1.0 to 1.3)
                 const scale = 1 + (0.3 * (1 - (distance / maxDistance)));
@@ -117,8 +118,8 @@ export const KineticDock: FunctionComponent = () => {
                     gsap.to(iconWrapper, {
                         scale,
                         y: translateY,
-                        duration: 0.15,
-                        ease: "power2.out",
+                        duration: 0.35,
+                        ease: "power4.out",
                         overwrite: "auto"
                     });
                 }
@@ -129,8 +130,8 @@ export const KineticDock: FunctionComponent = () => {
                     gsap.to(iconWrapper, {
                         scale: 1,
                         y: 0,
-                        duration: 0.25,
-                        ease: "power2.out",
+                        duration: 0.35,
+                        ease: "power4.out",
                         overwrite: "auto"
                     });
                 }
@@ -149,18 +150,28 @@ export const KineticDock: FunctionComponent = () => {
                     scale: 1,
                     y: 0,
                     duration: 0.35,
-                    ease: "elastic.out(1, 0.7)",
+                    ease: "power4.out",
                     overwrite: "auto",
-                    clearProps: "transform" // Reset inline styles so CSS can take over again
+                    clearProps: "transform"
                 });
             }
         });
     }, [prefersReducedMotion]);
 
+
     /* Active indicator — DOM-based so the divider doesn't break the math */
     useLayoutEffect(() => {
         updateIndicatorPosition();
     }, [updateIndicatorPosition]);
+
+    useLayoutEffect(() => {
+        if (!indicatorState.initialized && indicatorRef.current) {
+            gsap.set(indicatorRef.current, { left: indicatorState.left });
+        } else if (indicatorRef.current) {
+            gsap.to(indicatorRef.current, { left: indicatorState.left, duration: 0.5, ease: "elastic.out(1, 0.8)", overwrite: "auto" });
+        }
+    }, [indicatorState.left, indicatorState.initialized]);
+
 
     useEffect(() => {
         window.addEventListener('resize', updateIndicatorPosition);
@@ -229,11 +240,12 @@ export const KineticDock: FunctionComponent = () => {
             >
                 {/* Active Signal Indicator */}
                 <div
+                    ref={indicatorRef}
                     className={`absolute bottom-2 h-[3px] w-7 rounded-full
                                bg-signal-500 shadow-[0_0_12px_rgba(0,224,160,0.8)]
-                               transition-[left,opacity] duration-500 ease-[cubic-bezier(0.25,1,0.5,1)]
+                               transition-opacity duration-500
                                ${indicatorState.initialized ? "opacity-100" : "opacity-0"}`}
-                    style={{ left: `${indicatorState.left}px` }}
+
                 />
 
                 {/* Chat — left of divider */}
