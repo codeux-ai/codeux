@@ -109,9 +109,9 @@ export const KineticDock: FunctionComponent = () => {
             const maxDistance = 150;
             if (distance < maxDistance) {
                 // Calculate scale (1.0 to 1.3)
-                const scale = 1 + (0.3 * (1 - (distance / maxDistance)));
+                const scale = Math.min(1.2, 1 + (0.3 * (1 - (distance / maxDistance))));
                 // Calculate Y translation (-12px to 0)
-                const translateY = -12 * (1 - (distance / maxDistance));
+                const translateY = -12 * ((scale - 1) / 0.2); // proportional to scale change
 
                 const iconWrapper = el.querySelector('.dock-item-icon-wrapper');
                 if (iconWrapper) {
@@ -164,13 +164,7 @@ export const KineticDock: FunctionComponent = () => {
         updateIndicatorPosition();
     }, [updateIndicatorPosition]);
 
-    useLayoutEffect(() => {
-        if (!indicatorState.initialized && indicatorRef.current) {
-            gsap.set(indicatorRef.current, { left: indicatorState.left });
-        } else if (indicatorRef.current) {
-            gsap.to(indicatorRef.current, { left: indicatorState.left, duration: 0.5, ease: "elastic.out(1, 0.8)", overwrite: "auto" });
-        }
-    }, [indicatorState.left, indicatorState.initialized]);
+
 
 
     useEffect(() => {
@@ -241,9 +235,10 @@ export const KineticDock: FunctionComponent = () => {
                 {/* Active Signal Indicator */}
                 <div
                     ref={indicatorRef}
+                    style={{ left: `${indicatorState.left}px` }}
                     className={`absolute bottom-2 h-[3px] w-7 rounded-full
                                bg-signal-500 shadow-[0_0_12px_rgba(0,224,160,0.8)]
-                               transition-opacity duration-500
+                               transition-[left,opacity] duration-[400ms] ease-[cubic-bezier(0.175,0.885,0.32,1.275)]
                                ${indicatorState.initialized ? "opacity-100" : "opacity-0"}`}
 
                 />
