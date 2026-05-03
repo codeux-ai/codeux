@@ -1212,36 +1212,20 @@ export class ExecutionRepository {
   }
 
   acquireLease(input: AcquireExecutionLeaseInput): ExecutionLeaseRecord {
-    const existing = this.getLease(input.scopeType, input.scopeId);
     const now = new Date().toISOString();
-
-    if (existing && existing.expiresAt > now && existing.leaseToken !== input.leaseToken) {
-      throw new Error(`Lease already held for ${input.scopeType}:${input.scopeId}`);
-    }
-
-    if (existing) {
-      this.db.prepare(`
-        UPDATE execution_leases
-        SET owner_key = ?, lease_token = ?, acquired_at = ?, expires_at = ?, last_heartbeat_at = ?
-        WHERE scope_type = ? AND scope_id = ?
-      `).run(
-        input.ownerKey,
-        input.leaseToken,
-        now,
-        input.expiresAt,
-        now,
-        input.scopeType,
-        input.scopeId
-      );
-      const updated = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
-      this.notifyRealtimeForLease(input.scopeType, input.scopeId);
-      return updated;
-    }
-
     const id = randomUUID();
-    this.db.prepare(`
+
+    const res = this.db.prepare(`
       INSERT INTO execution_leases (id, scope_type, scope_id, owner_key, lease_token, acquired_at, expires_at, last_heartbeat_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(scope_type, scope_id) DO UPDATE SET
+        owner_key = excluded.owner_key,
+        lease_token = excluded.lease_token,
+        acquired_at = excluded.acquired_at,
+        expires_at = excluded.expires_at,
+        last_heartbeat_at = excluded.last_heartbeat_at
+      WHERE execution_leases.expires_at <= excluded.acquired_at
+         OR execution_leases.lease_token = excluded.lease_token
     `).run(
       id,
       input.scopeType,
@@ -1252,9 +1236,14 @@ export class ExecutionRepository {
       input.expiresAt,
       now
     );
-    const created = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
+
+    if (res.changes === 0) {
+      throw new Error(`Lease already held for ${input.scopeType}:${input.scopeId}`);
+    }
+
+    const updated = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
     this.notifyRealtimeForLease(input.scopeType, input.scopeId);
-    return created;
+    return updated;
   }
 
   renewLease(input: RenewExecutionLeaseInput): ExecutionLeaseRecord {

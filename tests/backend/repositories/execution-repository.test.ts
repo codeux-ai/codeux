@@ -1,3 +1,4 @@
+import { runMigrations } from "../../../src/repositories/db/app-db-migrations.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
@@ -2132,4 +2133,83 @@ describe("ExecutionRepository", () => {
 
       expect(claimed).toBeNull();
     });
+
+  describe('acquireLease (atomic operation)', () => {
+    it('handles concurrent lease acquisition attempts atomically', async () => {
+      const storage = new AppDbStorage(':memory:');
+      runMigrations(storage.getDatabase());
+      const repo = new ExecutionRepository(storage);
+
+      const scopeType = 'TASK';
+      const scopeId = 'concurrent-123';
+      const expiresAt = new Date(Date.now() + 60000).toISOString();
+
+      const promises = [];
+      for (let i = 0; i < 10; i++) {
+        promises.push(new Promise((resolve) => {
+          setTimeout(() => {
+            try {
+              const res = repo.acquireLease({
+                scopeType,
+                scopeId,
+                ownerKey: `owner-${i}`,
+                leaseToken: `token-${i}`,
+                expiresAt,
+              });
+              resolve({ success: true, res });
+            } catch (err: any) {
+              resolve({ success: false, err });
+            }
+          }, 10);
+        }));
+      }
+
+      const results = await Promise.all(promises);
+      const successes = results.filter(r => (r as any).success);
+      const failures = results.filter(r => !(r as any).success);
+
+      expect(successes).toHaveLength(1);
+      expect(failures).toHaveLength(9);
+
+      failures.forEach((f: any) => {
+        expect(f.err.message).toContain(`Lease already held for TASK:${scopeId}`);
+      });
+
+      const currentLease = repo.getLease(scopeType, scopeId);
+      expect(currentLease).toBeDefined();
+      expect(currentLease?.ownerKey).toBe((successes[0] as any).res.ownerKey);
+    });
+
+    it('reclaims expired leases successfully', () => {
+      const storage = new AppDbStorage(':memory:');
+      runMigrations(storage.getDatabase());
+      const repo = new ExecutionRepository(storage);
+
+      const scopeType = 'TASK';
+      const scopeId = 'expired-123';
+      const expiredTime = new Date(Date.now() - 60000).toISOString();
+      const newExpiry = new Date(Date.now() + 60000).toISOString();
+
+      // Acquire initially but set it as expired (simulated via DB since acquireLease sets acquired_at = now)
+      storage.getDatabase().prepare(`
+        INSERT INTO execution_leases (id, scope_type, scope_id, owner_key, lease_token, acquired_at, expires_at, last_heartbeat_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run('id1', scopeType, scopeId, 'old-owner', 'old-token', expiredTime, expiredTime, expiredTime);
+
+      const newLease = repo.acquireLease({
+        scopeType,
+        scopeId,
+        ownerKey: 'new-owner',
+        leaseToken: 'new-token',
+        expiresAt: newExpiry
+      });
+
+      expect(newLease.ownerKey).toBe('new-owner');
+      expect(newLease.leaseToken).toBe('new-token');
+
+      const currentLease = repo.getLease(scopeType, scopeId);
+      expect(currentLease?.ownerKey).toBe('new-owner');
+      expect(currentLease?.leaseToken).toBe('new-token');
+    });
   });
+});
