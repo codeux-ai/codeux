@@ -73,9 +73,16 @@ export const shortenRuntimeId = (value: string | null | undefined): string | nul
 export const ConnectionRuntimePanel: FunctionComponent<{
     snapshot: ExecutionDashboardSnapshot;
 }> = memo(({ snapshot }) => {
-    const activeConnections = snapshot.connections.filter((connection) => connection.status !== "offline");
-    const listeningConnections = activeConnections.filter((connection) => connection.status === "listening");
-    const workerConnections = activeConnections.filter((connection) => connection.role === "worker");
+    const { activeConnections, listeningConnections, workerConnections } = useMemo(() => {
+        const active = snapshot.connections.filter((connection) => connection.status !== "offline");
+        return {
+            activeConnections: active,
+            listeningConnections: active.filter((connection) => connection.status === "listening"),
+            workerConnections: active.filter((connection) => connection.role === "worker"),
+        };
+    }, [snapshot.connections, snapshot.connections.length]);
+
+    const visibleConnections = useMemo(() => snapshot.connections.slice(0, 8), [snapshot.connections, snapshot.connections.length]);
 
     return (
         <div className="rounded-[1.4rem] border border-black/[0.04] bg-black/[0.015] p-4 dark:border-white/[0.04] dark:bg-white/[0.015]">
@@ -97,7 +104,7 @@ export const ConnectionRuntimePanel: FunctionComponent<{
                 </p>
             ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto dashboard-scrollbar pr-1">
-                    {snapshot.connections.slice(0, 8).map((connection) => (
+                    {visibleConnections.map((connection) => (
                         <div
                             key={connection.id}
                             className="rounded-xl border border-black/[0.04] bg-white/55 p-3 dark:border-white/[0.04] dark:bg-void-900/30"
@@ -232,14 +239,23 @@ export const ExecutionRuntimePanel: FunctionComponent<{
 
     const [open, setOpen] = useState(defaultOpen);
     if (!snapshot) return null;
-    const activeSprintRuns = snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued");
-    const activeDispatches = snapshot.taskDispatches.filter((dispatch) => (
+    const activeSprintRuns = useMemo(() => snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued"), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
+    const activeDispatches = useMemo(() => snapshot.taskDispatches.filter((dispatch) => (
         dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running"
-    ));
-    const activeConnections = snapshot.connections.filter((connection) => connection.status !== "offline");
-    const workerDispatches = activeDispatches.filter((dispatch) => dispatch.executorType === "docker_cli");
-    const queuedWorkers = workerDispatches.filter((dispatch) => dispatch.status === "queued").length;
-    const runningWorkers = workerDispatches.filter((dispatch) => dispatch.status === "claimed" || dispatch.status === "running").length;
+    )), [snapshot.taskDispatches, snapshot.taskDispatches.length]);
+    const activeConnections = useMemo(() => snapshot.connections.filter((connection) => connection.status !== "offline"), [snapshot.connections, snapshot.connections.length]);
+
+    const { workerDispatches, queuedWorkers, runningWorkers } = useMemo(() => {
+        const workers = activeDispatches.filter((dispatch) => dispatch.executorType === "docker_cli");
+        return {
+            workerDispatches: workers,
+            queuedWorkers: workers.filter((dispatch) => dispatch.status === "queued").length,
+            runningWorkers: workers.filter((dispatch) => dispatch.status === "claimed" || dispatch.status === "running").length,
+        };
+    }, [activeDispatches]);
+
+    const visibleSprintRuns = useMemo(() => snapshot.sprintRuns.slice(0, 4), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
+    const visibleTaskDispatches = useMemo(() => snapshot.taskDispatches.slice(0, 8), [snapshot.taskDispatches, snapshot.taskDispatches.length]);
 
     return (
         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -310,7 +326,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                         <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No sprint runs recorded for the selected project.</p>
                     ) : (
                         <div className="space-y-2">
-                            {snapshot.sprintRuns.slice(0, 4).map((run) => (
+                            {visibleSprintRuns.map((run) => (
                                 <div key={run.id} className="rounded-xl border border-black/[0.04] dark:border-white/[0.04] bg-black/[0.015] dark:bg-white/[0.015] p-3">
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="min-w-0">
@@ -418,7 +434,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                         <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No task dispatches yet.</p>
                     ) : (
                         <div className="space-y-2 max-h-72 overflow-y-auto dashboard-scrollbar pr-1">
-                            {snapshot.taskDispatches.slice(0, 8).map((dispatch) => (
+                            {visibleTaskDispatches.map((dispatch) => (
                                 <div key={dispatch.id} className="rounded-xl border border-black/[0.04] dark:border-white/[0.04] bg-black/[0.015] dark:bg-white/[0.015] p-3">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">

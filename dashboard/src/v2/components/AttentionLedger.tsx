@@ -39,12 +39,12 @@ export const AttentionLedger: FunctionComponent = memo(() => {
             openCount: items.filter((item) => item.status === "open").length,
             claimedCount: items.filter((item) => item.status === "claimed").length,
         };
-    }, [snapshot.attentionItems]);
+    }, [snapshot.attentionItems, snapshot.attentionItems?.length]);
 
     const visibleAttentionItems = useMemo(() => {
         const items = snapshot.attentionItems || [];
         return items.slice(0, 8);
-    }, [snapshot.attentionItems]);
+    }, [snapshot.attentionItems, snapshot.attentionItems?.length]);
 
     useLayoutEffect(() => {
         const items = snapshot.attentionItems || [];
@@ -67,7 +67,7 @@ export const AttentionLedger: FunctionComponent = memo(() => {
             }
         }
         prevCountRef.current = currentCount;
-    }, [snapshot.attentionItems, reducedMotion]);
+    }, [snapshot.attentionItems, snapshot.attentionItems?.length, reducedMotion]);
 
     const canAutoClaim = Boolean(snapshot.primaryAssignedWorker || (snapshot.overflowAssignedWorkers && snapshot.overflowAssignedWorkers.length > 0));
 
