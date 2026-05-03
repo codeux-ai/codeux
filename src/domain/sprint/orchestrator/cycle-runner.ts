@@ -443,7 +443,7 @@ export class CycleRunner {
 
     if (memoryInputs.length > 0) {
       try {
-        await memoryService.createMemories(args.executionContext.project.id, memoryInputs);
+        await memoryService.createMemoriesBatch(args.executionContext.project.id, memoryInputs);
       } catch (error) {
         this.deps.logger.warn("Failed to auto-capture task memory", {
           projectId: args.executionContext.project.id,
@@ -489,7 +489,7 @@ export class CycleRunner {
 
     if (memoryInputs.length > 0) {
       try {
-        await memoryService.createMemories(args.executionContext.project.id, memoryInputs);
+        await memoryService.createMemoriesBatch(args.executionContext.project.id, memoryInputs);
       } catch (error) {
         this.deps.logger.warn("Failed to auto-capture task memory", {
           projectId: args.executionContext.project.id,
