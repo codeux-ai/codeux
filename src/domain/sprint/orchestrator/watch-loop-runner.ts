@@ -31,7 +31,7 @@ import { evaluateSprintRunState, isMainMergeAttentionItem } from "./sprint-state
 import type { HeartbeatService } from "../../../services/heartbeat-service.js";
 
 
-export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "finalizeSprintRunCancellationIfIdle" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "updateSprintRun" | "renewLease" | "releaseLease">;
+export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "finalizeSprintRunCancellationIfIdle" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "updateSprintRun" | "renewLease">;
 export type WatchLoopAttentionDependencies = Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItemsForSprintRun" | "resolveItem">;
 
 export interface WatchLoopDependencies {
@@ -256,30 +256,13 @@ export class WatchLoopRunner {
           return fullReport;
         }
 
-        case WatchLoopState.CHECKPOINT:
+        case WatchLoopState.CHECKPOINT: {
+          checkpointWindowStartedAt = Date.now();
+          await this.sleep(watchLoopIntervalMs);
+          break;
+        }
+
         case WatchLoopState.RUNNING: {
-          try {
-            // Await added to satisfy code reviewer, although executionRepository is synchronous.
-            await Promise.resolve(this.deps.executionRepository.updateSprintRun(sprintRunId, {
-              lastHeartbeatAt: new Date().toISOString(),
-            }));
-            if (leaseToken) {
-              await Promise.resolve(this.deps.executionRepository.renewLease({
-                scopeType: "sprint",
-                scopeId: scopedExecutionContext.sprint.id,
-                leaseToken,
-                expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-              }));
-            }
-          } catch (error) {
-            this.deps.logger.warn("Failed to renew watch loop lease tick", {
-              sprintRunId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-          if (nextState === WatchLoopState.CHECKPOINT) {
-            checkpointWindowStartedAt = Date.now();
-          }
           await this.sleep(watchLoopIntervalMs);
           break;
         }
@@ -288,13 +271,6 @@ export class WatchLoopRunner {
 
     } finally {
       this.deps.heartbeatService.stopHeartbeat(sprintRunId);
-      try {
-        if (leaseToken) {
-          await Promise.resolve(this.deps.executionRepository.releaseLease("sprint", scopedExecutionContext.sprint.id, leaseToken));
-        }
-      } catch (err) {
-        this.deps.logger.warn("Failed to release sprint lease on loop exit", { sprintRunId, error: err instanceof Error ? err.message : String(err) });
-      }
     }
     return fullReport;
   }

@@ -45,14 +45,9 @@ export class ExecutionControlService {
 
     const lingeringLease = this.deps.executionRepository.getLease("sprint", sprintId);
     if (lingeringLease) {
-      const isExpired = lingeringLease.expiresAt < new Date().toISOString();
-      if (isExpired) {
-        await Promise.resolve(this.deps.executionRepository.releaseLease("sprint", sprintId));
-      } else {
-        throw new Error(
-          `Sprint ${sprint.number ?? sprint.name} cannot be started because the previous orchestration still owns the sprint lease.`,
-        );
-      }
+      throw new Error(
+        `Sprint ${sprint.number ?? sprint.name} cannot be started because the previous orchestration still owns the sprint lease.`,
+      );
     }
 
     void this.deps.sprintOrchestrator.execute({
