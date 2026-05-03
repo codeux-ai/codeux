@@ -724,6 +724,49 @@ export class ExecutionRepository {
     return rows.map((row) => this.mapTaskDispatchRow(row));
   }
 
+
+  updateTaskDispatchesBatch(updates: { id: string; input: UpdateTaskDispatchInput }[]): TaskDispatchRecord[] {
+    if (updates.length === 0) return [];
+
+    return this.db.transaction(() => {
+      const results: TaskDispatchRecord[] = [];
+      const updatedProjectIds = new Set<string>();
+      const now = new Date().toISOString();
+
+      for (const { id: dispatchId, input } of updates) {
+        const current = requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
+        if (input.connectionId) {
+          requireConnection(this.db, input.connectionId);
+        }
+        this.db.prepare(`
+          UPDATE task_dispatches
+          SET connection_id = ?, status = ?, claimed_at = ?, started_at = ?, finished_at = ?, last_heartbeat_at = ?, error_message = ?, updated_at = ?
+          WHERE id = ?
+        `).run(
+          input.connectionId === undefined ? current.connectionId : input.connectionId,
+          input.status || current.status,
+          input.claimedAt === undefined ? current.claimedAt : input.claimedAt,
+          input.startedAt === undefined ? current.startedAt : input.startedAt,
+          input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
+          input.lastHeartbeatAt === undefined ? current.lastHeartbeatAt : input.lastHeartbeatAt,
+          input.errorMessage === undefined ? current.errorMessage : input.errorMessage,
+          now,
+          dispatchId
+        );
+        const updated = requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
+        if (this.shouldPublishTaskDispatchUpdate(input)) {
+          updatedProjectIds.add(updated.projectId);
+        }
+        results.push(updated);
+      }
+
+      for (const projectId of updatedProjectIds) {
+        this.notifyRealtime(projectId, true);
+      }
+      return results;
+    });
+  }
+
   updateTaskDispatch(dispatchId: string, input: UpdateTaskDispatchInput): TaskDispatchRecord {
     const current = requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
     if (input.connectionId) {
@@ -1043,6 +1086,49 @@ export class ExecutionRepository {
       }
     }
     return map;
+  }
+
+
+  updateTaskRunsBatch(updates: { id: string; input: UpdateTaskRunInput }[]): TaskRunRecord[] {
+    if (updates.length === 0) return [];
+
+    return this.db.transaction(() => {
+      const results: TaskRunRecord[] = [];
+      const updatedProjectIds = new Set<string>();
+
+      for (const { id: taskRunId, input } of updates) {
+        const current = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
+        this.db.prepare(`
+          UPDATE task_runs
+          SET connection_id = ?, provider = ?, mode = ?, session_id = ?, session_name = ?, state = ?, worker_branch = ?,
+              pr_url = ?, started_at = ?, finished_at = ?, duration_ms = ?
+          WHERE id = ?
+        `).run(
+          input.connectionId === undefined ? current.connectionId : input.connectionId,
+          input.provider === undefined ? current.provider : input.provider,
+          input.mode === undefined ? current.mode : input.mode,
+          input.sessionId === undefined ? current.sessionId : input.sessionId,
+          input.sessionName === undefined ? current.sessionName : input.sessionName,
+          input.state === undefined ? current.state : input.state,
+          input.workerBranch === undefined ? current.workerBranch : input.workerBranch,
+          input.prUrl === undefined ? current.prUrl : input.prUrl,
+          input.startedAt === undefined ? current.startedAt : input.startedAt,
+          input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
+          input.durationMs === undefined ? current.durationMs : input.durationMs,
+          taskRunId
+        );
+        const updated = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
+        if (updated.taskId) this.taskWallTimeCache.delete(updated.taskId);
+        if (updated.sprintRunId) this.sprintRunWallTimeCache.delete(updated.sprintRunId);
+        updatedProjectIds.add(updated.projectId);
+        results.push(updated);
+      }
+
+      for (const projectId of updatedProjectIds) {
+        this.notifyRealtime(projectId, false);
+      }
+      return results;
+    });
   }
 
   updateTaskRun(taskRunId: string, input: UpdateTaskRunInput): TaskRunRecord {

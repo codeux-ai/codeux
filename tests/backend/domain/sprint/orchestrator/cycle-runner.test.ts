@@ -24,6 +24,8 @@ function buildDeps(): SprintOrchestratorDependencies {
       resolveTaskProvider: vi.fn().mockReturnValue("codex"),
     } as any,
     executionRepository: {
+      updateTaskRunsBatch: vi.fn(),
+      updateTaskDispatchesBatch: vi.fn(),
       getLatestTaskRun: vi.fn().mockReturnValue({ id: "task-run-1", dispatchId: "dispatch-1" }),
       getTaskDispatch: vi.fn().mockReturnValue({
         id: "dispatch-1",
@@ -653,16 +655,26 @@ describe("CycleRunner attention sync", () => {
     const firstResult = await runner.run(baseArgs);
     expect(firstResult.subtasks[0]).toMatchObject({ status: "RUNNING" });
     expect(deps.sendSessionMessage).toHaveBeenCalledTimes(1);
-    expect(deps.executionRepository.updateTaskRun).toHaveBeenCalledWith("task-run-1", {
-      state: "RUNNING",
-      finishedAt: null,
-      durationMs: null,
-    });
-    expect(deps.executionRepository.updateTaskDispatch).toHaveBeenCalledWith("dispatch-1", expect.objectContaining({
-      status: "running",
-      finishedAt: null,
-      errorMessage: null,
-    }));
+    expect(deps.executionRepository.updateTaskRunsBatch).toHaveBeenCalledWith([
+      {
+        id: "task-run-1",
+        input: {
+          state: "RUNNING",
+          finishedAt: null,
+          durationMs: null,
+        },
+      }
+    ]);
+    expect(deps.executionRepository.updateTaskDispatchesBatch).toHaveBeenCalledWith([
+      {
+        id: "dispatch-1",
+        input: expect.objectContaining({
+          status: "running",
+          finishedAt: null,
+          errorMessage: null,
+        }),
+      }
+    ]);
 
     vi.mocked(deps.projectAttentionService.openItems).mockClear();
 
@@ -1645,18 +1657,26 @@ describe("CycleRunner attention sync", () => {
 
       (runner as any).stateCoordinator.syncAutoInterventionExecutionState(subtasks, previousTasks, "run-1");
 
-      expect(deps.executionRepository.updateTaskRun).toHaveBeenCalledWith("task-run-1", {
-        state: "RUNNING",
-        finishedAt: null,
-        durationMs: null,
-      });
-      expect(deps.executionRepository.updateTaskDispatch).toHaveBeenCalledWith("dispatch-1", {
-        status: "running",
-        startedAt: expect.any(String),
-        finishedAt: null,
-        lastHeartbeatAt: expect.any(String),
-        errorMessage: null,
-      });
+      expect(deps.executionRepository.updateTaskRunsBatch).toHaveBeenCalledWith([
+        {
+          id: "task-run-1",
+          input: {
+            state: "RUNNING",
+            finishedAt: null,
+            durationMs: null,
+          },
+        }
+      ]);
+      expect(deps.executionRepository.updateTaskDispatchesBatch).toHaveBeenCalledWith([
+        {
+          id: "dispatch-1",
+          input: expect.objectContaining({
+            status: "running",
+            finishedAt: null,
+            errorMessage: null,
+          }),
+        }
+      ]);
     });
 
     it("clears attention items when tasks are no longer in action-required or ci_fix_required state", async () => {
