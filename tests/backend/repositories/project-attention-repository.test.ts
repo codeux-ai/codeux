@@ -102,6 +102,71 @@ describe("ProjectAttentionRepository", () => {
     });
   });
 
+
+  it("creates or updates multiple attention items within a single transaction using openOrRefreshItems", async () => {
+    const { attention, project, sprint, task, sprintRun } = await buildFixture();
+
+    const input1 = {
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "worker_dispatch_blocked" as const,
+      severity: "medium" as const,
+      ownerType: "worker" as const,
+      title: "Blocked 1",
+      summaryMarkdown: "Summary 1",
+    };
+
+    const input2 = {
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "action_required" as const,
+      severity: "high" as const,
+      ownerType: "worker" as const,
+      title: "Action 2",
+      summaryMarkdown: "Summary 2",
+    };
+
+    const initialResults = attention.openOrRefreshItems([input1, input2]);
+
+    expect(initialResults).toHaveLength(2);
+    expect(initialResults[0].attentionType).toBe("worker_dispatch_blocked");
+    expect(initialResults[1].attentionType).toBe("action_required");
+
+    // Now call again with input1 updated and a new input3
+    const input1Updated = {
+      ...input1,
+      severity: "critical" as const,
+      summaryMarkdown: "Summary 1 Updated",
+    };
+
+    const input3 = {
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "merge_required" as const,
+      severity: "medium" as const,
+      ownerType: "worker" as const,
+      title: "Merge 3",
+      summaryMarkdown: "Summary 3",
+    };
+
+    const nextResults = attention.openOrRefreshItems([input1Updated, input3]);
+
+    expect(nextResults).toHaveLength(2);
+    expect(nextResults[0].id).toBe(initialResults[0].id); // Should update existing
+    expect(nextResults[0].severity).toBe("critical");
+    expect(nextResults[0].summaryMarkdown).toBe("Summary 1 Updated");
+    expect(nextResults[1].attentionType).toBe("merge_required");
+
+    const allItems = attention.listProjectAttentionItems(project.id);
+    expect(allItems).toHaveLength(3);
+  });
+
   it("resolves active attention items for a dispatch", async () => {
     const { attention, project, sprint, task, sprintRun, dispatch } = await buildFixture();
     attention.openOrRefreshItem({
