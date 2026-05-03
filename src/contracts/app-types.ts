@@ -1,3 +1,8 @@
+import type { AppConfig } from "../config/app-config.js";
+import type { McpConnectionInfo } from "./mcp-connection-types.js";
+import type { McpApprovalTracker } from "../services/mcp-approval-tracker.js";
+import type { ResolvePullRequestResult } from "../services/git-status-service.js";
+import type { RuntimeContext } from "../app/runtime-context.js";
 import type { InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import type { ProviderInvocationPurpose, TokenUsageSource } from "./execution-types.js";
 import type { MemorySettings } from "./memory-types.js";
@@ -105,6 +110,49 @@ export interface DashboardStatus {
   statusTable?: string;
   instructions?: string;
   timestamp: string | null;
+}
+
+export interface GitOperations {
+  getCiStatusForScope: (args: GetCiStatusForScopeArgs) => Promise<GitTrackingStatus | null>;
+  autoMergeFeaturePr: (args: AutoMergeFeaturePrArgs) => Promise<AutoMergeFeaturePrResult>;
+  resolveOrCreateMainBranchPr: (args: {
+    repoPath: string;
+    featureBranch: string;
+    defaultBranch: string;
+    title: string;
+    body: string;
+  }) => Promise<ResolvePullRequestResult | null>;
+  resolveGitStatusRepoPath: () => string;
+  fetchGitStatusForRepo: (repoPath: string, cacheTtlMs?: number) => Promise<GitTrackingStatus>;
+  invalidateGitStatusCache?: (repoPath: string) => void;
+  persistTaskMergedFlag: (args: PersistTaskMergedFlagArgs) => Promise<void>;
+}
+
+export interface ConfigurationProvider {
+  getAppConfig: () => AppConfig;
+  getDashboardPort: () => number;
+  isJulesApiConfigured: () => boolean;
+  getMissingJulesApiKeyInstruction: () => string;
+  getEffectiveJulesApiKey: () => string | undefined;
+  getEffectiveGithubToken: () => string | undefined;
+}
+
+export interface SessionManager {
+  resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
+  extractSessionId: (session: Partial<JulesSession>) => string | undefined;
+  fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
+  listSessionsForSync: () => Promise<{ sessions?: JulesSession[] }>;
+  resolveSessionNameFromTask: (task: Subtask) => string | undefined;
+  isTrackedCliSession: (sessionId: string) => boolean;
+}
+
+export interface EnvironmentResolver {
+  getProjectRoot: () => string;
+  isActionRequiredState: (state?: string) => boolean;
+  normalizeName: (type: string, id: string) => string;
+  runtimeContext: RuntimeContext;
+  getMcpConnectionInfo?: () => McpConnectionInfo | null;
+  getMcpApprovalTracker?: () => McpApprovalTracker;
 }
 
 /**
