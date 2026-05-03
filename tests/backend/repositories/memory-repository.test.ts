@@ -132,6 +132,51 @@ describe("MemoryRepository", () => {
     });
   });
 
+  describe("createMemories", () => {
+    it("creates multiple memories in a single transaction and returns the records", () => {
+      const inputs = [
+        makeInput({ content: "mem 1", category: "architecture", strength: 0.8 }),
+        makeInput({ content: "mem 2", category: "codebase", strength: 0.9 })
+      ];
+
+      const results = repo.createMemories(projectId, inputs);
+
+      expect(results).toHaveLength(2);
+
+      expect(results[0]).toMatchObject({
+        projectId,
+        content: "mem 1",
+        category: "architecture",
+        strength: 0.8,
+      });
+
+      expect(results[1]).toMatchObject({
+        projectId,
+        content: "mem 2",
+        category: "codebase",
+        strength: 0.9,
+      });
+
+      // Verify they are actually inserted in DB
+      const loaded0 = repo.getMemory(results[0].id);
+      const loaded1 = repo.getMemory(results[1].id);
+      expect(loaded0).toEqual(results[0]);
+      expect(loaded1).toEqual(results[1]);
+    });
+
+    it("returns an empty array if inputs is empty", () => {
+      const results = repo.createMemories(projectId, []);
+      expect(results).toEqual([]);
+    });
+
+    it("honors projectId validation", () => {
+      expect(() => {
+        repo.createMemories("non-existent-project", [makeInput()]);
+      }).toThrow(/Project/);
+    });
+  });
+
+
   describe("getMemory", () => {
     it("retrieves a memory by ID", () => {
       const created = repo.createMemory(projectId, makeInput({ content: "Findable" }));
