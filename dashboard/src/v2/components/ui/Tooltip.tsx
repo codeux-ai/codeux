@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { tooltipMotion } from "../../utils/motion.js";
+import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
 import { calculatePosition } from "../../lib/positioning/index.js";
 
 interface TooltipProps {
@@ -31,6 +32,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
     const hoverTimeout = useRef<number | null>(null);
 
     const [coords, setCoords] = useState({ top: 0, left: 0 });
+    const durations = useGsapDurations();
 
     const handleMouseEnter = () => {
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
@@ -78,9 +80,9 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
         gsap.killTweensOf(tooltipRef.current);
 
         if (isVisible) {
-            tooltipMotion.enter(tooltipRef.current, position);
+            tooltipMotion.enter(tooltipRef.current, position, { duration: durations.base, ease: GSAP_EASINGS.smoothInOut });
         } else if (isRendered) {
-            tooltipMotion.exit(tooltipRef.current, position, () => setIsRendered(false));
+            tooltipMotion.exit(tooltipRef.current, position, () => setIsRendered(false), { duration: durations.base, ease: GSAP_EASINGS.smoothInOut });
         }
     }, [isVisible, isRendered, position]);
 

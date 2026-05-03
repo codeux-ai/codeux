@@ -5,6 +5,7 @@ import gsap from "gsap";
 import type { ActionFeedbackStatus } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
 
 interface ActionFeedbackRegionProps {
   status: ActionFeedbackStatus;
@@ -29,6 +30,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
   const progressRef = useRef<HTMLDivElement>(null);
   const dismissBtnRef = useRef<HTMLButtonElement>(null);
   const reducedMotion = useReducedMotion();
+  const durations = useGsapDurations();
 
   const [displayedMessage, setDisplayedMessage] = useState(message);
   const messageRef = useRef<HTMLDivElement>(null);
@@ -42,10 +44,10 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
           gsap.to(messageRef.current, {
             opacity: 0,
             y: -4,
-            duration: 0.15,
+            duration: durations.fast,
             onComplete: () => {
               setDisplayedMessage(message);
-              gsap.fromTo(messageRef.current, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: 0.15 });
+              gsap.fromTo(messageRef.current, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: durations.fast });
             }
           });
         });
@@ -85,7 +87,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
         gsap.fromTo(
           progressRef.current,
           { width: "100%" },
-          { width: "0%", duration: autoDismissMs / 1000, ease: "linear" }
+          { width: "0%", duration: autoDismissMs / 1000, ease: GSAP_EASINGS.linear }
         );
       }
     });
