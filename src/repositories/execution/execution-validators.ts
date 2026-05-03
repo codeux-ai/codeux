@@ -1,3 +1,4 @@
+import { EntityNotFoundError, ValidationError } from "../repository-utils.js";
 import type { DatabaseAdapter } from "../db/database-adapter.js";
 import { requireEntity, requireEntityByGetter } from "../shared/validation-utils.js";
 import type {
@@ -21,7 +22,7 @@ export function requireSprint(db: DatabaseAdapter, sprintId: string, projectId?:
     "id, project_id",
     (row) => {
       if (projectId && row.project_id !== projectId) {
-        throw new Error(`Sprint ${sprintId} does not belong to project ${projectId}`);
+        throw new ValidationError(`Sprint ${sprintId} does not belong to project ${projectId}`);
       }
     }
   );
@@ -36,10 +37,10 @@ export function requireTask(db: DatabaseAdapter, taskId: string, projectId?: str
     "id, project_id, sprint_id",
     (row) => {
       if (projectId && row.project_id !== projectId) {
-        throw new Error(`Task ${taskId} does not belong to project ${projectId}`);
+        throw new ValidationError(`Task ${taskId} does not belong to project ${projectId}`);
       }
       if (sprintId && row.sprint_id !== sprintId) {
-        throw new Error(`Task ${taskId} does not belong to sprint ${sprintId}`);
+        throw new ValidationError(`Task ${taskId} does not belong to sprint ${sprintId}`);
       }
     }
   );
@@ -64,7 +65,7 @@ export function requireSprintRunScoped(
 ): void {
   requireEntityByGetter("Sprint run", runId, getSprintRun, (run) => {
     if (run.projectId !== projectId || run.sprintId !== sprintId) {
-      throw new Error(`Sprint run ${runId} does not belong to ${projectId}/${sprintId}`);
+      throw new ValidationError(`Sprint run ${runId} does not belong to ${projectId}/${sprintId}`);
     }
   });
 }
@@ -97,7 +98,7 @@ export function requireLease(
 ): ExecutionLeaseRecord {
   const lease = getLease(scopeType, scopeId);
   if (!lease) {
-    throw new Error(`Execution lease not found: ${scopeType}:${scopeId}`);
+    throw new EntityNotFoundError(`Execution lease not found: ${scopeType}:${scopeId}`);
   }
   return lease;
 }

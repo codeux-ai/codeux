@@ -1,5 +1,7 @@
 import * as path from "path";
 import { randomUUID } from "crypto";
+import { createLogger, type Logger } from "../shared/logging/logger.js";
+import { ValidationError, EntityNotFoundError, RepositoryError } from "./repository-utils.js";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import type {
   CreateProjectInput,
@@ -103,7 +105,8 @@ export class ProjectManagementRepository {
     private readonly storage: AppDbStorage = new AppDbStorage(),
     private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
     private readonly settingsRepository: SettingsRepository = new SettingsRepository(),
-    private readonly projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage)
+    private readonly projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage),
+    private readonly logger: Logger = createLogger({ bindings: { component: "ProjectManagementRepository" } })
   ) {
     this.db = storage.getDatabase();
   }
@@ -150,100 +153,121 @@ export class ProjectManagementRepository {
   }
 
   createProject(input: CreateProjectInput): ProjectSummary {
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    const slug = this.createUniqueProjectSlug(input.name);
-    const sourceType = input.sourceType;
-    const sourceRef = input.sourceRef.trim();
-    const baseDir = this.resolveBaseDir(sourceType, sourceRef, input.cloneDir);
-    const repoUrl = sourceType === "git" ? sourceRef : null;
+    try {
+      const id = randomUUID();
+      const now = new Date().toISOString();
+      const slug = this.createUniqueProjectSlug(input.name);
+      const sourceType = input.sourceType;
+      const sourceRef = input.sourceRef.trim();
+      const baseDir = this.resolveBaseDir(sourceType, sourceRef, input.cloneDir);
+      const repoUrl = sourceType === "git" ? sourceRef : null;
 
-    const insert = this.db.prepare(`
-      INSERT INTO projects (
-        id, slug, name, base_dir, repo_url, source_id, default_branch, feature_branch_prefix, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertSource = this.db.prepare(`
-      INSERT INTO project_sources (id, project_id, source_type, source_ref, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `);
+      const insert = this.db.prepare(`
+        INSERT INTO projects (
+          id, slug, name, base_dir, repo_url, source_id, default_branch, feature_branch_prefix, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const insertSource = this.db.prepare(`
+        INSERT INTO project_sources (id, project_id, source_type, source_ref, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `);
 
-    this.runInTransaction(() => {
-      insert.run(
-        id,
-        slug,
-        input.name.trim(),
-        baseDir,
-        repoUrl,
-        null,
-        input.defaultBranch?.trim() || "main",
-        input.featureBranchPrefix?.trim() || "feature/",
-        input.status || "idle",
-        now,
-        now
-      );
-      insertSource.run(randomUUID(), id, sourceType, sourceRef, now);
+      this.runInTransaction(() => {
+        insert.run(
+          id,
+          slug,
+          input.name.trim(),
+          baseDir,
+          repoUrl,
+          null,
+          input.defaultBranch?.trim() || "main",
+          input.featureBranchPrefix?.trim() || "feature/",
+          input.status || "idle",
+          now,
+          now
+        );
+        insertSource.run(randomUUID(), id, sourceType, sourceRef, now);
 
-      if (!this.getSelectedProjectId()) {
-        this.setSelectedProjectId(id);
-      }
-    });
+        if (!this.getSelectedProjectId()) {
+          this.setSelectedProjectId(id);
+        }
+      });
 
-    const created = this.requireProject(id);
-    this.publishProjectStructureRefresh(id);
-    this.publishProjectsRefresh();
-    return created;
+      const created = this.requireProject(id);
+      this.publishProjectStructureRefresh(id);
+      this.publishProjectsRefresh();
+      return created;
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, projectName: input.name });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   updateProject(projectId: string, input: UpdateProjectInput): ProjectSummary {
-    const current = this.requireProject(projectId);
-    const now = new Date().toISOString();
-    const nextName = input.name?.trim() || current.name;
-    const nextSlug = nextName === current.name ? current.slug : this.createUniqueProjectSlug(nextName, projectId);
-    const nextSourceType = input.sourceType || current.sourceType;
-    const nextSourceRef = input.sourceRef?.trim() || current.sourceRef;
-    const nextBaseDir = input.baseDir?.trim() || this.resolveBaseDir(nextSourceType, nextSourceRef, undefined, current.baseDir);
-    const nextRepoUrl = nextSourceType === "git" ? nextSourceRef : null;
+    try {
+      const current = this.requireProject(projectId);
+      const now = new Date().toISOString();
+      const nextName = input.name?.trim() || current.name;
+      const nextSlug = nextName === current.name ? current.slug : this.createUniqueProjectSlug(nextName, projectId);
+      const nextSourceType = input.sourceType || current.sourceType;
+      const nextSourceRef = input.sourceRef?.trim() || current.sourceRef;
+      const nextBaseDir = input.baseDir?.trim() || this.resolveBaseDir(nextSourceType, nextSourceRef, undefined, current.baseDir);
+      const nextRepoUrl = nextSourceType === "git" ? nextSourceRef : null;
 
-    const updateProject = this.db.prepare(`
-      UPDATE projects
-      SET slug = ?, name = ?, base_dir = ?, repo_url = ?, default_branch = ?, feature_branch_prefix = ?, status = ?, updated_at = ?
-      WHERE id = ?
-    `);
-    const updateSource = this.db.prepare(`
-      UPDATE project_sources
-      SET source_type = ?, source_ref = ?
-      WHERE project_id = ?
-    `);
+      const updateProject = this.db.prepare(`
+        UPDATE projects
+        SET slug = ?, name = ?, base_dir = ?, repo_url = ?, default_branch = ?, feature_branch_prefix = ?, status = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      const updateSource = this.db.prepare(`
+        UPDATE project_sources
+        SET source_type = ?, source_ref = ?
+        WHERE project_id = ?
+      `);
 
-    this.runInTransaction(() => {
-      updateProject.run(
-        nextSlug,
-        nextName,
-        nextBaseDir,
-        nextRepoUrl,
-        input.defaultBranch === undefined ? current.defaultBranch : input.defaultBranch,
-        input.featureBranchPrefix === undefined ? current.featureBranchPrefix : input.featureBranchPrefix,
-        input.status || current.status,
-        now,
-        projectId
-      );
-      updateSource.run(nextSourceType, nextSourceRef, projectId);
-    });
+      this.runInTransaction(() => {
+        updateProject.run(
+          nextSlug,
+          nextName,
+          nextBaseDir,
+          nextRepoUrl,
+          input.defaultBranch === undefined ? current.defaultBranch : input.defaultBranch,
+          input.featureBranchPrefix === undefined ? current.featureBranchPrefix : input.featureBranchPrefix,
+          input.status || current.status,
+          now,
+          projectId
+        );
+        updateSource.run(nextSourceType, nextSourceRef, projectId);
+      });
 
-    const updated = this.requireProject(projectId);
-    this.publishProjectStructureRefresh(projectId);
-    this.publishProjectsRefresh();
-    return updated;
+      const updated = this.requireProject(projectId);
+      this.publishProjectStructureRefresh(projectId);
+      this.publishProjectsRefresh();
+      return updated;
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, projectId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   deleteProject(projectId: string): void {
-    this.db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
-    if (this.getSelectedProjectId() === projectId) {
-      const nextProject = this.db.prepare(`SELECT id FROM projects ORDER BY updated_at DESC LIMIT 1`).get() as { id: string } | undefined;
-      this.setSelectedProjectId(nextProject?.id ?? null);
+    try {
+      this.db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
+      if (this.getSelectedProjectId() === projectId) {
+        const nextProject = this.db.prepare(`SELECT id FROM projects ORDER BY updated_at DESC LIMIT 1`).get() as { id: string } | undefined;
+        this.setSelectedProjectId(nextProject?.id ?? null);
+      }
+      this.publishProjectsRefresh();
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, projectId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
-    this.publishProjectsRefresh();
   }
 
   listSprints(projectId: string): SprintCollectionResponse {
@@ -263,91 +287,112 @@ export class ProjectManagementRepository {
   }
 
   createSprint(projectId: string, input: CreateSprintInput): SprintRecord {
-    this.requireProject(projectId);
+    try {
+      this.requireProject(projectId);
 
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    const number = input.number ?? this.getNextSprintNumber(projectId);
-    const name = input.name.trim();
-    const slug = this.createUniqueSprintSlug(projectId, name);
+      const id = randomUUID();
+      const now = new Date().toISOString();
+      const number = input.number ?? this.getNextSprintNumber(projectId);
+      const name = input.name.trim();
+      const slug = this.createUniqueSprintSlug(projectId, name);
 
-    this.db.prepare(`
-      INSERT INTO sprints (
-        id, project_id, number, slug, name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      projectId,
-      number,
-      slug,
-      name,
-      input.originalPrompt?.trim() || null,
-      input.goal?.trim() || "",
-      input.status || "idle",
-      Number(Boolean(input.showcasePinned)),
-      input.startDate || null,
-      input.endDate || null,
-      input.featureBranch || null,
-      now,
-      now
-    );
+      this.db.prepare(`
+        INSERT INTO sprints (
+          id, project_id, number, slug, name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        projectId,
+        number,
+        slug,
+        name,
+        input.originalPrompt?.trim() || null,
+        input.goal?.trim() || "",
+        input.status || "idle",
+        Number(Boolean(input.showcasePinned)),
+        input.startDate || null,
+        input.endDate || null,
+        input.featureBranch || null,
+        now,
+        now
+      );
 
-    this.touchProject(projectId, now);
-    const created = this.requireSprint(id);
-    this.setSelectedSprintId(projectId, id);
-    this.publishProjectStructureRefresh(projectId);
-    return created;
+      this.touchProject(projectId, now);
+      const created = this.requireSprint(id);
+      this.setSelectedSprintId(projectId, id);
+      this.publishProjectStructureRefresh(projectId);
+      return created;
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, projectId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   updateSprint(sprintId: string, input: UpdateSprintInput): SprintRecord {
-    const current = this.requireSprint(sprintId);
-    const now = new Date().toISOString();
-    const nextName = input.name?.trim() || current.name;
-    const nextSlug = nextName === current.name ? current.slug : this.createUniqueSprintSlug(current.projectId, nextName, sprintId);
+    try {
+      const current = this.requireSprint(sprintId);
+      const now = new Date().toISOString();
+      const nextName = input.name?.trim() || current.name;
+      const nextSlug = nextName === current.name ? current.slug : this.createUniqueSprintSlug(current.projectId, nextName, sprintId);
 
-    this.db.prepare(`
-      UPDATE sprints
-      SET number = ?, slug = ?, name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, updated_at = ?
-      WHERE id = ?
-    `).run(
-      input.number === undefined ? current.number : input.number,
-      nextSlug,
-      nextName,
-      input.originalPrompt === undefined ? current.originalPrompt : input.originalPrompt,
-      input.goal === undefined ? current.goal : input.goal,
-      input.status || current.status,
-      input.showcasePinned === undefined ? Number(current.showcasePinned) : Number(Boolean(input.showcasePinned)),
-      input.startDate === undefined ? current.startDate : input.startDate,
-      input.endDate === undefined ? current.endDate : input.endDate,
-      input.featureBranch === undefined ? current.featureBranch : input.featureBranch,
-      now,
-      sprintId
-    );
+      this.db.prepare(`
+        UPDATE sprints
+        SET number = ?, slug = ?, name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        input.number === undefined ? current.number : input.number,
+        nextSlug,
+        nextName,
+        input.originalPrompt === undefined ? current.originalPrompt : input.originalPrompt,
+        input.goal === undefined ? current.goal : input.goal,
+        input.status || current.status,
+        input.showcasePinned === undefined ? Number(current.showcasePinned) : Number(Boolean(input.showcasePinned)),
+        input.startDate === undefined ? current.startDate : input.startDate,
+        input.endDate === undefined ? current.endDate : input.endDate,
+        input.featureBranch === undefined ? current.featureBranch : input.featureBranch,
+        now,
+        sprintId
+      );
 
-    this.touchProject(current.projectId, now);
-    const updated = this.requireSprint(sprintId);
-    this.publishProjectStructureRefresh(current.projectId);
-    return updated;
+      this.touchProject(current.projectId, now);
+      const updated = this.requireSprint(sprintId);
+      this.publishProjectStructureRefresh(current.projectId);
+      return updated;
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, sprintId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   deleteSprint(sprintId: string): void {
-    const sprint = this.requireSprint(sprintId);
-    this.db.prepare(`DELETE FROM sprints WHERE id = ?`).run(sprintId);
+    try {
+      const sprint = this.requireSprint(sprintId);
+      this.db.prepare(`DELETE FROM sprints WHERE id = ?`).run(sprintId);
 
-    if (this.getSelectedSprintId(sprint.projectId) === sprintId) {
-      const nextSprintRow = this.db.prepare(`
-        SELECT id
-        FROM sprints
-        WHERE project_id = ?
-        ORDER BY COALESCE(number, 0) DESC, created_at DESC
-        LIMIT 1
-      `).get(sprint.projectId) as { id: string } | undefined;
+      if (this.getSelectedSprintId(sprint.projectId) === sprintId) {
+        const nextSprintRow = this.db.prepare(`
+          SELECT id
+          FROM sprints
+          WHERE project_id = ?
+          ORDER BY COALESCE(number, 0) DESC, created_at DESC
+          LIMIT 1
+        `).get(sprint.projectId) as { id: string } | undefined;
 
-      this.setSelectedSprintId(sprint.projectId, nextSprintRow?.id ?? null);
+        this.setSelectedSprintId(sprint.projectId, nextSprintRow?.id ?? null);
+      }
+
+      this.touchProject(sprint.projectId);
+      this.publishProjectStructureRefresh(sprint.projectId);
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, sprintId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
-
-    this.touchProject(sprint.projectId);
-    this.publishProjectStructureRefresh(sprint.projectId);
   }
 
   listTasks(projectId: string, sprintId?: string): TaskRecord[] {
@@ -370,165 +415,193 @@ export class ProjectManagementRepository {
   }
 
   createTask(projectId: string, input: CreateTaskInput): TaskRecord {
-    this.requireProject(projectId);
-    const sprint = this.requireSprint(input.sprintId);
-    if (sprint.projectId !== projectId) {
-      throw new Error(`Sprint ${input.sprintId} does not belong to project ${projectId}`);
-    }
-
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    const taskKey = input.taskKey?.trim() || this.createNextTaskKey(input.sprintId);
-    const sortOrder = input.sortOrder ?? this.getNextSortOrder(input.sprintId);
-
-    const insertTask = this.db.prepare(`
-      INSERT INTO tasks (
-        id, project_id, sprint_id, task_key, title, prompt_markdown, description, status, priority, executor_type,
-        sort_order, is_independent, is_merged, merge_indicator, source_type, source_path, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertDependency = this.db.prepare(`
-      INSERT INTO task_dependencies (task_id, depends_on_task_id)
-      VALUES (?, ?)
-    `);
-
-    const normalizedDependsOnTaskIds = this.normalizeDependencyIds(input.dependsOnTaskIds);
-    if (normalizedDependsOnTaskIds.length > 0) {
-      const sprintTasks = this.listTasks(projectId, input.sprintId);
-      validateTaskDependencies(id, input.sprintId, normalizedDependsOnTaskIds, sprintTasks);
-    }
-
-    this.runInTransaction(() => {
-      insertTask.run(
-        id,
-        projectId,
-        input.sprintId,
-        taskKey,
-        input.title.trim(),
-        input.promptMarkdown?.trim() || "",
-        input.description?.trim() || "",
-        input.status || "pending",
-        input.priority || "medium",
-        input.executorType || "auto",
-        sortOrder,
-        input.isIndependent === undefined ? 1 : Number(input.isIndependent),
-        Number(!!input.isMerged),
-        input.mergeIndicator || null,
-        input.sourceType || null,
-        input.sourcePath || null,
-        now,
-        now
-      );
-
-      for (const dependencyId of normalizedDependsOnTaskIds) {
-        insertDependency.run(id, dependencyId);
+    try {
+      this.requireProject(projectId);
+      const sprint = this.requireSprint(input.sprintId);
+      if (sprint.projectId !== projectId) {
+        throw new ValidationError(`Sprint ${input.sprintId} does not belong to project ${projectId}`);
       }
-    });
 
-    this.touchProject(projectId, now);
-    const created = this.requireTask(id);
-    this.publishProjectStructureRefresh(projectId);
-    return created;
+      const id = randomUUID();
+      const now = new Date().toISOString();
+      const taskKey = input.taskKey?.trim() || this.createNextTaskKey(input.sprintId);
+      const sortOrder = input.sortOrder ?? this.getNextSortOrder(input.sprintId);
+
+      const insertTask = this.db.prepare(`
+        INSERT INTO tasks (
+          id, project_id, sprint_id, task_key, title, prompt_markdown, description, status, priority, executor_type,
+          sort_order, is_independent, is_merged, merge_indicator, source_type, source_path, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const insertDependency = this.db.prepare(`
+        INSERT INTO task_dependencies (task_id, depends_on_task_id)
+        VALUES (?, ?)
+      `);
+
+      const normalizedDependsOnTaskIds = this.normalizeDependencyIds(input.dependsOnTaskIds);
+      if (normalizedDependsOnTaskIds.length > 0) {
+        const sprintTasks = this.listTasks(projectId, input.sprintId);
+        validateTaskDependencies(id, input.sprintId, normalizedDependsOnTaskIds, sprintTasks);
+      }
+
+      this.runInTransaction(() => {
+        insertTask.run(
+          id,
+          projectId,
+          input.sprintId,
+          taskKey,
+          input.title.trim(),
+          input.promptMarkdown?.trim() || "",
+          input.description?.trim() || "",
+          input.status || "pending",
+          input.priority || "medium",
+          input.executorType || "auto",
+          sortOrder,
+          input.isIndependent === undefined ? 1 : Number(input.isIndependent),
+          Number(!!input.isMerged),
+          input.mergeIndicator || null,
+          input.sourceType || null,
+          input.sourcePath || null,
+          now,
+          now
+        );
+
+        for (const dependencyId of normalizedDependsOnTaskIds) {
+          insertDependency.run(id, dependencyId);
+        }
+      });
+
+      this.touchProject(projectId, now);
+      const created = this.requireTask(id);
+      this.publishProjectStructureRefresh(projectId);
+      return created;
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, projectId, sprintId: input.sprintId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   updateTask(taskId: string, input: UpdateTaskInput): TaskRecord {
-    const current = this.requireTask(taskId);
-    const nextTitle = input.title?.trim() || current.title;
-    const nextPromptMarkdown = input.promptMarkdown === undefined ? current.promptMarkdown : input.promptMarkdown;
-    const nextDescription = input.description === undefined ? current.description : input.description;
-    const nextStatus = input.status || current.status;
-    const nextPriority = input.priority || current.priority;
-    const nextExecutorType = input.executorType || current.executorType;
-    const nextSortOrder = input.sortOrder === undefined ? current.sortOrder : input.sortOrder;
-    const nextIsIndependent = input.isIndependent === undefined ? current.isIndependent : input.isIndependent;
-    const nextIsMerged = input.isMerged === undefined ? current.isMerged : input.isMerged;
-    const nextMergeIndicator = input.mergeIndicator === undefined ? current.mergeIndicator : input.mergeIndicator;
-    const nextSourceType = input.sourceType === undefined ? current.sourceType : input.sourceType;
-    const nextSourcePath = input.sourcePath === undefined ? current.sourcePath : input.sourcePath;
-    const nextDependsOnTaskIds = input.dependsOnTaskIds
-      ? this.normalizeDependencyIds(input.dependsOnTaskIds)
-      : current.dependsOnTaskIds;
-    const dependenciesChanged = input.dependsOnTaskIds !== undefined
-      && !sameStringArray(nextDependsOnTaskIds, current.dependsOnTaskIds);
+    try {
+      const current = this.requireTask(taskId);
+      const nextTitle = input.title?.trim() || current.title;
+      const nextPromptMarkdown = input.promptMarkdown === undefined ? current.promptMarkdown : input.promptMarkdown;
+      const nextDescription = input.description === undefined ? current.description : input.description;
+      const nextStatus = input.status || current.status;
+      const nextPriority = input.priority || current.priority;
+      const nextExecutorType = input.executorType || current.executorType;
+      const nextSortOrder = input.sortOrder === undefined ? current.sortOrder : input.sortOrder;
+      const nextIsIndependent = input.isIndependent === undefined ? current.isIndependent : input.isIndependent;
+      const nextIsMerged = input.isMerged === undefined ? current.isMerged : input.isMerged;
+      const nextMergeIndicator = input.mergeIndicator === undefined ? current.mergeIndicator : input.mergeIndicator;
+      const nextSourceType = input.sourceType === undefined ? current.sourceType : input.sourceType;
+      const nextSourcePath = input.sourcePath === undefined ? current.sourcePath : input.sourcePath;
+      const nextDependsOnTaskIds = input.dependsOnTaskIds
+        ? this.normalizeDependencyIds(input.dependsOnTaskIds)
+        : current.dependsOnTaskIds;
+      const dependenciesChanged = input.dependsOnTaskIds !== undefined
+        && !sameStringArray(nextDependsOnTaskIds, current.dependsOnTaskIds);
 
-    if (dependenciesChanged) {
-      const sprintTasks = this.listTasks(current.projectId, current.sprintId);
-      validateTaskDependencies(taskId, current.sprintId, nextDependsOnTaskIds, sprintTasks);
-    }
-
-    const taskChanged = nextTitle !== current.title
-      || nextPromptMarkdown !== current.promptMarkdown
-      || nextDescription !== current.description
-      || nextStatus !== current.status
-      || nextPriority !== current.priority
-      || nextExecutorType !== current.executorType
-      || nextSortOrder !== current.sortOrder
-      || nextIsIndependent !== current.isIndependent
-      || nextIsMerged !== current.isMerged
-      || nextMergeIndicator !== current.mergeIndicator
-      || nextSourceType !== current.sourceType
-      || nextSourcePath !== current.sourcePath;
-    if (!taskChanged && !dependenciesChanged) {
-      return current;
-    }
-
-    const now = new Date().toISOString();
-    const updateTask = this.db.prepare(`
-      UPDATE tasks
-      SET title = ?, prompt_markdown = ?, description = ?, status = ?, priority = ?, executor_type = ?, sort_order = ?,
-          is_independent = ?, is_merged = ?, merge_indicator = ?, source_type = ?, source_path = ?, updated_at = ?
-      WHERE id = ?
-    `);
-    const deleteDependencies = this.db.prepare(`DELETE FROM task_dependencies WHERE task_id = ?`);
-    const insertDependency = this.db.prepare(`
-      INSERT INTO task_dependencies (task_id, depends_on_task_id)
-      VALUES (?, ?)
-    `);
-
-    this.runInTransaction(() => {
-      updateTask.run(
-        nextTitle,
-        nextPromptMarkdown,
-        nextDescription,
-        nextStatus,
-        nextPriority,
-        nextExecutorType,
-        nextSortOrder,
-        Number(nextIsIndependent),
-        Number(nextIsMerged),
-        nextMergeIndicator,
-        nextSourceType,
-        nextSourcePath,
-        now,
-        taskId
-      );
-
-      if (input.dependsOnTaskIds) {
-        deleteDependencies.run(taskId);
-        for (const dependencyId of nextDependsOnTaskIds) {
-          insertDependency.run(taskId, dependencyId);
-        }
+      if (dependenciesChanged) {
+        const sprintTasks = this.listTasks(current.projectId, current.sprintId);
+        validateTaskDependencies(taskId, current.sprintId, nextDependsOnTaskIds, sprintTasks);
       }
-    });
 
-    this.touchProject(current.projectId, now);
-    const updated = this.requireTask(taskId);
-    this.publishProjectStructureRefresh(current.projectId);
-    return updated;
+      const taskChanged = nextTitle !== current.title
+        || nextPromptMarkdown !== current.promptMarkdown
+        || nextDescription !== current.description
+        || nextStatus !== current.status
+        || nextPriority !== current.priority
+        || nextExecutorType !== current.executorType
+        || nextSortOrder !== current.sortOrder
+        || nextIsIndependent !== current.isIndependent
+        || nextIsMerged !== current.isMerged
+        || nextMergeIndicator !== current.mergeIndicator
+        || nextSourceType !== current.sourceType
+        || nextSourcePath !== current.sourcePath;
+      if (!taskChanged && !dependenciesChanged) {
+        return current;
+      }
+
+      const now = new Date().toISOString();
+      const updateTask = this.db.prepare(`
+        UPDATE tasks
+        SET title = ?, prompt_markdown = ?, description = ?, status = ?, priority = ?, executor_type = ?, sort_order = ?,
+            is_independent = ?, is_merged = ?, merge_indicator = ?, source_type = ?, source_path = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      const deleteDependencies = this.db.prepare(`DELETE FROM task_dependencies WHERE task_id = ?`);
+      const insertDependency = this.db.prepare(`
+        INSERT INTO task_dependencies (task_id, depends_on_task_id)
+        VALUES (?, ?)
+      `);
+
+      this.runInTransaction(() => {
+        updateTask.run(
+          nextTitle,
+          nextPromptMarkdown,
+          nextDescription,
+          nextStatus,
+          nextPriority,
+          nextExecutorType,
+          nextSortOrder,
+          Number(nextIsIndependent),
+          Number(nextIsMerged),
+          nextMergeIndicator,
+          nextSourceType,
+          nextSourcePath,
+          now,
+          taskId
+        );
+
+        if (input.dependsOnTaskIds) {
+          deleteDependencies.run(taskId);
+          for (const dependencyId of nextDependsOnTaskIds) {
+            insertDependency.run(taskId, dependencyId);
+          }
+        }
+      });
+
+      this.touchProject(current.projectId, now);
+      const updated = this.requireTask(taskId);
+      this.publishProjectStructureRefresh(current.projectId);
+      return updated;
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, taskId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   deleteTask(taskId: string): void {
-    const task = this.requireTask(taskId);
-    this.db.prepare(`DELETE FROM tasks WHERE id = ?`).run(taskId);
-    this.touchProject(task.projectId);
-    this.publishProjectStructureRefresh(task.projectId);
+    try {
+      const task = this.requireTask(taskId);
+      this.db.prepare(`DELETE FROM tasks WHERE id = ?`).run(taskId);
+      this.touchProject(task.projectId);
+      this.publishProjectStructureRefresh(task.projectId);
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, taskId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   deleteTasksBySprint(sprintId: string): void {
-    const sprint = this.requireSprint(sprintId);
-    this.db.prepare(`DELETE FROM tasks WHERE sprint_id = ?`).run(sprintId);
-    this.touchProject(sprint.projectId);
-    this.publishProjectStructureRefresh(sprint.projectId);
+    try {
+      const sprint = this.requireSprint(sprintId);
+      this.db.prepare(`DELETE FROM tasks WHERE sprint_id = ?`).run(sprintId);
+      this.touchProject(sprint.projectId);
+      this.publishProjectStructureRefresh(sprint.projectId);
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, sprintId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
 
@@ -553,25 +626,32 @@ export class ProjectManagementRepository {
   }
 
   setSelectedSprintId(projectId: string, sprintId: string | null): string | null {
-    this.requireProject(projectId);
-    if (sprintId) {
-      const sprint = this.requireSprint(sprintId);
-      if (sprint.projectId !== projectId) {
-        throw new Error(`Sprint ${sprintId} does not belong to project ${projectId}`);
+    try {
+      this.requireProject(projectId);
+      if (sprintId) {
+        const sprint = this.requireSprint(sprintId);
+        if (sprint.projectId !== projectId) {
+          throw new ValidationError(`Sprint ${sprintId} does not belong to project ${projectId}`);
+        }
       }
-    }
-    const now = new Date().toISOString();
-    this.db.prepare(`
-      INSERT INTO app_settings (key, payload, updated_at)
-      VALUES (?, ?, ?)
-      ${this.db.dialect.upsert(["key"], ["payload", "updated_at"])}
-    `).run(
-      `selected_sprint_id_${projectId}`,
-      JSON.stringify({ sprintId }),
-      now
-    );
+      const now = new Date().toISOString();
+      this.db.prepare(`
+        INSERT INTO app_settings (key, payload, updated_at)
+        VALUES (?, ?, ?)
+        ${this.db.dialect.upsert(["key"], ["payload", "updated_at"])}
+      `).run(
+        `selected_sprint_id_${projectId}`,
+        JSON.stringify({ sprintId }),
+        now
+      );
 
-    return sprintId;
+      return sprintId;
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, projectId, sprintId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   getSelectedProjectId(): string | null {
@@ -594,21 +674,28 @@ export class ProjectManagementRepository {
   }
 
   setSelectedProjectId(projectId: string | null): string | null {
-    if (projectId) {
-      this.requireProject(projectId);
-    }
-    const now = new Date().toISOString();
-    this.db.prepare(`
-      INSERT INTO app_settings (key, payload, updated_at)
-      VALUES (?, ?, ?)
-      ${this.db.dialect.upsert(["key"], ["payload", "updated_at"])}
-    `).run(
-      SELECTED_PROJECT_KEY,
-      JSON.stringify({ projectId }),
-      now
-    );
+    try {
+      if (projectId) {
+        this.requireProject(projectId);
+      }
+      const now = new Date().toISOString();
+      this.db.prepare(`
+        INSERT INTO app_settings (key, payload, updated_at)
+        VALUES (?, ?, ?)
+        ${this.db.dialect.upsert(["key"], ["payload", "updated_at"])}
+      `).run(
+        SELECTED_PROJECT_KEY,
+        JSON.stringify({ projectId }),
+        now
+      );
 
-    return projectId;
+      return projectId;
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, projectId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   notifyProjectsUpdated(): void {
@@ -660,7 +747,7 @@ export class ProjectManagementRepository {
   private requireProject(projectId: string): ProjectSummary {
     const project = this.getProject(projectId);
     if (!project) {
-      throw new Error(`Project not found: ${projectId}`);
+      throw new EntityNotFoundError(`Project not found: ${projectId}`);
     }
     return project;
   }
@@ -674,7 +761,7 @@ export class ProjectManagementRepository {
     `).get(sprintId) as SprintRow | undefined;
 
     if (!row) {
-      throw new Error(`Sprint not found: ${sprintId}`);
+      throw new EntityNotFoundError(`Sprint not found: ${sprintId}`);
     }
 
     return this.mapSprintRow(row);
@@ -688,7 +775,7 @@ export class ProjectManagementRepository {
     `).get(taskId) as TaskRow | undefined;
 
     if (!row) {
-      throw new Error(`Task not found: ${taskId}`);
+      throw new EntityNotFoundError(`Task not found: ${taskId}`);
     }
 
     const [task] = this.inflateTasks([row]);
@@ -925,7 +1012,7 @@ export class ProjectManagementRepository {
       const foundTaskIds = new Set(rows.map(r => r.id));
       for (const normalized of output) {
         if (!foundTaskIds.has(normalized)) {
-          throw new Error(`Task not found: ${normalized}`);
+          throw new EntityNotFoundError(`Task not found: ${normalized}`);
         }
       }
     }

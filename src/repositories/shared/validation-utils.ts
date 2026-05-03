@@ -1,3 +1,4 @@
+import { EntityNotFoundError } from "../repository-utils.js";
 import type { DatabaseAdapter } from "../db/database-adapter.js";
 
 export function requireEntity<T extends { id: string }>(
@@ -10,7 +11,7 @@ export function requireEntity<T extends { id: string }>(
 ): void {
   const row = db.prepare(`SELECT ${selectFields} FROM ${tableName} WHERE id = ?`).get(id) as T | undefined;
   if (!row) {
-    throw new Error(`${entityName} not found: ${id}`);
+    throw new EntityNotFoundError(`${entityName} not found: ${id}`);
   }
   if (extraChecks) {
     extraChecks(row);
@@ -25,7 +26,7 @@ export function requireEntityByGetter<T>(
 ): T {
   const entity = getter(id);
   if (!entity) {
-    throw new Error(`${entityName} not found: ${id}`);
+    throw new EntityNotFoundError(`${entityName} not found: ${id}`);
   }
   if (extraChecks) {
     extraChecks(entity);

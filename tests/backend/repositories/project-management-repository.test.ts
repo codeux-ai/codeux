@@ -471,7 +471,7 @@ describe("ProjectManagementRepository", () => {
 
     expect(() => {
       repository.updateTask(taskA.id, { dependsOnTaskIds: [taskA.id] });
-    }).toThrow("cannot depend on itself");
+    }).toThrow(/cannot depend on itself/);
   });
 
   it("rejects cross-sprint dependencies", async () => {

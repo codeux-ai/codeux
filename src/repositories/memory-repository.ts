@@ -1,4 +1,6 @@
 import { randomUUID } from "crypto";
+import { createLogger, type Logger } from "../shared/logging/logger.js";
+import { RepositoryError } from "./repository-utils.js";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { requireRecord, executeChunkedInQuery } from "./repository-utils.js";
@@ -55,118 +57,130 @@ interface CountRow {
 export class MemoryRepository {
   private readonly db: DatabaseAdapter;
 
-  constructor(storage: AppDbStorage) {
+  constructor(storage: AppDbStorage, private readonly logger: Logger = createLogger({ bindings: { component: "MemoryRepository" } })) {
     this.db = storage.getDatabase();
   }
 
   createMemory(projectId: string, input: CreateMemoryInput): MemoryRecord {
-    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
-    const now = new Date().toISOString();
-    const id = randomUUID();
-    const source: MemorySource = input.source ?? { type: "manual" };
+    try {
+      requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
+      const now = new Date().toISOString();
+      const id = randomUUID();
+      const source: MemorySource = input.source ?? { type: "manual" };
 
-    const row: MemoryRow = {
-      id,
-      project_id: projectId,
-      scope: input.scope,
-      sprint_id: input.sprintId ?? null,
-      agent_preset_id: input.agentPresetId ?? null,
-      content: input.content.trim(),
-      category: input.category,
-      strength: input.strength ?? 0.5,
-      source_json: JSON.stringify(source),
-      embedding_model: null,
-      embedding_dimension: null,
-      embedding_blob: null,
-      promoted_from_id: null,
-      promotion_reason: null,
-      created_at: now,
-      updated_at: now,
-    };
+      const row: MemoryRow = {
+        id,
+        project_id: projectId,
+        scope: input.scope,
+        sprint_id: input.sprintId ?? null,
+        agent_preset_id: input.agentPresetId ?? null,
+        content: input.content.trim(),
+        category: input.category,
+        strength: input.strength ?? 0.5,
+        source_json: JSON.stringify(source),
+        embedding_model: null,
+        embedding_dimension: null,
+        embedding_blob: null,
+        promoted_from_id: null,
+        promotion_reason: null,
+        created_at: now,
+        updated_at: now,
+      };
 
-    this.db.prepare(`
-      INSERT INTO memories (
-        id, project_id, scope, sprint_id, agent_preset_id,
-        content, category, strength, source_json,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      row.id,
-      row.project_id,
-      row.scope,
-      row.sprint_id,
-      row.agent_preset_id,
-      row.content,
-      row.category,
-      row.strength,
-      row.source_json,
-      row.created_at,
-      row.updated_at,
-    );
-
-    return this.mapRow(row);
-  }
-
-  createMemories(projectId: string, inputs: CreateMemoryInput[]): MemoryRecord[] {
-    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
-
-    if (inputs.length === 0) return [];
-
-    const now = new Date().toISOString();
-
-    return this.db.transaction(() => {
-      const stmt = this.db.prepare(`
+      this.db.prepare(`
         INSERT INTO memories (
           id, project_id, scope, sprint_id, agent_preset_id,
           content, category, strength, source_json,
           created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+      `).run(
+        row.id,
+        row.project_id,
+        row.scope,
+        row.sprint_id,
+        row.agent_preset_id,
+        row.content,
+        row.category,
+        row.strength,
+        row.source_json,
+        row.created_at,
+        row.updated_at,
+      );
 
-      const createdRecords: MemoryRecord[] = [];
+      return this.mapRow(row);
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, projectId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
 
-      for (const input of inputs) {
-        const id = randomUUID();
-        const source: MemorySource = input.source ?? { type: "manual" };
+  createMemories(projectId: string, inputs: CreateMemoryInput[]): MemoryRecord[] {
+    try {
+      requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
 
-        const row: MemoryRow = {
-          id,
-          project_id: projectId,
-          scope: input.scope,
-          sprint_id: input.sprintId ?? null,
-          agent_preset_id: input.agentPresetId ?? null,
-          content: input.content.trim(),
-          category: input.category,
-          strength: input.strength ?? 0.5,
-          source_json: JSON.stringify(source),
-          embedding_model: null,
-          embedding_dimension: null,
-          embedding_blob: null,
-          promoted_from_id: null,
-          promotion_reason: null,
-          created_at: now,
-          updated_at: now,
-        };
+      if (inputs.length === 0) return [];
 
-        stmt.run(
-          row.id,
-          row.project_id,
-          row.scope,
-          row.sprint_id,
-          row.agent_preset_id,
-          row.content,
-          row.category,
-          row.strength,
-          row.source_json,
-          row.created_at,
-          row.updated_at,
-        );
+      const now = new Date().toISOString();
 
-        createdRecords.push(this.mapRow(row));
-      }
+      return this.db.transaction(() => {
+        const stmt = this.db.prepare(`
+          INSERT INTO memories (
+            id, project_id, scope, sprint_id, agent_preset_id,
+            content, category, strength, source_json,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
 
-      return createdRecords;
-    });
+        const createdRecords: MemoryRecord[] = [];
+
+        for (const input of inputs) {
+          const id = randomUUID();
+          const source: MemorySource = input.source ?? { type: "manual" };
+
+          const row: MemoryRow = {
+            id,
+            project_id: projectId,
+            scope: input.scope,
+            sprint_id: input.sprintId ?? null,
+            agent_preset_id: input.agentPresetId ?? null,
+            content: input.content.trim(),
+            category: input.category,
+            strength: input.strength ?? 0.5,
+            source_json: JSON.stringify(source),
+            embedding_model: null,
+            embedding_dimension: null,
+            embedding_blob: null,
+            promoted_from_id: null,
+            promotion_reason: null,
+            created_at: now,
+            updated_at: now,
+          };
+
+          stmt.run(
+            row.id,
+            row.project_id,
+            row.scope,
+            row.sprint_id,
+            row.agent_preset_id,
+            row.content,
+            row.category,
+            row.strength,
+            row.source_json,
+            row.created_at,
+            row.updated_at,
+          );
+
+          createdRecords.push(this.mapRow(row));
+        }
+
+        return createdRecords;
+      });
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, projectId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
 
@@ -200,36 +214,48 @@ export class MemoryRepository {
   }
 
   updateMemory(memoryId: string, input: UpdateMemoryInput): MemoryRecord {
-    const current = requireRecord(this.getMemory(memoryId), "Memory", memoryId);
-    const now = new Date().toISOString();
+    try {
+      const current = requireRecord(this.getMemory(memoryId), "Memory", memoryId);
+      const now = new Date().toISOString();
 
-    const updatedContent = input.content?.trim() ?? current.content;
-    const updatedCategory = input.category ?? current.category;
-    const updatedStrength = input.strength ?? current.strength;
+      const updatedContent = input.content?.trim() ?? current.content;
+      const updatedCategory = input.category ?? current.category;
+      const updatedStrength = input.strength ?? current.strength;
 
-    this.db.prepare(`
-      UPDATE memories
-      SET content = ?, category = ?, strength = ?, updated_at = ?
-      WHERE id = ?
-    `).run(
-      updatedContent,
-      updatedCategory,
-      updatedStrength,
-      now,
-      memoryId,
-    );
+      this.db.prepare(`
+        UPDATE memories
+        SET content = ?, category = ?, strength = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        updatedContent,
+        updatedCategory,
+        updatedStrength,
+        now,
+        memoryId,
+      );
 
-    return {
-      ...current,
-      content: updatedContent,
-      category: updatedCategory,
-      strength: updatedStrength,
-      updatedAt: now,
-    };
+      return {
+        ...current,
+        content: updatedContent,
+        category: updatedCategory,
+        strength: updatedStrength,
+        updatedAt: now,
+      };
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, memoryId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   deleteMemory(memoryId: string): void {
-    this.db.prepare(`DELETE FROM memories WHERE id = ?`).run(memoryId);
+    try {
+      this.db.prepare(`DELETE FROM memories WHERE id = ?`).run(memoryId);
+      } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, memoryId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
   }
 
   private listMemories(
