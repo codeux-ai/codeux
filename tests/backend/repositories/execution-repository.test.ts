@@ -2100,4 +2100,44 @@ describe("ExecutionRepository", () => {
 
       expect(claimed).toBeNull();
     });
+
+    describe("resolveLeaseProjectId cache", () => {
+      it("queries the DB only once for the same lease ID and purges on release", async () => {
+        const { executionRepository, projectRepository } = await createRepositories();
+        const project = projectRepository.createProject({
+          name: "Cache Test",
+          sourceType: "local",
+          sourceRef: "/workspace/cache-test",
+        });
+
+        const sprint = projectRepository.createSprint(project.id, {
+          name: "Sprint",
+          goalMarkdown: "Goal",
+        });
+
+        const dbAdapter = (executionRepository as any).db;
+        const prepareSpy = vi.spyOn(dbAdapter, "prepare");
+
+        // First call should query DB
+        const projectId1 = executionRepository.resolveLeaseProjectId("sprint", sprint.id);
+        expect(projectId1).toBe(project.id);
+        expect(prepareSpy).toHaveBeenCalled();
+
+        prepareSpy.mockClear();
+
+        // Second call should hit cache
+        const projectId2 = executionRepository.resolveLeaseProjectId("sprint", sprint.id);
+        expect(projectId2).toBe(project.id);
+        expect(prepareSpy).not.toHaveBeenCalled();
+
+        // Release should clear cache
+        executionRepository.releaseLease("sprint", sprint.id);
+
+        // Third call should query DB again
+        prepareSpy.mockClear();
+        const projectId3 = executionRepository.resolveLeaseProjectId("sprint", sprint.id);
+        expect(projectId3).toBe(project.id);
+        expect(prepareSpy).toHaveBeenCalled();
+      });
+    });
   });

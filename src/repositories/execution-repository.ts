@@ -1271,6 +1271,8 @@ export class ExecutionRepository {
 
   releaseLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string, leaseToken?: string): void {
     const projectId = this.resolveLeaseProjectId(scopeType, scopeId);
+
+    // Clear project ID cache entry to prevent stale entries
     this.leaseProjectCache.delete(`${scopeType}:${scopeId}`);
 
     if (leaseToken) {
@@ -1982,9 +1984,11 @@ export class ExecutionRepository {
 
   public resolveLeaseProjectId(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): string | null {
     const cacheKey = `${scopeType}:${scopeId}`;
-    const cached = this.leaseProjectCache.get(cacheKey);
-    if (cached !== undefined) {
-      return cached;
+
+    // Check in-memory cache first to avoid repeated DB lookups
+    const cachedProjectId = this.leaseProjectCache.get(cacheKey);
+    if (cachedProjectId !== undefined) {
+      return cachedProjectId;
     }
 
     let projectId: string | null = null;
