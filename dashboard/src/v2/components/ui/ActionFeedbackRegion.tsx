@@ -1,5 +1,5 @@
 import { h, type FunctionComponent } from "preact";
-import { useRef, useLayoutEffect, useEffect } from "preact/hooks";
+import { useRef, useLayoutEffect, useEffect, useState } from "preact/hooks";
 import { X, CheckCircle, AlertTriangle, XCircle, Loader2, RotateCcw } from "lucide-preact";
 import gsap from "gsap";
 import type { ActionFeedbackStatus } from "../../hooks/use-action-feedback.js";
@@ -30,8 +30,38 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
   const dismissBtnRef = useRef<HTMLButtonElement>(null);
   const reducedMotion = useReducedMotion();
 
+  const [displayedMessage, setDisplayedMessage] = useState(message);
+  const messageRef = useRef<HTMLDivElement>(null);
+
   useLayoutEffect(() => {
-    if (status === "idle" || !message || !containerRef.current) return;
+    if (message !== displayedMessage) {
+      if (reducedMotion || !messageRef.current) {
+        setDisplayedMessage(message);
+      } else {
+        const ctx = gsap.context(() => {
+          gsap.to(messageRef.current, {
+            opacity: 0,
+            y: -4,
+            duration: 0.15,
+            onComplete: () => {
+              setDisplayedMessage(message);
+              gsap.fromTo(messageRef.current, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: 0.15 });
+            }
+          });
+        });
+        return () => ctx.revert();
+      }
+    }
+  }, [message, displayedMessage, reducedMotion]);
+
+  const [isVisible, setIsVisible] = useState(false);
+  useLayoutEffect(() => {
+    if (status !== "idle" && message) setIsVisible(true);
+    else setIsVisible(false);
+  }, [status, message]);
+
+  useLayoutEffect(() => {
+    if (!isVisible || !containerRef.current) return;
 
     const ctx = gsap.context(() => {
       gsap.fromTo(
@@ -42,7 +72,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     });
 
     return () => ctx.revert();
-  }, [status, message, reducedMotion]);
+  }, [isVisible, reducedMotion]);
 
   useEffect(() => {
     if (status === "idle" || !message || status === "error" || status === "pending" || !progressRef.current) return;
@@ -78,8 +108,10 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl border ${config.colors} ${className}`}
     >
       <Icon className={`w-5 h-5 shrink-0 ${status === "pending" ? "animate-spin" : ""}`} />
-      <div className="flex-1 text-sm font-medium mt-0.5">
-        {message}
+      <div className="flex-1 text-sm font-medium mt-0.5 relative">
+        <div ref={messageRef}>
+          {displayedMessage}
+        </div>
       </div>
       <div className="shrink-0 flex items-center gap-1">
         {retryAction && (

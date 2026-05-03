@@ -4,8 +4,9 @@ import { useCallback, useRef } from "preact/hooks";
 import { Check, X, Loader2 } from "lucide-preact";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useMagnetic } from "../../hooks/use-magnetic.js";
+import { useScalePop } from "../../hooks/use-scale-pop.js";
 
-export const SHARED_INTERACTION_CLASSES = "transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 aria-disabled:opacity-60 aria-disabled:cursor-not-allowed motion-safe:hover:-translate-y-px aria-disabled:hover:translate-y-0 motion-safe:active:scale-95 aria-disabled:active:scale-100 touch-target";
+export const SHARED_INTERACTION_CLASSES = "transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus-visible:ring-signal-500 aria-disabled:opacity-60 aria-disabled:cursor-not-allowed touch-target";
 
 export interface ButtonProps extends ComponentProps<"button"> {
   pending?: boolean;
@@ -46,6 +47,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   useMagnetic(buttonRef, contentRef, { enabled: variant === "primary" || variant === "signal" });
+  useScalePop(buttonRef, Boolean(disabled) || isPending);
 
   const handleClick = useCallback(
     (e: any) => {
@@ -94,23 +96,17 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
         {children}
       </div>
 
-      {isPending && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Loader2 className="w-5 h-5 animate-spin" />
-        </div>
-      )}
+      <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${isPending ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
 
-      {isSuccess && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Check className="w-5 h-5" />
-        </div>
-      )}
+      <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${isSuccess ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        <Check className="w-5 h-5" />
+      </div>
 
-      {isError && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <X className="w-5 h-5" />
-        </div>
-      )}
+      <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${isError ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        <X className="w-5 h-5" />
+      </div>
     </button>
   );
 });
