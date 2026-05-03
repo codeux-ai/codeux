@@ -14,6 +14,7 @@ import type { Logger } from "../shared/logging/logger.js";
 import { readFile, unlink } from "fs/promises";
 import { join } from "path";
 import { LEARNINGS_FILENAME, type ParsedMemoryEntry } from "../contracts/memory-types.js";
+import type { DashboardRealtimeMutationNotifier } from "./dashboard-realtime-service.js";
 
 const VALID_CATEGORIES = new Set<MemoryCategory>([
   "architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning",
@@ -113,6 +114,7 @@ export class MemoryService {
     memoryRepository: MemoryRepository,
     embeddingService: EmbeddingService,
     logger: Logger,
+    private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
   ) {
     this.memoryRepository = memoryRepository;
     this.embeddingService = embeddingService;
@@ -186,8 +188,8 @@ export class MemoryService {
     return record;
   }
 
-  async createMemories(projectId: string, inputs: CreateMemoryInput[]): Promise<MemoryRecord[]> {
-    const records = this.memoryRepository.createMemories(projectId, inputs);
+  async createMemoriesBatch(projectId: string, inputs: CreateMemoryInput[]): Promise<MemoryRecord[]> {
+    const records = this.memoryRepository.createMemoriesBatch(projectId, inputs);
 
     // Async: compute embedding if model is loaded
     if (this.embeddingService.isLoaded()) {
@@ -196,6 +198,10 @@ export class MemoryService {
           this.logger.warn(`Failed to embed memory ${record.id}: ${error}`);
         })
       )).catch(() => {});
+    }
+
+    if (records.length > 0) {
+      this.realtimeNotifier?.notifyMemoriesCreated(projectId);
     }
 
     return records;

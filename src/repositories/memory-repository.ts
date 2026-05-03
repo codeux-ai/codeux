@@ -107,7 +107,7 @@ export class MemoryRepository {
     return this.mapRow(row);
   }
 
-  createMemories(projectId: string, inputs: CreateMemoryInput[]): MemoryRecord[] {
+  createMemoriesBatch(projectId: string, inputs: CreateMemoryInput[]): MemoryRecord[] {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
 
     if (inputs.length === 0) return [];
