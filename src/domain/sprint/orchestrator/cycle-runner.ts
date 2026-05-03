@@ -487,7 +487,6 @@ export class CycleRunner {
 
     const limit = pLimit(5);
     const reviewPromises: Promise<void>[] = [];
-    const isDocker = settings.cliWorkflow?.executionMode === "DOCKER";
 
     for (const task of subtasks) {
       const prev = previousStates.get(task.id);
@@ -546,14 +545,10 @@ export class CycleRunner {
         }
       };
 
-      if (isDocker) {
-        reviewPromises.push(limit(runReview));
-      } else {
-        await runReview();
-      }
+      reviewPromises.push(limit(runReview));
     }
 
-    if (isDocker && reviewPromises.length > 0) {
+    if (reviewPromises.length > 0) {
       await Promise.all(reviewPromises);
     }
   }
