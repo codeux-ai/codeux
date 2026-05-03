@@ -43,7 +43,7 @@ export interface CiGateContext {
   persistMergedTask: (task: Subtask) => Promise<void>;
   executionRepository?: ExecutionRepository;
   sprintRunId?: string;
-  openCiFixAttention?: (task: Subtask, payload: WorkerCiFixPayload) => void;
+  openCiFixAttentionItems?: (items: Array<{ task: Subtask; payload: WorkerCiFixPayload }>) => void;
   hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
   evaluateTaskQaGate?: (task: Subtask) => TaskQaMergeGateStatus;
   logger?: Logger;
@@ -113,6 +113,8 @@ export class FeaturePrGateService {
     );
 
     let reportText = "";
+    const itemsToOpen: Array<{ task: Subtask; payload: WorkerCiFixPayload }> = [];
+
     for (let i = 0; i < completedAwaitingMerge.length; i++) {
       const task = completedAwaitingMerge[i];
       const result = processResults[i];
@@ -121,10 +123,14 @@ export class FeaturePrGateService {
         for (const event of result.events) {
           this.appendCiGateEvent(task, context, event.state, event.payload);
         }
-        if (result.attentionItem && context.openCiFixAttention) {
-          context.openCiFixAttention(task, result.attentionItem);
+        if (result.attentionItem) {
+          itemsToOpen.push({ task, payload: result.attentionItem });
         }
       }
+    }
+
+    if (itemsToOpen.length > 0 && context.openCiFixAttentionItems) {
+      context.openCiFixAttentionItems(itemsToOpen);
     }
 
     return { subtasks: updatedSubtasks, reportText };
@@ -336,7 +342,7 @@ export class FeaturePrGateService {
         );
       }
 
-      if (inProgressResult.workerCiFixRequired && inProgressResult.workerCiFixPayload && context.openCiFixAttention) {
+      if (inProgressResult.workerCiFixRequired && inProgressResult.workerCiFixPayload && context.openCiFixAttentionItems) {
         attentionItem = inProgressResult.workerCiFixPayload;
       }
 

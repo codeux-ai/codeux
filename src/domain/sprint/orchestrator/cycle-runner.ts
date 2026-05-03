@@ -223,30 +223,40 @@ export class CycleRunner {
           task,
           prNumber,
         ),
-        openCiFixAttention: (task, payload) => {
-          const taskId = task.record_id?.trim();
-          if (!taskId || !this.deps.projectAttentionService) {
+        openCiFixAttentionItems: (items) => {
+          if (!this.deps.projectAttentionService || items.length === 0) {
             return;
           }
-          const summaryLines = [
-            `CI failed for task \`${task.id}\` on branch \`${payload.branchName}\`.`,
-            `PR: ${payload.prUrl}`,
-            `Failed checks: ${payload.failedChecks.join(", ")}`,
-            payload.failedJobLabels.length > 0 ? `Failed jobs: ${payload.failedJobLabels.join(", ")}` : null,
-          ].filter(Boolean).join("\n");
 
-          this.deps.projectAttentionService.openItem({
-            projectId: args.executionContext.project.id,
-            sprintId: args.executionContext.sprint.id,
-            taskId,
-            sprintRunId: args.sprintRunId,
-            attentionType: "ci_fix_required",
-            severity: "high",
-            ownerType: "worker",
-            title: `CI fix required for ${task.id}`,
-            summaryMarkdown: summaryLines,
-            payload: { ...payload },
-          });
+          const attentionPayloads = [];
+          for (const { task, payload } of items) {
+            const taskId = task.record_id?.trim();
+            if (!taskId) continue;
+
+            const summaryLines = [
+              `CI failed for task \`${task.id}\` on branch \`${payload.branchName}\`.`,
+              `PR: ${payload.prUrl}`,
+              `Failed checks: ${payload.failedChecks.join(", ")}`,
+              payload.failedJobLabels.length > 0 ? `Failed jobs: ${payload.failedJobLabels.join(", ")}` : null,
+            ].filter(Boolean).join("\n");
+
+            attentionPayloads.push({
+              projectId: args.executionContext.project.id,
+              sprintId: args.executionContext.sprint.id,
+              taskId,
+              sprintRunId: args.sprintRunId,
+              attentionType: "ci_fix_required" as const,
+              severity: "high" as const,
+              ownerType: "worker" as const,
+              title: `CI fix required for ${task.id}`,
+              summaryMarkdown: summaryLines,
+              payload: { ...payload },
+            });
+          }
+
+          if (attentionPayloads.length > 0) {
+            this.deps.projectAttentionService.openItems(attentionPayloads);
+          }
         },
         persistMergedTask: async (task) => {
           if (typeof task.record_id !== "string" || task.record_id.trim().length === 0) {

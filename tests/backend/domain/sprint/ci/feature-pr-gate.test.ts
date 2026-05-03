@@ -396,15 +396,17 @@ jobs:
     context.gitStatus.openPullRequests[0].checks = [
       { name: "build", status: "completed", conclusion: "failure" }
     ];
-    context.openCiFixAttention = vi.fn();
+    context.openCiFixAttentionItems = vi.fn();
 
     const result = await service.evaluateCiGate(subtasks, context);
 
     expect(result.subtasks[0].status).toBe("RUNNING");
-    expect(context.openCiFixAttention).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "T1" }),
-      expect.objectContaining({ prNumber: 101, branchName: "feat/T1" }),
-    );
+    expect(context.openCiFixAttentionItems).toHaveBeenCalledWith([
+      {
+        task: expect.objectContaining({ id: "T1" }),
+        payload: expect.objectContaining({ prNumber: 101, branchName: "feat/T1" })
+      }
+    ]);
   });
 
   it("waits for an already active worker CI fix attempt instead of consuming another retry", async () => {
@@ -414,13 +416,13 @@ jobs:
       { name: "build", status: "completed", conclusion: "failure" }
     ];
     context.ciAutofixRetryCounts.set("T1:101", 1);
-    context.openCiFixAttention = vi.fn();
+    context.openCiFixAttentionItems = vi.fn();
     context.hasActiveWorkerCiFixAttempt = vi.fn().mockReturnValue(true);
 
     const result = await service.evaluateCiGate(subtasks, context);
 
     expect(result.subtasks[0].status).toBe("RUNNING");
-    expect(context.openCiFixAttention).not.toHaveBeenCalled();
+    expect(context.openCiFixAttentionItems).not.toHaveBeenCalled();
     expect(context.ciAutofixRetryCounts.get("T1:101")).toBe(1);
     expect(result.reportText).toContain("Worker CI fix already running");
   });
@@ -432,14 +434,14 @@ jobs:
       { name: "build", status: "completed", conclusion: "failure" }
     ];
     context.ciAutofixRetryCounts.set("T1:101", 3);
-    context.openCiFixAttention = vi.fn();
+    context.openCiFixAttentionItems = vi.fn();
     context.hasActiveWorkerCiFixAttempt = vi.fn().mockReturnValue(true);
 
     const result = await service.evaluateCiGate(subtasks, context);
 
     expect(result.subtasks[0].status).toBe("RUNNING");
     expect(result.subtasks[0].intervention_owner).toBeUndefined();
-    expect(context.openCiFixAttention).not.toHaveBeenCalled();
+    expect(context.openCiFixAttentionItems).not.toHaveBeenCalled();
     expect(result.reportText).toContain("Worker CI fix already running");
   });
 
@@ -447,11 +449,11 @@ jobs:
     context.gitStatus.openPullRequests[0].checks = [
       { name: "build", status: "completed", conclusion: "failure" }
     ];
-    context.openCiFixAttention = vi.fn();
+    context.openCiFixAttentionItems = vi.fn();
 
     await service.evaluateCiGate(subtasks, context);
 
-    expect(context.openCiFixAttention).not.toHaveBeenCalled();
+    expect(context.openCiFixAttentionItems).not.toHaveBeenCalled();
     expect(context.sendSessionMessage).toHaveBeenCalled();
   });
 

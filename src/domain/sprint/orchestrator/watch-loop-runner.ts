@@ -32,7 +32,7 @@ import type { HeartbeatService } from "../../../services/heartbeat-service.js";
 
 
 export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "finalizeSprintRunCancellationIfIdle" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "updateSprintRun" | "renewLease">;
-export type WatchLoopAttentionDependencies = Pick<ProjectAttentionService, "listActiveProjectItems" | "openItem" | "resolveItemsForSprintRun" | "resolveItem">;
+export type WatchLoopAttentionDependencies = Pick<ProjectAttentionService, "listActiveProjectItems" | "openItems" | "resolveItemsForSprintRun" | "resolveItem">;
 
 export interface WatchLoopDependencies {
   logger: Logger;
@@ -477,7 +477,7 @@ export class WatchLoopRunner {
           && mergeFeedback.hasMergeConflict
           && activeMainMergeAttentionItems.length === 0
         ) {
-          this.deps.projectAttentionService.openItem(buildTaskAttentionPayload({
+          this.deps.projectAttentionService.openItems([buildTaskAttentionPayload({
             projectId: scopedExecutionContext.project.id,
             sprintId: scopedExecutionContext.sprint.id,
             sprintRunId,
@@ -510,7 +510,7 @@ export class WatchLoopRunner {
               sprintName: scopedExecutionContext.sprint.name,
               featureBranchTaskContexts: selectMergedTaskContexts(subtasks, { limit: 8 }),
             },
-          }));
+          })]);
         } else if (ciIntelligence.resolveMainMergeConflicts && !mergeFeedback.hasMergeConflict) {
           resolveMainMergeConflictAttentionItems(
             this.deps.projectAttentionService,
@@ -652,7 +652,7 @@ export class WatchLoopRunner {
             { reason: "manual_attention" },
             `sprint-paused:${sprintRunId}:manual-attention`
           );
-          this.deps.projectAttentionService.openItem(buildTaskAttentionPayload({
+          this.deps.projectAttentionService.openItems([buildTaskAttentionPayload({
             projectId: scopedExecutionContext.project.id,
             sprintId: scopedExecutionContext.sprint.id,
             sprintRunId,
@@ -670,7 +670,7 @@ export class WatchLoopRunner {
               readyTaskIds: finalizationTransition.readyTaskIds,
               blockedTaskIds: finalizationTransition.blockedTaskIds,
             },
-          }));
+          })]);
           break;
         }
         case "completed":
