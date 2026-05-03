@@ -8,50 +8,11 @@ import type {
   TaskRunRecord
 } from "../../contracts/execution-types.js";
 
-
-class TTLCache {
-  private cache = new Map<string, number>();
-  private maxItems = 1000;
-  private ttlMs = 500;
-
-  set(key: string) {
-    if (this.cache.size >= this.maxItems) {
-      this.cache.clear();
-    }
-    this.cache.set(key, Date.now());
-  }
-
-  has(key: string): boolean {
-    const timestamp = this.cache.get(key);
-    if (!timestamp) return false;
-    if (Date.now() - timestamp > this.ttlMs) {
-      this.cache.delete(key);
-      return false;
-    }
-    return true;
-  }
-
-  clear() {
-    this.cache.clear();
-  }
-}
-
-const validationCache = new TTLCache();
-
-export function clearValidationCache() {
-  validationCache.clear();
-}
-
 export function requireProject(db: DatabaseAdapter, projectId: string): void {
-  const cacheKey = `Project:${projectId}`;
-  if (validationCache.has(cacheKey)) return;
   requireEntity<{ id: string }>(db, "Project", "projects", projectId);
-  validationCache.set(cacheKey);
 }
 
 export function requireSprint(db: DatabaseAdapter, sprintId: string, projectId?: string): void {
-  const cacheKey = `Sprint:${sprintId}:${projectId || ""}`;
-  if (validationCache.has(cacheKey)) return;
   requireEntity<{ id: string; project_id: string }>(
     db,
     "Sprint",
@@ -64,12 +25,9 @@ export function requireSprint(db: DatabaseAdapter, sprintId: string, projectId?:
       }
     }
   );
-  validationCache.set(cacheKey);
 }
 
 export function requireTask(db: DatabaseAdapter, taskId: string, projectId?: string, sprintId?: string): void {
-  const cacheKey = `Task:${taskId}:${projectId || ""}:${sprintId || ""}`;
-  if (validationCache.has(cacheKey)) return;
   requireEntity<{ id: string; project_id: string; sprint_id: string }>(
     db,
     "Task",
@@ -85,7 +43,6 @@ export function requireTask(db: DatabaseAdapter, taskId: string, projectId?: str
       }
     }
   );
-  validationCache.set(cacheKey);
 }
 
 export function requireConnection(db: DatabaseAdapter, connectionId: string): void {

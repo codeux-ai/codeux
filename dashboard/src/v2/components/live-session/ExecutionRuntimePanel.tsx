@@ -239,11 +239,11 @@ export const ExecutionRuntimePanel: FunctionComponent<{
 
     const [open, setOpen] = useState(defaultOpen);
     if (!snapshot) return null;
-    const activeSprintRuns = useMemo(() => snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued"), [snapshot.sprintRuns]);
+    const activeSprintRuns = useMemo(() => snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued"), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
     const activeDispatches = useMemo(() => snapshot.taskDispatches.filter((dispatch) => (
         dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running"
-    )), [snapshot.taskDispatches]);
-    const activeConnections = useMemo(() => snapshot.connections.filter((connection) => connection.status !== "offline"), [snapshot.connections]);
+    )), [snapshot.taskDispatches, snapshot.taskDispatches.length]);
+    const activeConnections = useMemo(() => snapshot.connections.filter((connection) => connection.status !== "offline"), [snapshot.connections, snapshot.connections.length]);
 
     const { workerDispatches, queuedWorkers, runningWorkers } = useMemo(() => {
         const workers = activeDispatches.filter((dispatch) => dispatch.executorType === "docker_cli");
@@ -254,17 +254,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         };
     }, [activeDispatches]);
 
-    const stats = useMemo(() => [
-        { label: "Active Runs", value: activeSprintRuns.length, accent: "text-signal-500" },
-        { label: "Active Dispatches", value: activeDispatches.length, accent: "text-slate-700 dark:text-slate-200" },
-        { label: "Worker Queued", value: queuedWorkers, accent: "text-ember-500" },
-        { label: "Worker Running", value: runningWorkers, accent: "text-status-green" },
-        { label: "Connections", value: activeConnections.length, accent: "text-signal-500" },
-        { label: "Pending Inbox", value: snapshot.connections.reduce((sum, connection) => sum + connection.pendingInboxCount, 0), accent: "text-status-amber" },
-    ], [activeSprintRuns.length, activeDispatches.length, queuedWorkers, runningWorkers, activeConnections.length, snapshot.connections]);
-
-    const visibleSprintRuns = useMemo(() => snapshot.sprintRuns.slice(0, 4), [snapshot.sprintRuns]);
-    const visibleTaskDispatches = useMemo(() => snapshot.taskDispatches.slice(0, 8), [snapshot.taskDispatches]);
+    const visibleSprintRuns = useMemo(() => snapshot.sprintRuns.slice(0, 4), [snapshot.sprintRuns, snapshot.sprintRuns.length]);
+    const visibleTaskDispatches = useMemo(() => snapshot.taskDispatches.slice(0, 8), [snapshot.taskDispatches, snapshot.taskDispatches.length]);
 
     return (
         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -314,7 +305,14 @@ export const ExecutionRuntimePanel: FunctionComponent<{
             <div className={`relative z-10 space-y-6 ${collapsible ? "px-5 pb-5" : "px-7 pb-7 pt-4"}`}>
 
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                    {stats.map(({ label, value, accent }) => (
+                    {[
+                        { label: "Active Runs", value: activeSprintRuns.length, accent: "text-signal-500" },
+                        { label: "Active Dispatches", value: activeDispatches.length, accent: "text-slate-700 dark:text-slate-200" },
+                        { label: "Worker Queued", value: queuedWorkers, accent: "text-ember-500" },
+                        { label: "Worker Running", value: runningWorkers, accent: "text-status-green" },
+                        { label: "Connections", value: activeConnections.length, accent: "text-signal-500" },
+                        { label: "Pending Inbox", value: snapshot.connections.reduce((sum, connection) => sum + connection.pendingInboxCount, 0), accent: "text-status-amber" },
+                    ].map(({ label, value, accent }) => (
                         <div key={label} className="rounded-xl bg-black/[0.02] dark:bg-white/[0.02] p-3">
                             <div className={`text-xl font-black font-mono leading-none ${accent}`}>{value}</div>
                             <div className="mt-1 text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</div>

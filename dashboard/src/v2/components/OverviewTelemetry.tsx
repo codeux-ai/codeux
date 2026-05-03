@@ -13,8 +13,8 @@ export const OverviewTelemetry: FunctionComponent = () => {
   const { loading: projectsLoading } = useProjectData();
   const isLoading = telemetryLoading || projectsLoading;
 
-  const hasActiveProjects = telemetry.activeProjects.length > 0;
-  const hasAttentionProjects = telemetry.attentionProjects.length > 0;
+  const hasActiveProjects = telemetry?.activeProjects?.length > 0;
+  const hasAttentionProjects = telemetry?.attentionProjects?.length > 0;
 
   const projectLookup = useMemo(() => buildProjectLookup(telemetry), [telemetry]);
   const hasRuntimeSignal = hasActiveProjects || hasAttentionProjects;
@@ -81,19 +81,19 @@ export const OverviewTelemetry: FunctionComponent = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
               <div className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active Projects</div>
-                <div className="mt-2 text-2xl md:text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.activeProjects.length}</div>
+                <div className="mt-2 text-2xl md:text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry?.activeProjects?.length ?? 0}</div>
               </div>
               <div className="rounded-2xl border border-status-amber/15 bg-status-amber/8 p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">Needs Attention</div>
-                <div className="mt-2 text-2xl md:text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.attentionProjects.length}</div>
+                <div className="mt-2 text-2xl md:text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry?.attentionProjects?.length ?? 0}</div>
               </div>
               <div className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4 col-span-2 sm:col-span-1">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Timeline Events</div>
-                <div className="mt-2 text-2xl md:text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.recentEvents.length}</div>
+                <div className="mt-2 text-2xl md:text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry?.recentEvents?.length ?? 0}</div>
               </div>
             </div>
 
-            {telemetry.attentionProjects.length > 0 && (
+            {telemetry?.attentionProjects?.length > 0 && (
               <div className="mb-6 rounded-[1.6rem] border border-status-amber/18 bg-status-amber/8 p-4">
                 <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">
                   <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.1} />
@@ -127,9 +127,9 @@ export const OverviewTelemetry: FunctionComponent = () => {
               </div>
             )}
 
-            {telemetry.activeProjects.length > 0 && (
+            {telemetry?.activeProjects?.length > 0 && (
               <div className="space-y-2 mb-6">
-              {telemetry.activeProjects.slice(0, 4).map((project) => (
+              {telemetry?.activeProjects?.slice(0, 4).map((project) => (
                 <div key={project.sprintRunId} className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -153,7 +153,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
             <div className="flex-1 min-h-0">
               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 mb-3">Runtime Timeline</div>
               <div className="h-full overflow-y-auto dashboard-scrollbar pr-1 space-y-2">
-                {telemetry.recentEvents.map((event) => {
+                {telemetry?.recentEvents?.map((event) => {
                   const style = getEventStyle(event);
                   return (
                     <div key={event.id} className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-3">

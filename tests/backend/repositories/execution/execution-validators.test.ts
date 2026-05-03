@@ -9,8 +9,7 @@ import {
   requireTaskDispatch,
   requireTaskRun,
   requireProviderInvocationUsage,
-  requireLease,
-  clearValidationCache
+  requireLease
 } from "../../../../src/repositories/execution/execution-validators.js";
 import { DatabaseAdapter } from "../../../../src/repositories/db/database-adapter.js";
 import type {
@@ -34,10 +33,6 @@ class MockDatabaseAdapter {
 }
 
 describe("execution-validators", () => {
-  beforeEach(() => {
-    clearValidationCache();
-  });
-
   describe("requireProject", () => {
     it("throws if project not found", () => {
       const db = new MockDatabaseAdapter({ "default": undefined }) as unknown as DatabaseAdapter;
@@ -46,24 +41,6 @@ describe("execution-validators", () => {
     it("returns void if project found", () => {
       const db = new MockDatabaseAdapter({ "default": { id: "proj-1" } }) as unknown as DatabaseAdapter;
       expect(() => requireProject(db, "proj-1")).not.toThrow();
-    });
-
-    it("caches project lookup", () => {
-      let callCount = 0;
-      const db = {
-        prepare: () => ({
-          get: () => {
-            callCount++;
-            return { id: "proj-1" };
-          }
-        })
-      } as unknown as DatabaseAdapter;
-
-      requireProject(db, "proj-1");
-      requireProject(db, "proj-1");
-      requireProject(db, "proj-1");
-
-      expect(callCount).toBe(1);
     });
   });
 
@@ -79,24 +56,6 @@ describe("execution-validators", () => {
     it("returns void if sprint found and belongs to project", () => {
       const db = new MockDatabaseAdapter({ "default": { id: "sprint-1", project_id: "proj-1" } }) as unknown as DatabaseAdapter;
       expect(() => requireSprint(db, "sprint-1", "proj-1")).not.toThrow();
-    });
-
-    it("caches sprint lookup", () => {
-      let callCount = 0;
-      const db = {
-        prepare: () => ({
-          get: () => {
-            callCount++;
-            return { id: "sprint-1", project_id: "proj-1" };
-          }
-        })
-      } as unknown as DatabaseAdapter;
-
-      requireSprint(db, "sprint-1", "proj-1");
-      requireSprint(db, "sprint-1", "proj-1");
-      requireSprint(db, "sprint-1", "proj-1");
-
-      expect(callCount).toBe(1);
     });
   });
 
@@ -116,24 +75,6 @@ describe("execution-validators", () => {
     it("returns void if task found and matches project/sprint", () => {
       const db = new MockDatabaseAdapter({ "default": { id: "task-1", project_id: "proj-1", sprint_id: "sprint-1" } }) as unknown as DatabaseAdapter;
       expect(() => requireTask(db, "task-1", "proj-1", "sprint-1")).not.toThrow();
-    });
-
-    it("caches task lookup", () => {
-      let callCount = 0;
-      const db = {
-        prepare: () => ({
-          get: () => {
-            callCount++;
-            return { id: "task-1", project_id: "proj-1", sprint_id: "sprint-1" };
-          }
-        })
-      } as unknown as DatabaseAdapter;
-
-      requireTask(db, "task-1", "proj-1", "sprint-1");
-      requireTask(db, "task-1", "proj-1", "sprint-1");
-      requireTask(db, "task-1", "proj-1", "sprint-1");
-
-      expect(callCount).toBe(1);
     });
   });
 

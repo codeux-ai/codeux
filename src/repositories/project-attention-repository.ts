@@ -132,7 +132,7 @@ export class ProjectAttentionRepository {
     return row ? this.mapRow(row) : null;
   }
 
-  openOrRefreshItems(inputs: OpenProjectAttentionItemInput[]): ProjectAttentionItemRecord[] {
+  openItems(inputs: OpenProjectAttentionItemInput[]): ProjectAttentionItemRecord[] {
     if (inputs.length === 0) return [];
 
     return this.db.transaction(() => {
@@ -219,12 +219,8 @@ export class ProjectAttentionRepository {
     });
   }
 
-  openItems(inputs: OpenProjectAttentionItemInput[]): ProjectAttentionItemRecord[] {
-    return this.openOrRefreshItems(inputs);
-  }
-
   openOrRefreshItem(input: OpenProjectAttentionItemInput): ProjectAttentionItemRecord {
-    const results = this.openOrRefreshItems([input]);
+    const results = this.openItems([input]);
     return results[0];
   }
 
