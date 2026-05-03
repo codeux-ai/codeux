@@ -54,10 +54,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
 
     const handleMouseLeave = () => {
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-        // Add a small delay before hiding to prevent abrupt hide/show transitions
-        hoverTimeout.current = window.setTimeout(() => {
-            setIsVisible(false);
-        }, 150);
+        setIsVisible(false);
     };
 
     useLayoutEffect(() => {
@@ -80,13 +77,20 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
         gsap.killTweensOf(tooltipRef.current);
 
         if (isVisible) {
-            tooltipMotion.enter(tooltipRef.current, position, { duration: durations.base, ease: GSAP_EASINGS.smoothInOut });
+            tooltipMotion.enter(tooltipRef.current, position, { duration: durations.fast, ease: GSAP_EASINGS.spring });
         } else if (isRendered) {
-            tooltipMotion.exit(tooltipRef.current, position, () => setIsRendered(false), { duration: durations.base, ease: GSAP_EASINGS.smoothInOut });
+            tooltipMotion.exit(tooltipRef.current, position, () => setIsRendered(false), { duration: durations.fast, ease: GSAP_EASINGS.smooth });
         }
     }, [isVisible, isRendered, position]);
 
     useEffect(() => {
+        const handleScroll = () => {
+            if (isVisible) {
+                if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+                setIsVisible(false);
+            }
+        };
+
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Escape" && isVisible) {
                 if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
@@ -96,10 +100,12 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
 
         if (isVisible) {
             document.addEventListener("keydown", handleKeyDown);
+            window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
         }
 
         return () => {
             document.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("scroll", handleScroll, { capture: true });
             if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         };
     }, [isVisible]);
