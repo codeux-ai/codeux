@@ -238,54 +238,75 @@ export class ExecutionRepository {
   }
 
 
-  createExecutionInvocation(input: CreateExecutionInvocationInput): ExecutionInvocationRecord {
-    requireProject(this.db, input.projectId);
-    if (input.sprintId) {
-      requireSprint(this.db, input.sprintId, input.projectId);
-    }
-    if (input.taskId) {
-      requireTask(this.db, input.taskId, input.projectId, input.sprintId || undefined);
-    }
-    if (input.sprintRunId) {
-      requireSprintRun((id) => this.getSprintRun(id), input.sprintRunId);
-    }
-    if (input.dispatchId) {
-      requireTaskDispatch((id) => this.getTaskDispatch(id), input.dispatchId);
-    }
-    if (input.taskRunId) {
-      requireTaskRun((id) => this.getTaskRun(id), input.taskRunId);
+  createExecutionInvocation(input: CreateExecutionInvocationInput): ExecutionInvocationRecord;
+  createExecutionInvocation(input: CreateExecutionInvocationInput[]): ExecutionInvocationRecord[];
+  createExecutionInvocation(
+    input: CreateExecutionInvocationInput | CreateExecutionInvocationInput[]
+  ): ExecutionInvocationRecord | ExecutionInvocationRecord[] {
+    const isArray = Array.isArray(input);
+    const inputs = isArray ? input : [input];
+
+    const projectIds = Array.from(new Set(inputs.map((i) => i.projectId)));
+    requireProject(this.db, projectIds);
+
+    const sprintsByProject = new Map<string, Set<string>>();
+    const tasksByProjectSprint = new Map<string, Set<string>>();
+
+    for (const item of inputs) {
+      if (item.sprintId) {
+        if (!sprintsByProject.has(item.projectId)) sprintsByProject.set(item.projectId, new Set());
+        sprintsByProject.get(item.projectId)!.add(item.sprintId);
+      }
+      if (item.taskId) {
+        const key = `${item.projectId}::${item.sprintId || ""}`;
+        if (!tasksByProjectSprint.has(key)) tasksByProjectSprint.set(key, new Set());
+        tasksByProjectSprint.get(key)!.add(item.taskId);
+      }
+      if (item.sprintRunId) requireSprintRun((id) => this.getSprintRun(id), item.sprintRunId);
+      if (item.dispatchId) requireTaskDispatch((id) => this.getTaskDispatch(id), item.dispatchId);
+      if (item.taskRunId) requireTaskRun((id) => this.getTaskRun(id), item.taskRunId);
     }
 
-    const id = `xi_${randomUUID().replace(/-/g, "")}`;
+    for (const [projectId, sprintIds] of sprintsByProject.entries()) {
+      requireSprint(this.db, Array.from(sprintIds), projectId);
+    }
+
+    for (const [key, taskIds] of tasksByProjectSprint.entries()) {
+      const [projectId, sprintIdStr] = key.split("::");
+      requireTask(this.db, Array.from(taskIds), projectId, sprintIdStr || undefined);
+    }
+
     const now = new Date().toISOString();
-    const startedAt = input.startedAt || now;
-
-    const record: ExecutionInvocationRecord = {
-      id,
-      projectId: input.projectId,
-      sprintId: input.sprintId || null,
-      taskId: input.taskId || null,
-      sprintRunId: input.sprintRunId || null,
-      dispatchId: input.dispatchId || null,
-      taskRunId: input.taskRunId || null,
-      attentionItemId: input.attentionItemId || null,
-      providerInvocationId: input.providerInvocationId || null,
-      type: input.type,
-      status: input.status || "running",
-      provider: input.provider || null,
-      model: input.model || null,
-      systemPrompt: input.systemPrompt || null,
-      startedAt,
-      finishedAt: input.finishedAt || null,
-      errorMessage: input.errorMessage || null,
-      lastErrorCategory: input.lastErrorCategory || null,
-      lastErrorMessage: input.lastErrorMessage || null,
-      lastRetryAfterIso: input.lastRetryAfterIso || null,
-      messageCount: 0,
-      lastMessageAt: null,
-      createdAt: now,
-      updatedAt: now,
-    };
+    const records = inputs.map((item) => {
+      const id = `xi_${randomUUID().replace(/-/g, "")}`;
+      const startedAt = item.startedAt || now;
+      return {
+        id,
+        projectId: item.projectId,
+        sprintId: item.sprintId || null,
+        taskId: item.taskId || null,
+        sprintRunId: item.sprintRunId || null,
+        dispatchId: item.dispatchId || null,
+        taskRunId: item.taskRunId || null,
+        attentionItemId: item.attentionItemId || null,
+        providerInvocationId: item.providerInvocationId || null,
+        type: item.type,
+        status: item.status || "running",
+        provider: item.provider || null,
+        model: item.model || null,
+        systemPrompt: item.systemPrompt || null,
+        startedAt,
+        finishedAt: item.finishedAt || null,
+        errorMessage: item.errorMessage || null,
+        lastErrorCategory: item.lastErrorCategory || null,
+        lastErrorMessage: item.lastErrorMessage || null,
+        lastRetryAfterIso: item.lastRetryAfterIso || null,
+        messageCount: 0,
+        lastMessageAt: null,
+        createdAt: now,
+        updatedAt: now,
+      } as ExecutionInvocationRecord;
+    });
 
     const stmt = this.db.prepare(`
       INSERT INTO execution_invocations (
@@ -297,35 +318,43 @@ export class ExecutionRepository {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    stmt.run(
-      record.id,
-      record.projectId,
-      record.sprintId,
-      record.taskId,
-      record.sprintRunId,
-      record.dispatchId,
-      record.taskRunId,
-      record.attentionItemId,
-      record.providerInvocationId,
-      record.type,
-      record.status,
-      record.provider,
-      record.model,
-      record.systemPrompt,
-        record.startedAt,
-        record.finishedAt,
-        record.errorMessage,
-        record.messageCount,
-        record.lastMessageAt,
-        record.lastErrorCategory,
-        record.lastErrorMessage,
-        record.lastRetryAfterIso,
-        record.createdAt,
-        record.updatedAt
-    );
+    this.db.transaction(() => {
+      for (const record of records) {
+        stmt.run(
+          record.id,
+          record.projectId,
+          record.sprintId,
+          record.taskId,
+          record.sprintRunId,
+          record.dispatchId,
+          record.taskRunId,
+          record.attentionItemId,
+          record.providerInvocationId,
+          record.type,
+          record.status,
+          record.provider,
+          record.model,
+          record.systemPrompt,
+          record.startedAt,
+          record.finishedAt,
+          record.errorMessage,
+          record.messageCount,
+          record.lastMessageAt,
+          record.lastErrorCategory,
+          record.lastErrorMessage,
+          record.lastRetryAfterIso,
+          record.createdAt,
+          record.updatedAt
+        );
+      }
+    });
 
-    this.notifyRealtime(record.projectId, true);
-    return record;
+    const projectsToNotify = Array.from(new Set(records.map((r) => r.projectId)));
+    for (const p of projectsToNotify) {
+      this.notifyRealtime(p, true);
+    }
+
+    return isArray ? records : records[0] as any;
   }
 
   updateExecutionInvocation(id: string, input: UpdateExecutionInvocationInput): ExecutionInvocationRecord {
@@ -797,68 +826,134 @@ export class ExecutionRepository {
     return created;
   }
 
-  createProviderInvocationUsage(input: CreateProviderInvocationUsageInput): ProviderInvocationUsageRecord {
-    requireProject(this.db, input.projectId);
-    if (input.sprintId) {
-      requireSprint(this.db, input.sprintId, input.projectId);
-    }
-    if (input.taskId) {
-      requireTask(this.db, input.taskId, input.projectId, input.sprintId || undefined);
-    }
-    if (input.sprintRunId) {
-      requireSprintRun((id) => this.getSprintRun(id), input.sprintRunId);
-    }
-    if (input.dispatchId) {
-      requireTaskDispatch((id) => this.getTaskDispatch(id), input.dispatchId);
-    }
-    if (input.taskRunId) {
-      requireTaskRun((id) => this.getTaskRun(id), input.taskRunId);
+  createProviderInvocationUsage(input: CreateProviderInvocationUsageInput): ProviderInvocationUsageRecord;
+  createProviderInvocationUsage(input: CreateProviderInvocationUsageInput[]): ProviderInvocationUsageRecord[];
+  createProviderInvocationUsage(
+    input: CreateProviderInvocationUsageInput | CreateProviderInvocationUsageInput[]
+  ): ProviderInvocationUsageRecord | ProviderInvocationUsageRecord[] {
+    const isArray = Array.isArray(input);
+    const inputs = isArray ? input : [input];
+
+    const projectIds = Array.from(new Set(inputs.map((i) => i.projectId)));
+    requireProject(this.db, projectIds);
+
+    const sprintsByProject = new Map<string, Set<string>>();
+    const tasksByProjectSprint = new Map<string, Set<string>>();
+
+    for (const item of inputs) {
+      if (item.sprintId) {
+        if (!sprintsByProject.has(item.projectId)) sprintsByProject.set(item.projectId, new Set());
+        sprintsByProject.get(item.projectId)!.add(item.sprintId);
+      }
+      if (item.taskId) {
+        const key = `${item.projectId}::${item.sprintId || ""}`;
+        if (!tasksByProjectSprint.has(key)) tasksByProjectSprint.set(key, new Set());
+        tasksByProjectSprint.get(key)!.add(item.taskId);
+      }
+      if (item.sprintRunId) requireSprintRun((id) => this.getSprintRun(id), item.sprintRunId);
+      if (item.dispatchId) requireTaskDispatch((id) => this.getTaskDispatch(id), item.dispatchId);
+      if (item.taskRunId) requireTaskRun((id) => this.getTaskRun(id), item.taskRunId);
     }
 
-    const id = randomUUID();
+    for (const [projectId, sprintIds] of sprintsByProject.entries()) {
+      requireSprint(this.db, Array.from(sprintIds), projectId);
+    }
+
+    for (const [key, taskIds] of tasksByProjectSprint.entries()) {
+      const [projectId, sprintIdStr] = key.split("::");
+      requireTask(this.db, Array.from(taskIds), projectId, sprintIdStr || undefined);
+    }
+
     const now = new Date().toISOString();
-    this.db.prepare(`
+    const recordsToInsert = inputs.map((item) => {
+      const id = randomUUID();
+      const startedAt = item.startedAt || now;
+      return {
+        id,
+        projectId: item.projectId,
+        sprintId: item.sprintId ?? null,
+        taskId: item.taskId ?? null,
+        sprintRunId: item.sprintRunId ?? null,
+        dispatchId: item.dispatchId ?? null,
+        taskRunId: item.taskRunId ?? null,
+        attentionItemId: item.attentionItemId ?? null,
+        sessionId: item.sessionId,
+        provider: item.provider,
+        purpose: item.purpose,
+        status: item.status || "running",
+        model: item.model ?? null,
+        executionMode: item.executionMode ?? null,
+        nativeSessionId: item.nativeSessionId ?? null,
+        startedAt,
+        finishedAt: null,
+        durationMs: null,
+        promptChars: item.promptChars ?? 0,
+        transcriptChars: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        usageSource: "unavailable",
+        rawUsageJson: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+
+    const stmt = this.db.prepare(`
       INSERT INTO provider_invocations (
         id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id, task_run_id, attention_item_id,
         session_id, provider, purpose, status, model, execution_mode, native_session_id, started_at, finished_at, duration_ms,
         prompt_chars, transcript_chars, input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens,
         total_tokens, usage_source, raw_usage_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      input.projectId,
-      input.sprintId ?? null,
-      input.taskId ?? null,
-      input.sprintRunId ?? null,
-      input.dispatchId ?? null,
-      input.taskRunId ?? null,
-      input.attentionItemId ?? null,
-      input.sessionId,
-      input.provider,
-      input.purpose,
-      input.status || "running",
-      input.model ?? null,
-      input.executionMode ?? null,
-      input.nativeSessionId ?? null,
-      input.startedAt || now,
-      null,
-      null,
-      input.promptChars ?? 0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      "unavailable",
-      null,
-      now,
-      now,
-    );
+    `);
 
-    const created = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), id);
-    this.notifyRealtime(created.projectId, false);
-    return created;
+    this.db.transaction(() => {
+      for (const record of recordsToInsert) {
+        stmt.run(
+          record.id,
+          record.projectId,
+          record.sprintId,
+          record.taskId,
+          record.sprintRunId,
+          record.dispatchId,
+          record.taskRunId,
+          record.attentionItemId,
+          record.sessionId,
+          record.provider,
+          record.purpose,
+          record.status,
+          record.model,
+          record.executionMode,
+          record.nativeSessionId,
+          record.startedAt,
+          record.finishedAt,
+          record.durationMs,
+          record.promptChars,
+          record.transcriptChars,
+          record.inputTokens,
+          record.cachedInputTokens,
+          record.outputTokens,
+          record.reasoningOutputTokens,
+          record.totalTokens,
+          record.usageSource,
+          record.rawUsageJson,
+          record.createdAt,
+          record.updatedAt
+        );
+      }
+    });
+
+    const createdRecords = recordsToInsert.map(r => requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), r.id));
+
+    const projectsToNotify = Array.from(new Set(createdRecords.map((r) => r.projectId)));
+    for (const p of projectsToNotify) {
+      this.notifyRealtime(p, false);
+    }
+
+    return isArray ? createdRecords : createdRecords[0] as any;
   }
 
   updateProviderInvocationUsage(invocationId: string, input: UpdateProviderInvocationUsageInput): ProviderInvocationUsageRecord {

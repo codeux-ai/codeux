@@ -1,5 +1,5 @@
 import type { DatabaseAdapter } from "../db/database-adapter.js";
-import { requireEntity, requireEntityByGetter } from "../shared/validation-utils.js";
+import { requireEntity, requireEntities, requireEntityByGetter } from "../shared/validation-utils.js";
 import type {
   ExecutionLeaseRecord,
   ProviderInvocationUsageRecord,
@@ -8,41 +8,71 @@ import type {
   TaskRunRecord
 } from "../../contracts/execution-types.js";
 
-export function requireProject(db: DatabaseAdapter, projectId: string): void {
-  requireEntity<{ id: string }>(db, "Project", "projects", projectId);
+export function requireProject(db: DatabaseAdapter, projectId: string | string[]): void {
+  if (Array.isArray(projectId)) {
+    requireEntities<{ id: string }>(db, "Project", "projects", projectId);
+  } else {
+    requireEntity<{ id: string }>(db, "Project", "projects", projectId);
+  }
 }
 
-export function requireSprint(db: DatabaseAdapter, sprintId: string, projectId?: string): void {
-  requireEntity<{ id: string; project_id: string }>(
-    db,
-    "Sprint",
-    "sprints",
-    sprintId,
-    "id, project_id",
-    (row) => {
-      if (projectId && row.project_id !== projectId) {
-        throw new Error(`Sprint ${sprintId} does not belong to project ${projectId}`);
-      }
+export function requireSprint(db: DatabaseAdapter, sprintId: string | string[], projectId?: string): void {
+  const checkSprint = (row: { id: string; project_id: string }, idForError: string) => {
+    if (projectId && row.project_id !== projectId) {
+      throw new Error(`Sprint ${idForError} does not belong to project ${projectId}`);
     }
-  );
+  };
+
+  if (Array.isArray(sprintId)) {
+    requireEntities<{ id: string; project_id: string }>(
+      db,
+      "Sprint",
+      "sprints",
+      sprintId,
+      "id, project_id",
+      (row) => checkSprint(row, row.id)
+    );
+  } else {
+    requireEntity<{ id: string; project_id: string }>(
+      db,
+      "Sprint",
+      "sprints",
+      sprintId,
+      "id, project_id",
+      (row) => checkSprint(row, sprintId)
+    );
+  }
 }
 
-export function requireTask(db: DatabaseAdapter, taskId: string, projectId?: string, sprintId?: string): void {
-  requireEntity<{ id: string; project_id: string; sprint_id: string }>(
-    db,
-    "Task",
-    "tasks",
-    taskId,
-    "id, project_id, sprint_id",
-    (row) => {
-      if (projectId && row.project_id !== projectId) {
-        throw new Error(`Task ${taskId} does not belong to project ${projectId}`);
-      }
-      if (sprintId && row.sprint_id !== sprintId) {
-        throw new Error(`Task ${taskId} does not belong to sprint ${sprintId}`);
-      }
+export function requireTask(db: DatabaseAdapter, taskId: string | string[], projectId?: string, sprintId?: string): void {
+  const checkTask = (row: { id: string; project_id: string; sprint_id: string }, idForError: string) => {
+    if (projectId && row.project_id !== projectId) {
+      throw new Error(`Task ${idForError} does not belong to project ${projectId}`);
     }
-  );
+    if (sprintId && row.sprint_id !== sprintId) {
+      throw new Error(`Task ${idForError} does not belong to sprint ${sprintId}`);
+    }
+  };
+
+  if (Array.isArray(taskId)) {
+    requireEntities<{ id: string; project_id: string; sprint_id: string }>(
+      db,
+      "Task",
+      "tasks",
+      taskId,
+      "id, project_id, sprint_id",
+      (row) => checkTask(row, row.id)
+    );
+  } else {
+    requireEntity<{ id: string; project_id: string; sprint_id: string }>(
+      db,
+      "Task",
+      "tasks",
+      taskId,
+      "id, project_id, sprint_id",
+      (row) => checkTask(row, taskId)
+    );
+  }
 }
 
 export function requireConnection(db: DatabaseAdapter, connectionId: string): void {
