@@ -886,24 +886,47 @@ export class ProjectManagementRepository {
   }
 
   private createNextTaskKey(sprintId: string): string {
-    const rows = this.db.prepare(`
-      SELECT task_key
+    const row = this.db.prepare(`
+      SELECT MAX(
+        CASE
+          WHEN task_key GLOB 'T[0-9]*' AND ltrim(SUBSTR(task_key, 2), '0123456789') = '' THEN CAST(SUBSTR(task_key, 2) AS INTEGER)
+          ELSE 0
+        END
+      ) as max_standard_num,
+      SUM(
+        CASE
+          WHEN task_key GLOB 'T[0-9]*' AND ltrim(SUBSTR(task_key, 2), '0123456789') = '' THEN 0
+          ELSE 1
+        END
+      ) as non_standard_count
       FROM tasks
       WHERE sprint_id = ?
-    `).all(sprintId) as { task_key: string }[];
+    `).get(sprintId) as { max_standard_num: number | null, non_standard_count: number | null };
 
-    if (rows.length === 0) {
-      return "T01";
-    }
+    // Fallback if there are any non-standard task keys that don't match the standard 'Txx' format.
+    if (row && row.non_standard_count && row.non_standard_count > 0) {
+      const rows = this.db.prepare(`
+        SELECT task_key
+        FROM tasks
+        WHERE sprint_id = ?
+      `).all(sprintId) as { task_key: string }[];
 
-    let maxNumber = 0;
-    for (const row of rows) {
-      const match = row.task_key.match(/(\d+)$/);
-      if (match) {
-        maxNumber = Math.max(maxNumber, Number(match[1]));
+      if (rows.length === 0) {
+        return "T01";
       }
+
+      let maxNumber = 0;
+      for (const r of rows) {
+        const match = r.task_key.match(/(\d+)$/);
+        if (match) {
+          maxNumber = Math.max(maxNumber, Number(match[1]));
+        }
+      }
+
+      return `T${String(maxNumber + 1).padStart(2, "0")}`;
     }
 
+    const maxNumber = row?.max_standard_num || 0;
     return `T${String(maxNumber + 1).padStart(2, "0")}`;
   }
 
