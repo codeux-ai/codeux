@@ -387,6 +387,7 @@ export class CycleRunner {
           featureBranch: args.defaultFeatureBranch,
           repoPath: args.repoPath,
           sprintNumber: args.executionContext.sprintNumber,
+          taskRecord: task.record_id ? taskRecordMap.get(task.record_id) : undefined,
         });
       },
       resolveSessionName: this.deps.resolveSessionName,
