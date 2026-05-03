@@ -18,6 +18,7 @@ import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
 import { Tooltip } from "./ui/Tooltip.js";
+import { RollingNumber } from "./ui/RollingNumber.js";
 import { dashboardSettingsToProjectSettings } from "../lib/settings-view-models.js";
 import {
     getProjectWorkerOptions,
@@ -114,6 +115,32 @@ interface TopNavProps {
 
 export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, onMenuToggle, isMobile }) => {
     const navRef = useRef<HTMLElement>(null);
+
+    const searchBarRef = useRef<HTMLButtonElement>(null);
+    const searchBarContainerRef = useRef<HTMLDivElement>(null);
+
+    const handleSearchEnter = () => {
+        if (!searchBarContainerRef.current) return;
+        gsap.to(searchBarContainerRef.current, {
+            scaleX: 1.05,
+            duration: 0.35,
+            ease: "expo.out",
+            boxShadow: "0 0 0 2px rgba(0,224,160,0.3)",
+            overwrite: "auto"
+        });
+    };
+
+    const handleSearchLeave = () => {
+        if (!searchBarContainerRef.current) return;
+        gsap.to(searchBarContainerRef.current, {
+            scaleX: 1,
+            duration: 0.35,
+            ease: "expo.out",
+            boxShadow: "0 0 0 0px rgba(0,224,160,0)",
+            overwrite: "auto"
+        });
+    };
+
     const dropdownRef = useRef<HTMLDivElement>(null);
     const workerDropdownRef = useRef<HTMLDivElement>(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -213,7 +240,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
     const projectId = selectedProject?.id || null;
 
-    const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null, { enabled: isSearchOpen });
+    const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null);
     const { sessions } = usePreviewSessions({ projectId: isSearchOpen ? projectId : null, pollInterval: 0 });
 
     const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
@@ -239,7 +266,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
             status: s.status
         }));
 
-        const filteredTasks = tasks.filter((t: Task) =>
+        const filteredTasks = (tasks || []).filter((t: Task) =>
             t.title.toLowerCase().includes(lowerQuery) ||
             (t.recordId && t.recordId.toLowerCase().includes(lowerQuery)) ||
             (t.description && t.description.toLowerCase().includes(lowerQuery))
@@ -403,18 +430,23 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                 </Link>
 
                 {/* Search Bar */}
-                <div className="relative group w-full max-w-[140px] sm:max-w-xs hidden sm:block">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <div ref={searchBarContainerRef} className="relative group w-full max-w-[140px] sm:max-w-xs hidden sm:block rounded-xl">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
                         <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
                     </div>
                     <button
+                        ref={searchBarRef}
                         type="button"
                         onClick={() => setIsSearchOpen(true)}
-                        className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl text-sm text-left text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-all"
+                        onMouseEnter={handleSearchEnter}
+                        onMouseLeave={handleSearchLeave}
+                        onFocus={handleSearchEnter}
+                        onBlur={handleSearchLeave}
+                        className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl text-sm text-left text-slate-400 focus:outline-none focus-visible:outline-none transition-all relative z-0"
                     >
                         Search...
                     </button>
-                    <div className="absolute inset-y-0 right-0 pr-3 hidden sm:flex items-center pointer-events-none">
+                    <div className="absolute inset-y-0 right-0 pr-3 hidden sm:flex items-center pointer-events-none z-10">
                         <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-400 border border-black/10 dark:border-white/10 rounded-md">
                             <Command aria-hidden="true" className="w-2.5 h-2.5" /> K
                         </kbd>
@@ -608,6 +640,17 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                         )}
                     </div>
                 )}
+
+
+                {/* Global Stats */}
+                <div className="hidden lg:flex items-center gap-4 px-4 py-1.5 bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04] rounded-xl mr-2">
+                    <div className="flex flex-col items-start">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Tasks</span>
+                        <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono leading-tight">
+                            <RollingNumber value={(tasks || []).filter((t: Task) => t.status === "in_progress" || t.status === "pending").length} />
+                        </div>
+                    </div>
+                </div>
 
                 {/* Worker Selector */}
                 {selectedProject && (
