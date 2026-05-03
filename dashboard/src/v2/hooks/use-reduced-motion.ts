@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "preact/hooks";
+import { useState, useEffect, useContext, useRef } from "preact/hooks";
 import { ProjectDataContext } from "../context/project-data.js";
 import { useProjectEffectiveSettings } from "./use-project-effective-settings.js";
 
@@ -11,7 +11,7 @@ export function useReducedMotion(): boolean {
     // in hooks that are deeply nested (or in tests where the Provider is missing) is to use context directly but NOT throw.
     const projectContext = useContext(ProjectDataContext);
     const selectedProject = projectContext?.selectedProject || null;
-    const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+    const { data: effectiveSettings, loading } = useProjectEffectiveSettings(selectedProject?.id || null);
 
     const preference = effectiveSettings?.settings.appearance?.reducedMotion || "AUTO";
 
@@ -50,14 +50,21 @@ export function useReducedMotion(): boolean {
 
     const isReducedMotion = preference === "REDUCE" || (preference !== "NONE" && systemReducedMotion);
 
+    // Stabilize the signal: during 'loading', retain the last known non-fallback value.
+    const stableSignalRef = useRef(isReducedMotion);
+    if (!loading) {
+        stableSignalRef.current = isReducedMotion;
+    }
+    const stableIsReducedMotion = loading ? stableSignalRef.current : isReducedMotion;
+
     useEffect(() => {
         if (typeof document === "undefined") return;
-        if (isReducedMotion) {
+        if (stableIsReducedMotion) {
             document.documentElement.setAttribute("data-reduced-motion", "true");
         } else {
             document.documentElement.removeAttribute("data-reduced-motion");
         }
-    }, [isReducedMotion]);
+    }, [stableIsReducedMotion]);
 
-    return isReducedMotion;
+    return stableIsReducedMotion;
 }
