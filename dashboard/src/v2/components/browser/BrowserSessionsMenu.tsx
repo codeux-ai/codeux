@@ -74,7 +74,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
         setInteractionState((prev) => (prev === 'closed' || prev === 'hover' ? 'open' : 'closed'));
     };
 
-    const handleMenuKeyDown = (e: KeyboardEvent) => {
+    const handleMenuKeyDown = (e: preact.JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
         if (!isMenuVisible || !containerRef.current) return;
 
         const items = Array.from(containerRef.current.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
@@ -139,7 +139,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
             ref={containerRef}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
-            onKeyDown={handleMenuKeyDown as any}
+            onKeyDown={handleMenuKeyDown}
         >
             <button
                 type="button"

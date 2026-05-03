@@ -30,7 +30,7 @@ type Tone = {
   card: string;
   label: string;
   dim: string;
-  icon: FunctionComponent<any>;
+  icon: FunctionComponent<preact.JSX.SVGAttributes<SVGSVGElement> & { strokeWidth?: number | string }>;
 };
 
 function stableRand(seed: string): number {

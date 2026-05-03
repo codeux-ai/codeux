@@ -16,7 +16,7 @@ const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
 export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("../hooks/use-overview-page-data.js").useOverviewPageData> }> = ({ pageData }) => {
     const listRef = useRef<HTMLDivElement>(null);
     const [activeFilter, setActiveFilter] = useState<TaskFilter>("All Tasks");
-    const flipStateRef = useRef<any>(null);
+    const flipStateRef = useRef<Flip.FlipState | null>(null);
 
     const handleFilterChange = (newFilter: TaskFilter) => {
         if (listRef.current) {
