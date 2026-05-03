@@ -104,6 +104,7 @@ export class WorkerInboxReplyService {
 
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId: input.projectId,
+      skipValidation: true,
       type: input.mode === "compact_thread" ? "chat_compaction" : "worker_reply",
       provider: route.provider,
       model: providerSettings.model,
@@ -265,6 +266,7 @@ export class WorkerInboxReplyService {
 
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId: args.projectId,
+      skipValidation: true,
       type: "worker_reply",
       provider: route.provider,
       model: providerSettings.model,

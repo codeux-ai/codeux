@@ -75,6 +75,38 @@ describe("ExecutionRepository", () => {
     });
   });
 
+  it("skips resource validation when skipValidation flag is true", async () => {
+    const { executionRepository, projectRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Skip Validation Project",
+      sourceType: "local",
+      sourceRef: "/workspace/skip-validation",
+    });
+
+    // This should fail without skipValidation because sprint doesn't exist
+    expect(() => {
+      executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        sprintId: "nonexistent",
+        type: "planning",
+        status: "running",
+      });
+    }).toThrowError(/Sprint not found/);
+
+    // This should succeed with skipValidation (bypassing the application layer requireSprint validation),
+    // but it will ultimately throw a SQLite FOREIGN KEY constraint error because we provided an invalid sprintId.
+    expect(() => {
+      executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        sprintId: "nonexistent",
+        type: "planning",
+        status: "running",
+        skipValidation: true,
+      });
+    }).toThrowError(/FOREIGN KEY constraint failed/);
+  });
+
   it("creates, updates, lists, and appends messages to execution invocations", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

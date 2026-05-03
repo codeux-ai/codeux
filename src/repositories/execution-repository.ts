@@ -239,21 +239,23 @@ export class ExecutionRepository {
 
 
   createExecutionInvocation(input: CreateExecutionInvocationInput): ExecutionInvocationRecord {
-    requireProject(this.db, input.projectId);
-    if (input.sprintId) {
-      requireSprint(this.db, input.sprintId, input.projectId);
-    }
-    if (input.taskId) {
-      requireTask(this.db, input.taskId, input.projectId, input.sprintId || undefined);
-    }
-    if (input.sprintRunId) {
-      requireSprintRun((id) => this.getSprintRun(id), input.sprintRunId);
-    }
-    if (input.dispatchId) {
-      requireTaskDispatch((id) => this.getTaskDispatch(id), input.dispatchId);
-    }
-    if (input.taskRunId) {
-      requireTaskRun((id) => this.getTaskRun(id), input.taskRunId);
+    if (!input.skipValidation) {
+      requireProject(this.db, input.projectId);
+      if (input.sprintId) {
+        requireSprint(this.db, input.sprintId, input.projectId);
+      }
+      if (input.taskId) {
+        requireTask(this.db, input.taskId, input.projectId, input.sprintId || undefined);
+      }
+      if (input.sprintRunId) {
+        requireSprintRun((id) => this.getSprintRun(id), input.sprintRunId);
+      }
+      if (input.dispatchId) {
+        requireTaskDispatch((id) => this.getTaskDispatch(id), input.dispatchId);
+      }
+      if (input.taskRunId) {
+        requireTaskRun((id) => this.getTaskRun(id), input.taskRunId);
+      }
     }
 
     const id = `xi_${randomUUID().replace(/-/g, "")}`;

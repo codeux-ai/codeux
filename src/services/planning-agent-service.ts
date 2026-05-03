@@ -120,6 +120,7 @@ export class PlanningAgentService {
     const runtime = this.resolvePlanningRuntime(projectId, input.overrides);
     const invocation = this.deps.executionRepository?.createExecutionInvocation({
       projectId,
+      skipValidation: true,
       sprintId: null,
       type: "planning",
       status: "running",
@@ -239,6 +240,7 @@ export class PlanningAgentService {
 
     const invocation = this.deps.executionRepository?.createExecutionInvocation({
       projectId,
+      skipValidation: true,
       sprintId,
       type: "planning",
       status: "running",

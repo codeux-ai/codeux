@@ -446,6 +446,7 @@ export class ChatThreadRuntimeService {
     const finalPrompt = buildProviderPrompt(promptContent, thinkingMode as any);
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId,
+      skipValidation: true,
       type: "chat_compaction",
       provider,
       model,
