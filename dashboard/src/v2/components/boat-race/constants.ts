@@ -1,0 +1,10 @@
+export const SVG_W = 1400;
+export const SVG_H = 440;
+export const HARBOUR_X = 100;
+export const FINISH_X = 1320;
+export const RACE_LEN = FINISH_X - HARBOUR_X - 40;
+export const LANE_TOP = 100;
+export const LANE_BOT = SVG_H - 60;
+export const TOW_LINE_LENGTH = 70;
+export const BADGE_OFFSET = TOW_LINE_LENGTH + 58; // tow line + half badge width
+export const SPAWN_Y = (LANE_TOP + LANE_BOT) / 2;
