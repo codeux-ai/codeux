@@ -3,7 +3,7 @@ import { memo } from "preact/compat";
 import type { Signal } from "@preact/signals";
 import { SVG_W, SVG_H, LANE_TOP, LANE_BOT, HARBOUR_X, FINISH_X, RACE_LEN } from "./constants.js";
 import { hashStr } from "./utils.js";
-import type { ShipDatum } from "./utils.js";
+import type { ShipDatum } from "../../hooks/useBoatRaceAnimation.js";
 
 export const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color: string; isDark: boolean }> = memo(({ x, color, label, isDark }) => (
     <g>
