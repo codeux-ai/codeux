@@ -772,7 +772,7 @@ describe("CycleRunner attention sync", () => {
   it("captures CI failure memory with importance of 0.7", async () => {
     const deps = buildDeps();
     const mockMemoryService = {
-      createMemories: vi.fn().mockResolvedValue([]),
+      createMemoriesBatch: vi.fn().mockResolvedValue([]),
       createMemoriesBatch: vi.fn().mockResolvedValue([]),
       createMemoriesBatch: vi.fn().mockResolvedValue([]),
       createMemoriesBatch: vi.fn().mockResolvedValue([]),
