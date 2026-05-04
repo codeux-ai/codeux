@@ -12,8 +12,9 @@ import { BoatRaceBackground, BoatRaceCourseLayer } from "./boat-race/BoatRaceCou
 import { BoatRaceHarbourLayer } from "./boat-race/BoatRaceHarbour.js";
 import { BoatRaceShipsLayer } from "./boat-race/BoatRaceShip.js";
 import { SVG_W, SVG_H, HARBOUR_X, FINISH_X, RACE_LEN, LANE_TOP, LANE_BOT, TOW_LINE_LENGTH, BADGE_OFFSET, SPAWN_Y } from "./boat-race/constants.js";
-import { useIsDark, getProgressTarget, getStyle, CP, HALF_LIFE_MS, hashStr, stableRand, createInitialShipAnimationState } from "./boat-race/utils.js";
-import type { ShipDatum } from "./boat-race/utils.js";
+import { useIsDark, getStyle, hashStr, stableRand } from "./boat-race/utils.js";
+import { useBoatRaceAnimation, CP } from "../hooks/useBoatRaceAnimation.js";
+import type { ShipDatum } from "../hooks/useBoatRaceAnimation.js";
 
 /* ─── Props ──────────────────────────────────────────────────────────────── */
 
@@ -27,22 +28,17 @@ interface BoatRaceProps {
 
 export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispatches, hasLiveSprint }) => {
     const shipsGroupRef = useRef<SVGGElement>(null);
-    const animStateRef = useRef<Map<string, {
-        currentProgress: number;
-        currentY: number;       // animated Y (starts at SPAWN_Y, drifts to laneY)
-        lastTime: number;
-        yWobbleOffset: number;  // small random Y wobble for natural movement
-        yWobblePhase: number;   // phase of wobble oscillation
-        pingedCheckpoints: Set<number>;
-    }>>(new Map());
-    const tickerRef = useRef<(() => void) | null>(null);
-    const bobTweensRef = useRef<gsap.core.Tween[]>([]);
     const isDark = useIsDark();
 
-    /* ── Tracking previous statuses for shake/tilt effect ────────── */
-    const prevStatusesRef = useRef<Map<string, string>>(new Map());
 
-    /* ── Mouse ripple effect ─────────────────────────────────────── */
+
+
+
+
+    const { activeShipsSignal, harbourCountSignal, animatedPositionsSignal } = useBoatRaceAnimation(tasks, dispatches, hasLiveSprint);
+
+    const raceHeightPx = useMemo(() => getBoatRaceHeightPx(activeShipsSignal.value.length), [activeShipsSignal.value.length]);
+
     const svgRef = useRef<SVGSVGElement>(null);
     const ripplesSignal = useSignal<{ x: number; y: number; id: number }[]>([]);
     const rippleIdRef = useRef(0);
@@ -51,7 +47,6 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
     const handleMouseMove = useCallback((e: MouseEvent) => {
         const svg = svgRef.current;
         if (!svg) return;
-        // Throttle: only add ripple every ~200ms
         const now = performance.now();
         if (now - lastRippleRef.current < 200) return;
         lastRippleRef.current = now;
@@ -61,253 +56,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
         const y = ((e.clientY - rect.top) / rect.height) * SVG_H;
         const id = ++rippleIdRef.current;
         ripplesSignal.value = [...ripplesSignal.value.slice(-6), { x, y, id }];
-        // Auto-remove after animation
         setTimeout(() => { ripplesSignal.value = ripplesSignal.value.filter(r => r.id !== id); }, 2000);
-    }, []);
-
-    /* ── Separate waiting (harbour) vs active (on water) ────────── */
-    const tasksSignal = useSignal(tasks);
-    tasksSignal.value = tasks;
-
-    const dispatchesSignal = useSignal(dispatches);
-    dispatchesSignal.value = dispatches;
-
-    const activeShipsSignal = useComputed(() => {
-        if (!hasLiveSprint || tasksSignal.value.length === 0) return [];
-        const active = tasksSignal.value.filter(t => t.status !== "PENDING" && t.status !== "BLOCKED");
-        const count = active.length;
-        const usable = LANE_BOT - LANE_TOP;
-        const laneH = Math.min(60, usable / Math.max(1, count));
-        const totalH = laneH * count;
-        const offsetY = LANE_TOP + (usable - totalH) / 2;
-        const dispatchIndex = buildBoatRaceDispatchIndex(dispatchesSignal.value);
-        return active.map((task, i) => {
-            const raceKey = getBoatRaceTaskKey(task);
-            const progress = getProgressTarget(task);
-            const style = getStyle(task);
-            const yJitter = (stableRand(raceKey, 20) - 0.5) * laneH * 0.2;
-            return {
-                key: raceKey,
-                task,
-                shipType: getShipType(task, dispatchIndex),
-                progress,
-                laneY: offsetY + i * laneH + laneH / 2 + yJitter,
-                style
-            } as ShipDatum;
-        });
-    });
-
-    const harbourCountSignal = useComputed(() => {
-        if (!hasLiveSprint || tasksSignal.value.length === 0) return 0;
-        return tasksSignal.value.filter(t => t.status === "PENDING" || t.status === "BLOCKED").length;
-    });
-
-    const raceHeightPx = useMemo(() => getBoatRaceHeightPx(activeShipsSignal.value.length), [activeShipsSignal.value.length]);
-
-    useEffect(() => {
-        if (!hasLiveSprint || activeShipsSignal.value.length === 0) {
-            animStateRef.current.clear();
-        }
-    }, [activeShipsSignal.value.length, hasLiveSprint]);
-
-    /* ── Continuous Zeno's paradox animation via GSAP ticker ─────── */
-    const updatePositions = useCallback(() => {
-        const group = shipsGroupRef.current;
-        if (!group || activeShipsSignal.value.length === 0) return;
-
-        const now = performance.now();
-        const els = Array.from(group.querySelectorAll<SVGGElement>(".race-ship"));
-
-        els.forEach((el, i) => {
-            const ship = activeShipsSignal.value[i];
-            if (!ship) return;
-
-            const state = animStateRef.current.get(ship.key);
-            const target = ship.progress.target;
-            const confirmed = ship.progress.confirmed;
-
-            if (!state) {
-                const initialState = createInitialShipAnimationState(ship.key, now);
-                animStateRef.current.set(ship.key, initialState);
-                const x = HARBOUR_X + 20 + initialState.currentProgress * RACE_LEN;
-                gsap.set(el, { x, y: SPAWN_Y, opacity: 0, scale: 0.6 });
-                gsap.to(el, {
-                    opacity: 1,
-                    scale: 1,
-                    duration: 1.6,
-                    ease: "power2.out",
-                    delay: i * 0.12,
-                });
-                return;
-            }
-
-            if (getTaskProgressPhase(ship.task) === "RUNNING" && state.currentProgress > CP.CODING_COMPLETED) {
-                const resetState = createInitialShipAnimationState(ship.key, now);
-                state.currentProgress = resetState.currentProgress;
-                state.currentY = resetState.currentY;
-                state.lastTime = resetState.lastTime;
-                state.yWobbleOffset = resetState.yWobbleOffset;
-                state.yWobblePhase = resetState.yWobblePhase;
-                state.pingedCheckpoints.clear();
-            }
-
-            const dt = now - state.lastTime;
-            state.lastTime = now;
-
-            // ── X: Ensure current is at least at confirmed checkpoint
-            if (state.currentProgress < confirmed) {
-                state.currentProgress = state.currentProgress + (confirmed - state.currentProgress) * 0.12;
-                if (confirmed - state.currentProgress < 0.002) {
-                    state.currentProgress = confirmed;
-                }
-            }
-
-            // ── X: Zeno's paradox drift toward target
-            if (!ship.progress.stopped && Math.abs(target - state.currentProgress) > 0.0005) {
-                const decay = 1 - Math.pow(0.5, dt / HALF_LIFE_MS);
-                state.currentProgress += (target - state.currentProgress) * decay;
-            }
-
-            // ── Y: Smoothly drift from current Y toward target lane
-            const targetY = ship.laneY;
-            const yDiff = targetY - state.currentY;
-            if (Math.abs(yDiff) > 0.5) {
-                // Smooth exponential approach with natural wobble
-                const yDecay = 1 - Math.pow(0.5, dt / 3000); // ~3s half-life for lane spreading
-                state.currentY += yDiff * yDecay;
-                // Add subtle sinusoidal wobble for natural curved paths
-                state.yWobblePhase += dt * 0.0008;
-                const wobble = Math.sin(state.yWobblePhase) * state.yWobbleOffset * Math.min(1, Math.abs(yDiff) / 30);
-                state.currentY += wobble * yDecay * 0.3;
-            } else {
-                state.currentY = targetY;
-            }
-
-            const x = HARBOUR_X + 20 + state.currentProgress * RACE_LEN;
-            gsap.set(el, { x, y: state.currentY });
-
-            // Checkpoint pings
-            const checkPing = (cp: number) => {
-                if (state.currentProgress >= cp && !state.pingedCheckpoints.has(cp)) {
-                    state.pingedCheckpoints.add(cp);
-                    const pingEl = el.querySelector(".checkpoint-ping");
-                    if (pingEl) {
-                        gsap.fromTo(pingEl,
-                            { opacity: 0.8, r: 0 },
-                            { opacity: 0, r: 60, duration: 1.5, ease: "power2.out" }
-                        );
-                    }
-                }
-            };
-
-            checkPing(CP.CI);
-            checkPing(CP.AUTOMERGE);
-            checkPing(CP.COMPLETED);
-        });
-    }, [activeShipsSignal.value]);
-
-    // Start/stop GSAP ticker
-    useEffect(() => {
-        if (activeShipsSignal.value.length === 0) return;
-
-        // Clean up departed ships from animation state
-        const currentIds = new Set(activeShipsSignal.value.map(s => s.key));
-        for (const key of animStateRef.current.keys()) {
-            if (!currentIds.has(key)) animStateRef.current.delete(key);
-        }
-
-        const handler = () => updatePositions();
-        tickerRef.current = handler;
-        gsap.ticker.add(handler);
-
-        return () => {
-            if (tickerRef.current) {
-                gsap.ticker.remove(tickerRef.current);
-                tickerRef.current = null;
-            }
-        };
-    }, [activeShipsSignal.value, updatePositions]);
-
-    /* ── Status change animations (shake/tilt) ───────────────────── */
-    useEffect(() => {
-        const group = shipsGroupRef.current;
-        if (!group) return;
-
-        const els = Array.from(group.querySelectorAll<SVGGElement>(".race-ship"));
-
-        activeShipsSignal.value.forEach((ship, i) => {
-            const prevStatus = prevStatusesRef.current.get(ship.key);
-            const currentStatus = ship.task.status;
-
-            if (prevStatus && prevStatus !== currentStatus && (currentStatus === "FAILED" || currentStatus === "BLOCKED")) {
-                const el = els[i];
-                if (el) {
-                    const wrapper = el.querySelector(".ship-model-wrapper");
-                    if (wrapper) {
-                        // Momentary tilt/shake
-                        gsap.timeline()
-                            .to(wrapper, { rotation: -15, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
-                            .to(wrapper, { rotation: 10, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
-                            .to(wrapper, { rotation: -5, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
-                            .to(wrapper, { rotation: 0, duration: 0.3, ease: "power2.out", transformOrigin: "center center" });
-                    }
-                }
-            }
-
-            if (currentStatus) {
-                prevStatusesRef.current.set(ship.key, currentStatus);
-            }
-        });
-    }, [activeShipsSignal.value]);
-
-    /* ── Bobbing & sway animation ────────────────────────────────── */
-    const shipIdLineup = useMemo(() => activeShipsSignal.value.map(s => s.key).join(","), [activeShipsSignal.value]);
-    useEffect(() => {
-        const group = shipsGroupRef.current;
-        if (!group || activeShipsSignal.value.length === 0) return;
-
-        bobTweensRef.current.forEach(t => t.kill());
-        bobTweensRef.current = [];
-
-        const els = Array.from(group.querySelectorAll<SVGGElement>(".race-ship"));
-        els.forEach((el, i) => {
-            const ship = activeShipsSignal.value[i];
-            if (!ship) return;
-            const isMoving = !ship.progress.stopped;
-            const bobAmp = isMoving ? 2.5 + stableRand(ship.key, 2) * 2 : 1 + stableRand(ship.key, 2) * 0.8;
-            const bobDur = 3 + stableRand(ship.key, 3) * 2;
-
-            bobTweensRef.current.push(
-                gsap.to(el, {
-                    y: `+=${bobAmp}`,
-                    rotation: (stableRand(ship.key, 4) - 0.5) * (isMoving ? 3 : 1),
-                    duration: bobDur,
-                    ease: "sine.inOut",
-                    repeat: -1,
-                    yoyo: true,
-                    delay: stableRand(ship.key, 1) * 4,
-                }),
-                gsap.to(el, {
-                    x: `+=${isMoving ? 3 + stableRand(ship.key, 5) * 4 : 1}`,
-                    duration: 5 + stableRand(ship.key, 6) * 3,
-                    ease: "sine.inOut",
-                    repeat: -1,
-                    yoyo: true,
-                }),
-            );
-        });
-
-        return () => {
-            bobTweensRef.current.forEach(t => t.kill());
-            bobTweensRef.current = [];
-        };
-    }, [shipIdLineup]);
-
-    /* ── Cleanup ─────────────────────────────────────────────────── */
-    useEffect(() => () => {
-        bobTweensRef.current.forEach(t => t.kill());
-        bobTweensRef.current = [];
-        if (tickerRef.current) gsap.ticker.remove(tickerRef.current);
     }, []);
 
     /* ─── Checkpoint buoy data ───────────────────────────────────── */
@@ -397,6 +146,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                     <BoatRaceCourseLayer isDark={isDark} activeShipsSignal={activeShipsSignal} />
                     <BoatRaceShipsLayer
                         activeShipsSignal={activeShipsSignal}
+                        animatedPositionsSignal={animatedPositionsSignal}
                         isDark={isDark}
                         shipsGroupRef={shipsGroupRef}
                         TOW_LINE_LENGTH={TOW_LINE_LENGTH}
