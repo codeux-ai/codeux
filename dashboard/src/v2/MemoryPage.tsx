@@ -2,6 +2,10 @@ import { useMemoryPageData } from "./hooks/use-memory-page-data.js";
 import { useEmbeddingModelStatus } from "./hooks/use-embedding-model-status.js";
 import { ModelCard } from "./components/memory/ModelCard.js";
 import { Inspector } from "./components/memory/Inspector.js";
+import { MemoryFilters, MemoryList, MemoryDetails, MemoryCard } from "./components/memory/index.js";
+import { MemorySearch } from "./components/memory/MemorySearch.js";
+import { searchQuerySignal, activeMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./components/memory/memoryState.js";
+
 import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useCallback, useEffect } from "preact/hooks";
@@ -83,10 +87,10 @@ export const MemoryPage: FunctionComponent = () => {
     const wrapRef = useRef<HTMLDivElement>(null);
 
     const [lobotomize, setLobotomize] = useState(false);
-    const [selectedNode, setSelectedNode] = useState<MemNode | null>(null);
-    const [searchQuery, setSearchQuery] = useState("");
+
+
         const [deletedCount, setDeletedCount] = useState(0);
-    const [activeTier, setActiveTier] = useState<MemTier>("short_term");
+    const activeTier = activeTierSignal.value;
     const activeScope: MemoryScope = activeTier === "short_term" ? "sprint" : "project";
     const [showModels, setShowModels] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -95,8 +99,8 @@ export const MemoryPage: FunctionComponent = () => {
     const { data: projectSprints } = useSprints(pid || null);
     const sprints = projectSprints as SprintRecord[];
     const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
-    const [selectedSprintId, setSelectedSprintId] = useState<string | undefined>(undefined);
-    const [selectedAgentPresetId, setSelectedAgentPresetId] = useState<string | undefined>(undefined);
+    const selectedSprintId = selectedSprintIdSignal.value;
+    const selectedAgentPresetId = selectedAgentPresetIdSignal.value;
     const effectiveSelectedSprintId = activeTier === "short_term"
         ? (selectedSprintId || sprints[0]?.id)
         : undefined;
@@ -155,7 +159,7 @@ export const MemoryPage: FunctionComponent = () => {
         if (activeTier !== "short_term" || selectedSprintId || sprints.length === 0) {
             return;
         }
-        setSelectedSprintId(sprints[0]!.id);
+        selectedSprintIdSignal.value = (sprints[0]!.id);
     }, [activeTier, selectedSprintId, sprints]);
 
 
@@ -167,7 +171,7 @@ export const MemoryPage: FunctionComponent = () => {
         s.pulses = s.graph.edges.map((_, i) => ({ edgeIdx: i, progress: Math.random(), speed: 0.002 + Math.random() * 0.003 }));
         s.selectedIdx = -1;
         s.searchMatch = null;
-        setSelectedNode(null);
+        activeMemoryIdSignal.value = null;
 
         // Animate entrance
         gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
@@ -462,11 +466,11 @@ export const MemoryPage: FunctionComponent = () => {
                 const idx = hitTest(wx, wy, s.graph.nodes);
                 if (idx >= 0) {
                     s.selectedIdx = idx;
-                    setSelectedNode({ ...s.graph.nodes[idx] });
+                    activeMemoryIdSignal.value = s.graph.nodes[idx].id;
                     gsap.to(s.cam, { x: s.graph.nodes[idx].x, y: s.graph.nodes[idx].y, zoom: 1.4, duration: 1, ease: "power3.out", overwrite: true });
                 } else {
                     s.selectedIdx = -1;
-                    setSelectedNode(null);
+                    activeMemoryIdSignal.value = null;
                 }
             }
             s.mouseDown = false;
@@ -524,7 +528,8 @@ export const MemoryPage: FunctionComponent = () => {
 
     /* ── Search ────────────────────────────────────────────────────────── */
     const handleSearch = useCallback(async (q: string) => {
-        setSearchQuery(q);
+        searchQuerySignal.value = q;
+
         const s = S.current;
         if (!q.trim()) {
             s.searchMatch = null;
@@ -577,7 +582,7 @@ export const MemoryPage: FunctionComponent = () => {
         gsap.timeline({
             onComplete: () => {
                 node.alive = false;
-                if (s.selectedIdx === idx) { s.selectedIdx = -1; setSelectedNode(null); }
+                if (s.selectedIdx === idx) { s.selectedIdx = -1; activeMemoryIdSignal.value = null; }
                 setMemoryCount(s.graph.nodes.filter(n => n.alive).length);
                 setDeletedCount(c => c + 1);
             },
@@ -600,7 +605,7 @@ export const MemoryPage: FunctionComponent = () => {
     const zoomReset = useCallback(() => {
         gsap.to(S.current.cam, { x: 0, y: 0, zoom: 1, duration: 0.8, ease: "power3.out", overwrite: true });
         S.current.selectedIdx = -1;
-        setSelectedNode(null);
+        activeMemoryIdSignal.value = null;
     }, []);
 
     /* ── Model actions ────────────────────────────────────────────────── */
@@ -650,6 +655,18 @@ export const MemoryPage: FunctionComponent = () => {
         } catch { /* ignore */ }
     }, [pid, stats]);
 
+        const onSelectNode = useCallback((idx: number) => {
+        const s = S.current;
+        if (idx >= 0 && idx < s.graph.nodes.length) {
+            s.selectedIdx = idx;
+            activeMemoryIdSignal.value = s.graph.nodes[idx].id;
+            gsap.to(s.cam, { x: s.graph.nodes[idx].x, y: s.graph.nodes[idx].y, zoom: 1.4, duration: 1, ease: "power3.out", overwrite: true });
+        } else {
+            S.current.selectedIdx = -1;
+            activeMemoryIdSignal.value = null;
+        }
+    }, []);
+
     /* ─── Render ──────────────────────────────────────────────────────── */
     return (
         <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-16 flex flex-col gap-8 relative z-10">
@@ -684,90 +701,16 @@ export const MemoryPage: FunctionComponent = () => {
                     </p>
                 </div>
 
-                <div className="flex flex-col items-end gap-3.5 shrink-0">
-                    <div className="flex items-center gap-2.5">
-                        {TIER_TABS.map(tab => {
-                            const count = tab.key === "short_term"
-                                ? (stats.sprint + stats.agent)
-                                : stats.project;
-                            return (
-                                <span key={tab.key} className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer transition-all duration-200
-                                    ${activeTier === tab.key
-                                        ? "bg-signal-500/[0.12] border border-signal-500/30 text-signal-500"
-                                        : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                                    }`}
-                                    onClick={() => setActiveTier(tab.key)}>
-                                    {tab.label} · {count}
-                                </span>
-                            );
-                        })}
-                    </div>
-                    <div className="flex items-center gap-2.5">
-                        {/* Sprint selector — only for Short Term */}
-                        {activeTier === "short_term" && sprints.length > 0 && (
-                            <select
-                                value={selectedSprintId ?? ""}
-                                onChange={(e) => setSelectedSprintId((e.target as HTMLSelectElement).value || undefined)}
-                                className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
-                                           bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08]
-                                           text-slate-600 dark:text-slate-300 cursor-pointer
-                                           focus:outline-none focus:border-signal-500/40">
-                                {sprints.map(s => (
-                                    <option key={s.id} value={s.id}>
-                                        Sprint {s.number ?? "?"} — {s.name || s.goal?.slice(0, 40) || s.id.slice(0, 8)}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
-                        {/* Agent selector — both tiers */}
-                        {agentPresets.length > 0 && (
-                            <select
-                                value={selectedAgentPresetId ?? ""}
-                                onChange={(e) => setSelectedAgentPresetId((e.target as HTMLSelectElement).value || undefined)}
-                                className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
-                                           bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08]
-                                           text-slate-600 dark:text-slate-300 cursor-pointer
-                                           focus:outline-none focus:border-signal-500/40">
-                                <option value="">All Agents</option>
-                                {agentPresets.map(a => (
-                                    <option key={a.id} value={a.id}>{a.name}</option>
-                                ))}
-                            </select>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2.5">
-                        <button onClick={() => setShowAddModal(true)}
-                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
-                                       bg-signal-500/10 text-signal-500 hover:bg-signal-500/20
-                                       border border-signal-500/20
-                                       transition-colors duration-200">
-                            <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Add Memory
-                        </button>
-                        <button onClick={() => setShowModels(v => !v)}
-                            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
-                                       border transition-colors duration-200
-                                       ${showModels
-                                           ? "bg-signal-500/[0.12] border-signal-500/30 text-signal-500"
-                                           : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.06] text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                                       }`}>
-                            <HardDrive className="w-3.5 h-3.5" strokeWidth={2} />
-                            Models
-                            {stats.activeModel && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-signal-500" />
-                            )}
-                        </button>
-                        <button onClick={handleLobotomizeToggle}
-                            className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-xs border
-                                       transition-[background-color,box-shadow,border-color] duration-300
-                                       ${lobotomize
-                                           ? "bg-status-red text-white border-status-red shadow-[0_0_24px_rgba(227,0,15,0.4)] hover:shadow-[0_0_36px_rgba(227,0,15,0.6)]"
-                                           : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-400 hover:border-status-red/50 hover:text-status-red"
-                                       }`}>
-                            <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
-                            {lobotomize ? "Lobotomize Active" : "Lobotomize"}
-                        </button>
-                    </div>
-                </div>
+                <MemoryFilters
+                    stats={stats}
+                    sprints={sprints}
+                    agentPresets={agentPresets}
+                    showModels={showModels}
+                    setShowModels={setShowModels}
+                    setShowAddModal={setShowAddModal}
+                    lobotomize={lobotomize}
+                    handleLobotomizeToggle={handleLobotomizeToggle}
+                />
             </div>
 
             {/* ── Model Management ────────────────────────────────────── */}
@@ -871,32 +814,7 @@ export const MemoryPage: FunctionComponent = () => {
                 <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
                 {/* Search overlay */}
-                <div className="absolute top-5 left-5 z-20">
-                    <div className="relative">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" strokeWidth={2} />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onInput={e => handleSearch((e.target as HTMLInputElement).value)}
-                            placeholder="Search memories…"
-                            className="w-56 pl-9 pr-4 py-2.5 rounded-xl text-xs font-medium
-                                       bg-white/80 dark:bg-void-800/80 backdrop-blur-2xl
-                                       border border-black/[0.06] dark:border-white/[0.06]
-                                       text-slate-700 dark:text-slate-300
-                                       placeholder:text-slate-400
-                                       focus:outline-none focus:ring-2 focus:ring-signal-500/10 focus:border-signal-500/40
-                                       transition-[border-color,box-shadow] duration-200"
-                        />
-                        {searchQuery && (
-                            <button onClick={() => handleSearch("")}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full
-                                           flex items-center justify-center bg-black/[0.06] dark:bg-white/[0.06]
-                                           hover:bg-black/[0.1] dark:hover:bg-white/[0.1] transition-colors duration-200">
-                                <X className="w-3 h-3 text-slate-500" strokeWidth={2} />
-                            </button>
-                        )}
-                    </div>
-                </div>
+                <MemorySearch />
 
                 {/* Zoom controls */}
                 <div className="absolute bottom-5 right-5 z-20 flex flex-col gap-1.5">
@@ -957,14 +875,28 @@ export const MemoryPage: FunctionComponent = () => {
                 )}
 
                 {/* Inspector panel */}
-                <Inspector
-                    node={selectedNode}
+                <MemoryDetails
                     allNodes={S.current.graph.nodes}
                     edges={S.current.graph.edges}
                     lobotomize={lobotomize}
-                    onClose={() => { S.current.selectedIdx = -1; setSelectedNode(null); }}
+                    onClose={() => { S.current.selectedIdx = -1; activeMemoryIdSignal.value = null; }}
                     onDelete={handleDelete}
                 />
+            </div>
+
+            <div className="w-[300px] border-l border-black/[0.06] dark:border-white/[0.06] bg-white/30 dark:bg-void-800/30 flex flex-col z-20 hidden lg:flex">
+                <div className="p-4 border-b border-black/[0.06] dark:border-white/[0.06] flex items-center justify-between">
+                     <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">List View</span>
+                     <span className="text-[10px] font-mono text-slate-400 px-2 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.04]">{memoryCount} Items</span>
+                </div>
+                <div className="flex-1 min-h-0 relative">
+                    {S.current.graph.nodes.length > 0 && (
+                        <MemoryList
+                            nodes={S.current.graph.nodes}
+                            onSelectNode={onSelectNode}
+                        />
+                    )}
+                </div>
             </div>
 
             {/* ── Category summary ────────────────────────────────────── */}
