@@ -36,6 +36,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
   onSubmit,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
 
   const state = useTaskComposerState(sprints, availableTasks, initialTask, initialSprintId);
@@ -75,6 +76,15 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
     event.preventDefault();
     if (!state.isValid) {
       state.setHasAttemptedSubmit(true);
+      if (!state.isTitleValid && titleInputRef.current) {
+        if (!reducedMotion) {
+          gsap.to(titleInputRef.current, {
+            keyframes: [{ x: -6 }, { x: 6 }, { x: -4 }, { x: 4 }, { x: 0 }],
+            duration: 0.4,
+            ease: "power2.inOut"
+          });
+        }
+      }
       return;
     }
 
@@ -185,6 +195,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           <label data-composer-stagger className="mt-8 block space-y-2">
             <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Task Title</span>
             <input
+              ref={titleInputRef}
               type="text"
               value={state.title}
               onInput={(event) => state.setTitle((event.target as HTMLInputElement).value)}
@@ -194,13 +205,20 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               required
               autoFocus
             />
-            <div className="min-h-[24px] mt-1">
-              {(state.hasAttemptedSubmit || state.touchedFields.title) && state.titleError && (
-                <div className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
+            <div
+              className="grid transition-all duration-200 ease-out mt-1"
+              style={{
+                gridTemplateRows: ((state.hasAttemptedSubmit || state.touchedFields.title) && state.titleError) ? '1fr' : '0fr',
+                opacity: ((state.hasAttemptedSubmit || state.touchedFields.title) && state.titleError) ? 1 : 0
+              }}
+              aria-live="assertive"
+            >
+              <div className="overflow-hidden">
+                <div className="flex items-center gap-1.5 text-xs text-red-500 font-medium pt-1">
                   <AlertCircle className="w-4 h-4" />
                   {state.titleError}
                 </div>
-              )}
+              </div>
             </div>
           </label>
 
