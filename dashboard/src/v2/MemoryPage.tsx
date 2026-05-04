@@ -5,6 +5,10 @@ import { Inspector } from "./components/memory/Inspector.js";
 import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useCallback, useEffect } from "preact/hooks";
+import { useSignal } from "@preact/signals";
+import { MemoryFilters } from "./components/memory/MemoryFilters.js";
+import { MemoryList } from "./components/memory/MemoryList.js";
+import { MemoryDetails } from "./components/memory/MemoryDetails.js";
 import gsap from "gsap";
 import { Brain, Search, X, AlertTriangle, Save, Check, RotateCcw, ZoomIn, ZoomOut, Maximize2, Plus, Download, Trash2, Power, Loader2, HardDrive, RefreshCw } from "lucide-preact";
 import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, getEmbeddingMap, type EmbeddingModelWithStatus, type ReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
@@ -77,6 +81,9 @@ function formatBytes(bytes: number): string {
 
 export const MemoryPage: FunctionComponent = () => {
     const { selectedProject } = useProjectData();
+    const activeView = useSignal<"map" | "list">("map");
+    const filterCriteria = useSignal<string>("");
+    const selectedMemoryId = useSignal<string | null>(null);
     const pid = selectedProject?.id || "";
     const headerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -735,6 +742,29 @@ export const MemoryPage: FunctionComponent = () => {
                             </select>
                         )}
                     </div>
+                    <div className="flex flex-col md:flex-row items-center gap-4">
+                        {/* ── View Toggle ─────────────────────────────────────── */}
+                        <div className="flex items-center p-1 rounded-xl bg-slate-200/50 dark:bg-void-800/80 backdrop-blur-2xl border border-black/5 dark:border-white/5">
+                            <button
+                                onClick={() => activeView.value = "map"}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                                    activeView.value === "map"
+                                        ? "bg-white dark:bg-void-600 text-slate-900 dark:text-white shadow-sm"
+                                        : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                                }`}>
+                                Map
+                            </button>
+                            <button
+                                onClick={() => activeView.value = "list"}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
+                                    activeView.value === "list"
+                                        ? "bg-white dark:bg-void-600 text-slate-900 dark:text-white shadow-sm"
+                                        : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                                }`}>
+                                List
+                            </button>
+                        </div>
+                    </div>
                     <div className="flex items-center gap-2.5">
                         <button onClick={() => setShowAddModal(true)}
                             className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
@@ -859,115 +889,143 @@ export const MemoryPage: FunctionComponent = () => {
                 </div>
             )}
 
-            {/* ── Neural Canvas ───────────────────────────────────────── */}
+
+            {/* ── View Container ───────────────────────────────────────── */}
             <div
-                ref={wrapRef}
                 className="relative w-full rounded-[2rem] overflow-hidden
                            bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl
                            border border-black/[0.05] dark:border-white/[0.05]
                            shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)]"
                 style={{ height: "max(600px, calc(100vh - 440px))" }}
             >
-                <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+                {activeView.value === "map" ? (
+                    <div ref={wrapRef} className="w-full h-full relative">
+                        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
-                {/* Search overlay */}
-                <div className="absolute top-5 left-5 z-20">
-                    <div className="relative">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" strokeWidth={2} />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onInput={e => handleSearch((e.target as HTMLInputElement).value)}
-                            placeholder="Search memories…"
-                            className="w-56 pl-9 pr-4 py-2.5 rounded-xl text-xs font-medium
-                                       bg-white/80 dark:bg-void-800/80 backdrop-blur-2xl
-                                       border border-black/[0.06] dark:border-white/[0.06]
-                                       text-slate-700 dark:text-slate-300
-                                       placeholder:text-slate-400
-                                       focus:outline-none focus:ring-2 focus:ring-signal-500/10 focus:border-signal-500/40
-                                       transition-[border-color,box-shadow] duration-200"
-                        />
-                        {searchQuery && (
-                            <button onClick={() => handleSearch("")}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full
-                                           flex items-center justify-center bg-black/[0.06] dark:bg-white/[0.06]
-                                           hover:bg-black/[0.1] dark:hover:bg-white/[0.1] transition-colors duration-200">
-                                <X className="w-3 h-3 text-slate-500" strokeWidth={2} />
-                            </button>
-                        )}
-                    </div>
-                </div>
+                        {/* Search overlay */}
+                        <div className="absolute top-5 left-5 z-20">
+                            <div className="relative">
+                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" strokeWidth={2} />
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onInput={e => handleSearch((e.target as HTMLInputElement).value)}
+                                    placeholder="Search memories…"
+                                    className="w-56 pl-9 pr-4 py-2.5 rounded-xl text-xs font-medium
+                                               bg-white/80 dark:bg-void-800/80 backdrop-blur-2xl
+                                               border border-black/[0.06] dark:border-white/[0.06]
+                                               text-slate-700 dark:text-slate-300
+                                               placeholder:text-slate-400
+                                               focus:outline-none focus:ring-2 focus:ring-signal-500/10 focus:border-signal-500/40
+                                               transition-[border-color,box-shadow] duration-200"
+                                />
+                                {searchQuery && (
+                                    <button onClick={() => handleSearch("")}
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full
+                                                   flex items-center justify-center bg-black/[0.06] dark:bg-white/[0.06]
+                                                   hover:bg-black/[0.1] dark:hover:bg-white/[0.1] transition-colors duration-200">
+                                        <X className="w-3 h-3 text-slate-500" strokeWidth={2} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
 
-                {/* Zoom controls */}
-                <div className="absolute bottom-5 right-5 z-20 flex flex-col gap-1.5">
-                    {[
-                        { icon: ZoomIn, fn: zoomIn, title: "Zoom in" },
-                        { icon: ZoomOut, fn: zoomOut, title: "Zoom out" },
-                        { icon: Maximize2, fn: zoomReset, title: "Reset view" },
-                    ].map(({ icon: Icon, fn, title }) => (
-                        <button key={title} onClick={fn} title={title}
-                            className="w-9 h-9 rounded-xl flex items-center justify-center
-                                       bg-white/80 dark:bg-void-800/80 backdrop-blur-2xl
-                                       border border-black/[0.06] dark:border-white/[0.06]
-                                       text-slate-500 hover:text-slate-900 dark:hover:text-white
-                                       shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.3)]
-                                       transition-colors duration-200">
-                            <Icon className="w-4 h-4" strokeWidth={1.5} />
-                        </button>
-                    ))}
-                </div>
+                        {/* Zoom controls */}
+                        <div className="absolute bottom-5 right-5 z-20 flex flex-col gap-1.5">
+                            {[
+                                { icon: ZoomIn, fn: zoomIn, title: "Zoom in" },
+                                { icon: ZoomOut, fn: zoomOut, title: "Zoom out" },
+                                { icon: Maximize2, fn: zoomReset, title: "Reset view" },
+                            ].map(({ icon: Icon, fn, title }) => (
+                                <button key={title} onClick={fn} title={title}
+                                    className="w-9 h-9 rounded-xl flex items-center justify-center
+                                               bg-white/80 dark:bg-void-800/80 backdrop-blur-2xl
+                                               border border-black/[0.06] dark:border-white/[0.06]
+                                               text-slate-500 hover:text-slate-900 dark:hover:text-white
+                                               shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.3)]
+                                               transition-colors duration-200">
+                                    <Icon className="w-4 h-4" strokeWidth={1.5} />
+                                </button>
+                            ))}
+                        </div>
 
-                {/* Legend */}
-                <div className="absolute bottom-5 left-5 z-20 flex flex-wrap gap-x-4 gap-y-1.5">
-                    {Object.entries(CAT).map(([, cfg]) => (
-                        <div key={cfg.label} className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-full" style={{ background: cfg.hex, boxShadow: `0 0 6px ${cfg.hex}` }} />
-                            <span className="text-[9px] font-bold uppercase tracking-[0.14em]
-                                           text-slate-400/80 dark:text-slate-500/80">
-                                {cfg.label}
+                        {/* Legend */}
+                        <div className="absolute bottom-5 left-5 z-20 flex flex-wrap gap-x-4 gap-y-1.5">
+                            {Object.entries(CAT).map(([, cfg]) => (
+                                <div key={cfg.label} className="flex items-center gap-1.5">
+                                    <div className="w-2 h-2 rounded-full" style={{ background: cfg.hex, boxShadow: `0 0 6px ${cfg.hex}` }} />
+                                    <span className="text-[9px] font-bold uppercase tracking-[0.14em]
+                                                   text-slate-400/80 dark:text-slate-500/80">
+                                        {cfg.label}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Node count */}
+                        <div className="absolute top-5 right-5 z-20 pointer-events-none">
+                            <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600">
+                                {memoryCount} nodes
                             </span>
                         </div>
-                    ))}
-                </div>
 
-                {/* Node count */}
-                <div className="absolute top-5 right-5 z-20 pointer-events-none">
-                    <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600">
-                        {memoryCount} nodes
-                    </span>
-                </div>
+                        {/* Empty state */}
+                        {!loading && memoryCount === 0 && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none z-20">
+                                <Brain className="w-12 h-12 text-signal-500/20" strokeWidth={1.5} />
+                                <p className="text-lg font-black font-display tracking-tight text-slate-400/60">
+                                    No memories yet
+                                </p>
+                                <p className="text-xs font-mono text-slate-400/50">
+                                    Memories will appear here as sprints capture them, or add one manually.
+                                </p>
+                            </div>
+                        )}
 
-                {/* Empty state */}
-                {!loading && memoryCount === 0 && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none z-20">
-                        <Brain className="w-12 h-12 text-signal-500/20" strokeWidth={1.5} />
-                        <p className="text-lg font-black font-display tracking-tight text-slate-400/60">
-                            No memories yet
-                        </p>
-                        <p className="text-xs font-mono text-slate-400/50">
-                            Memories will appear here as sprints capture them, or add one manually.
-                        </p>
+                        {loading && (
+                            <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                                <Loader2 className="w-8 h-8 text-signal-500/40 animate-spin" strokeWidth={1.5} />
+                            </div>
+                        )}
+
+                        {/* Inspector panel */}
+                        <Inspector
+                            node={selectedNode}
+                            allNodes={S.current.graph.nodes}
+                            edges={S.current.graph.edges}
+                            lobotomize={lobotomize}
+                            onClose={() => { S.current.selectedIdx = -1; setSelectedNode(null); }}
+                            onDelete={handleDelete}
+                        />
+                    </div>
+                ) : (
+                    <div className="flex flex-col h-full w-full p-6 gap-6 bg-slate-50 dark:bg-void-900/50">
+                        {/* Filters area */}
+                        <div className="flex items-center justify-between w-full">
+                            <MemoryFilters searchQuery={filterCriteria} />
+                        </div>
+
+                        {/* List & Detail views */}
+                        <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
+                            <div className="w-1/3 flex-shrink-0 flex flex-col h-full overflow-hidden">
+                                <MemoryList
+                                    nodes={S.current.graph.nodes}
+                                    searchQuery={filterCriteria}
+                                    selectedMemoryId={selectedMemoryId}
+                                />
+                            </div>
+                            <div className="w-2/3 flex-shrink-0 h-full overflow-hidden">
+                                <MemoryDetails
+                                    nodes={S.current.graph.nodes}
+                                    selectedMemoryId={selectedMemoryId}
+                                    onDelete={handleDelete}
+                                />
+                            </div>
+                        </div>
                     </div>
                 )}
-
-                {loading && (
-                    <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                        <Loader2 className="w-8 h-8 text-signal-500/40 animate-spin" strokeWidth={1.5} />
-                    </div>
-                )}
-
-                {/* Inspector panel */}
-                <Inspector
-                    node={selectedNode}
-                    allNodes={S.current.graph.nodes}
-                    edges={S.current.graph.edges}
-                    lobotomize={lobotomize}
-                    onClose={() => { S.current.selectedIdx = -1; setSelectedNode(null); }}
-                    onDelete={handleDelete}
-                />
             </div>
 
-            {/* ── Category summary ────────────────────────────────────── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
                 {Object.entries(CAT).map(([key, cfg]) => {
                     const alive = S.current.graph.nodes.filter(n => n.category === key && n.alive).length;
