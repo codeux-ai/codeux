@@ -1,16 +1,18 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bell, Command, Search, Moon, Sun, ChevronDown, Activity, FolderOpen, ArrowRight, Cpu, Zap, Compass, Menu } from "lucide-preact";
+import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Cpu, Zap, Compass, Menu } from "lucide-preact";
 import { Link } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
-import { SearchOverlay } from "./search/SearchOverlay.js";
+
+import { BrandSection } from "./top-nav/BrandSection.js";
+import { GlobalSearch } from "./top-nav/GlobalSearch.js";
+import { TelemetryStats } from "./top-nav/TelemetryStats.js";
+
 import { AddProjectModal } from "./ui/AddProjectModal.js";
 import { useProjectData } from "../context/project-data.js";
 import { useExecutions } from "../../hooks/useExecutions.js";
 import { useSprints } from "../../hooks/useSprints.js";
-import { useProjectTasks } from "../hooks/use-project-tasks.js";
-import { usePreviewSessions } from "../hooks/use-preview-sessions.js";
 import type { Task } from "../types.js";
 import type { SprintPreviewSession } from "../../types.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
@@ -18,7 +20,6 @@ import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
 import { Tooltip } from "./ui/Tooltip.js";
-import { RollingNumber } from "./ui/RollingNumber.js";
 import { dashboardSettingsToProjectSettings } from "../lib/settings-view-models.js";
 import {
     getProjectWorkerOptions,
@@ -116,50 +117,14 @@ interface TopNavProps {
 export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, onMenuToggle, isMobile }) => {
     const navRef = useRef<HTMLElement>(null);
 
-    const searchBarRef = useRef<HTMLButtonElement>(null);
-    const searchBarContainerRef = useRef<HTMLDivElement>(null);
-
-    const handleSearchEnter = () => {
-        if (!searchBarContainerRef.current) return;
-        gsap.to(searchBarContainerRef.current, {
-            scaleX: 1.05,
-            duration: 0.35,
-            ease: "expo.out",
-            boxShadow: "0 0 0 2px rgba(0,224,160,0.3)",
-            overwrite: "auto"
-        });
-    };
-
-    const handleSearchLeave = () => {
-        if (!searchBarContainerRef.current) return;
-        gsap.to(searchBarContainerRef.current, {
-            scaleX: 1,
-            duration: 0.35,
-            ease: "expo.out",
-            boxShadow: "0 0 0 0px rgba(0,224,160,0)",
-            overwrite: "auto"
-        });
-    };
-
     const dropdownRef = useRef<HTMLDivElement>(null);
     const workerDropdownRef = useRef<HTMLDivElement>(null);
-    const [isSearchOpen, setIsSearchOpen] = useState(false);
-    const [searchQuery, setSearchQuery] = useState("");
+
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
     const [workerSwitchBusy, setWorkerSwitchBusy] = useState(false);
 
-    useEffect(() => {
-        const handleCmdK = (e: KeyboardEvent) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-                e.preventDefault();
-                setIsSearchOpen(true);
-            }
-        };
-        document.addEventListener('keydown', handleCmdK);
-        return () => document.removeEventListener('keydown', handleCmdK);
-    }, []);
     const [projectSwitchBusy, setProjectSwitchBusy] = useState(false);
     const [sprintSwitchBusy, setSprintSwitchBusy] = useState(false);
     const [projectFilter, setProjectFilter] = useState('');
@@ -240,68 +205,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
     const projectId = selectedProject?.id || null;
 
-    const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null);
-    const { sessions } = usePreviewSessions({ projectId: isSearchOpen ? projectId : null, pollInterval: 0 });
 
-    const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
-
-    useEffect(() => {
-        const timer = setTimeout(() => setDebouncedQuery(searchQuery), 200);
-        return () => clearTimeout(timer);
-    }, [searchQuery]);
-
-    const searchResults = useMemo(() => {
-        if (!debouncedQuery.trim()) {
-            return { sprints: [], tasks: [], agents: [], containers: [] };
-        }
-
-        const lowerQuery = debouncedQuery.toLowerCase();
-
-        const filteredSprints = sprints.filter(s =>
-            s.name.toLowerCase().includes(lowerQuery) ||
-            `spr-${s.number}`.includes(lowerQuery)
-        ).map(s => ({
-            id: s.id,
-            title: `SPR-${s.number}: ${s.name}`,
-            status: s.status
-        }));
-
-        const filteredTasks = (tasks || []).filter((t: Task) =>
-            t.title.toLowerCase().includes(lowerQuery) ||
-            (t.recordId && t.recordId.toLowerCase().includes(lowerQuery)) ||
-            (t.description && t.description.toLowerCase().includes(lowerQuery))
-        ).map((t: Task) => ({
-            id: t.id,
-            title: t.title,
-            sprint: t.sprint,
-            status: t.status
-        }));
-
-        const filteredAgents = (selectedProject?.agentBindings || []).filter(a =>
-            a.workerDisplayName?.toLowerCase().includes(lowerQuery) ||
-            a.workerEndpointType?.toLowerCase().includes(lowerQuery)
-        ).map(a => ({
-            id: a.id || `${a.workerEndpointType}-${a.workerDisplayName}`,
-            name: a.workerDisplayName || a.workerEndpointType,
-            status: 'idle'
-        }));
-
-        const filteredContainers = sessions.filter((s: SprintPreviewSession) =>
-            (s.containerName && s.containerName.toLowerCase().includes(lowerQuery)) ||
-            (s.sprintId && s.sprintId.toLowerCase().includes(lowerQuery))
-        ).map((s: SprintPreviewSession) => ({
-            id: s.id,
-            name: s.containerName || 'Unnamed Container',
-            status: s.status
-        }));
-
-        return {
-            sprints: filteredSprints,
-            tasks: filteredTasks,
-            agents: filteredAgents,
-            containers: filteredContainers
-        };
-    }, [debouncedQuery, sprints, tasks, selectedProject, sessions]);
 
     const { data: effectiveSettings, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
     const browserVisible = !selectedProject || (
@@ -408,50 +312,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
             </a>
             <nav aria-label="Primary navigation" className="contents">
             <div className="flex items-center gap-4 md:gap-10 flex-1">
-                {isMobile && (
-                    <button
-                        type="button"
-                        onClick={onMenuToggle}
-                        aria-label="Toggle Navigation Menu"
-                        className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 shrink-0"
-                    >
-                        <Menu aria-hidden="true" className="w-5 h-5 text-slate-600 dark:text-slate-300" strokeWidth={2} />
-                    </button>
-                )}
-                {/* Logo */}
-                <Link to="/" className="flex items-center gap-3 cursor-pointer group shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-xl">
-                    <div className="relative w-8 h-8 flex items-center justify-center bg-void-900 dark:bg-white rounded-xl overflow-hidden shadow-[0_0_20px_rgba(0,224,160,0.25)]">
-                        <div className="absolute inset-0 bg-signal-500 opacity-0 group-hover:opacity-20 transition-opacity duration-500" />
-                        <Activity aria-hidden="true" className="w-4 h-4 text-signal-500 dark:text-void-900 relative z-10 group-hover:scale-110 transition-transform duration-500" strokeWidth={2.5} />
-                    </div>
-                    <span className="font-display font-bold text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-0.5 sm:flex">
-                        Sprint<span className="text-signal-500">OS</span>
-                    </span>
-                </Link>
+                <BrandSection isMobile={isMobile} onMenuToggle={onMenuToggle} />
 
-                {/* Search Bar */}
-                <div ref={searchBarContainerRef} className="relative group w-full max-w-[140px] sm:max-w-xs hidden sm:block rounded-xl">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
-                        <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
-                    </div>
-                    <button
-                        ref={searchBarRef}
-                        type="button"
-                        onClick={() => setIsSearchOpen(true)}
-                        onMouseEnter={handleSearchEnter}
-                        onMouseLeave={handleSearchLeave}
-                        onFocus={handleSearchEnter}
-                        onBlur={handleSearchLeave}
-                        className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl text-sm text-left text-slate-400 focus:outline-none focus-visible:outline-none transition-all relative z-0"
-                    >
-                        Search...
-                    </button>
-                    <div className="absolute inset-y-0 right-0 pr-3 hidden sm:flex items-center pointer-events-none z-10">
-                        <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-400 border border-black/10 dark:border-white/10 rounded-md">
-                            <Command aria-hidden="true" className="w-2.5 h-2.5" /> K
-                        </kbd>
-                    </div>
-                </div>
+                <GlobalSearch projectId={projectId} selectedProject={selectedProject} sprints={sprints} />
             </div>
 
             <div className="flex items-center gap-1 sm:gap-3">
@@ -642,15 +505,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                 )}
 
 
-                {/* Global Stats */}
-                <div className="hidden lg:flex items-center gap-4 px-4 py-1.5 bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04] rounded-xl mr-2">
-                    <div className="flex flex-col items-start">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Tasks</span>
-                        <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono leading-tight">
-                            <RollingNumber value={(tasks || []).filter((t: Task) => t.status === "in_progress" || t.status === "pending").length} />
-                        </div>
-                    </div>
-                </div>
+                <TelemetryStats projectId={projectId} sprints={sprints} />
 
                 {/* Worker Selector */}
                 {selectedProject && (
@@ -826,14 +681,6 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                     onAdd={(project) => { void handleCreateProject(project); }}
                 />
             )}
-            <SearchOverlay
-                isOpen={isSearchOpen}
-                onClose={() => setIsSearchOpen(false)}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-                results={searchResults}
-                isLoading={searchQuery !== debouncedQuery}
-            />
         </>
     );
 };
