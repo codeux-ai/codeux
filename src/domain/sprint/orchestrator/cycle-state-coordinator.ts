@@ -32,6 +32,9 @@ export class CycleStateCoordinator {
     }
 
     const now = new Date().toISOString();
+    const taskRunsToUpdate: any[] = [];
+    const dispatchesToUpdate: any[] = [];
+
     for (const task of subtasks) {
       const previous = previousTasks.get(task.id);
       if (!previous || !task.record_id) {
@@ -49,7 +52,8 @@ export class CycleStateCoordinator {
         continue;
       }
 
-      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+      taskRunsToUpdate.push({
+        id: taskRun.id,
         state: "RUNNING",
         finishedAt: null,
         durationMs: null,
@@ -64,13 +68,21 @@ export class CycleStateCoordinator {
         continue;
       }
 
-      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+      dispatchesToUpdate.push({
+        id: dispatch.id,
         status: "running",
         startedAt: dispatch.startedAt || taskRun.startedAt || now,
         finishedAt: null,
         lastHeartbeatAt: now,
         errorMessage: null,
       });
+    }
+
+    if (taskRunsToUpdate.length > 0) {
+      this.deps.executionRepository.updateTaskRunsBatch(taskRunsToUpdate);
+    }
+    if (dispatchesToUpdate.length > 0) {
+      this.deps.executionRepository.updateTaskDispatchesBatch(dispatchesToUpdate);
     }
   }
 

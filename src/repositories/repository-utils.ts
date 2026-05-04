@@ -79,7 +79,35 @@ export function requireRecord<T>(
   id: string
 ): T {
   if (!record) {
-    throw new Error(`${entityType} not found: ${id}`);
+    throw new EntityNotFoundError(`${entityType} not found: ${id}`);
   }
   return record;
+}
+
+export class RepositoryError extends Error {
+  constructor(message: string, public readonly originalError?: unknown) {
+    super(message);
+    this.name = "RepositoryError";
+  }
+}
+
+export class EntityNotFoundError extends RepositoryError {
+  constructor(message: string) {
+    super(message);
+    this.name = "EntityNotFoundError";
+  }
+}
+
+export class ConcurrencyConflictError extends RepositoryError {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConcurrencyConflictError";
+  }
+}
+
+export class ValidationError extends RepositoryError {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
 }

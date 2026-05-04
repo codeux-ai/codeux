@@ -70,6 +70,7 @@ export interface SprintOrchestratorDependencies {
       featureBranch: string;
       repoPath: string;
       sprintNumber: number;
+      taskRecord?: import("../contracts/project-management-types.js").TaskRecord;
     },
   ) => Promise<StartSprintDispatchResult>;
   updateLastStatus: (status: DashboardStatusSnapshot) => void;

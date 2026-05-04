@@ -14,6 +14,7 @@ export interface StartSprintDispatchArgs {
   featureBranch: string;
   repoPath: string;
   sprintNumber: number;
+  taskRecord?: import("../contracts/project-management-types.js").TaskRecord;
 }
 
 export interface StartSprintDispatchResult {
@@ -33,7 +34,7 @@ export class SprintTaskDispatchService {
 
   async startTask(args: StartSprintDispatchArgs): Promise<StartSprintDispatchResult> {
     const taskRecordId = this.requireTaskRecordId(args.task);
-    const taskRecord = this.projectManagementRepository.getTask(taskRecordId);
+    const taskRecord = args.taskRecord || this.projectManagementRepository.getTask(taskRecordId);
     if (!taskRecord) {
       throw new Error(`Task record not found: ${taskRecordId}`);
     }

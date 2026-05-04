@@ -92,7 +92,7 @@ describe("ExecutionRepository", () => {
         type: "planning",
         status: "running",
       });
-    }).toThrowError(/Sprint not found/);
+    }).toThrowError("Sprint not found: nonexistent");
 
     // This should succeed with skipValidation (bypassing the application layer requireSprint validation),
     // but it will ultimately throw a SQLite FOREIGN KEY constraint error because we provided an invalid sprintId.

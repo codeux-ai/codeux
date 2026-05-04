@@ -186,6 +186,10 @@ export class MemoryService {
     return record;
   }
 
+  async createMemoriesBatch(projectId: string, inputs: import("../contracts/memory-types.js").CreateMemoryInput[]): Promise<import("../contracts/memory-types.js").MemoryRecord[]> {
+    return this.memoryRepository.createMemoriesBatch(projectId, inputs);
+  }
+
   async createMemories(projectId: string, inputs: CreateMemoryInput[]): Promise<MemoryRecord[]> {
     const records = this.memoryRepository.createMemories(projectId, inputs);
 
