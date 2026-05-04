@@ -10,6 +10,7 @@ import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
 export const SHARED_INTERACTION_CLASSES = "transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus-visible:ring-signal-500 aria-disabled:opacity-60 aria-disabled:cursor-not-allowed touch-target";
 
 export interface ButtonProps extends ComponentProps<"button"> {
+  success?: boolean;
   pending?: boolean;
   variant?: "primary" | "secondary" | "danger" | "ghost" | "signal";
   size?: "sm" | "md" | "lg";
@@ -35,6 +36,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   variant = "secondary",
   size = "md",
   pending = false,
+  success = false,
   disabled,
   onClick,
   ...props
@@ -42,14 +44,14 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const { feedback, setPending, setSuccess, setError } = useActionFeedback(1500);
 
   const isPending = pending || feedback.status === "pending";
-  const isSuccess = feedback.status === "success";
+  const isSuccess = success || feedback.status === "success";
   const isError = feedback.status === "error";
   const durations = useGsapDurations();
 
   const buttonRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   useMagnetic(buttonRef, contentRef, { enabled: variant === "primary" || variant === "signal" });
-  useScalePop(buttonRef, Boolean(disabled) || isPending, { durationDown: durations.fast, durationUp: durations.slow, easeDown: GSAP_EASINGS.smooth, easeUp: GSAP_EASINGS.spring });
+  useScalePop(buttonRef, Boolean(disabled) || isPending, { scaleDown: 0.98, durationDown: durations.fast, durationUp: durations.slow, easeDown: GSAP_EASINGS.smooth, easeUp: GSAP_EASINGS.spring });
 
   const handleClick = useCallback(
     (e: any) => {
@@ -79,7 +81,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const sizeClasses = SIZES[size];
 
   let overrideClasses = "";
-  if (isSuccess) overrideClasses = "!bg-status-green !text-white !border-transparent";
+  if (isSuccess) overrideClasses = "!bg-status-green !text-white !border-status-green ring-2 ring-status-green ring-offset-2 ring-offset-white dark:ring-offset-void-900";
   else if (isError) overrideClasses = "!bg-status-red !text-white !border-transparent";
 
   const childrenOpacity = (isPending || isSuccess || isError) ? "opacity-0" : "opacity-100";

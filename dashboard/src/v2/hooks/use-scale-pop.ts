@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { useReducedMotion } from "./use-reduced-motion.js";
 
 export interface ScalePopConfig {
+  scaleDown?: number;
   durationDown?: number;
   durationUp?: number;
   easeDown?: string;
@@ -18,7 +19,7 @@ export function useScalePop(ref: RefObject<HTMLElement>, disabled: boolean = fal
         if (!el || reducedMotion || disabled) return;
 
         const handlePointerDown = () => {
-            gsap.to(el, { scale: 0.95, duration: config?.durationDown ?? 0.15, ease: config?.easeDown ?? "power2.out", overwrite: "auto" });
+            gsap.to(el, { scale: config?.scaleDown ?? 0.95, duration: config?.durationDown ?? 0.15, ease: config?.easeDown ?? "power2.out", overwrite: "auto" });
         };
 
         const handlePointerUp = () => {
