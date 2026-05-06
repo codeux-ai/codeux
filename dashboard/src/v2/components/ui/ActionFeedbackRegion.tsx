@@ -25,7 +25,7 @@ const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: Functi
   error: { icon: XCircle, colors: "bg-status-red/10 text-status-red border-status-red/20", progressColors: "bg-status-red" },
 };
 
-export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000, autoDismiss, retryAction, retryLabel, timestamp }: ActionFeedbackRegionProps & { timestamp?: number }) {
+export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000, autoDismiss, retryAction, retryLabel }: ActionFeedbackRegionProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const dismissBtnRef = useRef<HTMLButtonElement>(null);
@@ -77,28 +77,20 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
 
     const ctx = gsap.context(() => {
       if (isOpen) {
-        if (reducedMotion) {
-          gsap.set(containerRef.current, { y: 0, opacity: 1, scale: 1 });
-        } else {
-          gsap.fromTo(
-            containerRef.current,
-            { y: MODAL_MOTION.feedback.yStart, opacity: 0, scale: MODAL_MOTION.feedback.scaleStart },
-            { y: MODAL_MOTION.feedback.yEnd, opacity: 1, scale: MODAL_MOTION.feedback.scaleEnd, duration: MODAL_MOTION.feedback.duration, ease: MODAL_MOTION.feedback.ease }
-          );
-        }
+        gsap.fromTo(
+          containerRef.current,
+          { y: reducedMotion ? 0 : MODAL_MOTION.feedback.yStart, opacity: 0, scale: reducedMotion ? 1 : MODAL_MOTION.feedback.scaleStart },
+          { y: MODAL_MOTION.feedback.yEnd, opacity: 1, scale: MODAL_MOTION.feedback.scaleEnd, duration: reducedMotion ? 0 : MODAL_MOTION.feedback.duration, ease: MODAL_MOTION.feedback.ease }
+        );
       } else {
-        if (reducedMotion) {
-          gsap.set(containerRef.current, { opacity: 0, scale: 1, onComplete: () => setIsRendered(false) });
-        } else {
-          gsap.to(containerRef.current, {
-            y: MODAL_MOTION.feedback.yStart,
-            opacity: 0,
-            scale: MODAL_MOTION.feedback.scaleStart,
-            duration: durations.fast,
-            ease: GSAP_EASINGS.smooth,
-            onComplete: () => setIsRendered(false)
-          });
-        }
+        gsap.to(containerRef.current, {
+          y: reducedMotion ? 0 : MODAL_MOTION.feedback.yStart,
+          opacity: 0,
+          scale: reducedMotion ? 1 : MODAL_MOTION.feedback.scaleStart,
+          duration: reducedMotion ? 0 : durations.fast,
+          ease: GSAP_EASINGS.smooth,
+          onComplete: () => setIsRendered(false)
+        });
       }
     });
 
@@ -135,23 +127,20 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     });
 
     return () => ctx.revert();
-  }, [isOpen, displayedStatus, displayedMessage, autoDismissMs, autoDismiss, retryAction, reducedMotion, durations, timestamp]);
+  }, [isOpen, displayedStatus, displayedMessage, autoDismissMs, autoDismiss, retryAction, reducedMotion, durations]);
 
   if (!isRendered || !displayedMessage) return null;
 
   const config = statusConfig[displayedStatus === "idle" ? "pending" : displayedStatus];
   const Icon = config.icon;
 
-  const isError = displayedStatus === "error";
-  const role = isError ? "alert" : "status";
-  const ariaLive = isError ? "assertive" : "polite";
+  const ariaLive = displayedStatus === "error" ? "assertive" : "polite";
 
   return (
     <div
       ref={containerRef}
-      role={role}
+      role="status"
       aria-live={ariaLive}
-      aria-atomic="true"
       className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl border ${config.colors} ${className}`}
     >
       <Icon className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""}`} />

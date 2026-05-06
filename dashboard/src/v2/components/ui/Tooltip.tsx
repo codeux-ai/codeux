@@ -43,18 +43,19 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
     };
 
     const handleFocus = (e: FocusEvent) => {
-        // Only trigger on keyboard focus (focus-visible) to maintain parity
-        try {
-            if (!(e.target as Element).matches(":focus-visible")) return;
-        } catch {
-            // fallback for older browsers or test environments
-        }
         handleMouseEnter();
     };
 
     const handleMouseLeave = () => {
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         setIsVisible(false);
+    };
+
+    const handleKeyDownCapture = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+            if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+            setIsVisible(false);
+        }
     };
 
     useLayoutEffect(() => {
@@ -124,6 +125,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
             onMouseLeave={handleMouseLeave}
             onFocusCapture={handleFocus}
             onBlurCapture={handleMouseLeave}
+            onKeyDownCapture={handleKeyDownCapture}
             aria-describedby={isVisible ? tooltipId : undefined}
         >
             {children}

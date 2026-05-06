@@ -11,12 +11,10 @@ export interface ActionFeedbackOptions {
 export interface ActionFeedbackState extends ActionFeedbackOptions {
   status: ActionFeedbackStatus;
   message: string | null;
-  timestamp?: number;
-  autoDismissMs?: number;
 }
 
 export function useActionFeedback(autoDismissMs: number = 5000) {
-  const [feedback, setFeedback] = useState<ActionFeedbackState>({ status: "idle", message: null, autoDismissMs });
+  const [feedback, setFeedback] = useState<ActionFeedbackState>({ status: "idle", message: null });
   const timerRef = useRef<number | null>(null);
 
   const clearTimer = useCallback(() => {
@@ -32,27 +30,24 @@ export function useActionFeedback(autoDismissMs: number = 5000) {
 
   const clearFeedback = useCallback((message?: string) => {
     clearTimer();
-    setFeedback({ status: "idle", message: message || null, autoDismissMs, timestamp: Date.now() });
-  }, [clearTimer, autoDismissMs]);
+    setFeedback({ status: "idle", message: message || null });
+  }, [clearTimer]);
 
   const setWithTimeout = useCallback((status: ActionFeedbackStatus, message: string, options?: ActionFeedbackOptions) => {
     clearTimer();
-    setFeedback({ status, message, autoDismissMs, timestamp: Date.now(), ...options });
+    setFeedback({ status, message, ...options });
 
     if (options?.autoDismiss !== false) {
       timerRef.current = window.setTimeout(() => {
-        setFeedback((prev) => {
-          if (prev.status === "error" || prev.status === "pending") return prev;
-          return { status: "idle", message: null, autoDismissMs, timestamp: Date.now() };
-        });
+        setFeedback({ status: "idle", message: null });
       }, autoDismissMs);
     }
   }, [clearTimer, autoDismissMs]);
 
   const setPending = useCallback((message: string, options?: ActionFeedbackOptions) => {
     clearTimer();
-    setFeedback({ status: "pending", message, autoDismissMs, timestamp: Date.now(), ...options });
-  }, [clearTimer, autoDismissMs]);
+    setFeedback({ status: "pending", message, ...options });
+  }, [clearTimer]);
 
   const setSuccess = useCallback((message: string, options?: ActionFeedbackOptions) => {
     setWithTimeout("success", message, options);
@@ -64,8 +59,8 @@ export function useActionFeedback(autoDismissMs: number = 5000) {
 
   const setError = useCallback((message: string, options?: ActionFeedbackOptions) => {
     clearTimer();
-    setFeedback({ status: "error", message, autoDismissMs, timestamp: Date.now(), ...options });
-  }, [clearTimer, autoDismissMs]);
+    setFeedback({ status: "error", message, ...options });
+  }, [clearTimer]);
 
   return {
     feedback,

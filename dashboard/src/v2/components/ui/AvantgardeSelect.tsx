@@ -197,10 +197,10 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
 
   useEffect(() => {
-    if (open && listboxRef.current) {
+    if (open && isRendered && position && listboxRef.current) {
       listboxRef.current.focus();
     }
-  }, [open, position]);
+  }, [open, position, isRendered]);
 
 
   // Click outside
