@@ -19,7 +19,6 @@ import {
   sliceLedgerSprints,
   toggleSelection,
   deselectAll,
-  pruneSelection,
   getSelectedFilteredSprints,
   nextSort,
   DEFAULT_LEDGER_FILTERS,
@@ -85,14 +84,10 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     return sliceLedgerSprints(ledgerSprints, limit);
   }, [ledgerSprints, listWindow]);
 
-  // Prune selection when filter changes
+  // Clear selection when view changes to prevent confusing state
   useEffect(() => {
-    setSelectedIds((current) => {
-      if (current.size === 0) return current;
-      const pruned = pruneSelection(current, filteredSprints);
-      return pruned.size === current.size ? current : pruned;
-    });
-  }, [filteredSprints]);
+    setSelectedIds(new Set());
+  }, [filters, sort, listWindow]);
 
   const selectedFiltered = useMemo(
     () => getSelectedFilteredSprints(selectedIds, ledgerSprints),
@@ -148,7 +143,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       setSelectedIds(new Set());
     } else {
       const next = new Set(selectedIds);
-      for (const sprint of ledgerSprints) {
+      for (const sprint of windowedSprints) {
         next.add(sprint.id);
       }
       setSelectedIds(next);

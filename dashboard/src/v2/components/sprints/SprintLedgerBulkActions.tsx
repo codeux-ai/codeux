@@ -1,5 +1,8 @@
 import type { FunctionComponent } from "preact";
+import { useRef, useLayoutEffect } from "preact/hooks";
 import { Heart, Loader2, Play, Trash2 } from "lucide-preact";
+import gsap from "gsap";
+import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
 
 export interface SprintLedgerBulkActionsProps {
   selectedCount: number;
@@ -28,11 +31,40 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   onBulkShowcaseDisable,
   onClearSelection,
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const durations = useGsapDurations();
+
+  const isVisible = selectedCount > 0;
+
+  useLayoutEffect(() => {
+    if (!containerRef.current) return;
+
+    const ctx = gsap.context(() => {
+      if (isVisible) {
+        gsap.to(containerRef.current, {
+          height: "auto",
+          opacity: 1,
+          duration: durations.base,
+          ease: GSAP_EASINGS.smooth,
+        });
+      } else {
+        gsap.to(containerRef.current, {
+          height: 0,
+          opacity: 0,
+          duration: durations.base,
+          ease: GSAP_EASINGS.smooth,
+        });
+      }
+    });
+
+    return () => ctx.revert();
+  }, [isVisible, durations]);
+
   return (
     <div
-      className={`overflow-hidden transition-all duration-300 ease-in-out ${
-        selectedCount > 0 ? "max-h-20 opacity-100" : "max-h-0 opacity-0"
-      }`}
+      ref={containerRef}
+      className="overflow-hidden"
+      style={{ height: 0, opacity: 0 }}
     >
       <div className="flex items-center gap-3 border-b border-signal-500/20 bg-signal-500/10 px-6 py-3 dark:bg-signal-500/10">
         <div className="flex items-center gap-2">
@@ -49,7 +81,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.06] hover:text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPinPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Heart className="h-3 w-3" fill="currentColor" />}
-            {isPinPending ? "Pinning..." : "Pin"}
+            {isPinPending ? "Updating..." : "Pin"}
           </button>
           <button
             type="button"
@@ -58,7 +90,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.06] hover:text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPinPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Heart className="h-3 w-3" />}
-            {isPinPending ? "Unpinning..." : "Unpin"}
+            {isPinPending ? "Updating..." : "Unpin"}
           </button>
           <button
             type="button"
