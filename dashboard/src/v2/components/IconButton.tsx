@@ -1,5 +1,6 @@
 import type { FunctionComponent, ComponentProps } from "preact";
 import { memo } from "preact/compat";
+import { useCallback } from "preact/hooks";
 import { Loader2 } from "lucide-preact";
 import { Tooltip } from "./ui/Tooltip.js";
 import { SHARED_INTERACTION_CLASSES } from "./ui/Button.js";
@@ -11,17 +12,33 @@ interface IconButtonProps extends ComponentProps<"button"> {
     pending?: boolean;
 }
 
-export const IconButton: FunctionComponent<IconButtonProps> = memo(({ children, className = "", title, "aria-label": ariaLabel, pending = false, disabled, ...props }) => {
+export const IconButton: FunctionComponent<IconButtonProps> = memo(({ children, className = "", title, "aria-label": ariaLabel, pending = false, disabled, onClick, ...props }) => {
     const isPending = pending;
 
     const childrenOpacity = isPending ? "opacity-0" : "opacity-100";
 
+    const handleClick = useCallback(
+        (e: any) => {
+            if (isPending) {
+                e?.preventDefault();
+                return;
+            }
+            if (onClick) {
+                return (onClick as any)(e);
+            }
+        },
+        [onClick, isPending]
+    );
+
     const button = (
         <button
             {...props}
-            disabled={disabled || isPending}
+            onClick={handleClick}
+            disabled={disabled}
+            aria-disabled={disabled || isPending}
+            aria-busy={isPending}
             aria-label={ariaLabel || title}
-            className={`flex items-center justify-center p-2 rounded-xl relative hover:bg-black/5 dark:hover:bg-white/5 active:scale-[0.98] touch-target ${SHARED_INTERACTION_CLASSES} ${className}`}
+            className={`flex items-center justify-center p-2 rounded-xl relative hover:bg-black/5 dark:hover:bg-white/5 ${SHARED_INTERACTION_CLASSES} ${className}`}
         >
             <div className={`flex items-center justify-center transition-opacity duration-200 ${childrenOpacity}`}>
                 {children}

@@ -4,10 +4,9 @@ import { useCallback, useRef } from "preact/hooks";
 import { Check, X, Loader2 } from "lucide-preact";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useMagnetic } from "../../hooks/use-magnetic.js";
-import { useScalePop } from "../../hooks/use-scale-pop.js";
 import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
 
-export const SHARED_INTERACTION_CLASSES = "transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus-visible:ring-signal-500 aria-disabled:opacity-60 aria-disabled:cursor-not-allowed touch-target";
+export const SHARED_INTERACTION_CLASSES = "transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus-visible:ring-signal-500 aria-disabled:opacity-60 aria-disabled:cursor-not-allowed active:scale-[0.98] aria-disabled:active:scale-100 touch-target";
 
 export interface ButtonProps extends ComponentProps<"button"> {
   success?: boolean;
@@ -51,7 +50,6 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   useMagnetic(buttonRef, contentRef, { enabled: variant === "primary" || variant === "signal" });
-  useScalePop(buttonRef, Boolean(disabled) || isPending, { scaleDown: 0.98, durationDown: durations.fast, durationUp: durations.slow, easeDown: GSAP_EASINGS.smooth, easeUp: GSAP_EASINGS.spring });
 
   const handleClick = useCallback(
     (e: any) => {
