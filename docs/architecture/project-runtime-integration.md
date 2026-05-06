@@ -1,6 +1,6 @@
 # Project Runtime Integration
 
-This page describes the current runtime bridge between the legacy sprint orchestrator and the Sprint OS database model.
+This page describes the current runtime bridge between the legacy sprint orchestrator and the Code UX database model.
 
 ## Goal
 

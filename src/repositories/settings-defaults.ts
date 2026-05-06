@@ -411,7 +411,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     hostPortRangeStart: 5555,
     hostPortRangeEnd: 6666,
     containerAppPort: 3000,
-    startupScriptPath: ".sprint-os/browser/start-preview.sh",
+    startupScriptPath: ".code-ux/browser/start-preview.sh",
   },
   workers: {
     executionMode: "VIRTUAL",

@@ -5,7 +5,7 @@ Implemented foundation, later extended with markdown sync and Planning agent orc
 
 ## Purpose
 
-Sprint OS now separates `Agents` from live MCP connections.
+Code UX now separates `Agents` from live MCP connections.
 
 `Agents` are project-scoped instruction presets, not runtime clients.
 
@@ -62,7 +62,7 @@ Foundation-supported fields:
 - labels
 - instruction markdown
 
-This foundation gave Sprint OS a clean product base for:
+This foundation gave Code UX a clean product base for:
 
 - reusable planning roles
 - reusable worker role definitions later
@@ -98,7 +98,7 @@ Not implemented yet:
 
 ## Current Built-In Conventions
 
-Sprint OS currently recognizes these markdown-backed preset conventions under `.sprint-os/agents`:
+Code UX currently recognizes these markdown-backed preset conventions under `.code-ux/agents`:
 
 - `planning_agent.md` -> `Planning agent`
 - `worker.md` -> `Worker`

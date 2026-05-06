@@ -14,7 +14,7 @@ afterEach(async () => {
 
 describe("AgentPresetRepository", () => {
   it("creates, updates, lists, and deletes project-scoped presets", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-preset-repo-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-preset-repo-"));
     tempDirs.push(dir);
     const storage = new AppDbStorage(path.join(dir, "app.db"));
     const projectRepository = new ProjectManagementRepository(storage);

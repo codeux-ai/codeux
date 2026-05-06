@@ -131,7 +131,7 @@ function buildHumanInterventionSummaryFromEvents(
         const featureBranch = asNonEmptyString(payload?.featureBranch) || "the sprint feature branch";
         return {
           title: "Branch preparation blocked",
-          reason: `Sprint OS could not prepare ${featureBranch} automatically.`,
+          reason: `Code UX could not prepare ${featureBranch} automatically.`,
           instructions: "Check git authentication, remote push permissions, and local branch state, then resume the sprint.",
           attentionType: null,
           severity: "high",

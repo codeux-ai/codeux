@@ -46,7 +46,7 @@ describe("WorkerInboxReplyService", () => {
       projectManagementRepository: {
         getProject: vi.fn().mockReturnValue({
           id: "project-1",
-          name: "Sprint OS",
+          name: "Code UX",
           baseDir: "/repo",
         }),
       } as any,
@@ -113,7 +113,7 @@ describe("WorkerInboxReplyService", () => {
       projectManagementRepository: {
         getProject: vi.fn().mockReturnValue({
           id: "project-1",
-          name: "Sprint OS",
+          name: "Code UX",
           baseDir: "/repo",
         }),
       } as any,
@@ -164,7 +164,7 @@ describe("WorkerInboxReplyService", () => {
       projectManagementRepository: {
         getProject: vi.fn().mockReturnValue({
           id: "project-1",
-          name: "Sprint OS",
+          name: "Code UX",
           baseDir: "/repo",
         }),
       } as any,
@@ -211,7 +211,7 @@ describe("WorkerInboxReplyService", () => {
       projectManagementRepository: {
         getProject: vi.fn().mockReturnValue({
           id: "project-1",
-          name: "Sprint OS",
+          name: "Code UX",
           baseDir: "/repo",
         }),
       } as any,
@@ -269,7 +269,7 @@ describe("WorkerInboxReplyService", () => {
       projectManagementRepository: {
         getProject: vi.fn().mockReturnValue({
           id: "project-1",
-          name: "Sprint OS",
+          name: "Code UX",
           baseDir: "/repo",
         }),
       } as any,
@@ -345,7 +345,7 @@ describe("WorkerInboxReplyService", () => {
       projectManagementRepository: {
         getProject: vi.fn().mockReturnValue({
           id: "project-1",
-          name: "Sprint OS",
+          name: "Code UX",
           baseDir: "/repo",
         }),
       } as any,
@@ -460,7 +460,7 @@ describe("WorkerInboxReplyService", () => {
       projectManagementRepository: {
         getProject: vi.fn().mockReturnValue({
           id: "project-1",
-          name: "Sprint OS",
+          name: "Code UX",
           baseDir: "/repo",
         }),
       } as any,
@@ -536,7 +536,7 @@ describe("WorkerInboxReplyService", () => {
       projectManagementRepository: {
         getProject: vi.fn().mockReturnValue({
           id: "project-1",
-          name: "Sprint OS",
+          name: "Code UX",
           baseDir: "/repo",
         }),
       } as any,

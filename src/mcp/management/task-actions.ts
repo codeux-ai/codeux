@@ -1,4 +1,4 @@
-import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
@@ -13,7 +13,7 @@ export class TaskActions {
     private readonly taskRerunService: TaskRerunService,
   ) {}
 
-  async handleTaskAction(args: ManageSprintOsArgs): Promise<ManagementResponseEnvelope> {
+  async handleTaskAction(args: ManageCodeUxArgs): Promise<ManagementResponseEnvelope> {
     const payload = args.payload || {};
 
     switch (args.action) {
@@ -119,7 +119,7 @@ export class TaskActions {
     return { result: { task } };
   }
 
-  private deleteTask(args: ManageSprintOsArgs): ManagementResponseEnvelope {
+  private deleteTask(args: ManageCodeUxArgs): ManagementResponseEnvelope {
     const taskId = typeof args.payload.taskId === "string" ? args.payload.taskId : undefined;
     if (!taskId) {
       throw new Error("taskId is required");

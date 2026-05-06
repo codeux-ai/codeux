@@ -204,7 +204,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 function isGeminiRuntimeStorageError(text: string): boolean {
   return /ENOENT/i.test(text)
-    && /\.sprint-os-home\/\.gemini\//i.test(text);
+    && /\.code-ux-home\/\.gemini\//i.test(text);
 }
 
 function isCodexTransportServerError(text: string): boolean {

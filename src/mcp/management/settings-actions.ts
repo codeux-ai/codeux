@@ -1,4 +1,4 @@
-import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { SettingsRepository } from "../../repositories/settings-repository.js";
 import { SettingsPathUpdater } from "../../services/settings-path-updater.js";
 import type { SystemSettings, ProjectSettingsOverride, SprintSettingsOverride } from "../../contracts/settings-scope-types.js";
@@ -6,7 +6,7 @@ import type { SystemSettings, ProjectSettingsOverride, SprintSettingsOverride } 
 export class SettingsActions {
   constructor(private readonly settingsRepository: SettingsRepository) {}
 
-  async handleSettingsAction(args: ManageSprintOsArgs): Promise<ManagementResponseEnvelope> {
+  async handleSettingsAction(args: ManageCodeUxArgs): Promise<ManagementResponseEnvelope> {
     const payload = args.payload || {};
 
     switch (args.action) {
@@ -70,7 +70,7 @@ export class SettingsActions {
     return { result: { settings: this.settingsRepository.resolveSprintDashboardSettings(projectId, sprintId) } };
   }
 
-  private replaceSystemSettings(args: ManageSprintOsArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private replaceSystemSettings(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     if (args.approval?.confirmed !== true) {
       return { approvalRequired: true, approvalMessage: "Are you sure you want to replace all system settings?" };
     }
@@ -89,7 +89,7 @@ export class SettingsActions {
     return { result: { settings: this.settingsRepository.saveSystemSettings(updated) } };
   }
 
-  private replaceProjectSettings(args: ManageSprintOsArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private replaceProjectSettings(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
     if (!projectId) throw new Error("projectId is required");
     if (args.approval?.confirmed !== true) {
@@ -111,7 +111,7 @@ export class SettingsActions {
     return { result: { settings: this.settingsRepository.saveProjectSettings(projectId, updated) } };
   }
 
-  private resetProjectSettings(args: ManageSprintOsArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private resetProjectSettings(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
     if (!projectId) throw new Error("projectId is required");
     if (args.approval?.confirmed !== true) {
@@ -121,7 +121,7 @@ export class SettingsActions {
     return { result: { success: true } };
   }
 
-  private replaceSprintSettings(args: ManageSprintOsArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private replaceSprintSettings(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
     const sprintId = typeof payload.sprintId === "string" ? payload.sprintId : undefined;
     if (!projectId || !sprintId) throw new Error("projectId and sprintId are required");
@@ -149,7 +149,7 @@ export class SettingsActions {
     return { result: { settings: this.settingsRepository.saveSprintSettings(sprintId, baseProjectSettings, updated) } };
   }
 
-  private resetSprintSettings(args: ManageSprintOsArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private resetSprintSettings(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const sprintId = typeof payload.sprintId === "string" ? payload.sprintId : undefined;
     if (!sprintId) throw new Error("sprintId is required");
     if (args.approval?.confirmed !== true) {

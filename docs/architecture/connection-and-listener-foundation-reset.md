@@ -14,11 +14,11 @@ The current DB-native runtime foundation is the right direction, but the first m
 - the current listen tools return immediately instead of supporting a real listening loop
 - the in-repo worker client proved the dispatch contract, but it is not the final remote-worker transport model
 
-This document defines the corrected architecture that Sprint OS should now implement.
+This document defines the corrected architecture that Code UX should now implement.
 
 ## Product Model Separation
 
-Sprint OS must treat these as different first-class concepts.
+Code UX must treat these as different first-class concepts.
 
 ### 1. Agent presets
 
@@ -38,7 +38,7 @@ The `Agents` page must be reserved for these presets only.
 
 ### 2. Live connections
 
-Connections are active MCP clients attached to Sprint OS.
+Connections are active MCP clients attached to Code UX.
 
 Examples:
 
@@ -74,12 +74,12 @@ Workers are not agent presets, and agent presets are not workers.
 
 ### 1. Zero-setup stdio chat must work
 
-When a user starts Gemini CLI, Codex, or another normal stdio MCP client, Sprint OS must support dashboard chat without requiring a separate worker process or any special local bootstrap flow.
+When a user starts Gemini CLI, Codex, or another normal stdio MCP client, Code UX must support dashboard chat without requiring a separate worker process or any special local bootstrap flow.
 
 The required user experience is:
 
 1. user connects a normal MCP client
-2. user can place that client into Sprint OS listening mode
+2. user can place that client into Code UX listening mode
 3. dashboard messages appear in that client as work items
 4. the client replies
 5. the client re-enters listening mode
@@ -116,16 +116,16 @@ Otherwise workers will suffer the same breakage as normal stdio MCP clients:
 
 ### 4. Remote workers are required
 
-Workers that only work by spawning a second local Sprint OS server process are not the final design.
+Workers that only work by spawning a second local Code UX server process are not the final design.
 
-Sprint OS must keep stdio support for normal local MCP clients, but it must stop being stdio-only.
+Code UX must keep stdio support for normal local MCP clients, but it must stop being stdio-only.
 
 The target transport model is:
 
 - stdio for local human-driven MCP clients
 - Streamable HTTP MCP for remote long-lived listeners and workers
 
-Sprint OS now has the first implementation of that transport split through the Streamable HTTP worker gateway. The current shipped behavior is documented in [Streamable HTTP Worker Gateway](./streamable-http-worker-gateway.md).
+Code UX now has the first implementation of that transport split through the Streamable HTTP worker gateway. The current shipped behavior is documented in [Streamable HTTP Worker Gateway](./streamable-http-worker-gateway.md).
 
 ## Correct Listener Model
 
@@ -202,7 +202,7 @@ That instruction is required because tools like Gemini CLI and Codex otherwise t
 
 ## Timeout model
 
-Sprint OS already has an operator-facing concept of forced periodic output in the legacy sprint loop. The listener model should reuse that operational idea instead of inventing a separate ad hoc behavior.
+Code UX already has an operator-facing concept of forced periodic output in the legacy sprint loop. The listener model should reuse that operational idea instead of inventing a separate ad hoc behavior.
 
 Target rules:
 
@@ -220,7 +220,7 @@ Recommended configuration:
 
 Tool arguments may optionally allow a smaller per-call timeout for clients with stricter transport behavior, but the server-side setting remains the main operational default.
 
-If transport-specific limits are discovered later, Sprint OS may clamp requested values per transport, but the product contract remains long-poll plus timeout, not instant polling.
+If transport-specific limits are discovered later, Code UX may clamp requested values per transport, but the product contract remains long-poll plus timeout, not instant polling.
 
 ## Thread assignment and routing
 
@@ -278,7 +278,7 @@ Connection state should be derived primarily from:
 
 ### Cleanup rules
 
-Sprint OS should run a cleanup pass that:
+Code UX should run a cleanup pass that:
 
 - marks expired connections as `stale`
 - later marks them `offline`
@@ -320,13 +320,13 @@ Task auto-assignment and worker matching can come later.
 
 ## Keep stdio, but stop being stdio-only
 
-Sprint OS should keep stdio support because it is essential for:
+Code UX should keep stdio support because it is essential for:
 
 - Gemini CLI
 - Codex
 - other local MCP clients
 
-But Sprint OS must add a network transport for remote listeners and workers.
+But Code UX must add a network transport for remote listeners and workers.
 
 Recommended target:
 
@@ -337,7 +337,7 @@ Recommended target:
 The final worker architecture should be:
 
 1. worker daemon starts on any machine
-2. worker connects to Sprint OS over Streamable HTTP MCP
+2. worker connects to Code UX over Streamable HTTP MCP
 3. worker authenticates with a worker token
 4. worker registers capabilities and project scope
 5. worker enters the same long-poll listener loop
@@ -432,7 +432,7 @@ Current status:
 
 ## Definition Of Done For This Corrective Track
 
-Sprint OS is on the right foundation when all of these are true:
+Code UX is on the right foundation when all of these are true:
 
 1. A normal Gemini CLI or Codex MCP connection can enter listening mode and receive dashboard chat work without any worker setup.
 2. The listener call blocks until work is available or timeout expires.

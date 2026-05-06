@@ -76,7 +76,7 @@ When an item is opened with `ownerType = worker`:
 
 Worker listen-mode supervision now backfills that assignment path:
 
-- when a worker enters `listen` for a project, Sprint OS ensures a project-worker assignment for that active project scope even if the worker has not claimed a task dispatch yet
+- when a worker enters `listen` for a project, Code UX ensures a project-worker assignment for that active project scope even if the worker has not claimed a task dispatch yet
 - this lets worker-owned items that were opened before any dispatch activity still reach the connected worker through `listen`
 
 This keeps the sticky-worker behavior intact without forcing a worker connection to be online at open time.
@@ -147,7 +147,7 @@ When the sprint protocol detects a blocked task that still requires intervention
   - `worker` for agent-managed recovery
   - `human` for operator-only decisions
 - the payload includes `repoPath`, session state, provider, and intervention owner
-- clarification auto-reply dedupe is not treated as a new `action_required` attention state; once Sprint OS has answered the latest clarification prompt, the task remains in automated recovery and repeated cycles skip the same clarification until Jules emits a different request
+- clarification auto-reply dedupe is not treated as a new `action_required` attention state; once Code UX has answered the latest clarification prompt, the task remains in automated recovery and repeated cycles skip the same clarification until Jules emits a different request
 
 ### Watch-loop manual attention pause
 
@@ -156,7 +156,7 @@ When the watch loop finishes because no further automatic progress is possible:
 - a sprint-scoped attention item opens with type `manual_attention`
 - the payload includes `repoPath`, feature branch, and the blocked/running/ready task summary
 - this gives the assigned worker one sprint-level queue item even when the pause reason is broader than a single dispatch
-- pure dependency progression does not trigger this pause: if a task automerge or other CI-gate transition makes downstream tasks ready, Sprint OS re-derives readiness before deciding that manual attention is required
+- pure dependency progression does not trigger this pause: if a task automerge or other CI-gate transition makes downstream tasks ready, Code UX re-derives readiness before deciding that manual attention is required
 
 ## Current Resolution Rule
 

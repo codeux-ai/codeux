@@ -1,11 +1,11 @@
 import * as fs from "fs";
 import * as path from "path";
-import { getHomeSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { EMBEDDING_MODEL_CATALOG } from "./embedding-model-catalog.js";
 import { EmbeddingTokenizer } from "./embedding-tokenizer.js";
 import type { EmbeddingModelId } from "../contracts/memory-types.js";
 
-const MODELS_DIR = getHomeSprintOsPath("models");
+const MODELS_DIR = getHomeCodeUxPath("models");
 
 /**
  * Loads ONNX models and runs embedding inference on CPU.

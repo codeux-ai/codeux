@@ -1,6 +1,6 @@
 import type { ToolName as ContractToolName } from "../../contracts/mcp-tool-definitions.js";
 import type { McpConnectionCapabilities, McpConnectionRole } from "../../contracts/connection-chat-types.js";
-import type { ManageSprintOsArgs } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs } from "../../contracts/internal-management-types.js";
 
 export interface GetSessionArgs {
   session_id: string;
@@ -62,7 +62,7 @@ export interface McpToolArgsByName {
   start_listen: StartListenArgs;
   pull_inbox: PullInboxArgs;
   post_listen_reply: PostListenReplyArgs;
-  manage_sprint_os: ManageSprintOsArgs;
+  manage_code_ux: ManageCodeUxArgs;
 }
 
 export type McpToolName = keyof McpToolArgsByName;

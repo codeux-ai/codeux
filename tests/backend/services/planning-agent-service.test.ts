@@ -36,13 +36,13 @@ describe("PlanningAgentService", () => {
   });
 
   it("uses the Planning agent reply to improve prompts and create tasks", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-agent-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-agent-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -196,13 +196,13 @@ describe("PlanningAgentService", () => {
   });
 
   it("plans through a virtual worker when the project worker mode is virtual", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-virtual-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-virtual-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -364,13 +364,13 @@ describe("PlanningAgentService", () => {
   it("retries virtual planning on rate limit and records invocation error metadata", async () => {
     vi.spyOn(providerRetryPolicy, "sleepWithSignal").mockResolvedValue();
 
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-rate-limit-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-rate-limit-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -493,13 +493,13 @@ describe("PlanningAgentService", () => {
 
   it("stops virtual planning rate-limit retries after the configured max", async () => {
     const sleepSpy = vi.spyOn(providerRetryPolicy, "sleepWithSignal").mockResolvedValue();
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-rate-limit-max-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-rate-limit-max-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -600,13 +600,13 @@ describe("PlanningAgentService", () => {
   });
 
   it("accepts virtual planning JSON with prose but rejects legacy shape fields", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-loose-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-loose-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -710,13 +710,13 @@ describe("PlanningAgentService", () => {
   });
 
   it("supports virtual provider and model overrides and explicit replanning", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-overrides-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-overrides-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -848,13 +848,13 @@ describe("PlanningAgentService", () => {
   });
 
   it("targets a specific planning agent preset via overrides", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-preset-override-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-preset-override-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Default planning instructions.\n",
       "utf8",
     );
@@ -919,13 +919,13 @@ describe("PlanningAgentService", () => {
   });
 
   it("aborts a virtual improveSprintPrompt request immediately without leaving side-effects", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-abort-improve-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-abort-improve-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -988,13 +988,13 @@ describe("PlanningAgentService", () => {
   });
 
   it("aborts a virtual planSprint replan request without deleting existing tasks", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-abort-plan-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-abort-plan-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -1067,13 +1067,13 @@ describe("PlanningAgentService", () => {
   });
 
   it("retries virtual planning requests on invalid JSON and recovers on success", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-retry-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-retry-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -1157,13 +1157,13 @@ describe("PlanningAgentService", () => {
   });
 
   it("exhausts virtual planning retry budget and throws", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-exhaust-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-exhaust-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -1231,13 +1231,13 @@ describe("PlanningAgentService", () => {
   });
 
   it("emits planning_parse_failure_blocked event when JSON parsing fails completely", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-agent-failure-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-agent-failure-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );

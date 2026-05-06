@@ -5,11 +5,11 @@ Implemented
 
 ## Purpose
 
-Sprint OS now supports a dedicated Quality Assurance agent that reviews completed work after delivery instead of relying only on merge state or worker self-reporting.
+Code UX now supports a dedicated Quality Assurance agent that reviews completed work after delivery instead of relying only on merge state or worker self-reporting.
 
 The QA agent is designed to:
 
-- review a code-complete task with full sprint context before Sprint OS merges it
+- review a code-complete task with full sprint context before Code UX merges it
 - check whether the implementation is actually complete
 - catch code-quality issues and integration mistakes
 - investigate missing features or regressions
@@ -53,9 +53,9 @@ The `Settings -> Agents` panel includes a dedicated `Quality Assurance` section 
 
 ## Default Agent Preset
 
-Sprint OS ships a project-local default markdown file:
+Code UX ships a project-local default markdown file:
 
-- `.sprint-os/agents/quality_assurance_agent.md`
+- `.code-ux/agents/quality_assurance_agent.md`
 
 Agent resolution uses the same preset-sync path as other built-in agents, so a project can keep the default behavior, edit the preset in the dashboard, or point an individual QA trigger at a different project agent preset.
 
@@ -92,12 +92,12 @@ Behavior:
    - QA determines a no-PR task should not have a PR
    - task QA retry budget is exhausted
 
-If task QA is still pending, running, or has failed without exhausting `maxTaskReviewRuns`, Sprint OS marks the task merge state as `QA_PENDING` and keeps the sprint active instead of auto-merging.
+If task QA is still pending, running, or has failed without exhausting `maxTaskReviewRuns`, Code UX marks the task merge state as `QA_PENDING` and keeps the sprint active instead of auto-merging.
 
 Recovery guarantees:
 
-- task QA no longer depends only on catching a single in-cycle transition edge; if a task is already code-complete and still has no successful QA run, Sprint OS will enqueue the missing review on the next orchestration cycle instead of leaving the task parked in `QA_PENDING`
-- if a QA run row is left behind in `running` state after its backing execution invocation has already finished, Sprint OS now automatically converts that stale row into a retryable failed run so the gate can recover instead of blocking indefinitely
+- task QA no longer depends only on catching a single in-cycle transition edge; if a task is already code-complete and still has no successful QA run, Code UX will enqueue the missing review on the next orchestration cycle instead of leaving the task parked in `QA_PENDING`
+- if a QA run row is left behind in `running` state after its backing execution invocation has already finished, Code UX now automatically converts that stale row into a retryable failed run so the gate can recover instead of blocking indefinitely
 
 Run budgeting:
 
@@ -106,19 +106,19 @@ Run budgeting:
 - `maxTaskReviewRuns = 1` means only the initial task review runs; QA does not re-check later fixes
 - `maxTaskReviewRuns = 2` means the initial task review plus one QA re-check after fixes
 - `maxTaskReviewRuns = N` means the initial task review plus up to `N - 1` QA re-checks for later fix iterations
-- if QA still has not produced a green light after that cap, Sprint OS stops holding the merge on QA alone and treats the retry budget as exhausted
+- if QA still has not produced a green light after that cap, Code UX stops holding the merge on QA alone and treats the retry budget as exhausted
 - a passing task QA result is final for that completion state and is not retriggered just because orchestration loops again
 
 ### Sprint completion QA
 
-Before Sprint OS evaluates the final `feature -> default` merge, it runs sprint-completion QA when that trigger is enabled.
+Before Code UX evaluates the final `feature -> default` merge, it runs sprint-completion QA when that trigger is enabled.
 
 Behavior:
 
 - QA receives full sprint context, including every task instruction prompt rather than only the task summary lines
 - QA can choose a target task that should continue
-- QA can return structured `followUpTasks` with full task instructions so Sprint OS creates new pending sprint tasks automatically
-- if QA requests follow-up work and Sprint OS can continue that task session, sprint completion is held open
+- QA can return structured `followUpTasks` with full task instructions so Code UX creates new pending sprint tasks automatically
+- if QA requests follow-up work and Code UX can continue that task session, sprint completion is held open
 - if QA creates follow-up tasks, sprint completion is held open until those new tasks finish and sprint QA passes on a later run
 - sprint QA runs once for the finished sprint, then only runs again after a prior `changes_requested` or failed result and meaningful sprint task state changes have occurred
 - a passing sprint QA result is final for that sprint state and is not retriggered by another orchestration cycle with no real work changes
@@ -126,10 +126,10 @@ Behavior:
   - run `1` is the initial finished-sprint review
   - later runs are only used to check QA-requested fixes or follow-up work
   - `maxTaskReviewRuns = 1` means sprint fixes are not re-checked by QA
-- if sprint QA passes, Sprint OS proceeds to main-merge evaluation and eventual completion
+- if sprint QA passes, Code UX proceeds to main-merge evaluation and eventual completion
 - if sprint QA is still running, failed, or waiting on follow-up work, the main merge stays blocked
-- while a sprint QA review is running, Sprint OS now refreshes the parent sprint-run heartbeat and lease so long reviews are not mistaken for stalled orchestration and failed by runtime cleanup
-- stale sprint-level `running` QA rows are also reconciled against execution invocation state before gating; if the backing invocation already ended, Sprint OS reclassifies the stale row and immediately allows a retry instead of keeping sprint completion blocked forever
+- while a sprint QA review is running, Code UX now refreshes the parent sprint-run heartbeat and lease so long reviews are not mistaken for stalled orchestration and failed by runtime cleanup
+- stale sprint-level `running` QA rows are also reconciled against execution invocation state before gating; if the backing invocation already ended, Code UX reclassifies the stale row and immediately allows a retry instead of keeping sprint completion blocked forever
 
 ## Session Continuation
 
@@ -140,7 +140,7 @@ Instead:
 - Jules tasks receive a follow-up message on the existing Jules session
 - CLI tasks resume the existing worker session/worktree when possible
 
-For CLI follow-up runs, Sprint OS:
+For CLI follow-up runs, Code UX:
 
 - preserves the successful worktree after completion when QA is enabled for task completion
 - refreshes `origin` and starts follow-up work from the latest remote feature branch when remote GitHub mode is enabled
@@ -163,8 +163,8 @@ The QA provider is prompted to return JSON only with:
 
 That contract keeps the follow-up automation deterministic instead of scraping prose heuristically.
 
-QA agent responses are processed using the shared structured response helper (`StructuredProviderResponseService`). This ensures that if the agent returns malformed JSON or omits required fields, Sprint OS automatically triggers an in-session retry to correct the output shape before failing the review.
+QA agent responses are processed using the shared structured response helper (`StructuredProviderResponseService`). This ensures that if the agent returns malformed JSON or omits required fields, Code UX automatically triggers an in-session retry to correct the output shape before failing the review.
 
 ## Gemini Workspace Trust
 
-Gemini CLI can reject headless automation in untrusted folders before the QA prompt executes. Sprint OS sets `GEMINI_CLI_TRUST_WORKSPACE=true` for Gemini provider runs and passes it through Docker execution so task and sprint QA reviews can run in isolated snapshot containers without requiring an interactive trust prompt.
+Gemini CLI can reject headless automation in untrusted folders before the QA prompt executes. Code UX sets `GEMINI_CLI_TRUST_WORKSPACE=true` for Gemini provider runs and passes it through Docker execution so task and sprint QA reviews can run in isolated snapshot containers without requiring an interactive trust prompt.

@@ -546,7 +546,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             <Row
               key={skill.name}
               label={skill.name}
-              description={skill.isInternal ? "Built-in skill managed by Sprint OS." : "Project skill discovered from local configuration."}
+              description={skill.isInternal ? "Built-in skill managed by Code UX." : "Project skill discovered from local configuration."}
               badge={getBadge("skills")}
             >
               <Toggle

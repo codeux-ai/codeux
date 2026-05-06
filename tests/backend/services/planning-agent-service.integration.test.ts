@@ -32,13 +32,13 @@ describe("PlanningAgentService Integration", () => {
   });
 
   async function setupTestHarness() {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-agent-int-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-agent-int-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );

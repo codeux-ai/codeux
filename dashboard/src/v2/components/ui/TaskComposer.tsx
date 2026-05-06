@@ -22,7 +22,7 @@ interface TaskComposerProps {
 const PRIORITY_OPTIONS: TaskPriority[] = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "completed"];
 const EXECUTOR_OPTIONS: Array<{ value: TaskExecutorType; label: string; description: string }> = [
-  { value: "auto", label: "Auto", description: "Use the default Sprint OS routing." },
+  { value: "auto", label: "Auto", description: "Use the default Code UX routing." },
   { value: "docker_cli", label: "CLI", description: "Run through the isolated Docker workspace." },
   { value: "jules", label: "Jules", description: "Force remote Jules execution." },
 ];

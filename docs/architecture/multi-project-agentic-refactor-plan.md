@@ -69,7 +69,7 @@ Still pending from the broader refactor:
 
 ## Purpose and Scope
 
-This document defines the refactor plan for moving Sprint OS from a single-project, single-loop orchestration model to a multi-project orchestration system with sticky worker supervision.
+This document defines the refactor plan for moving Code UX from a single-project, single-loop orchestration model to a multi-project orchestration system with sticky worker supervision.
 
 The target behavior is:
 
@@ -94,7 +94,7 @@ This plan is based on the current implementation in:
 - `src/repositories/execution-repository.ts`
 - `src/repositories/connection-chat-repository.ts`
 - `src/server/jules-agent-server.ts`
-- `src/worker/sprint-os-worker.ts`
+- `src/worker/code-ux-worker.ts`
 
 ## Current-State Findings
 
@@ -125,7 +125,7 @@ That is the main missing layer for the system you described.
 
 ### Settings-model gap
 
-The current settings model is still one global `DashboardSettings` document stored through `SettingsRepository` in `~/.sprint-os/settings.db`.
+The current settings model is still one global `DashboardSettings` document stored through `SettingsRepository` in `~/.code-ux/settings.db`.
 
 That is now structurally wrong for the target product because:
 
@@ -304,7 +304,7 @@ For hosted API or Ollama workers, `repoPath` is metadata unless that worker is p
 
 ## Target settings scope model
 
-Sprint OS should move to three layers:
+Code UX should move to three layers:
 
 1. `SystemSettings`
 2. `ProjectSettingsOverride`
@@ -1217,7 +1217,7 @@ Primary files:
 - `src/contracts/connection-chat-types.ts`
 - `src/mcp/core-tool-handler.ts`
 - `src/repositories/connection-chat-repository.ts`
-- `src/worker/sprint-os-worker.ts`
+- `src/worker/code-ux-worker.ts`
 
 Exit criteria:
 

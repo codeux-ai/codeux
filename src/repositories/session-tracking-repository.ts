@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { randomUUID } from "crypto";
 import type { JulesActivity, JulesSession, ProviderId } from "../contracts/app-types.js";
-import { getHomeSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { SqliteDatabaseAdapter } from "./db/sqlite-database-adapter.js";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 
@@ -72,7 +72,7 @@ export interface UpdateTrackedSessionInput {
   title?: string;
 }
 
-const SESSION_DB_PATH = getHomeSprintOsPath("session-tracking.db");
+const SESSION_DB_PATH = getHomeCodeUxPath("session-tracking.db");
 
 const resolveDbPath = (dbPath?: string): string => {
   if (dbPath && dbPath.trim().length > 0) {

@@ -25,7 +25,7 @@ async function createRepositories(): Promise<{
   projectAttentionRepository: ProjectAttentionRepository;
   cleanupService: RuntimeCleanupService;
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-runtime-cleanup-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-runtime-cleanup-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const projectRepository = new ProjectManagementRepository(storage);
@@ -59,7 +59,7 @@ async function createCleanupFixture(options?: {
   dockerRuntimePruneService?: Pick<DockerRuntimePruneService, "cleanup">;
   logger?: Pick<Logger, "info" | "error">;
 }) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-runtime-cleanup-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-runtime-cleanup-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const projectRepository = new ProjectManagementRepository(storage);

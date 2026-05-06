@@ -60,9 +60,9 @@ Project management:
 - `PATCH /api/connections/:connectionId`
   - Updates connection metadata such as role/status/instruction payload
 - `GET /api/projects/:projectId/agent-presets`
-  - Lists DB-backed project agents and auto-imports unseen markdown agents from `.sprint-os/agents`
+  - Lists DB-backed project agents and auto-imports unseen markdown agents from `.code-ux/agents`
 - `POST /api/projects/:projectId/agent-presets`
-  - Creates a DB-backed agent and, when project markdown mirroring is enabled, also writes `.sprint-os/agents/<name>.md`
+  - Creates a DB-backed agent and, when project markdown mirroring is enabled, also writes `.code-ux/agents/<name>.md`
 - `PATCH /api/agent-presets/:agentPresetId`
   - Updates agent metadata and instruction markdown, mirroring the markdown back into the project agent directory when enabled
 - `DELETE /api/agent-presets/:agentPresetId`
@@ -263,8 +263,8 @@ Legacy runtime:
 - Agents are generated with a random persisted avatar on creation and can be fully customized in the dedicated edit mode.
 - Edit mode exposes a new toggleable Memory Template Override control, allowing operators to explicitly provide custom memory injection instructions on a per-agent basis.
 - Agents page is DB-backed and manages project-scoped agents (`name`, `labels`, `instruction markdown`, `memory template markdown`)
-- Agents are auto-imported from project and home `.sprint-os/agents/*.md` when first discovered
-- Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.sprint-os/agents/*.md` in the selected repo without touching shipped defaults
+- Agents are auto-imported from project and home `.code-ux/agents/*.md` when first discovered
+- Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.code-ux/agents/*.md` in the selected repo without touching shipped defaults
 - Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
 - `Settings -> Agents` now includes the QA controls above instruction templates, with per-trigger agent selection across all project agents and QA-labeled presets floated to the top
@@ -275,7 +275,7 @@ Legacy runtime:
 - Chat page filters the "Threads" mode to show user-facing conversation threads (`scope === "project"`).
 - Chat page "Invocations" mode provides a read-only list with metadata for active/completed execution invocations without cluttering the main thread rail.
 - Invocation cards and detail headers now show the resolved provider model when available, so planning runs expose the same model visibility as worker cards.
-- Invocation cards and the invocation message stream now surface classified provider errors such as `Rate limit` and `Quota reset`, including retry wait information when Sprint OS is backing off automatically.
+- Invocation cards and the invocation message stream now surface classified provider errors such as `Rate limit` and `Quota reset`, including retry wait information when Code UX is backing off automatically.
 - Chat page now receives websocket updates for thread assignment changes and incoming thread messages in the active thread
 - Chat page now shows a live "working" bubble once a listener has picked up a dashboard message and is preparing a reply
 - Chat page now force-refreshes the selected thread when realtime thread updates arrive, so virtual replies clear stale `pending` delivery badges and sidebar counts as soon as the reply lands
@@ -302,7 +302,7 @@ Legacy runtime:
 - Task cards include a `Rerun` action with confirmation prompt; rerun clears session/PR/merge state for that task and starts it again
 - Rerun now performs a full runtime reset instead of only changing task status:
   - failed-session retries clear stale session ids, provider activity, worker branch, PR URL, merge flags, and intervention metadata before a new run starts
-  - if the operator chooses `Reset downstream tasks`, Sprint OS writes fresh pending execution snapshots for every dependent task so completed/running descendants no longer keep stale PR or session state during a clean rerun
+  - if the operator chooses `Reset downstream tasks`, Code UX writes fresh pending execution snapshots for every dependent task so completed/running descendants no longer keep stale PR or session state during a clean rerun
   - if `Clear worktree` is enabled, the existing task worktree is removed before the reset so the next run starts from a clean workspace
 - Rerun confirmation now warns when the selected task, or the selected downstream reset chain, already merged code; operators are instructed to undo the landed changes before restarting the task
 - Reruns now reuse the same dispatch model as normal dashboard orchestration instead of bypassing execution state
@@ -517,7 +517,7 @@ Effect:
 - Feature-PR CI wait/automerge matching uses worker branch first and falls back to the task `pr_url`, so tasks without a stored worker branch still remain gated correctly.
 - Tasks that are still waiting on feature-PR CI now persist as `in_progress` in the dashboard task store instead of staying marked `completed` just because the provider session finished.
 - Feature PRs already in GitHub `DIRTY` merge state are surfaced as merge conflicts before any CI wait, so branch-protection deadlocks do not leave the task stuck in perpetual pending-check state.
-- If a matched feature PR has no checks, Sprint OS now consults local workflow definitions and only keeps waiting when a `pull_request` or `pull_request_target` workflow actually applies to that PR base branch; otherwise the task skips CI waiting and proceeds to merge readiness/review gating.
+- If a matched feature PR has no checks, Code UX now consults local workflow definitions and only keeps waiting when a `pull_request` or `pull_request_target` workflow actually applies to that PR base branch; otherwise the task skips CI waiting and proceeds to merge readiness/review gating.
 - CI Runs in `Feature PR CI` tracking include recent runs from PR head branches targeting the feature implementation branch (plus feature branch runs), sorted newest-first; the panel shows the latest 5.
 - Failed CI runs in tracking are enriched with failed job details and failed-job log excerpts (bounded) from GitHub Actions `gh run view` data.
 - Main merge stage (`feature -> main`) now emits live CI/review gate feedback with failed check names and ready-to-run `gh` commands.
@@ -555,7 +555,7 @@ Use case:
 
 ## No-Key Startup Mode
 
-Server startup no longer exits when Jules API key is missing. Sprint OS also performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
+Server startup no longer exits when Jules API key is missing. Code UX also performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
 
 Behavior:
 - MCP server and dashboard still start.
@@ -603,6 +603,6 @@ For provider-backed runs, session polling is now used to ingest durable runtime 
 - A shared dashboard resource layer manages resource keys, caching, and invalidation, deduplicating fetches and avoiding UI flashing during background updates.
 - Heavy list views use a progressive list strategy (`useProgressiveList`) with an intersection observer to render items in batches and prevent main-thread blocking.
 - Backend read-model optimizations efficiently project data to support the resource layer while leaving API routes and backend contracts entirely unchanged.
-- Extensionless dashboard routes like `/sprints` are served by the SPA app shell on direct load or refresh. This routing behavior remains consistent even when Sprint OS itself is running inside a preview container.
+- Extensionless dashboard routes like `/sprints` are served by the SPA app shell on direct load or refresh. This routing behavior remains consistent even when Code UX itself is running inside a preview container.
 
 - A "Live Preview" CTA link now appears in the Live view header when the relevant sprint has an active (`running`) preview session with a resolved `hostPort`. The link securely routes directly to the iframe preview origin (`buildPreviewUrl`) at the `lastKnownPath`.

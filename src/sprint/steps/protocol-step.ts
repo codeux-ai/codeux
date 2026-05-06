@@ -74,7 +74,7 @@ export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStep
         git_manager_skill: options.githubMode === "REMOTE" ? "`git_manager_remote`" : "`git_manager_local`",
         feature_branch: options.featureBranch,
         provider: task.provider || "jules",
-        task_reference: typeof task.record_id === "string" ? `Sprint OS task ${task.record_id}` : `Sprint OS task ${task.id}`,
+        task_reference: typeof task.record_id === "string" ? `Code UX task ${task.record_id}` : `Code UX task ${task.id}`,
         feature_ci_wait_line: buildFeatureCiWaitLine(options.ciIntelligence),
         feature_comments_line: buildFeatureCommentsLine(options.ciIntelligence),
       });

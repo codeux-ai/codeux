@@ -8,7 +8,7 @@ The chat thread runtime architecture provides a unified conversation model for b
 
 ### Stored Route & Session State
 
-Conversations in Sprint OS are stored as `ConversationThreadRecord` entities. The core enhancement to chat threads is the introduction of `runtimeState`, a persistent route and session tracker associated with a thread.
+Conversations in Code UX are stored as `ConversationThreadRecord` entities. The core enhancement to chat threads is the introduction of `runtimeState`, a persistent route and session tracker associated with a thread.
 
 The `ConversationRuntimeState` captures:
 - `routeKind`: Whether the thread is routed to a `worker` (Connected MCP) or a `virtual` (Internal CLI) provider.

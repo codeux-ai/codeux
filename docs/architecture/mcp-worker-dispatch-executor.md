@@ -1,6 +1,6 @@
 # MCP Worker Dispatch Executor
 
-This page describes the first real `mcp_worker` execution path on top of the Sprint OS DB-native runtime.
+This page describes the first real `mcp_worker` execution path on top of the Code UX DB-native runtime.
 
 ## Purpose
 
@@ -33,8 +33,8 @@ Tasks now store `executorType` in sqlite:
 
 When sprint orchestration starts a ready task whose `executorType = mcp_worker`:
 
-1. Sprint OS creates a `task_dispatch` with `executor_type = mcp_worker`
-2. Sprint OS creates a `task_run`
+1. Code UX creates a `task_dispatch` with `executor_type = mcp_worker`
+2. Code UX creates a `task_run`
 3. the task is marked `in_progress` in project management state
 4. no local provider workflow is started
 
@@ -106,13 +106,13 @@ There is no worker-only control plane and no compatibility file bridge.
 
 Worker support is now concrete, not schema-only.
 
-The repo now ships `sprint-os-worker`, which:
+The repo now ships `code-ux-worker`, which:
 
-1. spawns Sprint OS in headless `worker-host` mode
+1. spawns Code UX in headless `worker-host` mode
 2. connects to that worker-host server over stdio MCP
 3. registers as `role = worker`
 4. claims DB-native dispatches
-5. executes them through the same provider stack already used by Sprint OS
+5. executes them through the same provider stack already used by Code UX
 6. heartbeats and finalizes dispatch state through the worker tools
 
 Because transport is stdio today, this is the correct model for a real external worker client without requiring a second network transport.

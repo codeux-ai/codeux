@@ -17,7 +17,7 @@ async function createRepositories(): Promise<{
   projectRepository: ProjectManagementRepository;
   connectionRepository: ConnectionChatRepository;
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-connection-repo-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-connection-repo-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   return {
@@ -38,7 +38,7 @@ async function createRepositoriesWithRealtime(): Promise<{
   connectionRepository: ConnectionChatRepository;
   realtimeEventRepository: DashboardRealtimeEventRepository;
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-connection-repo-realtime-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-connection-repo-realtime-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const realtimeEventRepository = new DashboardRealtimeEventRepository(storage);

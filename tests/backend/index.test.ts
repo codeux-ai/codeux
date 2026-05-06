@@ -40,7 +40,7 @@ describe("index.ts main function", () => {
   it("should output help and exit with 0 when --help is provided", async () => {
     await expect(main(["node", "script", "--help"])).rejects.toThrow("process.exit called");
 
-    expect(consoleLogSpy).toHaveBeenCalledWith("Sprint OS MCP Server");
+    expect(consoleLogSpy).toHaveBeenCalledWith("Code UX MCP Server");
     expect(processExitSpy).toHaveBeenCalledWith(0);
     expect(JulesAgentServer).not.toHaveBeenCalled();
   });
@@ -48,7 +48,7 @@ describe("index.ts main function", () => {
   it("should output help and exit with 0 when -h is provided", async () => {
     await expect(main(["node", "script", "-h"])).rejects.toThrow("process.exit called");
 
-    expect(consoleLogSpy).toHaveBeenCalledWith("Sprint OS MCP Server");
+    expect(consoleLogSpy).toHaveBeenCalledWith("Code UX MCP Server");
     expect(processExitSpy).toHaveBeenCalledWith(0);
     expect(JulesAgentServer).not.toHaveBeenCalled();
   });

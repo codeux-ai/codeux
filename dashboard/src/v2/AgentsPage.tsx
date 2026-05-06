@@ -221,7 +221,7 @@ export const AgentsPage: FunctionComponent = () => {
         <div className="flex items-start gap-3 rounded-2xl border border-black/[0.04] bg-slate-50/60 px-5 py-3.5 text-[13px] leading-relaxed text-slate-500 dark:border-white/[0.04] dark:bg-white/[0.02] dark:text-slate-400">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" strokeWidth={2} />
           {projectFileSavingEnabled
-            ? "Markdown mirroring enabled \u2014 saving writes a companion file under .sprint-os/agents."
+            ? "Markdown mirroring enabled \u2014 saving writes a companion file under .code-ux/agents."
             : "Markdown mirroring disabled \u2014 edits stay in the database only."}
         </div>
       )}

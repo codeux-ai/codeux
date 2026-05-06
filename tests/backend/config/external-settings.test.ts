@@ -40,7 +40,7 @@ describe("external-settings", () => {
     };
 
     vi.spyOn(fs, "existsSync").mockImplementation((p: string) => {
-        return p.includes(".sprint-os/settings.json");
+        return p.includes(".code-ux/settings.json");
     });
     vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(mockSettings));
 
@@ -94,7 +94,7 @@ describe("external-settings", () => {
     };
 
     vi.spyOn(fs, "existsSync").mockImplementation((p: string) => {
-        return p.includes(".sprint-os/settings.json");
+        return p.includes(".code-ux/settings.json");
     });
     vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(mockSettings));
 

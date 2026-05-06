@@ -15,7 +15,7 @@ async function createRepository(): Promise<{
   executionRepository: ExecutionRepository;
   markdownService: SprintMarkdownService;
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-project-repo-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-repo-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const repository = new ProjectManagementRepository(storage);
@@ -97,9 +97,9 @@ describe("ProjectManagementRepository", () => {
     const { repository, executionRepository } = await createRepository();
 
     const project = repository.createProject({
-      name: "Sprint OS",
+      name: "Code UX",
       sourceType: "local",
-      sourceRef: "/workspace/sprint-os",
+      sourceRef: "/workspace/code-ux",
     });
 
     expect(repository.listProjects().selectedProjectId).toBe(project.id);
@@ -140,7 +140,7 @@ describe("ProjectManagementRepository", () => {
 
     expect(projects).toHaveLength(1);
     expect(projects[0]).toMatchObject({
-      name: "Sprint OS",
+      name: "Code UX",
       sprintsCount: 1,
       completedTasks: 1,
       openTasks: 1,
@@ -405,7 +405,7 @@ describe("ProjectManagementRepository", () => {
   });
 
   it("publishes project collection and structure refreshes on project mutations", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-project-repo-realtime-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-repo-realtime-"));
     tempDirs.push(dir);
     const storage = new AppDbStorage(path.join(dir, "app.db"));
     const notifier = {

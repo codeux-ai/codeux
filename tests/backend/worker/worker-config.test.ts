@@ -6,7 +6,7 @@ describe("loadWorkerConfig", () => {
     const config = loadWorkerConfig(["node", "worker.js"]);
 
     expect(config.connectionKey).toContain("worker:");
-    expect(config.displayName).toContain("Sprint OS Worker");
+    expect(config.displayName).toContain("Code UX Worker");
     expect(config.serverCommand).toBe(process.execPath);
     expect(config.serverArgs).toContain("--runtime-role");
     expect(config.serverArgs).toContain("worker-host");
@@ -37,7 +37,7 @@ describe("loadWorkerConfig", () => {
       "--server-arg",
       "worker-host",
       "--server-cwd",
-      "/tmp/sprint-os",
+      "/tmp/code-ux",
     ]);
 
     expect(config.connectionKey).toBe("worker-1");
@@ -52,7 +52,7 @@ describe("loadWorkerConfig", () => {
     expect(config.sessionPollIntervalMs).toBe(3000);
     expect(config.serverCommand).toBe("node");
     expect(config.serverArgs).toEqual(["dist/index.js", "--runtime-role", "worker-host"]);
-    expect(config.serverCwd).toBe("/tmp/sprint-os");
+    expect(config.serverCwd).toBe("/tmp/code-ux");
   });
 
   it("parses remote control-plane flags without changing local executor defaults", () => {

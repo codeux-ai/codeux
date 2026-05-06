@@ -8,7 +8,7 @@ import { DashboardRealtimeEventRepository } from "../../../src/repositories/dash
 const tempDirs: string[] = [];
 
 async function createRepository(): Promise<DashboardRealtimeEventRepository> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-realtime-events-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-realtime-events-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   return new DashboardRealtimeEventRepository(storage);

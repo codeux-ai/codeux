@@ -1,4 +1,4 @@
-import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../contracts/internal-management-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { DashboardSettings, ProviderId } from "../contracts/app-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
@@ -15,7 +15,7 @@ export interface ChatManagementActionServiceDeps {
 
 export interface ManagementActionProposedResult {
   replyMarkdown: string;
-  action: ManageSprintOsArgs | null;
+  action: ManageCodeUxArgs | null;
   approvalRequired: boolean;
   approvalMessage?: string;
   result?: unknown;
@@ -23,7 +23,7 @@ export interface ManagementActionProposedResult {
 
 interface ParsedProviderManagementJSON {
   replyMarkdown: string;
-  action: ManageSprintOsArgs | null;
+  action: ManageCodeUxArgs | null;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -120,7 +120,7 @@ const parseProviderManagementJson = (bodyMarkdown: string, depth = 0): ParsedPro
       if (isRecord(parsed) && typeof parsed.replyMarkdown === "string") {
         return {
           replyMarkdown: parsed.replyMarkdown,
-          action: isRecord(parsed.action) ? parsed.action as unknown as ManageSprintOsArgs : null,
+          action: isRecord(parsed.action) ? parsed.action as unknown as ManageCodeUxArgs : null,
         };
       }
 
@@ -163,7 +163,7 @@ export interface ProcessManagementActionArgs {
 export class ChatManagementActionService {
   constructor(private readonly deps: ChatManagementActionServiceDeps) {}
 
-  async executeApprovedAction(projectId: string, provider: string, model: string, action: ManageSprintOsArgs): Promise<ManagementActionProposedResult> {
+  async executeApprovedAction(projectId: string, provider: string, model: string, action: ManageCodeUxArgs): Promise<ManagementActionProposedResult> {
     const startedAt = new Date().toISOString();
     const execInvocationId = this.deps.executionRepository.createExecutionInvocation({
       projectId,
@@ -187,7 +187,7 @@ export class ChatManagementActionService {
       });
 
       const approvedAction = { ...action, approval: { confirmed: true } };
-      const envelopeJson = await this.deps.managementToolHandler.handleManageSprintOs(approvedAction);
+      const envelopeJson = await this.deps.managementToolHandler.handleManageCodeUx(approvedAction);
       const envelopeText = envelopeJson.content[0].text;
       const envelope = JSON.parse(envelopeText) as ManagementResponseEnvelope;
 
@@ -402,7 +402,7 @@ export class ChatManagementActionService {
         contentMarkdown: `Action proposed: ${JSON.stringify(parsed.action, null, 2)}`,
       });
 
-      const envelopeJson = await this.deps.managementToolHandler.handleManageSprintOs(parsed.action);
+      const envelopeJson = await this.deps.managementToolHandler.handleManageCodeUx(parsed.action);
       // The envelope is returned as a stringified JSON in the content array from the tool handler
       const envelopeText = envelopeJson.content[0].text;
       const envelope = JSON.parse(envelopeText) as ManagementResponseEnvelope;

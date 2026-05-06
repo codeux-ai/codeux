@@ -1,4 +1,4 @@
-# Sprint OS Documentation Index
+# Code UX Documentation Index
 
 This documentation is the canonical project reference for the MCP server, sprint orchestration engine, instruction template system, and dashboard.
 
@@ -16,7 +16,7 @@ Use this page as the main entrypoint.
 ### Path 2: Building or modifying orchestration behavior
 1. [System Overview](./architecture/system-overview.md)
 2. [Sprint 4 Project Management Foundation and Tool Surface Migration](./architecture/sprint-4-project-management-foundation.md)
-3. [Sprint OS Phase 1 Implementation Plan](./architecture/sprint-os-phase-1-implementation-plan.md)
+3. [Code UX Phase 1 Implementation Plan](./architecture/code-ux-phase-1-implementation-plan.md)
 4. [DB-Native Orchestration Foundation](./architecture/db-native-orchestration-foundation.md)
 5. [Execution Schema Foundation](./architecture/execution-schema-foundation.md)
 6. [DB-Native Orchestrator Integration](./architecture/db-native-orchestrator-integration.md)
@@ -69,7 +69,7 @@ Use this page as the main entrypoint.
 - [Repository Map](./architecture/repository-map.md)
 - [Sprint 2 Gap Closure and Migration Contract](./architecture/sprint-2-gap-closure.md)
 - [Sprint 4 Project Management Foundation and Tool Surface Migration](./architecture/sprint-4-project-management-foundation.md)
-- [Sprint OS Phase 1 Implementation Plan](./architecture/sprint-os-phase-1-implementation-plan.md)
+- [Code UX Phase 1 Implementation Plan](./architecture/code-ux-phase-1-implementation-plan.md)
 - [DB-Native Orchestration Foundation](./architecture/db-native-orchestration-foundation.md)
 - [Execution Schema Foundation](./architecture/execution-schema-foundation.md)
 - [DB-Native Orchestrator Integration](./architecture/db-native-orchestrator-integration.md)

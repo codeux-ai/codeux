@@ -33,7 +33,7 @@ export class ActiveDispatchRegistry {
     if (!handle) {
       return {
         accepted: false,
-        message: "Active executor handle is not registered on this Sprint OS server.",
+        message: "Active executor handle is not registered on this Code UX server.",
       };
     }
     return await handle.requestStop(reason);

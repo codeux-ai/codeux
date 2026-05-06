@@ -8,7 +8,7 @@ This guide explains runtime config sources, precedence, and persistence.
 
 1. CLI `--api-key`
 2. `JULES_API_KEY` or `JULES_KEY`
-3. `.sprint-os/settings.json` key fields
+3. `.code-ux/settings.json` key fields
 
 Additional startup config:
 - `JULES_API_BASE_URL` (default: `https://jules.googleapis.com/v1alpha`)
@@ -25,7 +25,7 @@ External hint env keys used for dashboard import:
 
 ## Settings JSON Search Paths
 
-For `.sprint-os/settings.json`, search roots include:
+For `.code-ux/settings.json`, search roots include:
 - current working directory
 - project root
 - home directory
@@ -38,13 +38,13 @@ Backend file:
 - `src/services/settings-resolution-service.ts`
 
 Storage:
-- scoped settings DB at `~/.sprint-os/settings.db`
+- scoped settings DB at `~/.code-ux/settings.db`
   - `system_settings`
   - `project_settings`
   - `sprint_settings`
   - `app_settings` is retained only as a one-time legacy migration source for development data that predates the scoped model
-- provider session DB at `~/.sprint-os/session-tracking.db`
-- Sprint OS app DB at `~/.sprint-os/app.db`
+- provider session DB at `~/.code-ux/session-tracking.db`
+- Code UX app DB at `~/.code-ux/app.db`
   - includes project planning tables (sprints with `original_prompt` and `goal`) plus sprint-scoped runtime projection in `app_settings`, `task_runs`, and `task_run_events`
   - runtime context rows are keyed by sprint (`runtime_context:<projectId>:<sprintId>`); legacy unscoped project-level runtime rows are deprecated and are no longer used for explicit sprint reads or rerun context
   - also stores sprint preview runtime state in `sprint_preview_sessions`
@@ -61,17 +61,17 @@ Runtime resolution:
   3. Project metadata `defaultBranch` field (Database)
   4. System setting default (Dashboard)
   5. Hardcoded default (`main`)
-- In remote git mode, Sprint OS refreshes `origin` before sprint branch preflight and before each task start so branch resolution is based on current remote state instead of stale local refs.
-- In remote git mode, Sprint OS also refreshes `origin` before branch-sensitive recovery flows such as QA review, QA follow-up continuation, clarification auto-replies, CI fix runs, and merge-conflict resolution.
+- In remote git mode, Code UX refreshes `origin` before sprint branch preflight and before each task start so branch resolution is based on current remote state instead of stale local refs.
+- In remote git mode, Code UX also refreshes `origin` before branch-sensitive recovery flows such as QA review, QA follow-up continuation, clarification auto-replies, CI fix runs, and merge-conflict resolution.
 - QA review execution uses an isolated snapshot workspace in Docker so review inspection does not mutate the task workspace directly.
 - QA-requested CLI follow-up work continues in the original task workspace when that workspace is still available.
 - CI autofix follow-up work reuses the existing task workspace for the same worker branch when available instead of always creating a fresh workspace.
-- if Docker is unavailable during a CI autofix follow-up, Sprint OS falls back to a host-backed git worktree for that repair run instead of escalating immediately or creating another doomed Docker attempt.
+- if Docker is unavailable during a CI autofix follow-up, Code UX falls back to a host-backed git worktree for that repair run instead of escalating immediately or creating another doomed Docker attempt.
 - Merge-conflict resolution remains isolated in its own Docker workspace even when the underlying task already has a reusable task workspace.
-- On startup, Sprint OS prunes stale Sprint OS Docker workspace volumes and cached setup-script images so finished, failed, unrecoverable, and outdated Docker assets do not accumulate across restarts.
+- On startup, Code UX prunes stale Code UX Docker workspace volumes and cached setup-script images so finished, failed, unrecoverable, and outdated Docker assets do not accumulate across restarts.
 - restart recovery also treats interrupted Docker sessions without a live backing container as failed, so abandoned workspaces are reclaimed instead of waiting forever for a callback that cannot arrive.
 - startup recovery now also requeues task-level CLI follow-up runs that were left in `in_progress` after QA/repair `Fix` work lost its backing container, so the orchestrator can start the container again instead of leaving the sprint stuck after a server restart.
-- When Sprint OS has to create a missing feature branch, it prefers `origin/<defaultBranch>` over the local `<defaultBranch>` ref when the remote-tracking base branch exists.
+- When Code UX has to create a missing feature branch, it prefers `origin/<defaultBranch>` over the local `<defaultBranch>` ref when the remote-tracking base branch exists.
 - `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from settings and project metadata.
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
 
@@ -174,7 +174,7 @@ Dashboard behavior:
   - Jules remains routable with `enabled` and `weight`, but the current Jules REST API does not expose model-selection or thinking controls.
   - Dashboard settings editors therefore hide `model` and `thinkingMode` for Jules and show an informational note instead.
   - Gemini alias entries `pro`, `flash`, and `flash-lite` are labeled as recent aliases in selects so it is clear they track the latest model target.
-  - Sprint OS performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
+  - Code UX performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
   - Enabling local auth on a named provider instance in Integrations also marks that instance active in the dashboard so mount-based Docker setups show the expected connected state even without an API key.
   - Note: `available` means an API key is present from saved settings/import hints or that specific provider instance has `mountAuth = true`. Local host auth files alone do not mark a CLI provider or provider instance active unless the matching named instance has local auth enabled. `enabled` means user-approved routing participation. CLI providers are opt-in on fresh installs and disabled by default.
   - `invocationRouting` map
@@ -212,8 +212,8 @@ Dashboard behavior:
 - `autoAnswerClarification` (default `false`): auto-answer `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`
 - `autoResumePaused` (default `false`): auto-send resume nudge for `PAUSED` sessions in `SEMI_AUTO`
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
-- `clarificationCooldownSeconds` (default `300`): retained for compatibility, but clarification dedupe now keys off the latest clarification content instead of elapsed time; once Sprint OS answers a specific clarification request, repeated cycles skip re-sending the same answer until Jules emits a different clarification prompt
-- when `autoAnswerClarificationMode = WORKER`, Sprint OS now composes the clarification-answer prompt from the editable `Project manager` agent preset instead of prepending worker instructions
+- `clarificationCooldownSeconds` (default `300`): retained for compatibility, but clarification dedupe now keys off the latest clarification content instead of elapsed time; once Code UX answers a specific clarification request, repeated cycles skip re-sending the same answer until Jules emits a different clarification prompt
+- when `autoAnswerClarificationMode = WORKER`, Code UX now composes the clarification-answer prompt from the editable `Project manager` agent preset instead of prepending worker instructions
 - worker-routed clarification prompts now include a dedicated Jules clarification section so the latest explicit `agentMessaged.agentMessage` is passed through when available instead of only broad sprint context
 
 `agents` contains:
@@ -236,7 +236,7 @@ Dashboard behavior:
 Quality assurance settings are project-scoped today and are edited from `Settings -> Agents`. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
 
 QA merge-gate notes:
-- task QA now runs on code-complete tasks before Sprint OS auto-merges their feature PRs
+- task QA now runs on code-complete tasks before Code UX auto-merges their feature PRs
 - enabled task QA blocks feature merge until QA passes or `maxTaskReviewRuns` is exhausted
 - while task QA is pending or retrying, the runtime merge indicator can be `QA_PENDING`
 - the initial task review always counts as run `1`; later runs are only used for QA-requested fix checks
@@ -261,7 +261,7 @@ QA merge-gate notes:
 - Docker runtime config:
   - `containerImage`
   - `containerSetupScriptPath` (optional; when set to a relative path, runtime checks both sprint repo root and current server working directory)
-    - if empty, falls back to `.sprint-os/container/setup.sh` in repo root, then home directory, then the bundled Sprint OS default script
+    - if empty, falls back to `.code-ux/container/setup.sh` in repo root, then home directory, then the bundled Code UX default script
   - `containerCacheSetupScriptImage` (default `false`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
     - cache misses fall back to the current per-run setup script path if the image build fails
@@ -300,14 +300,14 @@ Preview runtime notes:
 
 `agents` contains:
 - `saveToProjectDirectory` (default `true`)
-  - when enabled, dashboard agent create/update writes project-local markdown companions under `.sprint-os/agents`
+  - when enabled, dashboard agent create/update writes project-local markdown companions under `.code-ux/agents`
   - mirrored filenames use lowercase underscore-safe slugs such as `planning_agent.md`
   - clarification auto-answer can read project-local `project_manager.md` as the editable instruction source for worker-routed Jules clarification replies
-  - default/home markdown sources are never modified by dashboard edits; Sprint OS creates a project-level override file instead
+  - default/home markdown sources are never modified by dashboard edits; Code UX creates a project-level override file instead
 
 `workers` contains:
 - `executionMode` (default `VIRTUAL`)
-  - `VIRTUAL`: Sprint OS spins up an internal one-shot CLI worker when worker-owned attention exists, handles one cycle in an isolated container workspace, then tears it down
+  - `VIRTUAL`: Code UX spins up an internal one-shot CLI worker when worker-owned attention exists, handles one cycle in an isolated container workspace, then tears it down
 - `virtualWorkerProvider` (default `codex`)
   - allowed values: `gemini`, `codex`, `claude-code`
   - Jules is intentionally excluded from worker mode; virtual workers are CLI-only
@@ -315,14 +315,14 @@ Preview runtime notes:
 - In the dashboard, these controls are exposed in the active v2 settings page under `Sprint Engine -> Worker Runtime`
 
 Container execution notes:
-- `cliWorkflow.executionMode` defaults to `DOCKER`, but Sprint OS still supports `HOST` worktrees for controlled fallback and legacy-safe paths
+- `cliWorkflow.executionMode` defaults to `DOCKER`, but Code UX still supports `HOST` worktrees for controlled fallback and legacy-safe paths
 - task, planning, chat, and normal CI-fix flows execute inside isolated Docker-volume workspaces when Docker execution is available
 - QA review execution uses a fresh snapshot workspace instead of the mutable task workspace
 - QA-requested follow-up coding and CI autofix continue in the existing task workspace when that workspace is still reusable
 - CI autofix falls back to a host-backed worktree only when Docker is unavailable for that follow-up repair attempt
 - merge-conflict resolution remains Docker-only because it must run in an isolated throwaway workspace
-- repo-local `.sprint-os/worktrees/*` are no longer used for Docker execution
-- `~/.sprint-os/runtime/docker/` should now contain only cache-like artifacts such as reusable setup-image state, not per-session workspaces
+- repo-local `.code-ux/worktrees/*` are no longer used for Docker execution
+- `~/.code-ux/runtime/docker/` should now contain only cache-like artifacts such as reusable setup-image state, not per-session workspaces
 - write-back from isolated CLI runs uses a Git patch artifact applied on the host branch, not direct file syncing from the container
 - merge-conflict preparation and CI-fix Git commands must execute through the workspace runner; host-path Git invocations against `docker-volume://...` workspace handles are not valid
 
@@ -332,13 +332,13 @@ Container execution notes:
 
 `ciIntelligence` also includes:
 - `enableLivePrMonitoring` (default `true`): controls live PR/CI monitoring gates in sprint loop (`REMOTE` mode only; auto-disabled in `LOCAL` mode).
-- Sprint OS state is currently backed by SQLite via `DatabaseAdapter`, but is staged for a Postgres migration (see [Postgres Migration Plan](../architecture/postgres-migration-plan.md)).
+- Code UX state is currently backed by SQLite via `DatabaseAdapter`, but is staged for a Postgres migration (see [Postgres Migration Plan](../architecture/postgres-migration-plan.md)).
 - `resolveMainMergeConflicts` (default `false`): when enabled, a `feature -> main` PR in `DIRTY` merge state opens a worker-owned `merge_conflict` attention item with repo path, working-directory hint, conflicting branches, PR metadata, sprint context, and merged task prompts already present on the feature branch.
 - `resolveMergeConflicts` (default `false`): when enabled, feature PRs in `DIRTY` merge state open a dedicated worker-owned `merge_conflict` attention item instead of a generic merge-required item. The payload includes repo path, working directory hint, source/target branches, PR details, the current task prompt, and merged task prompts already on the feature branch so the virtual worker can resolve the conflict with full context.
-- worker-owned merge conflicts do not end the watch loop as manual merge work anymore; Sprint OS keeps the loop alive while the selected worker runtime is expected to handle the conflict, and the dashboard no longer projects those worker-owned conflict items as human intervention.
-- feature PRs with `mergeStateStatus = DIRTY` short-circuit the feature-merge CI wait path; Sprint OS marks them as merge conflicts immediately instead of waiting for checks that cannot start until the conflict is resolved.
+- worker-owned merge conflicts do not end the watch loop as manual merge work anymore; Code UX keeps the loop alive while the selected worker runtime is expected to handle the conflict, and the dashboard no longer projects those worker-owned conflict items as human intervention.
+- feature PRs with `mergeStateStatus = DIRTY` short-circuit the feature-merge CI wait path; Code UX marks them as merge conflicts immediately instead of waiting for checks that cannot start until the conflict is resolved.
 - completed tasks with no recorded worker branch or PR URL are treated as already settled for dependency unlocks and sprint finalization; only tasks with merge evidence enter the feature-merge wait path.
-- when `featurePrAutoMergeMode = "WHEN_GREEN"` but a matched feature PR has no checks, Sprint OS inspects local `.github/workflows/*.yml` files and skips CI waiting only when it can confidently determine that no `pull_request` or `pull_request_target` workflow applies to that PR base branch.
+- when `featurePrAutoMergeMode = "WHEN_GREEN"` but a matched feature PR has no checks, Code UX inspects local `.github/workflows/*.yml` files and skips CI waiting only when it can confidently determine that no `pull_request` or `pull_request_target` workflow applies to that PR base branch.
 - `waitForJulesCiAutofix` (default `false`): when enabled with `featurePrAutoMergeMode = "WHEN_GREEN"`, completed tasks stay in work status while feature PR checks are pending/failed so Jules can apply CI autofix before merge.
 - `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): max Jules CI autofix notify attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names.
 - `featurePrAutoMergeMode` (default `"OFF"`):
@@ -347,10 +347,10 @@ Container execution notes:
   - `"WHEN_GREEN"`: auto-merge when merge gates are clear, including green or confidently-not-applicable CI
   - `"ALWAYS"`: attempt auto-merge without waiting for CI, while still respecting merge conflicts and configured review-comment blockers
 - `mainBranchAutoMergeMode` (default `"OFF"`):
-  - `"OFF"`: Sprint OS does not automatically open or merge the final `feature -> default` PR
-  - `"CREATE_PR"`: when sprint work is complete, Sprint OS opens or resolves the main PR but does not auto-merge it
-  - `"WHEN_GREEN"`: when sprint work is complete, Sprint OS opens or resolves the main PR if needed, then auto-merges after the main merge gate is green
-  - `"ALWAYS"`: when sprint work is complete, Sprint OS opens or resolves the main PR if needed and attempts the merge without waiting for CI
+  - `"OFF"`: Code UX does not automatically open or merge the final `feature -> default` PR
+  - `"CREATE_PR"`: when sprint work is complete, Code UX opens or resolves the main PR but does not auto-merge it
+  - `"WHEN_GREEN"`: when sprint work is complete, Code UX opens or resolves the main PR if needed, then auto-merges after the main merge gate is green
+  - `"ALWAYS"`: when sprint work is complete, Code UX opens or resolves the main PR if needed and attempts the merge without waiting for CI
 
 `mcpTools` contains:
 - `name` (MCP tool name from `src/contracts/mcp-tool-definitions.ts`)
@@ -358,23 +358,23 @@ Container execution notes:
 - `isInternal` (reserved/internal metadata; currently all built-in tools are internal)
 
 Repository demo script:
-- `.sprint-os/container/setup.sh` is included as a baseline bootstrap script.
+- `.code-ux/container/setup.sh` is included as a baseline bootstrap script.
 - It verifies `npm`, ensures `git` + `gh`, installs `pnpm` when needed, and leaves provider CLI installation to the runtime's provider-specific fallback.
-- `npm` refresh is now opt-in via `SPRINT_OS_REFRESH_NPM=1` instead of happening on every container start.
-- Playwright bootstrap is now opt-in via `SPRINT_OS_INSTALL_PLAYWRIGHT=1` instead of downloading Chromium during every fresh container bootstrap.
+- `npm` refresh is now opt-in via `CODE_UX_REFRESH_NPM=1` instead of happening on every container start.
+- Playwright bootstrap is now opt-in via `CODE_UX_INSTALL_PLAYWRIGHT=1` instead of downloading Chromium during every fresh container bootstrap.
 - Docker CLI execution now uses isolated Docker volumes as the workspace backing store instead of repo-local worktrees or persistent host-side runtime homes.
-  - container `HOME` lives inside the isolated workspace at `/workspace/.sprint-os-home`
+  - container `HOME` lives inside the isolated workspace at `/workspace/.code-ux-home`
   - write-back happens via Git patch artifacts applied on the host, not direct file sync from the container
   - patch export preserves raw `git diff --binary` output byte-for-byte so whitespace-only EOF hunks and `\ No newline at end of file` markers still apply cleanly on the host branch
-  - patch export always excludes `/workspace/.sprint-os-home` so provider home/cache state cannot be committed, even when the target repository does not ignore `.cache/` or `.sprint-os-home/`
-  - the remaining persistent Docker-side cache is the optional setup-image cache, not per-session provider home directories under `~/.sprint-os/runtime/docker`
+  - patch export always excludes `/workspace/.code-ux-home` so provider home/cache state cannot be committed, even when the target repository does not ignore `.cache/` or `.code-ux-home/`
+  - the remaining persistent Docker-side cache is the optional setup-image cache, not per-session provider home directories under `~/.code-ux/runtime/docker`
 - If setup script is missing or does not provide the requested provider CLI, the runner attempts a provider-specific fallback install (`gemini`, `codex`, or `claude`) before failing.
   - CLI model settings continue to flow into Docker-backed providers:
     - Gemini: `GEMINI_MODEL`
     - Codex: `CODEX_MODEL` plus `--model` when applicable
     - Claude Code: `--model` when applicable
-  - When `containerCacheSetupScriptImage` is enabled and a setup script is present, runtime first tries to reuse a prebuilt `sprint-os-setup-cache:<hash>` image instead of rerunning the setup script on every container launch.
-  - An empty `containerSetupScriptPath` still participates in caching because runtime resolves the default script chain automatically, including the bundled Sprint OS setup script.
+  - When `containerCacheSetupScriptImage` is enabled and a setup script is present, runtime first tries to reuse a prebuilt `code-ux-setup-cache:<hash>` image instead of rerunning the setup script on every container launch.
+  - An empty `containerSetupScriptPath` still participates in caching because runtime resolves the default script chain automatically, including the bundled Code UX setup script.
   - `claude` fallback uses the official installer: `curl -fsSL https://claude.ai/install.sh | bash`
   - Claude runner uses explicit headless prompt mode (`claude -p "<prompt>"`) with `--dangerously-skip-permissions`.
   - When Claude credential mounts are enabled, runtime mounts `~/.claude` and also the sibling `~/.claude.json` when present.
@@ -383,7 +383,7 @@ Repository demo script:
   - Runtime syncs only Claude auth artifacts into container home before launch (`~/.claude/.credentials.json` and `~/.claude.json`) instead of recursively copying the full `.claude` state tree.
   - GitHub sync still copies directory contents into a fixed destination (`~/.config/gh`); Gemini now avoids recursive state copy so concurrent Docker sessions do not race on shared `.gemini/tmp` output files.
   - Provider auth mounts are controlled per credential type. When a Docker auth mount is enabled, the matching API key/token is no longer injected into the container environment.
-  - Provider-generated MCP/config files are no longer bind-mounted directly into `/workspace/.sprint-os-home/...`; runtime stages them under `/opt/provider-config/*` and merges or appends them into the writable home during bootstrap so provider CLIs can keep existing auth/config state while still receiving runtime MCP wiring.
+  - Provider-generated MCP/config files are no longer bind-mounted directly into `/workspace/.code-ux-home/...`; runtime stages them under `/opt/provider-config/*` and merges or appends them into the writable home during bootstrap so provider CLIs can keep existing auth/config state while still receiving runtime MCP wiring.
   - Gemini bootstrap now pre-seeds `~/.gemini/projects.json` plus the `tmp/`, `history/`, and `memory/` directories so the CLI does not hit its first-write race on a brand-new isolated home.
 
 Worker runtime notes:
@@ -393,7 +393,7 @@ Worker runtime notes:
 
 Runtime cleanup notes:
 - cleanup treats expired sprint leases as stale, not active ownership
-- when a stale `running` sprint run has no active dispatches and its heartbeat is older than the cleanup cutoff, Sprint OS fails that run and releases the expired sprint lease in the same sweep
+- when a stale `running` sprint run has no active dispatches and its heartbeat is older than the cleanup cutoff, Code UX fails that run and releases the expired sprint lease in the same sweep
 - startup now prunes orphaned virtual worker endpoints before new virtual cycles begin
 - startup prunes stale Docker workspaces and cached setup images for failed, finished, unrecoverable, and outdated sessions
 - terminal sprint completion/failure/cancellation also removes resumable CLI task workspaces immediately instead of waiting for the next restart sweep
@@ -435,7 +435,7 @@ Git manager skill toggles are mode-aware:
 Runtime precedence for dashboard port is:
 1. Bound runtime port (actual listening port; may differ when fallback increments)
 2. Dashboard settings (`dashboardPort`) in sqlite settings
-3. `.sprint-os/settings.json` (`dashboardPort`)
+3. `.code-ux/settings.json` (`dashboardPort`)
 4. `.env` (`DASHBOARD_PORT`)
 5. `config.json`
 6. Default `4444`

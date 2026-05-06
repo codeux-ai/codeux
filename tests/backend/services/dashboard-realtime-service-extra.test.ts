@@ -9,7 +9,7 @@ import { DashboardRealtimeService } from "../../../src/services/dashboard-realti
 const tempDirs: string[] = [];
 
 async function createService() {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-dashboard-realtime-extra-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-dashboard-realtime-extra-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const repository = new DashboardRealtimeEventRepository(storage);

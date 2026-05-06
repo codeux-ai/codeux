@@ -21,7 +21,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
   return (
     <div className="flex flex-col gap-5">
       <SectionCard title="Workspace Visibility" watermark="WEB" badge={getBadge("sprintPreview")}>
-        <Row label="Preview runtime enabled" description="Allow Sprint OS to launch, rebuild, and reconcile preview containers for this scope." badge={getFieldBadge("sprintPreview.enabled")}>
+        <Row label="Preview runtime enabled" description="Allow Code UX to launch, rebuild, and reconcile preview containers for this scope." badge={getFieldBadge("sprintPreview.enabled")}>
           <Toggle value={editableSettings.sprintPreview.enabled} onChange={() => updateEditableSettings((current) => ({
             ...current,
             sprintPreview: {
@@ -39,7 +39,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
             },
           }))} />
         </Row>
-        <Row label="Launch preview when sprint starts" description="Start a preview container automatically when Sprint OS detects the sprint is actively running." badge={getFieldBadge("sprintPreview.autoStartOnRunningSprint")}>
+        <Row label="Launch preview when sprint starts" description="Start a preview container automatically when Code UX detects the sprint is actively running." badge={getFieldBadge("sprintPreview.autoStartOnRunningSprint")}>
           <Toggle value={editableSettings.sprintPreview.autoStartOnRunningSprint} onChange={() => updateEditableSettings((current) => ({
             ...current,
             sprintPreview: {
@@ -78,7 +78,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
       </SectionCard>
 
       <SectionCard title="Runtime Limits" watermark="PORT" badge={getBadge("sprintPreview")}>
-        <Row label="Maximum active preview containers" description="When this cap is exceeded, Sprint OS stops the oldest active previews before launching the next one." badge={getFieldBadge("sprintPreview.maxConcurrentContainers")}>
+        <Row label="Maximum active preview containers" description="When this cap is exceeded, Code UX stops the oldest active previews before launching the next one." badge={getFieldBadge("sprintPreview.maxConcurrentContainers")}>
           <NumberInput
             value={editableSettings.sprintPreview.maxConcurrentContainers}
             onChange={(value) => updateEditableSettings((current) => ({
@@ -120,7 +120,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
             max={65535}
           />
         </Row>
-        <Row label="Container app port" description="Internal port the preview app listens on inside the container before Sprint OS maps it to a host port." badge={getFieldBadge("sprintPreview.containerAppPort")}>
+        <Row label="Container app port" description="Internal port the preview app listens on inside the container before Code UX maps it to a host port." badge={getFieldBadge("sprintPreview.containerAppPort")}>
           <NumberInput
             value={editableSettings.sprintPreview.containerAppPort}
             onChange={(value) => updateEditableSettings((current) => ({

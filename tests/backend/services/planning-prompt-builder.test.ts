@@ -21,7 +21,7 @@ describe("PlanningPromptBuilder", () => {
         goal: "Initial goal",
       });
 
-      expect(prompt).toContain("You are Sprint OS's Planning agent.");
+      expect(prompt).toContain("You are Code UX's Planning agent.");
       expect(prompt).toContain("## Planning Agent Instructions");
       expect(prompt).toContain("Custom agent instructions.");
       expect(prompt).toContain("Project: Test Project");
@@ -67,7 +67,7 @@ describe("PlanningPromptBuilder", () => {
         goal: "Plan this",
       });
 
-      expect(prompt).toContain("You are Sprint OS's Planning agent.");
+      expect(prompt).toContain("You are Code UX's Planning agent.");
       expect(prompt).toContain("Custom agent instructions.");
       expect(prompt).toContain("Sprint: SPR-1");
       expect(prompt).toContain("Sprint Name: Sprint One");

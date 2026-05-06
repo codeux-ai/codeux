@@ -186,8 +186,8 @@ export class RuntimeStartupRecoveryService {
 
       const sessionRecovered = taskRun?.sessionId ? recoveredCliSessionIds.has(taskRun.sessionId) : false;
       const errorMessage = sessionRecovered
-        ? "Local CLI execution was interrupted by Sprint OS restart. The task was moved back to a retryable state."
-        : "Local CLI execution was interrupted before Sprint OS could persist a resumable session. The task was moved back to a retryable state.";
+        ? "Local CLI execution was interrupted by Code UX restart. The task was moved back to a retryable state."
+        : "Local CLI execution was interrupted before Code UX could persist a resumable session. The task was moved back to a retryable state.";
 
       this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
       this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
@@ -283,7 +283,7 @@ export class RuntimeStartupRecoveryService {
     const containers = await this.deps.dockerService.listContainers().catch(() => []);
     return new Set(
       containers
-        .map((container) => container.labels?.["sprint-os.session-id"]?.trim())
+        .map((container) => container.labels?.["code-ux.session-id"]?.trim())
         .filter((sessionId): sessionId is string => Boolean(sessionId)),
     );
   }
@@ -298,12 +298,12 @@ export class RuntimeStartupRecoveryService {
     }
 
     if (recoveredCliSessionIds.has(invocation.sessionId)) {
-      return `Recovered stale ${invocation.purpose} invocation after Sprint OS restart. The backing CLI session (${invocation.sessionId}) was interrupted before completion.`;
+      return `Recovered stale ${invocation.purpose} invocation after Code UX restart. The backing CLI session (${invocation.sessionId}) was interrupted before completion.`;
     }
 
     const executionMode = this.resolveInvocationExecutionMode(invocation);
     if (executionMode === "DOCKER" && !activeContainerSessionIds.has(invocation.sessionId)) {
-      return `Recovered stale ${invocation.purpose} invocation after Sprint OS restart. No active Docker container remained for session ${invocation.sessionId}.`;
+      return `Recovered stale ${invocation.purpose} invocation after Code UX restart. No active Docker container remained for session ${invocation.sessionId}.`;
     }
 
     return null;

@@ -19,7 +19,7 @@ afterEach(async () => {
 
 function createTestStorage(): AppDbStorage {
   const dir = os.tmpdir();
-  const tmpDir = path.join(dir, `sprint-os-memory-repo-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const tmpDir = path.join(dir, `code-ux-memory-repo-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   // We use mkdirSync synchronously since AppDbStorage constructor is sync
   require("fs").mkdirSync(tmpDir, { recursive: true });
   tempDirs.push(tmpDir);

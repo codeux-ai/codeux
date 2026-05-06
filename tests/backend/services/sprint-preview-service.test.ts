@@ -19,8 +19,8 @@ const writeFile = async (targetPath: string, content: string): Promise<void> => 
 };
 
 const configureGitIdentity = async (repoPath: string): Promise<void> => {
-  await run("git", ["config", "user.name", "Sprint OS Test"], repoPath);
-  await run("git", ["config", "user.email", "sprint-os@example.com"], repoPath);
+  await run("git", ["config", "user.name", "Code UX Test"], repoPath);
+  await run("git", ["config", "user.email", "code-ux@example.com"], repoPath);
 };
 
 afterEach(async () => {

@@ -84,8 +84,8 @@ describe("apiKeyLoader", () => {
     expect(apiKeyLoader(tempDir)).toBe("legacy-env-key");
   });
 
-  it("loads from .sprint-os/settings.json", async () => {
-    const settingsDir = path.join(tempDir, ".sprint-os");
+  it("loads from .code-ux/settings.json", async () => {
+    const settingsDir = path.join(tempDir, ".code-ux");
     await fs.mkdir(settingsDir);
     await fs.writeFile(
       path.join(settingsDir, "settings.json"), 
@@ -96,7 +96,7 @@ describe("apiKeyLoader", () => {
 
   it("prioritizes env over file", async () => {
     process.env.JULES_API_KEY = "env-key";
-    const settingsDir = path.join(tempDir, ".sprint-os");
+    const settingsDir = path.join(tempDir, ".code-ux");
     await fs.mkdir(settingsDir);
     await fs.writeFile(
       path.join(settingsDir, "settings.json"), 

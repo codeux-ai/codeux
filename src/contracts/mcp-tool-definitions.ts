@@ -20,7 +20,7 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: {
-        project_id: { type: "string", description: "Sprint OS project id for repo and settings context." },
+        project_id: { type: "string", description: "Code UX project id for repo and settings context." },
         thread_id: { type: "string", description: "Dashboard conversation thread id." },
         thread_title: { type: "string", description: "Optional thread title for prompt context." },
         body_markdown: { type: "string", description: "The dashboard-authored message to answer." },
@@ -32,7 +32,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "listen",
     runtimeRoles: ["project_manager"],
-    description: "Enter Sprint OS listening mode. This call blocks until one actionable dashboard message is available, or until timeout expires.",
+    description: "Enter Code UX listening mode. This call blocks until one actionable dashboard message is available, or until timeout expires.",
     inputSchema: {
       type: "object",
       properties: {
@@ -103,9 +103,9 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "manage_sprint_os",
+    name: "manage_code_ux",
     runtimeRoles: ["project_manager"],
-    description: "Manage internal Sprint OS state. Used for configuration and destructive actions. Destructive actions require approval confirmation.",
+    description: "Manage internal Code UX state. Used for configuration and destructive actions. Destructive actions require approval confirmation.",
     inputSchema: {
       type: "object",
       properties: {

@@ -1,6 +1,6 @@
 # MCP Connections And Listen Mode
 
-This page describes the first concrete multi-MCP control-plane slice shipped on top of the Sprint OS database.
+This page describes the first concrete multi-MCP control-plane slice shipped on top of the Code UX database.
 
 It is no longer the final target architecture.
 
@@ -24,7 +24,7 @@ That limitation is now partly removed by the in-repo external worker client and 
 
 - workers can consume inbox messages on the same connection record
 - workers can generate reply-only dashboard responses locally
-- remote workers can now attach to the main Sprint OS control plane over Streamable HTTP
+- remote workers can now attach to the main Code UX control plane over Streamable HTTP
 
 ## Primary Files
 
@@ -145,7 +145,7 @@ Operational behavior:
 Transport notes:
 
 - normal human-driven MCP clients continue to use stdio
-- remote workers can now use the dedicated Streamable HTTP worker gateway on the main Sprint OS server
+- remote workers can now use the dedicated Streamable HTTP worker gateway on the main Code UX server
 - local worker-host stdio still exists for worker-machine execution hooks
 
 ## Current Routing Rules
@@ -169,8 +169,8 @@ When a listener replies:
 - related pending/delivered dashboard messages are marked `processed`
 
 When a worker escalates an attention item:
-- Sprint OS creates a project thread bound to that worker connection
-- Sprint OS inserts a `system` authored `connection_to_dashboard` message with the worker handoff summary
+- Code UX creates a project thread bound to that worker connection
+- Code UX inserts a `system` authored `connection_to_dashboard` message with the worker handoff summary
 - the original worker-owned item resolves
 - a human-owned handoff attention item is opened when follow-up is still required
 

@@ -403,7 +403,7 @@ export class GitStatusService {
       ok: true,
       merged: false,
       autoMergeScheduled: false,
-      message: confirmationWarnings[0] || commandOutput || "Merge command completed, but Sprint OS could not confirm the PR merge yet.",
+      message: confirmationWarnings[0] || commandOutput || "Merge command completed, but Code UX could not confirm the PR merge yet.",
     };
   }
 

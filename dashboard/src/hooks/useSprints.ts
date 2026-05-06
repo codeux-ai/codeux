@@ -21,8 +21,8 @@ interface SprintResourceState {
 }
 
 const sprintResourceState = ((globalThis as typeof globalThis & {
-  __SPRINT_OS_SPRINT_RESOURCE_STATE__?: SprintResourceState;
-}).__SPRINT_OS_SPRINT_RESOURCE_STATE__ ||= {
+  __CODE_UX_SPRINT_RESOURCE_STATE__?: SprintResourceState;
+}).__CODE_UX_SPRINT_RESOURCE_STATE__ ||= {
   cache: new Map<string, SprintCollectionResponse>(),
   inflightRequests: new Map<string, Promise<SprintCollectionResponse>>(),
 });

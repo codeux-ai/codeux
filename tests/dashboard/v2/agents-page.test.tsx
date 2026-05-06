@@ -193,7 +193,7 @@ describe("AgentsPage", () => {
         labels: ["planning"],
         instructionMarkdown: "Do some planning",
         syncStatus: "synced",
-        sourcePath: ".sprint-os/agents/planning.md",
+        sourcePath: ".code-ux/agents/planning.md",
         sourceScope: "project",
         sourceExists: true,
         avatarConfig: { body: "male" },

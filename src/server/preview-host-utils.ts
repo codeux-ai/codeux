@@ -6,10 +6,10 @@ import type { Duplex } from "stream";
 import path from "path";
 import type { SprintPreviewSession } from "../contracts/app-types.js";
 
-export const PREVIEW_BRIDGE_PATH = "/_sprint_os/preview-bridge.js";
-export const PREVIEW_STATUS_PATH = "/_sprint_os/preview-status";
-export const PREVIEW_START_PATH = "/_sprint_os/preview-start";
-export const PREVIEW_REBUILD_PATH = "/_sprint_os/preview-rebuild";
+export const PREVIEW_BRIDGE_PATH = "/_code_ux/preview-bridge.js";
+export const PREVIEW_STATUS_PATH = "/_code_ux/preview-status";
+export const PREVIEW_START_PATH = "/_code_ux/preview-start";
+export const PREVIEW_REBUILD_PATH = "/_code_ux/preview-rebuild";
 export const PREVIEW_HOST_PREFIX = "preview-";
 
 export function escapeHtml(value: string | null | undefined): string {
@@ -210,7 +210,7 @@ export function buildPreviewStandbyHtml(args: {
       ? "Container is stopped"
       : "Container is unavailable";
   const description = status === "starting"
-    ? "Sprint OS is building and booting this preview container. The browser will reconnect automatically once the preview responds."
+    ? "Code UX is building and booting this preview container. The browser will reconnect automatically once the preview responds."
     : status === "stopped"
       ? "This preview container is currently offline. Start it again or rebuild it to bring the in-app browser back."
       : "The preview host is not reachable right now. Rebuild or start the container to restore the browser.";

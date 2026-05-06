@@ -4,7 +4,7 @@ This page describes the provider-usage telemetry model that powers token and tim
 
 ## Purpose
 
-Sprint OS now tracks CLI-provider execution usage in a DB-native form so the dashboard can answer:
+Code UX now tracks CLI-provider execution usage in a DB-native form so the dashboard can answer:
 
 - how many tokens were used
 - how much active provider time was spent
@@ -35,7 +35,7 @@ Each row represents one provider invocation and stores:
 - `usage_source`
 - provider-native raw usage payload when available
 
-This makes usage first-class instead of trying to infer it from task status rows after the fact. Because usage rows map to an explicit invocation thread via `providerInvocationId`, Sprint OS preserves full-fidelity drill-downs for every tracked execution context.
+This makes usage first-class instead of trying to infer it from task status rows after the fact. Because usage rows map to an explicit invocation thread via `providerInvocationId`, Code UX preserves full-fidelity drill-downs for every tracked execution context.
 
 ## Normalized Usage Fields
 
@@ -63,27 +63,27 @@ Rollups are exposed in:
 
 Gemini CLI runs with structured JSON output enabled.
 
-Sprint OS reads provider-reported token counts directly from the JSON response stats block and treats them as `reported`.
+Code UX reads provider-reported token counts directly from the JSON response stats block and treats them as `reported`.
 Gemini must keep `--output-format json` enabled even when native MCP settings are injected; current Gemini CLI versions still load MCP settings in JSON mode and include the authoritative `stats` block. The collector records model-level `input`, `cached`, `candidates`, and `thoughts` counts, mapping `thoughts` into `reasoningOutputTokens`.
 Docker-backed Gemini invocations also carry the selected provider instance's `mountAuth` and `authPath` through task, QA, dashboard-chat, and compaction paths before the runner builds credential mounts. That keeps JSON-mode telemetry compatible with copied local Gemini OAuth credentials and prevents fallback to an unrelated Google Cloud project.
-If a historical or failed run lacks the structured stats envelope, Sprint OS can still estimate from prompt and transcript text so Docker-backed runs do not remain `unavailable`.
+If a historical or failed run lacks the structured stats envelope, Code UX can still estimate from prompt and transcript text so Docker-backed runs do not remain `unavailable`.
 
 ### Codex
 
 Codex runs with `codex exec --json`.
 
-Sprint OS first looks for `token_count` JSONL events. If those are missing, it falls back to token estimation using `js-tiktoken` over the prompt plus captured transcript.
+Code UX first looks for `token_count` JSONL events. If those are missing, it falls back to token estimation using `js-tiktoken` over the prompt plus captured transcript.
 
 ### Claude Code
 
 Claude Code runs with a generated native `--session-id`.
 
-Sprint OS reads usage from the persisted Claude session JSONL artifact under `~/.claude/projects/...`. If usage is absent, it falls back to token estimation using `@anthropic-ai/tokenizer` over the prompt plus recovered transcript text.
-For Docker-backed Claude Code runs, Sprint OS reads the same session JSONL from the isolated workspace runtime home (`/workspace/.sprint-os-home`) before the Docker volume is cleaned up.
+Code UX reads usage from the persisted Claude session JSONL artifact under `~/.claude/projects/...`. If usage is absent, it falls back to token estimation using `@anthropic-ai/tokenizer` over the prompt plus recovered transcript text.
+For Docker-backed Claude Code runs, Code UX reads the same session JSONL from the isolated workspace runtime home (`/workspace/.code-ux-home`) before the Docker volume is cleaned up.
 
 ### Jules
 
-Jules does not expose a compatible native token contract. Instead of excluding it, Sprint OS computes **estimated** tokens for Jules by accumulating input and output characters divided by 4 (the characters-per-token heuristic).
+Jules does not expose a compatible native token contract. Instead of excluding it, Code UX computes **estimated** tokens for Jules by accumulating input and output characters divided by 4 (the characters-per-token heuristic).
 
 ## Usage Source Semantics
 
@@ -92,7 +92,7 @@ Jules does not expose a compatible native token contract. Instead of excluding i
 - `reported`
   - provider gave authoritative counts
 - `estimated`
-  - Sprint OS calculated counts from the conversation text
+  - Code UX calculated counts from the conversation text
 - `unavailable`
   - the provider ran but no counts could be derived
 - `unsupported`

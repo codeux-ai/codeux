@@ -30,7 +30,7 @@ Templates are stored in the `agents.instructionTemplates` settings section:
 2. system scope can override any template in sqlite
 3. project scope can override any template for a selected project
 4. runtime resolution uses the project override when `repoPath` maps to a known project
-5. no file lookup under `.sprint-os/instructions` or `.jules-subagents/instructions` remains
+5. no file lookup under `.code-ux/instructions` or `.jules-subagents/instructions` remains
 
 ## Template IDs in Catalog
 

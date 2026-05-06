@@ -128,7 +128,7 @@ describe("resolveMainBranchPrBody", () => {
       subtasks: [],
     });
 
-    expect(body).toContain("Automated sprint completion PR opened by Sprint OS.");
+    expect(body).toContain("Automated sprint completion PR opened by Code UX.");
     expect(body).toContain("Sprint: 1");
     expect(body).toContain("**Sprint Context:**\nA sprint to add testing capabilities.");
     expect(body).toContain(`Base: \`main\``);
@@ -142,7 +142,7 @@ describe("resolveMainBranchPrBody", () => {
       subtasks: undefined,
     });
 
-    expect(body).toContain("Automated sprint completion PR opened by Sprint OS.");
+    expect(body).toContain("Automated sprint completion PR opened by Code UX.");
     expect(body).toContain("Sprint: 1");
     expect(body).toContain(`Base: \`main\``);
     expect(body).toContain(`Head: \`feature/sprint-1\``);

@@ -21,7 +21,7 @@ import * as cliProcessRunner from "../../../src/services/cli-process-runner.js";
 const tempDirs: string[] = [];
 
 async function createFixture() {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-virtual-worker-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-virtual-worker-"));
   tempDirs.push(dir);
   const appStorage = new AppDbStorage(path.join(dir, "app.db"));
   const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));

@@ -1,4 +1,4 @@
-import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../contracts/internal-management-types.js";
 import type { SprintPreviewService } from "../services/sprint-preview-service.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { DashboardSettings } from "../contracts/app-types.js";
@@ -52,7 +52,7 @@ export class ManagementToolHandler {
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
   }
 
-  async handleManageSprintOs(args: ManageSprintOsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+  async handleManageCodeUx(args: ManageCodeUxArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
       let envelope: ManagementResponseEnvelope;
 

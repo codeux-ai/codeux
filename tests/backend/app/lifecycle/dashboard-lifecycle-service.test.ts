@@ -211,7 +211,7 @@ describe("dashboard-lifecycle-service", () => {
       });
 
       expect(createLogger).toHaveBeenCalledWith({
-        bindings: { service: "sprint-os" },
+        bindings: { service: "code-ux" },
         logFilePath: undefined,
       });
     });
@@ -225,8 +225,8 @@ describe("dashboard-lifecycle-service", () => {
       });
 
       expect(createLogger).toHaveBeenCalledWith({
-        bindings: { service: "sprint-os" },
-        logFilePath: path.join("/project-root", ".sprint-os", "debug.log"),
+        bindings: { service: "code-ux" },
+        logFilePath: path.join("/project-root", ".code-ux", "debug.log"),
       });
     });
   });

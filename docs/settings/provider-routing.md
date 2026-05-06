@@ -1,6 +1,6 @@
 # Provider Routing
 
-This page describes how Sprint OS resolves provider, model, and provider pool selection for each invocation type.
+This page describes how Code UX resolves provider, model, and provider pool selection for each invocation type.
 
 ## Why This Exists
 
@@ -11,7 +11,7 @@ Examples:
 - planning may want a different provider pool than task coding
 - CI fix and merge-conflict repair runs often need worker-oriented defaults even when normal task routing is global
 
-Sprint OS now separates:
+Code UX now separates:
 - global provider defaults
 - worker runtime defaults
 - invocation-specific routing rules
@@ -32,7 +32,7 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 - `profile`
   - `GLOBAL`: baseline comes from top-level `aiProvider`
   - `WORKER`: baseline comes from `workers.virtualWorkerProvider` and `workers.model`
-    - the worker model override is only applied when it is valid for the selected provider; otherwise Sprint OS falls back to that provider's own configured/default model instead of leaking a Codex/Gemini/Claude model across providers
+    - the worker model override is only applied when it is valid for the selected provider; otherwise Code UX falls back to that provider's own configured/default model instead of leaking a Codex/Gemini/Claude model across providers
 - `strategy`
   - `MANUAL`, `WEIGHTED`, or `ORCHESTRATOR`
 - `provider`
@@ -71,9 +71,9 @@ Provider instances are first-class routing targets:
 5. Apply invocation-specific per-provider overrides.
 6. Filter by `allowedProviders`, then by any runtime provider pool restriction.
 7. Run the selected strategy.
-8. If Jules is selected but unavailable, Sprint OS reroutes within the remaining eligible providers.
-9. When a CLI instance is selected for Docker execution, Sprint OS forwards that instance's `mountAuth` and `authPath` into the runtime so the chosen route controls which local credential directory is copied.
-10. If a persisted task already has a concrete provider assignment, such as `gemini` on retry, Sprint OS resolves the matching provider instance settings for that provider instead of reusing settings from a newly resolved fallback route. This keeps model and auth-copy settings aligned with the actual CLI being launched.
+8. If Jules is selected but unavailable, Code UX reroutes within the remaining eligible providers.
+9. When a CLI instance is selected for Docker execution, Code UX forwards that instance's `mountAuth` and `authPath` into the runtime so the chosen route controls which local credential directory is copied.
+10. If a persisted task already has a concrete provider assignment, such as `gemini` on retry, Code UX resolves the matching provider instance settings for that provider instead of reusing settings from a newly resolved fallback route. This keeps model and auth-copy settings aligned with the actual CLI being launched.
 10. Legacy provider-id keyed payloads are normalized into the instance model so older settings rows and tests continue to resolve through the new routing engine.
 
 ## Current Defaults

@@ -1,6 +1,6 @@
 # Sprint Planning Guide
 
-This guide defines the quality bar for Sprint OS planning.
+This guide defines the quality bar for Code UX planning.
 
 The planner's job is to turn a sprint goal into a database-ready DAG of atomic tasks that coding agents can execute without guessing.
 
@@ -10,7 +10,7 @@ The planner's job is to turn a sprint goal into a database-ready DAG of atomic t
 - Maximize safe parallelism.
 - Keep tasks atomic, technical, and testable.
 - Remove ambiguity from executor prompts.
-- Produce a complete plan in the Sprint OS JSON task format, not markdown task files.
+- Produce a complete plan in the Code UX JSON task format, not markdown task files.
 
 ## Research Standard
 
@@ -31,7 +31,7 @@ The planner should never offload obvious discovery work to the executor when the
 - If two tasks can proceed in parallel, they must not depend on each other.
 - Avoid giant umbrella tasks that span backend, frontend, tests, docs, and integration at once.
 - Avoid placeholder tasks such as "analyze", "investigate", "review", "cleanup", or "coordinate".
-- Do not create explicit branch, PR, merge, or release tasks. Sprint OS handles that.
+- Do not create explicit branch, PR, merge, or release tasks. Code UX handles that.
 - Prefer 3 to 8 tasks for normal sprint scope.
 
 ## Output Contract

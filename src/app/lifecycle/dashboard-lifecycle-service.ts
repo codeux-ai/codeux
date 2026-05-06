@@ -44,7 +44,7 @@ import type { MemoryPromotionService } from "../../services/memory-promotion-ser
 import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
 import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
-import { getRepoDebugLogPath, SPRINT_OS_SERVICE_NAME } from "../../shared/config/sprint-os-paths.js";
+import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME } from "../../shared/config/code-ux-paths.js";
 import { getProjectLiveSnapshot } from "../live/project-live-snapshot.js";
 import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot-cache.js";
 
@@ -112,7 +112,7 @@ export function reinitializeLogger(deps: { projectRoot: string, runtimeContext: 
     : undefined;
 
   return createLogger({
-    bindings: { service: SPRINT_OS_SERVICE_NAME },
+    bindings: { service: CODE_UX_SERVICE_NAME },
     logFilePath,
   });
 }

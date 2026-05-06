@@ -7,7 +7,7 @@ import { AppDbStorage, resolveAppDbPath } from "../../../src/repositories/app-db
 const tempDirs: string[] = [];
 
 async function createTempDbPath(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-app-db-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-app-db-"));
   tempDirs.push(dir);
   return path.join(dir, "app.db");
 }

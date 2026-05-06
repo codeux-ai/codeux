@@ -6,7 +6,7 @@ This page describes the DB-backed execution snapshot now exposed to the dashboar
 
 `/api/status` is still useful for task-centric protocol output, but it is not enough to observe the full control plane.
 
-Sprint OS now projects execution state directly from sqlite into a dedicated dashboard payload so the UI can see:
+Code UX now projects execution state directly from sqlite into a dedicated dashboard payload so the UI can see:
 
 - sprint runs
 - task dispatch queue state
@@ -198,4 +198,4 @@ Related realtime scopes now also exist for the surrounding v2 project-management
 - `project:<projectId>`
 - `thread:<threadId>`
 
-That lets Sprint OS keep project lists, sprint/task pages, and chat threads in sync without treating execution polling as the only freshness path.
+That lets Code UX keep project lists, sprint/task pages, and chat threads in sync without treating execution polling as the only freshness path.

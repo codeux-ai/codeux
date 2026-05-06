@@ -5,7 +5,7 @@ Accepted implementation plan
 
 ## Decision
 
-Sprint OS should add WebSockets for the dashboard control plane.
+Code UX should add WebSockets for the dashboard control plane.
 
 This is the right fit for:
 
@@ -71,7 +71,7 @@ Do not merge those models together.
 
 ## Why WebSockets Instead Of SSE
 
-SSE would work for simple one-way event streaming, but WebSockets are the better foundation here because Sprint OS needs:
+SSE would work for simple one-way event streaming, but WebSockets are the better foundation here because Code UX needs:
 
 - multiple runtime subscription scopes
 - richer connection lifecycle handling
@@ -104,7 +104,7 @@ WebSockets only push committed changes.
 
 A reconnecting browser must be able to recover cleanly.
 
-That means Sprint OS needs:
+That means Code UX needs:
 
 - event sequence ids
 - resumable subscriptions or full snapshot fallback
@@ -192,7 +192,7 @@ Example event types:
 
 ## Event Source Model
 
-Sprint OS should not emit websocket events ad hoc from random controllers.
+Code UX should not emit websocket events ad hoc from random controllers.
 
 Use a small internal realtime publisher layer with two responsibilities:
 
@@ -209,7 +209,7 @@ The publisher should be called from service and repository integration points th
 
 ## Durability Strategy
 
-For a rock-solid foundation, Sprint OS should add a small durable replay log:
+For a rock-solid foundation, Code UX should add a small durable replay log:
 
 - table: `dashboard_realtime_events`
 
@@ -511,7 +511,7 @@ Do not introduce a separate weak auth model for realtime.
 
 ## Expected Outcome
 
-If implemented this way, Sprint OS gets:
+If implemented this way, Code UX gets:
 
 - much faster dashboard feedback
 - fewer stale-control race conditions

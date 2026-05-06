@@ -98,7 +98,7 @@ This map explains where major responsibilities live.
 - `types.ts`
   - Dashboard-side type contracts.
 
-## Local Configuration and Templates (`.sprint-os/`)
+## Local Configuration and Templates (`.code-ux/`)
 
 - `agents/`
   - project/home/default agent markdown mirrors such as `planning_agent.md` and `worker.md`

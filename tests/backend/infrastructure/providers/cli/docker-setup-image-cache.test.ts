@@ -22,7 +22,7 @@ describe("DockerSetupImageCache", () => {
   it("returns the base image when cache is disabled", async () => {
     const result = await new DockerSetupImageCache().resolveImage({
       baseImage: "node:24-bookworm",
-      setupScriptPath: "/repo/.sprint-os/container/setup.sh",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
       cacheEnabled: false,
       runtimeRoot: "/runtime",
       repoPath: "/repo",
@@ -44,7 +44,7 @@ describe("DockerSetupImageCache", () => {
     const onActivity = vi.fn();
     const result = await new DockerSetupImageCache().resolveImage({
       baseImage: "node:24-bookworm",
-      setupScriptPath: "/repo/.sprint-os/container/setup.sh",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
       cacheEnabled: true,
       runtimeRoot: "/runtime",
       repoPath: "/repo",
@@ -53,7 +53,7 @@ describe("DockerSetupImageCache", () => {
     });
 
     expect(result.runSetupScriptAtRuntime).toBe(false);
-    expect(result.image).toMatch(/^sprint-os-setup-cache:/);
+    expect(result.image).toMatch(/^code-ux-setup-cache:/);
     expect(runStreamingCommand).toHaveBeenCalledTimes(1);
     expect(onActivity).toHaveBeenCalledWith(expect.stringContaining("Using cached Docker setup image"));
   });
@@ -62,7 +62,7 @@ describe("DockerSetupImageCache", () => {
     const onActivity = vi.fn();
     const result = await new DockerSetupImageCache().resolveImage({
       baseImage: "node:24-bookworm",
-      setupScriptPath: "/repo/.sprint-os/container/setup.sh",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
       cacheEnabled: true,
       runtimeRoot: "/runtime",
       repoPath: "/repo",
@@ -71,7 +71,7 @@ describe("DockerSetupImageCache", () => {
     });
 
     expect(result.runSetupScriptAtRuntime).toBe(false);
-    expect(result.image).toMatch(/^sprint-os-setup-cache:/);
+    expect(result.image).toMatch(/^code-ux-setup-cache:/);
     expect(fs.writeFile).toHaveBeenCalledTimes(2);
     expect(runStreamingCommand).toHaveBeenNthCalledWith(
       2,
@@ -95,7 +95,7 @@ describe("DockerSetupImageCache", () => {
     const onActivity = vi.fn();
     const result = await new DockerSetupImageCache().resolveImage({
       baseImage: "node:24-bookworm",
-      setupScriptPath: "/repo/.sprint-os/container/setup.sh",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
       cacheEnabled: true,
       runtimeRoot: "/runtime",
       repoPath: "/repo",
@@ -118,7 +118,7 @@ describe("DockerSetupImageCache", () => {
     const onActivity = vi.fn();
     const result = await new DockerSetupImageCache().resolveImage({
       baseImage: "node:24-bookworm",
-      setupScriptPath: "/repo/.sprint-os/container/setup.sh",
+      setupScriptPath: "/repo/.code-ux/container/setup.sh",
       cacheEnabled: true,
       buildIfMissing: false,
       runtimeRoot: "/runtime",

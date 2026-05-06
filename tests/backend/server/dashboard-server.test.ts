@@ -37,7 +37,7 @@ afterEach(async () => {
 });
 
 async function createRealtimeService(): Promise<DashboardRealtimeService> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-dashboard-realtime-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-dashboard-realtime-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   return new DashboardRealtimeService(
@@ -422,7 +422,7 @@ describe("setupDashboardServer", () => {
   });
 
   it("serves the SPA fallback index.html for extensionless routes but passes through assets and API", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-dashboard-spa-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-dashboard-spa-"));
     tempDirs.push(dir);
     const indexPath = path.join(dir, "index.html");
     await fs.writeFile(indexPath, "<!doctype html><html><head><title>Dashboard</title></head><body>App</body></html>");
@@ -674,7 +674,7 @@ describe("setupDashboardServer", () => {
           containerName: "preview-1",
           worktreePath: "/tmp/preview",
           featureBranch: "feature/sprint-1",
-          startupScriptPath: ".sprint-os/browser/start-preview.sh",
+          startupScriptPath: ".code-ux/browser/start-preview.sh",
           startupMode: "auto",
           installCommand: null,
           buildCommand: null,
@@ -700,12 +700,12 @@ describe("setupDashboardServer", () => {
       path: "/",
     });
     expect(previewResponse.statusCode).toBe(200);
-    expect(previewResponse.body).toContain("/_sprint_os/preview-bridge.js");
+    expect(previewResponse.body).toContain("/_code_ux/preview-bridge.js");
 
     const bridgeResponse = await makeHostRequest({
       port: handle.port,
       host: `preview-test-session.localhost:${handle.port}`,
-      path: "/_sprint_os/preview-bridge.js",
+      path: "/_code_ux/preview-bridge.js",
     });
     expect(bridgeResponse.statusCode).toBe(200);
     expect(bridgeResponse.body).toContain("sprint-preview:state");
@@ -825,7 +825,7 @@ describe("setupDashboardServer", () => {
           containerName: "preview-1",
           worktreePath: "/tmp/preview",
           featureBranch: "feature/sprint-1",
-          startupScriptPath: ".sprint-os/browser/start-preview.sh",
+          startupScriptPath: ".code-ux/browser/start-preview.sh",
           startupMode: "auto",
           installCommand: null,
           buildCommand: null,
@@ -856,7 +856,7 @@ describe("setupDashboardServer", () => {
 
     expect(deepLinkResponse.statusCode).toBe(200);
     expect(deepLinkResponse.body).toContain("Preview Shell");
-    expect(deepLinkResponse.body).toContain("/_sprint_os/preview-bridge.js");
+    expect(deepLinkResponse.body).toContain("/_code_ux/preview-bridge.js");
   });
 
   it("renders a standby page for unavailable preview hosts and exposes same-origin preview controls", async () => {
@@ -936,7 +936,7 @@ describe("setupDashboardServer", () => {
           containerName: null,
           worktreePath: "/tmp/preview",
           featureBranch: "feature/sprint-1",
-          startupScriptPath: ".sprint-os/browser/start-preview.sh",
+          startupScriptPath: ".code-ux/browser/start-preview.sh",
           startupMode: "auto",
           installCommand: null,
           buildCommand: null,
@@ -975,12 +975,12 @@ describe("setupDashboardServer", () => {
     expect(previewResponse.statusCode).toBe(200);
     expect(previewResponse.body).toContain("Container is stopped");
     expect(previewResponse.body).toContain("Start Container");
-    expect(previewResponse.body).toContain("/_sprint_os/preview-status");
+    expect(previewResponse.body).toContain("/_code_ux/preview-status");
 
     const statusResponse = await makeHostRequest({
       port: handle.port,
       host: `preview-test-session.localhost:${handle.port}`,
-      path: "/_sprint_os/preview-status",
+      path: "/_code_ux/preview-status",
     });
     expect(statusResponse.statusCode).toBe(200);
     expect(statusResponse.body).toContain("\"status\":\"stopped\"");
@@ -988,7 +988,7 @@ describe("setupDashboardServer", () => {
     const startResponse = await makeHostRequest({
       port: handle.port,
       host: `preview-test-session.localhost:${handle.port}`,
-      path: "/_sprint_os/preview-start",
+      path: "/_code_ux/preview-start",
       method: "POST",
     });
     expect(startResponse.statusCode).toBe(200);
@@ -997,7 +997,7 @@ describe("setupDashboardServer", () => {
     const rebuildResponse = await makeHostRequest({
       port: handle.port,
       host: `preview-test-session.localhost:${handle.port}`,
-      path: "/_sprint_os/preview-rebuild",
+      path: "/_code_ux/preview-rebuild",
       method: "POST",
     });
     expect(rebuildResponse.statusCode).toBe(200);

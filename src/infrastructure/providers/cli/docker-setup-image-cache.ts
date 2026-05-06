@@ -60,7 +60,7 @@ export class DockerSetupImageCache {
       .update(scriptContent)
       .digest("hex")
       .slice(0, 24);
-    const imageTag = `sprint-os-setup-cache:${cacheKey}`;
+    const imageTag = `code-ux-setup-cache:${cacheKey}`;
     const cacheDir = path.join(runtimeRoot, "setup-image-cache", cacheKey);
 
     await fs.mkdir(cacheDir, { recursive: true });
@@ -105,8 +105,8 @@ export class DockerSetupImageCache {
   private buildDockerfile(baseImage: string): string {
     return [
       `FROM ${baseImage}`,
-      "COPY setup.sh /tmp/sprint-os-setup.sh",
-      "RUN bash /tmp/sprint-os-setup.sh && rm -f /tmp/sprint-os-setup.sh",
+      "COPY setup.sh /tmp/code-ux-setup.sh",
+      "RUN bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh",
     ].join("\n");
   }
 }

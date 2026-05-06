@@ -35,8 +35,8 @@ describe("WorkspaceArtifactService", () => {
     await runCommandStrict("git", ["init", "--bare", originPath], tempRoot);
     await runCommandStrict("git", ["clone", originPath, hostRepoPath], tempRoot);
 
-    await runGit(hostRepoPath, ["config", "user.name", "Sprint OS Test"]);
-    await runGit(hostRepoPath, ["config", "user.email", "sprint-os@example.com"]);
+    await runGit(hostRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
     await runGit(hostRepoPath, ["checkout", "-b", "main"]);
     await fs.writeFile(path.join(hostRepoPath, "file.txt"), "hello\n", "utf8");
     await runGit(hostRepoPath, ["add", "file.txt"]);
@@ -46,8 +46,8 @@ describe("WorkspaceArtifactService", () => {
     const baseRef = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
 
     await runCommandStrict("git", ["clone", originPath, workspaceRepoPath], tempRoot);
-    await runGit(workspaceRepoPath, ["config", "user.name", "Sprint OS Test"]);
-    await runGit(workspaceRepoPath, ["config", "user.email", "sprint-os@example.com"]);
+    await runGit(workspaceRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(workspaceRepoPath, ["config", "user.email", "code-ux@example.com"]);
     await runGit(workspaceRepoPath, ["checkout", "-b", "worker/test", "origin/main"]);
     await fs.writeFile(path.join(workspaceRepoPath, "file.txt"), "hello\n   \n", "utf8");
 
@@ -103,8 +103,8 @@ describe("WorkspaceArtifactService", () => {
     await runCommandStrict("git", ["init", "--bare", originPath], tempRoot);
     await runCommandStrict("git", ["clone", originPath, hostRepoPath], tempRoot);
 
-    await runGit(hostRepoPath, ["config", "user.name", "Sprint OS Test"]);
-    await runGit(hostRepoPath, ["config", "user.email", "sprint-os@example.com"]);
+    await runGit(hostRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
     await runGit(hostRepoPath, ["checkout", "-b", "main"]);
     await fs.writeFile(path.join(hostRepoPath, "existing.txt"), "hello\n", "utf8");
     await runGit(hostRepoPath, ["add", "existing.txt"]);
@@ -114,16 +114,16 @@ describe("WorkspaceArtifactService", () => {
     const baseRef = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
 
     await runCommandStrict("git", ["clone", originPath, workspaceRepoPath], tempRoot);
-    await runGit(workspaceRepoPath, ["config", "user.name", "Sprint OS Test"]);
-    await runGit(workspaceRepoPath, ["config", "user.email", "sprint-os@example.com"]);
+    await runGit(workspaceRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(workspaceRepoPath, ["config", "user.email", "code-ux@example.com"]);
     await runGit(workspaceRepoPath, ["checkout", "-b", "worker/test", "origin/main"]);
-    await fs.mkdir(path.join(workspaceRepoPath, ".sprint-os-home", ".gemini"), { recursive: true });
-    await fs.mkdir(path.join(workspaceRepoPath, ".sprint-os-home", ".cache", "node-gyp"), { recursive: true });
-    await fs.writeFile(path.join(workspaceRepoPath, ".sprint-os-home", ".gemini", "settings.json"), "{}\n", "utf8");
-    await runGit(workspaceRepoPath, ["add", ".sprint-os-home/.gemini/settings.json"]);
+    await fs.mkdir(path.join(workspaceRepoPath, ".code-ux-home", ".gemini"), { recursive: true });
+    await fs.mkdir(path.join(workspaceRepoPath, ".code-ux-home", ".cache", "node-gyp"), { recursive: true });
+    await fs.writeFile(path.join(workspaceRepoPath, ".code-ux-home", ".gemini", "settings.json"), "{}\n", "utf8");
+    await runGit(workspaceRepoPath, ["add", ".code-ux-home/.gemini/settings.json"]);
     await runGit(workspaceRepoPath, ["commit", "-m", "provider runtime state"]);
     await fs.writeFile(
-      path.join(workspaceRepoPath, ".sprint-os-home", ".cache", "node-gyp", "header.h"),
+      path.join(workspaceRepoPath, ".code-ux-home", ".cache", "node-gyp", "header.h"),
       "#define RUNTIME_CACHE 1\n",
       "utf8",
     );
@@ -147,7 +147,7 @@ describe("WorkspaceArtifactService", () => {
 
     expect(patchText).toContain("diff --git a/new-component.tsx b/new-component.tsx");
     expect(patchText).not.toContain(".task-learnings.md");
-    expect(patchText).not.toContain(".sprint-os-home");
+    expect(patchText).not.toContain(".code-ux-home");
 
     const result = await service.applyPatchToBranch({
       repoPath: hostRepoPath,
@@ -162,9 +162,9 @@ describe("WorkspaceArtifactService", () => {
       .toBe("export const value = 1;\n");
     await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.task-learnings.md"]))
       .rejects.toThrow();
-    await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.sprint-os-home/.gemini/settings.json"]))
+    await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.code-ux-home/.gemini/settings.json"]))
       .rejects.toThrow();
-    await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.sprint-os-home/.cache/node-gyp/header.h"]))
+    await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.code-ux-home/.cache/node-gyp/header.h"]))
       .rejects.toThrow();
   });
 
@@ -179,8 +179,8 @@ describe("WorkspaceArtifactService", () => {
     await runCommandStrict("git", ["init", "--bare", originPath], tempRoot);
     await runCommandStrict("git", ["clone", originPath, hostRepoPath], tempRoot);
 
-    await runGit(hostRepoPath, ["config", "user.name", "Sprint OS Test"]);
-    await runGit(hostRepoPath, ["config", "user.email", "sprint-os@example.com"]);
+    await runGit(hostRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
     await runGit(hostRepoPath, ["checkout", "-b", "main"]);
     await fs.writeFile(path.join(hostRepoPath, "file.txt"), "base\n", "utf8");
     await runGit(hostRepoPath, ["add", "file.txt"]);
@@ -197,8 +197,8 @@ describe("WorkspaceArtifactService", () => {
     const targetRef = (await runGit(hostRepoPath, ["rev-parse", "origin/target"])).trim();
 
     await runCommandStrict("git", ["clone", originPath, workspaceRepoPath], tempRoot);
-    await runGit(workspaceRepoPath, ["config", "user.name", "Sprint OS Test"]);
-    await runGit(workspaceRepoPath, ["config", "user.email", "sprint-os@example.com"]);
+    await runGit(workspaceRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(workspaceRepoPath, ["config", "user.email", "code-ux@example.com"]);
     await runGit(workspaceRepoPath, ["checkout", "-b", "worker/test", baseRef]);
     await fs.writeFile(path.join(workspaceRepoPath, "file.txt"), "base\nworker\n", "utf8");
 

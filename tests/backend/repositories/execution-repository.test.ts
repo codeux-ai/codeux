@@ -16,7 +16,7 @@ async function createRepositories(): Promise<{
   executionRepository: ExecutionRepository;
   projectAttentionRepository: ProjectAttentionRepository;
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-execution-repo-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-execution-repo-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   return {
@@ -33,7 +33,7 @@ async function createRepositoriesWithRealtimeNotifier(realtimeNotifier: {
   projectRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-execution-repo-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-execution-repo-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   return {

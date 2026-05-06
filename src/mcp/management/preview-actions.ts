@@ -1,9 +1,9 @@
-import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { SprintPreviewService } from "../../services/sprint-preview-service.js";
 import { buildPreviewUrl } from "../../server/preview-origin.js";
 
 export const handlePreviewActions = async (
-  args: ManageSprintOsArgs,
+  args: ManageCodeUxArgs,
   sprintPreviewService: SprintPreviewService,
   currentHost: string | null
 ): Promise<ManagementResponseEnvelope> => {

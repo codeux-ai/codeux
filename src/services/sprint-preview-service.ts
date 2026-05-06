@@ -34,18 +34,18 @@ import {
   readOptionalSprintPreviewScript,
 } from "./sprint-preview-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
-import { getHomeSprintOsPath, getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../.sprint-os/container/setup.sh",
+  "../../.code-ux/container/setup.sh",
 );
 const CONTAINER_PREVIEW_PROXY_PORT = 39000;
 const PREVIEW_READINESS_TIMEOUT_MS = 120_000;
 const PREVIEW_LOG_TAIL_LINES = 200;
 const PREVIEW_LOG_DRIVER = "local";
-const ORPHANED_SETUP_CONTAINER_COMMAND = "bash /tmp/sprint-os-setup.sh && rm -f /tmp/sprint-os-setup.sh";
+const ORPHANED_SETUP_CONTAINER_COMMAND = "bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh";
 
 export interface SprintPreviewProxyResponse {
   status: number;
@@ -108,7 +108,7 @@ export class SprintPreviewService {
       const runtimeHome = path.join(runtimeRoot, "home-preview");
       const runtimeNpmPrefix = path.join(projectRuntimeRoot, "npm-global");
       const runtimeNpmCache = path.join(projectRuntimeRoot, "npm-cache");
-      const startupMountPath = "/opt/sprint-os/preview-start.sh";
+      const startupMountPath = "/opt/code-ux/preview-start.sh";
       const startupRuntimePath = path.join(runtimeRoot, "start-preview.sh");
       const containerName = this.buildContainerName(projectId, sprintId);
       const effectiveInstallCommand = preparedScript.installCommand;
@@ -224,11 +224,11 @@ export class SprintPreviewService {
           "--log-driver", PREVIEW_LOG_DRIVER,
           "-p", `127.0.0.1:${hostPort}:${CONTAINER_PREVIEW_PROXY_PORT}`,
           "--workdir", workspacePath,
-          "--label", "sprint-os.preview=true",
-          "--label", `sprint-os.project-id=${projectId}`,
-          "--label", `sprint-os.sprint-id=${sprintId}`,
-          "--label", `sprint-os.session-id=${session.id}`,
-          "--label", `sprint-os.host-port=${hostPort}`,
+          "--label", "code-ux.preview=true",
+          "--label", `code-ux.project-id=${projectId}`,
+          "--label", `code-ux.sprint-id=${sprintId}`,
+          "--label", `code-ux.session-id=${session.id}`,
+          "--label", `code-ux.host-port=${hostPort}`,
           "--mount", toDockerMountArg({ source: projectRuntimeSource, destination: projectRuntimeRoot, readonly: false }),
           "--mount", toDockerMountArg({ source: startupScriptSource, destination: startupMountPath, readonly: true }),
           "-e", `HOME=${runtimeHome}`,
@@ -711,7 +711,7 @@ export class SprintPreviewService {
     try {
       const result = await runCommandStrict(
         "docker",
-        ["ps", "-aq", "--filter", "label=sprint-os.preview=true"],
+        ["ps", "-aq", "--filter", "label=code-ux.preview=true"],
         process.cwd(),
       );
       return result.stdout
@@ -730,9 +730,9 @@ export class SprintPreviewService {
         [
           "ps",
           "-a",
-          "--filter", "label=sprint-os.preview=true",
+          "--filter", "label=code-ux.preview=true",
           "--format",
-          "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Label \"sprint-os.project-id\"}}\t{{.Label \"sprint-os.sprint-id\"}}\t{{.Label \"sprint-os.session-id\"}}",
+          "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Label \"code-ux.project-id\"}}\t{{.Label \"code-ux.sprint-id\"}}\t{{.Label \"code-ux.session-id\"}}",
         ],
         cwd,
       );
@@ -747,9 +747,9 @@ export class SprintPreviewService {
             name: name || null,
             status: this.normalizeDockerState(rawStatus),
             labels: {
-              "sprint-os.project-id": projectId || "",
-              "sprint-os.sprint-id": sprintId || "",
-              "sprint-os.session-id": sessionId || "",
+              "code-ux.project-id": projectId || "",
+              "code-ux.sprint-id": sprintId || "",
+              "code-ux.session-id": sessionId || "",
             },
           } satisfies DockerContainerSummary;
         });
@@ -760,13 +760,13 @@ export class SprintPreviewService {
 
   private async findManagedContainerForSession(session: SprintPreviewSession): Promise<DockerContainerSummary | null> {
     const containers = await this.listPreviewContainers(session.worktreePath || process.cwd());
-    const bySession = containers.find((container) => container.labels["sprint-os.session-id"] === session.id);
+    const bySession = containers.find((container) => container.labels["code-ux.session-id"] === session.id);
     if (bySession) {
       return bySession;
     }
     const byIdentity = containers.find((container) =>
-      container.labels["sprint-os.project-id"] === session.projectId
-      && container.labels["sprint-os.sprint-id"] === session.sprintId,
+      container.labels["code-ux.project-id"] === session.projectId
+      && container.labels["code-ux.sprint-id"] === session.sprintId,
     );
     if (byIdentity) {
       return byIdentity;
@@ -900,7 +900,7 @@ export class SprintPreviewService {
   }
 
   private async cleanupLegacyPreviewWorkspaces(repoPath: string): Promise<void> {
-    const legacyRoot = path.join(repoPath, ".sprint-os", "worktrees");
+    const legacyRoot = path.join(repoPath, ".code-ux", "worktrees");
     let entries: Array<{ name: string; isDirectory(): boolean }> = [];
     try {
       entries = await fs.readdir(legacyRoot, { withFileTypes: true, encoding: "utf8" });
@@ -1179,8 +1179,8 @@ export class SprintPreviewService {
       }
     }
     const candidates = [
-      getRepoSprintOsPath(repoPath, "container", "setup.sh"),
-      getHomeSprintOsPath("container", "setup.sh"),
+      getRepoCodeUxPath(repoPath, "container", "setup.sh"),
+      getHomeCodeUxPath("container", "setup.sh"),
       BUNDLED_CONTAINER_SETUP_SCRIPT,
     ];
     for (const candidate of candidates) {
@@ -1196,6 +1196,6 @@ export class SprintPreviewService {
 
   private buildContainerName(projectId: string, sprintId: string): string {
     const sanitize = (value: string) => value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").slice(0, 24);
-    return `sprint-os-preview-${sanitize(projectId)}-${sanitize(sprintId)}`.slice(0, 63);
+    return `code-ux-preview-${sanitize(projectId)}-${sanitize(sprintId)}`.slice(0, 63);
   }
 }

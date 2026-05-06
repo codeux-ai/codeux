@@ -13,7 +13,7 @@ describe("SprintOrchestrator automation blocks", () => {
     const orchestrator = new SprintOrchestrator(deps as any);
 
     const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-test-"));
-    const subtasksDir = path.join(tmpRoot, ".sprint-os", "sprints", "sprint1-subtasks");
+    const subtasksDir = path.join(tmpRoot, ".code-ux", "sprints", "sprint1-subtasks");
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
@@ -64,7 +64,7 @@ describe("SprintOrchestrator automation blocks", () => {
     const orchestrator = new SprintOrchestrator(deps as any);
 
     const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-full-auto-"));
-    const subtasksDir = path.join(tmpRoot, ".sprint-os", "sprints", "sprint1-subtasks");
+    const subtasksDir = path.join(tmpRoot, ".code-ux", "sprints", "sprint1-subtasks");
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
@@ -112,7 +112,7 @@ describe("SprintOrchestrator automation blocks", () => {
     const orchestrator = new SprintOrchestrator(deps as any);
 
     const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-agent-intervention-"));
-    const subtasksDir = path.join(tmpRoot, ".sprint-os", "sprints", "sprint1-subtasks");
+    const subtasksDir = path.join(tmpRoot, ".code-ux", "sprints", "sprint1-subtasks");
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 

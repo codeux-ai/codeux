@@ -81,7 +81,7 @@ export function loadWorkerConfig(argv: string[] = process.argv): WorkerConfig {
   const connectionKey = parseStringFlag(argv, "--connection-key")?.trim()
     || `worker:${os.hostname()}:${process.pid}`;
   const displayName = parseStringFlag(argv, "--display-name")?.trim()
-    || `Sprint OS Worker ${os.hostname()}`;
+    || `Code UX Worker ${os.hostname()}`;
   const serverArgs = parseRepeatedStringFlag(argv, "--server-arg");
 
   return {

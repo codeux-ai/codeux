@@ -23,7 +23,7 @@ export const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => 
       </div>
       <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-signal-500">{label}</div>
       <p className="max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-        Sprint OS is loading the latest stored conversation state.
+        Code UX is loading the latest stored conversation state.
       </p>
     </div>
   </div>

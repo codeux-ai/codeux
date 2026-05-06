@@ -1,10 +1,10 @@
-import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
 
 export class AgentActions {
   constructor(private readonly agentPresetSyncService: AgentPresetSyncService) {}
 
-  async handleAgentAction(args: ManageSprintOsArgs): Promise<ManagementResponseEnvelope> {
+  async handleAgentAction(args: ManageCodeUxArgs): Promise<ManagementResponseEnvelope> {
     const payload = args.payload || {};
 
     switch (args.action) {
@@ -103,7 +103,7 @@ export class AgentActions {
     return { result: { agent } };
   }
 
-  private async deleteAgent(args: ManageSprintOsArgs, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
+  private async deleteAgent(args: ManageCodeUxArgs, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
     const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
     const presetId = typeof payload.presetId === "string" ? payload.presetId : undefined;
     if (!projectId || !presetId) throw new Error("projectId and presetId are required");

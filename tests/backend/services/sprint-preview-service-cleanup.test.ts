@@ -23,7 +23,7 @@ afterEach(async () => {
 beforeEach(() => {
   vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
     if (command === "docker" && args[0] === "ps") {
-      if (args.includes("label=sprint-os.preview=true")) {
+      if (args.includes("label=code-ux.preview=true")) {
         return { exitCode: 0, stdout: "container-1\ncontainer-2\n", stderr: "", durationMs: 1 };
       }
       if (args.includes("status=running")) {
@@ -33,7 +33,7 @@ beforeEach(() => {
     if (command === "docker" && args[0] === "inspect") {
       return {
         exitCode: 0,
-        stdout: "{}\t[\"/bin/sh\",\"-c\",\"bash /tmp/sprint-os-setup.sh && rm -f /tmp/sprint-os-setup.sh\"]\n",
+        stdout: "{}\t[\"/bin/sh\",\"-c\",\"bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh\"]\n",
         stderr: "",
         durationMs: 1,
       };
@@ -48,7 +48,7 @@ describe("SprintPreviewService startup cleanup", () => {
     tempDirs.push(root);
 
     const repoPath = path.join(root, "repo");
-    const legacyPreviewPath = path.join(repoPath, ".sprint-os", "worktrees", "preview-legacy");
+    const legacyPreviewPath = path.join(repoPath, ".code-ux", "worktrees", "preview-legacy");
     await fs.mkdir(legacyPreviewPath, { recursive: true });
     await fs.writeFile(path.join(legacyPreviewPath, "stale.txt"), "legacy", "utf8");
 
@@ -73,13 +73,13 @@ describe("SprintPreviewService startup cleanup", () => {
       sprintId: sprint.id,
       status: "running",
       containerAppPort: 3000,
-      startupScriptPath: ".sprint-os/browser/start-preview.sh",
+      startupScriptPath: ".code-ux/browser/start-preview.sh",
       startupMode: "auto",
       lastKnownPath: "/",
     });
     sprintPreviewRepository.updateSession(createdSession.id, {
       containerId: "container-2",
-      containerName: "sprint-os-preview-test",
+      containerName: "code-ux-preview-test",
       worktreePath: legacyPreviewPath,
       healthStatus: "healthy",
     });

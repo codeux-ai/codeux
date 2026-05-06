@@ -22,7 +22,7 @@ async function createFixture(): Promise<{
   requestStop: ReturnType<typeof vi.fn>;
   sendSessionMessage: ReturnType<typeof vi.fn>;
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-execution-control-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-execution-control-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const projectRepository = new ProjectManagementRepository(storage);

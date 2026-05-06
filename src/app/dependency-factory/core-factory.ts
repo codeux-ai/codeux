@@ -36,7 +36,7 @@ import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-ty
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
 import { createLogger, type Logger } from "../../shared/logging/logger.js";
 import { ServerContext } from "../dependency-factory.js";
-import { getRepoDebugLogPath, SPRINT_OS_SERVICE_NAME } from "../../shared/config/sprint-os-paths.js";
+import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME } from "../../shared/config/code-ux-paths.js";
 
 import { ProviderRunner } from "../../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../../infrastructure/providers/cli/docker-runner.js";
@@ -99,13 +99,13 @@ export function createCoreDependencies(
     : undefined;
 
   const logger = createLogger({
-    bindings: { service: SPRINT_OS_SERVICE_NAME },
+    bindings: { service: CODE_UX_SERVICE_NAME },
     logFilePath,
   });
 
   const server = new Server(
     {
-      name: SPRINT_OS_SERVICE_NAME,
+      name: CODE_UX_SERVICE_NAME,
       version: "1.2.0",
     },
     {

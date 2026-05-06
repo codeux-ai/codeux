@@ -7,8 +7,8 @@ export interface DockerAssetPruneResult {
   prunedSetupImages: string[];
 }
 
-const WORKSPACE_VOLUME_PREFIX = "sprint-os-";
-const SETUP_IMAGE_PREFIX = "sprint-os-setup-cache:";
+const WORKSPACE_VOLUME_PREFIX = "code-ux-";
+const SETUP_IMAGE_PREFIX = "code-ux-setup-cache:";
 
 export class DockerAssetPruneService {
   constructor(
@@ -100,7 +100,7 @@ export class DockerAssetPruneService {
   }
 
   private extractWorkspaceKey(volumeName: string): string | null {
-    const match = volumeName.match(/^sprint-os-.+-([a-f0-9]{12})-(.+)$/);
+    const match = volumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/);
     return match?.[2] || null;
   }
 }

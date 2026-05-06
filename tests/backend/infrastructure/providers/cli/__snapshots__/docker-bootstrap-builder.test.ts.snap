@@ -43,7 +43,7 @@ fi
 if [ "$1" = "opencode" ]; then
   if [ -d "/opt/credentials/opencode" ]; then sync_dir_contents "/opt/credentials/opencode" "$HOME/.local/share/opencode" "opencode"; fi
 fi
-append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]" "codex mcp config"
+append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"
 exec "$@""
 `;
 
@@ -90,7 +90,7 @@ fi
 if [ "$1" = "opencode" ]; then
   if [ -d "/opt/credentials/opencode" ]; then sync_dir_contents "/opt/credentials/opencode" "$HOME/.local/share/opencode" "opencode"; fi
 fi
-append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]" "codex mcp config"
+append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"
 exec "$@""
 `;
 
@@ -137,7 +137,7 @@ fi
 if [ "$1" = "opencode" ]; then
   if [ -d "/opt/credentials/opencode" ]; then sync_dir_contents "/opt/credentials/opencode" "$HOME/.local/share/opencode" "opencode"; fi
 fi
-append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]" "codex mcp config"
+append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"
 exec "$@""
 `;
 
@@ -183,6 +183,6 @@ fi
 if [ "$1" = "opencode" ]; then
   if [ -d "/opt/credentials/opencode" ]; then sync_dir_contents "/opt/credentials/opencode" "$HOME/.local/share/opencode" "opencode"; fi
 fi
-append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]" "codex mcp config"
+append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"
 exec "$@""
 `;

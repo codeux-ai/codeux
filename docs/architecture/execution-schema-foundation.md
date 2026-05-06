@@ -1,6 +1,6 @@
 # Execution Schema Foundation
 
-This page describes the first shipped DB-native execution foundation for Sprint OS.
+This page describes the first shipped DB-native execution foundation for Code UX.
 
 ## Scope
 

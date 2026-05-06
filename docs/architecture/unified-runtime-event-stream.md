@@ -1,6 +1,6 @@
 # Unified Runtime Event Stream
 
-This page documents the execution event model after Sprint OS stopped treating runtime history as task-only.
+This page documents the execution event model after Code UX stopped treating runtime history as task-only.
 
 ## Why This Exists
 
@@ -12,7 +12,7 @@ Examples:
 - a manual merge pause belongs to a `sprint_run`
 - a planning or branch preflight blocker belongs to an orchestration attempt for a sprint, not to one task
 
-Sprint OS now stores both scopes explicitly and projects them into one dashboard timeline.
+Code UX now stores both scopes explicitly and projects them into one dashboard timeline.
 
 ## Storage Model
 

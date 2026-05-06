@@ -82,7 +82,7 @@ flowchart TD
   L --> M[Dashboard UI dashboard/src/*]
   M -->|poll| N[/api/live + /api/git-status/]
   L --> O[src/repositories/settings-repository.ts]
-  O --> P[(~/.sprint-os/settings.db)]
+  O --> P[(~/.code-ux/settings.db)]
 ```
 
 ## High-Level Data Flow

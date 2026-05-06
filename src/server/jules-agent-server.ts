@@ -61,7 +61,7 @@ import { bootSettings, syncGitSettingsFromDashboard } from "../app/lifecycle/set
 import { bootDashboard } from "../app/lifecycle/dashboard-lifecycle-service.js";
 import { bootMcpHttpTransport, bootMcpTransport, type McpHttpTransportHandle } from "../app/lifecycle/mcp-lifecycle-service.js";
 import { McpApprovalTracker } from "../services/mcp-approval-tracker.js";
-import { getSprintSubtasksDir, SPRINT_OS_SERVICE_NAME } from "../shared/config/sprint-os-paths.js";
+import { getCodeUxSubtasksDir, CODE_UX_SERVICE_NAME } from "../shared/config/code-ux-paths.js";
 import { SprintMarkdownService } from "../services/sprint-markdown-service.js";
 import { VirtualWorkerService } from "../services/virtual-worker-service.js";
 import type { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
@@ -295,7 +295,7 @@ export class JulesAgentServer {
   private createMcpServerInstance(runtimeRole: "project_manager"): Server {
     const server = new Server(
       {
-        name: SPRINT_OS_SERVICE_NAME,
+        name: CODE_UX_SERVICE_NAME,
         version: "1.2.0",
       },
       {
@@ -589,7 +589,7 @@ export class JulesAgentServer {
   }
 
   private async persistTaskMergedFlag(args: PersistTaskMergedFlagArgs): Promise<void> {
-    const subtasksDir = getSprintSubtasksDir(args.repoPath, args.sprintNumber);
+    const subtasksDir = getCodeUxSubtasksDir(args.repoPath, args.sprintNumber);
     await this.subtaskRepository.setMerged(subtasksDir, args.taskId, args.merged);
   }
 
@@ -962,7 +962,7 @@ export class JulesAgentServer {
         }
       }
     } else {
-      this.logger.info("Dashboard startup skipped for headless Sprint OS runtime", {
+      this.logger.info("Dashboard startup skipped for headless Code UX runtime", {
         runtimeRole: this.appConfig.runtimeRole,
       });
     }

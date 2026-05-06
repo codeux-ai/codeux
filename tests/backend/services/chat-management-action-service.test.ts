@@ -25,7 +25,7 @@ describe("ChatManagementActionService", () => {
     } as any;
 
     managementToolHandler = {
-      handleManageSprintOs: vi.fn(),
+      handleManageCodeUx: vi.fn(),
     } as any;
 
     executionRepository = {
@@ -56,7 +56,7 @@ describe("ChatManagementActionService", () => {
       bodyMarkdown: "",
     });
 
-    managementToolHandler.handleManageSprintOs.mockResolvedValue({
+    managementToolHandler.handleManageCodeUx.mockResolvedValue({
       content: [{ type: "text", text: JSON.stringify({ result: { status: "success", domain: "sprints", action: "update_sprint", message: "updated" } }) }]
     });
 
@@ -85,7 +85,7 @@ describe("ChatManagementActionService", () => {
       result: { status: "success", domain: "sprints", action: "update_sprint", message: "updated" },
     });
 
-    expect(managementToolHandler.handleManageSprintOs).toHaveBeenCalledWith({
+    expect(managementToolHandler.handleManageCodeUx).toHaveBeenCalledWith({
       domain: "sprints",
       action: "update_sprint",
       payload: { id: "s1" },
@@ -122,7 +122,7 @@ describe("ChatManagementActionService", () => {
       bodyMarkdown: "",
     });
 
-    managementToolHandler.handleManageSprintOs.mockResolvedValue({
+    managementToolHandler.handleManageCodeUx.mockResolvedValue({
       content: [{ type: "text", text: JSON.stringify({ approvalRequired: true, approvalMessage: "Destructive action requires approval." }) }]
     });
 
@@ -174,7 +174,7 @@ describe("ChatManagementActionService", () => {
     expect(result.replyMarkdown).toBe("Hello world");
     expect(result.action).toBeNull();
     expect(result.approvalRequired).toBe(false);
-    expect(managementToolHandler.handleManageSprintOs).not.toHaveBeenCalled();
+    expect(managementToolHandler.handleManageCodeUx).not.toHaveBeenCalled();
 
     // Verify prompt and response are tracked even without an action
     const calls = executionRepository.appendExecutionInvocationMessage.mock.calls;

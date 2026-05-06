@@ -9,7 +9,7 @@ export interface ManagementRequestEnvelope {
   approval?: ManagementApproval;
 }
 
-export interface ManageSprintOsArgs extends ManagementRequestEnvelope {}
+export interface ManageCodeUxArgs extends ManagementRequestEnvelope {}
 
 export interface ManagementResponseEnvelope {
   approvalRequired?: boolean;

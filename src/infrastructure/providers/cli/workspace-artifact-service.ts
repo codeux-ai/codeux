@@ -6,7 +6,7 @@ import { runCommandStrict } from "../../../services/cli-process-runner.js";
 import type { IWorkspaceManager } from "./workspace-manager.js";
 
 const PROTECTED_EXPORT_PATH_PREFIXES = [
-  ".sprint-os-home",
+  ".code-ux-home",
 ];
 
 function isProtectedExportPath(candidate: string): boolean {
@@ -36,8 +36,8 @@ export class WorkspaceArtifactService {
       "--",
       ".",
       `:(exclude)${LEARNINGS_FILENAME}`,
-      ":(exclude).sprint-os-home",
-      ":(exclude).sprint-os-home/**",
+      ":(exclude).code-ux-home",
+      ":(exclude).code-ux-home/**",
     ];
     const untrackedResult = await this.workspaceManager.runWorkspaceCommand(
       workspaceRef,
@@ -65,7 +65,7 @@ export class WorkspaceArtifactService {
       return result.stdout;
     }
 
-    const tempIndexPath = `.sprint-os-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
+    const tempIndexPath = `.code-ux-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
     const tempIndexEnv = {
       ...process.env,
       GIT_INDEX_FILE: tempIndexPath,
@@ -112,7 +112,7 @@ export class WorkspaceArtifactService {
       return { hasChanges: false };
     }
 
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-patch-"));
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-patch-"));
     const patchPath = path.join(tempDir, "workspace.patch");
     const indexPath = path.join(tempDir, "workspace.index");
 

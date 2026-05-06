@@ -15,7 +15,7 @@ async function createRepositories(): Promise<{
   connectionRepository: ConnectionChatRepository;
   workerEndpointRepository: WorkerEndpointRepository;
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-worker-endpoint-repo-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-worker-endpoint-repo-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const workerEndpointRepository = new WorkerEndpointRepository(storage);

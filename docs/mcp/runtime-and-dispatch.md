@@ -17,11 +17,11 @@ Startup sequence:
 
 ## Runtime Modes
 
-Sprint OS now exposes a single MCP runtime role:
+Code UX now exposes a single MCP runtime role:
 
 - `project_manager`
 
-The legacy `worker_host`, `worker_gateway`, and in-repo `sprint-os-worker` runtime have been removed.
+The legacy `worker_host`, `worker_gateway`, and in-repo `code-ux-worker` runtime have been removed.
 
 ## MCP Request Handlers
 
@@ -62,7 +62,7 @@ This split keeps tool contracts stable while allowing orchestration internals to
 
 ## Transport Model
 
-Sprint OS now uses two MCP transport classes:
+Code UX now uses two MCP transport classes:
 
 - stdio
 - Streamable HTTP
@@ -73,7 +73,7 @@ Stdio remains the default MCP transport.
 
 ### HTTP
 
-The main Sprint OS server can also expose an authenticated MCP HTTP endpoint.
+The main Code UX server can also expose an authenticated MCP HTTP endpoint.
 
 That endpoint:
 

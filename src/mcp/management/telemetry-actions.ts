@@ -1,8 +1,8 @@
-import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
 
 export const handleTelemetryActions = async (
-  args: ManageSprintOsArgs,
+  args: ManageCodeUxArgs,
   executionRepository: ExecutionRepository
 ): Promise<ManagementResponseEnvelope> => {
   const { action, payload } = args;

@@ -16,7 +16,7 @@ const mockContainers = [
     status: "Up 2 hours",
     state: "running",
     runningFor: "2 hours",
-    labels: { "sprint-os.command": "npm run start" },
+    labels: { "code-ux.command": "npm run start" },
   },
   {
     id: "2",

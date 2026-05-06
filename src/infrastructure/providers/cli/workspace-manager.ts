@@ -11,8 +11,8 @@ import { extractPathHints } from "../../../services/cli-workflow-text-utils.js";
 const WORKSPACE_HANDLE_PREFIX = "docker-volume://";
 const CONTAINER_WORKSPACE_ROOT = "/workspace";
 const WORKSPACE_HELPER_IMAGE = "alpine/git";
-const WORKSPACE_VOLUME_LABEL = "sprint-os.workspace=true";
-const WORKSPACE_SESSION_LABEL_PREFIX = "sprint-os.workspace-session=";
+const WORKSPACE_VOLUME_LABEL = "code-ux.workspace=true";
+const WORKSPACE_SESSION_LABEL_PREFIX = "code-ux.workspace-session=";
 
 export interface WorkspaceCommandOptions {
   env?: NodeJS.ProcessEnv;
@@ -72,7 +72,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     const normalizedRepoPath = path.resolve(repoPath);
     const repoName = sanitizeToken(path.basename(normalizedRepoPath)) || "repo";
     const repoHash = createHash("sha256").update(normalizedRepoPath).digest("hex").slice(0, 12);
-    const volumeName = `sprint-os-${repoName}-${repoHash}-${sanitizeToken(workspaceKey)}`;
+    const volumeName = `code-ux-${repoName}-${repoHash}-${sanitizeToken(workspaceKey)}`;
     return `${WORKSPACE_HANDLE_PREFIX}${volumeName}`;
   }
 
@@ -228,7 +228,7 @@ export class WorkspaceManager implements IWorkspaceManager {
       "--entrypoint",
       command,
       "-e",
-      `HOME=${CONTAINER_WORKSPACE_ROOT}/.sprint-os-home`,
+      `HOME=${CONTAINER_WORKSPACE_ROOT}/.code-ux-home`,
       WORKSPACE_HELPER_IMAGE,
       ...args,
     ];
@@ -290,7 +290,7 @@ export class WorkspaceManager implements IWorkspaceManager {
 
   private async createVolume(worktreePath: string): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
-    const sessionKey = volumeName.match(/^sprint-os-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
+    const sessionKey = volumeName.match(/^code-ux-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
     await runCommandStrict(
       "docker",
       [
@@ -308,7 +308,7 @@ export class WorkspaceManager implements IWorkspaceManager {
 
   private async seedWorkspaceFromBundle(repoPath: string, worktreePath: string): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-bundle-"));
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-bundle-"));
     const bundlePath = path.join(tempDir, "repo.bundle");
     const originUrl = await this.resolveOriginUrl(repoPath);
     const ownerSpec = getWorkspaceOwnerSpec();
@@ -321,16 +321,16 @@ export class WorkspaceManager implements IWorkspaceManager {
         "cat > \"$tmp\"",
         "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true",
         "git init /workspace >/dev/null",
-        "git -C /workspace symbolic-ref HEAD refs/heads/sprint-os-bootstrap-$$",
+        "git -C /workspace symbolic-ref HEAD refs/heads/code-ux-bootstrap-$$",
         "git -C /workspace remote add origin \"$tmp\"",
         "git -C /workspace fetch origin '+refs/*:refs/*' >/dev/null",
         "rm -f \"$tmp\"",
         originUrl
           ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`
           : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
-        "git -C /workspace config user.name \"Sprint OS\"",
-        "git -C /workspace config user.email \"sprint-os@local\"",
-        "mkdir -p /workspace/.sprint-os-home",
+        "git -C /workspace config user.name \"Code UX\"",
+        "git -C /workspace config user.email \"code-ux@local\"",
+        "mkdir -p /workspace/.code-ux-home",
         ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
 

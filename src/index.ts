@@ -15,9 +15,9 @@ export async function main(args: string[] = process.argv) {
   const appConfig = loadAppConfig(args, projectRoot);
 
   if (args.includes("--help") || args.includes("-h")) {
-    console.log("Sprint OS MCP Server");
+    console.log("Code UX MCP Server");
     console.log("");
-    console.log("Usage: sprint-os [options]");
+    console.log("Usage: code-ux [options]");
     console.log("");
     console.log("Options:");
     console.log("  --api-key VALUE   Set the Jules API key (overrides env and settings)");

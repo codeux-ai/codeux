@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { StatementSync } from "node:sqlite";
-import { getHomeSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { SqliteDatabaseAdapter } from "./db/sqlite-database-adapter.js";
 import { APP_DB_SCHEMA_TABLES } from "./db/app-db-schema.js";
 import { runMigrations } from "./db/app-db-migrations.js";
@@ -11,7 +11,7 @@ interface TableRow {
   name: string;
 }
 
-const APP_DB_PATH = getHomeSprintOsPath("app.db");
+const APP_DB_PATH = getHomeCodeUxPath("app.db");
 
 export function resolveAppDbPath(dbPath?: string): string {
   if (dbPath && dbPath.trim().length > 0) {

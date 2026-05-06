@@ -4,11 +4,11 @@ This page describes the sprint-scoped in-app browser and preview-container runti
 
 ## Goal
 
-Sprint OS can now build and run one isolated preview app per sprint, then surface that app inside the dashboard through a same-origin browser view.
+Code UX can now build and run one isolated preview app per sprint, then surface that app inside the dashboard through a same-origin browser view.
 
 The feature is designed for:
 - comparing multiple active sprint builds side by side without port conflicts
-- previewing progress inside Sprint OS instead of switching out to separate terminals
+- previewing progress inside Code UX instead of switching out to separate terminals
 - reusing the existing Docker/bootstrap/runtime stack instead of introducing a second container system
 
 ## Primary Implementation Files
@@ -42,7 +42,7 @@ Preview session state is persisted in sqlite instead of staying process-local.
 
 ## Storage
 
-Preview runtime state is stored in the Sprint OS app database table:
+Preview runtime state is stored in the Code UX app database table:
 - `sprint_preview_sessions`
 
 The table stores:
@@ -61,7 +61,7 @@ Preview startup uses a dedicated script path, separate from the task-execution s
 
 Resolution order:
 1. explicit project setting `sprintPreview.startupScriptPath`
-2. default project-relative path `.sprint-os/browser/start-preview.sh`
+2. default project-relative path `.code-ux/browser/start-preview.sh`
 3. generated fallback script when no custom preview script exists
 
 Command detection reads `package.json` and lockfiles to infer:
@@ -74,7 +74,7 @@ Install behavior:
 - preview runtime now uses `pnpm install --prefer-offline --no-frozen-lockfile` so non-fatal manifest/lockfile drift does not spam container logs and warmed runtime caches are reused before going back to the registry
 - preview containers now reuse the shared Docker runtime package caches instead of mounting host `node_modules`, and pnpm is pinned to a persistent store under that runtime cache so exported workspaces do not trigger cold installs on every rebuild
 - preview fallback now prefers the base image plus app-level install/build commands over re-running the worker-oriented setup script, which avoids unrelated provider/Playwright bootstrap work from blocking app previews
-- the shared worker setup script now leaves Playwright bootstrap disabled by default, so fresh Docker startup in WSL is not blocked by browser downloads unless an image explicitly opts in with `SPRINT_OS_INSTALL_PLAYWRIGHT=1`
+- the shared worker setup script now leaves Playwright bootstrap disabled by default, so fresh Docker startup in WSL is not blocked by browser downloads unless an image explicitly opts in with `CODE_UX_INSTALL_PLAYWRIGHT=1`
 
 Runtime command preference:
 1. `preview`
@@ -116,7 +116,7 @@ It supports:
 - auto-stop when a sprint becomes terminal
 
 Rebuild behaviors:
-- Preview start and rebuild now use the shared branch-sync rule. In `REMOTE` git mode, Sprint OS refreshes `origin` before exporting the preview workspace so remote changes (such as those pushed by Jules workers) are reflected in the container. In `LOCAL` git mode, preview export stays local-only.
+- Preview start and rebuild now use the shared branch-sync rule. In `REMOTE` git mode, Code UX refreshes `origin` before exporting the preview workspace so remote changes (such as those pushed by Jules workers) are reflected in the container. In `LOCAL` git mode, preview export stays local-only.
 
 These behaviors are controlled through scoped settings under `sprintPreview`.
 
@@ -134,10 +134,10 @@ Current preview controls include:
 - `startupScriptPath`
 
 Startup hygiene:
-- Sprint OS now removes any existing `sprint-os.preview=true` containers on server startup before the preview reconciliation loop begins
-- Sprint OS also removes orphaned unlabeled setup-helper containers that were created by older inline setup-image preview flows
+- Code UX now removes any existing `code-ux.preview=true` containers on server startup before the preview reconciliation loop begins
+- Code UX also removes orphaned unlabeled setup-helper containers that were created by older inline setup-image preview flows
 - persisted preview sessions are reset back to `stopped` during that startup cleanup so stale containers do not survive process restarts
-- any legacy repo-local preview worktree directories under `.sprint-os/worktrees/preview-*` are removed on startup so older preview implementations stop polluting the repository checkout
+- any legacy repo-local preview worktree directories under `.code-ux/worktrees/preview-*` are removed on startup so older preview implementations stop polluting the repository checkout
 
 ## Dashboard Surface
 
@@ -157,7 +157,7 @@ The dashboard now exposes:
 - port routing status on preview cards, including container-port to host-port mappings such as `:4444 -> :5653`
 - when `showInAppBrowser` is disabled, Browser entry points are hidden from the dashboard shell and the `/browser` route shows a configuration notice instead of the embedded workspace
 - when `enabled` is disabled, preview reconciliation stops active preview containers and prevents new launches or rebuilds
-- when `maxConcurrentContainers` would be exceeded, Sprint OS stops the oldest active previews in the same project before starting the next one
+- when `maxConcurrentContainers` would be exceeded, Code UX stops the oldest active previews in the same project before starting the next one
 
 ## API Surface
 

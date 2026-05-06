@@ -33,7 +33,7 @@ function createTestServer(): Server {
     tools: [
       {
         name: "listen",
-        description: "Listen for Sprint OS work",
+        description: "Listen for Code UX work",
         inputSchema: {
           type: "object",
           properties: {},

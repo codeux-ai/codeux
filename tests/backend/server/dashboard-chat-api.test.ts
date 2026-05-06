@@ -30,7 +30,7 @@ afterEach(async () => {
 
 describe("Dashboard Chat API", () => {
   it("supports updating thread route and compacting thread session", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-chat-api-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-chat-api-"));
     tempDirs.push(dir);
 
     const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -187,7 +187,7 @@ describe("Dashboard Chat API", () => {
   });
 
   it("validates worker availability and virtual provider configuration", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-chat-api-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-chat-api-"));
     tempDirs.push(dir);
 
     const storage = new AppDbStorage(path.join(dir, "app.db"));

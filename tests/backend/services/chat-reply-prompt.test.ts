@@ -146,7 +146,7 @@ describe("chat-reply-prompt", () => {
         mcpAvailable: false,
       });
       expect(prompt).toContain("You must return STRICT JSON format");
-      expect(prompt).not.toContain("manage_sprint_os");
+      expect(prompt).not.toContain("manage_code_ux");
     });
 
     it("uses MCP-native output instructions when mcpAvailable is true", () => {
@@ -159,7 +159,7 @@ describe("chat-reply-prompt", () => {
         workerInstructions: "",
         mcpAvailable: true,
       });
-      expect(prompt).toContain("manage_sprint_os");
+      expect(prompt).toContain("manage_code_ux");
       expect(prompt).toContain("Do NOT wrap your response in JSON");
       expect(prompt).not.toContain("You must return STRICT JSON format");
     });
@@ -174,7 +174,7 @@ describe("chat-reply-prompt", () => {
         workerInstructions: "",
       });
       expect(prompt).toContain("You must return STRICT JSON format");
-      expect(prompt).not.toContain("manage_sprint_os");
+      expect(prompt).not.toContain("manage_code_ux");
     });
   });
 

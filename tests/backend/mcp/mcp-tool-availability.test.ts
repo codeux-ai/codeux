@@ -11,11 +11,11 @@ describe("tool availability", () => {
     expect(projectManagerTools.some((tool) => tool.name === "pull_inbox")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "post_listen_reply")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "generate_dashboard_reply")).toBe(true);
-    expect(projectManagerTools.some((tool) => tool.name === "manage_sprint_os")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "manage_code_ux")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "listen", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "start_listen", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "post_listen_reply", "project_manager")).toBe(true);
-    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_sprint_os", "project_manager")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_code_ux", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "claim_attention_item", "project_manager" as any)).toBe(false);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "execute_worker_dispatch", "project_manager" as any)).toBe(false);
   });

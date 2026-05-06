@@ -170,7 +170,7 @@ export const ChatPage: FunctionComponent = () => {
             ) : threadMessagesLoading ? (
               <LoadingChat label="Loading conversation" />
             ) : messages.length === 0 ? (
-              <EmptyChat message="This thread is ready. The next dashboard message will be stored in Sprint OS and queued for a listening MCP connection." />
+              <EmptyChat message="This thread is ready. The next dashboard message will be stored in Code UX and queued for a listening MCP connection." />
             ) : (
               <>
                 {messages.map((message) => <ChatMessageBubble key={message.id} message={message} />)}

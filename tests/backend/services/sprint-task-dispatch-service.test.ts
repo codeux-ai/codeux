@@ -10,7 +10,7 @@ import { SprintTaskDispatchService } from "../../../src/services/sprint-task-dis
 const tempDirs: string[] = [];
 
 async function createFixture() {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-dispatch-service-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-dispatch-service-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const projectManagementRepository = new ProjectManagementRepository(storage);

@@ -5,7 +5,7 @@ Implemented foundation
 
 ## Purpose
 
-Sprint OS now exposes live MCP connections as part of the execution control plane instead of treating them as agents.
+Code UX now exposes live MCP connections as part of the execution control plane instead of treating them as agents.
 
 This completes the first product-correct runtime surface for:
 

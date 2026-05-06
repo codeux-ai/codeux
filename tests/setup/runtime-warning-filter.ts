@@ -4,7 +4,7 @@ import * as path from "path";
 
 const originalEmitWarning = process.emitWarning.bind(process);
 const originalLogLevel = process.env.LOG_LEVEL;
-const isolatedHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "sprint-os-vitest-home-"));
+const isolatedHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "code-ux-vitest-home-"));
 
 process.env.HOME = isolatedHomeDir;
 process.env.USERPROFILE = isolatedHomeDir;

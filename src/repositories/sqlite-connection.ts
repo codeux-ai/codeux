@@ -49,7 +49,7 @@ export function openSqliteDatabase(dbPath: string): DatabaseSync {
       if (!isSqliteBusyError(error) || attempt >= SQLITE_OPEN_RETRY_COUNT) {
         if (isSqliteBusyError(error)) {
           throw new Error(
-            `SQLite database remained locked after ${SQLITE_OPEN_RETRY_COUNT} attempts (${dbPath}). Another Sprint OS process may still be holding the database.`,
+            `SQLite database remained locked after ${SQLITE_OPEN_RETRY_COUNT} attempts (${dbPath}). Another Code UX process may still be holding the database.`,
             { cause: error instanceof Error ? error : undefined },
           );
         }

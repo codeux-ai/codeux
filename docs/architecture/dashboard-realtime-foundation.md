@@ -5,7 +5,7 @@ Implemented foundation
 
 ## Purpose
 
-Sprint OS now has the first shipped dashboard realtime transport layer.
+Code UX now has the first shipped dashboard realtime transport layer.
 
 This foundation improves browser freshness for:
 
@@ -27,7 +27,7 @@ It does not replace:
 
 ### Durable realtime event log
 
-Sprint OS now persists dashboard realtime events in:
+Code UX now persists dashboard realtime events in:
 
 - `dashboard_realtime_events`
 
@@ -41,7 +41,7 @@ Production refinement shipped on March 15, 2026:
 
 ### Coalescing realtime publisher
 
-Sprint OS now coalesces runtime writes before broadcasting them.
+Code UX now coalesces runtime writes before broadcasting them.
 
 The current publisher schedules:
 
@@ -172,7 +172,7 @@ Still pending:
 
 The MCP listener model is unchanged.
 
-Sprint OS still uses:
+Code UX still uses:
 
 - blocking `listen`
 - one actionable item at a time

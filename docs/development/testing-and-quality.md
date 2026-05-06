@@ -47,7 +47,7 @@ GitHub Actions optimization notes:
 - dependency installation uses `pnpm install --frozen-lockfile --ignore-scripts` with the pnpm store cached by `actions/setup-node`
 - Vite, Vitest, and TypeScript incremental metadata now write into repo-local `.cache/` directories so GitHub Actions can restore them across workflow runs and the `build` step can reuse prior typecheck work
 - the shared Vitest setup defaults `LOG_LEVEL` to `error` during tests and installs lightweight canvas stubs so dashboard-heavy suites avoid noisy server logs and repeated DOM warnings
-- the shared Vitest setup also redirects `HOME`/XDG paths into a temp directory for each test worker so backend repositories that default to `~/.sprint-os/*` cannot wipe or mutate a developer's live local settings during `pnpm test`
+- the shared Vitest setup also redirects `HOME`/XDG paths into a temp directory for each test worker so backend repositories that default to `~/.code-ux/*` cannot wipe or mutate a developer's live local settings during `pnpm test`
 - prefer `happy-dom` for simple dashboard component and hook tests; reserve `jsdom` for cases that need stricter browser behavior
 - backend server tests that need a real listener should bind with `port: 0` and reuse `handle.port` instead of reserving a throwaway port first
 - if a backend route suite does not need host routing or upgrade handling, configure the Express app in-process and drive it with `supertest` instead of booting a real TCP listener

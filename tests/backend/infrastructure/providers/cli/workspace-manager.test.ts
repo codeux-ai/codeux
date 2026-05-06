@@ -18,13 +18,13 @@ describe("WorkspaceManager", () => {
   beforeEach(() => {
     manager = new WorkspaceManager();
     vi.clearAllMocks();
-    vi.mocked(fs.mkdtemp).mockResolvedValue("/tmp/sprint-os-bundle-123");
+    vi.mocked(fs.mkdtemp).mockResolvedValue("/tmp/code-ux-bundle-123");
     vi.mocked(fs.rm).mockResolvedValue(undefined);
   });
 
   it("builds Docker volume handles for isolated workspaces", () => {
     const result = manager.buildWorktreePath("/repo/project", "session-1", "DOCKER");
-    expect(result).toMatch(/^docker-volume:\/\/sprint-os-project-[a-f0-9]{12}-session-1$/);
+    expect(result).toMatch(/^docker-volume:\/\/code-ux-project-[a-f0-9]{12}-session-1$/);
   });
 
   it("builds host worktree paths when host execution mode is selected", () => {
@@ -37,7 +37,7 @@ describe("WorkspaceManager", () => {
 
     const result = await manager.resolveResumeWorktreePath("/repo/project", "session-1", "DOCKER");
 
-    expect(result).toMatch(/^docker-volume:\/\/sprint-os-project-[a-f0-9]{12}-session-1$/);
+    expect(result).toMatch(/^docker-volume:\/\/code-ux-project-[a-f0-9]{12}-session-1$/);
     expect(runCommandStrict).toHaveBeenCalledWith("docker", expect.arrayContaining(["volume", "inspect"]), expect.any(String));
   });
 
@@ -62,18 +62,18 @@ describe("WorkspaceManager", () => {
 
     const workspace = await manager.createSnapshotWorkspace("/repo/project", "session-1");
 
-    expect(workspace).toMatch(/^docker-volume:\/\/sprint-os-project-[a-f0-9]{12}-session-1-snapshot$/);
+    expect(workspace).toMatch(/^docker-volume:\/\/code-ux-project-[a-f0-9]{12}-session-1-snapshot$/);
     expect(runCommandStrict).toHaveBeenCalledWith(
       "docker",
-      expect.arrayContaining(["volume", "create", "--label", "sprint-os.workspace=true"]),
+      expect.arrayContaining(["volume", "create", "--label", "code-ux.workspace=true"]),
       expect.any(String),
     );
-    expect(runCommandStrict).toHaveBeenCalledWith("git", ["bundle", "create", "/tmp/sprint-os-bundle-123/repo.bundle", "--all"], "/repo/project");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["bundle", "create", "/tmp/code-ux-bundle-123/repo.bundle", "--all"], "/repo/project");
     const bootstrapCall = vi.mocked(runCommandStrict).mock.calls.find((call) => call[0] === "bash");
     const bootstrapCommand = bootstrapCall?.[1]?.join(" ") || "";
     expect(bootstrapCommand).toContain("--entrypoint sh");
     expect(bootstrapCommand).toContain("git init /workspace");
-    expect(bootstrapCommand).toContain("git -C /workspace symbolic-ref HEAD refs/heads/sprint-os-bootstrap-$$");
+    expect(bootstrapCommand).toContain("git -C /workspace symbolic-ref HEAD refs/heads/code-ux-bootstrap-$$");
     expect(bootstrapCommand).toContain("git -C /workspace fetch origin");
     expect(bootstrapCommand).toContain("+refs/*:refs/*");
     expect(bootstrapCommand).toContain("git -C /workspace config user.name");

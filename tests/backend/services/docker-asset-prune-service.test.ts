@@ -25,8 +25,8 @@ describe("DockerAssetPruneService", () => {
         return {
           ok: true,
           stdout: [
-            "sprint-os-repo-aaaaaaaaaaaa-cli-codex-active",
-            "sprint-os-repo-aaaaaaaaaaaa-cli-codex-stale",
+            "code-ux-repo-aaaaaaaaaaaa-cli-codex-active",
+            "code-ux-repo-aaaaaaaaaaaa-cli-codex-stale",
           ].join("\n"),
           stderr: "",
           code: 0,
@@ -36,7 +36,7 @@ describe("DockerAssetPruneService", () => {
         return {
           ok: true,
           stdout: [
-            "sprint-os-setup-cache:abc123",
+            "code-ux-setup-cache:abc123",
             "node:24-bookworm",
           ].join("\n"),
           stderr: "",
@@ -53,9 +53,9 @@ describe("DockerAssetPruneService", () => {
 
     const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
 
-    expect(result.prunedWorkspaceVolumes).toEqual(["sprint-os-repo-aaaaaaaaaaaa-cli-codex-stale"]);
-    expect(result.prunedSetupImages).toEqual(["sprint-os-setup-cache:abc123"]);
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["volume", "rm", "-f", "sprint-os-repo-aaaaaaaaaaaa-cli-codex-stale"], expect.any(String));
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["image", "rm", "-f", "sprint-os-setup-cache:abc123"], expect.any(String));
+    expect(result.prunedWorkspaceVolumes).toEqual(["code-ux-repo-aaaaaaaaaaaa-cli-codex-stale"]);
+    expect(result.prunedSetupImages).toEqual(["code-ux-setup-cache:abc123"]);
+    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["volume", "rm", "-f", "code-ux-repo-aaaaaaaaaaaa-cli-codex-stale"], expect.any(String));
+    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["image", "rm", "-f", "code-ux-setup-cache:abc123"], expect.any(String));
   });
 });

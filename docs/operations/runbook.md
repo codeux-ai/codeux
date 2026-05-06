@@ -17,7 +17,7 @@ If started without key:
 
 ## Sprint Execution Procedure
 
-1. Verify the repo is a healthy git checkout. Sprint OS now prepares the local feature branch automatically on orchestration start and will try to push it to `origin` when that remote exists.
+1. Verify the repo is a healthy git checkout. Code UX now prepares the local feature branch automatically on orchestration start and will try to push it to `origin` when that remote exists.
 2. Create or verify sprint tasks in the dashboard, or import them from markdown when needed.
 3. Ensure at least one worker is connected through `listen` for the project when you want supervised execution.
 4. Start the sprint from the dashboard.
@@ -32,7 +32,7 @@ If consecutive task creation failures reach threshold:
 - Re-run after corrective actions.
 
 ### Preflight blockers
-- Branch preflight blocker means Sprint OS could not prepare the local feature branch, or it could not push the branch to `origin` on a repo that expects a remote feature branch.
+- Branch preflight blocker means Code UX could not prepare the local feature branch, or it could not push the branch to `origin` on a repo that expects a remote feature branch.
 - Planning preflight blocker means subtask files are missing.
 
 ## Common Incidents
@@ -78,7 +78,7 @@ Checks:
 - If `Settings -> CLI Workflow -> Execution Mode` is `Docker`:
   - Is Docker daemon available (`docker ps`)?
   - Is the configured image pullable/runnable?
-  - If provider tools are not in the image, is a setup script configured, present at `.sprint-os/container/setup.sh`, or available through the bundled Sprint OS default script?
+  - If provider tools are not in the image, is a setup script configured, present at `.code-ux/container/setup.sh`, or available through the bundled Code UX default script?
   - If `Cache setup as image` is enabled, check session activity for cache hits or image-build failures before the worker command starts.
   - Check session activity for setup resolution details:
     - `Configured container setup script not found: ...`
@@ -94,17 +94,17 @@ Checks:
   - Runtime now syncs only those Claude auth files before launch, avoiding recursive copy of all `.claude` state.
   - For Gemini auth mounts, ensure host has `~/.gemini/settings.json` plus the expected auth files such as `oauth_creds.json`; runtime now syncs only those stable files and intentionally skips `.gemini/tmp`, `history`, and other mutable runtime trees.
   - Runtime merges generated Gemini and Claude MCP config into the copied auth settings, and appends the Codex MCP stanza into `~/.codex/config.toml` only when it is not already present, so enabling Docker auth mounts does not wipe host-side provider config.
-  - For WORKER-profile routes, a saved worker model is only forwarded when it belongs to the selected provider. If you switch a planning or worker run from Codex to Gemini/Claude, Sprint OS now falls back to that provider's own model instead of sending an incompatible model id like `gpt-5.3-codex` to Gemini or Claude.
+  - For WORKER-profile routes, a saved worker model is only forwarded when it belongs to the selected provider. If you switch a planning or worker run from Codex to Gemini/Claude, Code UX now falls back to that provider's own model instead of sending an incompatible model id like `gpt-5.3-codex` to Gemini or Claude.
   - Codex websocket `HTTP 5xx` failures are transport/server errors, not auth failures. If you see `responses_websocket` + `HTTP error: 500`, treat that as a transient provider-side failure rather than a stale local login.
   - If auth is expected from host login state, is the relevant Docker auth mount enabled and is its mount path valid?
   - Docker mode requires daemon-visible workspace paths. Runtime now prefers repo-scoped worktree paths for Docker sessions.
-  - Docker runtime state is stored under `~/.sprint-os/runtime/docker/<repo-hash>/` by default (override with `JULES_DOCKER_RUNTIME_ROOT`).
+  - Docker runtime state is stored under `~/.code-ux/runtime/docker/<repo-hash>/` by default (override with `JULES_DOCKER_RUNTIME_ROOT`).
   - Codex uses per-session container home directories under that runtime root to prevent stale state from previous Codex runs.
   - Runtime cleanup prunes stale `home-codex-*` session homes and stale shared runtime temp directories automatically once those sessions are no longer active.
 - GitHub credential sync still copies mount contents into a fixed dir (`~/.config/gh`); Gemini sync is now auth-only to avoid concurrent Docker sessions racing on shared `.gemini/tmp/tool-outputs`.
 - If provider output says "No file changes produced", runtime now still checks for unpushed worker-branch commits and will push/create (or reuse) the feature PR when commits exist.
 - CI autofix and merge-conflict virtual-worker runs now perform the same unpublished-commit check before they mark the attention item resolved, so provider-created local commits are pushed to GitHub even when the workspace diff is empty by the end of the run.
-- Workspace patch export includes newly created untracked files by marking them in a temporary Git index before diffing. The transient `.task-learnings.md` memory file and isolated provider home at `.sprint-os-home/` are excluded from the exported patch so memory capture, provider config, and provider cache state cannot be committed.
+- Workspace patch export includes newly created untracked files by marking them in a temporary Git index before diffing. The transient `.task-learnings.md` memory file and isolated provider home at `.code-ux-home/` are excluded from the exported patch so memory capture, provider config, and provider cache state cannot be committed.
 - For Docker-in-Docker or remote daemon path mismatches, configure:
     - `JULES_DOCKER_HOST_WORKSPACE_ROOT=<host-visible-repo-root>`
     - `JULES_DOCKER_HOST_HOME_ROOT=<host-visible-home-root>` (optional, for auth mounts)
@@ -131,17 +131,17 @@ Checks:
 - Are dependencies in final `completed`, or in `coding_completed` with no remaining merge work?
 - Any action-required session states (`AWAITING_*`, `PAUSED`)?
 - Is merge protocol disabled in step toggles?
-- For CLI-backed tasks, inspect the latest dispatch error. Sprint OS now treats unrecoverable Git auth/config failures as hard blockers instead of retryable failures.
+- For CLI-backed tasks, inspect the latest dispatch error. Code UX now treats unrecoverable Git auth/config failures as hard blockers instead of retryable failures.
   - Examples: unset GitHub token, `fatal: could not read Username for 'https://github.com'`, `Authentication failed`, or similar remote permission/auth errors during push/PR flow.
   - Expected behavior: the task run moves to `BLOCKED`, the sprint pauses, and the watch loop stops consuming tokens until credentials are fixed and the task or sprint is resumed manually.
-- For tasks shown as `QUOTA`, inspect the dispatch error and retry-after metadata. Sprint OS preserves quota/rate-limit dispatch errors during session sync; if no active retry timestamp remains, the task is requeued instead of staying in `QUOTA`. Repeated quota failures without a reset timer are still bounded by `cliWorkflow.maxQuotaRetriesWithoutTimer`.
+- For tasks shown as `QUOTA`, inspect the dispatch error and retry-after metadata. Code UX preserves quota/rate-limit dispatch errors during session sync; if no active retry timestamp remains, the task is requeued instead of staying in `QUOTA`. Repeated quota failures without a reset timer are still bounded by `cliWorkflow.maxQuotaRetriesWithoutTimer`.
 
 ### 7. Tasks completed but pipeline not progressing
 Checks:
 - Does the DB task record still show `coding_completed` because a feature PR or worker branch is still unresolved?
 - Did the merge settle on the feature branch, or was this a no-output task that should auto-promote to final `completed`?
 - Are CI / review gates still intentionally holding the task before final completion?
-- If the provider session actually ended `FAILED`, Sprint OS should now clear the stale session/PR runtime state and requeue the task instead of treating the task as completed just because a PR artifact exists.
+- If the provider session actually ended `FAILED`, Code UX should now clear the stale session/PR runtime state and requeue the task instead of treating the task as completed just because a PR artifact exists.
 
 ### 8. Tasks show RUNNING after MCP was interrupted
 Symptoms:
@@ -161,7 +161,7 @@ Checks:
 - Use activities APIs to inspect detailed session trace.
 - Re-enable steps after diagnosis to restore normal operation.
 - On startup, interrupted local CLI sessions (`cli-*` with `RUNNING`) are auto-recovered to `FAILED` so orchestration can safely retry them.
-- On startup, active `queued` and `running` sprint runs are resumed automatically in place; Sprint OS now restores the watch loop instead of requiring a manual sprint restart.
+- On startup, active `queued` and `running` sprint runs are resumed automatically in place; Code UX now restores the watch loop instead of requiring a manual sprint restart.
 - Local `docker_cli` task dispatches are rewritten to retryable failed state during that recovery, while durable Jules sessions and connected-worker dispatches remain attached to the resumed sprint run.
 - Failed CLI sessions can preserve their worktree for manual follow-up or assisted retry, based on CLI Workflow settings.
 - Dashboard task reruns now support a full clean reset:

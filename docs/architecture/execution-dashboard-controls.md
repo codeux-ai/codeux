@@ -4,7 +4,7 @@ This page describes the first DB-native runtime control actions exposed through 
 
 ## Scope
 
-The dashboard can now control execution state without bypassing the Sprint OS execution model.
+The dashboard can now control execution state without bypassing the Code UX execution model.
 
 Shipped controls:
 
@@ -32,17 +32,17 @@ The dashboard server now exposes:
 
 Starting from the dashboard does not invent a second orchestrator path.
 
-It schedules `sprintOrchestrator.execute({ action: "orchestrate", project_id, sprint_id, wait: true })` inside the Sprint OS server process and lets the normal lease and watch-loop rules apply.
+It schedules `sprintOrchestrator.execute({ action: "orchestrate", project_id, sprint_id, wait: true })` inside the Code UX server process and lets the normal lease and watch-loop rules apply.
 
 That means:
 
 - duplicate orchestration still respects sprint leases
 - a resumed sprint creates a fresh orchestration attempt rather than mutating old run history
 - dashboard-triggered execution and MCP-triggered execution converge on the same runtime model
-- Sprint OS now releases stale sprint leases left behind by already-terminal runs, paused runs, and fully-idle cancelled runs before starting a fresh orchestration attempt
+- Code UX now releases stale sprint leases left behind by already-terminal runs, paused runs, and fully-idle cancelled runs before starting a fresh orchestration attempt
 - if a lingering sprint lease still exists after stale-run recovery, the dashboard start request now fails fast instead of returning a misleading success while no new run can start
 - a sprint cannot be restarted while an older run is still `cancel_requested` with active dispatch shutdown still pending
-- if an older `cancel_requested` run is already idle, Sprint OS finalizes it to `cancelled` before allowing a fresh start, allowing prompt restart without leftover lease blocking
+- if an older `cancel_requested` run is already idle, Code UX finalizes it to `cancelled` before allowing a fresh start, allowing prompt restart without leftover lease blocking
 - dashboard-owned watch loops now continue through watch-loop output checkpoints instead of exiting and requiring a manual rerun; the checkpoint return behavior is preserved only for interactive MCP callers
 
 ### Pause Sprint Run
@@ -62,38 +62,38 @@ The dashboard:
 - cancels queued and claimed dispatches immediately
 - requests stop for any active running dispatches
 
-The watch loop exits as soon as it observes `cancel_requested`, so Sprint OS stops scheduling new work while active executors wind down.
+The watch loop exits as soon as it observes `cancel_requested`, so Code UX stops scheduling new work while active executors wind down.
 
-Once no active dispatches remain, Sprint OS finalizes the run to `cancelled` and writes `sprint_cancelled`.
+Once no active dispatches remain, Code UX finalizes the run to `cancelled` and writes `sprint_cancelled`.
 That finalization path now also releases any stale sprint lease for the sprint so a fully cancelled run can be restarted immediately.
 
 Unexpected orchestration exceptions no longer leave the sprint run stranded in `running`.
-If the background orchestrator throws after creating the sprint run, Sprint OS now marks that run `failed` and writes a `sprint_failed` event with reason `orchestrator_exception`.
+If the background orchestrator throws after creating the sprint run, Code UX now marks that run `failed` and writes a `sprint_failed` event with reason `orchestrator_exception`.
 
 This means `cancel_requested` is a real stop-pending state, not a terminal state:
 
-- Sprint OS will not start a fresh orchestration attempt while the cancelled run still has active dispatch work
-- Sprint OS will finalize an already-idle `cancel_requested` run immediately and allow restart
+- Code UX will not start a fresh orchestration attempt while the cancelled run still has active dispatch work
+- Code UX will finalize an already-idle `cancel_requested` run immediately and allow restart
 
 ## Stale Run Recovery
 
 The runtime cleanup sweep now reconciles stale execution records before they block the dashboard:
 
 - if a `task_run` is already terminal but its linked `task_dispatch` is still `queued`, `claimed`, `running`, or `cancel_requested`, the dispatch is reconciled to the same terminal outcome
-- if a `running` sprint run has no unexpired sprint lease, no active dispatches, and its heartbeat is stale, Sprint OS marks it `failed` with reason `orchestration_heartbeat_stalled`
+- if a `running` sprint run has no unexpired sprint lease, no active dispatches, and its heartbeat is stale, Code UX marks it `failed` with reason `orchestration_heartbeat_stalled`
 - expired sprint leases attached to those stale runs are released during cleanup so restart does not stay wedged behind dead ownership rows
 
 This prevents dead background orchestration attempts from leaving the dashboard permanently stuck in a fake active state.
 
 ## Startup Recovery
 
-Sprint OS now performs a dedicated execution recovery pass during server startup before the normal cleanup loop begins.
+Code UX now performs a dedicated execution recovery pass during server startup before the normal cleanup loop begins.
 
 That startup pass is intentionally different from stale-runtime cleanup:
 
 - `queued` and `running` sprint runs are resumed in place, keeping the original `sprint_run` id instead of creating a fresh restart run
-- Sprint OS releases the orphaned in-process sprint lease from the old server process before reacquiring a fresh lease for the resumed watch loop
-- if corrupted state left more than one active `queued` or `running` run for the same sprint, Sprint OS resumes only the newest run and fails older duplicates as superseded
+- Code UX releases the orphaned in-process sprint lease from the old server process before reacquiring a fresh lease for the resumed watch loop
+- if corrupted state left more than one active `queued` or `running` run for the same sprint, Code UX resumes only the newest run and fails older duplicates as superseded
 - interrupted local CLI task dispatches (`docker_cli`) are not treated as still running after process restart; they are rewritten to failed/retryable state so the resumed sprint loop can launch them again safely
 - remote/durable executor paths remain attached to the original run:
   - Jules sessions continue through session-sync against the remote provider state
@@ -126,7 +126,7 @@ Executor-specific behavior:
 
 - `docker_cli`: active local process receives an abort signal and transitions to `cancelled` when shutdown completes
 - `mcp_worker`: the next `update_task_dispatch` heartbeat returns `controlAction = "cancel"` so the worker can stop and report back through the same dispatch contract
-- `jules`: Sprint OS sends an in-session close message immediately and then finalizes the dispatch to `cancelled` without waiting for a separate Jules cancel API
+- `jules`: Code UX sends an in-session close message immediately and then finalizes the dispatch to `cancelled` without waiting for a separate Jules cancel API
 
 ### Retry Dispatch
 
@@ -134,18 +134,18 @@ Retry is currently limited to terminal dispatches.
 
 Retry uses the existing task rerun flow instead of inventing a dispatch-only executor path. That keeps retry semantics aligned with normal task restarts.
 
-When a dashboard task rerun has to create a fresh `running` sprint run because no active run exists, Sprint OS now resumes the watch loop automatically after launching the new task dispatch. That keeps post-task CI, merge-conflict handling, and sprint completion logic moving without requiring a second manual `orchestrate` click after the rerun finishes.
+When a dashboard task rerun has to create a fresh `running` sprint run because no active run exists, Code UX now resumes the watch loop automatically after launching the new task dispatch. That keeps post-task CI, merge-conflict handling, and sprint completion logic moving without requiring a second manual `orchestrate` click after the rerun finishes.
 
 ## Remaining Limitation
 
-Sprint OS now has cooperative stop behavior for local CLI work and connected workers, while Jules uses an immediate close-message path:
+Code UX now has cooperative stop behavior for local CLI work and connected workers, while Jules uses an immediate close-message path:
 
 - active Docker/CLI executions are aborted through the local process runner, not a kernel-level descendant tree manager
-- active Jules sessions still cannot be terminated through an official REST cancel API, so Sprint OS treats the close message as terminal and reconciles runtime state locally
+- active Jules sessions still cannot be terminated through an official REST cancel API, so Code UX treats the close message as terminal and reconciles runtime state locally
 - worker cancellation depends on the worker honoring the returned `controlAction = "cancel"` contract
 
 That limitation is explicit in the runtime model:
 
-- Sprint OS records `cancel_requested` separately from final `cancelled`
+- Code UX records `cancel_requested` separately from final `cancelled`
 - live runtime panels show stop-pending state while work is still shutting down
-- terminal outcomes are only written once the executor path actually reports back or exits, except for Jules where Sprint OS finalizes immediately after sending the close message
+- terminal outcomes are only written once the executor path actually reports back or exits, except for Jules where Code UX finalizes immediately after sending the close message

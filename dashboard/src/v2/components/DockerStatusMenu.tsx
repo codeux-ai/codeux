@@ -198,7 +198,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                         ) : (
                             <div className="flex flex-col p-1.5 gap-1.5">
                                 {containers.map(container => {
-                                    const commandLabel = container.labels?.["sprint-os.command"];
+                                    const commandLabel = container.labels?.["code-ux.command"];
 
                                     return (
                                         <button

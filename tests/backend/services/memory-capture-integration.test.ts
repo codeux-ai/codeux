@@ -25,7 +25,7 @@ describe("Memory Capture Integration", () => {
 
   beforeEach(() => {
     const dir = os.tmpdir();
-    const tmpDir = join(dir, `sprint-os-test-${Date.now()}`);
+    const tmpDir = join(dir, `code-ux-test-${Date.now()}`);
     fsSync.mkdirSync(tmpDir, { recursive: true });
     tempDirs.push(tmpDir);
     appDbStorage = new AppDbStorage(join(tmpDir, "app.db"));
@@ -53,7 +53,7 @@ describe("Memory Capture Integration", () => {
   });
 
   it("should capture memory learnings correctly using pipeline", async () => {
-    const worktreePath = await fs.mkdtemp(join(os.tmpdir(), "sprint-os-test-"));
+    const worktreePath = await fs.mkdtemp(join(os.tmpdir(), "code-ux-test-"));
     tempDirs.push(worktreePath);
 
     const learningsContent = `

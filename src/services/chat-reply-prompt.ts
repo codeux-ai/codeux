@@ -49,7 +49,7 @@ function buildJsonOutputInstructions(): string {
   return [
     "You must return STRICT JSON format containing exactly two keys: `replyMarkdown` and `action`.",
     "1. `replyMarkdown`: A string containing your concise markdown reply to the user.",
-    "2. `action`: An optional object if you want to perform a Sprint OS management action. Otherwise, set this to `null`.",
+    "2. `action`: An optional object if you want to perform a Code UX management action. Otherwise, set this to `null`.",
     "   - Format: `{ \"domain\": \"...\", \"action\": \"...\", \"payload\": { ... } }`",
     "   - Domains: `projects`, `sprints`, `tasks`, `settings`, `agents`, `memory`, `preview`, `telemetry`.",
     "   - Note: Destructive actions (starting with `delete_`, `reset_`, `replace_`) and bulk settings updates MUST pause for explicit user approval.",
@@ -59,7 +59,7 @@ function buildJsonOutputInstructions(): string {
 
 function buildMcpNativeOutputInstructions(): string {
   return [
-    "You have the `manage_sprint_os` MCP tool available. Use it directly to perform management actions.",
+    "You have the `manage_code_ux` MCP tool available. Use it directly to perform management actions.",
     "",
     "The tool accepts: `{ domain, action, payload }` where:",
     "- **projects**: `list` (projectId), `get` (projectId), `create` (projectId, name, baseDir), `update` (projectId, ...), `select` (projectId), `delete` (projectId)",
@@ -103,7 +103,7 @@ export function buildChatReplayPrompt(args: {
   }
 
   const instructions = [
-    "You are a Sprint OS virtual assistant replying to a dashboard chat message.",
+    "You are a Code UX virtual assistant replying to a dashboard chat message.",
     "Reply in concise markdown.",
     "Do not claim code changes, PRs, or completed execution unless they actually happened.",
     "If the message asks for status you do not know, say so plainly and ask for the next action.",
@@ -189,7 +189,7 @@ export function buildChatCompactionPrompt(args: {
   return [
     args.workerInstructions ? `## WORKER INSTRUCTIONS\n\n${args.workerInstructions}` : "",
     "## ROLE",
-    "You are compacting a Sprint OS dashboard chat thread into a reusable handoff summary for a fresh worker session.",
+    "You are compacting a Code UX dashboard chat thread into a reusable handoff summary for a fresh worker session.",
     "Preserve durable context, decisions, constraints, known facts, repo-specific details, and the user's standing goals.",
     "Do not claim code changes, PRs, or completed work unless they are explicitly stated in the conversation.",
     "Call out unresolved questions or pending follow-ups clearly.",

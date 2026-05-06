@@ -1,6 +1,6 @@
 # Qwen Code Integration
 
-Sprint OS supports Qwen Code as a first-class virtual CLI provider alongside Gemini, Codex, and Claude Code.
+Code UX supports Qwen Code as a first-class virtual CLI provider alongside Gemini, Codex, and Claude Code.
 
 ## Provider Identity
 
@@ -48,7 +48,7 @@ The Qwen runner launches with `--auth-type openai` and sets `OPENAI_BASE_URL` to
 - API key
 - model id from the AI Models routing panel
 
-For OpenAI-compatible providers, Sprint OS also forwards `OPENAI_API_KEY` and `OPENAI_BASE_URL` to the Qwen process. This covers DashScope compatible mode, OpenRouter, Ollama, vLLM, LM Studio, and similar endpoints.
+For OpenAI-compatible providers, Code UX also forwards `OPENAI_API_KEY` and `OPENAI_BASE_URL` to the Qwen process. This covers DashScope compatible mode, OpenRouter, Ollama, vLLM, LM Studio, and similar endpoints.
 
 ## Docker Runtime
 
@@ -63,7 +63,7 @@ The bootstrap merge is additive and preserves existing `mcpServers` entries.
 
 ## External Hints
 
-Sprint OS detects Qwen credentials from:
+Code UX detects Qwen credentials from:
 
 - `DASHSCOPE_API_KEY`
 - `BAILIAN_CODING_PLAN_API_KEY`

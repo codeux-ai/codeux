@@ -31,7 +31,7 @@ export interface PlanPromptArgs {
  */
 export function buildImprovePrompt(args: ImprovePromptArgs): string {
   const parts = [
-    "You are Sprint OS's Planning agent.",
+    "You are Code UX's Planning agent.",
     "",
     "## Planning Agent Instructions",
     args.planningAgent.instructionMarkdown.trim() || "Refine sprint prompts into crisp, implementation-ready scopes.",
@@ -74,7 +74,7 @@ export function buildImprovePrompt(args: ImprovePromptArgs): string {
 export function buildPlanPrompt(args: PlanPromptArgs): string {
   const memorySection = args.memoryContext ? `\n${args.memoryContext}\n` : "";
   const parts = [
-    "You are Sprint OS's Planning agent.",
+    "You are Code UX's Planning agent.",
     "",
     "## Planning Agent Instructions",
     args.planningAgent.instructionMarkdown.trim() || "Break sprint goals into actionable subtasks.",

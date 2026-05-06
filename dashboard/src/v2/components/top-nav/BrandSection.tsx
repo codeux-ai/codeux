@@ -27,7 +27,7 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
                     <Activity aria-hidden="true" className="w-4 h-4 text-signal-500 dark:text-void-900 relative z-10 group-hover:scale-110 transition-transform duration-500" strokeWidth={2.5} />
                 </div>
                 <span className="font-display font-bold text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-0.5 sm:flex">
-                    Sprint<span className="text-signal-500">OS</span>
+                    Code<span className="text-signal-500">UX</span>
                 </span>
             </Link>
         </div>

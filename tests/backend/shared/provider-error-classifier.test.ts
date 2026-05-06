@@ -60,7 +60,7 @@ describe("classifyProviderError", () => {
     it("does not misclassify Gemini runtime-home ENOENT as auth failure", () => {
       const result = makeResult(
         "",
-        "Failed to save project registry to /workspace/.sprint-os-home/.gemini/projects.json: Error: ENOENT: no such file or directory, rename '/workspace/.sprint-os-home/.gemini/projects.json.tmp' -> '/workspace/.sprint-os-home/.gemini/projects.json'",
+        "Failed to save project registry to /workspace/.code-ux-home/.gemini/projects.json: Error: ENOENT: no such file or directory, rename '/workspace/.code-ux-home/.gemini/projects.json.tmp' -> '/workspace/.code-ux-home/.gemini/projects.json'",
       );
       const classification = classifyProviderError("gemini", result);
       expect(classification.category).toBe("UNKNOWN");

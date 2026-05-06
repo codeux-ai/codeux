@@ -1,4 +1,4 @@
-import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
@@ -10,7 +10,7 @@ export class MemoryActions {
     private readonly embeddingModelManager: EmbeddingModelManager,
   ) {}
 
-  async handleMemoryAction(args: ManageSprintOsArgs): Promise<ManagementResponseEnvelope> {
+  async handleMemoryAction(args: ManageCodeUxArgs): Promise<ManagementResponseEnvelope> {
     const payload = args.payload || {};
 
     switch (args.action) {
@@ -125,7 +125,7 @@ export class MemoryActions {
     return { result: { memory } };
   }
 
-  private deleteMemory(args: ManageSprintOsArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
+  private deleteMemory(args: ManageCodeUxArgs, payload: Record<string, unknown>): ManagementResponseEnvelope {
     const memoryId = typeof payload.memoryId === "string" ? payload.memoryId : undefined;
     if (!memoryId) throw new Error("memoryId is required");
 

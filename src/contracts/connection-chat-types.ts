@@ -43,7 +43,7 @@ export interface McpConnectionRecord {
 }
 
 
-import type { ManageSprintOsArgs } from "./internal-management-types.js";
+import type { ManageCodeUxArgs } from "./internal-management-types.js";
 
 export interface ConversationRuntimeState {
   routeKind?: string;
@@ -57,7 +57,7 @@ export interface ConversationRuntimeState {
   replayRequired?: boolean;
   compactionSummary?: ConversationCompactionSummary | null;
   pendingManagementAction?: {
-    action: ManageSprintOsArgs;
+    action: ManageCodeUxArgs;
     approvalMessage: string;
     proposedAt: string;
   } | null;

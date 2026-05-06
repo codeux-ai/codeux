@@ -1,6 +1,6 @@
 # External MCP Worker Client
 
-This page documents the in-repo worker process shipped with Sprint OS.
+This page documents the in-repo worker process shipped with Code UX.
 
 The worker is now remote-capable at the control-plane layer through the Streamable HTTP worker gateway documented in [Streamable HTTP Worker Gateway](./streamable-http-worker-gateway.md).
 
@@ -12,21 +12,21 @@ The worker is not an embedded executor inside the dashboard server.
 
 It is a separate process:
 
-1. starts a headless Sprint OS server in `worker-host` mode over stdio on the worker machine
+1. starts a headless Code UX server in `worker-host` mode over stdio on the worker machine
 2. connects to that local worker-host with the MCP client SDK
-3. optionally connects to the main Sprint OS server over Streamable HTTP for the remote control plane
+3. optionally connects to the main Code UX server over Streamable HTTP for the remote control plane
 4. registers itself as `role = worker`
-5. claims queued `mcp_worker` dispatches from the main Sprint OS control plane
+5. claims queued `mcp_worker` dispatches from the main Code UX control plane
 6. executes the claimed task through the existing provider stack on the worker machine
 7. polls dashboard inbox threads on the same connection
 8. generates reply-only chat responses through the local provider stack
-9. heartbeats and finalizes dispatches back into the main Sprint OS database
+9. heartbeats and finalizes dispatches back into the main Code UX database
 
 That gives us a real worker contract without introducing a second execution model.
 
 ## Why Worker-Host Mode Still Exists
 
-Sprint OS no longer relies on stdio-only transport for worker control-plane traffic.
+Code UX no longer relies on stdio-only transport for worker control-plane traffic.
 
 However, workers still need a local execution runtime on the worker machine so they can:
 
@@ -35,7 +35,7 @@ However, workers still need a local execution runtime on the worker machine so t
 - access local repo state
 - generate reply-only dashboard content with local provider context
 
-For that reason, each worker process still starts a local Sprint OS server process and talks to it over stdio for execution hooks.
+For that reason, each worker process still starts a local Code UX server process and talks to it over stdio for execution hooks.
 
 To make that safe, the spawned server now supports:
 
@@ -49,7 +49,7 @@ This local worker-host runtime is now a helper for local execution, not the main
 
 The new CLI is:
 
-- `sprint-os-worker`
+- `code-ux-worker`
 
 Default behavior:
 
@@ -74,7 +74,7 @@ Useful flags:
 - `--server-arg`
 - `--server-cwd`
 
-Use `--server-url` to connect the worker control plane to the main Sprint OS Streamable HTTP gateway. Without it, the worker falls back to local-only control-plane behavior.
+Use `--server-url` to connect the worker control plane to the main Code UX Streamable HTTP gateway. Without it, the worker falls back to local-only control-plane behavior.
 
 ## Execution Path
 
@@ -82,9 +82,9 @@ The worker does not reconstruct tasks from markdown.
 
 For each claimed dispatch:
 
-1. the main Sprint OS control plane returns a `task_dispatch` event through `listen`
+1. the main Code UX control plane returns a `task_dispatch` event through `listen`
 2. the worker executes the dispatch locally through `execute_worker_dispatch` on its worker-host runtime
-3. Sprint OS starts the existing provider flow through `TaskService.startSprintTask(...)`
+3. Code UX starts the existing provider flow through `TaskService.startSprintTask(...)`
 4. CLI providers keep using the existing Docker/worktree/CI path
 5. Jules providers keep using the existing Jules session path
 6. the worker polls local execution progress with `get_session`
@@ -100,7 +100,7 @@ For each inbox message:
 
 1. `listen` on the control plane returns the pending dashboard message
 2. `generate_dashboard_reply` on the local worker-host resolves the project repo and settings
-3. Sprint OS selects a CLI-capable provider and builds a reply-only prompt
+3. Code UX selects a CLI-capable provider and builds a reply-only prompt
 4. the worker-host process generates markdown text locally
 5. `post_listen_reply` on the control plane stores the reply under the same connection record
 

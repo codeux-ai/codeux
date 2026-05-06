@@ -274,7 +274,7 @@ export class QualityAssuranceService {
 
       const fixInstructions = review.fixInstructions
         || (triggerType === "completed_task_without_pr" && review.shouldHavePr
-          ? "A feature PR is still required for this task. Ensure the branch contains the intended changes, push any missing commits, and create or update the feature PR so Sprint OS can track the work correctly."
+          ? "A feature PR is still required for this task. Ensure the branch contains the intended changes, push any missing commits, and create or update the feature PR so Code UX can track the work correctly."
           : null);
 
       const continued = fixInstructions
@@ -836,8 +836,8 @@ export class QualityAssuranceService {
     return this.deps.qaReviewRepository.updateRun(run.id, {
       status: "failed",
       summaryMarkdown: latestInvocation
-        ? `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation ${latestInvocation.status}. Sprint OS will retry the review.`
-        : `${RECOVERED_STALE_QA_SUMMARY_PREFIX} that never started its backing invocation. Sprint OS will retry the review.`,
+        ? `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation ${latestInvocation.status}. Code UX will retry the review.`
+        : `${RECOVERED_STALE_QA_SUMMARY_PREFIX} that never started its backing invocation. Code UX will retry the review.`,
       finishedAt: latestInvocation?.finishedAt || new Date().toISOString(),
     });
   }

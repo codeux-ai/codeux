@@ -1,14 +1,14 @@
 import * as fs from "fs";
 import * as path from "path";
 import { DatabaseAdapter } from "./db/database-adapter.js";
-import { getHomeSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { SqliteDatabaseAdapter } from "./db/sqlite-database-adapter.js";
 
 interface PayloadRow {
   payload: string;
 }
 
-const SETTINGS_DB_PATH = getHomeSprintOsPath("settings.db");
+const SETTINGS_DB_PATH = getHomeCodeUxPath("settings.db");
 
 const resolveSettingsDbPath = (dbPath?: string): string => {
   if (dbPath && dbPath.trim().length > 0) {

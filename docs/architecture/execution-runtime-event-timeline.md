@@ -4,7 +4,7 @@ This page describes the DB-native event stream that now powers the v2 live runti
 
 ## Purpose
 
-Sprint OS should not depend on ad hoc session polling responses as the primary dashboard live feed.
+Code UX should not depend on ad hoc session polling responses as the primary dashboard live feed.
 
 The durable runtime timeline now lives in sqlite:
 

@@ -16,12 +16,12 @@ afterEach(async () => {
 
 describe("AgentPresetSyncService", () => {
   it("imports project markdown agents and auto-syncs content on change", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-sync-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-sync-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
-    const agentPath = path.join(repoPath, ".sprint-os", "agents", "planning_agent.md");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    const agentPath = path.join(repoPath, ".code-ux", "agents", "planning_agent.md");
     await fs.writeFile(agentPath, "---json\n{\"avatarConfig\":{\"body\":\"alien\"},\"memoryTemplateOverrideEnabled\":true}\n---\nInitial planning instructions.\n", "utf8");
 
     const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -63,13 +63,13 @@ describe("AgentPresetSyncService", () => {
   });
 
   it("normalizes project_manager sources and resolves the Project manager agent", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-project-manager-agent-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-manager-agent-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "project_manager.md"),
+      path.join(repoPath, ".code-ux", "agents", "project_manager.md"),
       "Answer Jules clarification requests.\n",
       "utf8",
     );
@@ -103,12 +103,12 @@ describe("AgentPresetSyncService", () => {
   });
 
   it("repairs stale DB content when source metadata already matches", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-stale-content-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-stale-content-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
-    const agentPath = path.join(repoPath, ".sprint-os", "agents", "worker.md");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    const agentPath = path.join(repoPath, ".code-ux", "agents", "worker.md");
     await fs.writeFile(agentPath, "Real worker instructions.\n", "utf8");
 
     const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -155,11 +155,11 @@ describe("AgentPresetSyncService", () => {
   });
 
   it("writes dashboard-created and updated agents into the project agent directory", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-dashboard-write-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-dashboard-write-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    const defaultAgentsDir = path.join(dir, ".sprint-os", "agents");
+    const defaultAgentsDir = path.join(dir, ".code-ux", "agents");
     await fs.mkdir(defaultAgentsDir, { recursive: true });
     const defaultPlanningPath = path.join(defaultAgentsDir, "planning_agent.md");
     await fs.writeFile(defaultPlanningPath, "Default planning instructions.\n", "utf8");
@@ -186,7 +186,7 @@ describe("AgentPresetSyncService", () => {
       instructionMarkdown: "Handle execution work.\n",
       labels: ["execution"],
     });
-    const createdPath = path.join(repoPath, ".sprint-os", "agents", "worker_agent.md");
+    const createdPath = path.join(repoPath, ".code-ux", "agents", "worker_agent.md");
 
     expect(created).toMatchObject({
       name: "Worker Agent",
@@ -202,7 +202,7 @@ describe("AgentPresetSyncService", () => {
     const updated = await syncService.updateAgentPreset(planningAgent!.id, {
       instructionMarkdown: "Project-specific planning instructions.\n",
     });
-    const projectPlanningPath = path.join(repoPath, ".sprint-os", "agents", "planning_agent.md");
+    const projectPlanningPath = path.join(repoPath, ".code-ux", "agents", "planning_agent.md");
 
     expect(updated.sourceScope).toBe("project");
     expect(updated.syncStatus).toBe("synced");
@@ -211,11 +211,11 @@ describe("AgentPresetSyncService", () => {
   });
 
   it("respects disabled project file mirroring and supports sync-all for local drift", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-sync-all-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-sync-all-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
-    const projectAgentsDir = path.join(repoPath, ".sprint-os", "agents");
+    const projectAgentsDir = path.join(repoPath, ".code-ux", "agents");
     await fs.mkdir(projectAgentsDir, { recursive: true });
     const planningPath = path.join(projectAgentsDir, "planning_agent.md");
     const reviewerPath = path.join(projectAgentsDir, "Reviewer.md");
@@ -265,7 +265,7 @@ describe("AgentPresetSyncService", () => {
 
   describe("resolveTargetedPlanningAgent", () => {
     it("resolves to the default planning agent when no ID is provided", async () => {
-      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-resolve-"));
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-resolve-"));
       tempDirs.push(dir);
       const storage = new AppDbStorage(path.join(dir, "app.db"));
       const projectRepository = new ProjectManagementRepository(storage);
@@ -279,8 +279,8 @@ describe("AgentPresetSyncService", () => {
       });
 
       const repoPath = path.join(dir, "repo");
-      await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
-      await fs.writeFile(path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"), "Default planning instructions.", "utf8");
+      await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+      await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "planning_agent.md"), "Default planning instructions.", "utf8");
 
       const project = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: repoPath });
       const resolved = await syncService.resolveTargetedPlanningAgent(project.id);
@@ -288,7 +288,7 @@ describe("AgentPresetSyncService", () => {
     });
 
     it("resolves to a valid targeted planning preset with 'planning' label", async () => {
-      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-resolve-valid-"));
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-resolve-valid-"));
       tempDirs.push(dir);
       const storage = new AppDbStorage(path.join(dir, "app.db"));
       const projectRepository = new ProjectManagementRepository(storage);
@@ -314,7 +314,7 @@ describe("AgentPresetSyncService", () => {
     });
 
     it("falls back to default planning agent if targeted ID is missing or invalid", async () => {
-      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-resolve-fallback-"));
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-resolve-fallback-"));
       tempDirs.push(dir);
       const storage = new AppDbStorage(path.join(dir, "app.db"));
       const projectRepository = new ProjectManagementRepository(storage);
@@ -328,8 +328,8 @@ describe("AgentPresetSyncService", () => {
       });
 
       const repoPath = path.join(dir, "repo");
-      await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
-      await fs.writeFile(path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"), "Default instructions.", "utf8");
+      await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+      await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "planning_agent.md"), "Default instructions.", "utf8");
 
       const project = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: repoPath });
       const resolved = await syncService.resolveTargetedPlanningAgent(project.id, "non-existent-id");
@@ -337,7 +337,7 @@ describe("AgentPresetSyncService", () => {
     });
 
     it("falls back to default planning agent if targeted preset belongs to a different project", async () => {
-      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-resolve-cross-project-"));
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-resolve-cross-project-"));
       tempDirs.push(dir);
       const storage = new AppDbStorage(path.join(dir, "app.db"));
       const projectRepository = new ProjectManagementRepository(storage);
@@ -351,8 +351,8 @@ describe("AgentPresetSyncService", () => {
       });
 
       const repoPath = path.join(dir, "repo");
-      await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
-      await fs.writeFile(path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"), "Default instructions.", "utf8");
+      await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+      await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "planning_agent.md"), "Default instructions.", "utf8");
 
       const p1 = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: repoPath });
       const p2 = projectRepository.createProject({ name: "P2", sourceType: "local", sourceRef: "/p2" });
@@ -366,7 +366,7 @@ describe("AgentPresetSyncService", () => {
     });
 
     it("falls back to default planning agent if targeted preset lacks 'planning' label", async () => {
-      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-resolve-unlabeled-"));
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-resolve-unlabeled-"));
       tempDirs.push(dir);
       const storage = new AppDbStorage(path.join(dir, "app.db"));
       const projectRepository = new ProjectManagementRepository(storage);
@@ -380,8 +380,8 @@ describe("AgentPresetSyncService", () => {
       });
 
       const repoPath = path.join(dir, "repo");
-      await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
-      await fs.writeFile(path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"), "Default instructions.", "utf8");
+      await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+      await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "planning_agent.md"), "Default instructions.", "utf8");
 
       const project = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: repoPath });
       const unlabeled = agentPresetRepository.createAgentPreset(project.id, {

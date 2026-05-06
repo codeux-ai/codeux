@@ -197,7 +197,7 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.readWorkspaceFile).toHaveBeenCalledWith(
       "docker-volume://workspace-1",
-      "/workspace/.sprint-os-home/.claude/projects/-workspace/native-123.jsonl",
+      "/workspace/.code-ux-home/.claude/projects/-workspace/native-123.jsonl",
     );
     expect(result.usageTelemetry).toMatchObject({
       inputTokens: 12,

@@ -139,7 +139,7 @@ async function createServerHandle(): Promise<{
     retryDispatches: string[];
   };
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-dashboard-api-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-dashboard-api-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const repository = new ProjectManagementRepository(storage);
@@ -762,7 +762,7 @@ describe("dashboard project management API", () => {
     };
     expect(agentPreset.name).toBe("Project Manager");
     expect(agentPreset.sourceScope).toBe("project");
-    expect(agentPreset.sourcePath).toBe(path.join(project.baseDir, ".sprint-os", "agents", "project_manager.md"));
+    expect(agentPreset.sourcePath).toBe(path.join(project.baseDir, ".code-ux", "agents", "project_manager.md"));
     expect(agentPreset.avatarConfig).toEqual({ body: "bot", hair: "wires" });
     expect(agentPreset.memoryTemplateOverrideEnabled).toBe(true);
     expect(await fs.readFile(agentPreset.sourcePath!, "utf8")).toContain("Coordinate the sprint");
@@ -790,7 +790,7 @@ describe("dashboard project management API", () => {
       labels: ["execution"],
       sourceScope: "project",
     });
-    expect(updatedAgentPreset.sourcePath).toBe(path.join(project.baseDir, ".sprint-os", "agents", "worker.md"));
+    expect(updatedAgentPreset.sourcePath).toBe(path.join(project.baseDir, ".code-ux", "agents", "worker.md"));
     expect(await fs.readFile(updatedAgentPreset.sourcePath!, "utf8")).toContain("Updated worker markdown");
 
     await new Promise((resolve) => setTimeout(resolve, 20));

@@ -1,7 +1,7 @@
-import type { ManageSprintOsArgs } from "../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs } from "../contracts/internal-management-types.js";
 
 export interface PendingMcpApproval {
-  action: ManageSprintOsArgs;
+  action: ManageCodeUxArgs;
   approvalMessage: string;
   proposedAt: string;
 }

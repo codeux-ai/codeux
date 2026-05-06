@@ -9,7 +9,7 @@ Implemented in:
 - `src/mcp/management-tool-handler.ts`
 
 These cover:
-- `manage_sprint_os`
+- `manage_code_ux`
 
 ### Core tools
 Implemented in:
@@ -27,7 +27,7 @@ These cover:
 - `generate_dashboard_reply`
 
 ### Management
-- `manage_sprint_os`
+- `manage_code_ux`
 
 ## Registered Tools
 
@@ -75,7 +75,7 @@ Unknown tool names raise MCP `MethodNotFound`.
 
 ### Destructive Action Approvals
 
-Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) executed via the `manage_sprint_os` tool follow an explicit approval flow to prevent accidental data loss:
+Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) executed via the `manage_code_ux` tool follow an explicit approval flow to prevent accidental data loss:
 1. The initial call is sent without an `approval` block, or with `approval.confirmed: false`.
 2. The server short-circuits the action, returning an early envelope with `approvalRequired: true` and an explanatory `approvalMessage`.
 3. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
@@ -104,7 +104,7 @@ Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`
 ### Agent reply behavior
 - `generate_dashboard_reply` generates a reply-only markdown response for a dashboard inbox message using the editable `Worker` agent plus the project repo context.
 - `generate_dashboard_reply` also accepts `mode = compact_thread`, which treats the supplied markdown as a prepared compaction prompt and records the run as a `chat_compaction` invocation.
-- `post_listen_reply` accepts optional `metadata`, which Sprint OS uses for hidden control-plane replies such as connected-worker thread compaction.
+- `post_listen_reply` accepts optional `metadata`, which Code UX uses for hidden control-plane replies such as connected-worker thread compaction.
 
 ## Removed Legacy Surface
 
@@ -123,7 +123,7 @@ These legacy MCP tools are no longer registered:
 - `list_all_activities`
 - `task_agent`
 
-Sprint OS now keeps orchestration inside its own DB-backed dispatch layer. External MCP clients interact through listener, inbox, dispatch, and control-plane tools instead of direct Jules session management.
+Code UX now keeps orchestration inside its own DB-backed dispatch layer. External MCP clients interact through listener, inbox, dispatch, and control-plane tools instead of direct Jules session management.
 
 ## Stability Expectations
 
@@ -154,7 +154,7 @@ Behavior:
 
 ## Runtime Role Gating
 
-Sprint OS now also filters tools by runtime role before applying dashboard toggles.
+Code UX now also filters tools by runtime role before applying dashboard toggles.
 
 Current roles:
 
@@ -162,7 +162,7 @@ Current roles:
 
 Behavior:
 
-- Sprint OS now exposes only the project-manager tool surface
+- Code UX now exposes only the project-manager tool surface
 - the same tool list is used for stdio and HTTP transports
 
 This keeps Gemini CLI and other regular MCP clients compatible without cluttering them with worker-local controls.

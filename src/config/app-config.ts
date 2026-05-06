@@ -3,7 +3,7 @@ import * as path from "path";
 import os from "os";
 import { buildCandidatePaths } from "../shared/config/search-paths.js";
 import { readPort, readString } from "../shared/config/value-readers.js";
-import { getRelativeSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { getRelativeCodeUxPath } from "../shared/config/code-ux-paths.js";
 
 export interface AppConfig {
   apiKey: string | null;
@@ -100,7 +100,7 @@ export const hasHeadlessArg = (argv: string[]): boolean => {
 
 /**
  * Resolves the API key from environment variables or settings files.
- * Precedence: Env > .sprint-os/settings.json
+ * Precedence: Env > .code-ux/settings.json
  */
 export const apiKeyLoader = (projectRoot: string): string | null => {
   // 1. Environment variables
@@ -108,7 +108,7 @@ export const apiKeyLoader = (projectRoot: string): string | null => {
   if (envKey) return envKey.trim();
 
   // 2. Settings files
-  const settingsRelativePath = getRelativeSprintOsPath("settings.json");
+  const settingsRelativePath = getRelativeCodeUxPath("settings.json");
   const searchPaths = buildCandidatePaths(settingsRelativePath, projectRoot);
 
   for (const settingsPath of searchPaths) {

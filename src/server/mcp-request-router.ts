@@ -32,7 +32,7 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("pull_inbox", (input) => args.coreToolHandler.handlePullInbox(input))
     .register("post_listen_reply", (input) => args.coreToolHandler.handlePostListenReply(input))
     .register("generate_dashboard_reply", async (input) => (await args.agentToolHandler.handleGenerateDashboardReply(input)) as McpToolResponse)
-    .register("manage_sprint_os", async (input) => (await args.managementToolHandler.handleManageSprintOs(input)) as McpToolResponse);
+    .register("manage_code_ux", async (input) => (await args.managementToolHandler.handleManageCodeUx(input)) as McpToolResponse);
 
   args.server.setRequestHandler(ListToolsRequestSchema, async () => {
     logger?.debug("MCP list_tools request received");

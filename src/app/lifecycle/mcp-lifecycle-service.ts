@@ -7,7 +7,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
 import type { Logger } from "../../shared/logging/logger.js";
-import { SPRINT_OS_DISPLAY_NAME } from "../../shared/config/sprint-os-paths.js";
+import { CODE_UX_DISPLAY_NAME } from "../../shared/config/code-ux-paths.js";
 import type { RuntimeStartupRecoveryService } from "../../services/runtime-startup-recovery-service.js";
 
 export interface BootMcpTransportDeps {
@@ -96,13 +96,13 @@ export async function bootMcpTransport(deps: BootMcpTransportDeps): Promise<void
   }
 
   if (process.stdin.isTTY) {
-    deps.logger.info(`${SPRINT_OS_DISPLAY_NAME} running in standalone mode (stdin is a TTY) — MCP stdio transport disabled`);
+    deps.logger.info(`${CODE_UX_DISPLAY_NAME} running in standalone mode (stdin is a TTY) — MCP stdio transport disabled`);
     return;
   }
 
   const transport = new StdioServerTransport();
   await deps.server.connect(transport);
-  deps.logger.info(`${SPRINT_OS_DISPLAY_NAME} MCP server running on stdio`, { version: "1.2.0" });
+  deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP server running on stdio`, { version: "1.2.0" });
 }
 
 export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Promise<McpHttpTransportHandle | null> {
@@ -212,7 +212,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     deps.logger.error("Failed to recover runtime state on startup", { error });
   }
 
-  deps.logger.info(`${SPRINT_OS_DISPLAY_NAME} MCP HTTP server running`, {
+  deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTP server running`, {
     host: deps.host,
     port: resolvedPort,
     path: deps.path,

@@ -27,7 +27,7 @@ export default defineConfig({
       exclude: [
         "src/services/embedding-service.ts",
         "src/services/embedding-tokenizer.ts",
-        "src/worker/sprint-os-worker.ts",
+        "src/worker/code-ux-worker.ts",
         "src/server/dashboard-server.ts",
         "src/server/mcp-request-router.ts",
         "src/server/websocket-server.ts",

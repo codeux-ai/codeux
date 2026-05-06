@@ -22,11 +22,11 @@ export type InstructionTemplateId = keyof typeof INSTRUCTION_TEMPLATE_PATHS;
 export const INSTRUCTION_TEMPLATE_IDS = Object.keys(INSTRUCTION_TEMPLATE_PATHS) as InstructionTemplateId[];
 
 export const DEFAULT_INSTRUCTION_TEMPLATES: Record<InstructionTemplateId, string> = {
-  branchMissing: `### 🛑 ACTION REQUIRED: Branch Configuration Missing\n\nSprint OS could not prepare the feature branch \`{{feature_branch}}\` automatically.\n\n{{create_branch_step}}{{push_branch_step}}**Important:** Once these steps are completed, run this tool again to proceed with the \`{{action}}\` phase.`,
+  branchMissing: `### 🛑 ACTION REQUIRED: Branch Configuration Missing\n\nCode UX could not prepare the feature branch \`{{feature_branch}}\` automatically.\n\n{{create_branch_step}}{{push_branch_step}}**Important:** Once these steps are completed, run this tool again to proceed with the \`{{action}}\` phase.`,
   planningMissing: `### 🛑 ACTION REQUIRED: Sprint Planning Missing\n\nNo tasks were found for \`{{planning_target}}{{subtasks_dir}}\`. You must create or import sprint tasks before orchestration can begin.\n\n**Instruction:** Use the v2 dashboard Projects/Sprints/Tasks flow or markdown import to populate the sprint, then start or resume orchestration from the dashboard.`,
-  planningCreated: `### Planning Phase for Sprint {{sprint_number}}\n\nTarget sprint: \`{{planning_target}}{{subtasks_dir}}\`.\n\n{{planning_guide_block}}**Instructions for the calling Agent:**\n1. Open the v2 dashboard sprint and define the task breakdown there, or use markdown import.\n2. Keep dependencies explicit so Sprint OS can derive task readiness from the database.\n3. Use markdown only as import/export transport, not as runtime state.`,
+  planningCreated: `### Planning Phase for Sprint {{sprint_number}}\n\nTarget sprint: \`{{planning_target}}{{subtasks_dir}}\`.\n\n{{planning_guide_block}}**Instructions for the calling Agent:**\n1. Open the v2 dashboard sprint and define the task breakdown there, or use markdown import.\n2. Keep dependencies explicit so Code UX can derive task readiness from the database.\n3. Use markdown only as import/export transport, not as runtime state.`,
   mergeHeader: `\n### 📥 MERGE INSTRUCTIONS\n`,
-  mergeTask: `- **Task {{task_id}}** ({{provider}}): Use \`git_manager\` ({{git_manager_skill}}) to merge the task PR/branch into \`{{feature_branch}}\`.\n{{feature_ci_wait_line}}{{feature_comments_line}}- Mark \`{{task_reference}}\` as merged in Sprint OS if it was not auto-updated.\n- Resume the sprint from the dashboard once the merge is complete.`,
+  mergeTask: `- **Task {{task_id}}** ({{provider}}): Use \`git_manager\` ({{git_manager_skill}}) to merge the task PR/branch into \`{{feature_branch}}\`.\n{{feature_ci_wait_line}}{{feature_comments_line}}- Mark \`{{task_reference}}\` as merged in Code UX if it was not auto-updated.\n- Resume the sprint from the dashboard once the merge is complete.`,
   actionRequiredAgentHeader: `\n### 🤖 AGENT INTERVENTION NEEDED\n`,
   actionRequiredAgentTask: `- **Task {{task_id}}** ({{provider}}) is \`{{session_state}}\`.\n{{intervention_hint_line}}- Agent should resolve this in-session, then rerun orchestration.`,
   actionRequiredHumanHeader: `\n### ✋ HUMAN INTERVENTION NEEDED\n`,
@@ -36,7 +36,7 @@ export const DEFAULT_INSTRUCTION_TEMPLATES: Record<InstructionTemplateId, string
   watchNoMoreActions: `\n🛑 **Action Required:** Orchestration paused. No tasks are running and no pending tasks can be started.\n`,
   completionSteps: `\n## 🏁 SPRINT COMPLETION STEPS\n1. **Final Merge via Git Manager**: Use \`git_manager\` ({{git_manager_skill}}) to merge \`{{feature_branch}}\` into \`{{default_branch}}\`.\n{{main_ci_wait_line}}{{main_comments_line}}2. **Next Sprint**: Proceed with Sprint {{next_sprint}} once \`{{default_branch}}\` is green.\n`,
   cleanupAllMerged: `\n🧹 **Cleanup:** All tasks completed and merged successfully for \`{{planning_target}}\`.\n`,
-  cleanupFailed: `\n⚠️ **Cleanup Skipped:** Some tasks failed in \`{{planning_target}}\`. Review the Sprint OS live view and task run history.\n`,
+  cleanupFailed: `\n⚠️ **Cleanup Skipped:** Some tasks failed in \`{{planning_target}}\`. Review the Code UX live view and task run history.\n`,
   cleanupDeferred: `\n⏸️ **Cleanup Deferred:** Awaiting merges for completed tasks.\n`,
   cleanupEmpty: `\n⚠️ **Sprint Empty:** No subtasks found. The sprint has not been planned yet.\n`,
 };

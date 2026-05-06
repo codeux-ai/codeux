@@ -2,7 +2,7 @@ import { AppDbStorage } from "./src/repositories/app-db-storage.js";
 import path from "path";
 
 async function main() {
-  const dbPath = path.resolve(".sprint-os/data.db");
+  const dbPath = path.resolve(".code-ux/data.db");
   const storage = new AppDbStorage(dbPath);
   const db = storage.getDatabase();
   

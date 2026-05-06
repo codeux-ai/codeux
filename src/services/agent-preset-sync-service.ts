@@ -5,7 +5,7 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import { parseAgentMarkdown, formatAgentMarkdown } from "./agent-preset-markdown.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
-import { getHomeSprintOsPath, getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 interface AgentPresetSyncServiceDeps {
@@ -341,9 +341,9 @@ export class AgentPresetSyncService {
   private async readAgentSources(repoPath: string): Promise<AgentSourceFile[]> {
     const collected = new Map<string, AgentSourceFile>();
     const roots: Array<{ directory: string; scope: AgentSourceScope }> = [
-      { directory: getRepoSprintOsPath(repoPath, "agents"), scope: "project" },
-      { directory: getRepoSprintOsPath(this.deps.projectRoot, "agents"), scope: "default" },
-      { directory: getHomeSprintOsPath("agents"), scope: "home" },
+      { directory: getRepoCodeUxPath(repoPath, "agents"), scope: "project" },
+      { directory: getRepoCodeUxPath(this.deps.projectRoot, "agents"), scope: "default" },
+      { directory: getHomeCodeUxPath("agents"), scope: "home" },
     ];
 
     for (const root of roots) {
@@ -404,7 +404,7 @@ export class AgentPresetSyncService {
     await this.syncProjectAgents(projectId);
     const agent = this.deps.agentPresetRepository.findAgentPresetByName(projectId, name);
     if (!agent) {
-      throw new Error(`${name} not found. Add \`${suggestedFileName}\` under \`.sprint-os/agents\` or create it in Agents.`);
+      throw new Error(`${name} not found. Add \`${suggestedFileName}\` under \`.code-ux/agents\` or create it in Agents.`);
     }
     return await this.decorateAgentPreset(agent);
   }
@@ -440,7 +440,7 @@ export class AgentPresetSyncService {
     memoryTemplateMarkdown?: string;
     previousProjectSourcePath?: string | null;
   }): Promise<AgentSourceFile> {
-    const directory = getRepoSprintOsPath(args.projectBaseDir, "agents");
+    const directory = getRepoCodeUxPath(args.projectBaseDir, "agents");
     await fs.mkdir(directory, { recursive: true });
 
     const filePath = path.join(directory, `${this.toAgentFileStem(args.name)}.md`);

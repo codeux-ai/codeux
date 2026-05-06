@@ -103,7 +103,7 @@ describe("SprintOrchestrator - Automerge Logic", () => {
     });
 
     const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-automerge-"));
-    const subtasksDir = path.join(tmpRoot, ".sprint-os", "sprints", "sprint1-subtasks");
+    const subtasksDir = path.join(tmpRoot, ".code-ux", "sprints", "sprint1-subtasks");
     deps.projectManagementRepository.updateTask = vi.fn(async (_taskId: string, input: any) => {
       if (input.isMerged === true) {
         await deps.subtaskRepository.setMerged(subtasksDir, "01-task", true);

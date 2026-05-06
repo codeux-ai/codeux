@@ -67,7 +67,7 @@ export const ChatPageShell: FunctionComponent<{
           </div>
           <p className="max-w-2xl text-lg leading-relaxed text-slate-500 dark:text-slate-400">
             {selectedProject
-              ? `Messages sent here are stored in Sprint OS and routed toward listening MCP connections for ${selectedProject.name}.`
+              ? `Messages sent here are stored in Code UX and routed toward listening MCP connections for ${selectedProject.name}.`
               : "Select a project to inspect its conversation threads and route dashboard messages to connected listeners."}
           </p>
         </div>

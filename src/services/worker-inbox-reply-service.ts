@@ -17,7 +17,7 @@ import {
   normalizeProviderReply,
 } from "./chat-reply-prompt.js";
 
-import { getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import type { TaskService } from "./task-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { Logger } from "../shared/logging/logger.js";

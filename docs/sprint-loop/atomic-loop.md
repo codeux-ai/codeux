@@ -141,7 +141,7 @@ When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
 - Orchestrator enters continuous loop.
 - Wait interval is 120 seconds between cycles.
 - Output interval defaults to 300 seconds and is now used only as an internal checkpoint boundary for heartbeat/lease renewal inside the same sprint run.
-- Sprint OS does not stop at that boundary anymore. It keeps the same sprint run alive, renews its lease/heartbeat, resets the checkpoint window, and continues watching until a real terminal condition is reached.
+- Code UX does not stop at that boundary anymore. It keeps the same sprint run alive, renews its lease/heartbeat, resets the checkpoint window, and continues watching until a real terminal condition is reached.
 - Loop exits when:
   - all tasks terminal (`COMPLETED+merged` or `FAILED`), or
   - no runnable tasks remain, or
@@ -173,7 +173,7 @@ For `action=status`:
 - Main-branch auto-merge mode `ALWAYS` intentionally bypasses the main CI wait gate and attempts the final `feature -> default` merge as soon as the PR is not conflicted or review-blocked.
 - If `waitForJulesCiAutofix` is enabled and feature PR checks fail, the sprint loop notifies the Jules session with failed-check context, matched failed run ids/URLs, failed job names, and failed-job log excerpts (when available), then keeps the task in work state.
 - CI autofix retries are capped by `julesCiAutofixMaxRetries`; once exhausted, the task is escalated as intervention-needed with exact task id, PR URL, failed check names, failed run summary, and failed job names (focus: fix CI before merge).
-- Worker-owned CI autofix attempts are de-duplicated across watch-loop cycles. While a matching `ci_fix_required` attention item is still open or claimed, Sprint OS treats that attempt as in-flight, keeps the task in `RUNNING`, and does not consume another retry until the worker attempt resolves.
+- Worker-owned CI autofix attempts are de-duplicated across watch-loop cycles. While a matching `ci_fix_required` attention item is still open or claimed, Code UX treats that attempt as in-flight, keeps the task in `RUNNING`, and does not consume another retry until the worker attempt resolves.
 
 ## Files and Data Used
 

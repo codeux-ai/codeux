@@ -427,7 +427,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
               max={3600}
             />
           </Row>
-          <Row label="Max rate limit retries" description="Maximum retry attempts for rate-limited provider calls before Sprint OS fails the invocation." badge={getFieldBadge("cliWorkflow.maxRateLimitRetries")}>
+          <Row label="Max rate limit retries" description="Maximum retry attempts for rate-limited provider calls before Code UX fails the invocation." badge={getFieldBadge("cliWorkflow.maxRateLimitRetries")}>
             <NumberInput
               value={editableSettings.cliWorkflow.maxRateLimitRetries}
               onChange={(value) => updateEditableSettings((current) => ({

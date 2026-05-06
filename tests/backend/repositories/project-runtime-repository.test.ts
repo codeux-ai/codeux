@@ -19,7 +19,7 @@ async function createRepositories(): Promise<{
     scheduleProjectRuntimeStatusRefresh: ReturnType<typeof vi.fn>;
   };
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-runtime-repo-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-runtime-repo-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const realtimeNotifier = {

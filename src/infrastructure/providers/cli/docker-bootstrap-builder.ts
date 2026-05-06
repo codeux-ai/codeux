@@ -118,7 +118,7 @@ export class DockerBootstrapBuilder {
       "if [ \"$1\" = \"opencode\" ]; then",
       `  if [ -d "${OPENCODE_CREDENTIALS_MOUNT}" ]; then sync_dir_contents "${OPENCODE_CREDENTIALS_MOUNT}" "$HOME/.local/share/opencode" "opencode"; fi`,
       "fi",
-      `append_if_missing_literal "${CODEX_MCP_CONFIG_MOUNT}" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]" "codex mcp config"`,
+      `append_if_missing_literal "${CODEX_MCP_CONFIG_MOUNT}" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"`,
     ].join("\n");
   }
 

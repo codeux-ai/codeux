@@ -1,6 +1,6 @@
 # DB-Native Orchestration Foundation
 
-This page defines the execution architecture Sprint OS should build toward after the v2 dashboard model was finalized.
+This page defines the execution architecture Code UX should build toward after the v2 dashboard model was finalized.
 
 ## Core Principle
 
@@ -44,7 +44,7 @@ The old prototype treated execution as:
 - one sprint number
 - one file directory
 
-Sprint OS must treat execution as:
+Code UX must treat execution as:
 
 - one project
 - one sprint

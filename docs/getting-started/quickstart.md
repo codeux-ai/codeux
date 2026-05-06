@@ -79,7 +79,7 @@ curl http://localhost:4444/api/git-status
 ## Common First Workflow
 
 1. Configure system settings in dashboard, then adjust project settings and sprint overrides as needed.
-2. Create the sprint and tasks. Sprint OS now prepares the local feature branch automatically when orchestration starts, and it will attempt to push that branch to `origin` when the remote exists.
+2. Create the sprint and tasks. Code UX now prepares the local feature branch automatically when orchestration starts, and it will attempt to push that branch to `origin` when the remote exists.
 3. Create the sprint tasks in the dashboard, or import them from markdown if you are bringing in an existing sprint plan.
 4. Connect your worker with `listen` so it can monitor inbox, dispatch, and attention events for the project.
 5. Start the sprint from the dashboard.

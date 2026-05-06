@@ -72,7 +72,7 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
       <SectionCard title="Project Markdown Mirror" watermark="AGT" badge={getBadge("agents")}>
         <Row
           label="Save agent markdown to project directory"
-          description="When enabled, dashboard edits write a companion markdown file under `.sprint-os/agents` for the selected project. Default and home agent files are never modified."
+          description="When enabled, dashboard edits write a companion markdown file under `.code-ux/agents` for the selected project. Default and home agent files are never modified."
           badge={getFieldBadge("agents.saveToProjectDirectory")}
         >
           <Toggle
@@ -86,9 +86,9 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
             }))}
           />
         </Row>
-        <Row label="Mirror directory" description="Dashboard-authored markdown companions live alongside other project-local Sprint OS files." last>
+        <Row label="Mirror directory" description="Dashboard-authored markdown companions live alongside other project-local Code UX files." last>
           <div className="rounded-xl bg-black/[0.04] px-3 py-2 font-mono text-sm text-slate-600 dark:bg-white/[0.04] dark:text-slate-300">
-            .sprint-os/agents
+            .code-ux/agents
           </div>
         </Row>
       </SectionCard>
@@ -155,7 +155,7 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
       </NoticePanel>
 
       <NoticePanel title="Instruction template storage">
-        Sprint protocol and intervention templates are now stored in scoped settings. Built-in defaults stay in code, system scope defines the default copy, and project scope can override any template without relying on `.sprint-os/instructions`.
+        Sprint protocol and intervention templates are now stored in scoped settings. Built-in defaults stay in code, system scope defines the default copy, and project scope can override any template without relying on `.code-ux/instructions`.
       </NoticePanel>
     </div>
   );

@@ -1,13 +1,13 @@
 # Project Management Implementation
 
-This page describes the first shipped slice of the Sprint OS project-management refactor.
+This page describes the first shipped slice of the Code UX project-management refactor.
 
 ## Scope
 
 This implementation moves the v2 dashboard onto a database-backed `project -> sprint -> task` model.
 
 It includes:
-- Sprint OS app database tables in `~/.sprint-os/app.db`
+- Code UX app database tables in `~/.code-ux/app.db`
 - typed project/sprint/task repositories
 - selected-project persistence in sqlite
 - project-scoped dashboard HTTP endpoints
@@ -17,7 +17,7 @@ It includes:
 - DB-backed project-scoped Agents and Chat pages
 - first listen-loop MCP connection and conversation contracts
 - first DB-native sprint orchestration slice for project/sprint scope
-- `manage_sprint_os` MCP tool handlers for projects and sprints domain actions
+- `manage_code_ux` MCP tool handlers for projects and sprints domain actions
 
 It does not yet include:
 - multi-MCP scheduling

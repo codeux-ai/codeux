@@ -19,7 +19,7 @@ import { DockerBootstrapBuilder } from "./docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.js";
 import { DockerSetupImageCache } from "./docker-setup-image-cache.js";
 import { WorkspaceManager } from "./workspace-manager.js";
-import { getHomeSprintOsPath, getRepoSprintOsPath } from "../../../shared/config/sprint-os-paths.js";
+import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import {
   CLAUDE_CODE_MCP_CONFIG_MOUNT,
   CODEX_MCP_CONFIG_MOUNT,
@@ -29,7 +29,7 @@ import {
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../../../.sprint-os/container/setup.sh",
+  "../../../../.code-ux/container/setup.sh",
 );
 
 const CONTAINER_WORKSPACE_ROOT = "/workspace";
@@ -100,14 +100,14 @@ export class DockerRunner implements IDockerRunner {
   }): Promise<CommandResult> {
     const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, signal, onActivity } = input;
     const workspace = this.resolveWorkspace(cwd);
-    const runtimeHome = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".sprint-os-home");
+    const runtimeHome = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".code-ux-home");
     const runtimeNpmPrefix = pathPosix.join(runtimeHome, ".npm-global");
     const runtimeNpmCache = pathPosix.join(runtimeHome, ".npm-cache");
 
     await this.maybeLogDockerPathMappingHint(sessionId, repoPath, onActivity);
 
     const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, onActivity);
-    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-docker-"));
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-docker-"));
     const baseImage = workflowSettings.containerImage.trim() || "node:24-bookworm";
 
     try {
@@ -132,11 +132,11 @@ export class DockerRunner implements IDockerRunner {
         "--workdir",
         CONTAINER_WORKSPACE_ROOT,
         "--label",
-        `sprint-os.session-id=${sessionId}`,
+        `code-ux.session-id=${sessionId}`,
         "--label",
-        `sprint-os.command=${command}`,
+        `code-ux.command=${command}`,
         "--label",
-        `sprint-os.args=${args.join(" ")}`,
+        `code-ux.args=${args.join(" ")}`,
         "--mount",
         toDockerMountArg({
           source: workspace.volumeName,
@@ -292,8 +292,8 @@ export class DockerRunner implements IDockerRunner {
     }
 
     const candidates = [
-      getRepoSprintOsPath(repoPath, "container", "setup.sh"),
-      getHomeSprintOsPath("container", "setup.sh"),
+      getRepoCodeUxPath(repoPath, "container", "setup.sh"),
+      getHomeCodeUxPath("container", "setup.sh"),
       BUNDLED_CONTAINER_SETUP_SCRIPT,
     ];
     for (const candidate of candidates) {
@@ -326,7 +326,7 @@ export class DockerRunner implements IDockerRunner {
       const filePath = path.join(tempRoot, "claude-mcp.json");
       await fs.writeFile(filePath, JSON.stringify({
         mcpServers: {
-          sprint_os: {
+          code_ux: {
             type: "http",
             url: conn.url,
             ...(Object.keys(headers).length > 0 ? { headers } : {}),
@@ -340,7 +340,7 @@ export class DockerRunner implements IDockerRunner {
       const filePath = path.join(tempRoot, "gemini-settings.json");
       await fs.writeFile(filePath, JSON.stringify({
         mcpServers: {
-          sprint_os: {
+          code_ux: {
             httpUrl: conn.url,
             ...(Object.keys(headers).length > 0 ? { headers } : {}),
           },
@@ -353,7 +353,7 @@ export class DockerRunner implements IDockerRunner {
       const filePath = path.join(tempRoot, "qwen-settings.json");
       await fs.writeFile(filePath, JSON.stringify({
         mcpServers: {
-          sprint_os: {
+          code_ux: {
             httpUrl: conn.url,
             ...(Object.keys(headers).length > 0 ? { headers } : {}),
           },
@@ -367,7 +367,7 @@ export class DockerRunner implements IDockerRunner {
     }
 
     const filePath = path.join(tempRoot, "codex-config.toml");
-    const lines = ["[mcp_servers.sprint-os]", `url = "${conn.url}"`];
+    const lines = ["[mcp_servers.code-ux]", `url = "${conn.url}"`];
     if (conn.authToken) {
       lines.push(`http_headers = { "Authorization" = "Bearer ${conn.authToken}" }`);
     }

@@ -17,7 +17,7 @@ afterEach(async () => {
 describe("runSessionSyncStep", () => {
 
   it("fetches full transcript and syncs usage and git metrics on terminal session state without duplication", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-session-sync-metrics-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-metrics-"));
     tempDirs.push(dir);
 
     const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -401,7 +401,7 @@ describe("runSessionSyncStep", () => {
   });
 
   it("syncs provider session state and activities into task runs", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-session-sync-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-"));
     tempDirs.push(dir);
 
     const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -535,7 +535,7 @@ describe("runSessionSyncStep", () => {
   });
 
   it("preserves the first terminal finishedAt during later completed-session syncs", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-session-sync-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-"));
     tempDirs.push(dir);
 
     const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -765,7 +765,7 @@ describe("runSessionSyncStep", () => {
   });
 
   it("requeues quota sessions without an active cooldown instead of leaving them stuck", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-session-sync-quota-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-quota-"));
     tempDirs.push(dir);
 
     const storage = new AppDbStorage(path.join(dir, "app.db"));

@@ -39,7 +39,7 @@ describe("DockerRunner", () => {
   beforeEach(() => {
     runner = new DockerRunner();
     vi.clearAllMocks();
-    vi.mocked(fs.mkdtemp).mockResolvedValue("/tmp/sprint-os-docker-123");
+    vi.mocked(fs.mkdtemp).mockResolvedValue("/tmp/code-ux-docker-123");
     vi.mocked(fs.rm).mockResolvedValue(undefined);
     vi.mocked(fs.stat).mockResolvedValue({ uid: 1000, gid: 1000 } as any);
     vi.mocked(fs.access).mockRejectedValue(new Error("missing"));
@@ -107,7 +107,7 @@ describe("DockerRunner", () => {
         "--workdir",
         "/workspace",
         "--label",
-        "sprint-os.session-id=session-1",
+        "code-ux.session-id=session-1",
       ]),
       expect.any(String),
       expect.any(Object),
@@ -115,7 +115,7 @@ describe("DockerRunner", () => {
     );
     const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
     expect(dockerArgs.some((arg) => arg.includes("type=volume") && arg.includes("source=workspace-1"))).toBe(true);
-    expect(dockerArgs).toContain("HOME=/workspace/.sprint-os-home");
+    expect(dockerArgs).toContain("HOME=/workspace/.code-ux-home");
   });
 
   it("stages generated Gemini MCP config outside runtime home and copies it during bootstrap", async () => {
@@ -146,7 +146,7 @@ describe("DockerRunner", () => {
       expect.stringContaining("target=/opt/provider-config/gemini-settings.json"),
     ]));
     expect(dockerArgs).not.toEqual(expect.arrayContaining([
-      expect.stringContaining("target=/workspace/.sprint-os-home/.gemini/settings.json"),
+      expect.stringContaining("target=/workspace/.code-ux-home/.gemini/settings.json"),
     ]));
   });
 });

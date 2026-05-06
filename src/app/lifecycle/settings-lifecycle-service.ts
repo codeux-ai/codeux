@@ -3,7 +3,7 @@ import type { Logger } from "../../shared/logging/logger.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import type { RuntimeContext } from "../runtime-context.js";
 import { buildCandidatePaths } from "../../shared/config/search-paths.js";
-import { getRelativeSprintOsPath } from "../../shared/config/sprint-os-paths.js";
+import { getRelativeCodeUxPath } from "../../shared/config/code-ux-paths.js";
 
 export interface BootSettingsDeps {
   runtimeContext: RuntimeContext;
@@ -22,7 +22,7 @@ async function loadSettings(runtimeContext: RuntimeContext, projectRoot: string,
   }
 
   // 2. Higher priorities: settings.json files (Reverse order for correct override: HOME -> PROJECT -> CWD)
-  const searchPaths = getSearchPaths(projectRoot, getRelativeSprintOsPath("settings.json")).reverse();
+  const searchPaths = getSearchPaths(projectRoot, getRelativeCodeUxPath("settings.json")).reverse();
   for (const settingsPath of searchPaths) {
     try {
       await fs.access(settingsPath);

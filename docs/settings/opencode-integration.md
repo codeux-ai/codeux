@@ -1,6 +1,6 @@
 # OpenCode Integration
 
-Sprint OS supports OpenCode as a first-class virtual CLI provider alongside Gemini, Codex, Claude Code, and Qwen Code.
+Code UX supports OpenCode as a first-class virtual CLI provider alongside Gemini, Codex, Claude Code, and Qwen Code.
 
 ## Runtime Contract
 
@@ -35,7 +35,7 @@ openai/gpt-5
 github-copilot/gpt-5
 ```
 
-Sprint OS injects an inline OpenCode config through `OPENCODE_CONFIG_CONTENT` and maps the stored provider key to `OPENCODE_API_KEY`. The configured `openCodeEnvKey` is still used as an import hint when the saved key is empty.
+Code UX injects an inline OpenCode config through `OPENCODE_CONFIG_CONTENT` and maps the stored provider key to `OPENCODE_API_KEY`. The configured `openCodeEnvKey` is still used as an import hint when the saved key is empty.
 
 ### Custom Provider
 
@@ -67,12 +67,12 @@ This covers OpenRouter, LiteLLM, Ollama, vLLM, LM Studio, private gateways, and 
 
 ## MCP Tools
 
-OpenCode reads MCP servers from the `mcp` section of its config. Sprint OS injects the management MCP server through the same `OPENCODE_CONFIG_CONTENT` payload used for provider settings:
+OpenCode reads MCP servers from the `mcp` section of its config. Code UX injects the management MCP server through the same `OPENCODE_CONFIG_CONTENT` payload used for provider settings:
 
 ```json
 {
   "mcp": {
-    "sprint_os": {
+    "code_ux": {
       "type": "remote",
       "url": "http://127.0.0.1:4444/mcp",
       "enabled": true
@@ -81,7 +81,7 @@ OpenCode reads MCP servers from the `mcp` section of its config. Sprint OS injec
 }
 ```
 
-When the runtime connection has a bearer token, Sprint OS includes an `Authorization` header in that MCP entry.
+When the runtime connection has a bearer token, Code UX includes an `Authorization` header in that MCP entry.
 
 ## Docker Execution
 
@@ -92,7 +92,7 @@ Docker execution prepares OpenCode in the shared CLI bootstrap path:
 - passes `OPENCODE_API_KEY` and `OPENCODE_CONFIG_CONTENT` into the container
 - installs OpenCode if `opencode` is missing and fallback installs are enabled
 
-The generated config is inline instead of written into a permanent host config file. This keeps one named Sprint OS provider instance from overwriting another instance's OpenCode settings.
+The generated config is inline instead of written into a permanent host config file. This keeps one named Code UX provider instance from overwriting another instance's OpenCode settings.
 
 ## Dashboard Surface
 

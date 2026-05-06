@@ -8,7 +8,7 @@ import { randomUUID } from "crypto";
 
 describe("queryProjectGitStats", () => {
   it("aggregates git metrics and PR counts accurately over multiple events, handling distinct PR deduplication", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-git-stats-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-git-stats-"));
     // This auto-runs the real migrations to give us an exact schema
     const storage = new AppDbStorage(path.join(dir, "app.db"));
     const db = storage.db;
@@ -99,7 +99,7 @@ describe("queryProjectGitStats", () => {
   });
 
   it("deduplicates metrics and PR/merged counts across multiple task runs in different time buckets", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-git-stats-cross-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-git-stats-cross-"));
     const storage = new AppDbStorage(path.join(dir, "app.db"));
     const db = storage.db;
 

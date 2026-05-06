@@ -8,7 +8,7 @@ import { DockerRuntimePruneService } from "../../../src/services/docker-runtime-
 const tempDirs: string[] = [];
 
 const makeTempDir = async (): Promise<string> => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-docker-runtime-prune-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-docker-runtime-prune-"));
   tempDirs.push(dir);
   return dir;
 };

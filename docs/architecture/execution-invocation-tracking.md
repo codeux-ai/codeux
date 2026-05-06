@@ -36,9 +36,9 @@ When an invocation or its messages are created/updated, the server emits a proje
 
 CLI-backed provider invocations now persist their workflow execution mode alongside the session id used to launch the worker.
 
-On Sprint OS restart, runtime recovery reconciles any still-`running` CLI provider invocations before the dashboard rehydrates:
+On Code UX restart, runtime recovery reconciles any still-`running` CLI provider invocations before the dashboard rehydrates:
 - tracked background CLI sessions recovered from `session-tracking.db` are marked failed because the original owning process exited
-- Docker-backed invocations are checked against active Docker containers using the `sprint-os.session-id` label; if no active container remains, the provider invocation and linked execution invocation are failed and annotated with a recovery message
+- Docker-backed invocations are checked against active Docker containers using the `code-ux.session-id` label; if no active container remains, the provider invocation and linked execution invocation are failed and annotated with a recovery message
 
 This prevents stale `qa_review` or worker invocations from remaining indefinitely `running` after the underlying container or host process has already exited.
 

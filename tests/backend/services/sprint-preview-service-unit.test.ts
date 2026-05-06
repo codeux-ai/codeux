@@ -58,12 +58,12 @@ vi.mock("../../../src/git/sprint-branch-scheme.js", () => ({
 }));
 
 vi.mock("../../../src/services/cli-workflow-utils.js", () => ({
-  CONTAINER_SETUP_SCRIPT: "/opt/sprint-os/setup.sh",
+  CONTAINER_SETUP_SCRIPT: "/opt/code-ux/setup.sh",
 }));
 
-vi.mock("../../../src/shared/config/sprint-os-paths.js", () => ({
-  getHomeSprintOsPath: vi.fn(() => "/home/.sprint-os/container/setup.sh"),
-  getRepoSprintOsPath: vi.fn(() => "/repo/.sprint-os/container/setup.sh"),
+vi.mock("../../../src/shared/config/code-ux-paths.js", () => ({
+  getHomeCodeUxPath: vi.fn(() => "/home/.code-ux/container/setup.sh"),
+  getRepoCodeUxPath: vi.fn(() => "/repo/.code-ux/container/setup.sh"),
 }));
 
 vi.mock("fs/promises", async () => {
@@ -95,7 +95,7 @@ function makePreviewSettings(overrides: Record<string, unknown> = {}) {
     hostPortRangeStart: 5555,
     hostPortRangeEnd: 5560,
     containerAppPort: 3000,
-    startupScriptPath: ".sprint-os/browser/start-preview.sh",
+    startupScriptPath: ".code-ux/browser/start-preview.sh",
     ...overrides,
   };
 }
@@ -112,10 +112,10 @@ function makeSession(overrides: Partial<SprintPreviewSession> = {}): SprintPrevi
     hostPort: 5555,
     containerAppPort: 3000,
     containerId: "abc123",
-    containerName: "sprint-os-preview-test",
+    containerName: "code-ux-preview-test",
     worktreePath: "/workspace",
     featureBranch: "feature/sprint-1",
-    startupScriptPath: ".sprint-os/browser/start-preview.sh",
+    startupScriptPath: ".code-ux/browser/start-preview.sh",
     startupMode: "auto",
     installCommand: "npm ci",
     buildCommand: "npm run build",
@@ -265,7 +265,7 @@ describe("SprintPreviewService unit tests", () => {
       expect(result.status).toBe("stopped");
       expect(runCommandStrict).toHaveBeenCalledWith(
         "docker",
-        ["rm", "-f", expect.stringContaining("sprint-os-preview")],
+        ["rm", "-f", expect.stringContaining("code-ux-preview")],
         expect.any(String),
       );
     });
@@ -363,7 +363,7 @@ describe("SprintPreviewService unit tests", () => {
       // refreshRuntimeState calls listPreviewContainers which calls docker ps
       vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
         if (command === "docker" && args?.[0] === "ps") {
-          const line = `abc123\tsprint-os-preview-test\tUp 5 minutes\tproj-1\tsprint-1\tsession-1`;
+          const line = `abc123\tcode-ux-preview-test\tUp 5 minutes\tproj-1\tsprint-1\tsession-1`;
           return { exitCode: 0, stdout: line, stderr: "", durationMs: 1 };
         }
         if (command === "docker" && args?.[0] === "logs") {
@@ -829,7 +829,7 @@ describe("SprintPreviewService unit tests", () => {
     it("buildContainerName produces valid docker name", () => {
       const service = new SprintPreviewService(deps as any);
       const name = (service as any).buildContainerName("My Project!", "sprint-42");
-      expect(name).toMatch(/^sprint-os-preview-/);
+      expect(name).toMatch(/^code-ux-preview-/);
       expect(name.length).toBeLessThanOrEqual(63);
       expect(name).not.toMatch(/[^a-z0-9_.-]/);
     });
@@ -974,7 +974,7 @@ describe("SprintPreviewService unit tests", () => {
 
       vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
         if (command === "docker" && args?.[0] === "ps") {
-          const line = `abc123\tsprint-os-preview-test\tExited (1) 5 minutes ago\tproj-1\tsprint-1\tsession-1`;
+          const line = `abc123\tcode-ux-preview-test\tExited (1) 5 minutes ago\tproj-1\tsprint-1\tsession-1`;
           return { exitCode: 0, stdout: line, stderr: "", durationMs: 1 };
         }
         if (command === "docker" && args?.[0] === "logs") {
@@ -1226,7 +1226,7 @@ describe("SprintPreviewService unit tests", () => {
 
       const service = new SprintPreviewService(deps as any);
       const result = await (service as any).prepareStartupScript("/repo", {
-        startupScriptPath: ".sprint-os/browser/start-preview.sh",
+        startupScriptPath: ".code-ux/browser/start-preview.sh",
       });
 
       expect(result.mode).toBe("auto");
@@ -1241,7 +1241,7 @@ describe("SprintPreviewService unit tests", () => {
 
       const service = new SprintPreviewService(deps as any);
       const result = await (service as any).prepareStartupScript("/repo", {
-        startupScriptPath: ".sprint-os/browser/start-preview.sh",
+        startupScriptPath: ".code-ux/browser/start-preview.sh",
       });
 
       expect(result.mode).toBe("script");
@@ -1345,7 +1345,7 @@ describe("SprintPreviewService unit tests", () => {
         if (command === "docker" && args?.[0] === "inspect") {
           return {
             exitCode: 0,
-            stdout: '{}\t["/bin/sh","-c","bash /tmp/sprint-os-setup.sh && rm -f /tmp/sprint-os-setup.sh"]',
+            stdout: '{}\t["/bin/sh","-c","bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh"]',
             stderr: "",
             durationMs: 1,
           };

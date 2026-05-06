@@ -7,7 +7,7 @@ Implemented
 
 Virtual workers are now the only worker runtime.
 
-Instead of keeping an external worker in a long-lived `listen` loop, Sprint OS now:
+Instead of keeping an external worker in a long-lived `listen` loop, Code UX now:
 
 - detect open worker-owned attention
 - create an ephemeral internal `virtual_cli` worker endpoint
@@ -59,7 +59,7 @@ Virtual workers create `worker_endpoints.endpoint_type = virtual_cli` and do not
 Each virtual cycle is project-scoped and one-shot:
 
 1. Scheduler notices worker work for a project.
-2. Sprint OS creates an ephemeral virtual endpoint and project assignment.
+2. Code UX creates an ephemeral virtual endpoint and project assignment.
 3. The cycle handles one worker-owned attention item.
 4. It handles one item.
 5. It releases the assignment and deletes the endpoint.
@@ -80,7 +80,7 @@ Today virtual workers handle:
 - worker-owned `ci_fix_required` attention
 - worker-owned `action_required` attention that can be auto-answered or auto-approved
 
-For planning flows, Sprint OS (`src/services/planning-agent-service.ts`):
+For planning flows, Code UX (`src/services/planning-agent-service.ts`):
 
 - runs the Planning agent prompt through the configured virtual worker CLI
 - injects the Planning agent's current long-term memory plus the current sprint's short-term learnings into the prompt when memory is enabled
@@ -92,7 +92,7 @@ For planning flows, Sprint OS (`src/services/planning-agent-service.ts`):
 - when Docker execution mode is active, planning runs inside a snapshot workspace volume and captures `.task-learnings.md` back out of that snapshot instead of trying to read host files directly
 - allows sprint compose, improve, and `Plan & Start` to work even when no live MCP listener is attached
 
-For merge conflicts, Sprint OS:
+For merge conflicts, Code UX:
 
 - prepares an isolated Docker workspace on the PR source branch
 - seeds that Docker workspace from an exact-ref Git bundle fetch instead of cloning the bundle, using a private bootstrap `HEAD` ref so checked-out default branches cannot block the fetch; this prevents stale local branches from shadowing newer `origin/*` target refs during merge preparation
@@ -101,7 +101,7 @@ For merge conflicts, Sprint OS:
 - merges the target branch into it
 - runs the selected CLI provider against the conflict context plus the worker agent's current long-term and sprint memory context when available
 - accepts both the original merge-conflict prompt payload fields (`currentTaskPrompt`, `mergedTaskPrompts`) and the newer task-context payload fields (`currentTask`, `featureBranchTaskContexts`) when constructing that provider prompt
-- requires the worker to write durable learnings to `.task-learnings.md`, which Sprint OS captures back into memory after the conflict is resolved
+- requires the worker to write durable learnings to `.task-learnings.md`, which Code UX captures back into memory after the conflict is resolved
 - verifies conflicts are resolved
 - verifies the resolved source branch actually contains `origin/<targetBranch>` before clearing the merge-conflict attention item
 - exports a Git patch artifact from the isolated workspace
@@ -109,13 +109,13 @@ For merge conflicts, Sprint OS:
 
 Merge-conflict handling intentionally stays isolated from the original task workspace. It always runs in a dedicated ephemeral Docker workspace so conflict resolution cannot pollute the task's normal follow-up workspace.
 
-For CI autofix, Sprint OS now prefers reusing the existing task workspace when one is still available for the same worker branch. That allows follow-up CI fixes to continue in the same workspace context instead of creating an unnecessary new Docker volume for every CI rerun. The CI-fix prompt also receives the worker agent's current memory context and writes new durable learnings back into memory from the reused workspace.
+For CI autofix, Code UX now prefers reusing the existing task workspace when one is still available for the same worker branch. That allows follow-up CI fixes to continue in the same workspace context instead of creating an unnecessary new Docker volume for every CI rerun. The CI-fix prompt also receives the worker agent's current memory context and writes new durable learnings back into memory from the reused workspace.
 
-Workspace artifact export captures both tracked edits and newly created untracked files from the worker workspace. This matters for CI autofix follow-ups that add missing modules or tests after the original task run; the exporter uses a temporary Git index for untracked files and still excludes the transient `.task-learnings.md` memory-capture file and `.sprint-os-home/` provider home from commits.
+Workspace artifact export captures both tracked edits and newly created untracked files from the worker workspace. This matters for CI autofix follow-ups that add missing modules or tests after the original task run; the exporter uses a temporary Git index for untracked files and still excludes the transient `.task-learnings.md` memory-capture file and `.code-ux-home/` provider home from commits.
 
-If Docker is unavailable when the CI autofix flow starts, Sprint OS degrades that specific repair run to a host-backed worktree instead of looping on an unrecoverable Docker failure. Merge-conflict resolution does not use this fallback: it remains Docker-only so conflict repair stays isolated from the reusable task workspace.
+If Docker is unavailable when the CI autofix flow starts, Code UX degrades that specific repair run to a host-backed worktree instead of looping on an unrecoverable Docker failure. Merge-conflict resolution does not use this fallback: it remains Docker-only so conflict repair stays isolated from the reusable task workspace.
 
-For QA review execution, Sprint OS now runs the review itself against a fresh snapshot workspace rather than the mutable task workspace. This keeps review inspection isolated while still allowing QA-requested coding follow-ups to continue in the original task workspace when appropriate. Both the review agent and QA-requested coding follow-ups now receive their current memory context, and QA follow-up edits capture fresh learnings back into memory from the actual workspace used for the fix.
+For QA review execution, Code UX now runs the review itself against a fresh snapshot workspace rather than the mutable task workspace. This keeps review inspection isolated while still allowing QA-requested coding follow-ups to continue in the original task workspace when appropriate. Both the review agent and QA-requested coding follow-ups now receive their current memory context, and QA follow-up edits capture fresh learnings back into memory from the actual workspace used for the fix.
 
 Unsupported worker-owned attention types are escalated back to human attention with a summary.
 
@@ -123,14 +123,14 @@ Unsupported worker-owned attention types are escalated back to human attention w
 
 Startup cleanup prunes orphaned `virtual_cli` endpoints from previous runs.
 
-Startup cleanup also aggressively removes stale Sprint OS Docker assets:
+Startup cleanup also aggressively removes stale Code UX Docker assets:
 
 - stale workspace volumes for finished, failed, unrecoverable, or outdated sessions
 - cached setup-script Docker images from previous runs
 
 Interrupted Docker-backed sessions that were running before restart are treated as failed during recovery unless a live backing container is still present. This keeps restart recovery deterministic and prevents dead sessions from holding disk space or waiting forever for callbacks that will never arrive.
 
-When a sprint reaches a terminal state, Sprint OS also removes the resumable CLI workspaces tied to that sprint immediately instead of relying only on the next startup cleanup pass.
+When a sprint reaches a terminal state, Code UX also removes the resumable CLI workspaces tied to that sprint immediately instead of relying only on the next startup cleanup pass.
 
 If a virtual cycle dies mid-attention:
 

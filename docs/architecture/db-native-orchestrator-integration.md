@@ -1,6 +1,6 @@
 # DB-Native Orchestrator Integration
 
-This page describes the execution refactor that moved sprint orchestration onto the Sprint OS database model and is now driven from the dashboard/runtime services instead of a dedicated MCP orchestration tool.
+This page describes the execution refactor that moved sprint orchestration onto the Code UX database model and is now driven from the dashboard/runtime services instead of a dedicated MCP orchestration tool.
 
 ## Scope
 
@@ -8,7 +8,7 @@ This slice replaces markdown task directories as the orchestration input for `st
 
 It now:
 - resolves execution scope from `project_id` / `sprint_id` / `sprint_number` / selected project
-- loads sprint tasks from sqlite instead of `.sprint-os/sprints/...`
+- loads sprint tasks from sqlite instead of `.code-ux/sprints/...`
 - creates `sprint_runs` for orchestrate executions
 - creates `task_dispatches` and `task_runs` when ready tasks start
 - acquires a sprint-scoped execution lease while the orchestrator owns the loop
@@ -111,7 +111,7 @@ Executor mapping in this slice:
 That keeps the old Docker/worktree flow alive, but under DB-native dispatch records, and adds worker routing without introducing a second runtime.
 
 Worktree safety rule:
-- Sprint OS never treats the primary repository checkout as a disposable worktree
+- Code UX never treats the primary repository checkout as a disposable worktree
 - linked-worktree discovery now ignores the main repo path even when that checkout is on the same branch as the worker or merge-resolution branch
 - cleanup refuses to remove any path that resolves to the project repo root, or to an ancestor of that repo root
 
@@ -134,7 +134,7 @@ Task lifecycle is now four-stage at the planning/runtime seam:
 - `coding_completed`
 - `completed`
 
-`coding_completed` means task execution finished successfully and code is ready, but Sprint OS still has to settle the merge outcome. The task only advances to final `completed` when one of these is true:
+`coding_completed` means task execution finished successfully and code is ready, but Code UX still has to settle the merge outcome. The task only advances to final `completed` when one of these is true:
 
 - the feature PR was merged
 - merge state is otherwise marked settled
@@ -142,17 +142,17 @@ Task lifecycle is now four-stage at the planning/runtime seam:
 
 When all sprint tasks are settled, the same completion path now also handles the final `feature -> default` merge gate:
 
-- if `ciIntelligence.mainBranchAutoMergeMode != OFF` and no main PR exists yet, Sprint OS opens or resolves the `feature -> default` PR automatically
+- if `ciIntelligence.mainBranchAutoMergeMode != OFF` and no main PR exists yet, Code UX opens or resolves the `feature -> default` PR automatically
 - it then re-checks the main merge gate and applies the configured auto-merge policy
 - `CREATE_PR` stops after PR creation/resolution and does not auto-merge
 - `WHEN_GREEN` waits for green checks before merging
 - `ALWAYS` attempts the final main PR merge without waiting for CI
-- Sprint OS now emits `sprint_completed` only after an enabled main auto-merge flow actually settles, including the case where the `feature -> default` PR has already been merged
+- Code UX now emits `sprint_completed` only after an enabled main auto-merge flow actually settles, including the case where the `feature -> default` PR has already been merged
 - while main auto-merge is still pending, waiting on CI, ready to merge, or armed in GitHub, the sprint stays active instead of completing early
 - if the main merge gate is `DIRTY`, has failed checks, is review-blocked, or an open main-merge conflict handoff item for the same sprint run still exists, the sprint run pauses instead of completing
-- if a CLI task hits an unrecoverable Git push/auth/configuration error, Sprint OS now records that task run as `BLOCKED` rather than retryable `FAILED`, so the watch loop pauses the sprint instead of requeueing the same token-burning failure forever
-- if a CLI task hits an unrecoverable execution-environment failure such as missing Docker in a Docker-required path, Sprint OS also records that run as `BLOCKED` rather than retrying indefinitely
-- when a sprint run transitions to `completed`, `failed`, or terminal `cancelled`, Sprint OS now removes resumable CLI workspaces for that sprint immediately so disk usage drops without waiting for the next restart
+- if a CLI task hits an unrecoverable Git push/auth/configuration error, Code UX now records that task run as `BLOCKED` rather than retryable `FAILED`, so the watch loop pauses the sprint instead of requeueing the same token-burning failure forever
+- if a CLI task hits an unrecoverable execution-environment failure such as missing Docker in a Docker-required path, Code UX also records that run as `BLOCKED` rather than retrying indefinitely
+- when a sprint run transitions to `completed`, `failed`, or terminal `cancelled`, Code UX now removes resumable CLI workspaces for that sprint immediately so disk usage drops without waiting for the next restart
 
 ## Active Ownership
 
@@ -163,12 +163,12 @@ When all sprint tasks are settled, the same completion path now also handles the
 
 The lease is acquired before the sprint run starts, renewed while the watch loop is active, and released when the orchestrator call exits.
 
-If another orchestrator already owns the sprint lease, Sprint OS returns an active-run message instead of starting a duplicate loop.
+If another orchestrator already owns the sprint lease, Code UX returns an active-run message instead of starting a duplicate loop.
 
 Additional start guard:
 
-- Sprint OS now also refuses to start a fresh sprint run when the latest run is still `running`, `queued`, or `cancel_requested`
-- if the latest `cancel_requested` run is already idle, Sprint OS finalizes it to `cancelled` and then allows the new start
+- Code UX now also refuses to start a fresh sprint run when the latest run is still `running`, `queued`, or `cancel_requested`
+- if the latest `cancel_requested` run is already idle, Code UX finalizes it to `cancelled` and then allows the new start
 
 ## Merge Persistence
 

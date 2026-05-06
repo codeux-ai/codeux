@@ -1,11 +1,11 @@
-# Sprint OS Phase 1 Implementation Plan
+# Code UX Phase 1 Implementation Plan
 
 ## Status
 Accepted implementation plan
 
 ## Purpose
 
-This document defines the first implementation phase of the Sprint OS refactor after the v2 dashboard direction was finalized.
+This document defines the first implementation phase of the Code UX refactor after the v2 dashboard direction was finalized.
 
 The goal is not to preserve the old prototype workflow.
 
@@ -26,7 +26,7 @@ The first remote-capable transport foundation for workers is now in place throug
 
 ## Product Goal
 
-Sprint OS must become a true project operating system, not a dashboard on top of a file-based sprint loop.
+Code UX must become a true project operating system, not a dashboard on top of a file-based sprint loop.
 
 That means:
 
@@ -75,7 +75,7 @@ The phase-1 execution model must assume that:
 
 ### 4. Executors are pluggable, not separate systems
 
-Sprint OS will support multiple executor types on one orchestration contract:
+Code UX will support multiple executor types on one orchestration contract:
 
 - local/CLI provider execution with Docker and git worktrees
 - Jules remote execution
@@ -97,7 +97,7 @@ Those assumptions block the v2 architecture.
 
 ## Phase 1 Outcome
 
-At the end of phase 1, Sprint OS must support:
+At the end of phase 1, Code UX must support:
 
 1. DB-backed management of projects, sprints, and tasks in the v2 dashboard.
 2. DB-backed execution state for each active sprint.
@@ -109,12 +109,12 @@ At the end of phase 1, Sprint OS must support:
 
 ## Required Design Decisions
 
-### 1. Sprint OS directory migration
+### 1. Code UX directory migration
 
 Runtime/config ownership is:
 
-- repo-scoped: `<repo>/.sprint-os/`
-- home-scoped: `~/.sprint-os/`
+- repo-scoped: `<repo>/.code-ux/`
+- home-scoped: `~/.code-ux/`
 
 This replaces:
 
@@ -375,7 +375,7 @@ Required behavior:
 
 ### Track 0: Rebrand and path migration
 
-- Complete `.sprint-os` migration.
+- Complete `.code-ux` migration.
 - Remove active `.jules-subagents` execution dependencies.
 
 ### Track 1: DB-native execution schema

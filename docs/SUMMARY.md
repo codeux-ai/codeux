@@ -1,12 +1,12 @@
 # Documentation Summary
 
-- [Sprint OS Documentation Index](./index.md)
+- [Code UX Documentation Index](./index.md)
 - [Quickstart](./getting-started/quickstart.md)
 - [System Overview](./architecture/system-overview.md)
 - [Repository Map](./architecture/repository-map.md)
 - [Sprint 2 Gap Closure and Migration Contract](./architecture/sprint-2-gap-closure.md)
 - [Sprint 4 Project Management Foundation and Tool Surface Migration](./architecture/sprint-4-project-management-foundation.md)
-- [Sprint OS Phase 1 Implementation Plan](./architecture/sprint-os-phase-1-implementation-plan.md)
+- [Code UX Phase 1 Implementation Plan](./architecture/code-ux-phase-1-implementation-plan.md)
 - [DB-Native Orchestration Foundation](./architecture/db-native-orchestration-foundation.md)
 - [Execution Schema Foundation](./architecture/execution-schema-foundation.md)
 - [DB-Native Orchestrator Integration](./architecture/db-native-orchestrator-integration.md)

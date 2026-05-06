@@ -7,11 +7,11 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as pathPosix from "path/posix";
 import { randomUUID } from "crypto";
-import { getRepoSprintOsPath } from "../../../shared/config/sprint-os-paths.js";
+import { getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { collectProviderUsageTelemetry, type ProviderUsageTelemetry } from "./provider-usage.js";
 
 const CONTAINER_WORKSPACE_ROOT = "/workspace";
-const CONTAINER_RUNTIME_HOME = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".sprint-os-home");
+const CONTAINER_RUNTIME_HOME = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".code-ux-home");
 
 export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
 
@@ -135,7 +135,7 @@ export class ProviderRunner implements IProviderRunner {
     const outputPath = input.provider === "codex"
       ? input.workflowSettings.executionMode === "DOCKER"
         ? pathPosix.join("/workspace", `provider-last-message-${input.sessionId}.txt`)
-        : path.join(getRepoSprintOsPath(input.repoPath, "tmp"), `provider-last-message-${input.sessionId}.txt`)
+        : path.join(getRepoCodeUxPath(input.repoPath, "tmp"), `provider-last-message-${input.sessionId}.txt`)
       : null;
 
     if (outputPath && !outputPath.startsWith("/workspace/")) {
@@ -507,7 +507,7 @@ export class ProviderRunner implements IProviderRunner {
         headers.Authorization = `Bearer ${conn.authToken}`;
       }
       runtimeConfig.mcp = {
-        sprint_os: {
+        code_ux: {
           type: "remote",
           url: conn.url,
           enabled: true,
@@ -555,7 +555,7 @@ export class ProviderRunner implements IProviderRunner {
       const configPath = path.join(cwd, ".mcp.json");
       const config = {
         mcpServers: {
-          "sprint_os": {
+          "code_ux": {
             type: "http",
             url: conn.url,
             ...(Object.keys(headers).length > 0 ? { headers } : {}),
@@ -570,7 +570,7 @@ export class ProviderRunner implements IProviderRunner {
       await fs.mkdir(dirPath, { recursive: true });
       const configPath = path.join(dirPath, "settings.json");
       const mcpServers = {
-        "sprint_os": {
+        "code_ux": {
           httpUrl: conn.url,
           ...(Object.keys(headers).length > 0 ? { headers } : {}),
         },
@@ -588,7 +588,7 @@ export class ProviderRunner implements IProviderRunner {
       const dirPath = path.join(cwd, ".codex");
       await fs.mkdir(dirPath, { recursive: true });
       const configPath = path.join(dirPath, "config.toml");
-      const lines = ["[mcp_servers.sprint-os]", `url = "${conn.url}"`];
+      const lines = ["[mcp_servers.code-ux]", `url = "${conn.url}"`];
       if (conn.authToken) {
         lines.push(`http_headers = { "Authorization" = "Bearer ${conn.authToken}" }`);
       }

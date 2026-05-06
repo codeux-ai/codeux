@@ -18,7 +18,7 @@ async function createFixture(options?: {
   logger?: Pick<Logger, "info" | "error">;
   dockerService?: { listContainers: () => Promise<Array<{ labels?: Record<string, string> }>> };
 }) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-startup-recovery-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-startup-recovery-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const projectRepository = new ProjectManagementRepository(storage);
@@ -320,7 +320,7 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
       id: dispatch.id,
       status: "failed",
-      errorMessage: "Local CLI execution was interrupted before Sprint OS could persist a resumable session. The task was moved back to a retryable state.",
+      errorMessage: "Local CLI execution was interrupted before Code UX could persist a resumable session. The task was moved back to a retryable state.",
     });
     expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
       id: taskRun.id,

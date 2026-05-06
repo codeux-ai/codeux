@@ -5,7 +5,7 @@ Implemented foundation
 
 ## Purpose
 
-Sprint OS now supports a remote-capable MCP transport path for workers without breaking the zero-setup stdio experience for normal human-driven MCP clients.
+Code UX now supports a remote-capable MCP transport path for workers without breaking the zero-setup stdio experience for normal human-driven MCP clients.
 
 The transport split is:
 
@@ -16,15 +16,15 @@ This keeps local MCP usage simple while allowing workers to run on other machine
 
 ## Why This Exists
 
-Sprint OS was previously stdio-only.
+Code UX was previously stdio-only.
 
-That worked for local MCP clients, but it blocked the real worker architecture because a worker on another machine could not attach to the main Sprint OS server over stdio.
+That worked for local MCP clients, but it blocked the real worker architecture because a worker on another machine could not attach to the main Code UX server over stdio.
 
-The worker gateway solves that by exposing a dedicated authenticated MCP HTTP endpoint on the main Sprint OS server.
+The worker gateway solves that by exposing a dedicated authenticated MCP HTTP endpoint on the main Code UX server.
 
 ## Runtime Roles
 
-Sprint OS now uses three MCP runtime roles internally:
+Code UX now uses three MCP runtime roles internally:
 
 - `project_manager`
 - `worker_host`
@@ -32,13 +32,13 @@ Sprint OS now uses three MCP runtime roles internally:
 
 ### `project_manager`
 
-The normal main Sprint OS server process.
+The normal main Code UX server process.
 
 It exposes the human-facing MCP tool surface over stdio.
 
 ### `worker_host`
 
-A headless local Sprint OS runtime started by the worker process on the worker machine.
+A headless local Code UX runtime started by the worker process on the worker machine.
 
 It exposes only the worker-local execution tools needed to:
 
@@ -48,7 +48,7 @@ It exposes only the worker-local execution tools needed to:
 
 ### `worker_gateway`
 
-The MCP role exposed by the main Sprint OS server over Streamable HTTP.
+The MCP role exposed by the main Code UX server over Streamable HTTP.
 
 It exposes only the remote worker control-plane tools needed to:
 
@@ -72,7 +72,7 @@ The current worker architecture is intentionally split into two channels.
 
 ### Control plane
 
-The worker connects to the main Sprint OS server over Streamable HTTP.
+The worker connects to the main Code UX server over Streamable HTTP.
 
 That connection is used for:
 
@@ -84,7 +84,7 @@ This is the remote, project-scoped control plane.
 
 ### Local execution plane
 
-The worker also starts a local headless Sprint OS server in `worker_host` mode and connects to it over stdio.
+The worker also starts a local headless Code UX server in `worker_host` mode and connects to it over stdio.
 
 That local connection is used for:
 
@@ -93,7 +93,7 @@ That local connection is used for:
 - `generate_dashboard_reply`
 - `get_session`
 
-This allows the worker machine to use its own local provider environment, CLI tools, Docker installation, auth state, and repo context while still reporting into the central Sprint OS control plane.
+This allows the worker machine to use its own local provider environment, CLI tools, Docker installation, auth state, and repo context while still reporting into the central Code UX control plane.
 
 Worker registrations now also include lightweight machine metadata in the connection record:
 
@@ -106,7 +106,7 @@ That metadata is surfaced in the live runtime dashboard so operators can disting
 
 ## Main Server Configuration
 
-The main Sprint OS server can expose the worker gateway with:
+The main Code UX server can expose the worker gateway with:
 
 - `--mcp-http`
 - `--mcp-http-port`
@@ -152,7 +152,7 @@ node dist/worker/index.js \
 
 Important detail:
 
-- `--server-url` points at the main Sprint OS worker gateway
+- `--server-url` points at the main Code UX worker gateway
 - the worker still starts its own local `worker_host` runtime unless explicitly customized
 
 The local worker-host runtime is configured with:
@@ -169,7 +169,7 @@ The worker gateway supports bearer authentication:
 
 - `Authorization: Bearer <token>`
 
-If the gateway is exposed on anything other than loopback, Sprint OS now requires a configured auth token at startup.
+If the gateway is exposed on anything other than loopback, Code UX now requires a configured auth token at startup.
 
 This is a minimal transport guard, not the final worker identity model.
 
