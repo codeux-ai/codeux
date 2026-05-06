@@ -41,14 +41,16 @@ export function useFocusTrap(
       }
 
       const autoFocusTarget = containerRef.current.querySelector("[autofocus]") as HTMLElement | null;
-      const focusableElements = Array.from(
+      const focusableElements = (Array.from(
         containerRef.current.querySelectorAll(FOCUSABLE_SELECTOR)
-      ) as HTMLElement[];
+      ) as HTMLElement[]).filter(e => !e.hasAttribute("disabled") && e.tabIndex >= 0);
       const initialTarget = autoFocusTarget ?? focusableElements[0];
       initialTarget?.focus();
     }, 50);
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
@@ -59,11 +61,14 @@ export function useFocusTrap(
       if (event.key === "Tab") {
         if (!containerRef.current) return;
 
-        const focusableElements = Array.from(
+        const focusableElements = (Array.from(
           containerRef.current.querySelectorAll(FOCUSABLE_SELECTOR)
-        ) as HTMLElement[];
+        ) as HTMLElement[]).filter(e => !e.hasAttribute("disabled") && e.tabIndex >= 0);
 
-        if (focusableElements.length === 0) return;
+        if (focusableElements.length === 0) {
+          event.preventDefault();
+          return;
+        }
 
         const first = focusableElements[0];
         const last = focusableElements[focusableElements.length - 1];
@@ -93,7 +98,11 @@ export function useFocusTrap(
       if (restoreFocus && triggerRef.current) {
         // Defer focus restoration to ensure element is re-enabled or DOM is updated
         const trigger = triggerRef.current;
-        window.setTimeout(() => trigger.focus(), 0);
+        window.setTimeout(() => {
+          if (trigger.isConnected) {
+            trigger.focus();
+          }
+        }, 0);
       }
     };
   }, [active]);
