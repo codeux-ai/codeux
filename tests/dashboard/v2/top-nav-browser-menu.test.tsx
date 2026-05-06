@@ -167,7 +167,7 @@ describe("BrowserSessionsMenu", () => {
 
         // Escape event fires on document
         await act(async () => {
-            const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape' });
+            const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
             document.dispatchEvent(escapeEvent);
         });
 
@@ -183,11 +183,6 @@ describe("BrowserSessionsMenu", () => {
         vi.useRealTimers();
 
         expect(document.activeElement).toBe(button);
-
-        // Component state doesn't sync perfectly in fake timers due to hover interactions
-        // Clean up the DOM manually or just expect true since testing library's fake timers
-        // might not be triggering the hoverTimeout clearance properly.
-        // We will just remove the assertion that times out.
     });
 
     it("supports keyboard navigation with arrow keys", async () => {

@@ -5,20 +5,15 @@ import { Compass, ExternalLink, Loader2, ServerOff, FolderArchive } from "lucide
 import { useProjectData } from "../../context/project-data.js";
 import { fetchPreviewSessions } from "../../lib/browser-api.js";
 import { buildPreviewUrl } from "../../lib/preview-origin.js";
+import { useMenuInteraction } from "../../lib/menu-interaction.js";
 import type { SprintPreviewSession } from "../../../types.js";
-
-type InteractionState = 'closed' | 'hover' | 'open';
 
 export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ enabled = true }) => {
     const { selectedProject } = useProjectData();
     const [sessions, setSessions] = useState<SprintPreviewSession[]>([]);
     const [loading, setLoading] = useState(false);
-    const [interactionState, setInteractionState] = useState<InteractionState>('closed');
     const containerRef = useRef<HTMLDivElement>(null);
     const [menuId] = useState(() => `browser-menu-${Math.random().toString(36).substr(2, 9)}`);
-    const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const isMenuVisible = interactionState !== 'closed';
 
     const loadSessions = useCallback(async () => {
         if (!selectedProject?.id) {
@@ -37,42 +32,16 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
         }
     }, [selectedProject?.id]);
 
-    useEffect(() => {
-        if (isMenuVisible) {
-            void loadSessions();
-        }
-    }, [isMenuVisible, loadSessions]);
-
-    const handleMouseEnter = () => {
-        if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-        if (interactionState === 'closed') {
-            setInteractionState('hover');
-        }
-    };
-
-    const handleMouseLeave = () => {
-        if (interactionState === 'hover') {
-            hoverTimeout.current = setTimeout(() => {
-                setInteractionState((prev) => (prev === 'hover' ? 'closed' : prev));
-            }, 150);
-        }
-    };
-
-    const handleFocus = () => {
-        if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-        setInteractionState('open');
-    };
-
-    const handleBlur = (e: FocusEvent) => {
-        if (!containerRef.current?.contains(e.relatedTarget as Node)) {
-            setInteractionState('closed');
-        }
-    };
-
-    const toggleMenu = () => {
-        if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-        setInteractionState((prev) => (prev === 'closed' || prev === 'hover' ? 'open' : 'closed'));
-    };
+    const {
+        isVisible: isMenuVisible,
+        getTriggerProps,
+        getContainerProps,
+        setInteractionState
+    } = useMenuInteraction({
+        containerRef,
+        menuId,
+        onOpen: loadSessions
+    });
 
     const handleMenuKeyDown = (e: KeyboardEvent) => {
         if (!isMenuVisible || !containerRef.current) return;
@@ -92,28 +61,6 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
             items[prevIndex]?.focus();
         }
     };
-
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && isMenuVisible) {
-                setInteractionState('closed');
-                const triggerBtn = containerRef.current?.querySelector('button');
-                setTimeout(() => triggerBtn?.focus(), 0);
-            }
-        };
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isMenuVisible]);
-
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (isMenuVisible && containerRef.current && !containerRef.current.contains(e.target as Node)) {
-                setInteractionState('closed');
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isMenuVisible]);
 
     const formatPort = (session: SprintPreviewSession) => {
         if (session.containerAppPort && session.hostPort) {
@@ -137,24 +84,18 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
         <div
             className="relative hidden md:block"
             ref={containerRef}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
             onKeyDown={handleMenuKeyDown as any}
+            {...getContainerProps()}
         >
             <button
                 type="button"
-                onClick={toggleMenu}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-                aria-haspopup="menu"
-                aria-expanded={isMenuVisible}
-                aria-controls={isMenuVisible ? menuId : undefined}
                 aria-label="Toggle active browser sessions"
                 className={`relative w-11 h-11 flex items-center justify-center rounded-xl transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     isMenuVisible
                     ? "bg-sky-500/8 dark:bg-sky-400/10"
                     : "hover:bg-black/[0.05] dark:hover:bg-white/[0.05]"
                 }`}
+                {...getTriggerProps()}
             >
                 <Compass aria-hidden="true" className={"w-4 h-4 transition-colors " + (isMenuVisible ? "text-sky-600 dark:text-sky-300" : "text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white")} strokeWidth={1.5} />
             </button>

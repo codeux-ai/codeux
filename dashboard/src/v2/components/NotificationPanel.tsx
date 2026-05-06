@@ -4,7 +4,7 @@ import gsap from "gsap";
 import { CheckCircle, AlertTriangle, GitPullRequest } from "lucide-preact";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 
-export const NotificationPanel: FunctionComponent = () => {
+export const NotificationPanel: FunctionComponent<{ id?: string }> = ({ id }) => {
     const panelRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = useReducedMotion();
 
