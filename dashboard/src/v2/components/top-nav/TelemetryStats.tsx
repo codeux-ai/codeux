@@ -15,10 +15,10 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
     const activeTasksCount = (tasks || []).filter((t: Task) => t.status === "in_progress" || t.status === "pending").length;
 
     return (
-        <div className="hidden lg:flex items-center gap-4 px-4 py-1.5 bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04] rounded-xl mr-2">
-            <div className="flex flex-col items-start">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Tasks</span>
-                <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono leading-tight">
+        <div className="mr-2 hidden h-9 items-center gap-4 rounded-xl border border-black/[0.04] bg-black/[0.02] px-3.5 dark:border-white/[0.04] dark:bg-white/[0.02] lg:flex">
+            <div className="flex flex-col items-start justify-center gap-0.5">
+                <span className="text-[9px] font-bold uppercase leading-none tracking-wider text-slate-400">Active Tasks</span>
+                <div className="font-mono text-sm font-semibold leading-none text-slate-700 dark:text-slate-200">
                     <RollingNumber value={activeTasksCount} />
                 </div>
             </div>

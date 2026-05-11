@@ -9,7 +9,7 @@ interface BrandSectionProps {
 
 export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, onMenuToggle }) => {
     return (
-        <div className="flex items-center gap-4 md:gap-10 flex-1">
+        <div className="flex shrink-0 items-center gap-4 md:gap-10">
             {isMobile && (
                 <button
                     type="button"
