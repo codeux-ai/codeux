@@ -17,6 +17,7 @@ import type {
   SkillToggle,
   ThinkingMode,
   WorkerSettings,
+  ConsoleLogLevel,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
@@ -75,6 +76,7 @@ export interface ProjectSettings {
 export interface SystemRuntimeSettings {
   dashboardPort: number;
   enableDebugLogFile: boolean;
+  consoleLogLevel: ConsoleLogLevel;
 }
 
 export interface SystemProviderCredentialSettings {

@@ -94,6 +94,7 @@ function buildSettingsServerOptions() {
       runtime: {
         dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
         enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
+        consoleLogLevel: "standard",
       },
       integrations: {
         julesApiKey: "",

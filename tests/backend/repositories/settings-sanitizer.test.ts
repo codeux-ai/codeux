@@ -46,6 +46,7 @@ describe("settings-sanitizer", () => {
     const settings = sanitizeSettings({
       dashboardPort: "nope",
       enableDebugLogFile: "nope",
+      consoleLogLevel: "nope",
       automationLevel: "INVALID",
       automationInterventions: {
         autoApprovePlan: "bad",
@@ -110,6 +111,7 @@ describe("settings-sanitizer", () => {
 
     expect(settings.dashboardPort).toBe(4444);
     expect(settings.enableDebugLogFile).toBe(false);
+    expect(settings.consoleLogLevel).toBe("standard");
     expect(settings.automationLevel).toBe("SEMI_AUTO");
     expect(settings.automationInterventions.autoApprovePlan).toBe(true);
     expect(settings.aiProvider.provider).toBe("jules");

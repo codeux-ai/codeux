@@ -111,6 +111,9 @@ Legacy runtime:
   - Resolves or dismisses an active attention item from the dashboard runtime surface
 - `GET /api/system-settings`
   - Persisted system-wide settings (`runtime`, `integrations`, `defaults`, `mcpTools`)
+  - `runtime.consoleLogLevel` controls server console verbosity:
+    - `standard` keeps important lifecycle, orchestration, MCP, invocation, warning, and error output visible.
+    - `full` also prints routine dashboard HTTP request-completion logs.
 - `PUT /api/system-settings`
   - Save system-wide settings
 - `GET /api/projects/:projectId/settings`
@@ -559,6 +562,7 @@ Server startup no longer exits when Jules API key is missing. Code UX also perfo
 
 Behavior:
 - MCP server and dashboard still start.
+- Startup does not emit warning logs solely because the Jules API key is missing.
 - API-backed tools return setup guidance until key is configured.
 - Guidance points to:
   - `.env` (`JULES_API_KEY`)

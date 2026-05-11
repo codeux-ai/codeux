@@ -62,7 +62,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
                 max={65535}
               />
             </Row>
-            <Row label="Debug log file" description="Write extra runtime diagnostics to disk for development and incident analysis." last>
+            <Row label="Debug log file" description="Write extra runtime diagnostics to disk for development and incident analysis.">
               <Toggle
                 value={systemSettings?.runtime.enableDebugLogFile ?? false}
                 onChange={() => updateSystem((current) => ({
@@ -72,6 +72,22 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
                     enableDebugLogFile: !current.runtime.enableDebugLogFile,
                   },
                 }))}
+              />
+            </Row>
+            <Row label="Console Log Level" description="Standard keeps important lifecycle and invocation logs visible. Full also prints routine dashboard HTTP requests." last>
+              <PillChoiceGroup
+                value={systemSettings?.runtime.consoleLogLevel ?? "standard"}
+                onChange={(value) => updateSystem((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    consoleLogLevel: value === "full" ? "full" : "standard",
+                  },
+                }))}
+                options={[
+                  { value: "standard", label: "Standard", hint: "Important runtime activity." },
+                  { value: "full", label: "Full", hint: "Includes HTTP requests." },
+                ]}
               />
             </Row>
           </SectionCard>

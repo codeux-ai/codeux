@@ -140,7 +140,7 @@ const createDashboardSettings = () => {
 };
 
 const mockSystemSettings = {
-  runtime: { dashboardPort: 4444, enableDebugLogFile: false },
+  runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
   integrations: {
     providers: {
       jules: { provider: "jules", name: "Jules Primary", apiKey: "sys-key" },

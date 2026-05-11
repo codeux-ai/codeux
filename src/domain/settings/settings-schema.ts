@@ -13,6 +13,7 @@ import type {
   WorkerExecutionMode,
   InvocationRoutingId,
   InvocationRoutingProfile,
+  ConsoleLogLevel,
 } from "../../contracts/app-types.js";
 import { EMBEDDING_MODEL_IDS } from "../../contracts/memory-types.js";
 import type { EmbeddingModelId } from "../../contracts/memory-types.js";
@@ -26,6 +27,7 @@ import {
   WORKER_EXECUTION_MODES,
   INVOCATION_ROUTING_IDS,
   INVOCATION_ROUTING_PROFILES,
+  CONSOLE_LOG_LEVELS,
 } from "../../repositories/settings-defaults.js";
 import { INSTRUCTION_TEMPLATE_IDS } from "../../instructions/instruction-template-catalog.js";
 
@@ -495,6 +497,10 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
 
   if (typeof payload.enableDebugLogFile !== "boolean") {
     issues.push({ path: "enableDebugLogFile", message: "Expected a boolean" });
+  }
+
+  if (typeof payload.consoleLogLevel !== "string" || !CONSOLE_LOG_LEVELS.includes(payload.consoleLogLevel as ConsoleLogLevel)) {
+    issues.push({ path: "consoleLogLevel", message: `Expected one of: ${CONSOLE_LOG_LEVELS.join(", ")}` });
   }
 
   const validAutomationLevels: AutomationLevel[] = ["FULL", "SEMI_AUTO", "ALWAYS_ASK"];

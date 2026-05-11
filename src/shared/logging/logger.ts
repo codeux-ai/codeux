@@ -1,10 +1,26 @@
 import * as fs from "fs";
 import { inspect } from "util";
 import { getCorrelationId } from "./correlation-id.js";
+import type { ConsoleLogLevel } from "../../contracts/app-types.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogPurpose =
+  | "dashboard"
+  | "general"
+  | "integration"
+  | "invocation"
+  | "lifecycle"
+  | "mcp"
+  | "orchestration"
+  | "request"
+  | "runtime"
+  | "settings"
+  | "storage"
+  | "realtime"
+  | "security";
 
 export interface LogMetadata {
+  logPurpose?: LogPurpose;
   [key: string]: unknown;
 }
 
@@ -18,14 +34,18 @@ export interface Logger {
 
 interface StructuredLoggerOptions {
   level?: LogLevel;
+  consoleLogLevel?: ConsoleLogLevel;
+  getConsoleLogLevel?: () => ConsoleLogLevel | undefined;
   environment?: "development" | "production";
   bindings?: LogMetadata;
   logFilePath?: string;
+  color?: boolean;
 }
 
 interface StructuredLogRecord {
   timestamp: string;
   level: LogLevel;
+  purpose: LogPurpose;
   message: string;
   correlationId?: string;
   metadata?: LogMetadata;
@@ -40,12 +60,89 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   error: 40,
 };
 
+const PURPOSE_LABELS: Record<LogPurpose, string> = {
+  dashboard: "DASH",
+  general: "GEN",
+  integration: "INT",
+  invocation: "INVK",
+  lifecycle: "LIFE",
+  mcp: "MCP",
+  orchestration: "ORCH",
+  request: "HTTP",
+  runtime: "RUN",
+  settings: "CONF",
+  storage: "DATA",
+  realtime: "LIVE",
+  security: "SEC",
+};
+
+const LEVEL_COLORS: Record<LogLevel, string> = {
+  debug: "\u001b[90m",
+  info: "\u001b[36m",
+  warn: "\u001b[33m",
+  error: "\u001b[31m",
+};
+
+const PURPOSE_COLORS: Record<LogPurpose, string> = {
+  dashboard: "\u001b[35m",
+  general: "\u001b[37m",
+  integration: "\u001b[34m",
+  invocation: "\u001b[32m",
+  lifecycle: "\u001b[36m",
+  mcp: "\u001b[95m",
+  orchestration: "\u001b[96m",
+  request: "\u001b[90m",
+  runtime: "\u001b[36m",
+  settings: "\u001b[33m",
+  storage: "\u001b[94m",
+  realtime: "\u001b[92m",
+  security: "\u001b[31m",
+};
+
+const RESET_COLOR = "\u001b[0m";
+
 const normalizeLevel = (level: string | undefined): LogLevel => {
   const normalized = level?.toLowerCase();
   if (normalized === "debug" || normalized === "info" || normalized === "warn" || normalized === "error") {
     return normalized;
   }
   return "info";
+};
+
+const normalizeConsoleLogLevel = (level: string | undefined): ConsoleLogLevel => {
+  return level?.toLowerCase() === "full" ? "full" : "standard";
+};
+
+const normalizePurpose = (purpose: unknown): LogPurpose | undefined => {
+  if (typeof purpose !== "string") {
+    return undefined;
+  }
+  const normalized = purpose.toLowerCase();
+  if (normalized in PURPOSE_LABELS) {
+    return normalized as LogPurpose;
+  }
+  return undefined;
+};
+
+const inferPurpose = (metadata: LogMetadata | undefined, message: string): LogPurpose => {
+  const explicit = normalizePurpose(metadata?.logPurpose);
+  if (explicit) {
+    return explicit;
+  }
+
+  const component = typeof metadata?.component === "string" ? metadata.component : "";
+  const lower = `${component} ${message}`.toLowerCase();
+  const hasHttpMetadata = typeof metadata?.method === "string"
+    && ("statusCode" in (metadata || {}) || "path" in (metadata || {}));
+  if (hasHttpMetadata || lower.includes("http request")) return "request";
+  if (lower.includes("invocation") || lower.includes("provider")) return "invocation";
+  if (lower.includes("mcp")) return "mcp";
+  if (lower.includes("realtime") || lower.includes("websocket")) return "realtime";
+  if (lower.includes("settings") || lower.includes("config")) return "settings";
+  if (lower.includes("sprint") || lower.includes("orchestrat")) return "orchestration";
+  if (lower.includes("startup") || lower.includes("running") || lower.includes("recover")) return "lifecycle";
+  if (lower.includes("dashboard")) return "dashboard";
+  return "general";
 };
 
 const normalizeMetadataValue = (value: unknown): unknown => {
@@ -78,7 +175,11 @@ const normalizeMetadata = (metadata: LogMetadata | undefined): LogMetadata | und
   if (!metadata || Object.keys(metadata).length === 0) {
     return undefined;
   }
-  return normalizeMetadataValue(metadata) as LogMetadata;
+  const { logPurpose, ...rest } = metadata;
+  if (Object.keys(rest).length === 0) {
+    return undefined;
+  }
+  return normalizeMetadataValue(rest) as LogMetadata;
 };
 
 const serializeForJson = (record: StructuredLogRecord): string => {
@@ -99,15 +200,33 @@ const formatMetadataForDevelopment = (metadata: LogMetadata | undefined): string
 
 const serializeForDevelopment = (record: StructuredLogRecord): string => {
   const levelLabel = record.level.toUpperCase();
+  const purposeLabel = PURPOSE_LABELS[record.purpose];
   const correlationSegment = record.correlationId ? ` [correlationId=${record.correlationId}]` : "";
-  return `${record.timestamp} ${levelLabel}${correlationSegment} ${record.message}${formatMetadataForDevelopment(record.metadata)}`;
+  return `${record.timestamp} ${levelLabel.padEnd(5)} ${purposeLabel}${correlationSegment} ${record.message}${formatMetadataForDevelopment(record.metadata)}`;
+};
+
+const colorize = (text: string, color: string, enabled: boolean): string => (
+  enabled ? `${color}${text}${RESET_COLOR}` : text
+);
+
+const serializeForColoredDevelopment = (record: StructuredLogRecord): string => {
+  const levelLabel = colorize(record.level.toUpperCase().padEnd(5), LEVEL_COLORS[record.level], true);
+  const purposeLabel = colorize(PURPOSE_LABELS[record.purpose], PURPOSE_COLORS[record.purpose], true);
+  const timestamp = colorize(record.timestamp, "\u001b[90m", true);
+  const correlationSegment = record.correlationId
+    ? colorize(` [correlationId=${record.correlationId}]`, "\u001b[90m", true)
+    : "";
+  return `${timestamp} ${levelLabel} ${purposeLabel}${correlationSegment} ${record.message}${formatMetadataForDevelopment(record.metadata)}`;
 };
 
 export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
   const minLevel = options.level ?? normalizeLevel(process.env.LOG_LEVEL);
+  const staticConsoleLogLevel = options.consoleLogLevel ?? normalizeConsoleLogLevel(process.env.CONSOLE_LOG_LEVEL);
+  const getConsoleLogLevel = options.getConsoleLogLevel;
   const environment = options.environment ?? (process.env.NODE_ENV === "production" ? "production" : "development");
   const bindings = { ...(options.bindings || {}) };
   const logFilePath = options.logFilePath;
+  const useColor = options.color ?? (Boolean(process.stderr.isTTY) && !process.env.NO_COLOR);
   const logFileStream = logFilePath
     ? (() => {
         const existing = logFileStreams.get(logFilePath);
@@ -123,17 +242,29 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
       })()
     : null;
 
-  const shouldLog = (level: LogLevel): boolean => LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minLevel];
+  const shouldLogBySeverity = (level: LogLevel): boolean => LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minLevel];
+  const resolveConsoleLogLevel = (): ConsoleLogLevel => normalizeConsoleLogLevel(getConsoleLogLevel?.() ?? staticConsoleLogLevel);
+  const shouldLogToConsole = (level: LogLevel, purpose: LogPurpose): boolean => {
+    if (!shouldLogBySeverity(level)) {
+      return false;
+    }
+    if (resolveConsoleLogLevel() === "full") {
+      return true;
+    }
+    return purpose !== "request";
+  };
 
-  const write = (level: LogLevel, text: string): void => {
+  const write = (level: LogLevel, purpose: LogPurpose, consoleText: string, fileText: string): void => {
     // In Node.js, console.info/log goes to stdout.
     // MCP uses stdout for its protocol.
     // We must redirect ALL logs to stderr.
-    process.stderr.write(text + "\n");
+    if (shouldLogToConsole(level, purpose)) {
+      process.stderr.write(consoleText + "\n");
+    }
 
     if (logFileStream) {
       try {
-        logFileStream.write(text + "\n");
+        logFileStream.write(fileText + "\n");
       } catch {
         // Silently ignore log file write errors to avoid crashing
       }
@@ -141,7 +272,7 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
   };
 
   const log = (level: LogLevel, message: string, metadata?: LogMetadata): void => {
-    if (!shouldLog(level)) {
+    if (!shouldLogBySeverity(level)) {
       return;
     }
 
@@ -155,9 +286,11 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
         }
       : undefined;
 
+    const purpose = inferPurpose({ ...(bindings || {}), ...(metadata || {}) }, message);
     const record: StructuredLogRecord = {
       timestamp: new Date().toISOString(),
       level,
+      purpose,
       message,
     };
 
@@ -171,7 +304,10 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
     const serialized = environment === "production"
       ? serializeForJson(record)
       : serializeForDevelopment(record);
-    write(level, serialized);
+    const consoleSerialized = environment === "production" || !useColor
+      ? serialized
+      : serializeForColoredDevelopment(record);
+    write(level, purpose, consoleSerialized, serialized);
   };
 
   return {
@@ -182,8 +318,11 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
     child: (childBindings: LogMetadata) =>
       createLogger({
         level: minLevel,
+        consoleLogLevel: staticConsoleLogLevel,
+        getConsoleLogLevel,
         environment,
         logFilePath,
+        color: useColor,
         bindings: {
           ...bindings,
           ...childBindings,

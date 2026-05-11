@@ -113,6 +113,7 @@ export function reinitializeLogger(deps: { projectRoot: string, runtimeContext: 
 
   return createLogger({
     bindings: { service: CODE_UX_SERVICE_NAME },
+    getConsoleLogLevel: () => deps.runtimeContext.dashboardSettings?.consoleLogLevel,
     logFilePath,
   });
 }

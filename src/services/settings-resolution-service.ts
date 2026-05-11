@@ -354,6 +354,7 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
     runtime: {
       dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
       enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
+      consoleLogLevel: DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel,
     },
     integrations: {
       providers: buildDefaultIntegrationProviders(externalHints),
@@ -463,6 +464,9 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   const enableDebugLogFile = typeof runtime.enableDebugLogFile === "boolean"
     ? runtime.enableDebugLogFile
     : defaults.runtime.enableDebugLogFile;
+  const consoleLogLevel = runtime.consoleLogLevel === "full"
+    ? "full"
+    : defaults.runtime.consoleLogLevel;
 
   const defaultsInput = sanitizeProjectSettings({
     ...toRecord(input.defaults),
@@ -478,6 +482,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
     runtime: {
       dashboardPort,
       enableDebugLogFile,
+      consoleLogLevel,
     },
     integrations: {
       providers: integrations,
@@ -543,6 +548,7 @@ export function resolveDashboardSettings(args: {
   const dashboardSettings: DashboardSettings = {
     dashboardPort: args.systemSettings.runtime.dashboardPort,
     enableDebugLogFile: args.systemSettings.runtime.enableDebugLogFile,
+    consoleLogLevel: args.systemSettings.runtime.consoleLogLevel,
     appearance: { ...sprintSettings.appearance },
     automationLevel: sprintSettings.automationLevel,
     automationInterventions: { ...sprintSettings.automationInterventions },

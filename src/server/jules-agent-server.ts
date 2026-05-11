@@ -970,8 +970,6 @@ export class JulesAgentServer {
     await bootMcpTransport({
       server: this.server,
       logger: this.logger,
-      isJulesApiConfigured: () => this.isJulesApiConfigured(),
-      getMissingJulesApiKeyInstruction: () => this.getMissingJulesApiKeyInstruction(),
     });
     this.mcpHttpHandle = await bootMcpHttpTransport({
       enabled: this.appConfig.mcpHttpEnabled,

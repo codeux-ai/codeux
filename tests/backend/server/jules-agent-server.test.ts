@@ -866,8 +866,10 @@ describe("JulesAgentServer", () => {
       expect(bootMcpTransport).toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalled();
       const bootMcpArgs = (bootMcpTransport as any).mock.calls[0][0];
-      expect(bootMcpArgs.isJulesApiConfigured()).toBeDefined();
-      expect(bootMcpArgs.getMissingJulesApiKeyInstruction()).toBeDefined();
+      expect(bootMcpArgs.server).toBeDefined();
+      expect(bootMcpArgs.logger).toBeDefined();
+      expect(bootMcpArgs.isJulesApiConfigured).toBeUndefined();
+      expect(bootMcpArgs.getMissingJulesApiKeyInstruction).toBeUndefined();
     }, 30000);
 
 

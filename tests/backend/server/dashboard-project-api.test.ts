@@ -618,7 +618,7 @@ describe("dashboard project management API", () => {
     const systemSettingsResponse = await fetch(`${baseUrl}/api/system-settings`);
     expect(systemSettingsResponse.status).toBe(200);
     const initialSystemSettings = await systemSettingsResponse.json() as {
-      runtime: { dashboardPort: number; enableDebugLogFile: boolean };
+      runtime: { dashboardPort: number; enableDebugLogFile: boolean; consoleLogLevel: "standard" | "full" };
       integrations: { githubToken: string };
       defaults: { git: { defaultBranch: string } };
     };

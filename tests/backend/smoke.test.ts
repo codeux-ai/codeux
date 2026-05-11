@@ -26,9 +26,8 @@ describe("Smoke Test", () => {
     
     expect(server).toBeDefined();
 
-    // The SQLite warning is expected and emitted by Node, not console.warn in our code usually,
-    // but we can check our own calls.
-    // If we want to be strict about NO errors:
+    // Keep this strict for application console errors. Runtime entrypoints suppress
+    // noisy Node SQLite experimental warnings before importing the server.
     expect(errorSpy).not.toHaveBeenCalled();
 
     // Verify tools are registered and can be listed
@@ -55,4 +54,3 @@ describe("Smoke Test", () => {
     warnSpy.mockRestore();
   });
 });
-

@@ -29,6 +29,7 @@ describe("SettingsRepository", () => {
     const system = repo.getSystemSettings();
     expect(system.runtime.dashboardPort).toBe(4444);
     expect(system.runtime.enableDebugLogFile).toBe(false);
+    expect(system.runtime.consoleLogLevel).toBe("standard");
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
     expect(system.defaults.aiProvider.provider).toBe("jules");
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.3-codex");
@@ -64,6 +65,7 @@ describe("SettingsRepository", () => {
       runtime: {
         dashboardPort: 4450,
         enableDebugLogFile: true,
+        consoleLogLevel: "full",
       },
       integrations: {
         julesApiKey: "sys-jules",
@@ -201,6 +203,7 @@ describe("SettingsRepository", () => {
     const effectiveProject = reloaded.resolveProjectDashboardSettings("project-1");
     expect(effectiveProject.settings.dashboardPort).toBe(4450);
     expect(effectiveProject.settings.enableDebugLogFile).toBe(true);
+    expect(effectiveProject.settings.consoleLogLevel).toBe("full");
     expect(effectiveProject.settings.aiProvider.providers.jules.apiKey).toBe("sys-jules");
     expect(effectiveProject.settings.git.githubToken).toBe("sys-gh");
     expect(effectiveProject.settings.automationLevel).toBe("ALWAYS_ASK");
@@ -379,6 +382,7 @@ describe("SettingsRepository", () => {
 
     const migrated = repo.getSystemSettings();
     expect(migrated.runtime.dashboardPort).toBe(4999);
+    expect(migrated.runtime.consoleLogLevel).toBe("standard");
     expect(migrated.integrations.githubToken).toBe("legacy-gh");
     expect(migrated.defaults.automationLevel).toBe("ALWAYS_ASK");
     expect(migrated.defaults.git.defaultBranch).toBe("develop");

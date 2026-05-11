@@ -710,9 +710,12 @@ export interface McpToolToggle {
   isInternal: boolean;
 }
 
+export type ConsoleLogLevel = "standard" | "full";
+
 export interface DashboardSettings {
   dashboardPort: number;
   enableDebugLogFile: boolean;
+  consoleLogLevel: ConsoleLogLevel;
   appearance: AppearanceSettings;
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;

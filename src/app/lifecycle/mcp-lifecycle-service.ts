@@ -13,8 +13,6 @@ import type { RuntimeStartupRecoveryService } from "../../services/runtime-start
 export interface BootMcpTransportDeps {
   server: McpServer;
   logger: Logger;
-  isJulesApiConfigured: () => boolean;
-  getMissingJulesApiKeyInstruction: () => string;
 }
 
 export interface BootMcpHttpTransportDeps {
@@ -90,11 +88,6 @@ function respondBadRequest(res: ServerResponse, message: string): void {
 }
 
 export async function bootMcpTransport(deps: BootMcpTransportDeps): Promise<void> {
-  if (!deps.isJulesApiConfigured()) {
-    deps.logger.warn("Jules API key is not set. Jules-native tools are disabled; Gemini/Codex CLI providers can still run.");
-    deps.logger.warn(deps.getMissingJulesApiKeyInstruction());
-  }
-
   if (process.stdin.isTTY) {
     deps.logger.info(`${CODE_UX_DISPLAY_NAME} running in standalone mode (stdin is a TTY) — MCP stdio transport disabled`);
     return;

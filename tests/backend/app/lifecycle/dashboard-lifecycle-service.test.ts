@@ -35,6 +35,7 @@ describe("dashboard-lifecycle-service", () => {
           runtime: {
             dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
             enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
+            consoleLogLevel: "standard",
           },
           integrations: {
             julesApiKey: "",
@@ -212,6 +213,7 @@ describe("dashboard-lifecycle-service", () => {
 
       expect(createLogger).toHaveBeenCalledWith({
         bindings: { service: "code-ux" },
+        getConsoleLogLevel: expect.any(Function),
         logFilePath: undefined,
       });
     });
@@ -226,6 +228,7 @@ describe("dashboard-lifecycle-service", () => {
 
       expect(createLogger).toHaveBeenCalledWith({
         bindings: { service: "code-ux" },
+        getConsoleLogLevel: expect.any(Function),
         logFilePath: path.join("/project-root", ".code-ux", "debug.log"),
       });
     });
@@ -261,6 +264,7 @@ describe("dashboard-lifecycle-service", () => {
         runtime: {
           dashboardPort: 4444,
           enableDebugLogFile: true,
+          consoleLogLevel: "standard",
         },
       };
 

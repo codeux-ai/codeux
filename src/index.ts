@@ -1,17 +1,28 @@
 #!/usr/bin/env node
-import dotenv from "dotenv";
-import * as path from "path";
-import { fileURLToPath } from "url";
-import { loadAppConfig } from "./config/app-config.js";
-import { JulesAgentServer } from "./server/jules-agent-server.js";
+import { installRuntimeWarningFilter } from "./runtime-warning-filter.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const projectRoot = path.resolve(__dirname, "..");
+installRuntimeWarningFilter();
 
-dotenv.config({ path: path.join(projectRoot, ".env") });
+export async function main(args: string[] = process.argv): Promise<void> {
+  const [
+    dotenv,
+    path,
+    { fileURLToPath },
+    { loadAppConfig },
+    { JulesAgentServer },
+  ] = await Promise.all([
+    import("dotenv"),
+    import("path"),
+    import("url"),
+    import("./config/app-config.js"),
+    import("./server/jules-agent-server.js"),
+  ]);
 
-export async function main(args: string[] = process.argv) {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const projectRoot = path.resolve(__dirname, "..");
+
+  dotenv.config({ path: path.join(projectRoot, ".env"), quiet: true });
   const appConfig = loadAppConfig(args, projectRoot);
 
   if (args.includes("--help") || args.includes("-h")) {

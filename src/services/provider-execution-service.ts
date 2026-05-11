@@ -133,6 +133,18 @@ export class ProviderExecutionService {
       }
 
       const startedMs = Date.now();
+      this.deps.logger?.info("Provider invocation started", {
+        logPurpose: "invocation",
+        invocationId: execInvocationId,
+        providerInvocationId: invocation?.id,
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        taskId: args.taskId,
+        provider: args.provider,
+        model: args.model,
+        purpose: args.purpose,
+        executionMode: args.workflowSettings.executionMode,
+      });
 
       const runnerOpts = {
         provider: args.provider,
@@ -173,18 +185,38 @@ export class ProviderExecutionService {
         },
       };
 
-      const result = args.expectTextOutput
-        ? await this.deps.providerRunner.runProviderForText(runnerOpts)
-        : await this.deps.providerRunner.runProvider(runnerOpts);
+      const result = await (async (): Promise<ProviderRunResult> => {
+        try {
+          return args.expectTextOutput
+            ? await this.deps.providerRunner.runProviderForText(runnerOpts)
+            : await this.deps.providerRunner.runProvider(runnerOpts);
+        } catch (error) {
+          this.deps.logger?.error("Provider invocation crashed", {
+            logPurpose: "invocation",
+            invocationId: execInvocationId,
+            providerInvocationId: invocation?.id,
+            projectId: args.projectId,
+            sprintId: args.sprintId,
+            taskId: args.taskId,
+            provider: args.provider,
+            model: args.model,
+            purpose: args.purpose,
+            durationMs: Date.now() - startedMs,
+            error,
+          });
+          throw error;
+        }
+      })();
 
       if (invocation && this.deps.executionRepository) {
         const finishedAt = new Date().toISOString();
+        const durationMs = Date.now() - startedMs;
         this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
           status: result.ok ? "completed" : "failed",
           model: args.model,
           nativeSessionId: result.nativeSessionId,
           finishedAt,
-          durationMs: Date.now() - startedMs,
+          durationMs,
           transcriptChars: result.usageTelemetry.transcriptText.length,
           inputTokens: result.usageTelemetry.inputTokens,
           cachedInputTokens: result.usageTelemetry.cachedInputTokens,
@@ -206,12 +238,28 @@ export class ProviderExecutionService {
             reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
             totalTokens: result.usageTelemetry.totalTokens,
             usageSource: result.usageTelemetry.usageSource,
-            durationMs: Date.now() - startedMs,
+            durationMs,
           }, {
             sourceEventKey: `cli:provider:usage:${invocation.id}`,
           });
         }
       }
+
+      this.deps.logger?.info("Provider invocation finished", {
+        logPurpose: "invocation",
+        invocationId: execInvocationId,
+        providerInvocationId: invocation?.id,
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        taskId: args.taskId,
+        provider: args.provider,
+        model: args.model,
+        purpose: args.purpose,
+        ok: result.ok,
+        durationMs: Date.now() - startedMs,
+        totalTokens: result.usageTelemetry.totalTokens,
+        usageSource: result.usageTelemetry.usageSource,
+      });
 
       return result;
     };

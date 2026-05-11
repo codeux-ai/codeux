@@ -81,6 +81,7 @@ Runtime resolution:
 - `runtime`
   - `dashboardPort`
   - `enableDebugLogFile`
+  - `consoleLogLevel` (`standard` by default; `full` also prints routine dashboard HTTP request logs)
 - `integrations`
   - `julesApiKey`
   - `geminiApiKey`

@@ -100,6 +100,7 @@ export function createCoreDependencies(
 
   const logger = createLogger({
     bindings: { service: CODE_UX_SERVICE_NAME },
+    getConsoleLogLevel: () => context.runtimeContext.dashboardSettings?.consoleLogLevel,
     logFilePath,
   });
 

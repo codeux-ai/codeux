@@ -88,6 +88,7 @@ const sanitizeQualityAssuranceTrigger = (
 export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
   dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
   enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
+  consoleLogLevel: DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel,
   appearance: { ...DEFAULT_DASHBOARD_SETTINGS.appearance },
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   automationInterventions: {
@@ -139,6 +140,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const input = (value && typeof value === "object" ? value : {}) as Partial<DashboardSettings>;
   const dashboardPort = readPort(input.dashboardPort, DEFAULT_DASHBOARD_SETTINGS.dashboardPort);
   const enableDebugLogFile = readBoolean(input.enableDebugLogFile, DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile);
+  const consoleLogLevel = input.consoleLogLevel === "full" ? "full" : DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel;
 
   const appearanceInput = (input.appearance && typeof input.appearance === "object"
     ? input.appearance
@@ -293,6 +295,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   return {
     dashboardPort,
     enableDebugLogFile,
+    consoleLogLevel,
     appearance,
     automationLevel: validAutomationLevel,
     automationInterventions,

@@ -25,16 +25,13 @@ describe("mcp-lifecycle-service", () => {
         debug: vi.fn(),
         child: vi.fn(),
       } as any,
-      isJulesApiConfigured: vi.fn().mockReturnValue(true),
-      getMissingJulesApiKeyInstruction: vi.fn().mockReturnValue("Missing key instructions"),
     };
   });
 
   describe("bootMcpTransport", () => {
-    it("connects to transport and logs info when API key is configured", async () => {
+    it("connects to transport and logs info", async () => {
       await bootMcpTransport(mockDeps);
 
-      expect(mockDeps.isJulesApiConfigured).toHaveBeenCalled();
       expect(mockDeps.logger.warn).not.toHaveBeenCalled();
 
       expect(StdioServerTransport).toHaveBeenCalled();
@@ -46,16 +43,10 @@ describe("mcp-lifecycle-service", () => {
       );
     });
 
-    it("logs warnings when API key is not configured", async () => {
-      vi.mocked(mockDeps.isJulesApiConfigured).mockReturnValue(false);
-
+    it("does not warn when the Jules API key is not configured at startup", async () => {
       await bootMcpTransport(mockDeps);
 
-      expect(mockDeps.logger.warn).toHaveBeenCalledWith(
-        "Jules API key is not set. Jules-native tools are disabled; Gemini/Codex CLI providers can still run."
-      );
-      expect(mockDeps.logger.warn).toHaveBeenCalledWith("Missing key instructions");
-      expect(mockDeps.getMissingJulesApiKeyInstruction).toHaveBeenCalled();
+      expect(mockDeps.logger.warn).not.toHaveBeenCalled();
 
       expect(StdioServerTransport).toHaveBeenCalled();
       expect(mockDeps.server.connect).toHaveBeenCalled();

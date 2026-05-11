@@ -17,6 +17,7 @@ export const applyDashboardPreRouteMiddleware = (
     const startedAt = Date.now();
     res.on("finish", () => {
       dashboardLogger.info("Dashboard request completed", {
+        logPurpose: "request",
         method: req.method,
         path: req.originalUrl,
         statusCode: res.statusCode,

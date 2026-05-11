@@ -65,6 +65,7 @@ describe("validateSettingsPayload", () => {
     const payload = {
       dashboardPort: 4444,
       enableDebugLogFile: false,
+      consoleLogLevel: "standard",
       automationLevel: "FULL",
       automationInterventions: "invalid",
       aiProvider: "invalid",
@@ -98,6 +99,7 @@ describe("validateSettingsPayload", () => {
     const payload = {
       dashboardPort: "bad",
       enableDebugLogFile: "bad",
+      consoleLogLevel: "bad",
       automationLevel: "INVALID",
       automationInterventions: {
         autoApprovePlan: "bad",
@@ -219,6 +221,7 @@ describe("validateSettingsPayload", () => {
     expect(result.success).toBe(false);
     expect(paths).toContain("dashboardPort");
     expect(paths).toContain("enableDebugLogFile");
+    expect(paths).toContain("consoleLogLevel");
     expect(paths).toContain("automationLevel");
     expect(paths).toContain("automationInterventions.autoApprovePlan");
     expect(paths).toContain("aiProvider.provider");

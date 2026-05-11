@@ -16,6 +16,7 @@ import {
   calculateChartMetrics,
   getTooltipState,
 } from "../../../dashboard/src/v2/pages/stats/chart-view-models.js";
+import { useUsageChartState } from "../../../dashboard/src/v2/pages/stats/use-usage-chart-state.js";
 
 // Basic stubs
 window.SVGElement.prototype.getTotalLength = () => 100;
@@ -321,8 +322,6 @@ describe("useUsageChartState", () => {
     let currentState: any = null;
 
     const HookWrapper = ({ projectId, stats }: { projectId: string | null, stats: any }) => {
-      // Import inline for testing
-      const { useUsageChartState } = require("../../../dashboard/src/v2/pages/stats/use-usage-chart-state.ts");
       currentState = useUsageChartState(projectId, stats);
       return <div data-testid="wrapper">Test</div>;
     };

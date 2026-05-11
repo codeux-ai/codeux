@@ -206,6 +206,7 @@ export class SettingsRepository {
         runtime: {
           dashboardPort: legacySettings.dashboardPort,
           enableDebugLogFile: legacySettings.enableDebugLogFile,
+          consoleLogLevel: legacySettings.consoleLogLevel,
         },
         integrations: {
           julesApiKey: legacySettings.aiProvider?.providers?.jules?.apiKey || "",

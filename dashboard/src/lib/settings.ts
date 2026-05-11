@@ -6,6 +6,7 @@ export { DEFAULT_DASHBOARD_SETTINGS };
 export const cloneDefaultSettings = (): DashboardSettings => ({
   dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
   enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
+  consoleLogLevel: DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel,
   appearance: { ...DEFAULT_DASHBOARD_SETTINGS.appearance },
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   automationInterventions: { ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions },
