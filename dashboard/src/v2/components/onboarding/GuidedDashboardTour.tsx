@@ -189,6 +189,9 @@ const readRect = (element: HTMLElement): RectState => {
 
 export const GuidedDashboardTour: FunctionComponent = () => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const lineLayerRef = useRef<SVGSVGElement>(null);
+  const linePathRef = useRef<SVGPathElement>(null);
+  const targetRingRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [availableSteps, setAvailableSteps] = useState<TourStep[]>([]);
@@ -208,6 +211,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
   }, []);
 
   const activeStep = availableSteps[activeIndex] || null;
+  const targetReady = Boolean(targetRect);
 
   const updateTargetRect = useCallback(() => {
     if (!activeStep) {
@@ -255,15 +259,28 @@ export const GuidedDashboardTour: FunctionComponent = () => {
   }, [open, updateTargetRect]);
 
   useLayoutEffect(() => {
-    if (!open || !cardRef.current) {
+    if (!open || !targetReady || !cardRef.current) {
       return;
     }
+    const animatedElements = [cardRef.current, lineLayerRef.current, targetRingRef.current].filter(Boolean);
     gsap.fromTo(
-      cardRef.current,
+      animatedElements,
       { opacity: 0, y: reducedMotion ? 0 : 18, scale: reducedMotion ? 1 : 0.97, filter: reducedMotion ? "blur(0px)" : "blur(10px)" },
       { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", duration: reducedMotion ? 0 : 0.42, ease: "power4.out", clearProps: "filter" },
     );
-  }, [activeIndex, open, reducedMotion]);
+    if (!reducedMotion && linePathRef.current) {
+      gsap.fromTo(
+        linePathRef.current,
+        { strokeDashoffset: 0 },
+        { strokeDashoffset: -32, duration: 2.8, ease: "none", repeat: -1 },
+      );
+    }
+    return () => {
+      if (linePathRef.current) {
+        gsap.killTweensOf(linePathRef.current);
+      }
+    };
+  }, [activeIndex, open, reducedMotion, targetReady]);
 
   useEffect(() => {
     setProgress(0);
@@ -309,7 +326,8 @@ export const GuidedDashboardTour: FunctionComponent = () => {
     }
     const width = Math.min(380, window.innerWidth - 32);
     const estimatedHeight = 270;
-    const gap = 22;
+    const bottomAnchored = targetRect.top > window.innerHeight * 0.55;
+    const gap = bottomAnchored ? 82 : 22;
     const targetCenterX = targetRect.left + targetRect.width / 2;
     const targetCenterY = targetRect.top + targetRect.height / 2;
     const belowTop = targetRect.top + targetRect.height + gap;
@@ -340,8 +358,9 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
   return (
     <div className="fixed inset-0 z-[180] pointer-events-none">
-      <svg className="absolute inset-0 h-full w-full" aria-hidden="true">
+      <svg ref={lineLayerRef} className="absolute inset-0 h-full w-full opacity-0" aria-hidden="true">
         <path
+          ref={linePathRef}
           d={path}
           fill="none"
           stroke={accent.line}
@@ -353,8 +372,9 @@ export const GuidedDashboardTour: FunctionComponent = () => {
       </svg>
 
       <div
+        ref={targetRingRef}
         aria-hidden="true"
-        className={`absolute rounded-[1.35rem] border ${accent.border} ${accent.shadow}`}
+        className={`absolute rounded-[1.35rem] border opacity-0 ${accent.border} ${accent.shadow}`}
         style={{
           left: `${targetRect.left - 8}px`,
           top: `${targetRect.top - 8}px`,

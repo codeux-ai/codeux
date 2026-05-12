@@ -702,18 +702,33 @@ export const OnboardingExperience: FunctionComponent = () => {
             ) : null}
 
             {active.id === "introduction" ? (
-              <div className="grid gap-4 md:grid-cols-3">
-                {[
-                  ["Container-first execution", "Provider CLIs run inside isolated Docker containers with a mounted workspace snapshot."],
-                  ["Credential boundary", "Local credentials are copied only into the intended CLI runtime and are not used as raw application secrets."],
-                  ["TOS-compliant workflow", "Authentication stays with each provider's supported CLI flow, so Code UX orchestrates tools instead of impersonating providers."],
-                ].map(([title, description]) => (
-                  <div data-onboarding-card key={title} className="group rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.045)] transition-transform hover:-translate-y-1 dark:border-white/[0.06] dark:bg-white/[0.04]">
-                    <ShieldCheck className="h-6 w-6 text-signal-600 dark:text-signal-300" />
-                    <div className="mt-4 text-base font-black text-slate-900 dark:text-white">{title}</div>
-                    <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
+              <div className="space-y-4">
+                <div data-onboarding-card className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
+                  <div aria-hidden className="absolute -right-8 -top-10 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">UX</div>
+                  <div className="relative z-10 max-w-3xl">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-signal-700 dark:text-signal-200">
+                      <Sparkles className="h-3.5 w-3.5" strokeWidth={2.4} />
+                      Agentic runtime
+                    </div>
+                    <h4 className="mt-4 font-display text-3xl font-black leading-none tracking-tight text-slate-950 dark:text-white">Welcome to Code UX.</h4>
+                    <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+                      Code UX is an advanced containerized agentic workspace for turning projects into guided sprints, executable tasks, live previews, and measurable delivery. It coordinates provider CLIs inside isolated Docker runtimes, keeps credentials inside the intended tools, and gives you one polished control surface for agents, memory, browser sessions, and automation.
+                    </p>
                   </div>
-                ))}
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {[
+                    ["Container-first execution", "Provider CLIs run inside isolated Docker containers with a mounted workspace snapshot."],
+                    ["Credential boundary", "Local credentials are copied only into the intended CLI runtime and are not used as raw application secrets."],
+                    ["TOS-compliant workflow", "Authentication stays with each provider's supported CLI flow, so Code UX orchestrates tools instead of impersonating providers."],
+                  ].map(([title, description]) => (
+                    <div data-onboarding-card key={title} className="group rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.045)] transition-transform hover:-translate-y-1 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <ShieldCheck className="h-6 w-6 text-signal-600 dark:text-signal-300" />
+                      <div className="mt-4 text-base font-black text-slate-900 dark:text-white">{title}</div>
+                      <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
 
