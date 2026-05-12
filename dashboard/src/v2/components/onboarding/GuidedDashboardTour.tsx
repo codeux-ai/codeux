@@ -192,6 +192,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
   const lineLayerRef = useRef<SVGSVGElement>(null);
   const linePathRef = useRef<SVGPathElement>(null);
   const targetRingRef = useRef<HTMLDivElement>(null);
+  const suppressAutoAdvanceRef = useRef(false);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [availableSteps, setAvailableSteps] = useState<TourStep[]>([]);
@@ -235,6 +236,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
         }
         setActiveIndex(0);
         setProgress(0);
+        suppressAutoAdvanceRef.current = false;
         setOpen(true);
       }, 140);
     };
@@ -298,9 +300,17 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
   useEffect(() => {
     if (progress < 100 || availableSteps.length === 0) {
+      if (progress < 100) {
+        suppressAutoAdvanceRef.current = false;
+      }
+      return;
+    }
+    if (suppressAutoAdvanceRef.current) {
       return;
     }
     if (activeIndex < availableSteps.length - 1) {
+      suppressAutoAdvanceRef.current = true;
+      setProgress(0);
       setActiveIndex((current) => current + 1);
       return;
     }
@@ -313,10 +323,14 @@ export const GuidedDashboardTour: FunctionComponent = () => {
   };
 
   const goPrevious = () => {
+    suppressAutoAdvanceRef.current = true;
+    setProgress(0);
     setActiveIndex((current) => Math.max(0, current - 1));
   };
 
   const goNext = () => {
+    suppressAutoAdvanceRef.current = true;
+    setProgress(0);
     setActiveIndex((current) => Math.min(availableSteps.length - 1, current + 1));
   };
 

@@ -31,6 +31,10 @@ import { fetchSystemSettings, saveSystemSettings } from "../../lib/settings-api.
 import { ONBOARDING_OPEN_EVENT, ONBOARDING_STORAGE_KEY, startDashboardTour } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { OnboardingIntro } from "./OnboardingIntro.js";
+
+const INTRO_SEEN_KEY = "cux-onboarding-intro-seen";
+type IntroPhase = "intro" | "transitioning" | "onboarding";
 import type { OnboardingProviderCredentialStatus, OnboardingRuntimeReadiness, ProviderConfigId, ProviderId, ProjectSettings, SystemSettings } from "../../../types.js";
 import {
   createProjectProviderDraft,
@@ -200,6 +204,9 @@ export const OnboardingExperience: FunctionComponent = () => {
   const [selectedProviders, setSelectedProviders] = useState<ProviderId[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [introPhase, setIntroPhase] = useState<IntroPhase>(() =>
+    typeof window !== "undefined" && window.localStorage.getItem(INTRO_SEEN_KEY) === "true" ? "onboarding" : "intro",
+  );
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -208,10 +215,26 @@ export const OnboardingExperience: FunctionComponent = () => {
     const handleOpen = () => {
       setActiveStep(0);
       setOpen(true);
+      if (window.localStorage.getItem(INTRO_SEEN_KEY) !== "true") {
+        setIntroPhase("intro");
+      }
     };
     window.addEventListener(ONBOARDING_OPEN_EVENT, handleOpen);
     return () => window.removeEventListener(ONBOARDING_OPEN_EVENT, handleOpen);
   }, []);
+
+  const handleIntroExitStart = () => {
+    setIntroPhase("transitioning");
+  };
+
+  const handleIntroComplete = () => {
+    try {
+      window.localStorage.setItem(INTRO_SEEN_KEY, "true");
+    } catch {
+      /* localStorage may be unavailable; intro will replay next time, no functional issue */
+    }
+    setIntroPhase("onboarding");
+  };
 
   const load = async () => {
     try {
@@ -558,6 +581,11 @@ export const OnboardingExperience: FunctionComponent = () => {
   const clusterReady = readiness.cluster.status === "ready";
 
   return (
+    <>
+      {introPhase !== "onboarding" && (
+        <OnboardingIntro onExitStart={handleIntroExitStart} onComplete={handleIntroComplete} />
+      )}
+      {introPhase !== "intro" && (
     <div ref={backdropRef} className="fixed inset-0 z-[200] flex items-center justify-center overflow-hidden bg-[#060A0D] px-3 py-4 md:px-6 md:py-8">
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <Suspense fallback={<div className="absolute inset-0 bg-[#060A0D]" />}>
@@ -1065,6 +1093,8 @@ export const OnboardingExperience: FunctionComponent = () => {
         </div>
       </section>
     </div>
+      )}
+    </>
   );
 };
 
