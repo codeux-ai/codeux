@@ -64,3 +64,15 @@ Provider choices update:
 Appearance choices update `defaults.appearance`, which is also used by the Settings page. The root dashboard shell listens for settings updates and reapplies theme and reduced-motion preferences without a page reload.
 
 Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action clears only the browser-local onboarding completion marker and does not reset saved system or project settings.
+
+## Post-Onboarding Tour
+
+Finishing onboarding redirects the operator to `/` and starts the dashboard guide. The guide anchors to real UI elements through `data-tour-id` markers so it works with both dock navigation and sidebar navigation.
+
+The guide covers:
+- Projects: project management and adding the first project
+- Docker Containers: container runtime readiness and running CLI containers
+- Active Sessions: preview containers and browser sessions
+- Each navigation destination: Chat, Overview, Sprints, Tasks, Agents, Stats, Memory, Browser, Live, and Settings/Config
+
+The tour card includes previous/next controls, a hide action, the current step count, and an auto-advance progress bar. Hidden state is stored in the browser under `codeux:dashboard-tour-hidden:v1`.

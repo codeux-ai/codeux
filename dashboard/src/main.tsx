@@ -19,6 +19,7 @@ import { SkeletonPanel } from "./v2/components/ui/ListSkeletons.js";
 import { DashboardV2 } from "./v2/DashboardV2.js";
 import { LiveSessionPage } from "./v2/LiveSessionPage.js";
 import { OnboardingExperience } from "./v2/components/onboarding/OnboardingExperience.js";
+import { GuidedDashboardTour } from "./v2/components/onboarding/GuidedDashboardTour.js";
 import "./styles.css";
 
 const DeepOceanBackground = lazy(() => import("./v2/components/chat/DeepOceanBackground.js").then((module) => ({
@@ -145,6 +146,7 @@ const AppLayout = () => {
 
         {!showSidebar && <KineticDock />}
         <OnboardingExperience />
+        <GuidedDashboardTour />
         <footer className="sr-only">Dashboard Footer</footer>
       </div>
     </div>

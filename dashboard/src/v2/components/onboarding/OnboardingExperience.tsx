@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { lazy, Suspense } from "preact/compat";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,7 +25,7 @@ import {
 } from "lucide-preact";
 import { fetchOnboardingReadiness } from "../../../lib/api/dashboard-api.js";
 import { fetchSystemSettings, saveSystemSettings } from "../../lib/settings-api.js";
-import { ONBOARDING_OPEN_EVENT, ONBOARDING_STORAGE_KEY } from "../../lib/onboarding-control.js";
+import { ONBOARDING_OPEN_EVENT, ONBOARDING_STORAGE_KEY, startDashboardTour } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import type { OnboardingProviderCredentialStatus, OnboardingRuntimeReadiness, ProviderConfigId, ProviderId, ProjectSettings, SystemSettings } from "../../../types.js";
@@ -184,6 +185,7 @@ const syncProjectProvidersToIntegrationCatalog = (
 };
 
 export const OnboardingExperience: FunctionComponent = () => {
+  const navigate = useNavigate();
   const backdropRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLElement>(null);
   const sideRef = useRef<HTMLElement>(null);
@@ -474,6 +476,8 @@ export const OnboardingExperience: FunctionComponent = () => {
     if (!settings) {
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
       setOpen(false);
+      await navigate({ to: "/" });
+      window.setTimeout(startDashboardTour, 260);
       return;
     }
     setSaving(true);
@@ -534,6 +538,8 @@ export const OnboardingExperience: FunctionComponent = () => {
       setSettings(nextSettings);
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
       setOpen(false);
+      await navigate({ to: "/" });
+      window.setTimeout(startDashboardTour, 260);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError));
     } finally {

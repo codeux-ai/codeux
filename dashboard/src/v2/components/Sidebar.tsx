@@ -162,7 +162,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                     </div>
                 </div>
                 <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex flex-col leading-none font-display">
-                    Jules <span className="text-[9px] uppercase font-bold font-mono tracking-[0.2em] text-signal-500 mt-1 opacity-90">Code UX</span>
+                    Code <span className="text-[9px] uppercase font-bold font-mono tracking-[0.2em] text-signal-500 mt-1 opacity-90">UX Runtime</span>
                 </h1>
             </a>
 
@@ -176,6 +176,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                             key={item.label}
                             to={item.path}
                             aria-current={isActive ? "page" : undefined}
+                            data-tour-id={`nav-${item.label.toLowerCase()}`}
                             className="relative flex items-center gap-3.5 px-5 py-3 min-h-[44px] rounded-2xl transition-colors duration-200 w-full text-left group overflow-hidden mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none"
                         >
                             <div className={`absolute inset-0 rounded-2xl transition-all duration-300 pointer-events-none origin-left ${isActive ? 'bg-signal-500/[0.10] dark:bg-signal-500/[0.10] opacity-100 translate-x-0' : 'bg-black/[0.05] dark:bg-white/[0.05] opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100'}`} />
@@ -198,7 +199,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
             {/* Settings */}
             <div className="px-4 relative z-10">
-                <Link to="/config" aria-label="Settings" className="relative w-full flex items-center gap-3.5 px-5 py-3 min-h-[44px] rounded-2xl transition-colors duration-200 text-left group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none">
+                <Link to="/config" aria-label="Settings" data-tour-id="nav-config" className="relative w-full flex items-center gap-3.5 px-5 py-3 min-h-[44px] rounded-2xl transition-colors duration-200 text-left group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none">
                     <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100" />
                     <Settings aria-hidden="true" className="relative z-10 w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:rotate-90 transition-all duration-700 ease-in-out" strokeWidth={1.5} />
                     <span className="relative z-10 font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300">Settings</span>

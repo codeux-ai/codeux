@@ -143,6 +143,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
         >
             <button
                 type="button"
+                data-tour-id="active-sessions"
                 onClick={toggleMenu}
                 onFocus={handleFocus}
                 onBlur={handleBlur}

@@ -144,6 +144,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
         >
             <button
                 type="button"
+                data-tour-id="docker-containers"
                 aria-label="Docker Status"
                 aria-haspopup="dialog"
                 aria-expanded={interactionState !== 'closed'}
