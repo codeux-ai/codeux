@@ -570,105 +570,20 @@
 }
 
 /* ============================================================
-   Code UX brand motion — Hover choreography for the ORBIT mark.
-   Triggered by hovering the .cux-mark itself, OR any ancestor
-   marked with .cux-trigger. Reusable: drop .cux-trigger on a
-   button/card to make any embedded mark spring to life.
+   Code UX brand motion — Reusable hover primitives.
+   The brand mark itself uses the GSAP-driven <Atom> component.
+   These utilities are for general-purpose micro-interactions
+   throughout the app: status badges, pill highlights, etc.
    ============================================================ */
 
-@keyframes cux-blink {
-  0%, 100% { transform: scaleY(1); }
-  18%      { transform: scaleY(0.96); }
-  44%, 50% { transform: scaleY(0.04); }
-  76%      { transform: scaleY(1.05); }
-}
-
-@keyframes cux-iris {
-  0%, 100% { transform: scale(1); }
-  55%      { transform: scale(1.16); }
-}
-
 @keyframes cux-pulse {
-  0%, 100% { opacity: 1;   transform: scale(1); }
+  0%, 100% { opacity: 1;    transform: scale(1); }
   55%      { opacity: 1.55; transform: scale(1.22); }
 }
 
 @keyframes cux-glint {
   0%, 100% { opacity: 0.78; transform: scale(1); }
   50%      { opacity: 1;    transform: scale(1.32); }
-}
-
-@keyframes cux-sweep {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-/* Anchor every animated piece to the 64-grid viewBox center,
-   except the satellite halo which has its own pivot. */
-.cux-mark .cux-eye,
-.cux-mark .cux-pupil,
-.cux-mark .cux-eye-halo,
-.cux-mark .cux-glint {
-  transform-box: view-box;
-  transform-origin: 32px 32px;
-}
-.cux-mark .cux-sat-halo {
-  transform-box: view-box;
-  transform-origin: 54px 41px;
-}
-.cux-mark .cux-glint {
-  transform-origin: 30.4px 30.5px;
-}
-
-/* The lid */
-.cux-mark:hover .cux-eye,
-.cux-mark:focus-visible .cux-eye,
-.cux-trigger:hover .cux-mark .cux-eye,
-.cux-trigger:focus-visible .cux-mark .cux-eye {
-  animation: cux-blink 780ms cubic-bezier(0.65, 0, 0.35, 1);
-}
-
-/* The pupil dilates as the eye reopens — overshoot easing */
-.cux-mark:hover .cux-pupil,
-.cux-mark:focus-visible .cux-pupil,
-.cux-trigger:hover .cux-mark .cux-pupil,
-.cux-trigger:focus-visible .cux-mark .cux-pupil {
-  animation: cux-iris 980ms cubic-bezier(0.34, 1.56, 0.64, 1) 340ms;
-}
-
-/* The atmosphere expands */
-.cux-mark:hover .cux-eye-halo,
-.cux-mark:focus-visible .cux-eye-halo,
-.cux-trigger:hover .cux-mark .cux-eye-halo,
-.cux-trigger:focus-visible .cux-mark .cux-eye-halo {
-  animation: cux-pulse 1240ms cubic-bezier(0.4, 0, 0.2, 1) 80ms;
-}
-
-.cux-mark:hover .cux-sat-halo,
-.cux-mark:focus-visible .cux-sat-halo,
-.cux-trigger:hover .cux-mark .cux-sat-halo,
-.cux-trigger:focus-visible .cux-mark .cux-sat-halo {
-  animation: cux-pulse 1100ms cubic-bezier(0.4, 0, 0.2, 1) 220ms;
-}
-
-/* The glint — moment of recognition */
-.cux-mark:hover .cux-glint,
-.cux-mark:focus-visible .cux-glint,
-.cux-trigger:hover .cux-mark .cux-glint,
-.cux-trigger:focus-visible .cux-mark .cux-glint {
-  animation: cux-glint 900ms cubic-bezier(0.4, 0, 0.2, 1) 520ms;
-}
-
-/* ---- Reusable primitives ---------------------------------
-   Drop on ANY element to get the brand motion vocabulary. */
-
-.cux-blink-on-hover {
-  transform-box: fill-box;
-  transform-origin: 50% 50%;
-}
-.cux-blink-on-hover:hover,
-.cux-trigger:hover .cux-blink-on-hover {
-  animation: cux-blink 780ms cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 .cux-pulse-on-hover {
@@ -689,16 +604,9 @@
   animation: cux-glint 900ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Respect accessibility preference */
 @media (prefers-reduced-motion: reduce) {
-  .cux-mark:hover *,
-  .cux-mark:focus-visible *,
-  .cux-trigger:hover .cux-mark *,
-  .cux-trigger:focus-visible .cux-mark *,
-  .cux-blink-on-hover:hover,
   .cux-pulse-on-hover:hover,
   .cux-glint-on-hover:hover,
-  .cux-trigger:hover .cux-blink-on-hover,
   .cux-trigger:hover .cux-pulse-on-hover,
   .cux-trigger:hover .cux-glint-on-hover {
     animation: none !important;
