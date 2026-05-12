@@ -16,6 +16,7 @@ import { TopCardsModeRenderer } from "../../components/stats/TopCardsModeRendere
 import { STATS_COLORS } from "../../lib/stats/color-tokens.js";
 import { buildMetricSeries } from "../../lib/stats/series-builders.js";
 import { Button } from "../../components/ui/Button.js";
+import { PageContainer } from "../../components/ui/PageContainer.js";
 import styles from "./StatsPage.module.css";
 
 export const StatsPage: FunctionComponent = () => {
@@ -67,7 +68,7 @@ export const StatsPage: FunctionComponent = () => {
   }, [stats, reducedMotion]);
 
   return (
-    <div ref={rootRef} className={`mx-auto flex max-w-[2400px] flex-col gap-16 px-8 py-20 md:px-20 ${styles.pageRoot}`}>
+    <PageContainer containerRef={rootRef} padding="stats" className={`gap-16 ${styles.pageRoot}`}>
       <StatsPageHero
         selectedProject={selectedProject}
         stats={stats}
@@ -133,6 +134,6 @@ export const StatsPage: FunctionComponent = () => {
 
                   </>
       ) : null}
-    </div>
+    </PageContainer>
   );
 };

@@ -161,6 +161,7 @@ Legacy runtime:
 
 ### V2 project management
 - Interactive dashboard controls use pointer cursors consistently: enabled buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays expose a pointer affordance, while disabled controls retain `not-allowed`.
+- V2 pages use the shared `PageContainer` atomic component for page-level layout. Its `2400px` max width matches the `/` overview dashboard and is the single source of truth for page container width across overview, project, sprint, task, live, memory, stats, settings, agents, chat, and browser routes.
 - Top-nav project selector persists the active project in sqlite
 - Top-nav sprint selector persists the active sprint for the selected project
 - Top-nav search sits in the left header cluster beside the brand, while the active task counter uses the same compact height as the project, sprint, and worker selectors
@@ -235,6 +236,7 @@ Legacy runtime:
 - Heavy WebGL-only dashboard surfaces are now lazy-loaded, including the global ocean background and the agent avatar scene, so the initial dashboard route no longer eagerly pulls those renderer modules into the first page chunk
 - Tasks page is project-scoped and uses a three-column board state (`Queued`, `In Progress`, `Completed`), where `coding_completed` acts as active work.
 - Tasks page renders create/edit inline through the new `TaskComposer` replacing the modal flow.
+- On a fresh installation, the Tasks page replaces the old generic project/sprint/task database message with a polished task-scope placeholder; the project action opens the shared Add Project dialog and the sprint action routes operators to the Sprints page before the kanban controls appear.
 - Task cards now explicitly show downstream dependent tasks as readable metadata tags.
 - Task cards keep the premium glass layout with pointer-driven tilt, status wave, border trace, compact executor/time metadata, and dependency status badges.
 - Navigating from a sprint cell into `View Tasks` now preselects that sprint instead of leaving the board on `All Sprints`

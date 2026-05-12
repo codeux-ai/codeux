@@ -31,6 +31,7 @@ import { StatsHeader } from "./components/StatsHeader.js";
 import { SprintProtocol } from "./components/SprintProtocol.js";
 import { IdleRuntimeState } from "./components/ui/IdleRuntimeState.js";
 import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
+import { PageContainer } from "./components/ui/PageContainer.js";
 import {
     EMPTY_RUNTIME_STATS,
 } from "./lib/live-session-config.js";
@@ -341,7 +342,7 @@ export const LiveSessionPage: FunctionComponent = () => {
 
 
     return (
-        <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10">
+        <PageContainer className="gap-16">
             <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
             <LiveTransportBanner
                 transportState={transportState}
@@ -541,6 +542,6 @@ export const LiveSessionPage: FunctionComponent = () => {
                     />
                 </div>
             </div>
-        </div>
+        </PageContainer>
     );
 };

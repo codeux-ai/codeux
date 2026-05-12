@@ -36,6 +36,7 @@ import { useProgressiveList } from "../../hooks/use-progressive-list.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
 import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { PageContainer } from "../../components/ui/PageContainer.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 
@@ -302,9 +303,7 @@ export const SprintsPage: FunctionComponent = () => {
       execution={execution}
       pendingActionIds={pendingActionIds}
     >
-      <div className={`relative z-10 mx-auto flex max-w-[1920px] flex-col px-8 md:px-20 ${
-        selectedProject ? "gap-20 py-24" : "gap-4 py-12"
-      }`}>
+      <PageContainer padding={selectedProject ? "standard" : "sprintsEmpty"} className={selectedProject ? "gap-20" : "gap-4"}>
         <div ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
           <div className="flex flex-col gap-5">
             <div className="flex items-center gap-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-signal-500">
@@ -560,7 +559,7 @@ export const SprintsPage: FunctionComponent = () => {
             onAddProject={() => setShowAddProjectModal(true)}
           />
         )}
-      </div>
+      </PageContainer>
 
       {showAddProjectModal && (
         <AddProjectModal

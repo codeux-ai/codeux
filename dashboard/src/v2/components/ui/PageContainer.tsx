@@ -1,0 +1,47 @@
+import type { ComponentChildren, FunctionComponent, JSX, Ref } from "preact";
+
+const PAGE_CONTAINER_WIDTH = "max-w-[2400px]";
+
+const pageContainerPadding = {
+  overview: "px-4 py-12 md:px-20 md:py-24",
+  standard: "px-8 py-24 md:px-20",
+  section: "px-8 py-16 md:px-20",
+  stats: "px-8 py-20 md:px-20",
+  settings: "px-6 py-16 md:px-12 xl:px-20",
+  agents: "px-8 py-14 md:px-16 lg:px-20",
+  browser: "px-6 py-6 md:px-8",
+  chat: "px-8 py-12 md:px-20",
+  sprintsEmpty: "px-8 py-12 md:px-20",
+  none: "",
+} as const;
+
+type PageContainerPadding = keyof typeof pageContainerPadding;
+
+type PageContainerProps = Omit<JSX.HTMLAttributes<HTMLDivElement>, "ref"> & {
+  children: ComponentChildren;
+  className?: string;
+  containerRef?: Ref<HTMLDivElement>;
+  padding?: PageContainerPadding;
+};
+
+export const PageContainer: FunctionComponent<PageContainerProps> = ({
+  children,
+  className = "",
+  containerRef,
+  padding = "standard",
+  ...props
+}) => {
+  const classes = [
+    "relative z-10 mx-auto flex w-full flex-col",
+    PAGE_CONTAINER_WIDTH,
+    pageContainerPadding[padding],
+    className,
+  ].filter(Boolean).join(" ");
+
+  return (
+    <div {...props} ref={containerRef} className={classes}>
+      {children}
+    </div>
+  );
+};
+

@@ -8,11 +8,12 @@ import { TasksList } from "./components/TasksList.js";
 import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
 import { useOverviewPageData } from "./hooks/use-overview-page-data.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
+import { PageContainer } from "./components/ui/PageContainer.js";
 
 const OverviewTelemetry = lazy(() => import("./components/OverviewTelemetry.js").then(m => ({ default: m.OverviewTelemetry })));
 
 export const DashboardV2: FunctionComponent = () => {
-    const mainContentRef = useRef<HTMLElement>(null);
+    const mainContentRef = useRef<HTMLDivElement>(null);
     const pageData = useOverviewPageData();
     const prefersReducedMotion = useReducedMotion();
 
@@ -34,7 +35,7 @@ export const DashboardV2: FunctionComponent = () => {
     }, [prefersReducedMotion]);
 
     return (
-        <main id="main-content" ref={mainContentRef} className="max-w-[2400px] mx-auto px-4 md:px-20 py-12 md:py-24 flex flex-col gap-12 md:gap-24">
+        <PageContainer containerRef={mainContentRef} padding="overview" className="gap-12 md:gap-24">
             {/* Page Header */}
             <header className="flex flex-col md:flex-row items-start md:items-end justify-between w-full gap-6">
                 <div>
@@ -91,6 +92,6 @@ export const DashboardV2: FunctionComponent = () => {
                     </Suspense>
                 </aside>
             </div>
-        </main>
+        </PageContainer>
     );
 };

@@ -9,6 +9,7 @@ import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useProjectData } from "./context/project-data.js";
 import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
+import { PageContainer } from "./components/ui/PageContainer.js";
 
 const EMBER_HEX = '#FFB800';
 
@@ -381,10 +382,7 @@ export const ProjectsPage: FunctionComponent = () => {
 
     return (
         <>
-            <div
-                ref={mainRef}
-                className="max-w-[1920px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10"
-            >
+            <PageContainer containerRef={mainRef} className="gap-16">
                 {/* ── Ambient glows (max 2 per page) ─────────────────── */}
                 <div
                     aria-hidden="true"
@@ -522,7 +520,7 @@ export const ProjectsPage: FunctionComponent = () => {
                         </>
                     ) : null}
                 </div>
-            </div>
+            </PageContainer>
 
             {showModal && (
                 <AddProjectModal

@@ -7,6 +7,7 @@ import { useSettingsPageState } from "./hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES, CATEGORY_SEARCH_HINTS } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
+import { PageContainer } from "./components/ui/PageContainer.js";
 
 export const SettingsPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
@@ -80,7 +81,7 @@ export const SettingsPage: FunctionComponent = () => {
   }, [activeCategory, state, prefersReducedMotion]);
 
   return (
-    <div className="relative z-10 mx-auto flex max-w-[1920px] flex-col gap-10 px-6 py-16 md:px-12 xl:px-20">
+    <PageContainer padding="settings" className="gap-10">
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_-5%_-10%,rgba(0,224,160,0.04)_0%,transparent_60%)] dark:bg-[radial-gradient(ellipse_60%_50%_at_-5%_-10%,rgba(0,224,160,0.06)_0%,transparent_60%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,rgba(255,184,0,0.025)_0%,transparent_60%)] dark:bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,rgba(255,184,0,0.04)_0%,transparent_60%)]" />
@@ -272,6 +273,6 @@ export const SettingsPage: FunctionComponent = () => {
           <SettingsContentPanels state={state} />
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 };

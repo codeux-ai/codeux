@@ -29,6 +29,7 @@ import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js
 import { LaunchContainerPanel } from "./components/browser/LaunchContainerPanel.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
+import { PageContainer } from "./components/ui/PageContainer.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
@@ -366,16 +367,16 @@ export const BrowserPage: FunctionComponent = () => {
 
   if (!selectedProject) {
     return (
-      <div className="p-8">
+      <PageContainer padding="browser">
         <div className="rounded-[2rem] border border-black/[0.06] bg-white/60 p-8 text-sm text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
           Select a project first. The in-app browser launches one isolated preview container per sprint.
         </div>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="min-h-full px-6 py-6 md:px-8">
+    <PageContainer padding="browser" className="min-h-full">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
@@ -603,6 +604,6 @@ export const BrowserPage: FunctionComponent = () => {
         </div>
       </div>
       )}
-    </div>
+    </PageContainer>
   );
 };

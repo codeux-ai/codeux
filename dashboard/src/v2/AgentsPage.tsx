@@ -20,6 +20,7 @@ import { AgentsHero } from "./components/agents/AgentsHero.js";
 import { AgentPresetShowcaseCard } from "./components/agents/AgentPresetShowcaseCard.js";
 import { AgentPresetDetailPanel } from "./components/agents/AgentPresetDetailPanel.js";
 import { AgentPresetEditorPanel } from "./components/agents/AgentPresetEditorPanel.js";
+import { PageContainer } from "./components/ui/PageContainer.js";
 
 /* ── Empty State ── */
 const EmptyState: FunctionComponent<{ hasProject: boolean; onCreate?: () => void }> = ({ hasProject, onCreate }) => (
@@ -198,7 +199,7 @@ export const AgentsPage: FunctionComponent = () => {
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
 
   return (
-    <div ref={contentRef} className="relative z-10 mx-auto flex max-w-[1920px] flex-col gap-7 px-8 py-14 md:px-16 lg:px-20">
+    <PageContainer containerRef={contentRef} padding="agents" className="gap-7">
       <AgentsHero
         selectedProject={selectedProject}
         projectLoading={projectLoading}
@@ -278,6 +279,6 @@ export const AgentsPage: FunctionComponent = () => {
           </div>
         </div>
       ) : null}
-    </div>
+    </PageContainer>
   );
 };

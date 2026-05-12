@@ -18,6 +18,7 @@ import { useSprints } from "../hooks/useSprints.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import { prepareMemoryGraph, type MemNode, type Edge, type GraphMetadata, CLUSTER } from "./lib/memory-graph.js";
 import type { SprintRecord, AgentPreset } from "./types.js";
+import { PageContainer } from "./components/ui/PageContainer.js";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -669,7 +670,7 @@ export const MemoryPage: FunctionComponent = () => {
 
     /* ─── Render ──────────────────────────────────────────────────────── */
     return (
-        <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-16 flex flex-col gap-8 relative z-10">
+        <PageContainer padding="section" className="gap-8">
 
             <div aria-hidden className="fixed inset-0 pointer-events-none -z-10">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_40%,rgba(0,224,160,0.04)_0%,transparent_70%)]
@@ -934,6 +935,6 @@ export const MemoryPage: FunctionComponent = () => {
                 onClose={() => setShowAddModal(false)}
                 onCreated={loadData}
             />
-        </div>
+        </PageContainer>
     );
 };
