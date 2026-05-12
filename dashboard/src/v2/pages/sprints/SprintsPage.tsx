@@ -36,7 +36,6 @@ import { useProgressiveList } from "../../hooks/use-progressive-list.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
 import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { useProjectData } from "../../context/project-data.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 
@@ -121,10 +120,10 @@ export const SprintsPage: FunctionComponent = () => {
   const bubblesRef = useRef<HTMLDivElement>(null);
   const createStageRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
-  const { projects, createProject } = useProjectData();
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
 
   const {
+    projects = [],
     selectedProject,
     sortedSprints,
     loading,
@@ -172,6 +171,7 @@ export const SprintsPage: FunctionComponent = () => {
     handleBulkToggleShowcase,
     handleOpenExport,
     handleImportSprint,
+    handleAddProject = async () => undefined,
   } = useSprintsPageData();
 
   const progressiveSprints = useProgressiveList(sortedSprints);
@@ -297,21 +297,14 @@ export const SprintsPage: FunctionComponent = () => {
     void handleBulkToggleShowcase(ids, false);
   }, [handleBulkToggleShowcase]);
 
-  const handleAddProject = useCallback(async (project: { name: string; type: "local" | "git"; path: string; cloneDir?: string }) => {
-    await createProject({
-      name: project.name,
-      sourceType: project.type,
-      sourceRef: project.path,
-      cloneDir: project.cloneDir,
-    });
-  }, [createProject]);
-
   return (
     <ExecutionTimelineProvider
       execution={execution}
       pendingActionIds={pendingActionIds}
     >
-      <div className="relative z-10 mx-auto flex max-w-[1920px] flex-col gap-20 px-8 py-24 md:px-20">
+      <div className={`relative z-10 mx-auto flex max-w-[1920px] flex-col px-8 md:px-20 ${
+        selectedProject ? "gap-20 py-24" : "gap-4 py-12"
+      }`}>
         <div ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
           <div className="flex flex-col gap-5">
             <div className="flex items-center gap-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-signal-500">

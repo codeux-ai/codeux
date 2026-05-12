@@ -65,6 +65,13 @@ const VIRTUAL_PROVIDER_LABELS: Record<string, string> = {
   "claude-code": "Virtual Claude Code Worker",
 };
 
+type AddProjectDraft = {
+  name: string;
+  type: "local" | "git";
+  path: string;
+  cloneDir?: string;
+};
+
 const compareString = (left: string, right: string): number => (
   left.localeCompare(right, undefined, { sensitivity: "base" })
 );
@@ -102,7 +109,7 @@ export function useSprintsPageData() {
 
   const { feedback, setError, clearFeedback } = useActionFeedback();
 
-  const { selectedProject } = useProjectData();
+  const { projects, selectedProject, createProject } = useProjectData();
   const { data: sprints, refetch: refresh, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
   const { data: execution, refetch: refreshExecution, loading: executionLoading } = useExecutions(selectedProject?.id || null);
 
@@ -652,6 +659,15 @@ export function useSprintsPageData() {
     await reloadQuicksprintTemplates();
   }, [selectedProject, reloadQuicksprintTemplates]);
 
+  const handleAddProject = useCallback(async (project: AddProjectDraft): Promise<void> => {
+    await createProject({
+      name: project.name,
+      sourceType: project.type,
+      sourceRef: project.path,
+      cloneDir: project.cloneDir,
+    });
+  }, [createProject]);
+
   const virtualProviders = useMemo(() => (
     Object.entries(VIRTUAL_PROVIDER_LABELS).map(([id, label]) => ({
       id: id as VirtualWorkerProvider,
@@ -660,6 +676,7 @@ export function useSprintsPageData() {
   ), []);
 
   return {
+    projects,
     selectedProject,
     sprints,
     sortedSprints,
@@ -708,5 +725,6 @@ export function useSprintsPageData() {
     handleBulkToggleShowcase,
     handleOpenExport,
     handleImportSprint,
+    handleAddProject,
   };
 }
