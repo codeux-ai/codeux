@@ -46,9 +46,9 @@ type OrbitSpec = {
 };
 
 const ORBITS: OrbitSpec[] = [
-    { rx: 25, ry: 17, rotation: 0, period: 4.6, phase: 0.08, electronR: 1.7, electronColor: JADE, strokeOpacity: 0.22 },
-    { rx: 24, ry: 8, rotation: 58, period: 3.4, phase: 0.43, electronR: 1.45, electronColor: JADE_LIGHT, strokeOpacity: 0.2 },
-    { rx: 22, ry: 10, rotation: -42, period: 5.8, phase: 0.77, electronR: 1.5, electronColor: JADE_DEEP, strokeOpacity: 0.18 },
+    { rx: 25, ry: 17, rotation: 0, period: 4.6, phase: 0.08, electronR: 2.2, electronColor: JADE, strokeOpacity: 0.28 },
+    { rx: 24, ry: 8, rotation: 58, period: 3.4, phase: 0.43, electronR: 1.9, electronColor: JADE_LIGHT, strokeOpacity: 0.26 },
+    { rx: 22, ry: 10, rotation: -42, period: 5.8, phase: 0.77, electronR: 2.0, electronColor: JADE_DEEP, strokeOpacity: 0.24 },
 ];
 
 let svgIdCounter = 0;
@@ -174,14 +174,12 @@ export const Atom: FunctionComponent<AtomProps> = ({
             });
             electrons.forEach((e, i) => {
                 tl.fromTo(e,
-                    { opacity: 0, scale: 0.3 },
+                    { opacity: 0, attr: { r: 0 } },
                     {
                         opacity: 1,
-                        scale: 1,
-                        duration: 0.6,
+                        attr: { r: ORBITS[i].electronR },
+                        duration: 0.55,
                         ease: "back.out(1.9)",
-                        transformOrigin: "50% 50%",
-                        svgOrigin: "32 32",
                     },
                     0.12 + i * 0.08);
             });
@@ -211,11 +209,9 @@ export const Atom: FunctionComponent<AtomProps> = ({
             tl.to(orbits, { opacity: 0, duration: 0.38, ease: "power2.in" }, 0);
             tl.to(electrons, {
                 opacity: 0,
-                scale: 0.5,
+                attr: { r: 0 },
                 duration: 0.28,
                 ease: "power2.in",
-                transformOrigin: "50% 50%",
-                svgOrigin: "32 32",
             }, 0);
             tl.to(eyeOutlineRef.current, { opacity: 1, duration: 0.42, ease: "power2.out" }, 0.18);
             if (eyeHaloRef.current) {
@@ -287,7 +283,7 @@ export const Atom: FunctionComponent<AtomProps> = ({
                     <stop offset="100%" stopColor={JADE} stopOpacity="0" />
                 </radialGradient>
                 <filter id={`${uid}-electron-glow`} x="-300%" y="-300%" width="700%" height="700%">
-                    <feGaussianBlur stdDeviation="0.55" />
+                    <feGaussianBlur stdDeviation="0.4" />
                 </filter>
             </defs>
 
@@ -310,7 +306,8 @@ export const Atom: FunctionComponent<AtomProps> = ({
                     transform={`rotate(${orbit.rotation} 32 32)`}
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="0.75"
+                    strokeWidth="1.0"
+                    strokeLinecap="round"
                     opacity="0"
                 />
             ))}
