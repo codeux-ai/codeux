@@ -92,6 +92,85 @@ export const SettingsAppearancePanel: FunctionComponent<{
           />
         </Row>
       </SectionCard>
+
+      <SectionCard title="Background Settings" watermark="BG">
+        <Row
+          label="Background Mode"
+          description="Choose between animated backgrounds or a static solid color."
+          badge={getFieldBadge(activeScope, projectSources, "appearance.backgroundMode")}
+        >
+          <PillChoiceGroup
+            value={appearance.backgroundMode || "ANIMATED"}
+            onChange={(val) => {
+              state.updateEditableSettings((current) => ({
+                ...current,
+                appearance: {
+                  ...current.appearance,
+                  backgroundMode: val as "ANIMATED" | "STATIC",
+                },
+              }));
+            }}
+            options={[
+              { value: "ANIMATED", label: "Animated" },
+              { value: "STATIC", label: "Static" },
+            ]}
+          />
+        </Row>
+
+        {(appearance.backgroundMode || "ANIMATED") === "ANIMATED" ? (
+          <Row
+            label="Animation Style"
+            description="Select an award-winning background animation."
+            badge={getFieldBadge(activeScope, projectSources, "appearance.animatedBackground")}
+            last
+          >
+            <PillChoiceGroup
+              value={appearance.animatedBackground || "deep-ocean"}
+              onChange={(val) => {
+                state.updateEditableSettings((current) => ({
+                  ...current,
+                  appearance: {
+                    ...current.appearance,
+                    animatedBackground: val,
+                  },
+                }));
+              }}
+              options={[
+                { value: "deep-ocean", label: "Deep Ocean" },
+                { value: "neon-dreams", label: "Neon Dreams" },
+                { value: "aurora-borealis", label: "Aurora Borealis" },
+              ]}
+            />
+          </Row>
+        ) : (
+          <Row
+            label="Static Color"
+            description="Choose a solid background color."
+            badge={getFieldBadge(activeScope, projectSources, "appearance.staticBackgroundColor")}
+            last
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={appearance.staticBackgroundColor || "#0d0f12"}
+                onInput={(e) => {
+                  state.updateEditableSettings((current) => ({
+                    ...current,
+                    appearance: {
+                      ...current.appearance,
+                      staticBackgroundColor: (e.target as HTMLInputElement).value,
+                    },
+                  }));
+                }}
+                className="h-10 w-20 cursor-pointer rounded-lg border-2 border-black/[0.06] bg-transparent p-1 focus:outline-none focus:ring-2 focus:ring-signal-500 dark:border-white/[0.06]"
+              />
+              <span className="font-mono text-sm uppercase text-slate-500 dark:text-slate-400">
+                {appearance.staticBackgroundColor || "#0d0f12"}
+              </span>
+            </div>
+          </Row>
+        )}
+      </SectionCard>
     </Card>
   );
 };

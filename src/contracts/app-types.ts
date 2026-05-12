@@ -696,6 +696,9 @@ export interface AppearanceSettings {
   navigationMode: "DOCK" | "SIDEBAR";
   theme: "LIGHT" | "DARK" | "SYSTEM";
   reducedMotion: "AUTO" | "REDUCE" | "NONE";
+  backgroundMode: "ANIMATED" | "STATIC";
+  animatedBackground: string;
+  staticBackgroundColor: string;
 }
 
 export interface SkillToggle {

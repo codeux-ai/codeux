@@ -22,9 +22,7 @@ import { OnboardingExperience } from "./v2/components/onboarding/OnboardingExper
 import { GuidedDashboardTour } from "./v2/components/onboarding/GuidedDashboardTour.js";
 import "./styles.css";
 
-const DeepOceanBackground = lazy(() => import("./v2/components/chat/DeepOceanBackground.js").then((module) => ({
-  default: module.DeepOceanBackground,
-})));
+import { BackgroundManager } from "./v2/components/backgrounds/BackgroundManager.js";
 
 // 0. AppLayout extracted to use context hooks
 const AppLayout = () => {
@@ -131,7 +129,12 @@ const AppLayout = () => {
           Skip to main content
         </a>
         <Suspense fallback={null}>
-          <DeepOceanBackground />
+          <BackgroundManager 
+            mode={appearanceSettings?.backgroundMode || "ANIMATED"} 
+            animation={appearanceSettings?.animatedBackground || "deep-ocean"} 
+            staticColor={appearanceSettings?.staticBackgroundColor || "#0d0f12"} 
+            isDark={isDark} 
+          />
         </Suspense>
 
         <div className="flex-1 flex flex-col h-full relative z-10 overflow-hidden">

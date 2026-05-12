@@ -314,6 +314,9 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     navigationMode: "DOCK",
     theme: "SYSTEM",
     reducedMotion: "AUTO",
+    backgroundMode: "ANIMATED",
+    animatedBackground: "deep-ocean",
+    staticBackgroundColor: "#0d0f12",
   },
   automationLevel: "SEMI_AUTO",
   automationInterventions: {
