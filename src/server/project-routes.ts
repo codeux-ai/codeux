@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { toErrorResponse, syncRoute, requireTrimmedString, parseTrimmedString } from "./route-utils.js";
+import { asyncRoute, toErrorResponse, syncRoute, requireTrimmedString, parseTrimmedString } from "./route-utils.js";
 import type { CreateProjectInput, UpdateProjectInput } from "../contracts/project-management-types.js";
 import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.js";
 
@@ -9,9 +9,9 @@ export function registerProjectRoutes(router: Express, deps: DashboardDependenci
     res.json(deps.listProjects());
   }));
 
-  router.post("/api/projects", syncRoute((req, res) => {
+  router.post("/api/projects", asyncRoute(async (req, res) => {
     try {
-      res.status(201).json(deps.createProject(req.body as CreateProjectInput));
+      res.status(201).json(await deps.createProject(req.body as CreateProjectInput));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to create project"));
     }

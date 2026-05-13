@@ -52,6 +52,9 @@ describe("WorkspaceManager", () => {
 
   it("creates a fresh snapshot workspace volume", async () => {
     vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo/project\n", stderr: "" } as any;
+      }
       if (args[0] === "docker" && args[1] === "volume" && args[2] === "inspect") {
         throw new Error("missing");
       }
@@ -152,6 +155,24 @@ describe("WorkspaceManager", () => {
       expect.any(String),
       expect.any(Object),
       expect.any(Object),
+    );
+  });
+
+  it("rejects nested directories that resolve to a parent Git repository", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {
+        return { ok: true, stdout: "/repo\n", stderr: "" } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    await expect(manager.createSnapshotWorkspace("/repo/project", "session-1"))
+      .rejects
+      .toThrow("Project repository path must be a Git checkout root");
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining(["volume", "create"]),
+      expect.any(String),
     );
   });
 });

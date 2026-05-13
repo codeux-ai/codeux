@@ -143,7 +143,7 @@ export interface DashboardServerOptions {
   resetSprintSettings: (sprintId: string) => void;
   getSprintEffectiveSettings: (projectId: string, sprintId: string) => EffectiveSettingsResponse;
   listProjects: () => ProjectCollectionResponse;
-  createProject: (input: CreateProjectInput) => ProjectSummary;
+  createProject: (input: CreateProjectInput) => ProjectSummary | Promise<ProjectSummary>;
   getProject: (projectId: string) => ProjectSummary | null;
   updateProject: (projectId: string, input: UpdateProjectInput) => ProjectSummary;
   deleteProject: (projectId: string) => void;

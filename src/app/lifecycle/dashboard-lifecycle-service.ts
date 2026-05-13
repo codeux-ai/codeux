@@ -48,6 +48,7 @@ import type { MemoryRepository } from "../../repositories/memory-repository.js";
 import { getRepoDebugLogPath, CODE_UX_SERVICE_NAME } from "../../shared/config/code-ux-paths.js";
 import { getProjectLiveSnapshot } from "../live/project-live-snapshot.js";
 import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot-cache.js";
+import { prepareGitProjectCreateInput } from "../../services/project-git-clone-service.js";
 import { getOnboardingRuntimeReadiness } from "../../services/onboarding-readiness-service.js";
 
 export interface BootDashboardDeps {
@@ -141,6 +142,15 @@ function mapAttentionItem(item: NonNullable<ReturnType<ProjectAttentionRepositor
     resolvedAt: item.resolvedAt,
     updatedAt: item.updatedAt,
   };
+}
+
+function resolveGithubToken(deps: BootDashboardDeps): string | undefined {
+  const dashboardToken = deps.runtimeContext.dashboardSettings?.git?.githubToken?.trim();
+  if (dashboardToken) {
+    return dashboardToken;
+  }
+  const fallback = deps.externalSettingsHints.resolved?.githubToken?.trim();
+  return fallback || undefined;
 }
 
 function requireProjectAttentionItem(
@@ -410,7 +420,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       return deps.settingsRepository.resolveSprintDashboardSettings(projectId, sprintId);
     },
     listProjects: () => deps.projectManagementRepository.listProjects(),
-    createProject: (input) => deps.projectManagementRepository.createProject(input),
+    createProject: async (input) => deps.projectManagementRepository.createProject(
+      await prepareGitProjectCreateInput(input, { githubToken: resolveGithubToken(deps) }),
+    ),
     getProject: (projectId) => deps.projectManagementRepository.getProject(projectId),
     updateProject: (projectId, input) => deps.projectManagementRepository.updateProject(projectId, input),
     deleteProject: (projectId) => deps.projectManagementRepository.deleteProject(projectId),

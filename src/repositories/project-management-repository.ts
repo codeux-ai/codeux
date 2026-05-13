@@ -29,6 +29,7 @@ import { resolveRepositoryHost } from "../infrastructure/git/repository-host-res
 import { projectSummaryQuery } from "./project-management/project-summary-query.js";
 import { sprintSummaryQuery } from "./project-management/sprint-summary-query.js";
 import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
+import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 
@@ -1035,7 +1036,7 @@ export class ProjectManagementRepository {
       return path.resolve(cloneDir.trim(), repoName);
     }
 
-    return fallback || repoName;
+    return fallback || path.resolve(getHomeCodeUxPath("projects"), repoName);
   }
 
   private touchProject(projectId: string, updatedAt = new Date().toISOString()): void {
