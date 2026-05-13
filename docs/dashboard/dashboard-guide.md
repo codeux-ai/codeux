@@ -210,6 +210,7 @@ Legacy runtime:
   - dashboard token persistence is still GitHub-only, so GitLab tokens currently come from `GITLAB_TOKEN` / `GLAB_TOKEN`
 - Sprint data now hydrates cache-first when revisiting the page and refreshes in the background, so the showcase and ledger do not flash empty while the latest data loads. First-hydration uses skeleton placeholders while background refreshes continue, preserving existing data without reintroducing blocking loaders
 - Sprint and task list windows support selectable page size options (`10`, `20`, `50`, `100`, `All`) with a default of `20` (a frontend-only view change with no API contract change)
+- The Sprints page gallery show/hide control persists its browser-local visibility preference, so the gallery remains hidden or shown after navigation and reloads
 - `Improve with AI` is worker-backed through the Planning agent and only rewrites the sprint prompt
 - Sprint planning is also worker-backed through the Planning agent and automatically creates task records from the returned plan
 - The built-in Planning agent now expects a strict database task JSON contract:

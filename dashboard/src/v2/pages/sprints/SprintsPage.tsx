@@ -41,6 +41,23 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { PageContainer } from "../../components/ui/PageContainer.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
+const SPRINT_GALLERY_VISIBILITY_STORAGE_KEY = "code_ux_sprints_show_gallery";
+
+const readStoredSprintGalleryVisibility = (): boolean => {
+  try {
+    return window.localStorage.getItem(SPRINT_GALLERY_VISIBILITY_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+};
+
+const storeSprintGalleryVisibility = (visible: boolean): void => {
+  try {
+    window.localStorage.setItem(SPRINT_GALLERY_VISIBILITY_STORAGE_KEY, String(visible));
+  } catch {
+    // Ignore unavailable browser storage.
+  }
+};
 
 const SprintsProjectPlaceholder: FunctionComponent<{
   hasProjects: boolean;
@@ -124,7 +141,7 @@ export const SprintsPage: FunctionComponent = () => {
   const createStageRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
-  const [showSprintGallery, setShowSprintGallery] = useState(true);
+  const [showSprintGallery, setShowSprintGallery] = useState(readStoredSprintGalleryVisibility);
 
   const {
     projects = [],
@@ -200,6 +217,10 @@ export const SprintsPage: FunctionComponent = () => {
   }, [prefersReducedMotion]);
 
   // No auto-scroll when opening the sprint composer — keep viewport stable.
+
+  useEffect(() => {
+    storeSprintGalleryVisibility(showSprintGallery);
+  }, [showSprintGallery]);
 
   useEffect(() => {
     if (!rowMenu) {
