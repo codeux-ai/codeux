@@ -20,6 +20,7 @@ describe("WorkspaceManager", () => {
     vi.clearAllMocks();
     vi.mocked(fs.mkdtemp).mockResolvedValue("/tmp/code-ux-bundle-123");
     vi.mocked(fs.rm).mockResolvedValue(undefined);
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined);
   });
 
   it("builds Docker volume handles for isolated workspaces", () => {
@@ -100,7 +101,9 @@ describe("WorkspaceManager", () => {
 
     await manager.runWorkspaceCommand("docker-volume://workspace-1", "git", ["status", "--short"]);
 
-    const call = vi.mocked(runCommandStrict).mock.calls[0];
+    const call = vi.mocked(runCommandStrict).mock.calls.find((candidate) =>
+      candidate[0] === "docker" && candidate[1].includes("run")
+    );
     expect(call?.[0]).toBe("docker");
     expect(call?.[1]).toEqual(expect.arrayContaining([
       "run",
@@ -117,5 +120,38 @@ describe("WorkspaceManager", () => {
         `${process.getuid()}:${process.getgid()}`,
       ]));
     }
+  });
+
+  it("pulls the public workspace helper image with isolated Docker config when host credentials are broken", async () => {
+    vi.mocked(fs.mkdtemp).mockResolvedValue("/tmp/code-ux-docker-config-123");
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args, _cwd, env) => {
+      if (command === "docker" && args[0] === "image" && args[1] === "inspect") {
+        throw new Error("docker image inspect alpine/git failed: missing");
+      }
+      if (command === "docker" && args[0] === "pull" && !env?.DOCKER_CONFIG) {
+        throw new Error("docker pull alpine/git failed: error getting credentials - err: fork/exec /usr/bin/docker-credential-desktop.exe: exec format error");
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0 } as any;
+    });
+
+    await manager.runWorkspaceCommand("docker-volume://workspace-1", "git", ["status", "--short"]);
+
+    const pullCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) =>
+      call[0] === "docker" && call[1][0] === "pull"
+    );
+    expect(pullCalls).toHaveLength(2);
+    expect(pullCalls[1]?.[3]?.DOCKER_CONFIG).toBe("/tmp/code-ux-docker-config-123");
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      "/tmp/code-ux-docker-config-123/config.json",
+      "{}\n",
+      "utf8",
+    );
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining(["run", "alpine/git", "status", "--short"]),
+      expect.any(String),
+      expect.any(Object),
+      expect.any(Object),
+    );
   });
 });

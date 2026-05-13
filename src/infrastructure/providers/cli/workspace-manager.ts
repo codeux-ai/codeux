@@ -58,6 +58,11 @@ const getWorkspaceOwnerSpec = (): string | undefined => {
   return `${getUid()}:${getGid()}`;
 };
 
+const isDockerCredentialHelperError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("error getting credentials") || message.includes("docker-credential");
+};
+
 export class WorkspaceManager implements IWorkspaceManager {
   private readonly repoLocks = new Map<string, Promise<void>>();
 
@@ -217,6 +222,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     }
     const { volumeName } = parseWorkspaceHandle(worktreePath);
     const ownerSpec = getWorkspaceOwnerSpec();
+    await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, process.cwd(), options.env ?? process.env);
     const dockerArgs = [
       "run",
       "--rm",
@@ -314,6 +320,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     const ownerSpec = getWorkspaceOwnerSpec();
 
     try {
+      await this.ensurePublicHelperImage(WORKSPACE_HELPER_IMAGE, repoPath, process.env);
       await runCommandStrict("git", ["bundle", "create", bundlePath, "--all"], repoPath);
       const initScript = [
         "set -e",
@@ -344,6 +351,40 @@ export class WorkspaceManager implements IWorkspaceManager {
       );
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  private async ensurePublicHelperImage(image: string, cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
+    try {
+      await runCommandStrict("docker", ["image", "inspect", image], cwd, env);
+      return;
+    } catch {
+      // Missing local public helper image. Pull below.
+    }
+
+    try {
+      await runCommandStrict("docker", ["pull", image], cwd, env);
+      return;
+    } catch (error) {
+      if (!isDockerCredentialHelperError(error)) {
+        throw error;
+      }
+    }
+
+    const dockerConfigDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-docker-config-"));
+    try {
+      await fs.writeFile(path.join(dockerConfigDir, "config.json"), "{}\n", "utf8");
+      await runCommandStrict(
+        "docker",
+        ["pull", image],
+        cwd,
+        {
+          ...env,
+          DOCKER_CONFIG: dockerConfigDir,
+        },
+      );
+    } finally {
+      await fs.rm(dockerConfigDir, { recursive: true, force: true }).catch(() => undefined);
     }
   }
 

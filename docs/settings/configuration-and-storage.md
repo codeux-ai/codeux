@@ -324,6 +324,7 @@ Container execution notes:
 - merge-conflict resolution remains Docker-only because it must run in an isolated throwaway workspace
 - repo-local `.code-ux/worktrees/*` are no longer used for Docker execution
 - `~/.code-ux/runtime/docker/` should now contain only cache-like artifacts such as reusable setup-image state, not per-session workspaces
+- Docker-volume workspace bootstrap uses public helper images such as `alpine/git`. Code UX verifies or pulls these helpers automatically, and if a stale host Docker credential helper blocks a public pull, retries that helper pull with an isolated empty Docker client config.
 - write-back from isolated CLI runs uses a Git patch artifact applied on the host branch, not direct file syncing from the container
 - merge-conflict preparation and CI-fix Git commands must execute through the workspace runner; host-path Git invocations against `docker-volume://...` workspace handles are not valid
 
