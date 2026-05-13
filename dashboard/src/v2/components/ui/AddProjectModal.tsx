@@ -14,6 +14,7 @@ interface AddProjectModalProps {
 }
 
 type SourceType = 'local' | 'git';
+type DirectoryPickerTarget = 'localPath' | 'cloneDir';
 
 const fieldLabelClass = "text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors";
 
@@ -21,6 +22,7 @@ const projectNameInputClass = "mt-2.5 w-full rounded-[1.35rem] border border-bla
 
 const detailInputSurfaceClass = "w-full rounded-[1.15rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-sm font-mono font-semibold text-slate-700 outline-none transition-all duration-250 placeholder:text-slate-300 focus:border-ember-500/45 focus:bg-white focus:shadow-[0_0_0_1px_rgba(255,184,0,0.16),0_12px_28px_rgba(255,184,0,0.1)] focus-visible:outline-none dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-300 dark:placeholder:text-slate-600 dark:focus:border-ember-500/50 dark:focus:bg-white/[0.055] aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)]";
 const detailInputClass = `mt-2.5 ${detailInputSurfaceClass}`;
+const modalMinHeight = "min(640px, calc(100vh - 2rem))";
 
 export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd }) => {
     const cardRef     = useRef<HTMLDivElement>(null);
@@ -32,7 +34,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [gitUrl, setGitUrl]       = useState('');
     const [cloneDir, setCloneDir]   = useState('');
     const [submitError, setSubmitError] = useState<string | null>(null);
-    const [isDirectoryPickerOpen, setIsDirectoryPickerOpen] = useState(false);
+    const [activeDirectoryPickerTarget, setActiveDirectoryPickerTarget] = useState<DirectoryPickerTarget | null>(null);
     const [directoryListing, setDirectoryListing] = useState<LocalDirectoryBrowserResponse | null>(null);
     const [directoryPickerError, setDirectoryPickerError] = useState<string | null>(null);
     const [isDirectoryPickerLoading, setIsDirectoryPickerLoading] = useState(false);
@@ -114,8 +116,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         }
     };
 
-    const loadDirectory = async (directoryPath?: string) => {
-        setIsDirectoryPickerOpen(true);
+    const loadDirectory = async (target: DirectoryPickerTarget, directoryPath?: string) => {
+        setActiveDirectoryPickerTarget(target);
         setIsDirectoryPickerLoading(true);
         setDirectoryPickerError(null);
         try {
@@ -128,24 +130,27 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         }
     };
 
-    const handleOpenDirectoryPicker = () => {
-        void loadDirectory(localPath.trim() || undefined);
+    const handleOpenDirectoryPicker = (target: DirectoryPickerTarget) => {
+        const initialPath = target === 'localPath' ? localPath.trim() : cloneDir.trim();
+        void loadDirectory(target, initialPath || undefined);
     };
 
     const handleUseDirectory = () => {
         if (!directoryListing) return;
-        setLocalPath(directoryListing.currentPath);
-        setTouched(prev => ({ ...prev, path: false }));
+        if (activeDirectoryPickerTarget === 'localPath') {
+            setLocalPath(directoryListing.currentPath);
+            setTouched(prev => ({ ...prev, path: false }));
+        } else if (activeDirectoryPickerTarget === 'cloneDir') {
+            setCloneDir(directoryListing.currentPath);
+        }
         setSubmitError(null);
-        setIsDirectoryPickerOpen(false);
+        setActiveDirectoryPickerTarget(null);
     };
 
     // Re-animate fields when source type changes
     const handleSourceTypeChange = (type: SourceType) => {
         setSourceType(type);
-        if (type !== 'local') {
-            setIsDirectoryPickerOpen(false);
-        }
+        setActiveDirectoryPickerTarget(null);
         if (fieldsRef.current) {
             const conditionalFields = Array.from(fieldsRef.current.children).slice(2);
             gsap.fromTo(conditionalFields,
@@ -153,6 +158,99 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                 { y: 0, opacity: 1, stagger: 0.06, duration: 0.35, ease: "power3.out" }
             );
         }
+    };
+
+    const renderDirectoryPicker = (target: DirectoryPickerTarget) => {
+        if (activeDirectoryPickerTarget !== target) return null;
+        const pickerId = target === 'localPath' ? "add-project-directory-picker" : "add-project-clone-directory-picker";
+
+        return (
+            <div
+                id={pickerId}
+                className="mt-3 overflow-hidden rounded-[1.15rem] border border-black/[0.06] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.035]"
+            >
+                <div className="flex items-center gap-2 border-b border-black/[0.06] px-3 py-2.5 dark:border-white/[0.08]">
+                    <button
+                        type="button"
+                        onClick={() => directoryListing?.parentPath && void loadDirectory(target, directoryListing.parentPath)}
+                        disabled={!directoryListing?.parentPath || isDirectoryPickerLoading}
+                        className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-all hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
+                        aria-label="Go to parent directory"
+                        title="Go up"
+                    >
+                        <ChevronUp className="h-4 w-4" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => void loadDirectory(target, directoryListing?.homePath)}
+                        disabled={isDirectoryPickerLoading}
+                        className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-all hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
+                        aria-label="Go to home directory"
+                        title="Home"
+                    >
+                        <Home className="h-4 w-4" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const typedPath = target === 'localPath' ? localPath.trim() : cloneDir.trim();
+                            void loadDirectory(target, directoryListing?.currentPath || typedPath || undefined);
+                        }}
+                        disabled={isDirectoryPickerLoading}
+                        className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-all hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
+                        aria-label="Refresh directories"
+                        title="Refresh"
+                    >
+                        <RefreshCw className={`h-4 w-4 ${isDirectoryPickerLoading ? "animate-spin" : ""}`} />
+                    </button>
+                    <div className="min-w-0 flex-1 truncate rounded-xl bg-white px-3 py-2 font-mono text-xs font-semibold text-slate-600 dark:bg-white/[0.055] dark:text-slate-300">
+                        {directoryListing?.currentPath || "Loading directories..."}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleUseDirectory}
+                        disabled={!directoryListing || isDirectoryPickerLoading}
+                        className="flex h-8 items-center gap-1.5 rounded-xl bg-ember-500 px-3 text-xs font-black uppercase tracking-[0.12em] text-void-900 transition-all hover:bg-ember-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
+                    >
+                        <Check className="h-3.5 w-3.5" />
+                        Use
+                    </button>
+                </div>
+                {directoryPickerError ? (
+                    <div className="flex items-center gap-2 px-3 py-3 text-xs font-semibold text-status-red">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span>{directoryPickerError}</span>
+                    </div>
+                ) : (
+                    <div className="max-h-44 overflow-y-auto p-2">
+                        {isDirectoryPickerLoading && !directoryListing ? (
+                            <div className="flex items-center gap-2 px-2 py-3 text-xs font-semibold text-slate-400">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Loading directories
+                            </div>
+                        ) : directoryListing?.directories.length ? (
+                            <div className="grid gap-1">
+                                {directoryListing.directories.map((directory) => (
+                                    <button
+                                        key={directory.path}
+                                        type="button"
+                                        onClick={() => void loadDirectory(target, directory.path)}
+                                        className="flex min-w-0 items-center gap-2 rounded-xl px-2.5 py-2 text-left font-mono text-xs font-semibold text-slate-600 transition-all hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                                    >
+                                        <FolderOpen className="h-4 w-4 shrink-0 text-ember-500" />
+                                        <span className="truncate">{directory.name}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="px-2 py-3 text-xs font-semibold text-slate-400">
+                                No child directories
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
     };
 
     return (
@@ -166,8 +264,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         >
             <div
                 ref={cardRef}
-                className="relative flex w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
-                style={{ minHeight: 'min(520px, calc(100vh - 2rem))' }}
+                className="relative flex w-full max-w-2xl lg:max-w-3xl max-h-[calc(100vh-2rem)] overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
+                style={{ minHeight: modalMinHeight }}
             >
                 {/* ── Left decorative panel ── */}
                 <div className="relative w-52 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">
@@ -299,9 +397,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         />
                                         <button
                                             type="button"
-                                            onClick={handleOpenDirectoryPicker}
+                                            onClick={() => handleOpenDirectoryPicker('localPath')}
                                             className="flex shrink-0 items-center justify-center gap-2 rounded-[1.15rem] border border-black/[0.06] bg-void-900 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-all duration-250 hover:-translate-y-px hover:bg-void-800 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]"
-                                            aria-expanded={isDirectoryPickerOpen}
+                                            aria-expanded={activeDirectoryPickerTarget === 'localPath'}
                                             aria-controls="add-project-directory-picker"
                                             title="Browse directories"
                                         >
@@ -309,90 +407,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             Browse
                                         </button>
                                     </div>
-                                    {isDirectoryPickerOpen && (
-                                        <div
-                                            id="add-project-directory-picker"
-                                            className="mt-3 overflow-hidden rounded-[1.15rem] border border-black/[0.06] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.035]"
-                                        >
-                                            <div className="flex items-center gap-2 border-b border-black/[0.06] px-3 py-2.5 dark:border-white/[0.08]">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => directoryListing?.parentPath && void loadDirectory(directoryListing.parentPath)}
-                                                    disabled={!directoryListing?.parentPath || isDirectoryPickerLoading}
-                                                    className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-all hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
-                                                    aria-label="Go to parent directory"
-                                                    title="Go up"
-                                                >
-                                                    <ChevronUp className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => void loadDirectory(directoryListing?.homePath)}
-                                                    disabled={isDirectoryPickerLoading}
-                                                    className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-all hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
-                                                    aria-label="Go to home directory"
-                                                    title="Home"
-                                                >
-                                                    <Home className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => void loadDirectory(directoryListing?.currentPath || localPath.trim() || undefined)}
-                                                    disabled={isDirectoryPickerLoading}
-                                                    className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm transition-all hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
-                                                    aria-label="Refresh directories"
-                                                    title="Refresh"
-                                                >
-                                                    <RefreshCw className={`h-4 w-4 ${isDirectoryPickerLoading ? "animate-spin" : ""}`} />
-                                                </button>
-                                                <div className="min-w-0 flex-1 truncate rounded-xl bg-white px-3 py-2 font-mono text-xs font-semibold text-slate-600 dark:bg-white/[0.055] dark:text-slate-300">
-                                                    {directoryListing?.currentPath || "Loading directories..."}
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleUseDirectory}
-                                                    disabled={!directoryListing || isDirectoryPickerLoading}
-                                                    className="flex h-8 items-center gap-1.5 rounded-xl bg-ember-500 px-3 text-xs font-black uppercase tracking-[0.12em] text-void-900 transition-all hover:bg-ember-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
-                                                >
-                                                    <Check className="h-3.5 w-3.5" />
-                                                    Use
-                                                </button>
-                                            </div>
-                                            {directoryPickerError ? (
-                                                <div className="flex items-center gap-2 px-3 py-3 text-xs font-semibold text-status-red">
-                                                    <AlertCircle className="h-4 w-4 shrink-0" />
-                                                    <span>{directoryPickerError}</span>
-                                                </div>
-                                            ) : (
-                                                <div className="max-h-44 overflow-y-auto p-2">
-                                                    {isDirectoryPickerLoading && !directoryListing ? (
-                                                        <div className="flex items-center gap-2 px-2 py-3 text-xs font-semibold text-slate-400">
-                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                            Loading directories
-                                                        </div>
-                                                    ) : directoryListing?.directories.length ? (
-                                                        <div className="grid gap-1">
-                                                            {directoryListing.directories.map((directory) => (
-                                                                <button
-                                                                    key={directory.path}
-                                                                    type="button"
-                                                                    onClick={() => void loadDirectory(directory.path)}
-                                                                    className="flex min-w-0 items-center gap-2 rounded-xl px-2.5 py-2 text-left font-mono text-xs font-semibold text-slate-600 transition-all hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
-                                                                >
-                                                                    <FolderOpen className="h-4 w-4 shrink-0 text-ember-500" />
-                                                                    <span className="truncate">{directory.name}</span>
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="px-2 py-3 text-xs font-semibold text-slate-400">
-                                                            No child directories
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
+                                    {renderDirectoryPicker('localPath')}
                                     {validationErrors.path && touched.path && <div id="project-path-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.path}</div>}
                                 </div>
                             ) : (
@@ -423,14 +438,28 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             <FolderInput className="w-3 h-3" /> Clone Into Directory
                                             <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">(optional)</span>
                                         </label>
-                                        <input
-                                            id="add-project-clone-dir"
-                                            type="text"
-                                            value={cloneDir}
-                                            onInput={(e) => setCloneDir((e.target as HTMLInputElement).value)}
-                                            placeholder="/home/user/projects"
-                                            className={detailInputClass}
-                                        />
+                                        <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                                            <input
+                                                id="add-project-clone-dir"
+                                                type="text"
+                                                value={cloneDir}
+                                                onInput={(e) => setCloneDir((e.target as HTMLInputElement).value)}
+                                                placeholder="/home/user/projects"
+                                                className={`${detailInputSurfaceClass} min-w-0 flex-1`}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleOpenDirectoryPicker('cloneDir')}
+                                                className="flex shrink-0 items-center justify-center gap-2 rounded-[1.15rem] border border-black/[0.06] bg-void-900 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-all duration-250 hover:-translate-y-px hover:bg-void-800 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]"
+                                                aria-expanded={activeDirectoryPickerTarget === 'cloneDir'}
+                                                aria-controls="add-project-clone-directory-picker"
+                                                title="Browse clone directory"
+                                            >
+                                                <FolderOpen className="h-4 w-4" />
+                                                Browse
+                                            </button>
+                                        </div>
+                                        {renderDirectoryPicker('cloneDir')}
                                     </div>
                                 </>
                             )}

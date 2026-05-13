@@ -176,7 +176,7 @@ Legacy runtime:
 - Projects page is DB-backed and can create/select/delete projects
 - The `Add Project` dialog now keeps keyboard focus inside the active form field while typing, and its initial focus respects the form's `autofocus` input instead of jumping to the header close button
 - The Projects page `Add Project` placeholder card uses the same full-height card footprint and internal padding as project cards, and the add dialog fields use rounded field surfaces with amber focus states instead of bare underline inputs; the dialog also constrains itself to the viewport on shorter screens
-- The local `Add Project` path field now includes an inline directory browser with home, refresh, parent-directory navigation, child-directory traversal, and an explicit use-current-folder action
+- The `Add Project` dialog now has a wider desktop layout, keeps a stable Git-form-height floor while switching source types, and exposes the inline directory browser on both local project paths and optional Git clone destination paths, with home, refresh, parent-directory navigation, child-directory traversal, and an explicit use-current-folder action
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown (and soon Jira) capabilities, plus markdown export controls
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
