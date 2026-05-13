@@ -318,6 +318,7 @@ Preview runtime notes:
 Container execution notes:
 - `cliWorkflow.executionMode` defaults to `DOCKER`, but Code UX still supports `HOST` worktrees for controlled fallback and legacy-safe paths
 - task, planning, chat, and normal CI-fix flows execute inside isolated Docker-volume workspaces when Docker execution is available
+- Git URL projects must have a local checkout. Dashboard project creation clones them into the selected clone directory, or `~/.code-ux/projects/<repo-name>` when no clone directory is provided.
 - QA review execution uses a fresh snapshot workspace instead of the mutable task workspace
 - QA-requested follow-up coding and CI autofix continue in the existing task workspace when that workspace is still reusable
 - CI autofix falls back to a host-backed worktree only when Docker is unavailable for that follow-up repair attempt
@@ -325,6 +326,7 @@ Container execution notes:
 - repo-local `.code-ux/worktrees/*` are no longer used for Docker execution
 - `~/.code-ux/runtime/docker/` should now contain only cache-like artifacts such as reusable setup-image state, not per-session workspaces
 - Docker-volume workspace bootstrap uses public helper images such as `alpine/git`. Code UX verifies or pulls these helpers automatically, and if a stale host Docker credential helper blocks a public pull, retries that helper pull with an isolated empty Docker client config.
+- Docker workspace bootstrap now rejects configured project paths that are nested inside a different Git checkout; this prevents Git from walking up to a parent repo and producing misleading no-change task completions.
 - write-back from isolated CLI runs uses a Git patch artifact applied on the host branch, not direct file syncing from the container
 - merge-conflict preparation and CI-fix Git commands must execute through the workspace runner; host-path Git invocations against `docker-volume://...` workspace handles are not valid
 

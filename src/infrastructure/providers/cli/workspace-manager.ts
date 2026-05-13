@@ -82,6 +82,7 @@ export class WorkspaceManager implements IWorkspaceManager {
   }
 
   async createSnapshotWorkspace(repoPath: string, sessionId: string): Promise<string> {
+    await this.assertExactGitWorktreeRoot(repoPath);
     const workspaceRef = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "DOCKER");
     await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
     await this.createVolume(workspaceRef);
@@ -109,6 +110,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     const workspaceRef = worktreePath;
 
     await this.withRepoLock(repoPath, async () => {
+      await this.assertExactGitWorktreeRoot(repoPath);
       try {
         await runCommandStrict("git", ["fetch", "origin"], repoPath);
       } catch {
@@ -430,6 +432,22 @@ export class WorkspaceManager implements IWorkspaceManager {
       return value.length > 0 ? value : null;
     } catch {
       return null;
+    }
+  }
+
+  private async assertExactGitWorktreeRoot(repoPath: string): Promise<void> {
+    let result: CommandResult;
+    try {
+      result = await runCommandStrict("git", ["rev-parse", "--show-toplevel"], repoPath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Project repository path is not a Git checkout: ${repoPath}. ${message}`);
+    }
+
+    const actualRoot = path.resolve(result.stdout.trim());
+    const expectedRoot = path.resolve(repoPath);
+    if (actualRoot !== expectedRoot) {
+      throw new Error(`Project repository path must be a Git checkout root. Configured path ${expectedRoot} resolves to parent Git root ${actualRoot}. Re-add the Git project so Code UX clones it into a local checkout directory.`);
     }
   }
 
