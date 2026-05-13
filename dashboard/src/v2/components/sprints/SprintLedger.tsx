@@ -5,6 +5,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   CheckSquare,
+  Inbox,
   Square,
 } from "lucide-preact";
 import { SkeletonRow } from "../ui/ListSkeletons.js";
@@ -84,6 +85,12 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     const limit = resolveListWindow(listWindow, ledgerSprints.length);
     return sliceLedgerSprints(ledgerSprints, limit);
   }, [ledgerSprints, listWindow]);
+
+  const ledgerSummary = useMemo(() => ({
+    pinnedCount: sprints.filter((sprint) => sprint.showcasePinned).length,
+    activeCount: sprints.filter((sprint) => sprint.status === "running" || sprint.status === "paused").length,
+    completedCount: sprints.filter((sprint) => sprint.status === "completed").length,
+  }), [sprints]);
 
   // Prune selection when filter changes
   useEffect(() => {
@@ -219,6 +226,9 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       <SprintLedgerHeader
         sprintsCount={sprints.length}
         ledgerSprintsCount={ledgerSprints.length}
+        pinnedCount={ledgerSummary.pinnedCount}
+        activeCount={ledgerSummary.activeCount}
+        completedCount={ledgerSummary.completedCount}
         listWindow={listWindow}
         onListWindowChange={onListWindowChange}
         filters={filters}
@@ -246,17 +256,16 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
         onCancel={handleCancel}
       />
 
-      {/* Table */}
-      <div className="min-h-[20rem]">
-        <table className="min-w-full text-left">
-          <thead>
-            <tr className="border-b border-black/[0.06] text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.06]">
-              <th className="px-4 py-3 pl-6 w-10">
+      <div className="min-h-[20rem] px-3 py-4 sm:px-4 lg:overflow-x-auto lg:px-5">
+        <table className="block w-full border-separate border-spacing-y-3 text-left lg:table lg:min-w-[74rem]">
+          <thead className="hidden lg:table-header-group">
+            <tr className="text-[11px] font-bold text-slate-400">
+              <th className="w-12 rounded-l-2xl border-y border-l border-black/[0.06] bg-white/55 px-4 py-3 pl-6 dark:border-white/[0.06] dark:bg-white/[0.035]">
                 <button
                   type="button"
                   disabled={windowedSprints.length === 0 || isAnyBulkPending}
                   onClick={handleToggleSelectAll}
-                  className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 rounded"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
                   title={allFilteredSelected ? "Deselect all" : "Select all visible"}
                 >
                   {allFilteredSelected
@@ -264,95 +273,105 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                     : <Square className="h-4 w-4" strokeWidth={2.2} />}
                 </button>
               </th>
-              <th className="px-4 py-3 group">
+              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("showcasePinned")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
+                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
                 >
                   Showcase
                   {renderSortIndicator("showcasePinned")}
                 </button>
               </th>
-              <th className="px-4 py-3 group">
+              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("sprintKey")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
+                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
                 >
                   Sprint ID
                   {renderSortIndicator("sprintKey")}
                 </button>
               </th>
-              <th className="px-4 py-3 group">
+              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("name")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
+                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
                 >
                   Sprint
                   {renderSortIndicator("name")}
                 </button>
               </th>
-              <th className="px-4 py-3 group">
+              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("status")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
+                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
                 >
                   Status
                   {renderSortIndicator("status")}
                 </button>
               </th>
-              <th className="px-4 py-3 group">
+              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("tasksCount")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
+                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
                 >
                   Tasks
                   {renderSortIndicator("tasksCount")}
                 </button>
               </th>
-              <th className="px-4 py-3 group">
+              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("completion")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
+                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
                 >
                   Completion
                   {renderSortIndicator("completion")}
                 </button>
               </th>
-              <th className="px-4 py-3 group">
+              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("createdAt")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
+                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
                 >
                   Created
                   {renderSortIndicator("createdAt")}
                 </button>
               </th>
-              <th className="px-4 py-3 pr-6 text-right">Controls</th>
+              <th className="rounded-r-2xl border-y border-r border-black/[0.06] bg-white/55 px-4 py-3 pr-6 text-right dark:border-white/[0.06] dark:bg-white/[0.035]">Controls</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="block lg:table-row-group">
             {isLoading && windowedSprints.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="border-b border-black/[0.04] dark:border-white/[0.04]">
-                  <td colSpan={9} className="p-4">
+                <tr key={i} className="block lg:table-row">
+                  <td colSpan={9} className="block p-2 lg:table-cell">
                     <SkeletonRow />
                   </td>
                 </tr>
               ))
             ) : windowedSprints.length === 0 ? (
-              <tr>
-                <td colSpan={9}>
-                  <div className="px-6 py-8 text-sm text-slate-400">
-                    {filters.query || filters.qa !== "all" || filters.showcase !== "all" || filters.status !== "all"
-                      ? "No sprints match the current filters."
-                      : "No sprints exist yet. Create one above and it will appear in the showcase and in the ledger below."}
+              <tr className="block lg:table-row">
+                <td colSpan={9} className="block lg:table-cell">
+                  <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-black/[0.08] bg-white/50 px-6 py-10 text-center dark:border-white/[0.08] dark:bg-white/[0.03]">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/80 text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.05]">
+                      <Inbox className="h-5 w-5" strokeWidth={2.1} />
+                    </div>
+                    <div className="mt-4 font-display text-xl font-bold text-slate-800 dark:text-white">
+                      {filters.query || filters.qa !== "all" || filters.showcase !== "all" || filters.status !== "all"
+                        ? "No matching sprints"
+                        : "No sprints yet"}
+                    </div>
+                    <p className="mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">
+                      {filters.query || filters.qa !== "all" || filters.showcase !== "all" || filters.status !== "all"
+                        ? "Adjust the search or filters to bring sprints back into the ledger."
+                        : "Create a sprint above and it will appear in the showcase and ledger automatically."}
+                    </p>
                   </div>
                 </td>
               </tr>

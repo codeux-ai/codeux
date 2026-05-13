@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   CheckSquare,
   Download,
+  Eye,
+  EyeOff,
   FolderOpen,
   Heart,
   Layers,
@@ -122,6 +124,7 @@ export const SprintsPage: FunctionComponent = () => {
   const createStageRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [showSprintGallery, setShowSprintGallery] = useState(true);
 
   const {
     projects = [],
@@ -351,6 +354,20 @@ export const SprintsPage: FunctionComponent = () => {
                 {label} <span className="font-mono text-slate-700 dark:text-white">{value}</span>
               </div>
             ))}
+            <button
+              type="button"
+              onClick={() => setShowSprintGallery((current) => !current)}
+              disabled={!selectedProject}
+              aria-pressed={showSprintGallery}
+              className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-all hover:-translate-y-px hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
+            >
+              {showSprintGallery ? (
+                <EyeOff className="h-3.5 w-3.5 text-ember-500" strokeWidth={2.2} />
+              ) : (
+                <Eye className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
+              )}
+              {showSprintGallery ? "Hide Gallery" : "Show Gallery"}
+            </button>
             <SprintImportMenu
               disabled={!selectedProject}
               onImportMarkdown={() => setShowImportModal(true)}
@@ -405,7 +422,7 @@ export const SprintsPage: FunctionComponent = () => {
             <div ref={createStageRef} className="relative">
               <div
                 className={`transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                  showCreateComposer || editingSprint || showQuicksprint
+                  showCreateComposer || editingSprint || showQuicksprint || !showSprintGallery
                     ? "pointer-events-none max-h-0 overflow-hidden -translate-y-8 scale-[0.985] opacity-0 blur-[10px]"
                     : "max-h-[240rem] overflow-visible translate-y-0 scale-100 opacity-100 blur-0"
                 }`}

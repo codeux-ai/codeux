@@ -201,6 +201,41 @@ describe("SprintsPage", () => {
     expect(setShowQuicksprint).toHaveBeenCalledWith(false);
   });
 
+  it("toggles the sprint gallery from the top action row", () => {
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      showCreateComposer: false,
+      setShowCreateComposer: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+    } as any);
+
+    render(<SprintsPage />);
+
+    const hideGalleryButton = screen.getByRole("button", { name: /hide gallery/i });
+    expect(hideGalleryButton).toBeInTheDocument();
+
+    fireEvent.click(hideGalleryButton);
+
+    expect(screen.getByRole("button", { name: /show gallery/i })).toBeInTheDocument();
+  });
+
 
   it("dismisses planning overlays on cancel", () => {
     // This is tested in SprintsComposer implicitly through UI states,

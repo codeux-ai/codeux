@@ -133,6 +133,23 @@ describe("SprintLedger Component", () => {
     });
   });
 
+  it("filters by status from the ledger controls", async () => {
+    render(<SprintLedger {...defaultProps} listWindow="all" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha Design")).toBeInTheDocument();
+      expect(screen.getByText("Beta API")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Filter ledger by sprint status" }));
+    fireEvent.click(screen.getByRole("option", { name: "Done" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Alpha Design")).not.toBeInTheDocument();
+      expect(screen.getByText("Beta API")).toBeInTheDocument();
+    });
+  });
+
   it("selects, deselects, and performs bulk actions", async () => {
     render(<SprintLedger {...defaultProps} listWindow="all" />);
 

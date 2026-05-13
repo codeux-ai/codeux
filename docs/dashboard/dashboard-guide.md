@@ -221,6 +221,7 @@ Legacy runtime:
 - Showcase pinning is now fully operator-controlled; pinned sprints remain in the gallery until explicitly unpinned, surviving transitions like sprint start, pause, and completion
 - Showcase heart controls in the sprint ledger remain available for completed sprints, so completed work can stay pinned in or be removed from the gallery manually
 - The sprint gallery selection is now the full set of showcased sprints, ordered newest-first by sprint creation time
+- The Sprints page top action row includes a `Hide Gallery` / `Show Gallery` control that collapses or restores the sprint gallery cells without affecting Import, Quicksprint, New Sprint, or the ledger.
 - On a fresh installation with no selected project, the Sprints page renders a polished project-scope placeholder with working `Add First Project` and `Manage Projects` actions; the first action opens the shared Add Project dialog directly
 - Completed sprint cells now use a static finished treatment and fade slightly instead of continuing animated motion
 - Sprint cell settings now open an animated menu with showcase toggle, `Edit`, `Export`, `Delete`, and live `Overrides`
@@ -229,11 +230,12 @@ Legacy runtime:
 - Sprint markdown export now includes direct download actions and per-section copy-to-clipboard buttons (with brief `Copied` confirmation) in the export modal
 - The in-page sprint composer collapses into a stacked single-column layout on smaller screens, and both create and edit now use that same inline flow. The Quicksprint panel and the Sprint Composer are mutually exclusive; opening one automatically dismisses the other to maintain focus.
 - The Quicksprint panel now separates `Default Templates` from custom templates and includes a purpose selector for built-in template sets. The first shipped built-in purpose is `Fullstack JS App`, which groups six project-agnostic engineering and UI quicksprint templates. See [Quicksprint Templates](./quicksprint-templates.md).
-- The refreshed sprint ledger below the showcase renders a glass ledger row treatment with a real-time search field and dedicated filters for status, showcase, and QA state; a live result counter shows filtered vs total counts and a clear button resets the query
+- The refreshed sprint ledger below the showcase renders as a responsive card/table hybrid: mobile rows collapse into touch-friendly sprint cards, desktop keeps sortable table scanning, and the header includes live visible/pinned/active/completed counters.
+- Ledger controls include real-time search, dropdown filters for status, showcase, and QA state, page-size selection, a filtered/total counter, and a clear action that resets the full filter set.
 - Ledger search integrates with selection: the header select-all checkbox operates on the currently filtered set only, and the selection is automatically pruned when the filter changes so stale hidden selections cannot accumulate
 - When one or more ledger rows are selected, a bulk action bar appears with `Start` and `Delete` controls that operate on all selected sprints, plus a `Clear` button to deselect
 - Sortable column headers cycle through unsorted, ascending, and descending for showcasePinned, sprintKey, name, status, tasksCount, completion, and createdAt (default: newest-first)
-- Ledger rows expose: a primary start/stop button, an `Open Subtasks` deep link (`/tasks?sprint=<id>`) that navigates to the Tasks page pre-filtered to that sprint, and a compact settings menu for edit/export/showcase/overrides/delete
+- Ledger rows expose: pinned/showcase state, sprint key, review and human-intervention badges, task count, gradient progress, created/updated metadata, a primary start/stop button, an `Open Subtasks` deep link (`/tasks?sprint=<id>`) that navigates to the Tasks page pre-filtered to that sprint, and a compact settings menu for edit/export/showcase/overrides/delete
 - The sprint page no longer runs a full-page entrance fade on mount, which keeps initial navigation more immediate and avoids perceived flashing
 - The sprint page now uses lighter targeted motion on the heading instead of a full-page fade, keeping navigation more immediate without leaving the page static
 - Sprint composer planning-route overrides now correctly force the selected virtual provider instead of only overriding the model on the project default provider
