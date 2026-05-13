@@ -32,6 +32,7 @@ import { ONBOARDING_OPEN_EVENT, ONBOARDING_STORAGE_KEY, startDashboardTour } fro
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { OnboardingIntro } from "./OnboardingIntro.js";
+import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
 import type { OnboardingProviderCredentialStatus, OnboardingRuntimeReadiness, ProviderConfigId, ProviderId, ProjectSettings, SystemSettings } from "../../../types.js";
@@ -801,9 +802,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                         <div aria-hidden className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full transition-opacity ${selected ? "bg-signal-500 opacity-100" : "bg-slate-300 opacity-0 group-hover:opacity-100 dark:bg-slate-600"}`} />
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-black/[0.06] bg-black/[0.03] font-display text-xs font-black tracking-[0.14em] text-slate-700 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white">
-                              {getProviderWatermark(providerId)}
-                            </div>
+                            <ProviderBrandIcon id={providerId} />
                             <div>
                               <div className="font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
                               <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{instanceCount || 1} instance{(instanceCount || 1) === 1 ? "" : "s"}</div>
@@ -837,10 +836,13 @@ export const OnboardingExperience: FunctionComponent = () => {
                         {getProviderWatermark(providerId)}
                       </div>
                       <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
-                        <div>
-                          <div className="text-base font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
-                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            {readinessStatus?.detectedFiles.length ? `Detected: ${readinessStatus.detectedFiles.join(", ")}` : providerDescriptions[providerId]}
+                        <div className="flex min-w-0 items-start gap-3">
+                          <ProviderBrandIcon id={providerId} />
+                          <div className="min-w-0">
+                            <div className="text-base font-black text-slate-900 dark:text-white">{providerLabels[providerId]}</div>
+                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              {readinessStatus?.detectedFiles.length ? `Detected: ${readinessStatus.detectedFiles.join(", ")}` : providerDescriptions[providerId]}
+                            </div>
                           </div>
                         </div>
                         <button

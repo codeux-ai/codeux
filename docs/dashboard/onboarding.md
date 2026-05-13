@@ -40,6 +40,7 @@ The flow currently contains six steps:
 3. Provider Configuration
    - Detects local provider auth directories.
    - Lets operators choose multiple providers to activate, including Jules API-key based usage.
+   - Shows provider identities with vendored, pinned Lobe Icons SVG logos for the integration catalog.
 4. Provider Setup
    - Provides a named-instance workspace for every selected provider.
    - Supports adding and removing multiple credential instances per provider.

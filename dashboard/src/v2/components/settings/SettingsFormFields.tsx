@@ -1,6 +1,6 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
-import { PROVIDER_CARD_TOKENS } from "../../lib/settings-view-models.js";
+import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import type { ProviderId } from "../../../types.js";
 
 export const Toggle: FunctionComponent<{
@@ -102,18 +102,9 @@ export const PillChoiceGroup: FunctionComponent<{
 export const ProviderLogo: FunctionComponent<{
   providerId: ProviderId | string;
   disabled?: boolean;
-}> = ({ providerId, disabled = false }) => {
-  const token = PROVIDER_CARD_TOKENS[(providerId in PROVIDER_CARD_TOKENS ? providerId : "jules") as ProviderId];
-
-  return (
-    <div
-      className={`flex h-11 w-11 items-center justify-center rounded-[1rem] border border-black/[0.08] bg-[#F9F8F4] font-display text-sm font-black tracking-[0.16em] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${disabled ? "opacity-60" : ""}`}
-      aria-hidden
-    >
-      {token.logoLabel}
-    </div>
-  );
-};
+}> = ({ providerId, disabled = false }) => (
+  <ProviderBrandIcon id={providerId} disabled={disabled} />
+);
 
 export const TextInput: FunctionComponent<{
   value: string;

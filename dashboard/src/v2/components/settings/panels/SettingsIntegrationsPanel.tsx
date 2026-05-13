@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, Settings2, Trash2 } from "lucide-preact";
 import type { SettingsPageState, IntegrationId } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel, ActionButton } from "../SettingsSurface.js";
 import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
+import { ProviderBrandIcon } from "../../providers/ProviderBrandIcon.js";
 import type { ProjectSettings, ProviderConfigId, ProviderId, SystemSettings } from "../../../../types.js";
 import {
   countConnectedProviders,
@@ -699,9 +700,12 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   if (integration.id === "github") {
                     return (
                       <div key={integration.id} className={`flex items-center justify-between gap-4 rounded-[1.25rem] border border-black/[0.06] bg-white/82 px-4 py-4 dark:border-white/[0.06] dark:bg-white/[0.04] ${index === integrations.length - 1 ? "" : ""}`}>
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
-                          <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
+                        <div className="flex items-start gap-3">
+                          <ProviderBrandIcon id="github" />
+                          <div>
+                            <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
+                            <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <button type="button" onClick={() => setSelectedIntegration("github")} className="rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">

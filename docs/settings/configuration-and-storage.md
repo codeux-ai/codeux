@@ -165,6 +165,7 @@ Dashboard behavior:
 - the Integrations panel restores the Git host workspace:
   - system scope edits the GitHub token and per-instance CLI auth sources
   - project and sprint scopes edit GitHub auth-copy mounts and gitconfig sharing for Docker runs
+- integration and AI model provider tiles use vendored, pinned Lobe Icons SVG brand marks for Jules/Google, Gemini, Codex, Claude, Qwen, OpenCode, and GitHub identity.
 
 `aiProvider` contains:
 - `provider` (`ProviderConfigId|null`)
