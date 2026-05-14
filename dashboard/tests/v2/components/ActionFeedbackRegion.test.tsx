@@ -26,8 +26,8 @@ describe("ActionFeedbackRegion", () => {
   });
 
   it("uses assertive aria-live for errors", () => {
-    render(<ActionFeedbackRegion status="error" message="Failed to save" />);
-    const region = screen.getByRole("status");
+    const { container } = render(<ActionFeedbackRegion status="error" message="Failed to save" />);
+    const region = screen.getByText("Failed to save").closest('[role="status"]');
     expect(region).toHaveAttribute("aria-live", "assertive");
   });
 
