@@ -3,6 +3,7 @@ import * as path from "path";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import type { CreateProjectInput } from "../contracts/project-management-types.js";
+import { buildGitHttpAuthEnv } from "./git-http-auth.js";
 
 const isPathWithin = (basePath: string, targetPath: string): boolean => {
   const base = path.resolve(basePath);
@@ -28,22 +29,6 @@ export function deriveGitCloneRepoName(sourceRef: string): string {
 
 export function getDefaultProjectCloneRoot(): string {
   return getHomeCodeUxPath("projects");
-}
-
-function buildGitAuthEnv(sourceRef: string, githubToken?: string): NodeJS.ProcessEnv {
-  const token = githubToken?.trim();
-  if (!token || !sourceRef.includes("github.com")) {
-    return process.env;
-  }
-
-  const existingCount = Number.parseInt(process.env.GIT_CONFIG_COUNT || "0", 10);
-  const index = Number.isFinite(existingCount) && existingCount >= 0 ? existingCount : 0;
-  return {
-    ...process.env,
-    GIT_CONFIG_COUNT: String(index + 1),
-    [`GIT_CONFIG_KEY_${index}`]: "http.https://github.com/.extraheader",
-    [`GIT_CONFIG_VALUE_${index}`]: `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
-  };
 }
 
 function normalizeRemoteForCompare(value: string): string {
@@ -93,7 +78,12 @@ async function ensureExistingCloneMatchesRemote(
     throw new Error(`Git project checkout at ${targetPath} already uses origin ${remote}, expected ${sourceRef}`);
   }
 
-  await runCommandStrict("git", ["fetch", "origin", "--prune"], targetPath, buildGitAuthEnv(sourceRef, options.githubToken));
+  await runCommandStrict(
+    "git",
+    ["fetch", "origin", "--prune"],
+    targetPath,
+    buildGitHttpAuthEnv(sourceRef, { githubToken: options.githubToken }) || process.env,
+  );
 }
 
 export async function prepareGitProjectCreateInput(
@@ -121,12 +111,22 @@ export async function prepareGitProjectCreateInput(
 
   if (await directoryExists(targetPath)) {
     if (await isDirectoryEmpty(targetPath)) {
-      await runCommandStrict("git", ["clone", sourceRef, targetPath], cloneRoot, buildGitAuthEnv(sourceRef, options.githubToken));
+      await runCommandStrict(
+        "git",
+        ["clone", sourceRef, targetPath],
+        cloneRoot,
+        buildGitHttpAuthEnv(sourceRef, { githubToken: options.githubToken }) || process.env,
+      );
     } else {
       await ensureExistingCloneMatchesRemote(targetPath, sourceRef, options);
     }
   } else {
-    await runCommandStrict("git", ["clone", sourceRef, targetPath], cloneRoot, buildGitAuthEnv(sourceRef, options.githubToken));
+    await runCommandStrict(
+      "git",
+      ["clone", sourceRef, targetPath],
+      cloneRoot,
+      buildGitHttpAuthEnv(sourceRef, { githubToken: options.githubToken }) || process.env,
+    );
   }
 
   return {

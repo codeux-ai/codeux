@@ -998,7 +998,9 @@ describe("QualityAssuranceService", () => {
       agentPresetId: null,
     })).rejects.toThrow("Failed to refresh origin before running QA review on feature/task-1: fetch failed");
 
-    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", "feature/task-1");
+    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", "feature/task-1", {
+      githubToken: "",
+    });
   });
 
   it("refreshes origin before continuing QA follow-up in REMOTE git mode", async () => {
@@ -1046,7 +1048,9 @@ describe("QualityAssuranceService", () => {
       followUpPrompt: "Address QA findings",
     })).rejects.toThrow("Failed to refresh origin before continuing QA follow-up on feature/task-1: fetch failed");
 
-    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", "feature/task-1");
+    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", "feature/task-1", {
+      githubToken: "",
+    });
   });
 
   it("passes provider auth mount settings into QA follow-up provider runs", async () => {

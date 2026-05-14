@@ -64,6 +64,7 @@ export class TaskService {
     repoPath: string,
     branch: string | undefined,
     scope?: DashboardSettingsScope,
+    options: { required?: boolean; provider?: ProviderId } = {},
   ): Promise<void> {
     const settings = this.deps.getDashboardSettings(scope);
     if (settings.git.githubMode !== "REMOTE") {
@@ -71,10 +72,21 @@ export class TaskService {
     }
 
     try {
-      await syncRemoteBranchIfAvailable(repoPath, branch);
+      await syncRemoteBranchIfAvailable(repoPath, branch, {
+        githubToken: settings.git.githubToken,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const branchLabel = branch?.trim() || settings.git.defaultBranch || "the requested branch";
+      if (options.required === false) {
+        this.deps.logger?.warn("Remote branch refresh failed before provider dispatch; continuing because the provider does not require local git state.", {
+          repoPath,
+          branch: branchLabel,
+          provider: options.provider,
+          error: message,
+        });
+        return;
+      }
       throw new Error(`Failed to refresh origin before starting work from ${branchLabel}: ${message}`);
     }
   }
@@ -158,8 +170,6 @@ export class TaskService {
   }
 
   async createTaskAgentSession(args: TaskAgentSessionArgs): Promise<JulesSession> {
-    await this.syncRemoteBranchesIfNeeded(args.repo_path, args.branch);
-
     const pseudoTask: Subtask = {
       id: `adhoc-${Date.now().toString(36)}`,
       title: args.title || "Adhoc Task",
@@ -172,6 +182,11 @@ export class TaskService {
     const provider = route.provider;
     const selectedProviderConfigId = route.providerConfigId || route.provider;
     const selectedProviderSettings = route.providers[selectedProviderConfigId];
+
+    await this.syncRemoteBranchesIfNeeded(args.repo_path, args.branch, undefined, {
+      required: provider !== "jules",
+      provider,
+    });
 
     if (provider !== "jules") {
       return await this.deps.cliWorkflowService.startTask({
@@ -239,8 +254,6 @@ export class TaskService {
     dispatchId?: string,
     taskRunId?: string,
   ): Promise<JulesSession> {
-    await this.syncRemoteBranchesIfNeeded(repoPath, baseBranch, settingsScope);
-
     // Respect task.provider if already set (e.g. from a rerun with provider override)
     const route = this.resolveInvocationProvider("task_coding", task, { scope: settingsScope });
     const provider = task.provider || route.provider;
@@ -248,6 +261,11 @@ export class TaskService {
       ? this.resolveProviderConfigIdForProvider(route, task.provider)
       : route.providerConfigId;
     const selectedProviderSettings = route.providers[selectedProviderConfigId];
+
+    await this.syncRemoteBranchesIfNeeded(repoPath, baseBranch, settingsScope, {
+      required: provider !== "jules",
+      provider,
+    });
 
     if (provider !== "jules") {
       const session = await this.deps.cliWorkflowService.startTask({

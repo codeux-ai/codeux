@@ -69,6 +69,14 @@ Checks:
 - Is `.jules-subagents/settings.json` containing `julesApiKey`?
 - Was settings save applied after editing dashboard value?
 
+### 3a. Jules task stays at "Started jules dispatch"
+Checks:
+- Inspect the latest task run. If it has `dispatch_started` but no `session_created`, the provider session has not been created yet.
+- Check for a long-running `git fetch origin --prune` child of `node dist/index.js`; Jules dispatch refreshes `origin` before calling the Jules API in remote git mode.
+- HTTPS remotes should fail fast when credentials are missing. Code UX disables interactive Git credential prompts and bounds branch-preflight/fetch checks so orchestration settles instead of waiting indefinitely on a local credential helper. For Jules dispatch, that local refresh is best-effort and a refresh failure should be logged without blocking Jules session creation.
+- After a restart, active Jules dispatches that never reached `session_created` are treated as interrupted pre-session dispatches and moved back to a retryable task state. Jules dispatches with a persisted session remain attached for normal sprint recovery.
+- If the dispatch fails with an auth error, fix the dashboard GitHub token or remote URL, then rerun the task.
+
 ### 4. Gemini/Codex task sessions fail immediately
 Checks:
 - Is the CLI installed and executable (`gemini`, `codex`)?

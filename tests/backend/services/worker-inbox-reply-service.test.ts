@@ -449,7 +449,9 @@ describe("WorkerInboxReplyService", () => {
         type: "worker_reply",
       }),
     );
-    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", undefined);
+    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", undefined, {
+      githubToken: undefined,
+    });
   });
 
   it("falls back to the latest activity summary when Jules did not emit an explicit clarification message", async () => {

@@ -321,7 +321,9 @@ describe("SprintPreviewService unit tests", () => {
       await service.startSession("proj-1", "sprint-1");
 
       expect(stopSessionSpy).toHaveBeenCalledWith("oldest");
-      expect(fetchOriginIfAvailable).toHaveBeenCalledWith("/repo");
+      expect(fetchOriginIfAvailable).toHaveBeenCalledWith("/repo", {
+        githubToken: undefined,
+      });
     });
   });
 

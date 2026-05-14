@@ -67,6 +67,7 @@ describe("SettingsIntegrationsPanel", () => {
             "claude-code": { provider: "claude-code", name: "Claude Primary", apiKey: "", mountAuth: false, authPath: "~/.claude" },
           },
           githubToken: "",
+          gitlabToken: "",
         },
       },
       projectSources: {},
@@ -83,6 +84,7 @@ describe("SettingsIntegrationsPanel", () => {
           codexApiKey: "",
           claudeCodeApiKey: "",
           githubToken: "",
+          gitlabToken: "",
         },
       },
       handleImportHints: vi.fn(),
@@ -93,7 +95,7 @@ describe("SettingsIntegrationsPanel", () => {
     const { container } = render(<SettingsIntegrationsPanel state={state} />);
 
     await waitFor(() => {
-      expect(container.textContent).toContain("Git Host Configuration");
+      expect(container.textContent).toContain("GitHub Configuration");
     });
 
     const panelRoot = container.querySelector(".flex.flex-col.gap-5") as HTMLElement;

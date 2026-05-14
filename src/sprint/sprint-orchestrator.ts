@@ -458,6 +458,9 @@ export class SprintOrchestrator {
     const automationLevel = dashboardSettings.automationLevel;
     const automationInterventions = this.getAutomationInterventionsSettings(dashboardSettings);
     const featureBranchPrefix = dashboardSettings.git.featureBranchPrefix;
+    const gitAuthOptions = {
+      githubToken: dashboardSettings.git.githubToken,
+    };
 
     const enabledProviders = Object.entries(dashboardSettings.aiProvider.providers)
       .filter(([, provider]) => provider.enabled)
@@ -477,37 +480,23 @@ export class SprintOrchestrator {
     if (loopSteps.branchPreflight && (args.action === "plan" || args.action === "orchestrate")) {
       if (githubMode === "REMOTE") {
         try {
-          await fetchOriginIfAvailable(repoPath);
+          await fetchOriginIfAvailable(repoPath, gitAuthOptions);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          const branchBlocker = [
-            "Branch preparation blocked",
-            "",
-            `Code UX could not refresh origin before checking \`${defaultBranch}\` and \`${defaultFeatureBranch}\`.`,
-            "",
-            `Fetch error: ${message}`,
-            "",
-            "What to do now",
-            "Check git authentication, remote connectivity, and local branch state, then resume the sprint.",
-          ].join("\n");
-          this.recordBlockedSprintRun({
-            action: args.action,
+          this.deps.logger.warn("Origin refresh failed during branch preflight; continuing with local refs and direct remote checks.", {
             projectId: executionContext.project.id,
             sprintId: executionContext.sprint.id,
-            eventType: "branch_preflight_blocked",
-            payload: {
-              featureBranch: defaultFeatureBranch,
-              defaultBranch,
-              fetchError: message,
-            },
+            repoPath,
+            featureBranch: defaultFeatureBranch,
+            defaultBranch,
+            error: message,
           });
-          return { content: [{ type: "text", text: branchBlocker }] };
         }
       }
 
       const branchAvailability = args.action === "orchestrate"
-        ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch)
-        : await runBranchPreflightStep(repoPath, defaultFeatureBranch);
+        ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch, gitAuthOptions)
+        : await runBranchPreflightStep(repoPath, defaultFeatureBranch, gitAuthOptions);
       const { existsLocal, existsRemote } = branchAvailability;
       const requiresRemoteBranch = args.action === "plan"
         || ("hasRemoteOrigin" in branchAvailability && branchAvailability.hasRemoteOrigin);

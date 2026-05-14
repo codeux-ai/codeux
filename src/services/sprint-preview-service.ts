@@ -181,6 +181,9 @@ export class SprintPreviewService {
           featureBranch,
           defaultBranch,
           effectiveSettings.git.githubMode === "REMOTE",
+          {
+            githubToken: effectiveSettings.git.githubToken,
+          },
         );
         await fs.mkdir(path.dirname(startupRuntimePath), { recursive: true });
         await fs.writeFile(startupRuntimePath, preparedScript.content, "utf8");
@@ -952,9 +955,10 @@ export class SprintPreviewService {
     featureBranch: string,
     defaultBranch: string,
     syncLatestFromOrigin = true,
+    gitAuthOptions?: { githubToken?: string; gitlabToken?: string },
   ): Promise<void> {
     if (syncLatestFromOrigin) {
-      await fetchOriginIfAvailable(repoPath);
+      await fetchOriginIfAvailable(repoPath, gitAuthOptions);
     }
     await this.ensurePreviewBranchExists(repoPath, featureBranch, defaultBranch);
     const exportRef = await this.resolvePreviewExportRef(repoPath, featureBranch);

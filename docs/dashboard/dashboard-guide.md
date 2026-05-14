@@ -199,15 +199,13 @@ Legacy runtime:
 - Settings now expose separate CLI retry controls for quota resets and rate limits, including the rate-limit delay and a max rate-limit retry count (`5` by default). Session sync preserves quota/rate-limit dispatch errors so active retry timers remain visible, while expired or missing cooldown metadata requeues the task instead of leaving it stuck in `QUOTA`.
 - The v2 settings workspace restores the full Git Flow and Git host controls:
   - Git Flow lives in the Sprint tab with default branch, branch prefix, sprint branch scheme, remote/local mode, and auto-create PR
-  - Integrations exposes the system GitHub token plus per-scope GitHub auth-copy mounts and gitconfig sharing
+  - Integrations exposes system GitHub and GitLab tokens plus per-scope GitHub auth-copy mounts and gitconfig sharing
   - CLI provider credentials are managed per named instance, including optional local auth-copy mounts and custom auth paths for each Gemini, Codex, or Claude entry
 - The first-run onboarding flow guides operators through installation checks, container security basics, provider auth-copy setup, AI behaviour defaults, appearance preferences, and primary dashboard controls. See [Dashboard Onboarding](./onboarding.md).
 - The Docker top-nav control now consumes onboarding readiness data. If Docker is unavailable, it shows a `Cluster not ready` badge with an info icon and explains that Docker is mandatory for containerized CLI execution.
 - Settings -> General includes `Open Onboarding`, which reopens the setup flow without clearing saved settings.
 - The notification center now renders startup-check notifications from real readiness data and persists read/dismissed notification state in browser storage.
-- GitLab support is currently partial:
-  - backend git host detection, `glab`, and GitLab CI queries are implemented
-  - dashboard token persistence is still GitHub-only, so GitLab tokens currently come from `GITLAB_TOKEN` / `GLAB_TOKEN`
+- GitLab support is available from Integrations with dashboard token persistence, backend GitLab host detection, `glab` support, and GitLab CI queries. `GITLAB_TOKEN` / `GLAB_TOKEN` remain supported as external fallbacks.
 - Sprint data now hydrates cache-first when revisiting the page and refreshes in the background, so the showcase and ledger do not flash empty while the latest data loads. First-hydration uses skeleton placeholders while background refreshes continue, preserving existing data without reintroducing blocking loaders
 - Sprint and task list windows support selectable page size options (`10`, `20`, `50`, `100`, `All`) with a default of `20` (a frontend-only view change with no API contract change)
 - The Sprints page gallery show/hide control persists its browser-local visibility preference, so the gallery remains hidden or shown after navigation and reloads
@@ -422,12 +420,12 @@ Runtime scoping:
 - Project settings also own agent authoring behavior, including whether dashboard edits mirror agent markdown into the project directory
 - The `/config` page keeps the existing v2 settings shell and categories, but now binds them to real scoped settings instead of draft-only values
 - System scope only edits system-owned controls, while project scope only edits project-owned overrides for the selected project
-- The integrations view now owns provider API keys plus GitHub token and GitHub workflow settings, rather than splitting those across separate categories
+- The integrations view now owns provider API keys plus GitHub and GitLab tokens and GitHub workflow settings, rather than splitting those across separate categories
 - The integrations view uses a registry-style list with per-integration `Add` and `Manage` actions so additional integrations can be added without turning the page into one long form
 - Provider integrations are now instance-based:
   - each CLI type can have multiple named credentials
   - the list shows connected counts per CLI type rather than a single connected/disconnected badge
-  - GitHub remains system-scoped and is edited as one configuration panel
+  - GitHub and GitLab tokens remain system-scoped and are edited from dedicated configuration panels
 - Individual MCP tool toggles and skill toggles are intentionally not exposed in the current user-facing settings surface
 - CLI workflow settings now expose provider throttle controls in addition to workspace cleanup:
   - `Retry after quota reset`

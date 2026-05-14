@@ -174,6 +174,24 @@ describe("runBranchPreflightStep (Async)", () => {
     expect(result.existsRemote).toBe(false);
   });
 
+  it("uses the remote-tracking ref when direct remote inspection fails", async () => {
+    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(commandRunner.run)
+      // isGitRepository
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // hasLocalBranch
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // hasRemoteBranch -> ls-remote auth/network failure
+      .mockResolvedValueOnce({ ok: false, code: 128, stdout: "", stderr: "Authentication failed" })
+      // hasRemoteBranch -> remote-tracking fallback
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    const result = await runBranchPreflightStep("/valid-repo", "feature/sprint1");
+
+    expect(result).toEqual({ existsLocal: true, existsRemote: true });
+    expect(commandRunner.run).toHaveBeenCalledWith("git", ["show-ref", "--verify", "refs/remotes/origin/feature/sprint1"], { cwd: "/valid-repo" });
+  });
+
   it("returns existsLocal false and existsRemote false if isGitRepository throws", async () => {
     vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
     // 1st call: isGitRepository (throws)
@@ -219,6 +237,49 @@ describe("runBranchPreflightStep (Async)", () => {
     });
     expect(commandRunner.run).toHaveBeenCalledWith("git", ["branch", "feature/sprint1", "main"], { cwd: "/valid-repo" });
     expect(commandRunner.run).toHaveBeenCalledWith("git", ["push", "-u", "origin", "refs/heads/feature/sprint1:refs/heads/feature/sprint1"], { cwd: "/valid-repo" });
+  });
+
+  it("uses HTTPS auth headers for remote branch checks and pushes when a token is configured", async () => {
+    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(commandRunner.run)
+      // prepareBranchForOrchestration -> remote URL for auth
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "https://github.com/example/repo.git\n", stderr: "" })
+      // prepareBranchForOrchestration -> fetch origin
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // runBranchPreflightStep -> is git repo
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // runBranchPreflightStep -> local branch missing
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      // runBranchPreflightStep -> remote branch missing
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // createLocalBranch -> remote feature branch missing locally
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      // createLocalBranch -> remote default branch missing
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      // createLocalBranch -> local default branch exists
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // createLocalBranch -> create feature branch from default branch ref
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // push remote branch
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    await prepareBranchForOrchestration("/valid-repo", "feature/sprint1", "main", {
+      githubToken: "gh-token",
+    });
+
+    const remoteCalls = vi.mocked(commandRunner.run).mock.calls.filter((call) => (
+      call[1][0] === "fetch" || call[1][0] === "ls-remote" || call[1][0] === "push"
+    ));
+    expect(remoteCalls).toHaveLength(3);
+    for (const call of remoteCalls) {
+      expect(call[2]).toEqual(expect.objectContaining({
+        cwd: "/valid-repo",
+        env: expect.objectContaining({
+          GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+          GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from("x-access-token:gh-token").toString("base64")}`,
+        }),
+      }));
+    }
   });
 
   it("does not block orchestration on a missing remote branch when no origin remote exists", async () => {

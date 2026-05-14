@@ -65,7 +65,9 @@ export class WorkerInboxReplyService {
     }
 
     try {
-      await syncRemoteBranchIfAvailable(repoPath, branch);
+      await syncRemoteBranchIfAvailable(repoPath, branch, {
+        githubToken: settings.git.githubToken,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const branchLabel = branch?.trim() || settings.git.defaultBranch || "the requested branch";

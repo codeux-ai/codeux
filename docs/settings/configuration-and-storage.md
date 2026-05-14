@@ -62,6 +62,7 @@ Runtime resolution:
   4. System setting default (Dashboard)
   5. Hardcoded default (`main`)
 - In remote git mode, Code UX refreshes `origin` before sprint branch preflight and before each task start so branch resolution is based on current remote state instead of stale local refs.
+- HTTPS GitHub remotes use the configured dashboard token as a temporary Git extraheader during origin refresh, remote branch checks, and branch pushes. HTTPS origin refreshes and branch preflight network checks run with interactive credential prompts disabled and a bounded timeout so orchestration cannot remain stuck waiting on local credential helpers. If direct remote inspection is unavailable, branch preflight can use an existing `refs/remotes/origin/<branch>` ref as remote-branch evidence. Local origin-refresh failures remain strict for CLI-backed work that needs local git state, but are best-effort for branch preflight and Jules dispatch because Jules works from the remote source and starting branch. SSH remotes continue to use the local SSH agent/key setup unchanged.
 - In remote git mode, Code UX also refreshes `origin` before branch-sensitive recovery flows such as QA review, QA follow-up continuation, clarification auto-replies, CI fix runs, and merge-conflict resolution.
 - QA review execution uses an isolated snapshot workspace in Docker so review inspection does not mutate the task workspace directly.
 - QA-requested CLI follow-up work continues in the original task workspace when that workspace is still available.
@@ -88,6 +89,7 @@ Runtime resolution:
   - `codexApiKey`
   - `claudeCodeApiKey`
   - `githubToken`
+  - `gitlabToken`
 - `defaults`
   - full inheritable project settings baseline
 - `mcpTools`
@@ -115,7 +117,7 @@ System-level integrations are injected into effective dashboard settings at reso
   - default instance ids intentionally match the base provider ids (`jules`, `gemini`, `codex`, `claude-code`) for compatibility with older settings payloads
   - additional instances can coexist under the same CLI type
   - for CLI providers, `mountAuth` and `authPath` are instance-specific Docker auth-copy settings, so multiple Codex/Gemini/Claude entries can each point at different local credential directories
-- `git.githubToken` is system-scoped
+- `git.githubToken` and `git.gitlabToken` are system-scoped
 - runtime fields like `dashboardPort` and `enableDebugLogFile` are system-scoped
 - project and sprint scopes still own `cliWorkflow.containerMountGithubAuth`, `cliWorkflow.containerGithubAuthPath`, and `cliWorkflow.containerMountGitConfig`
 
@@ -165,7 +167,7 @@ Dashboard behavior:
 - the Integrations panel restores the Git host workspace:
   - system scope edits the GitHub token and per-instance CLI auth sources
   - project and sprint scopes edit GitHub auth-copy mounts and gitconfig sharing for Docker runs
-- integration and AI model provider tiles use vendored, pinned Lobe Icons SVG brand marks for Jules/Google, Gemini, Codex, Claude, Qwen, OpenCode, and GitHub identity.
+- integration and AI model provider tiles use vendored, pinned Lobe Icons SVG brand marks for Jules/Google, Gemini, Codex, Claude, Qwen, OpenCode, GitHub, and GitLab identity.
 
 `aiProvider` contains:
 - `provider` (`ProviderConfigId|null`)
