@@ -352,7 +352,58 @@ describe("TaskService", () => {
     expect(syncRemoteBranchIfAvailable).not.toHaveBeenCalled();
   });
 
-  it("surfaces a clear error when remote origin refresh fails before starting a sprint task", async () => {
+  it("continues Jules sprint task dispatch when local origin refresh fails", async () => {
+    const logger = { warn: vi.fn() };
+    const resilientService = new TaskService({
+      julesApi: { createSession } as any,
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: getWorkerAgent } as any,
+      resolveJulesSourceId,
+      getDashboardSettings: () => ({
+        aiProvider: {
+          provider: "jules",
+          strategy: "MANUAL",
+          julesApiKey: "",
+          providers: {
+            jules: { enabled: true, model: "default", weight: 60, thinkingMode: "MEDIUM", apiKey: "" },
+            gemini: { enabled: true, model: "default", weight: 20, thinkingMode: "MEDIUM", apiKey: "" },
+          },
+        },
+        git: { githubMode: "REMOTE", defaultBranch: "main" },
+      }) as any,
+      isJulesApiConfigured: () => true,
+      cliWorkflowService: { startTask: startCliTask } as any,
+      logger: logger as any,
+    });
+    vi.mocked(syncRemoteBranchIfAvailable).mockRejectedValueOnce(new Error("fetch failed"));
+    getWorkerAgent.mockResolvedValue({ instructionMarkdown: "Rules" });
+    createSession.mockResolvedValue({ id: "s-resilient" });
+
+    await resilientService.startSprintTask(
+      {
+        id: "01-task",
+        title: "Do Thing",
+        prompt: "Implement",
+        depends_on: [],
+        is_independent: true,
+      },
+      "999",
+      "feature/sprint1",
+      "/tmp/repo",
+      1,
+    );
+
+    expect(createSession).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Remote branch refresh failed before provider dispatch; continuing because the provider does not require local git state.",
+      expect.objectContaining({
+        branch: "feature/sprint1",
+        provider: "jules",
+        error: "fetch failed",
+      }),
+    );
+  });
+
+  it("surfaces a clear error when remote origin refresh fails before starting a CLI sprint task", async () => {
     vi.mocked(syncRemoteBranchIfAvailable).mockRejectedValueOnce(new Error("fetch failed"));
 
     await expect(service.startSprintTask(
@@ -362,6 +413,7 @@ describe("TaskService", () => {
         prompt: "Implement",
         depends_on: [],
         is_independent: true,
+        provider: "gemini",
       },
       "999",
       "feature/sprint1",

@@ -174,6 +174,24 @@ describe("runBranchPreflightStep (Async)", () => {
     expect(result.existsRemote).toBe(false);
   });
 
+  it("uses the remote-tracking ref when direct remote inspection fails", async () => {
+    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(commandRunner.run)
+      // isGitRepository
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // hasLocalBranch
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // hasRemoteBranch -> ls-remote auth/network failure
+      .mockResolvedValueOnce({ ok: false, code: 128, stdout: "", stderr: "Authentication failed" })
+      // hasRemoteBranch -> remote-tracking fallback
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    const result = await runBranchPreflightStep("/valid-repo", "feature/sprint1");
+
+    expect(result).toEqual({ existsLocal: true, existsRemote: true });
+    expect(commandRunner.run).toHaveBeenCalledWith("git", ["show-ref", "--verify", "refs/remotes/origin/feature/sprint1"], { cwd: "/valid-repo" });
+  });
+
   it("returns existsLocal false and existsRemote false if isGitRepository throws", async () => {
     vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
     // 1st call: isGitRepository (throws)
