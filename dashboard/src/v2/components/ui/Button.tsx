@@ -1,6 +1,7 @@
 import type { FunctionComponent, ComponentProps } from "preact";
 import { memo } from "preact/compat";
-import { useCallback, useRef } from "preact/hooks";
+import { useCallback, useRef, useEffect } from "preact/hooks";
+import gsap from "gsap";
 import { Check, X, Loader2 } from "lucide-preact";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useMagnetic } from "../../hooks/use-magnetic.js";
@@ -75,6 +76,23 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   else if (isError) overrideClasses = "!bg-status-red !text-white !border-transparent";
 
   const childrenOpacity = (isPending || isSuccess || isError) ? "opacity-0" : "opacity-100";
+
+
+  useEffect(() => {
+    if (isError && buttonRef.current && typeof gsap !== 'undefined' && gsap.to) {
+      gsap.to(buttonRef.current, {
+        keyframes: [
+          { x: -4, borderColor: "var(--status-red)", duration: 0.05 },
+          { x: 4, borderColor: "var(--status-red)", duration: 0.05 },
+          { x: -4, borderColor: "var(--status-red)", duration: 0.05 },
+          { x: 4, borderColor: "var(--status-red)", duration: 0.05 },
+          { x: 0, borderColor: "var(--status-red)", duration: 0.05 }
+        ],
+        ease: "power2.inOut",
+        clearProps: "x,borderColor"
+      });
+    }
+  }, [isError]);
 
   return (
     <button
