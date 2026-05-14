@@ -1,11 +1,10 @@
 import type { FunctionComponent } from "preact";
-import { useState, useRef, useLayoutEffect } from "preact/hooks";
+import { useState, useRef, useLayoutEffect, useEffect } from "preact/hooks";
 import gsap from "gsap";
 import { ChevronDown } from "lucide-preact";
 import { WaveFluid } from "./WaveFluid.js";
 import { BorderTrace } from "./BorderTrace.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 export const CollapsiblePanel: FunctionComponent<{
     title: string;
@@ -17,6 +16,7 @@ export const CollapsiblePanel: FunctionComponent<{
 }> = ({ title, icon: Icon, accentHex, defaultOpen = false, badge, children }) => {
     const [open, setOpen] = useState(defaultOpen);
     const contentRef = useRef<HTMLDivElement>(null);
+    const innerRef = useRef<HTMLDivElement>(null);
     const reducedMotion = useReducedMotion();
     const initialMountRef = useRef(true);
 
@@ -35,15 +35,47 @@ export const CollapsiblePanel: FunctionComponent<{
             return;
         }
 
-        const duration = reducedMotion ? 0 : MODAL_MOTION.collapse.duration;
+        const duration = reducedMotion ? 0 : 0.4;
 
         gsap.to(contentRef.current, {
             height: open ? "auto" : 0,
             opacity: open ? 1 : 0,
             duration,
-            ease: MODAL_MOTION.collapse.ease,
+            ease: "power2.inOut",
             overflow: "hidden"
         });
+    }, [open, reducedMotion]);
+
+    useEffect(() => {
+        if (!innerRef.current || !contentRef.current || typeof ResizeObserver === 'undefined') return;
+
+        let prevHeight = innerRef.current.offsetHeight;
+
+        const ro = new ResizeObserver(() => {
+            if (!innerRef.current || !contentRef.current) return;
+            const newHeight = innerRef.current.offsetHeight;
+
+            if (open && newHeight !== prevHeight) {
+                const duration = reducedMotion ? 0 : 0.4;
+                if (gsap.isTweening(contentRef.current)) {
+                    gsap.to(contentRef.current, {
+                        height: "auto",
+                        duration,
+                        ease: "power2.inOut",
+                        overwrite: "auto"
+                    });
+                } else {
+                    gsap.fromTo(contentRef.current,
+                        { height: prevHeight },
+                        { height: "auto", duration, ease: "power2.inOut" }
+                    );
+                }
+            }
+            prevHeight = newHeight;
+        });
+
+        ro.observe(innerRef.current);
+        return () => ro.disconnect();
     }, [open, reducedMotion]);
 
     return (
@@ -54,6 +86,7 @@ export const CollapsiblePanel: FunctionComponent<{
             {/* Header — always visible, clickable */}
             <button
                 type="button"
+                aria-expanded={open}
                 onClick={() => setOpen(!open)}
                 className="relative z-10 w-full flex items-center justify-between gap-3 p-5 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
             >
@@ -74,7 +107,7 @@ export const CollapsiblePanel: FunctionComponent<{
 
             {/* Collapsible body */}
             <div ref={contentRef}>
-                <div className="relative z-10 px-5 pb-5 pt-0">
+                <div ref={innerRef} className="relative z-10 px-5 pb-5 pt-0">
                     {children}
                 </div>
             </div>
