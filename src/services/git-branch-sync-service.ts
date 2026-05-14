@@ -6,11 +6,15 @@ export type GitBranchSyncRunner = (
   args: string[],
   cwd: string,
   env?: NodeJS.ProcessEnv,
+  options?: { timeoutMs?: number },
 ) => Promise<CommandResult>;
 
 export interface GitBranchSyncOptions extends GitHttpAuthOptions {
   runner?: GitBranchSyncRunner;
+  fetchTimeoutMs?: number;
 }
+
+const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
 
 const normalizeOptions = (
   runnerOrOptions?: GitBranchSyncRunner | GitBranchSyncOptions,
@@ -26,11 +30,41 @@ const runGit = (
   args: string[],
   cwd: string,
   env?: NodeJS.ProcessEnv,
+  options?: { timeoutMs?: number },
 ): Promise<CommandResult> => {
-  if (env) {
-    return runner("git", args, cwd, env);
+  if (env || options) {
+    return runner("git", args, cwd, env, options);
   }
   return runner("git", args, cwd);
+};
+
+const defaultGitRunner: GitBranchSyncRunner = (
+  command: string,
+  args: string[],
+  cwd: string,
+  env?: NodeJS.ProcessEnv,
+  options?: { timeoutMs?: number },
+): Promise<CommandResult> => runCommandStrict(command, args, cwd, env ?? process.env, {
+  timeout: options?.timeoutMs,
+});
+
+const isHttpRemote = (remoteUrl: string): boolean => /^https?:\/\//i.test(remoteUrl.trim());
+
+const buildNonInteractiveHttpEnv = (
+  remoteUrl: string,
+  options: GitBranchSyncOptions,
+): NodeJS.ProcessEnv | undefined => {
+  if (!isHttpRemote(remoteUrl)) {
+    return undefined;
+  }
+
+  return {
+    ...(buildGitHttpAuthEnv(remoteUrl, options) || process.env),
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_ASKPASS: "true",
+    SSH_ASKPASS: "true",
+    GCM_INTERACTIVE: "never",
+  };
 };
 
 export async function fetchOriginIfAvailable(
@@ -38,7 +72,7 @@ export async function fetchOriginIfAvailable(
   runnerOrOptions?: GitBranchSyncRunner | GitBranchSyncOptions,
 ): Promise<boolean> {
   const options = normalizeOptions(runnerOrOptions);
-  const runner = options.runner || runCommandStrict;
+  const runner = options.runner || defaultGitRunner;
   let remoteUrl: string;
   try {
     remoteUrl = (await runGit(runner, ["remote", "get-url", "origin"], repoPath)).stdout.trim();
@@ -46,8 +80,10 @@ export async function fetchOriginIfAvailable(
     return false;
   }
 
-  const authEnv = buildGitHttpAuthEnv(remoteUrl, options);
-  await runGit(runner, ["fetch", "origin", "--prune"], repoPath, authEnv);
+  const fetchEnv = buildNonInteractiveHttpEnv(remoteUrl, options);
+  await runGit(runner, ["fetch", "origin", "--prune"], repoPath, fetchEnv, {
+    timeoutMs: options.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS,
+  });
   return true;
 }
 
@@ -57,7 +93,7 @@ export async function syncRemoteBranchIfAvailable(
   runnerOrOptions?: GitBranchSyncRunner | GitBranchSyncOptions,
 ): Promise<boolean> {
   const options = normalizeOptions(runnerOrOptions);
-  const runner = options.runner || runCommandStrict;
+  const runner = options.runner || defaultGitRunner;
   const fetched = await fetchOriginIfAvailable(repoPath, options);
   const branchName = branch?.trim();
   if (!fetched || !branchName) {

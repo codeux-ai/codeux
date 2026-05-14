@@ -483,28 +483,14 @@ export class SprintOrchestrator {
           await fetchOriginIfAvailable(repoPath, gitAuthOptions);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          const branchBlocker = [
-            "Branch preparation blocked",
-            "",
-            `Code UX could not refresh origin before checking \`${defaultBranch}\` and \`${defaultFeatureBranch}\`.`,
-            "",
-            `Fetch error: ${message}`,
-            "",
-            "What to do now",
-            "Check git authentication, remote connectivity, and local branch state, then resume the sprint.",
-          ].join("\n");
-          this.recordBlockedSprintRun({
-            action: args.action,
+          this.deps.logger.warn("Origin refresh failed during branch preflight; continuing with local refs and direct remote checks.", {
             projectId: executionContext.project.id,
             sprintId: executionContext.sprint.id,
-            eventType: "branch_preflight_blocked",
-            payload: {
-              featureBranch: defaultFeatureBranch,
-              defaultBranch,
-              fetchError: message,
-            },
+            repoPath,
+            featureBranch: defaultFeatureBranch,
+            defaultBranch,
+            error: message,
           });
-          return { content: [{ type: "text", text: branchBlocker }] };
         }
       }
 

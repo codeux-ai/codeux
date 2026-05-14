@@ -17,6 +17,7 @@ const CLI_PROVIDERS = new Set<ProviderId>(["gemini", "codex", "claude-code", "qw
 export interface RuntimeStartupRecoveryResult {
   recoveredCliSessionIds: string[];
   reconciledLocalDispatchIds: string[];
+  reconciledProviderDispatchIds: string[];
   reconciledContainerInvocationIds: string[];
   resumedSprintRunIds: string[];
   supersededSprintRunIds: string[];
@@ -41,12 +42,14 @@ export class RuntimeStartupRecoveryService {
     const cliRecovery = this.deps.sessionTracking.recoverInterruptedCliSessions();
     const recoveredCliSessionIds = cliRecovery.sessionIds;
     const reconciledLocalDispatchIds = this.reconcileInterruptedLocalDispatches(new Set(recoveredCliSessionIds));
+    const reconciledProviderDispatchIds = this.reconcileInterruptedProviderDispatches();
     const reconciledContainerInvocationIds = await this.reconcileInterruptedCliInvocations(new Set(recoveredCliSessionIds));
     const { resumedSprintRunIds, supersededSprintRunIds } = this.resumeRecoverableSprintRuns();
 
     if (
       recoveredCliSessionIds.length > 0
       || reconciledLocalDispatchIds.length > 0
+      || reconciledProviderDispatchIds.length > 0
       || reconciledContainerInvocationIds.length > 0
       || resumedSprintRunIds.length > 0
       || supersededSprintRunIds.length > 0
@@ -54,6 +57,7 @@ export class RuntimeStartupRecoveryService {
       this.deps.logger?.info("Recovered runtime state on startup", {
         recoveredCliSessions: recoveredCliSessionIds.length,
         reconciledLocalDispatches: reconciledLocalDispatchIds.length,
+        reconciledProviderDispatches: reconciledProviderDispatchIds.length,
         reconciledContainerInvocations: reconciledContainerInvocationIds.length,
         resumedSprintRuns: resumedSprintRunIds.length,
         supersededSprintRuns: supersededSprintRunIds.length,
@@ -63,6 +67,7 @@ export class RuntimeStartupRecoveryService {
     return {
       recoveredCliSessionIds,
       reconciledLocalDispatchIds,
+      reconciledProviderDispatchIds,
       reconciledContainerInvocationIds,
       resumedSprintRunIds,
       supersededSprintRunIds,
@@ -215,6 +220,55 @@ export class RuntimeStartupRecoveryService {
         });
       }
 
+      this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
+        status: "pending",
+      });
+
+      if (dispatch.sprintRunId) {
+        this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+      }
+      reconciledDispatchIds.push(dispatch.id);
+    }
+
+    return reconciledDispatchIds;
+  }
+
+  private reconcileInterruptedProviderDispatches(): string[] {
+    const interruptedAt = new Date().toISOString();
+    const reconciledDispatchIds: string[] = [];
+    const activeJulesDispatches = this.deps.executionRepository.listTaskDispatchesByStatus(
+      [...ACTIVE_DISPATCH_STATUSES],
+      { executorType: "jules" },
+    );
+
+    for (const dispatch of activeJulesDispatches) {
+      const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
+      if (!taskRun || isTerminalTaskRunState(taskRun) || taskRun.sessionId || taskRun.sessionName) {
+        continue;
+      }
+
+      const errorMessage = "Jules dispatch was interrupted before Code UX persisted a provider session. The task was moved back to a retryable state.";
+      this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        connectionId: null,
+        status: "failed",
+        finishedAt: interruptedAt,
+        lastHeartbeatAt: interruptedAt,
+        errorMessage,
+      });
+      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+        connectionId: null,
+        state: "FAILED",
+        finishedAt: interruptedAt,
+        durationMs: calculateDurationMs(taskRun, interruptedAt),
+      });
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_failed", "system", {
+        dispatchId: dispatch.id,
+        reason: "runtime_restart_interrupted_before_session",
+        errorMessage,
+      }, {
+        sourceEventKey: `startup-recovery:jules-pre-session:${dispatch.id}:${taskRun.id}`,
+      });
       this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
         status: "pending",
       });

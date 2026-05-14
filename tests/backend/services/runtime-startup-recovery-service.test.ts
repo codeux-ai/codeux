@@ -151,6 +151,156 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(projectRepository.getTask(task.id)?.status).toBe("pending");
   });
 
+  it("fails interrupted Jules dispatches that never persisted a provider session back to a retryable state", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Interrupted Jules Project",
+      sourceType: "local",
+      sourceRef: "/workspace/interrupted-jules-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Interrupted Jules Sprint",
+      number: 3,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Start Jules session after restart",
+      executorType: "jules",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "jules",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+    });
+    executionRepository.updateTaskDispatch(dispatch.id, {
+      status: "running",
+      startedAt: "2026-03-29T10:01:00.000Z",
+      lastHeartbeatAt: "2026-03-29T10:01:00.000Z",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      mode: "jules",
+      state: "RUNNING",
+      startedAt: "2026-03-29T10:01:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledProviderDispatchIds).toEqual([dispatch.id]);
+    expect(result.resumedSprintRunIds).toEqual([sprintRun.id]);
+    expect(recoverSprintRun).toHaveBeenCalledWith(sprintRun.id);
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      id: dispatch.id,
+      status: "failed",
+      errorMessage: "Jules dispatch was interrupted before Code UX persisted a provider session. The task was moved back to a retryable state.",
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      id: taskRun.id,
+      state: "FAILED",
+      sessionId: null,
+      sessionName: null,
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "dispatch_failed",
+          payload: expect.objectContaining({
+            reason: "runtime_restart_interrupted_before_session",
+          }),
+        }),
+      ]),
+    );
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
+  });
+
+  it("keeps active Jules dispatches with persisted sessions attached for sprint recovery", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Durable Jules Project",
+      sourceType: "local",
+      sourceRef: "/workspace/durable-jules-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Durable Jules Sprint",
+      number: 4,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Keep durable Jules session",
+      executorType: "jules",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "jules",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "jules-session-1",
+      sessionName: "sessions/jules-session-1",
+      state: "RUNNING",
+      startedAt: "2026-03-29T10:01:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledProviderDispatchIds).toEqual([]);
+    expect(result.resumedSprintRunIds).toEqual([sprintRun.id]);
+    expect(recoverSprintRun).toHaveBeenCalledWith(sprintRun.id);
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      id: dispatch.id,
+      status: "running",
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      id: taskRun.id,
+      state: "RUNNING",
+      sessionId: "jules-session-1",
+    });
+  });
+
   it("recovers only the newest active run per sprint and fails older duplicate active runs", async () => {
     const {
       projectRepository,
@@ -557,6 +707,7 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(logger.info).toHaveBeenCalledWith("Recovered runtime state on startup", {
       recoveredCliSessions: 0,
       reconciledLocalDispatches: 0,
+      reconciledProviderDispatches: 0,
       reconciledContainerInvocations: 0,
       resumedSprintRuns: 1,
       supersededSprintRuns: 0,

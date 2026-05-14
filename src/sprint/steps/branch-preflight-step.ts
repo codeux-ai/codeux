@@ -16,7 +16,10 @@ export interface BranchPreparationResult extends BranchAvailability {
 
 export interface BranchPreflightOptions extends GitHttpAuthOptions {
   authEnv?: NodeJS.ProcessEnv;
+  networkTimeoutMs?: number;
 }
+
+const DEFAULT_GIT_NETWORK_TIMEOUT_MS = 30_000;
 
 const runGit = async (
   repoPath: string,
@@ -26,6 +29,7 @@ const runGit = async (
   return commandRunner.run("git", args, {
     cwd: repoPath,
     ...(options?.authEnv ? { env: options.authEnv } : {}),
+    ...(options ? { timeout: options.networkTimeoutMs ?? DEFAULT_GIT_NETWORK_TIMEOUT_MS } : {}),
   });
 };
 
@@ -43,7 +47,7 @@ const withResolvedAuthEnv = (
   remoteUrl: string | null,
   options?: BranchPreflightOptions,
 ): BranchPreflightOptions | undefined => {
-  const authEnv = options?.authEnv || buildGitHttpAuthEnv(remoteUrl, options);
+  const authEnv = options?.authEnv || buildNonInteractiveHttpEnv(remoteUrl, options);
   if (!authEnv && !options) {
     return undefined;
   }
@@ -53,11 +57,27 @@ const withResolvedAuthEnv = (
   };
 };
 
-const shouldResolveAuthEnv = (options?: BranchPreflightOptions): boolean => Boolean(
-  options?.authEnv
-    || options?.githubToken?.trim()
-    || options?.gitlabToken?.trim(),
-);
+const isHttpRemote = (remoteUrl: string): boolean => /^https?:\/\//i.test(remoteUrl.trim());
+
+const buildNonInteractiveHttpEnv = (
+  remoteUrl: string | null,
+  options?: BranchPreflightOptions,
+): NodeJS.ProcessEnv | undefined => {
+  const normalizedRemote = remoteUrl?.trim();
+  if (!normalizedRemote || !isHttpRemote(normalizedRemote)) {
+    return options?.authEnv;
+  }
+
+  return {
+    ...(buildGitHttpAuthEnv(normalizedRemote, options) || process.env),
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_ASKPASS: "true",
+    SSH_ASKPASS: "true",
+    GCM_INTERACTIVE: "never",
+  };
+};
+
+const shouldResolveAuthEnv = (options?: BranchPreflightOptions): boolean => Boolean(options);
 
 const isGitRepository = async (repoPath: string): Promise<boolean> => {
   try {
@@ -84,9 +104,12 @@ const hasRemoteBranch = async (
 ): Promise<boolean> => {
   try {
     const result = await runGit(repoPath, ["ls-remote", "--heads", "origin", branch], options);
-    return result.ok && result.stdout.trim().length > 0;
+    if (result.ok) {
+      return result.stdout.trim().length > 0;
+    }
+    return await remoteTrackingRefExists(repoPath, branch);
   } catch {
-    return false;
+    return await remoteTrackingRefExists(repoPath, branch);
   }
 };
 
