@@ -1,9 +1,17 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { FolderGit2, CheckCircle2, Circle, PlayCircle, Clock, Play, Square, Settings, Maximize2 } from "lucide-preact";
+import { useState, useEffect } from "preact/hooks";
+import { FolderGit2, CheckCircle2, Circle, PlayCircle, Clock, Play, Square, Settings, Maximize2, Loader2 } from "lucide-preact";
 import type { Task } from "../../types.js";
 
-export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
+export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => {
+    const [isFiring, setIsFiring] = useState(false);
+
+    useEffect(() => {
+        setIsFiring(false);
+    }, [task.status]);
+
+    return (
     <div
         className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.06] dark:border-white/[0.06] last:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 focus-visible:z-10 focus-visible:rounded-xl"
         tabIndex={0}
@@ -17,6 +25,9 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
         {/* Hover backdrop */}
         <div className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
         <div className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-xl" />
+
+        {/* Firing signal pulse */}
+        <div className={`absolute inset-0 bg-signal-500/[0.08] dark:bg-signal-500/[0.15] transition-opacity duration-300 rounded-xl -z-10 ${isFiring ? 'opacity-100 animate-pulse' : 'opacity-0'}`} />
 
         <div className="flex-1 grid grid-cols-12 gap-3 md:gap-5 items-center min-w-0">
             {/* ID */}
@@ -68,8 +79,15 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
 
                 {/* Quick actions */}
                 <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-xl rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] absolute right-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-[50ms]">
-                    <button className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95" title="Play/Stop">
-                        {task.status === 'in_progress' ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
+                    <button onClick={(e) => {
+                        if (isFiring) { e.preventDefault(); e.stopPropagation(); return; }
+                        setIsFiring(true);
+                    }} aria-disabled={isFiring} className={`touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95 ${isFiring ? 'opacity-50 cursor-not-allowed' : ''}`} title="Play/Stop">
+                        {isFiring ? (
+                            task.status === 'in_progress' ? <Square className="w-3.5 h-3.5 animate-pulse" fill="currentColor" /> : <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            task.status === 'in_progress' ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />
+                        )}
                     </button>
                     <button className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95" title="Configure">
                         <Settings className="w-3.5 h-3.5" />
@@ -81,4 +99,5 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
             </div>
         </div>
     </div>
-));
+    );
+});
