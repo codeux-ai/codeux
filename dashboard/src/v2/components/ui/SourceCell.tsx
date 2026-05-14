@@ -20,12 +20,14 @@ interface SourceCellProps {
 
 export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven, animDelay = 0 }) => {
     const cellRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
     const anim = isEven ? 'animate-organic' : 'animate-organic-reverse';
     const state = statusMap[source.status] ?? statusMap.idle;
     const StatusIcon = state.icon;
 
     const handleHoverEnter = useCallback(() => {
         if (!cellRef.current) return;
+
         gsap.to(cellRef.current, {
             scale: 1.08,
             rotation: (Math.random() - 0.5) * 8,
@@ -33,16 +35,51 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             ease: "back.out(2)",
             overwrite: true,
         });
+
+        if (contentRef.current) {
+            gsap.to(contentRef.current, {
+                z: 24, // Subtle depth shift inside the perspective
+                y: -4, // Subtle upward shift
+                duration: 0.6,
+                ease: "back.out(2)",
+                overwrite: true,
+            });
+        }
+
+        const anims = cellRef.current.querySelectorAll('.animate-organic, .animate-organic-reverse');
+        anims.forEach((el) => {
+            el.getAnimations().forEach(anim => {
+                gsap.to(anim, { playbackRate: 2.5, duration: 0.6, ease: "power2.out", overwrite: true });
+            });
+        });
     }, []);
 
     const handleHoverLeave = useCallback(() => {
         if (!cellRef.current) return;
+
         gsap.to(cellRef.current, {
             scale: 1,
             rotation: 0,
             duration: 0.8,
             ease: "elastic.out(1, 0.5)",
             overwrite: true,
+        });
+
+        if (contentRef.current) {
+            gsap.to(contentRef.current, {
+                z: 0,
+                y: 0,
+                duration: 0.8,
+                ease: "elastic.out(1, 0.5)",
+                overwrite: true,
+            });
+        }
+
+        const anims = cellRef.current.querySelectorAll('.animate-organic, .animate-organic-reverse');
+        anims.forEach((el) => {
+            el.getAnimations().forEach(anim => {
+                gsap.to(anim, { playbackRate: 1, duration: 0.8, ease: "power2.out", overwrite: true });
+            });
         });
     }, []);
 
@@ -76,26 +113,28 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             </div>
 
             {/* Content */}
-            <div className="relative z-20 flex flex-col items-center justify-center text-center p-5 w-full h-full transform-gpu group-hover:translate-z-12 transition-transform duration-500 ease-out">
-                {/* Status label on hover */}
-                <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${state.text}`}>
-                    <StatusIcon className={`w-3.5 h-3.5 ${source.status === 'running' ? 'animate-pulse' : ''}`} strokeWidth={2.5} />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{state.label}</span>
-                </div>
+            <div className="relative z-20 flex flex-col items-center justify-center text-center p-5 w-full h-full transform-gpu">
+                <div ref={contentRef} className="flex flex-col items-center justify-center w-full transform-gpu" style={{ transformStyle: 'preserve-3d' }}>
+                    {/* Status label on hover */}
+                    <div className={`absolute top-0 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${state.text}`}>
+                        <StatusIcon className={`w-3.5 h-3.5 ${source.status === 'running' ? 'animate-pulse' : ''}`} strokeWidth={2.5} />
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{state.label}</span>
+                    </div>
 
-                {/* Main icon */}
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-slate-600 dark:text-slate-400 group-hover:opacity-0 transition-opacity duration-300 mb-2">
-                    <FolderGit2 className="w-7 h-7" strokeWidth={1} />
-                </div>
+                    {/* Main icon */}
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-slate-600 dark:text-slate-400 group-hover:opacity-0 transition-opacity duration-300 mb-2">
+                        <FolderGit2 className="w-7 h-7" strokeWidth={1} />
+                    </div>
 
-                <h4 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight truncate w-full px-3 mt-1 group-hover:-translate-y-3 transition-transform duration-300 font-mono">
-                    {source.name}
-                </h4>
+                    <h4 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight truncate w-full px-3 mt-1 group-hover:-translate-y-3 transition-transform duration-300 font-mono">
+                        {source.name}
+                    </h4>
 
-                <div className="mt-1.5 flex gap-3 text-xs font-semibold text-slate-500 dark:text-slate-400 group-hover:opacity-0 transition-opacity duration-300">
-                    <span>{source.openTasks} open</span>
-                    <span className="text-slate-300 dark:text-slate-600">·</span>
-                    <span>{source.completedTasks} done</span>
+                    <div className="mt-1.5 flex gap-3 text-xs font-semibold text-slate-500 dark:text-slate-400 group-hover:opacity-0 transition-opacity duration-300">
+                        <span>{source.openTasks} open</span>
+                        <span className="text-slate-300 dark:text-slate-600">·</span>
+                        <span>{source.completedTasks} done</span>
+                    </div>
                 </div>
 
                 {/* Actions */}

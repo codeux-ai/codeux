@@ -52,7 +52,7 @@ export function useMagnetic(
         };
 
         const handleMouseLeave = () => {
-            gsap.to(target, { x: 0, y: 0, duration: 0.55, ease: "elastic.out(1, 0.5)", overwrite: "auto" });
+            gsap.to(target, { x: 0, y: 0, duration: 0.55, ease: "elastic.out(1, 0.6)", overwrite: "auto" });
         };
 
         trigger.addEventListener("mousemove", handleMouseMove);

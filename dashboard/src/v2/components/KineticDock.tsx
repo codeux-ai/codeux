@@ -27,6 +27,65 @@ const RIGHT_ITEMS = [
 
 type DockItem = (typeof LEFT_ITEMS)[number] | (typeof RIGHT_ITEMS)[number];
 
+const DockItemLink: FunctionComponent<{
+    item: DockItem;
+    globalIndex: number;
+    activeIndex: number;
+    setItemRef: (el: HTMLAnchorElement | null) => void;
+    prefersReducedMotion: boolean;
+}> = ({ item, globalIndex, activeIndex, setItemRef, prefersReducedMotion }) => {
+    const isActive = activeIndex === globalIndex;
+    const tooltipRef = useRef<HTMLSpanElement>(null);
+
+    const handleMouseEnter = () => {
+        if (!tooltipRef.current) return;
+        if (prefersReducedMotion) {
+            gsap.set(tooltipRef.current, { opacity: 1, scale: 1, y: 0, scaleY: 1 });
+        } else {
+            gsap.fromTo(tooltipRef.current,
+                { opacity: 0, scale: 0.5, scaleY: 1.2, y: 10 },
+                { opacity: 1, scale: 1, scaleY: 1, y: 0, duration: 0.6, ease: "elastic.out(1, 0.7)", overwrite: "auto" }
+            );
+        }
+    };
+
+    const handleMouseLeave = () => {
+        if (!tooltipRef.current) return;
+        if (prefersReducedMotion) {
+            gsap.set(tooltipRef.current, { opacity: 0 });
+        } else {
+            gsap.to(tooltipRef.current, { opacity: 0, scale: 0.8, y: 5, duration: 0.2, ease: "power2.in", overwrite: "auto" });
+        }
+    };
+
+    return (
+        <Link
+            key={item.label}
+            to={item.path}
+            ref={setItemRef}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] rounded-[1.4rem] transition-colors duration-300 decoration-none"
+        >
+            <div className="absolute inset-0 bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] rounded-[1.4rem] pointer-events-none transition-colors duration-300" />
+
+            <DockItemIcon item={item} isActive={isActive} />
+
+            {/* Tooltip */}
+            <span ref={tooltipRef}
+                  className="absolute -top-11 px-2.5 py-1
+                             bg-void-900/95 dark:bg-white/95
+                             text-white dark:text-void-900
+                             text-[11px] font-bold tracking-wide rounded-xl
+                             opacity-0
+                             pointer-events-none
+                             shadow-xl backdrop-blur-md whitespace-nowrap">
+                {item.label}
+            </span>
+        </Link>
+    );
+};
+
 const DockItemIcon: FunctionComponent<{ item: DockItem; isActive: boolean }> = ({ item, isActive }) => {
     const triggerRef = useRef<HTMLDivElement>(null);
     const targetRef = useRef<HTMLDivElement>(null);
@@ -141,35 +200,6 @@ export const KineticDock: FunctionComponent = () => {
         });
     };
 
-    const renderItem = (item: DockItem, globalIndex: number) => {
-        const isActive = activeIndex === globalIndex;
-        return (
-            <Link
-                key={item.label}
-                to={item.path}
-                ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
-                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] rounded-[1.4rem] transition-colors duration-300 decoration-none"
-            >
-                <div className="absolute inset-0 bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] rounded-[1.4rem] pointer-events-none transition-colors duration-300" />
-
-                <DockItemIcon item={item} isActive={isActive} />
-
-                {/* Tooltip */}
-                <span className="absolute -top-11 px-2.5 py-1
-                                 bg-void-900/95 dark:bg-white/95
-                                 text-white dark:text-void-900
-                                 text-[11px] font-bold tracking-wide rounded-xl
-                                 opacity-0 scale-75
-                                 group-hover:opacity-100 group-hover:scale-100
-                                 -translate-y-1 group-hover:-translate-y-0
-                                 pointer-events-none
-                                 transition-all duration-200 ease-out
-                                 shadow-xl backdrop-blur-md whitespace-nowrap">
-                    {item.label}
-                </span>
-            </Link>
-        );
-    };
 
     return (
         <div className="fixed bottom-7 left-0 right-0 z-50 flex justify-center items-end h-28 pointer-events-none px-4">
@@ -195,13 +225,31 @@ export const KineticDock: FunctionComponent = () => {
                 />
 
                 {/* Chat — left of divider */}
-                {LEFT_ITEMS.map((item, i) => renderItem(item, i))}
+                {LEFT_ITEMS.map((item, i) => (
+                    <DockItemLink
+                        key={item.label}
+                        item={item}
+                        globalIndex={i}
+                        activeIndex={activeIndex}
+                        setItemRef={(el) => { itemRefs.current[i] = el; }}
+                        prefersReducedMotion={prefersReducedMotion}
+                    />
+                ))}
 
                 {/* Thin vertical divider */}
                 <div className="w-px h-5 bg-black/[0.1] dark:bg-white/[0.1] mx-0.5 self-center shrink-0" />
 
                 {/* Main nav items */}
-                {rightItems.map((item, i) => renderItem(item, LEFT_ITEMS.length + i))}
+                {rightItems.map((item, i) => (
+                    <DockItemLink
+                        key={item.label}
+                        item={item}
+                        globalIndex={LEFT_ITEMS.length + i}
+                        activeIndex={activeIndex}
+                        setItemRef={(el) => { itemRefs.current[LEFT_ITEMS.length + i] = el; }}
+                        prefersReducedMotion={prefersReducedMotion}
+                    />
+                ))}
             </nav>
         </div>
     );

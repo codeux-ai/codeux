@@ -17,6 +17,7 @@ interface AvantgardeSelectProps {
   options: SelectOption[];
   disabled?: boolean;
   placeholder?: string;
+  error?: boolean;
   /** Compact variant for inline/card usage (smaller text, no border bg) */
   variant?: "default" | "compact" | "card";
   className?: string;
@@ -52,6 +53,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   onChange,
   options,
   disabled = false,
+  error = false,
   placeholder = "Select\u2026",
   variant = "default",
   className = "",
@@ -250,6 +252,23 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     };
 
 
+
+
+  useEffect(() => {
+    if (error && triggerRef.current && typeof gsap !== 'undefined' && gsap.to) {
+      gsap.to(triggerRef.current, {
+        keyframes: [
+          { x: -4, borderColor: "var(--status-red)", duration: 0.05 },
+          { x: 4, borderColor: "var(--status-red)", duration: 0.05 },
+          { x: -4, borderColor: "var(--status-red)", duration: 0.05 },
+          { x: 4, borderColor: "var(--status-red)", duration: 0.05 },
+          { x: 0, duration: 0.05 }
+        ],
+        ease: "power1.inOut",
+        clearProps: "borderColor"
+      });
+    }
+  }, [error]);
 
   const selected = options.find((o) => o.value === value);
 

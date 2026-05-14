@@ -41,14 +41,14 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     }, [name, localPath, gitUrl, sourceType]);
 
     useLayoutEffect(() => {
-        const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
-        const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+        const d_backdrop = reducedMotion ? 0 : 0.4;
+        const d_card = reducedMotion ? 0 : 0.4;
         const d_fields = reducedMotion ? 0 : 0.45;
 
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
+        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power4.out" });
         gsap.fromTo(cardRef.current,
-            { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
-            { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease }
+            { y: reducedMotion ? 0 : 20, opacity: 0, scale: reducedMotion ? 1 : 0.9, filter: reducedMotion ? "blur(0px)" : "blur(14px)" },
+            { y: 0, opacity: 1, scale: 1, filter: "blur(0px)", duration: d_card, ease: "power4.out", clearProps: "filter" }
         );
         if (fieldsRef.current) {
             gsap.fromTo(Array.from(fieldsRef.current.children),
@@ -62,9 +62,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         if (isSubmitting) return;
         setIsClosing(true);
 
-        const duration = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
-        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration, ease: MODAL_MOTION.exit.ease });
-        gsap.to(backdropRef.current, { opacity: 0, duration, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
+        const duration = reducedMotion ? 0 : 0.4;
+        gsap.to(cardRef.current, { y: reducedMotion ? 0 : 20, opacity: 0, scale: reducedMotion ? 1 : 0.9, filter: reducedMotion ? "blur(0px)" : "blur(14px)", duration, ease: "power4.in" });
+        gsap.to(backdropRef.current, { opacity: 0, duration, delay: 0, onComplete: onClose });
     };
 
     const backdropRef = useFocusTrap(!isClosing, { onClose: handleClose, restoreFocus: true });
@@ -118,7 +118,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-project-modal-title"
-            className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/50 dark:bg-black/70 backdrop-blur-xl"
+            className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-void-900/40 backdrop-blur-2xl"
         >
             <div
                 ref={cardRef}

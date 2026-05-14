@@ -79,6 +79,11 @@ export const WaveFluid: FunctionComponent<{ accentHex: string; isActive?: boolea
                 fillOpacity="0.065"
             />
         </svg>
+        {/* Glow bloom synchronized with framing completion (700ms) */}
+        <div
+            className="absolute inset-0 opacity-0 group-hover:opacity-[0.3] group-focus-within:opacity-[0.3] transition-opacity duration-700 delay-[700ms] ease-out pointer-events-none transform-gpu blur-2xl"
+            style={{ backgroundColor: accentHex }}
+        />
     </div>
     );
 };

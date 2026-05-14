@@ -1,13 +1,17 @@
 /** @jsx h */
 // @vitest-environment jsdom
 import { h } from "preact";
-import { render, screen, fireEvent } from "@testing-library/preact";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, cleanup } from "@testing-library/preact";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { ActionFeedbackRegion } from "../../../src/v2/components/ui/ActionFeedbackRegion.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
 describe("ActionFeedbackRegion", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders nothing when status is idle", () => {
     const { container } = render(<ActionFeedbackRegion status="idle" message="Hidden" />);
     expect(container.firstChild).toBeNull();
@@ -26,8 +30,8 @@ describe("ActionFeedbackRegion", () => {
   });
 
   it("uses assertive aria-live for errors", () => {
-    render(<ActionFeedbackRegion status="error" message="Failed to save" />);
-    const region = screen.getByRole("status");
+    const { container } = render(<ActionFeedbackRegion status="error" message="Failed to save" />);
+    const region = screen.getByText("Failed to save").closest('[role="status"]');
     expect(region).toHaveAttribute("aria-live", "assertive");
   });
 

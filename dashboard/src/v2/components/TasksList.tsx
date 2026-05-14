@@ -61,8 +61,22 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                     stagger: 0.02,
                     scale: true,
                     absolute: true,
-                    onEnter: (elements: Element[]) => gsap.fromTo(elements, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.02 }),
-                    onLeave: (elements: Element[]) => gsap.to(elements, { opacity: 0, duration: 0.2 })
+                    onEnter: (elements: Element[]) => {
+                        const emptyState = elements.find(el => el.hasAttribute("data-empty-state"));
+                        const rows = elements.filter(el => !el.hasAttribute("data-empty-state"));
+
+                        if (rows.length > 0) {
+                            gsap.fromTo(rows, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.02 });
+                        }
+                        if (emptyState) {
+                            gsap.fromTo(emptyState, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3 });
+                            const children = emptyState.querySelectorAll(".empty-state-child");
+                            if (children.length > 0) {
+                                gsap.fromTo(children, { opacity: 0 }, { opacity: 1, duration: 0.3, stagger: 0.1, delay: 0.1 });
+                            }
+                        }
+                    },
+                    onLeave: (elements: Element[]) => gsap.to(elements, { opacity: 0, y: -10, duration: 0.2 })
                 });
                 flipStateRef.current = null;
             } else if (initialMountRef.current) {
@@ -112,12 +126,12 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         <div key={task.id} data-flip-id={task.id} className="task-flip-item"><TaskRow task={task} /></div>
                     ))
                 ) : (
-                    <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-                        <svg className="w-12 h-12 mb-4 text-slate-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div key="empty-state" data-flip-id="empty-state" data-empty-state="true" className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+                        <svg className="w-12 h-12 mb-4 text-slate-300 dark:text-slate-600 empty-state-child" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                         </svg>
-                        <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">No Results Found</div>
-                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">There are no tasks currently matching the selected filter in active sprints.</div>
+                        <div className="text-sm font-semibold text-slate-500 dark:text-slate-400 empty-state-child">No Results Found</div>
+                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-1 empty-state-child">There are no tasks currently matching the selected filter in active sprints.</div>
                     </div>
                 )}
             </div>
