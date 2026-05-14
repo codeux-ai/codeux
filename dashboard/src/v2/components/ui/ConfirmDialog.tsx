@@ -173,17 +173,17 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
 
   useLayoutEffect(() => {
     if (shouldRender && !isClosing) {
-      const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
-      const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+      const d_backdrop = reducedMotion ? 0 : 0.4;
+      const d_card = reducedMotion ? 0 : 0.4;
 
       if (backdropRef.current) {
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
+        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power4.out" });
       }
 
       if (cardRef.current) {
         gsap.fromTo(cardRef.current,
-          { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
-          { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease }
+          { y: reducedMotion ? 0 : 20, opacity: 0, scale: reducedMotion ? 1 : 0.9, filter: reducedMotion ? "blur(0px)" : "blur(14px)" },
+          { y: 0, opacity: 1, scale: 1, filter: "blur(0px)", duration: d_card, ease: "power4.out", clearProps: "filter" }
         );
       }
     }
@@ -199,17 +199,17 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
 
   useEffect(() => {
     if (isClosing) {
-      const d = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
+      const d = reducedMotion ? 0 : 0.4;
 
       if (cardRef.current) {
-        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
+        gsap.to(cardRef.current, { y: reducedMotion ? 0 : 20, opacity: 0, scale: reducedMotion ? 1 : 0.9, filter: reducedMotion ? "blur(0px)" : "blur(14px)", duration: d, ease: "power4.in" });
       }
 
       if (backdropRef.current) {
         gsap.to(backdropRef.current, {
           opacity: 0,
           duration: d,
-          delay: reducedMotion ? 0 : 0.05,
+          delay: 0,
           onComplete: () => {
             setShouldRender(false);
             setIsClosing(false);
@@ -237,7 +237,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-void-900/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-void-900/40 backdrop-blur-2xl p-4"
     >
       <div
         ref={(el) => {
