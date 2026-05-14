@@ -5,7 +5,7 @@ import { Check, X, Loader2 } from "lucide-preact";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useMagnetic } from "../../hooks/use-magnetic.js";
 
-export const SHARED_INTERACTION_CLASSES = "transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-60 disabled:cursor-not-allowed motion-safe:hover:-translate-y-px disabled:hover:translate-y-0 motion-safe:active:scale-95 disabled:active:scale-100 touch-target";
+export const SHARED_INTERACTION_CLASSES = "transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-60 disabled:cursor-not-allowed motion-safe:hover:-translate-y-px disabled:hover:translate-y-0 motion-safe:active:scale-[0.96] active:shadow-inner disabled:active:scale-100 touch-target";
 
 export interface ButtonProps extends ComponentProps<"button"> {
   pending?: boolean;
@@ -14,11 +14,11 @@ export interface ButtonProps extends ComponentProps<"button"> {
 }
 
 const VARIANTS = {
-  primary: "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100",
+  primary: "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100 active:shadow-[0_0_20px_rgba(0,224,160,0.4)] focus-visible:shadow-[0_0_20px_rgba(0,224,160,0.4)]",
   secondary: "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white",
   danger: "border border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]",
   ghost: "bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-black/[0.03] dark:hover:bg-white/[0.03]",
-  signal: "bg-signal-500 hover:bg-signal-400 text-void-900 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] disabled:shadow-none",
+  signal: "bg-signal-500 hover:bg-signal-400 text-void-900 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] active:shadow-[0_0_20px_rgba(0,224,160,0.6)] focus-visible:shadow-[0_0_20px_rgba(0,224,160,0.6)] disabled:shadow-none",
 };
 
 const SIZES = {
