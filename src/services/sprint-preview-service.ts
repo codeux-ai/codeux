@@ -36,6 +36,7 @@ import {
 import type { Logger } from "../shared/logging/logger.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
+import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -183,6 +184,7 @@ export class SprintPreviewService {
           effectiveSettings.git.githubMode === "REMOTE",
           {
             githubToken: effectiveSettings.git.githubToken,
+            gitlabToken: effectiveSettings.git.gitlabToken,
           },
         );
         await fs.mkdir(path.dirname(startupRuntimePath), { recursive: true });
@@ -955,12 +957,12 @@ export class SprintPreviewService {
     featureBranch: string,
     defaultBranch: string,
     syncLatestFromOrigin = true,
-    gitAuthOptions?: { githubToken?: string; gitlabToken?: string },
+    gitAuthOptions?: GitHttpAuthOptions,
   ): Promise<void> {
     if (syncLatestFromOrigin) {
       await fetchOriginIfAvailable(repoPath, gitAuthOptions);
     }
-    await this.ensurePreviewBranchExists(repoPath, featureBranch, defaultBranch);
+    await this.ensurePreviewBranchExists(repoPath, featureBranch, defaultBranch, gitAuthOptions);
     const exportRef = await this.resolvePreviewExportRef(repoPath, featureBranch);
     const archivePath = `${workspacePath}.tar`;
 
@@ -976,11 +978,16 @@ export class SprintPreviewService {
     }
   }
 
-  private async ensurePreviewBranchExists(repoPath: string, featureBranch: string, defaultBranch: string): Promise<void> {
+  private async ensurePreviewBranchExists(
+    repoPath: string,
+    featureBranch: string,
+    defaultBranch: string,
+    gitAuthOptions?: GitHttpAuthOptions,
+  ): Promise<void> {
     if (await this.localBranchExists(repoPath, featureBranch)) {
       return;
     }
-    if (await this.remoteBranchExists(repoPath, featureBranch)) {
+    if (await this.remoteBranchExists(repoPath, featureBranch, gitAuthOptions)) {
       return;
     }
 
@@ -1032,9 +1039,14 @@ export class SprintPreviewService {
     }
   }
 
-  private async remoteBranchExists(repoPath: string, branch: string): Promise<boolean> {
+  private async remoteBranchExists(
+    repoPath: string,
+    branch: string,
+    gitAuthOptions?: GitHttpAuthOptions,
+  ): Promise<boolean> {
     try {
-      const result = await runCommandStrict("git", ["ls-remote", "--heads", "origin", branch], repoPath);
+      const env = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuthOptions ?? {});
+      const result = await runCommandStrict("git", ["ls-remote", "--heads", "origin", branch], repoPath, env ?? process.env);
       return result.stdout.trim().length > 0;
     } catch {
       return false;

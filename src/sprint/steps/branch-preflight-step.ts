@@ -1,6 +1,6 @@
 import { commandRunner } from "../../shared/subprocess/command-runner.js";
 import * as fs from "fs/promises";
-import { buildGitHttpAuthEnv, type GitHttpAuthOptions } from "../../services/git-http-auth.js";
+import { resolveHttpsAuthOrFallback, type GitHttpAuthOptions } from "../../services/git-http-auth.js";
 
 export interface BranchAvailability {
   existsLocal: boolean;
@@ -43,37 +43,17 @@ const getRemoteOriginUrl = async (repoPath: string): Promise<string | null> => {
   }
 };
 
-const withResolvedAuthEnv = (
+const withResolvedAuthEnv = async (
   remoteUrl: string | null,
   options?: BranchPreflightOptions,
-): BranchPreflightOptions | undefined => {
-  const authEnv = options?.authEnv || buildNonInteractiveHttpEnv(remoteUrl, options);
+): Promise<BranchPreflightOptions | undefined> => {
+  const authEnv = options?.authEnv || await resolveHttpsAuthOrFallback(remoteUrl, options);
   if (!authEnv && !options) {
     return undefined;
   }
   return {
     ...options,
     authEnv,
-  };
-};
-
-const isHttpRemote = (remoteUrl: string): boolean => /^https?:\/\//i.test(remoteUrl.trim());
-
-const buildNonInteractiveHttpEnv = (
-  remoteUrl: string | null,
-  options?: BranchPreflightOptions,
-): NodeJS.ProcessEnv | undefined => {
-  const normalizedRemote = remoteUrl?.trim();
-  if (!normalizedRemote || !isHttpRemote(normalizedRemote)) {
-    return options?.authEnv;
-  }
-
-  return {
-    ...(buildGitHttpAuthEnv(normalizedRemote, options) || process.env),
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_ASKPASS: "true",
-    SSH_ASKPASS: "true",
-    GCM_INTERACTIVE: "never",
   };
 };
 
@@ -234,7 +214,7 @@ export const runBranchPreflightStep = async (
     ? await getRemoteOriginUrl(repoPath)
     : null;
   const resolvedOptions = shouldResolveAuthEnv(options)
-    ? withResolvedAuthEnv(remoteUrl, options)
+    ? await withResolvedAuthEnv(remoteUrl, options)
     : undefined;
 
   return {
@@ -253,7 +233,7 @@ export const prepareBranchForOrchestration = async (
     ? await getRemoteOriginUrl(repoPath)
     : null;
   const resolvedOptions = shouldResolveAuthEnv(options)
-    ? withResolvedAuthEnv(remoteUrl, options)
+    ? await withResolvedAuthEnv(remoteUrl, options)
     : undefined;
   await fetchOrigin(repoPath, resolvedOptions);
   const initial = await runBranchPreflightStep(repoPath, branch, resolvedOptions);

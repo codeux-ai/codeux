@@ -460,6 +460,7 @@ export class SprintOrchestrator {
     const featureBranchPrefix = dashboardSettings.git.featureBranchPrefix;
     const gitAuthOptions = {
       githubToken: dashboardSettings.git.githubToken,
+      gitlabToken: dashboardSettings.git.gitlabToken,
     };
 
     const enabledProviders = Object.entries(dashboardSettings.aiProvider.providers)

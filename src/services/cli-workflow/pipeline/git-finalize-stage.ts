@@ -1,4 +1,5 @@
 import type { PipelineContext } from "./pipeline-context.js";
+import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "../../git-http-auth.js";
 
 export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
   hasChanges: boolean;
@@ -11,6 +12,10 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     deletions: number;
   };
 }> {
+  const gitAuth: GitHttpAuthOptions = {
+    githubToken: ctx.settings.git.githubToken,
+    gitlabToken: ctx.settings.git.gitlabToken,
+  };
   const patchText = await ctx.workspaceArtifactService.exportBinaryPatch(ctx.worktreePath, ctx.initialHead);
   const applied = await ctx.workspaceArtifactService.applyPatchToBranch({
     repoPath: ctx.repoPath,
@@ -18,6 +23,7 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     workerBranch: ctx.workerBranch,
     patchText,
     commitMessage: `feat(task ${ctx.task.id}): implement via ${ctx.provider}`,
+    gitAuth,
   });
 
   if (applied.hasChanges) {
@@ -41,10 +47,12 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
   }
 
   if (hasUnpushed) {
+    const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(ctx.repoPath, gitAuth);
     await ctx.runCommand(
       "git",
       ["push", "-u", "origin", `refs/heads/${ctx.workerBranch}:refs/heads/${ctx.workerBranch}`],
       ctx.repoPath,
+      pushEnv ?? process.env,
     );
   }
 

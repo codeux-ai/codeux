@@ -72,7 +72,11 @@ export async function executePrepareStage(
     ctx.worktreePath,
     ctx.workerBranch,
     ctx.featureBranch,
-    resumeFromFailedSessionId
+    resumeFromFailedSessionId,
+    {
+      githubToken: ctx.settings.git.githubToken,
+      gitlabToken: ctx.settings.git.gitlabToken,
+    },
   );
 
   ctx.worktreePath = finalPath;

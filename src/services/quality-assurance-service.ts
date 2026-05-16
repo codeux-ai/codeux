@@ -20,6 +20,7 @@ import type { TaskService } from "./task-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { runCommandStrict } from "./cli-process-runner.js";
+import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import type { MemoryService } from "./memory-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
@@ -157,6 +158,7 @@ export class QualityAssuranceService {
     try {
       await syncRemoteBranchIfAvailable(repoPath, branch, {
         githubToken: settings.git.githubToken,
+        gitlabToken: settings.git.gitlabToken,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1144,11 +1146,16 @@ export class QualityAssuranceService {
       "continuing QA follow-up",
     );
 
+    const gitAuth: GitHttpAuthOptions = {
+      githubToken: settings.git.githubToken,
+      gitlabToken: settings.git.gitlabToken,
+    };
+
     const worktreePath = await this.workspaceManager.resolveResumeWorktreePath(args.repoPath, args.sessionId, workflowSettings.executionMode)
       || this.workspaceManager.buildWorktreePath(args.repoPath, args.sessionId, workflowSettings.executionMode);
     const existed = await this.workspacePathExists(worktreePath);
     if (!existed) {
-      await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch);
+      await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch, undefined, gitAuth);
     }
 
     const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath);
@@ -1243,6 +1250,7 @@ export class QualityAssuranceService {
       workerBranch,
       patchText,
       commitMessage: `fix(task ${args.task.id}): address qa review via ${args.provider}`,
+      gitAuth,
     });
 
     let hasUnpushed = applyResult.hasChanges;
@@ -1251,10 +1259,12 @@ export class QualityAssuranceService {
       hasUnpushed = await this.prService.hasUnpushedCommits(args.repoPath, workerBranch, args.featureBranch);
       hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(args.repoPath, workerBranch, args.featureBranch);
       if (hasUnpushed) {
+        const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, gitAuth);
         await runCommandStrict(
           "git",
           ["push", "-u", "origin", `refs/heads/${workerBranch}:refs/heads/${workerBranch}`],
           args.repoPath,
+          pushEnv ?? process.env,
         );
       }
     }

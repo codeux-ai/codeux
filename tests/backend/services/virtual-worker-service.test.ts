@@ -873,7 +873,7 @@ describe("VirtualWorkerService", () => {
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
 
     expect(buildWorkspaceRef).toHaveBeenCalledWith("/test", "cli-codex-existing", expect.anything());
-    expect(prepareWorktree).toHaveBeenCalledWith("/test", "/tmp/reused-worktree", "fix/branch", "fix/branch", "cli-codex-existing");
+    expect(prepareWorktree).toHaveBeenCalledWith("/test", "/tmp/reused-worktree", "fix/branch", "fix/branch", "cli-codex-existing", expect.anything());
   });
 
   it("falls back to HOST mode for CI autofix when docker is unavailable", async () => {

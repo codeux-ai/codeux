@@ -3,6 +3,10 @@ import * as os from "os";
 import * as path from "path";
 import { LEARNINGS_FILENAME } from "../../../contracts/memory-types.js";
 import { runCommandStrict } from "../../../services/cli-process-runner.js";
+import {
+  buildGitHttpAuthEnvForRepoWithFallbacks,
+  type GitHttpAuthOptions,
+} from "../../../services/git-http-auth.js";
 import type { IWorkspaceManager } from "./workspace-manager.js";
 
 const PROTECTED_EXPORT_PATH_PREFIXES = [
@@ -107,6 +111,7 @@ export class WorkspaceArtifactService {
     patchText: string;
     commitMessage: string;
     parentRefs?: string[];
+    gitAuth?: GitHttpAuthOptions;
   }): Promise<AppliedWorkspacePatchResult> {
     if (!args.patchText.trim()) {
       return { hasChanges: false };
@@ -146,10 +151,12 @@ export class WorkspaceArtifactService {
       )).stdout.trim();
 
       await runCommandStrict("git", ["update-ref", `refs/heads/${args.workerBranch}`, commitSha], args.repoPath);
+      const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, args.gitAuth ?? {});
       await runCommandStrict(
         "git",
         ["push", "-u", "origin", `refs/heads/${args.workerBranch}:refs/heads/${args.workerBranch}`],
         args.repoPath,
+        pushEnv ?? process.env,
       );
 
       const diffOutput = (await runCommandStrict(

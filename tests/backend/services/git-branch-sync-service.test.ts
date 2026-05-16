@@ -1,7 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { syncRemoteBranchIfAvailable } from "../../../src/services/git-branch-sync-service.js";
+import { setProviderTokenResolverForTests } from "../../../src/services/git-http-auth.js";
 
 describe("git branch sync service", () => {
+  beforeEach(() => {
+    // Disable host CLI fallbacks so tests don't depend on a logged-in gh/glab.
+    setProviderTokenResolverForTests(async () => null);
+  });
+  afterEach(() => {
+    setProviderTokenResolverForTests(null);
+  });
+
   it("fetches SSH remotes without injecting HTTPS auth", async () => {
     const runner = vi.fn()
       .mockResolvedValueOnce({ stdout: "git@github.com:owner/repo.git\n", stderr: "", exitCode: 0 })
@@ -59,7 +68,7 @@ describe("git branch sync service", () => {
     expect(env.GCM_INTERACTIVE).toBe("never");
   });
 
-  it("disables interactive prompts for HTTPS remotes even when no token is configured", async () => {
+  it("forces non-interactive mode for HTTPS remotes when no token can be resolved (fail fast, do not hang on askpass)", async () => {
     const runner = vi.fn()
       .mockResolvedValueOnce({ stdout: "https://github.com/owner/repo.git\n", stderr: "", exitCode: 0 })
       .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
@@ -72,12 +81,29 @@ describe("git branch sync service", () => {
     const fetchCall = runner.mock.calls[1];
     const env = fetchCall?.[3] as NodeJS.ProcessEnv;
     const options = fetchCall?.[4] as { timeoutMs?: number };
+    expect(env).toBeDefined();
     expect(env.GIT_CONFIG_KEY_0).toBeUndefined();
     expect(env.GIT_TERMINAL_PROMPT).toBe("0");
     expect(env.GIT_ASKPASS).toBe("true");
     expect(env.SSH_ASKPASS).toBe("true");
     expect(env.GCM_INTERACTIVE).toBe("never");
     expect(options.timeoutMs).toBe(5000);
+  });
+
+  it("resolves a github token from the gh CLI fallback when no token is in settings", async () => {
+    setProviderTokenResolverForTests(async (provider) => provider === "github" ? "gh-cli-token" : null);
+    const runner = vi.fn()
+      .mockResolvedValueOnce({ stdout: "https://github.com/owner/repo.git\n", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+
+    await expect(syncRemoteBranchIfAvailable("/repo", undefined, {
+      runner,
+    })).resolves.toBe(true);
+
+    const env = runner.mock.calls[1]?.[3] as NodeJS.ProcessEnv;
+    expect(env.GIT_CONFIG_KEY_0).toBe("http.https://github.com/.extraheader");
+    expect(env.GIT_CONFIG_VALUE_0).toBe(`Authorization: Basic ${Buffer.from("x-access-token:gh-cli-token").toString("base64")}`);
+    expect(env.GIT_TERMINAL_PROMPT).toBe("0");
   });
 
   it("creates a missing local branch from origin after fetching", async () => {

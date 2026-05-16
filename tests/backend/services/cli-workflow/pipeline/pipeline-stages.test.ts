@@ -202,7 +202,14 @@ describe("executePrepareStage", () => {
     expect(result.providerPrompt).toContain("worker guide content");
     expect(result.providerPrompt).toContain("test prompt");
     expect(result.providerPrompt).toContain("guidance");
-    expect(ctx.workspaceManager.prepareWorktree).toHaveBeenCalledWith("/repo", "/repo/worktree", "worker-branch", "feature-branch", undefined);
+    expect(ctx.workspaceManager.prepareWorktree).toHaveBeenCalledWith(
+      "/repo",
+      "/repo/worktree",
+      "worker-branch",
+      "feature-branch",
+      undefined,
+      { githubToken: "token", gitlabToken: undefined },
+    );
   });
 
   it("includes default memory learnings instruction when memory capture is enabled without override", async () => {
@@ -409,6 +416,7 @@ describe("executeGitFinalizeStage", () => {
       workerBranch: ctx.workerBranch,
       patchText: "",
       commitMessage: `feat(task ${ctx.task.id}): implement via ${ctx.provider}`,
+      gitAuth: { githubToken: "token", gitlabToken: undefined },
     });
     expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED" });
   });
@@ -459,6 +467,7 @@ describe("executeGitFinalizeStage", () => {
       "git",
       ["push", "-u", "origin", "refs/heads/worker-branch:refs/heads/worker-branch"],
       "/repo",
+      expect.anything(),
     );
     expect(ctx.runCommand).toHaveBeenNthCalledWith(
       2,

@@ -153,6 +153,15 @@ function resolveGithubToken(deps: BootDashboardDeps): string | undefined {
   return fallback || undefined;
 }
 
+function resolveGitlabToken(deps: BootDashboardDeps): string | undefined {
+  const dashboardToken = deps.runtimeContext.dashboardSettings?.git?.gitlabToken?.trim();
+  if (dashboardToken) {
+    return dashboardToken;
+  }
+  const fallback = deps.externalSettingsHints.resolved?.gitlabToken?.trim();
+  return fallback || undefined;
+}
+
 function requireProjectAttentionItem(
   deps: Pick<BootDashboardDeps, "projectAttentionRepository">,
   projectId: string,
@@ -421,7 +430,10 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     },
     listProjects: () => deps.projectManagementRepository.listProjects(),
     createProject: async (input) => deps.projectManagementRepository.createProject(
-      await prepareGitProjectCreateInput(input, { githubToken: resolveGithubToken(deps) }),
+      await prepareGitProjectCreateInput(input, {
+        githubToken: resolveGithubToken(deps),
+        gitlabToken: resolveGitlabToken(deps),
+      }),
     ),
     getProject: (projectId) => deps.projectManagementRepository.getProject(projectId),
     updateProject: (projectId, input) => deps.projectManagementRepository.updateProject(projectId, input),

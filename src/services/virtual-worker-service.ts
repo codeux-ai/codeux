@@ -19,6 +19,7 @@ import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
 import { runCommandStrict } from "./cli-process-runner.js";
+import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { WorkerTaskDispatchService } from "./worker-task-dispatch-service.js";
@@ -564,6 +565,10 @@ export class VirtualWorkerService {
     });
 
     let cleanedUp = false;
+    const gitAuth: GitHttpAuthOptions = {
+      githubToken: settings.git.githubToken,
+      gitlabToken: settings.git.gitlabToken,
+    };
     try {
       const effectiveWorkflowSettings = await this.resolveVirtualWorkerWorkflowSettings({
         workflowSettings,
@@ -576,6 +581,8 @@ export class VirtualWorkerService {
         this.workspaceManager.buildWorktreePath(repoPath, sessionId, effectiveWorkflowSettings.executionMode),
         sourceBranch,
         sourceBranch,
+        undefined,
+        gitAuth,
       );
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
@@ -641,6 +648,7 @@ export class VirtualWorkerService {
         patchText,
         commitMessage: `fix(merge): resolve ${targetBranch} into ${sourceBranch}`,
         parentRefs: [`origin/${targetBranch}`],
+        gitAuth,
       });
       let hasUnpushed = applyResult.hasChanges;
       let hasAhead = applyResult.hasChanges;
@@ -648,10 +656,12 @@ export class VirtualWorkerService {
         hasUnpushed = await this.prService.hasUnpushedCommits(repoPath, sourceBranch, targetBranch);
         hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(repoPath, sourceBranch, targetBranch);
         if (hasUnpushed) {
+          const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth);
           await runCommandStrict(
             "git",
             ["push", "-u", "origin", `refs/heads/${sourceBranch}:refs/heads/${sourceBranch}`],
             repoPath,
+            pushEnv ?? process.env,
           );
         }
       }
@@ -796,6 +806,10 @@ export class VirtualWorkerService {
     });
 
     let cleanedUp = false;
+    const gitAuth: GitHttpAuthOptions = {
+      githubToken: settings.git.githubToken,
+      gitlabToken: settings.git.gitlabToken,
+    };
     try {
       const effectiveWorkflowSettings = await this.resolveVirtualWorkerWorkflowSettings({
         workflowSettings,
@@ -809,6 +823,7 @@ export class VirtualWorkerService {
         branchName,
         branchName,
         resumeTarget?.sessionId,
+        gitAuth,
       );
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
@@ -869,6 +884,7 @@ export class VirtualWorkerService {
         workerBranch: branchName,
         patchText,
         commitMessage: `fix(ci): resolve failing checks on ${branchName}`,
+        gitAuth,
       });
       let hasUnpushed = applyResult.hasChanges;
       let hasAhead = applyResult.hasChanges;
@@ -876,10 +892,12 @@ export class VirtualWorkerService {
         hasUnpushed = await this.prService.hasUnpushedCommits(repoPath, branchName, compareBaseBranch);
         hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(repoPath, branchName, compareBaseBranch);
         if (hasUnpushed) {
+          const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth);
           await runCommandStrict(
             "git",
             ["push", "-u", "origin", `refs/heads/${branchName}:refs/heads/${branchName}`],
             repoPath,
+            pushEnv ?? process.env,
           );
         }
       }

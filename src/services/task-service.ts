@@ -74,6 +74,7 @@ export class TaskService {
     try {
       await syncRemoteBranchIfAvailable(repoPath, branch, {
         githubToken: settings.git.githubToken,
+        gitlabToken: settings.git.gitlabToken,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

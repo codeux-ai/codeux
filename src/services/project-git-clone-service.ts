@@ -3,7 +3,7 @@ import * as path from "path";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import type { CreateProjectInput } from "../contracts/project-management-types.js";
-import { buildGitHttpAuthEnv } from "./git-http-auth.js";
+import { buildGitHttpAuthEnvWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 
 const isPathWithin = (basePath: string, targetPath: string): boolean => {
   const base = path.resolve(basePath);
@@ -66,7 +66,7 @@ async function getExactGitWorktreeRoot(targetPath: string): Promise<string | nul
 async function ensureExistingCloneMatchesRemote(
   targetPath: string,
   sourceRef: string,
-  options: { githubToken?: string } = {},
+  options: GitHttpAuthOptions = {},
 ): Promise<void> {
   const root = await getExactGitWorktreeRoot(targetPath);
   if (root !== path.resolve(targetPath)) {
@@ -82,13 +82,13 @@ async function ensureExistingCloneMatchesRemote(
     "git",
     ["fetch", "origin", "--prune"],
     targetPath,
-    buildGitHttpAuthEnv(sourceRef, { githubToken: options.githubToken }) || process.env,
+    (await buildGitHttpAuthEnvWithFallbacks(sourceRef, options)) || process.env,
   );
 }
 
 export async function prepareGitProjectCreateInput(
   input: CreateProjectInput,
-  options: { githubToken?: string } = {},
+  options: GitHttpAuthOptions = {},
 ): Promise<CreateProjectInput> {
   if (input.sourceType !== "git") {
     return input;
@@ -115,7 +115,7 @@ export async function prepareGitProjectCreateInput(
         "git",
         ["clone", sourceRef, targetPath],
         cloneRoot,
-        buildGitHttpAuthEnv(sourceRef, { githubToken: options.githubToken }) || process.env,
+        (await buildGitHttpAuthEnvWithFallbacks(sourceRef, options)) || process.env,
       );
     } else {
       await ensureExistingCloneMatchesRemote(targetPath, sourceRef, options);
@@ -125,7 +125,7 @@ export async function prepareGitProjectCreateInput(
       "git",
       ["clone", sourceRef, targetPath],
       cloneRoot,
-      buildGitHttpAuthEnv(sourceRef, { githubToken: options.githubToken }) || process.env,
+      (await buildGitHttpAuthEnvWithFallbacks(sourceRef, options)) || process.env,
     );
   }
 

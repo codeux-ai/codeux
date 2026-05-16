@@ -1000,6 +1000,7 @@ describe("QualityAssuranceService", () => {
 
     expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", "feature/task-1", {
       githubToken: "",
+      gitlabToken: "",
     });
   });
 
@@ -1050,6 +1051,7 @@ describe("QualityAssuranceService", () => {
 
     expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", "feature/task-1", {
       githubToken: "",
+      gitlabToken: "",
     });
   });
 
