@@ -19,6 +19,21 @@ describe("chat-reply-prompt", () => {
       expect(normalizeProviderReply('{"response": "Extracted answer"}')).toBe("Extracted answer");
     });
 
+    it("extracts provider response envelopes from noisy CLI output", () => {
+      const output = [
+        "added 7 packages in 10s",
+        JSON.stringify({
+          session_id: "5d97e956-0b05-489b-8f4c-62ab8612558c",
+          response: "Only the answer message.",
+          stats: { models: {} },
+        }),
+        "npm notice New minor version of npm available!",
+        "YOLO mode is enabled. All tool calls will be automatically approved.",
+      ].join("\n");
+
+      expect(normalizeProviderReply(output)).toBe("Only the answer message.");
+    });
+
     it("handles empty strings", () => {
       expect(normalizeProviderReply("")).toBe("");
     });

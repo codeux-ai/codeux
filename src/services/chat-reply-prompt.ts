@@ -4,6 +4,25 @@ import {
   ConversationRuntimeState,
   ConversationThreadRecord,
 } from "../contracts/connection-chat-types.js";
+import { findAllJsonCandidates } from "../domain/llm/json-extraction.js";
+
+function isProviderReplyEnvelope(value: unknown): value is { response: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return typeof record.response === "string";
+}
+
+function isNoisyProviderReplyEnvelope(value: unknown): value is { response: string } {
+  if (!isProviderReplyEnvelope(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return "session_id" in record || "sessionId" in record || "stats" in record;
+}
 
 export function normalizeProviderReply(output: string): string {
   const trimmed = output.trim();
@@ -12,12 +31,27 @@ export function normalizeProviderReply(output: string): string {
   }
 
   try {
-    const parsed = JSON.parse(trimmed) as { response?: unknown };
-    if (typeof parsed?.response === "string") {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (isProviderReplyEnvelope(parsed)) {
       return parsed.response.trim();
     }
   } catch {
-    // Provider returned plain text; keep it as-is.
+    // Provider may have emitted bootstrap logs around the JSON envelope.
+  }
+
+  for (const candidate of findAllJsonCandidates(trimmed)) {
+    if (candidate === trimmed) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      if (isNoisyProviderReplyEnvelope(parsed)) {
+        return parsed.response.trim();
+      }
+    } catch {
+      // Keep scanning other balanced JSON candidates.
+    }
   }
 
   return trimmed;

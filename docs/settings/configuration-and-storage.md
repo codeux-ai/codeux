@@ -219,6 +219,7 @@ Dashboard behavior:
 - `clarificationCooldownSeconds` (default `300`): retained for compatibility, but clarification dedupe now keys off the latest clarification content instead of elapsed time; once Code UX answers a specific clarification request, repeated cycles skip re-sending the same answer until Jules emits a different clarification prompt
 - when `autoAnswerClarificationMode = WORKER`, Code UX now composes the clarification-answer prompt from the editable `Project manager` agent preset instead of prepending worker instructions
 - worker-routed clarification prompts now include a dedicated Jules clarification section so the latest explicit `agentMessaged.agentMessage` is passed through when available instead of only broad sprint context
+- worker-routed clarification replies normalize CLI provider envelopes before sending the answer to Jules; if package-manager/bootstrap logs surround a `{ "response": "..." }` provider envelope, only the `response` body is sent and stored as the assistant reply
 
 `agents` contains:
 
