@@ -1,4 +1,5 @@
 import type { Task, TaskStatus, TaskExecutorType } from "../../types.js";
+import { type LiveTaskEnrichment } from "./live-task-enrichment.js";
 
 export interface DependencyIndicator {
   recordId: string;
@@ -12,6 +13,11 @@ export interface TaskCardViewModel {
   humanizedCreatedAt: string;
   executorLabel: string;
   dependencyIndicators: DependencyIndicator[];
+  sessionId?: string;
+  sessionState?: string;
+  prUrl?: string;
+  liveRunningTime?: string;
+  liveStartedAt?: string | null;
 }
 
 const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
@@ -51,7 +57,8 @@ export function getExecutorLabel(executorType: TaskExecutorType): string {
 
 export function buildTaskCardViewModel(
   task: Task,
-  taskLookup: Map<string, Task>
+  taskLookup: Map<string, Task>,
+  liveEnrichment?: LiveTaskEnrichment
 ): TaskCardViewModel {
   const dependencyIndicators: DependencyIndicator[] = (task.dependsOnTaskIds || []).map(depId => {
     const depTask = taskLookup.get(depId);
@@ -76,5 +83,12 @@ export function buildTaskCardViewModel(
     humanizedCreatedAt: formatTimeAgo(task.createdAt),
     executorLabel: getExecutorLabel(task.executorType),
     dependencyIndicators,
+    sessionId: liveEnrichment?.sessionId,
+    sessionState: liveEnrichment?.sessionState,
+    prUrl: liveEnrichment?.prUrl,
+    liveRunningTime: liveEnrichment?.liveTotalSeconds && liveEnrichment.liveTotalSeconds > 0
+      ? formatDuration(liveEnrichment.liveTotalSeconds)
+      : undefined,
+    liveStartedAt: liveEnrichment?.liveStartedAt,
   };
 }
