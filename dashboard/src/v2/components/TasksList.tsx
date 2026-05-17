@@ -20,14 +20,16 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
 
     const handleFilterChange = (newFilter: TaskFilter) => {
         if (listRef.current) {
-            flipStateRef.current = Flip.getState(listRef.current.children);
+            listRef.current.style.minHeight = `${listRef.current.scrollHeight}px`;
+            flipStateRef.current = Flip.getState(listRef.current.querySelectorAll('[data-flip-id]'));
         }
         setActiveFilter(newFilter);
     };
 
     const handleClearFilter = () => {
         if (listRef.current) {
-            flipStateRef.current = Flip.getState(listRef.current.children);
+            listRef.current.style.minHeight = `${listRef.current.scrollHeight}px`;
+            flipStateRef.current = Flip.getState(listRef.current.querySelectorAll('[data-flip-id]'));
         }
         setActiveFilter("All Tasks");
     };
@@ -47,18 +49,6 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
         return true;
     }), [activeTasks, activeFilter]);
 
-    const prevTasksRef = useRef(filteredTasks);
-    const [renderedTasks, setRenderedTasks] = useState(filteredTasks);
-
-    // Check during render if filteredTasks changed. If so, capture Flip state before rendering the new DOM.
-    if (filteredTasks !== prevTasksRef.current) {
-        if (listRef.current) {
-            flipStateRef.current = Flip.getState(listRef.current.children);
-        }
-        prevTasksRef.current = filteredTasks;
-        setRenderedTasks(filteredTasks);
-    }
-
     const initialMountRef = useRef(true);
 
     useLayoutEffect(() => {
@@ -68,13 +58,15 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
             } else if (flipStateRef.current) {
                 Flip.from(flipStateRef.current, {
                     targets: listRef.current.children,
-                    duration: 0.3,
-                    ease: "power2.out",
-                    stagger: 0.02,
-                    scale: true,
+                    duration: 0.4,
+                    ease: "power3.out",
+                    stagger: 0.03,
                     absolute: true,
-                    onEnter: (elements: Element[]) => gsap.fromTo(elements, { opacity: 0, y: 10, scale: 0.95 }, { opacity: 1, y: 0, scale: 1, duration: 0.3, stagger: 0.02, ease: "power2.out" }),
-                    onLeave: (elements: Element[]) => gsap.to(elements, { opacity: 0, duration: 0.2 })
+                    onEnter: (elements: Element[]) => gsap.fromTo(elements, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.03, ease: "power3.out" }),
+                    onLeave: (elements: Element[]) => gsap.to(elements, { opacity: 0, y: -8, duration: 0.4, onComplete: () => elements.forEach(el => el.remove()) }),
+                    onComplete: () => {
+                        if (listRef.current) listRef.current.style.minHeight = '';
+                    }
                 });
                 flipStateRef.current = null;
             } else if (initialMountRef.current) {
@@ -105,7 +97,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                     </div>
                 </div>
                 <div className="text-xs font-semibold text-slate-400 dark:text-slate-600 font-mono hidden sm:block">
-                    {renderedTasks.length} active
+                    {filteredTasks.length} active
                 </div>
             </div>
 
@@ -119,8 +111,8 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         <SkeletonRow />
                         <SkeletonRow />
                     </>
-                ) : renderedTasks.length > 0 ? (
-                    renderedTasks.map((task) => (
+                ) : filteredTasks.length > 0 ? (
+                    filteredTasks.map((task) => (
                         <div key={task.id} data-flip-id={task.id} className="task-flip-item"><TaskRow task={task} /></div>
                     ))
                 ) : (
