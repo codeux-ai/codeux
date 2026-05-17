@@ -1,9 +1,9 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import type { Signal } from "@preact/signals";
 import { SVG_W, SVG_H, LANE_TOP, LANE_BOT, HARBOUR_X, FINISH_X, RACE_LEN } from "./constants.js";
 import { hashStr } from "./utils.js";
 import type { ShipDatum } from "../../hooks/useBoatRaceAnimation.js";
+import { getBoatRaceCheckpoints } from "../../lib/boat-race.js";
 
 export const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color: string; isDark: boolean }> = memo(({ x, color, label, isDark }) => (
     <g>
@@ -170,7 +170,7 @@ export const SubtleWaves: FunctionComponent<{ isDark: boolean }> = memo(({ isDar
 
 
 
-export const BoatRaceBackground = memo(({ isDark, ripplesSignal }: { isDark: boolean; ripplesSignal: Signal<{x: number, y: number, id: number}[]> }) => {
+export const BoatRaceBackground = memo(({ isDark, ripples }: { isDark: boolean; ripples: {x: number, y: number, id: number}[] }) => {
     return (
         <g>
             <defs>
@@ -193,7 +193,7 @@ export const BoatRaceBackground = memo(({ isDark, ripplesSignal }: { isDark: boo
             </defs>
             <CelestialBody isDark={isDark} />
             <SubtleWaves isDark={isDark} />
-            {ripplesSignal.value.map(r => (
+            {ripples.map(r => (
                 <g key={r.id}>
                     <circle cx={r.x} cy={r.y} r={2} fill="none"
                         stroke={isDark ? "white" : "#334155"} strokeWidth={0.5} opacity={0}>
@@ -211,13 +211,9 @@ export const BoatRaceBackground = memo(({ isDark, ripplesSignal }: { isDark: boo
     );
 });
 
-const buoys = [
-    { progress: 0.25, label: "25%", color: "#FFB800" },
-    { progress: 0.50, label: "50%", color: "#FFB800" },
-    { progress: 0.75, label: "75%", color: "#FFB800" }
-];
+const buoys = getBoatRaceCheckpoints();
 
-export const BoatRaceCourseLayer = memo(({ isDark, activeShipsSignal }: { isDark: boolean; activeShipsSignal: Signal<ShipDatum[]> }) => {
+export const BoatRaceCourseLayer = memo(({ isDark, activeShips }: { isDark: boolean; activeShips: ShipDatum[] }) => {
     return (
         <g>
             {buoys.map(b => (
@@ -229,7 +225,7 @@ export const BoatRaceCourseLayer = memo(({ isDark, activeShipsSignal }: { isDark
                 />
             ))}
             <FinishLine x={FINISH_X} isDark={isDark} />
-            {activeShipsSignal.value.map(s => (
+            {activeShips.map(s => (
                 <line key={`ln-${s.key}`}
                     x1={HARBOUR_X + 40} y1={s.laneY + 16} x2={FINISH_X - 20} y2={s.laneY + 16}
                     stroke={isDark ? "white" : "black"} strokeWidth={0.2} strokeDasharray="2,24" opacity={0.025} />

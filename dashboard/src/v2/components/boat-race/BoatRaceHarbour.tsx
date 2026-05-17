@@ -1,6 +1,5 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import type { Signal } from "@preact/signals";
 import { SVG_H, HARBOUR_X } from "./constants.js";
 import { hashStr } from "./utils.js";
 
@@ -110,8 +109,8 @@ export const HarbourBuilding: FunctionComponent<{ x: number; waitingCount: numbe
 
 
 
-export const BoatRaceHarbourLayer = memo(({ isDark, harbourCountSignal }: { isDark: boolean; harbourCountSignal: Signal<number> }) => {
+export const BoatRaceHarbourLayer = memo(({ isDark, waitingCount }: { isDark: boolean; waitingCount: number }) => {
     return (
-        <HarbourBuilding x={HARBOUR_X - 40} waitingCount={harbourCountSignal.value} isDark={isDark} />
+        <HarbourBuilding x={HARBOUR_X - 40} waitingCount={waitingCount} isDark={isDark} />
     );
 });

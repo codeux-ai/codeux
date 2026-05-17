@@ -411,7 +411,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                     <SprintBoatRace
                         tasks={visibleTasksWithLiveActivities}
                         dispatches={sprintDispatches}
-                        hasLiveSprint={hasLiveSprint}
+                        hasSprintContext={hasSprintContext}
                     />
                 </Suspense>
             ) : (

@@ -27,7 +27,7 @@ export interface StatusStyle { color: string; label: string; dim: boolean }
 
 export const getStyle = (task: Subtask): StatusStyle => {
     switch (getTaskProgressPhase(task)) {
-        case "RUNNING":   return { color: "#00E0A0", label: "Racing",    dim: false };
+        case "RUNNING":   return { color: "#00E0A0", label: "Coding",    dim: false };
         case "CODING_COMPLETED": {
             const mi = task.merge_indicator;
             if (mi === "AUTOMERGE")      return { color: "#FFB800", label: "Automerge",  dim: false };

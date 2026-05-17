@@ -356,7 +356,7 @@ Legacy runtime:
   - transient execution-only refreshes therefore no longer drop the DAG, race, or task pipeline back to a mismatched or partially stale state
 - The Live view hero now has three interchangeable visualizations:
   - `Stats` for a compact asymmetric telemetry deck with one dominant sprint-time panel, a slimmer runtime intelligence rail, live flow-state deltas, merge pressure, and accumulated stage timing
-  - `Race` for stage-based progress across the execution course
+  - `Race` for stage-based progress across the execution course, with labelled checkpoint buoys for Coding, Code Done, CI, Merge, and Completed; the race is scoped to the selected sprint context so completed or paused sprint snapshots still render their fleet instead of falling back to the idle harbour
   - `DAG` for an animated dependency graph of the current sprint using real `depends_on` edges, live task phases, and merge-stage state
 - The DAG canvas positions task cards directly against its absolute coordinate system, with fixed card dimensions and centered per-column row spacing so cards do not stack and dependency connectors attach to the visible node ports.
 - DAG node hover cards now use the shared portal tooltip with a full-card trigger area and a compact contextual panel showing task title, phase, prompt, dependencies, depth, and dependency counts instead of relying on native browser title overlays.

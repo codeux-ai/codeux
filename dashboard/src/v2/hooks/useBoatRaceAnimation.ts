@@ -1,9 +1,15 @@
 import { useRef, useEffect, useCallback, useMemo } from "preact/hooks";
-import { useSignal, useComputed, type Signal } from "@preact/signals";
+import { useSignal, type Signal } from "@preact/signals";
 import gsap from "gsap";
 import type { Subtask, ExecutionTaskDispatchSummary } from "../../types.js";
 import { getTaskProgressPhase } from "../../lib/task-progress.js";
-import { getBoatRaceTaskKey, buildBoatRaceDispatchIndex, getShipType } from "../lib/boat-race.js";
+import {
+    getBoatRaceTaskKey,
+    buildBoatRaceDispatchIndex,
+    getShipType,
+    isBoatRaceActiveTask,
+    isBoatRaceHarbourTask,
+} from "../lib/boat-race.js";
 import { SPAWN_Y, HARBOUR_X, RACE_LEN, LANE_TOP, LANE_BOT } from "../components/boat-race/constants.js";
 import { stableRand, getStyle, type StatusStyle } from "../components/boat-race/utils.js";
 
@@ -43,6 +49,7 @@ export const getProgressTarget = (task: Subtask): ProgressTarget => {
     switch (getTaskProgressPhase(task)) {
         case "PENDING":  return { confirmed: CP.HARBOUR, target: CP.HARBOUR, stopped: true };
         case "BLOCKED":  return { confirmed: CP.HARBOUR, target: CP.HARBOUR, stopped: true };
+        case "QUOTA":    return { confirmed: CP.HARBOUR, target: CP.HARBOUR, stopped: true };
         case "FAILED":   return { confirmed: CP.DEPARTURE + stableRand(raceKey, 30) * 0.12, target: CP.DEPARTURE + stableRand(raceKey, 30) * 0.12, stopped: true };
         case "RUNNING":  return { confirmed: CP.DEPARTURE, target: CP.RUNNING, stopped: false };
         case "CODING_COMPLETED": {
@@ -59,11 +66,14 @@ export const getProgressTarget = (task: Subtask): ProgressTarget => {
     }
 };
 
-export const createInitialShipAnimationState = (shipKey: string, now: number) => {
-    const initial = CP.DEPARTURE * 0.5;
+export const createInitialShipAnimationState = (shipKey: string, now: number, progress?: ProgressTarget) => {
     const spawnXOffset = (stableRand(shipKey, 40) - 0.5) * 0.02;
+    const confirmed = progress?.confirmed ?? CP.HARBOUR;
+    const initial = confirmed > CP.DEPARTURE
+        ? Math.min(confirmed, CP.FINISH)
+        : CP.DEPARTURE * 0.5 + spawnXOffset;
     return {
-        currentProgress: initial + spawnXOffset,
+        currentProgress: initial,
         currentY: SPAWN_Y + (stableRand(shipKey, 41) - 0.5) * 20,
         lastTime: now,
         yWobbleOffset: (stableRand(shipKey, 42) - 0.5) * 6,
@@ -85,23 +95,17 @@ export interface AnimatedShipPosition {
 export const useBoatRaceAnimation = (
     tasks: Subtask[],
     dispatches: ExecutionTaskDispatchSummary[],
-    hasLiveSprint: boolean
+    hasSprintContext: boolean
 ) => {
-    const tasksSignal = useSignal(tasks);
-    tasksSignal.value = tasks;
-
-    const dispatchesSignal = useSignal(dispatches);
-    dispatchesSignal.value = dispatches;
-
-    const activeShipsSignal = useComputed(() => {
-        if (!hasLiveSprint || tasksSignal.value.length === 0) return [];
-        const active = tasksSignal.value.filter(t => t.status !== "PENDING" && t.status !== "BLOCKED");
+    const activeShips = useMemo(() => {
+        if (!hasSprintContext || tasks.length === 0) return [];
+        const active = tasks.filter(isBoatRaceActiveTask);
         const count = active.length;
         const usable = LANE_BOT - LANE_TOP;
         const laneH = Math.min(60, usable / Math.max(1, count));
         const totalH = laneH * count;
         const offsetY = LANE_TOP + (usable - totalH) / 2;
-        const dispatchIndex = buildBoatRaceDispatchIndex(dispatchesSignal.value);
+        const dispatchIndex = buildBoatRaceDispatchIndex(dispatches);
         return active.map((task, i) => {
             const raceKey = getBoatRaceTaskKey(task);
             const progress = getProgressTarget(task);
@@ -116,38 +120,38 @@ export const useBoatRaceAnimation = (
                 style
             } as ShipDatum;
         });
-    });
+    }, [dispatches, hasSprintContext, tasks]);
 
-    const harbourCountSignal = useComputed(() => {
-        if (!hasLiveSprint || tasksSignal.value.length === 0) return 0;
-        return tasksSignal.value.filter(t => t.status === "PENDING" || t.status === "BLOCKED").length;
-    });
+    const harbourCount = useMemo(() => {
+        if (!hasSprintContext || tasks.length === 0) return 0;
+        return tasks.filter(isBoatRaceHarbourTask).length;
+    }, [hasSprintContext, tasks]);
 
     const animStateRef = useRef<Map<string, ReturnType<typeof createInitialShipAnimationState>>>(new Map());
     const tickerRef = useRef<(() => void) | null>(null);
     const animatedPositionsSignal = useSignal<Record<string, AnimatedShipPosition>>({});
 
     useEffect(() => {
-        if (!hasLiveSprint || activeShipsSignal.value.length === 0) {
+        if (!hasSprintContext || activeShips.length === 0) {
             animStateRef.current.clear();
             animatedPositionsSignal.value = {};
         }
-    }, [activeShipsSignal.value.length, hasLiveSprint]);
+    }, [activeShips.length, hasSprintContext]);
 
     const updatePositions = useCallback(() => {
-        if (activeShipsSignal.value.length === 0) return;
+        if (activeShips.length === 0) return;
 
         const now = performance.now();
         const nextPositions: Record<string, AnimatedShipPosition> = {};
         let needsUpdate = false;
 
-        activeShipsSignal.value.forEach((ship, i) => {
+        activeShips.forEach((ship, i) => {
             let state = animStateRef.current.get(ship.key);
             const target = ship.progress.target;
             const confirmed = ship.progress.confirmed;
 
             if (!state) {
-                state = createInitialShipAnimationState(ship.key, now);
+                state = createInitialShipAnimationState(ship.key, now, ship.progress);
                 animStateRef.current.set(ship.key, state);
 
                 // Spawn tweening via GSAP on the state object
@@ -226,12 +230,12 @@ export const useBoatRaceAnimation = (
         if (needsUpdate) {
             animatedPositionsSignal.value = nextPositions;
         }
-    }, [activeShipsSignal.value]);
+    }, [activeShips]);
 
     useEffect(() => {
-        if (activeShipsSignal.value.length === 0) return;
+        if (activeShips.length === 0) return;
 
-        const currentIds = new Set(activeShipsSignal.value.map(s => s.key));
+        const currentIds = new Set(activeShips.map(s => s.key));
         for (const key of animStateRef.current.keys()) {
             if (!currentIds.has(key)) animStateRef.current.delete(key);
         }
@@ -246,11 +250,11 @@ export const useBoatRaceAnimation = (
                 tickerRef.current = null;
             }
         };
-    }, [activeShipsSignal.value, updatePositions]);
+    }, [activeShips, updatePositions]);
 
     return {
-        activeShipsSignal,
-        harbourCountSignal,
+        activeShips,
+        harbourCount,
         animatedPositionsSignal
     };
 };
