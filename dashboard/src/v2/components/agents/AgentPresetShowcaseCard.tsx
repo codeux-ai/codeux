@@ -42,10 +42,10 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
       ref={cardRef}
       type="button"
       onClick={onClick}
-      className={`group relative flex w-full overflow-hidden rounded-[1.5rem] border text-left transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
+      className={`group relative flex w-full overflow-hidden rounded-[1.4rem] border text-left backdrop-blur-xl transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
         isSelected
-          ? "border-signal-500/40 bg-white shadow-[0_8px_32px_rgba(0,224,160,0.10)] dark:border-signal-500/40 dark:bg-void-900 dark:shadow-[0_8px_32px_rgba(0,224,160,0.08)]"
-          : "border-black/[0.06] bg-white/80 hover:border-signal-500/25 hover:bg-white hover:shadow-lg dark:border-white/[0.06] dark:bg-void-800/50 dark:hover:border-signal-500/25 dark:hover:bg-void-800/80"
+          ? "border-signal-500/40 bg-white/85 shadow-[0_8px_32px_rgba(0,224,160,0.12)] dark:border-signal-500/40 dark:bg-void-800/75 dark:shadow-[0_8px_32px_rgba(0,224,160,0.10)]"
+          : "border-black/[0.06] bg-white/55 hover:-translate-y-0.5 hover:border-signal-500/20 hover:bg-white/75 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] dark:border-white/[0.06] dark:bg-void-800/40 dark:hover:border-signal-500/25 dark:hover:bg-void-800/60 dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.25)]"
       }`}
     >
       {/* Left accent strip */}

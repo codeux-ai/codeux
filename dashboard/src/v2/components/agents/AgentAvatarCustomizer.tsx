@@ -63,10 +63,10 @@ function PartPicker<T extends { id: string; label: string }>({
               type="button"
               disabled={disabled}
               onClick={() => onChange(opt.id)}
-              className={`rounded-xl px-3 py-2 text-[11px] font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`rounded-xl px-3 py-2 text-[11px] font-bold backdrop-blur-md transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 disabled:cursor-not-allowed ${
                 selected
-                  ? "bg-signal-500 text-slate-900 shadow-[0_0_10px_rgba(0,224,160,0.2)] dark:text-void-900"
-                  : "border border-black/[0.06] bg-slate-50 text-slate-500 hover:border-signal-500/30 hover:bg-signal-500/8 hover:text-signal-600 dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-400 dark:hover:border-signal-500/30 dark:hover:text-signal-400"
+                  ? "bg-signal-500 text-void-900 shadow-[0_0_14px_rgba(0,224,160,0.25)]"
+                  : "border border-black/[0.05] bg-white/40 text-slate-500 hover:border-signal-500/30 hover:bg-signal-500/8 hover:text-signal-600 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-signal-500/30 dark:hover:text-signal-400"
               }`}
             >
               {opt.label}
@@ -107,8 +107,10 @@ function ColorSwatchPicker({
               disabled={disabled}
               onClick={() => onChange(opt.id)}
               title={opt.label}
-              className={`group relative h-8 w-8 rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 disabled:cursor-not-allowed ${
-                selected ? "scale-110 ring-2 ring-slate-400/40 ring-offset-2 ring-offset-white dark:ring-white/30 dark:ring-offset-void-900" : "hover:scale-110"
+              className={`group relative h-9 w-9 rounded-full shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 disabled:cursor-not-allowed ${
+                selected
+                  ? "scale-110 ring-2 ring-signal-500/60 ring-offset-2 ring-offset-white dark:ring-offset-void-800"
+                  : "hover:scale-110 ring-1 ring-black/[0.08] dark:ring-white/[0.08]"
               }`}
               style={{ backgroundColor: opt.hex }}
             >
@@ -151,7 +153,7 @@ export function AgentAvatarCustomizer({
   return (
     <div className={`flex flex-col gap-5 ${className}`}>
       {/* ── Preview stage ── */}
-      <div className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-gradient-to-b from-slate-50 to-slate-100 shadow-[0_2px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:from-void-800/80 dark:to-void-900 dark:shadow-[0_4px_24px_rgba(0,0,0,0.3)]">
+      <div className="relative overflow-hidden rounded-[1.6rem] border border-black/[0.05] bg-white/40 shadow-[0_2px_16px_rgba(0,0,0,0.04)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.025] dark:shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
         <div className="h-[300px] w-full">
           <LazyAgentAvatarScene
             config={config}
@@ -165,14 +167,14 @@ export function AgentAvatarCustomizer({
           onClick={handleRandomize}
           disabled={disabled}
           type="button"
-          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-slate-500 shadow-sm backdrop-blur-sm transition-all hover:bg-signal-500 hover:text-white hover:shadow-[0_0_16px_rgba(0,224,160,0.3)] dark:bg-void-900/80 dark:text-slate-400 dark:hover:bg-signal-500 dark:hover:text-void-900 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition-all hover:bg-signal-500 hover:text-void-900 hover:shadow-[0_0_16px_rgba(0,224,160,0.3)] dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-slate-300 dark:hover:bg-signal-500 dark:hover:text-void-900 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
           title="Randomize"
         >
           <RefreshCw size={14} strokeWidth={2.5} />
         </button>
 
         {/* Expression bar */}
-        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-gradient-to-t from-white/90 to-transparent px-4 py-3 dark:from-void-900/90">
+        <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-gradient-to-t from-white/85 via-white/40 to-transparent px-4 py-3 dark:from-void-800/85 dark:via-void-800/40">
           {SHOWCASE_EXPRESSIONS.map((expr) => {
             const meta = EXPR_META[expr];
             const isActive = activeExpression === expr;
@@ -182,10 +184,10 @@ export function AgentAvatarCustomizer({
                 type="button"
                 onClick={() => setPreviewExpression(expr)}
                 title={meta.label}
-                className={`flex flex-col items-center gap-0.5 rounded-xl px-2.5 py-1.5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
+                className={`flex flex-col items-center gap-0.5 rounded-xl px-2.5 py-1.5 backdrop-blur-md transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                   isActive
-                    ? "bg-signal-500/12 dark:bg-signal-500/20"
-                    : "hover:bg-black/[0.03] dark:hover:bg-white/[0.04]"
+                    ? "bg-signal-500/15 shadow-[0_0_10px_rgba(0,224,160,0.15)] dark:bg-signal-500/20"
+                    : "hover:bg-white/60 dark:hover:bg-white/[0.06]"
                 }`}
               >
                 <meta.Icon
@@ -202,10 +204,21 @@ export function AgentAvatarCustomizer({
       </div>
 
       {/* ── Part pickers ── */}
-      <div className="flex flex-col gap-4 rounded-[1.75rem] border border-black/[0.06] bg-white/80 p-5 backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-800/40">
-        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-500">
-          Customize Parts
-        </span>
+      <div className="flex flex-col gap-4 rounded-[1.6rem] border border-black/[0.05] bg-white/40 p-5 backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.025]">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-400">
+            Customize Parts
+          </span>
+          <button
+            type="button"
+            onClick={handleRandomize}
+            disabled={disabled}
+            className="inline-flex items-center gap-1 rounded-md border border-black/[0.06] bg-white/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-white hover:text-slate-900 disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white"
+          >
+            <RefreshCw size={10} strokeWidth={2.4} />
+            Randomize
+          </button>
+        </div>
 
         <PartPicker label="Chassis" options={ROBOT_CHASSIS_OPTIONS} value={config.chassis} onChange={(id) => handleField("chassis", id)} disabled={disabled} />
         <PartPicker label="Eyes" options={ROBOT_EYE_OPTIONS} value={config.eyes} onChange={(id) => handleField("eyes", id)} disabled={disabled} />
