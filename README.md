@@ -246,111 +246,75 @@ Per-instance credential isolation is handled via Docker auth-copy settings (`mou
 
 ---
 
-## 🏗️ Sprint Orchestration Workflow
+## Sprint Orchestration
 
-The `sprint_agent` tool provides a professional framework for managing complex sprints.
+The `sprint_agent` tool provides a DB-backed orchestration workflow for executing complex, multi-task projects with dependency management.
 
-### 1. Planning (`action: "plan"`)
-Initializes `.jules-subagents/sprints/sprint<N>-subtasks/`. Break your sprint into independent and sequential tasks.
-```markdown
-title: Implement Auth API
-depends_on: [setup-db]
-is_independent: true
-merged: false
-prompt: Create the login and register endpoints in src/auth.
-```
+- **Sprint Creation Flow**: Create a project, then define tasks with titles and optional `dependsOn` keys. Sprint OS automatically resolves the DAG order.
+- **Parallel Execution**: Tasks with no unsatisfied dependencies start immediately. Dependent tasks are blocked until all of their dependencies are `COMPLETED` and merged.
+- **Automation Mode**: You can set `AUTO_CREATE_PR` on a task or at the sprint level. In this mode, the worker automatically opens a pull request upon completing its work.
+- **CI Intelligence**: Sprint OS actively monitors PR statuses and CI checks. If CI checks fail, it can automatically trigger a `ci_fix` invocation route for the worker.
+- **Emergency Stop**: To prevent runaway API spend, the sprint will enter an emergency stop state if a set number of consecutive task-start failures occur (default: 5). This is configurable via the `maxFailures` setting or `JULES_API_MAX_FAILS` environment variable.
 
-### 2. Status (`action: "status"`)
-Get a real-time report of all subtasks, their dependencies, and linked Jules sessions. Defaults to continuous monitoring (`wait: true`).
-
-### 3. Orchestration (`action: "orchestrate"`)
-- **Parallelism**: Automatically starts Jules sessions for all ready, independent tasks.
-- **Continuous Mode**: Defaults to `wait: true`. Monitors progress every 120s and automatically starts dependent tasks.
-- **Automatic Retries**: Failed tasks are automatically retried in a new session (default `retry_failed: true`).
-- **Mandatory Merge Step**: Dependent tasks are only started when their dependencies are both `COMPLETED` and have `merged: true` set in their subtask file.
-- **Integration Instructions**: Provides explicit CLI instructions for merging PRs and updating subtask states.
-- **Finalization**: Automatically provides steps for merging the main feature branch into `main` and proceeding to the next sprint.
-
----
-
-## 🛠️ Tool Capabilities & Options
-
-### ⚡ Automation Mode
-The `create_session`, `task_agent`, and `sprint_agent` tools support `automation_mode: "AUTO_CREATE_PR"`. When enabled, Jules will automatically create a Pull Request upon successful task completion.
-
-### ⏳ Waiting for Completion
-Tools like `task_agent` and `wait_for_session_completion` allow you to block until a task is finished.
-- **Poll Interval**: Default 10s.
-- **Timeout**: Default 900s (15 minutes).
-
-### 📊 Sprint Status Icons
-| Icon | State | Action Required |
+### Sprint Status Icons
+| Icon | State | Meaning |
 |---|---|---|
-| ✅ | **MERGED** | None. Task is fully integrated. |
-| 🤝 | **COMPLETED** | **Manual**: Merge the PR and set `merged: true` in the subtask file. |
-| ⏳ | **RUNNING** | None. Jules is currently working. |
-| ❌ | **FAILED** | **Auto**: Retried in a new session (if `retry_failed: true`). |
-| 🚫 | **BLOCKED** | **Manual**: Check and merge dependencies. |
-| 💤 | **PENDING** | None. Waiting for resources or the next cycle. |
+| ✅ | **MERGED** | Task is fully integrated. |
+| 🤝 | **COMPLETED** | PR is open. Merge required to satisfy dependencies. |
+| ⏳ | **RUNNING** | Jules is currently working. |
+| ❌ | **FAILED** | Task encountered an error. |
+| 🚫 | **BLOCKED** | Waiting on upstream dependencies. |
+| 💤 | **PENDING** | Task is defined but not yet started. |
 
 ---
 
-## ⚙️ Configuration & Safety
+## Settings & Configuration
 
-The server uses a hierarchical configuration system and built-in safety mechanisms to ensure reliable operation.
+The server persists configuration using a SQLite database located at `~/.sprint-os/settings.db`.
 
-### 🔍 Configuration Search Priority
-The server loads settings from `settings.json` and agent guides from `.jules-subagents/` in the following order (highest priority first):
-1.  **Current Working Directory**: `./.jules-subagents/`
-2.  **Project Root**: `<project_root>/.jules-subagents/`
-3.  **Home Directory**: `~/.jules-subagents/`
-4.  **Environment Variables**: (Lowest priority baseline)
+### Scope Hierarchy
+Settings are resolved in the following priority order (highest wins):
+1. **Sprint Overrides**: Settings specific to an active sprint execution.
+2. **Project Overrides**: Settings configured for a specific project.
+3. **System Defaults**: Global settings stored in the database.
+4. **Built-in Code Defaults**: Fallbacks defined in the source code.
 
-### 🛡️ Emergency Stop (Retry Safety)
-To prevent runaway API calls and excessive cost in case of persistent errors, the server implements an **Emergency Stop** mechanism:
-- **Consecutive Failure Tracking**: The server monitors consecutive failures when starting new Jules tasks.
-- **Stop Threshold**: If a specified number of tasks fail to start in a row, the server enters an emergency stop state and blocks further task creation.
-- **Default Threshold**: 5 consecutive failures.
-- **Configuration**: You can adjust this threshold using the `maxFailures` setting in your `settings.json` or via the `JULES_API_MAX_FAILS` environment variable.
+### Management
+Settings should be managed primarily through the **Dashboard Settings Page**. No manual JSON editing is required.
 
-### 📝 Example `settings.json`
-Place this in `~/.jules-subagents/settings.json` or your project folder:
-```json
-{
-  "maxFailures": 10
-}
-```
+For key and port configuration, you can optionally provide a local override file at `.jules-subagents/settings.json` within the project or home directory.
 
 ---
 
-## 🎨 Customizing Agent Guides
+## Configuration Reference
 
-The server uses Markdown guides to define engineering standards and orchestration logic. You can override the default guides by placing your own versions in the hierarchical search paths mentioned above.
-
-### 📝 Overridable Guides
-- `worker.md`: Technical standards injected into every Jules agent session.
-- `sprint_agent_guide.md`: Operating guide for the main agent during the "plan" phase.
-- `orchestrator.md`: Guidance for the main agent during the "orchestrate" and "status" phases.
-- `watch.md`: Operating instructions for the continuous orchestration loop.
+| Setting | CLI Flag | Env Var | Description |
+|---|---|---|---|
+| API Key | `--api-key <key>` | `JULES_API_KEY` / `JULES_KEY` | Jules API authentication |
+| Dashboard Port | — | `DASHBOARD_PORT` | Override default port 4444 |
+| API Base URL | — | `JULES_API_BASE_URL` | Override Google API endpoint |
+| MCP HTTP mode | `--mcp-http` | `MCP_HTTP_ENABLED` | Enable streamable HTTP transport |
+| Headless mode | `--headless` | — | Run without dashboard UI |
+| Runtime role | `--runtime-role` | — | Set server runtime role |
 
 ---
 
-## 🛠️ Available Tools
+## Available MCP Tools
 
-### 1. Sprint & Task Management
+### Sprint & Task Management
 | Tool | Description |
 |---|---|
 | `sprint_agent` | The core orchestrator for planning and executing complex multi-task sprints. |
 | `task_agent` | Execute a single specific task with built-in engineering standards, support for custom titles/branches, and optional completion waiting (`wait: true`). |
 
-### 📂 Sources
+### Sources
 | Tool | Description |
 |---|---|
 | `get_source` | Detailed metadata for a specific repository. |
 | `list_sources` | Paginated list of connected sources. |
 | `list_all_sources` | Convenience tool to fetch all sources automatically. |
 
-### 💬 Sessions
+### Sessions
 | Tool | Description |
 |---|---|
 | `create_session` | Start a new agent task. Supports `require_plan_approval` and `automation_mode: "AUTO_CREATE_PR"`. |
@@ -359,60 +323,23 @@ The server uses Markdown guides to define engineering standards and orchestratio
 | `approve_session_plan` | Authorize an agent to proceed with a plan. |
 | `send_session_message` | Send follow-up instructions to an active agent. |
 | `wait_for_session_completion`| Poll until completion, failure, or PR creation with configurable `poll_interval` and `timeout`. |
-
-### 📊 Activities
-| Tool | Description |
-|---|---|
 | `get_activity` | Details for a specific interaction step. |
 | `list_activities` | History of all interactions in a session. |
 | `list_all_activities` | Convenience tool to fetch the full session history. |
 
 ---
 
-## Development
+## Documentation
 
-Node.js 20+ is required for local development. Node.js 22 is required to pass the full CI pipeline.
+For a comprehensive index of the project's documentation, please refer to the [Documentation Index](./docs/index.md).
 
-Start the development server from source:
-```bash
-pnpm run dev
-```
-
-Build the project (compiles TypeScript and builds the Vite dashboard):
-```bash
-pnpm run build
-```
-
-Run tests:
-```bash
-pnpm run test
-pnpm run test:coverage
-```
-
-Run static analysis:
-```bash
-pnpm run typecheck
-pnpm run lint
-```
-
-Run the full CI gate (linting, tests, and build):
-```bash
-pnpm run ci
-```
+We recommend following one of three reading paths based on your needs:
+- **New to the project**: Get started with the quickstart, system overview, and dashboard guide.
+- **Building orchestration behavior**: Learn about DB-native orchestration, the execution schema, and worker endpoint foundations.
+- **MCP integrator**: Understand tool contracts, runtime dispatch, and operational runbooks.
 
 ---
 
-## 🔐 Configuration Reference
-
-| Flag / Var | Source | Description |
-|---|---|---|
-| `--api-key <key>` | CLI Argument | Highest priority API key source. |
-| `JULES_API_KEY` | Environment | Recommended environment variable. |
-| `JULES_KEY` | Environment | Fallback environment variable. |
-| `JULES_API_BASE_URL`| Environment | Override the default Google API endpoint. |
-
----
-
-## 📄 License 
+## License
 
 This project is licensed under the **ISC License**.
