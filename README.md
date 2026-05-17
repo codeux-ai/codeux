@@ -1,9 +1,13 @@
-# 🤖 Jules Subagents MCP Server (v1.2.0)
+# Sprint OS
+Production-grade agentic sprint orchestration via MCP.
 
+[![Node.js 20+](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-blue.svg)](https://pnpm.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-blue.svg)](https://www.typescriptlang.org/)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
 [![Protocol: MCP](https://img.shields.io/badge/Protocol-MCP-green.svg)](https://modelcontextprotocol.io/)
 
-A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for the [Jules Agent API](https://developers.google.com/jules). This server empowers LLMs to interact with Jules for codebase management, agent session creation, and intelligent sprint orchestration.
+Sprint OS is a production-grade MCP server and multi-provider virtual worker engine supporting Jules, Gemini, Codex, Claude Code, and Qwen Code. It exposes a powerful suite of sprint orchestration tools alongside a real-time V2 Preact dashboard. Under the hood, a DB-backed sprint orchestration engine provides dependency-aware DAG scheduling and Git/CI intelligence to automate development workflows.
 
 ## 📚 Documentation
 
@@ -14,12 +18,15 @@ Project documentation index:
 
 ## ✨ Key Features
 
-- **🚀 Sprint Orchestration**: Intelligent task delegation with dependency management and parallel execution.
-- **✨ Live Web Dashboard**: A beautiful, real-time Preact dashboard to monitor your sprint progress at `http://localhost:4444`.
-- **🛠️ Enterprise-Grade Tools**: 12+ tools covering the full Jules API with automatic pagination and robust error handling.
-- **🧬 Smart Worker Context**: Automatically injects your technical standards into every Jules agent session.
-- **🔌 Multi-Client Support**: Seamlessly integrates with Gemini CLI, Codex CLI, and Claude Desktop.
-- **🛡️ Secure & Flexible Auth**: Support for environment variables, `.env` files, and command-line flags.
+- **Sprint Orchestration**: Intelligent task delegation with DAG dependency scheduling.
+- **Live Web Dashboard**: A beautiful, real-time V2 Preact dashboard to monitor your sprint progress at `http://localhost:4444`.
+- **AI Integrations**: Five supported AI provider integrations for varied workflows.
+- **Virtual Worker Routing**: Flexible execution using MANUAL, WEIGHTED, or ORCHESTRATOR routing strategies.
+- **Hierarchical Settings**: SQLite-backed settings following a system → project → sprint scope hierarchy.
+- **CI Intelligence**: Built-in git/CI intelligence with automated PR merge gates.
+- **Enterprise-Grade Tools**: 12+ MCP tools covering the full Jules API surface.
+- **Safety First**: Configurable emergency stop safety mechanism to prevent runaway loops.
+- **Customizable Protocol**: DB-backed editable instruction templates for protocol tuning.
 
 ---
 
