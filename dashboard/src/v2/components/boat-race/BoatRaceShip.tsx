@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useEffect } from "preact/hooks";
 import { memo } from "preact/compat";
-import type { Signal } from "@preact/signals";
+import gsap from "gsap";
 import { stableRand } from "./utils.js";
 import type { StatusStyle } from "./utils.js";
 import type { ShipDatum, AnimatedShipPosition } from "../../hooks/useBoatRaceAnimation.js";
@@ -288,13 +288,13 @@ export const ShipBadge: FunctionComponent<{
 export const BoatRaceShipItem = memo(({
     s,
     isDark,
-    animatedPositionsSignal,
+    animatedPositions,
     TOW_LINE_LENGTH,
     BADGE_OFFSET
 }: {
     s: ShipDatum,
     isDark: boolean,
-    animatedPositionsSignal: Signal<Record<string, AnimatedShipPosition>>,
+    animatedPositions: Record<string, AnimatedShipPosition>,
     TOW_LINE_LENGTH: number,
     BADGE_OFFSET: number
 }) => {
@@ -303,7 +303,7 @@ export const BoatRaceShipItem = memo(({
     const isFailed = getTaskProgressPhase(s.task) === "FAILED";
 
     // Read the individual ship's animated state directly
-    const pos = animatedPositionsSignal.value[s.key] || { x: -100, y: 0, scale: 0.6, opacity: 0, pingedCheckpoints: new Set<number>() };
+    const pos = animatedPositions[s.key] || { x: -100, y: 0, scale: 0.6, opacity: 0, pingedCheckpoints: new Set<number>() };
 
     // We animate checkpoint pings by looking at the size of the set
     const pingsCount = pos.pingedCheckpoints.size;
@@ -369,7 +369,7 @@ export const BoatRaceShipItem = memo(({
     }, [pingsCount]);
 
     return (
-        <g className="race-ship" transform={`translate(${pos.x}, ${pos.y})`} opacity={pos.opacity} style={{ transformOrigin: 'center center', scale: pos.scale }}>
+        <g className="race-ship" transform={`translate(${pos.x}, ${pos.y}) scale(${pos.scale})`} opacity={pos.opacity}>
             <g ref={bobRef}>
             <circle ref={pingRef} className="checkpoint-ping" cx={0} cy={24} r={0} fill="none" stroke={s.style.color} strokeWidth={1.5} opacity={0} />
 
@@ -422,15 +422,15 @@ export const BoatRaceShipItem = memo(({
 });
 
 export const BoatRaceShipsLayer = memo(({
-    activeShipsSignal,
-    animatedPositionsSignal,
+    activeShips,
+    animatedPositions,
     isDark,
     shipsGroupRef,
     TOW_LINE_LENGTH,
     BADGE_OFFSET
 }: {
-    activeShipsSignal: Signal<ShipDatum[]>;
-    animatedPositionsSignal: Signal<Record<string, AnimatedShipPosition>>;
+    activeShips: ShipDatum[];
+    animatedPositions: Record<string, AnimatedShipPosition>;
     isDark: boolean;
     shipsGroupRef: import("preact").Ref<SVGGElement>;
     TOW_LINE_LENGTH: number;
@@ -438,12 +438,12 @@ export const BoatRaceShipsLayer = memo(({
 }) => {
     return (
         <g ref={shipsGroupRef}>
-            {activeShipsSignal.value.map(s => (
+            {activeShips.map(s => (
                 <BoatRaceShipItem
                     key={s.key}
                     s={s}
                     isDark={isDark}
-                    animatedPositionsSignal={animatedPositionsSignal}
+                    animatedPositions={animatedPositions}
                     TOW_LINE_LENGTH={TOW_LINE_LENGTH}
                     BADGE_OFFSET={BADGE_OFFSET}
                 />

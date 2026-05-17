@@ -1,6 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { getBoatRaceHeightPx, getBoatRaceTaskKey, buildBoatRaceDispatchIndex, getShipType } from "../../../dashboard/src/v2/lib/boat-race.js";
-import type { ExecutionTaskDispatchSummary } from "../../../dashboard/src/types.js";
+import {
+  getBoatRaceHeightPx,
+  getBoatRaceTaskKey,
+  buildBoatRaceDispatchIndex,
+  getBoatRaceCheckpoints,
+  getShipType,
+  isBoatRaceActiveTask,
+  isBoatRaceHarbourTask,
+} from "../../../dashboard/src/v2/lib/boat-race.js";
+import { CP, getProgressTarget } from "../../../dashboard/src/v2/hooks/useBoatRaceAnimation.js";
+import { getStyle } from "../../../dashboard/src/v2/components/boat-race/utils.js";
+import type { ExecutionTaskDispatchSummary, Subtask } from "../../../dashboard/src/types.js";
+
+function task(overrides: Partial<Subtask>): Subtask {
+  return {
+    id: "T01",
+    title: "Task",
+    status: "PENDING",
+    ...overrides,
+  } as Subtask;
+}
 
 describe("boat race task identity", () => {
   it("prefers the persisted task record id so repeated task keys do not reuse old boat state", () => {
@@ -29,6 +48,16 @@ describe("boat race task identity", () => {
     expect(getBoatRaceHeightPx(10)).toBe(800);
     expect(getBoatRaceHeightPx(11)).toBe(800);
     expect(getBoatRaceHeightPx(25)).toBe(800);
+  });
+
+  it("uses stage checkpoint labels instead of generic percentages", () => {
+    expect(getBoatRaceCheckpoints().map((checkpoint) => checkpoint.label)).toEqual([
+      "CODING",
+      "CODE DONE",
+      "CI",
+      "MERGE",
+      "COMPLETED",
+    ]);
   });
 });
 
@@ -143,5 +172,43 @@ describe("boat race dispatch index and ship type resolution", () => {
     ];
     const index = buildBoatRaceDispatchIndex(dispatches);
     expect(getShipType({ id: "T01", record_id: "task-record-1" }, index)).toBe("container");
+  });
+});
+
+describe("boat race task phase partitioning", () => {
+  it("keeps pending, blocked, and quota tasks in harbour", () => {
+    for (const status of ["PENDING", "BLOCKED", "QUOTA"] as const) {
+      const candidate = task({ status });
+      expect(isBoatRaceHarbourTask(candidate)).toBe(true);
+      expect(isBoatRaceActiveTask(candidate)).toBe(false);
+    }
+  });
+
+  it("keeps running, post-coding, failed, and completed tasks on the course", () => {
+    const activeTasks = [
+      task({ status: "RUNNING" }),
+      task({ status: "RUNNING", merge_indicator: "CI", worker_branch: "feature/task" }),
+      task({ status: "FAILED" }),
+      task({ status: "COMPLETED" }),
+    ];
+
+    for (const candidate of activeTasks) {
+      expect(isBoatRaceHarbourTask(candidate)).toBe(false);
+      expect(isBoatRaceActiveTask(candidate)).toBe(true);
+    }
+  });
+});
+
+describe("boat race running stage display", () => {
+  it("labels running tasks as Coding instead of Racing", () => {
+    expect(getStyle(task({ status: "RUNNING" })).label).toBe("Coding");
+  });
+
+  it("moves running tasks toward the Coding checkpoint", () => {
+    expect(getProgressTarget(task({ status: "RUNNING" }))).toMatchObject({
+      confirmed: CP.DEPARTURE,
+      target: CP.RUNNING,
+      stopped: false,
+    });
   });
 });

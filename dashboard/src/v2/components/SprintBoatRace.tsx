@@ -1,32 +1,28 @@
 import type { FunctionComponent } from "preact";
-import { useRef, useMemo, useEffect, useCallback, useState } from "preact/hooks";
-import { useSignal, useComputed } from "@preact/signals";
-import { memo } from "preact/compat";
-import gsap from "gsap";
+import { useRef, useMemo, useCallback } from "preact/hooks";
+import { useSignal } from "@preact/signals";
 import { Anchor } from "lucide-preact";
 import type { Subtask, ExecutionTaskDispatchSummary } from "../../types.js";
-import { getTaskProgressPhase } from "../../lib/task-progress.js";
-import { getBoatRaceHeightPx, getBoatRaceTaskKey, buildBoatRaceDispatchIndex, getShipType } from "../lib/boat-race.js";
+import { getBoatRaceHeightPx } from "../lib/boat-race.js";
 
 import { BoatRaceBackground, BoatRaceCourseLayer } from "./boat-race/BoatRaceCourse.js";
 import { BoatRaceHarbourLayer } from "./boat-race/BoatRaceHarbour.js";
 import { BoatRaceShipsLayer } from "./boat-race/BoatRaceShip.js";
-import { SVG_W, SVG_H, HARBOUR_X, FINISH_X, RACE_LEN, LANE_TOP, LANE_BOT, TOW_LINE_LENGTH, BADGE_OFFSET, SPAWN_Y } from "./boat-race/constants.js";
-import { useIsDark, getStyle, hashStr, stableRand } from "./boat-race/utils.js";
-import { useBoatRaceAnimation, CP } from "../hooks/useBoatRaceAnimation.js";
-import type { ShipDatum } from "../hooks/useBoatRaceAnimation.js";
+import { SVG_W, SVG_H, TOW_LINE_LENGTH, BADGE_OFFSET } from "./boat-race/constants.js";
+import { useIsDark } from "./boat-race/utils.js";
+import { useBoatRaceAnimation } from "../hooks/useBoatRaceAnimation.js";
 
 /* ─── Props ──────────────────────────────────────────────────────────────── */
 
 interface BoatRaceProps {
     tasks: Subtask[];
     dispatches: ExecutionTaskDispatchSummary[];
-    hasLiveSprint: boolean;
+    hasSprintContext: boolean;
 }
 
 
 
-export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispatches, hasLiveSprint }) => {
+export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispatches, hasSprintContext }) => {
     const shipsGroupRef = useRef<SVGGElement>(null);
     const isDark = useIsDark();
 
@@ -35,9 +31,10 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
 
 
 
-    const { activeShipsSignal, harbourCountSignal, animatedPositionsSignal } = useBoatRaceAnimation(tasks, dispatches, hasLiveSprint);
+    const { activeShips, harbourCount, animatedPositionsSignal } = useBoatRaceAnimation(tasks, dispatches, hasSprintContext);
+    const animatedPositions = animatedPositionsSignal.value;
 
-    const raceHeightPx = useMemo(() => getBoatRaceHeightPx(activeShipsSignal.value.length), [activeShipsSignal.value.length]);
+    const raceHeightPx = useMemo(() => getBoatRaceHeightPx(activeShips.length), [activeShips.length]);
 
     const svgRef = useRef<SVGSVGElement>(null);
     const ripplesSignal = useSignal<{ x: number; y: number; id: number }[]>([]);
@@ -59,17 +56,8 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
         setTimeout(() => { ripplesSignal.value = ripplesSignal.value.filter(r => r.id !== id); }, 2000);
     }, []);
 
-    /* ─── Checkpoint buoy data ───────────────────────────────────── */
-    const buoys = useMemo(() => [
-        { progress: CP.RUNNING, label: "CODING", color: "#00E0A0" },
-        { progress: CP.CODING_COMPLETED, label: "CODE DONE", color: "#0F9FA8" },
-        { progress: CP.CI, label: "CI", color: "#5dade2" },
-        { progress: CP.AUTOMERGE, label: "MERGE", color: "#FFB800" },
-        { progress: CP.COMPLETED, label: "COMPLETED", color: "#00AB84" },
-    ], []);
-
     /* ─── Idle state ─────────────────────────────────────────────── */
-    if (!hasLiveSprint || tasks.length === 0) {
+    if (!hasSprintContext || tasks.length === 0) {
         return (
             <div className="relative boat-race-bleed">
                 <div className="relative overflow-hidden p-12">
@@ -93,7 +81,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                             </div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500 dark:text-white/25">Fleet Awaiting Departure</p>
                             <p className="text-[11px] text-slate-400/60 dark:text-white/12 mt-3 font-mono max-w-xs mx-auto">
-                                {hasLiveSprint ? "No tasks currently in the pipeline" : "Launch a sprint to begin the race"}
+                                {hasSprintContext ? "No tasks currently in the pipeline" : "Launch a sprint to begin the race"}
                             </p>
                         </div>
                     </div>
@@ -116,7 +104,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                         </div>
                         <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-white/35">Sprint Race</span>
                         <span className="text-[8px] font-mono text-slate-400 dark:text-white/15 ml-1">
-                            {activeShipsSignal.value.length + harbourCountSignal.value} vessel{(activeShipsSignal.value.length + harbourCountSignal.value) !== 1 ? "s" : ""}
+                            {activeShips.length + harbourCount} vessel{(activeShips.length + harbourCount) !== 1 ? "s" : ""}
                         </span>
                     </div>
                     <div className="flex items-center gap-5 text-[7px] font-mono text-slate-400 dark:text-white/20 uppercase tracking-wider">
@@ -141,12 +129,12 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                     preserveAspectRatio="xMidYMid meet"
                     onMouseMove={handleMouseMove}
                 >
-                    <BoatRaceBackground isDark={isDark} ripplesSignal={ripplesSignal} />
-                    <BoatRaceHarbourLayer isDark={isDark} harbourCountSignal={harbourCountSignal} />
-                    <BoatRaceCourseLayer isDark={isDark} activeShipsSignal={activeShipsSignal} />
+                    <BoatRaceBackground isDark={isDark} ripples={ripplesSignal.value} />
+                    <BoatRaceHarbourLayer isDark={isDark} waitingCount={harbourCount} />
+                    <BoatRaceCourseLayer isDark={isDark} activeShips={activeShips} />
                     <BoatRaceShipsLayer
-                        activeShipsSignal={activeShipsSignal}
-                        animatedPositionsSignal={animatedPositionsSignal}
+                        activeShips={activeShips}
+                        animatedPositions={animatedPositions}
                         isDark={isDark}
                         shipsGroupRef={shipsGroupRef}
                         TOW_LINE_LENGTH={TOW_LINE_LENGTH}
