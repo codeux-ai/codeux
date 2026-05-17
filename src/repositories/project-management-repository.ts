@@ -28,6 +28,7 @@ import { ProjectWorkerAssignmentRepository } from "./project-worker-assignment-r
 import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.js";
 import type { ProjectWorkerAssignmentRecord } from "../contracts/worker-types.js";
 import { resolveRepositoryHost } from "../infrastructure/git/repository-host-resolver.js";
+import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js";
 import { projectSummaryQuery } from "./project-management/project-summary-query.js";
 import { sprintSummaryQuery } from "./project-management/sprint-summary-query.js";
 import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
@@ -969,14 +970,16 @@ export class ProjectManagementRepository {
   ): ProjectSummary {
     const sourceType = row.source_type || "local";
     const sourceRef = row.source_ref || row.base_dir;
-    const { provider, hostDomain } = resolveRepositoryHost(row.repo_url || (sourceType === "git" ? sourceRef : null));
+    const inferredLocalRemoteUrl = row.repo_url ? null : readLocalGitOriginUrl(row.base_dir);
+    const effectiveRepoUrl = row.repo_url || inferredLocalRemoteUrl;
+    const { provider, hostDomain } = resolveRepositoryHost(effectiveRepoUrl || (sourceType === "git" ? sourceRef : null));
 
     return {
       id: row.id,
       slug: row.slug,
       name: row.name,
       baseDir: row.base_dir,
-      repoUrl: row.repo_url,
+      repoUrl: effectiveRepoUrl,
       sourceType,
       sourceRef,
       gitProvider: provider,

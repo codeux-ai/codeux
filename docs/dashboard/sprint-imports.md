@@ -42,6 +42,8 @@ Supported task fields include `title`, `depends_on`, `is_independent`, `merged` 
 
 Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to search the selected project's remote backlog. The import modal supports provider selection, repository override, full-text search, state filtering, label filtering, and multi-select.
 
+For local projects, the dashboard reads the repository's `remote.origin.url` from `.git/config` when available. This pre-fills the provider and `owner/repository` target for projects that were added from a local checkout instead of a Git clone URL.
+
 Imported issues appear in the sprint composer under the Sprint Prompt field as linked issue cards. Each card shows the provider, repository, issue key, title, labels, assignees, and a direct link to the source issue. When the sprint is submitted, the selected issues are persisted as linked sprint issue records and the sprint prompt receives a `Linked Issues` markdown section so the Planning agent has the issue context.
 
 Issue import uses the saved integration tokens:

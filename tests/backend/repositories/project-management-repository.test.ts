@@ -167,6 +167,33 @@ describe("ProjectManagementRepository", () => {
     });
   });
 
+  it("infers remote GitHub metadata for local projects from origin", async () => {
+    const { repository } = await createRepository();
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-local-origin-"));
+    tempDirs.push(repoPath);
+    await fs.mkdir(path.join(repoPath, ".git"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, ".git", "config"), `
+[core]
+  repositoryformatversion = 0
+[remote "origin"]
+  url = git@github.com:numnx/jules-agent-mcp.git
+  fetch = +refs/heads/*:refs/remotes/origin/*
+`);
+
+    const project = repository.createProject({
+      name: "Code UX",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    expect(project).toMatchObject({
+      sourceType: "local",
+      repoUrl: "git@github.com:numnx/jules-agent-mcp.git",
+      gitProvider: "github",
+      gitHostDomain: "github.com",
+    });
+  });
+
 
   it("supports optional sprint review summaries in listSprints and ignores task-level QA", async () => {
     const { repository, storage } = await createRepository();
