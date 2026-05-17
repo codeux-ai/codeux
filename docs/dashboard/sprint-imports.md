@@ -48,6 +48,8 @@ Issue import uses the saved integration tokens:
 - GitHub: system/project effective `git.githubToken`, usually configured in Settings -> Integrations.
 - GitLab: system/project effective `git.gitlabToken`, also available through `GITLAB_TOKEN` / `GLAB_TOKEN` host hints.
 
+When the GitHub token is empty, the server falls back to local `gh` CLI authentication for search and auto-close (`gh issue list` / `gh issue close`). This uses the dashboard host environment's GitHub auth; Docker auth-copy mount settings help worker containers, but the dashboard import itself needs either a saved token or a working local `gh auth login`.
+
 ## Auto-Close
 
 `Settings -> Sprint -> Git Flow -> Auto-close linked issues` controls whether imported GitHub/GitLab issues are closed automatically.

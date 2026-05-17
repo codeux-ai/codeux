@@ -106,9 +106,34 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
   return (
     <div className="fixed inset-0 z-[230] flex items-center justify-center bg-black/55 px-4 py-6 backdrop-blur-xl dark:bg-black/75">
       <div className="flex max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[2.25rem] border border-white/70 bg-white shadow-[0_48px_120px_rgba(15,23,42,0.28)] dark:border-white/[0.08] dark:bg-void-800 dark:shadow-[0_48px_120px_rgba(0,0,0,0.72)]">
-        <aside className="hidden w-72 shrink-0 flex-col justify-between overflow-hidden bg-slate-950 p-7 text-white lg:flex">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-300">
+        <aside className="relative hidden w-72 shrink-0 flex-col justify-between overflow-hidden bg-slate-950 p-7 text-white lg:flex">
+          <span className="pointer-events-none absolute -left-5 -top-3 select-none font-display text-[7.4rem] font-black leading-none tracking-tighter text-white/[0.035]">
+            LINK
+          </span>
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div
+              className={`h-52 w-52 animate-organic ${
+                provider === "gitlab" ? "bg-ember-500/[0.12]" : "bg-[#2F81F7]/[0.11]"
+              }`}
+              style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }}
+            />
+            <div
+              className={`absolute h-32 w-32 animate-organic-reverse ${
+                provider === "gitlab" ? "bg-status-red/[0.12]" : "bg-signal-500/[0.12]"
+              }`}
+              style={{ borderRadius: "60% 40% 35% 65% / 55% 42% 58% 45%" }}
+            />
+            <div
+              className="absolute h-72 w-72 animate-[spin_22s_linear_infinite] border border-white/[0.045]"
+              style={{ borderRadius: "46% 54% 60% 40% / 48% 42% 58% 52%" }}
+            />
+          </div>
+          <div className="relative z-10">
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${
+              provider === "gitlab"
+                ? "border-ember-500/22 bg-ember-500/10 text-ember-300"
+                : "border-[#2F81F7]/25 bg-[#2F81F7]/10 text-[#9ecbff]"
+            }`}>
               <Filter className="h-3.5 w-3.5" strokeWidth={2.2} />
               Backlog Import
             </div>
@@ -119,7 +144,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
               Search the repository backlog, select one or many issues, then link them into the sprint composer.
             </p>
           </div>
-          <div className="grid gap-3">
+          <div className="relative z-10 grid gap-3">
             {[
               ["Provider", provider === "github" ? "GitHub" : "GitLab"],
               ["Repository", repository || "not set"],

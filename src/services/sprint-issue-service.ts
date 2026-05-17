@@ -8,6 +8,7 @@ import type { DashboardSettings } from "../contracts/app-types.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { resolveRepositoryHost } from "../infrastructure/git/repository-host-resolver.js";
+import { execFile } from "child_process";
 
 export interface IssueSearchInput {
   provider?: LinkedIssueProvider;
@@ -28,7 +29,14 @@ export interface RemoteIssueSummary extends SprintLinkedIssueInput {
 interface IssueServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   getDashboardSettings: (scope?: { projectId?: string; sprintId?: string }) => DashboardSettings;
+  runCommand?: (command: string, args: string[]) => Promise<LocalCommandResult>;
   logger?: Logger;
+}
+
+interface LocalCommandResult {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
 }
 
 export class SprintIssueService {
@@ -127,7 +135,8 @@ export class SprintIssueService {
     if (issue.provider === "github") {
       const token = settings.git.githubToken?.trim();
       if (!token) {
-        throw new Error("GitHub token is not configured.");
+        await this.closeGitHubIssueWithCli(issue);
+        return;
       }
       await requestJson(`https://api.github.com/repos/${issue.repository}/issues/${issue.issueNumber}`, {
         method: "PATCH",
@@ -153,7 +162,7 @@ export class SprintIssueService {
   private async searchGitHubIssues(args: ResolvedIssueTarget & SearchRuntimeOptions): Promise<RemoteIssueSummary[]> {
     const token = args.token?.trim();
     if (!token) {
-      throw new Error("GitHub token is not configured.");
+      return this.searchGitHubIssuesWithCli(args);
     }
     const qualifiers = [
       `repo:${args.repository}`,
@@ -190,6 +199,68 @@ export class SprintIssueService {
         bodyPreview: truncatePreview(issue.body || ""),
         updatedAt: issue.updated_at || null,
       }));
+  }
+
+  private async searchGitHubIssuesWithCli(args: ResolvedIssueTarget & SearchRuntimeOptions): Promise<RemoteIssueSummary[]> {
+    const cliArgs = [
+      "issue",
+      "list",
+      "--repo",
+      formatGitHubCliRepo(args.hostDomain, args.repository),
+      "--state",
+      args.state,
+      "--limit",
+      String(args.limit),
+      "--json",
+      "number,title,url,state,body,updatedAt,labels,assignees",
+    ];
+    for (const label of args.labels) {
+      cliArgs.push("--label", label);
+    }
+    if (args.assignee?.trim()) {
+      cliArgs.push("--assignee", args.assignee.trim());
+    }
+    if (args.search?.trim()) {
+      cliArgs.push("--search", args.search.trim());
+    }
+
+    const result = await this.runCommand("gh", cliArgs);
+    if (!result.ok) {
+      throw new Error(`GitHub token is not configured and local gh auth failed: ${truncatePreview(result.stderr || result.stdout || "gh issue list failed")}`);
+    }
+
+    const parsed = parseJsonArray<GitHubCliIssue>(result.stdout, "gh issue list");
+    return parsed.map((issue) => ({
+      provider: "github",
+      hostDomain: args.hostDomain,
+      repository: args.repository,
+      issueNumber: issue.number,
+      issueKey: `#${issue.number}`,
+      title: issue.title,
+      url: issue.url,
+      state: String(issue.state || "open").toLowerCase(),
+      labels: (issue.labels || [])
+        .map((label) => label.name)
+        .filter((label): label is string => typeof label === "string" && label.trim().length > 0),
+      assignees: (issue.assignees || [])
+        .map((assignee) => assignee.login || assignee.name)
+        .filter((assignee): assignee is string => typeof assignee === "string" && assignee.trim().length > 0),
+      bodyPreview: truncatePreview(issue.body || ""),
+      updatedAt: issue.updatedAt || null,
+    }));
+  }
+
+  private async closeGitHubIssueWithCli(issue: SprintLinkedIssueRecord): Promise<void> {
+    const result = await this.runCommand("gh", [
+      "issue",
+      "close",
+      String(issue.issueNumber),
+      "--repo",
+      formatGitHubCliRepo(issue.hostDomain, issue.repository),
+    ]);
+    if (!result.ok) {
+      throw new Error(`GitHub token is not configured and local gh auth failed: ${truncatePreview(result.stderr || result.stdout || "gh issue close failed")}`);
+    }
   }
 
   private async searchGitLabIssues(args: ResolvedIssueTarget & SearchRuntimeOptions): Promise<RemoteIssueSummary[]> {
@@ -239,6 +310,13 @@ export class SprintIssueService {
     }
     return project;
   }
+
+  private async runCommand(command: string, args: string[]): Promise<LocalCommandResult> {
+    if (this.deps.runCommand) {
+      return this.deps.runCommand(command, args);
+    }
+    return runLocalCommand(command, args);
+  }
 }
 
 interface ResolvedIssueTarget {
@@ -266,6 +344,17 @@ interface GitHubIssue {
   pull_request?: unknown;
   labels?: Array<string | { name?: string }>;
   assignees?: Array<{ login?: string }>;
+}
+
+interface GitHubCliIssue {
+  number: number;
+  title: string;
+  url: string;
+  state?: string;
+  body?: string | null;
+  updatedAt?: string | null;
+  labels?: Array<{ name?: string }>;
+  assignees?: Array<{ login?: string; name?: string }>;
 }
 
 interface GitLabIssue {
@@ -313,6 +402,25 @@ function quoteSearchValue(value: string): string {
   return /\s/.test(trimmed) ? `"${trimmed.replace(/"/g, "")}"` : trimmed;
 }
 
+function formatGitHubCliRepo(hostDomain: string, repository: string): string {
+  const normalizedHost = hostDomain.trim().toLowerCase();
+  return normalizedHost && normalizedHost !== "github.com"
+    ? `${normalizedHost}/${repository}`
+    : repository;
+}
+
+function parseJsonArray<T>(value: string, source: string): T[] {
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed as T[];
+    }
+  } catch {
+    // handled below
+  }
+  throw new Error(`Unable to parse ${source} JSON output.`);
+}
+
 function truncatePreview(value: string): string {
   const compact = value.replace(/\s+/g, " ").trim();
   return compact.length > 220 ? `${compact.slice(0, 217)}...` : compact;
@@ -343,4 +451,16 @@ async function requestJson<T>(url: string, options: {
     throw new Error(`${response.status} ${response.statusText}${text ? `: ${truncatePreview(text)}` : ""}`);
   }
   return response.json() as Promise<T>;
+}
+
+async function runLocalCommand(command: string, args: string[]): Promise<LocalCommandResult> {
+  return new Promise((resolve) => {
+    execFile(command, args, { timeout: 20_000, maxBuffer: 1024 * 1024 * 4 }, (error, stdout, stderr) => {
+      resolve({
+        ok: !error,
+        stdout: String(stdout || ""),
+        stderr: String(stderr || (error instanceof Error ? error.message : "")),
+      });
+    });
+  });
 }
