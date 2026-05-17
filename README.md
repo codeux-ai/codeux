@@ -30,7 +30,9 @@ Project documentation index:
 
 ---
 
-## 📦 Quick Installation
+## Installation
+
+### Global Install (NPM)
 
 Install globally via NPM to use the `jules-subagents` command anywhere:
 
@@ -38,14 +40,78 @@ Install globally via NPM to use the `jules-subagents` command anywhere:
 npm install -g jules-subagents
 ```
 
+Verify the installation:
+
+```bash
+jules-subagents --help
+```
+
+### Build from Source
+
+Building from source requires Node.js 20+ and pnpm.
+
+```bash
+pnpm install
+pnpm run build
+pnpm start
+```
+
 ---
 
-## ⚙️ Client Configuration
+## Quickstart
 
-### 🌌 Gemini CLI
+Configure your API key using one of these methods (in priority order):
+
+1. **CLI Flag** (highest priority):
+   ```bash
+   --api-key YOUR_KEY
+   ```
+2. **Environment Variable**:
+   ```bash
+   export JULES_API_KEY=YOUR_KEY
+   ```
+   *(Note: `JULES_KEY` can also be used as a fallback)*
+3. **`.env` file** in the project root:
+   ```env
+   JULES_API_KEY=YOUR_KEY
+   ```
+4. **`settings.json`** in `.jules-subagents/` (project or home directory):
+   ```json
+   {
+     "julesApiKey": "YOUR_KEY"
+   }
+   ```
+
+Run the development server:
+
+```bash
+pnpm run dev
+```
+
+Open the dashboard in your browser at `http://localhost:4444`. The server automatically increments the port (4445, 4446, etc.) if 4444 is in use. You can also override this by setting `DASHBOARD_PORT`.
+
+Verify health via API endpoints from another terminal:
+
+```bash
+curl http://localhost:4444/api/status
+```
+
+### Common First Workflow
+
+1. Configure system settings in the dashboard, then adjust project settings and sprint overrides as needed.
+2. Create the sprint and tasks. (Code UX automatically prepares the local feature branch when orchestration starts).
+3. Connect your worker with `listen` so it can monitor inbox, dispatch, and attention events for the project.
+4. Start the sprint from the dashboard.
+5. Follow the merge/action-required protocol shown in the dashboard and resume the sprint there when manual work is finished.
+
+---
+
+## MCP Client Setup
+
+### Gemini CLI
 You can add the server by editing your `~/.gemini/settings.json` or using the one-line CLI command.
 
-**Manual Configuration:**
+**Manual Configuration (`~/.gemini/settings.json`):**
 ```json
 {
   "mcpServers": {
@@ -65,10 +131,10 @@ You can add the server by editing your `~/.gemini/settings.json` or using the on
 gemini mcp add jules npx -- -y jules-subagents --api-key your_api_key_here
 ```
 
-### 💻 Codex CLI
+### Codex CLI
 Add to your `~/.codex/config.toml` or use the one-line CLI command.
 
-**Manual Configuration:**
+**Manual Configuration (`~/.codex/config.toml`):**
 ```toml
 [mcp_servers.jules]
 command = "npx"
@@ -80,8 +146,25 @@ args = ["-y", "jules-subagents", "--api-key", "your_api_key_here"]
 codex mcp add jules -- npx -y jules-subagents --api-key your_api_key_here
 ```
 
-### 🤖 Claude Desktop
+### Claude Desktop
 Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "jules-subagents": {
+      "command": "npx",
+      "args": ["-y", "jules-subagents"],
+      "env": {
+        "JULES_API_KEY": "your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+### Claude Code
+Add to your `.claude/settings.json` or `~/.claude/settings.json`:
 
 ```json
 {
@@ -236,47 +319,36 @@ The server uses Markdown guides to define engineering standards and orchestratio
 
 ---
 
-## 🛠️ Development & Source Build
+## Development
 
-If you want to contribute or run from source:
+Node.js 20+ is required for local development. Node.js 22 is required to pass the full CI pipeline.
 
-1.  **Clone & Install**:
-    ```bash
-    git clone https://github.com/numnx/jules-subagents-mcp.git
-    cd jules-subagents-mcp
-    pnpm install
-    ```
-2.  **Environment Setup**:
-    ```bash
-    cp .env.example .env
-    # Add your JULES_API_KEY to the .env file
-    ```
-3.  **Build**:
-    ```bash
-    pnpm run build
-    ```
-4.  **Verification**:
-    Test if the server starts correctly on stdio:
-    ```bash
-    node dist/index.js --api-key YOUR_KEY
-    ```
-5.  **Global Link**:
-    ```bash
-    pnpm link --global
-    ```
-6.  **Add to Gemini CLI (Manual Build)**:
-    Once linked, you can use the `jules-subagents` command globally:
-    ```bash
-    gemini mcp add jules jules-subagents
-    ```
-    *Note: The server will automatically use the `.env` file and technical guides from the source directory, regardless of where you run the command.*
+Start the development server from source:
+```bash
+pnpm run dev
+```
 
-7.  **Alternative: Run Local Source with npx**:
-    If you prefer not to use `npm link`, you can point `npx` directly to your project directory:
-    ```bash
-    gemini mcp add jules npx /path/to/jules-subagents-mcp
-    ```
-    *This is useful for testing local changes without modifying your global system path.*
+Build the project (compiles TypeScript and builds the Vite dashboard):
+```bash
+pnpm run build
+```
+
+Run tests:
+```bash
+pnpm run test
+pnpm run test:coverage
+```
+
+Run static analysis:
+```bash
+pnpm run typecheck
+pnpm run lint
+```
+
+Run the full CI gate (linting, tests, and build):
+```bash
+pnpm run ci
+```
 
 ---
 
