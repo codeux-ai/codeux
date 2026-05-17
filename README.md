@@ -182,17 +182,67 @@ Add to your `.claude/settings.json` or `~/.claude/settings.json`:
 
 ---
 
-## 📊 Live Web Dashboard
+## Live Dashboard
 
-The Jules Subagents MCP server includes a built-in, real-time web dashboard to visualize your sprint progress.
+The project features a real-time V2 web dashboard to visualize your sprint progress and orchestrate agents.
 
-- **URL**: `http://localhost:4444`
-- **Real-time**: Automatically polls every 10 seconds for live status updates.
-- **Live Session Logs**: The dashboard consumes a dedicated local endpoint (`/api/live-activities`) that refreshes active task activities from Jules every 10 seconds.
-- **Visuals**: Track active tasks (⏳), completed integrations (✅), and potential blockers (🚫) with an award-winning UI.
-- **Activity Feed**: View live logs and automated protocol instructions in a clean, side-by-side view.
+- **Default URL**: `http://localhost:4444` (starts automatically with the server).
+- **Health APIs**: The dashboard exposes health APIs at `/api/status`, `/api/system-settings`, and `/api/git-status`.
 
-Simply open the URL in your browser once the orchestration begins to watch Jules work in real-time.
+### Dashboard Pages
+
+- **Tasks**: Real-time task execution, DAG visualization, and boat-race timeline. Features key visualizations like `SprintBoatRace` (animated task timeline) and `SprintDag` (dependency graph).
+- **Projects**: Multi-project workspace management.
+- **Settings**: AI provider config, system and project overrides.
+- **Agents**: Virtual worker management and presets.
+- **Chat**: Interactive chat with AI providers via the dashboard.
+- **Browser**: Live preview and deployment integration.
+- **Live Session**: Active Jules session monitoring.
+- **Memory**: Agent memory inspection and management.
+- **Stats**: Usage telemetry, git analytics, and token metrics by provider.
+
+---
+
+## AI Providers
+
+The system includes a multi-provider virtual worker routing system.
+
+### Built-in Provider Instances
+
+| ID | Name | Type | Typical Use |
+| :--- | :--- | :--- | :--- |
+| `jules` | Google Jules | Google Jules API | Primary orchestration / planning |
+| `gemini` | Google Gemini | Google Gemini | Virtual worker (code generation) |
+| `codex` | OpenAI Codex | OpenAI Codex CLI | Virtual worker (code generation) |
+| `claude-code` | Anthropic Claude Code | Anthropic Claude Code | Virtual worker (code generation) |
+| `qwen-code` | Qwen Code | Qwen Code CLI | Virtual worker (code generation) |
+
+### Routing Strategies
+
+- **`MANUAL`**: Uses one exact provider instance.
+- **`WEIGHTED`**: Load-balances requests across enabled instances based on assigned weight.
+- **`ORCHESTRATOR`**: Jules picks the appropriate provider type, then selects an enabled instance within that type.
+
+### Supported Invocation Routes
+
+Providers can be explicitly routed for different invocation types:
+- `task_coding`
+- `planning`
+- `dashboard_reply`
+- `clarification_reply`
+- `qa_review`
+- `ci_fix`
+- `merge_conflict`
+
+### Virtual Workers
+
+When configured with `executionMode: VIRTUAL`, virtual workers are ephemeral, one-shot processes. There are no persistent listen loops required. An ephemeral `virtual_cli` endpoint handles exactly one unit of work and is released.
+
+### Advanced Configuration
+
+You can add additional provider instances of the same type (e.g., two Codex credentials) with distinct weights, models, and auth-copy paths.
+
+Per-instance credential isolation is handled via Docker auth-copy settings (`mountAuth`, `authPath`), allowing different instances to mount different local authentication directories into the runtime.
 
 ---
 
