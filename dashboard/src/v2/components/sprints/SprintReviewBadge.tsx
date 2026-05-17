@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useState } from "preact/hooks";
+import { useState, useRef } from "preact/hooks";
 import { CheckCircle2, ListChecks, ChevronRight, Loader2  } from "lucide-preact";
 import type { SprintReviewSummary } from "../../types.js";
 
@@ -15,6 +15,8 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
   align = "center",
 }) => {
   const [findingsOpen, setFindingsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [tooltipStyle, setTooltipStyle] = useState<{ top?: number, left?: number, right?: number, bottom?: number }>({});
 
   if (summary.status === 'running') {
     return (
@@ -40,23 +42,39 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
     const spaceRight = window.innerWidth - rect.left;
     const spaceLeft = rect.right;
 
+    let newAlign = align;
     if (spaceRight < tooltipWidth && spaceLeft >= tooltipWidth) {
-      setDynamicAlign("right");
+      newAlign = "right";
     } else if (spaceLeft < tooltipWidth && spaceRight >= tooltipWidth) {
-      setDynamicAlign("left");
-    } else {
-      setDynamicAlign(align);
+      newAlign = "left";
     }
+
+    setDynamicAlign(newAlign);
+
+    const style: { bottom: number, left?: number, right?: number } = {
+      bottom: window.innerHeight - rect.top,
+    };
+
+    if (newAlign === "left") {
+      style.left = rect.left;
+    } else if (newAlign === "right") {
+      style.right = window.innerWidth - rect.right;
+    } else {
+      style.left = rect.left + rect.width / 2;
+    }
+
+    setTooltipStyle(style);
   };
 
   const tooltipAlignment = dynamicAlign === "left"
-    ? "left-0"
+    ? ""
     : dynamicAlign === "right"
-      ? "right-0"
-      : "left-1/2 -translate-x-1/2";
+      ? ""
+      : "-translate-x-1/2";
 
   return (
     <div
+      ref={containerRef}
       className="group/review relative inline-flex"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => {
@@ -74,7 +92,8 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
       </div>
 
       <div
-        className={`absolute bottom-full pb-3 hidden z-[9999] opacity-0 translate-y-1 transition-all duration-300 ease-out group-hover/review:block group-hover/review:opacity-100 group-hover/review:translate-y-0 ${tooltipAlignment}`}
+        className={`fixed pb-3 hidden z-[99999] opacity-0 translate-y-1 transition-all duration-300 ease-out group-hover/review:block group-hover/review:opacity-100 group-hover/review:translate-y-0 ${tooltipAlignment}`}
+        style={tooltipStyle}
       >
         <div
           className={`relative grid gap-4 overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white p-4 shadow-[0_20px_48px_rgba(15,23,42,0.16),0_0_0_1px_rgba(0,0,0,0.04)] before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-gradient-to-r before:from-signal-500 before:via-signal-400 before:to-signal-500 dark:border-white/[0.08] dark:bg-void-800 ${
