@@ -458,6 +458,48 @@ describe("ProjectManagementRepository", () => {
     expect(tasks.find((t) => t.id === taskC.id)?.dependsOnTaskIds).toEqual([taskB.id]);
   });
 
+  it("persists and updates linked sprint issues", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Issue Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/acme/widgets.git",
+    });
+
+    const sprint = repository.createSprint(project.id, {
+      name: "Issue Sprint",
+      linkedIssues: [
+        {
+          provider: "github",
+          hostDomain: "github.com",
+          repository: "acme/widgets",
+          issueNumber: 42,
+          issueKey: "#42",
+          title: "Improve imports",
+          url: "https://github.com/acme/widgets/issues/42",
+          labels: ["ux", "import"],
+          assignees: ["pierre"],
+        },
+      ],
+    });
+
+    expect(sprint.linkedIssues).toHaveLength(1);
+    expect(sprint.linkedIssues[0]?.title).toBe("Improve imports");
+    expect(repository.getSprint(sprint.id)?.linkedIssues[0]?.labels).toEqual(["ux", "import"]);
+
+    const issue = sprint.linkedIssues[0]!;
+    const closed = repository.updateSprintLinkedIssueCloseState(issue.id, {
+      closeState: "closed",
+      closedAt: "2026-05-17T00:00:00.000Z",
+      closeError: null,
+      issueState: "closed",
+    });
+
+    expect(closed.closeState).toBe("closed");
+    expect(closed.state).toBe("closed");
+    expect(repository.listSprintLinkedIssues(project.id, sprint.id)[0]?.closedAt).toBe("2026-05-17T00:00:00.000Z");
+  });
+
   it("rejects self-dependencies during creation and update", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({

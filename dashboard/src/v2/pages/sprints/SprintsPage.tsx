@@ -32,6 +32,7 @@ import { AddProjectModal } from "../../components/ui/AddProjectModal.js";
 import { SprintMarkdownModal } from "../../components/ui/SprintMarkdownModal.js";
 import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsOverrideModal.js";
 import { SprintImportMenu } from "../../components/sprints/SprintImportMenu.js";
+import { SprintIssueImportModal } from "../../components/sprints/SprintIssueImportModal.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { useProgressiveList } from "../../hooks/use-progressive-list.js";
@@ -39,6 +40,7 @@ import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-windo
 import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { PageContainer } from "../../components/ui/PageContainer.js";
+import type { SprintLinkedIssueInput } from "../../types.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const SPRINT_GALLERY_VISIBILITY_STORAGE_KEY = "code_ux_sprints_show_gallery";
@@ -142,6 +144,8 @@ export const SprintsPage: FunctionComponent = () => {
   const prefersReducedMotion = useReducedMotion();
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [showSprintGallery, setShowSprintGallery] = useState(readStoredSprintGalleryVisibility);
+  const [showIssueImportModal, setShowIssueImportModal] = useState(false);
+  const [linkedIssues, setLinkedIssues] = useState<SprintLinkedIssueInput[]>([]);
 
   const {
     projects = [],
@@ -277,7 +281,25 @@ export const SprintsPage: FunctionComponent = () => {
     if (!editingSprint) {
         animateLatestCell();
     }
+    setLinkedIssues([]);
   }, [handleSubmitSprint, editingSprint, animateLatestCell]);
+
+  useEffect(() => {
+    setLinkedIssues(editingSprint?.linkedIssues || []);
+  }, [editingSprint?.id]);
+
+  const mergeLinkedIssues = useCallback((issues: SprintLinkedIssueInput[]) => {
+    setLinkedIssues((current) => {
+      const next = new Map<string, SprintLinkedIssueInput>();
+      for (const issue of current) {
+        next.set(`${issue.provider}:${issue.hostDomain}:${issue.repository}:${issue.issueNumber}`, issue);
+      }
+      for (const issue of issues) {
+        next.set(`${issue.provider}:${issue.hostDomain}:${issue.repository}:${issue.issueNumber}`, issue);
+      }
+      return Array.from(next.values());
+    });
+  }, []);
 
   const openRowActionsMenu = useCallback((event: MouseEvent, sprintId: string) => {
     event.stopPropagation();
@@ -392,6 +414,7 @@ export const SprintsPage: FunctionComponent = () => {
             <SprintImportMenu
               disabled={!selectedProject}
               onImportMarkdown={() => setShowImportModal(true)}
+              onImportIssues={() => setShowIssueImportModal(true)}
             />
             <button
               type="button"
@@ -421,8 +444,10 @@ export const SprintsPage: FunctionComponent = () => {
                 if (editingSprint || showCreateComposer) {
                   setEditingSprint(null);
                   setShowCreateComposer(false);
+                  setLinkedIssues([]);
                   return;
                 }
+                setLinkedIssues([]);
                 setShowCreateComposer(true);
               }}
               disabled={!selectedProject}
@@ -468,6 +493,7 @@ export const SprintsPage: FunctionComponent = () => {
                         onEdit={() => {
                           setEditingSprint(sprint);
                           setShowCreateComposer(false);
+                          setLinkedIssues(sprint.linkedIssues || []);
                         }}
                         onDelete={() => { void handleDeleteSprint(sprint.id); }}
                         onExport={() => { void handleOpenExport(sprint.id, sprint.name); }}
@@ -481,6 +507,7 @@ export const SprintsPage: FunctionComponent = () => {
                     type="button"
                     onClick={() => {
                       setEditingSprint(null);
+                      setLinkedIssues([]);
                       setShowCreateComposer(true);
                     }}
                     disabled={!selectedProject}
@@ -523,13 +550,14 @@ export const SprintsPage: FunctionComponent = () => {
                   <SprintComposer
                     nextId={nextId}
                     initialSprint={editingSprint}
-
+                    linkedIssues={linkedIssues}
                     virtualProviders={virtualProviders}
                     planningPresets={planningPresets}
                     planningEta={planningEta}
                     onClose={() => {
                       setShowCreateComposer(false);
                       setEditingSprint(null);
+                      setLinkedIssues([]);
                     }}
                     onImprovePrompt={handleImprovePrompt}
                     onSubmit={onSprintSubmit}
@@ -537,8 +565,17 @@ export const SprintsPage: FunctionComponent = () => {
                     onStartNewSprint={() => {
                       setEditingSprint(null);
                       setShowCreateComposer(true);
+                      setLinkedIssues([]);
                     }}
                     onAppendTasks={editingSprint ? () => { void handleOpenAppendTasks(editingSprint); } : undefined}
+                    onRemoveLinkedIssue={(issue) => {
+                      setLinkedIssues((current) => current.filter((candidate) => (
+                        candidate.provider !== issue.provider
+                        || candidate.hostDomain !== issue.hostDomain
+                        || candidate.repository !== issue.repository
+                        || candidate.issueNumber !== issue.issueNumber
+                      )));
+                    }}
                   />
                 </div>
               </div>
@@ -622,6 +659,7 @@ export const SprintsPage: FunctionComponent = () => {
               onClick={() => {
                 setRowMenu(null);
                 setEditingSprint(activeRowMenuSprint);
+                setLinkedIssues(activeRowMenuSprint.linkedIssues || []);
                 setShowCreateComposer(false);
               }}
               className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
@@ -697,6 +735,21 @@ export const SprintsPage: FunctionComponent = () => {
           mode="import"
           onClose={() => setShowImportModal(false)}
           onImport={handleImportSprint}
+        />
+      )}
+
+      {showIssueImportModal && selectedProject && (
+        <SprintIssueImportModal
+          project={selectedProject}
+          onClose={() => setShowIssueImportModal(false)}
+          onImport={(issues) => {
+            mergeLinkedIssues(issues);
+            setShowIssueImportModal(false);
+            setShowQuicksprint(false);
+            if (!editingSprint) {
+              setShowCreateComposer(true);
+            }
+          }}
         />
       )}
 

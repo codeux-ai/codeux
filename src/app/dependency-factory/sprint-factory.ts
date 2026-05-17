@@ -232,6 +232,7 @@ export function createSprintDependencies(
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
     qualityAssuranceService,
+    sprintIssueService: coreDeps.sprintIssueService,
     taskService,
     heartbeatService,
     workspaceManager: new WorkspaceManager(),

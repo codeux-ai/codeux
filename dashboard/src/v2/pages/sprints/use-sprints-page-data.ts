@@ -4,6 +4,7 @@ import type {
   CreateTaskInput, 
   ImprovePromptInput, 
   Sprint, 
+  SprintLinkedIssueInput,
   SprintStatus, 
   Task, 
   VirtualWorkerProvider 
@@ -27,7 +28,7 @@ import {
   cancelPlanningRequest,
 } from "../../lib/project-api.js";
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
-import { buildTaskBundle, parseTaskBundle } from "../../lib/markdown-transfer.js";
+import { buildTaskBundle, mergePromptWithLinkedIssues, parseTaskBundle } from "../../lib/markdown-transfer.js";
 import { toTaskViewModel } from "../../lib/view-models.js";
 import { derivePlanningETA } from "../../lib/planning-telemetry.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
@@ -441,6 +442,7 @@ export function useSprintsPageData() {
     routeOverride: PlanningRouteOption | null;
     modelOverride: string | null;
     planningAgentPresetId: string | null;
+    linkedIssues?: SprintLinkedIssueInput[];
     clientRequestId?: string;
     signal?: AbortSignal;
   }): Promise<void> => {
@@ -449,12 +451,15 @@ export function useSprintsPageData() {
     }
 
     const overrides = toPlanningOverrides(payload.routeOverride, payload.modelOverride, payload.planningAgentPresetId);
+    const linkedIssues = payload.linkedIssues || [];
+    const goal = mergePromptWithLinkedIssues(payload.goal, linkedIssues);
 
     if (editingSprint) {
       await updateSprint(editingSprint.id, {
         name: payload.name,
-        goal: payload.goal,
+        goal,
         originalPrompt: payload.originalPrompt,
+        linkedIssues,
       });
 
       if (payload.submitMode === "plan_only" || payload.submitMode === "replan") {
@@ -482,8 +487,9 @@ export function useSprintsPageData() {
 
     const created = await createSprint(selectedProject.id, {
       name: payload.name,
-      goal: payload.goal,
+      goal,
       originalPrompt: payload.originalPrompt,
+      linkedIssues,
       number: nextSprintNumber,
       status: "idle",
       showcasePinned: true,

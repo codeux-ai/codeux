@@ -602,6 +602,7 @@ export interface GitSettings {
   gitlabToken?: string;
   defaultBranch: string;
   autoCreatePr: boolean;
+  autoCloseLinkedIssues: boolean;
   featureBranchPrefix: string;
   sprintBranchScheme: string;
 }

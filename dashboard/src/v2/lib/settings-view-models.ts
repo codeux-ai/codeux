@@ -76,6 +76,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     githubMode: settings.git.githubMode,
     defaultBranch: settings.git.defaultBranch,
     autoCreatePr: settings.git.autoCreatePr,
+    autoCloseLinkedIssues: settings.git.autoCloseLinkedIssues,
     featureBranchPrefix: settings.git.featureBranchPrefix,
     sprintBranchScheme: settings.git.sprintBranchScheme,
   },

@@ -41,6 +41,8 @@ Project management:
   - Creates a sprint
 - `POST /api/projects/:projectId/sprints/import`
   - Imports sprint/task markdown into sqlite
+- `GET /api/projects/:projectId/issues`
+  - Searches GitHub/GitLab issues for the selected project using provider, repository, text, state, label, and assignee filters
 - `GET /api/projects/:projectId/sprints/:sprintId/export`
   - Exports one sprint plus its tasks back to markdown
 - `PATCH /api/sprints/:sprintId`
@@ -179,7 +181,7 @@ Legacy runtime:
 - The `Add Project` dialog now has a wider desktop layout, keeps a stable Git-form-height floor while switching source types, and exposes the inline directory browser on both local project paths and optional Git clone destination paths, with home, refresh, parent-directory navigation, child-directory traversal, and an explicit use-current-folder action
 - Git URL projects are cloned into a local checkout before the project record is created. When the optional clone directory is left empty, Code UX uses `~/.code-ux/projects/<repo-name>` so Docker workspaces always seed from a real repository root instead of a relative placeholder path.
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
-- Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown (and soon Jira) capabilities, plus markdown export controls
+- Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown plus GitHub/GitLab issue import capabilities, plus markdown export controls. See [Sprint Imports](./sprint-imports.md).
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
 - Sprint cells and ledger rows now surface a dedicated human-intervention badge when a paused sprint needs merge work, planning, or another operator action, and the hover card explains what to do before resuming
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
@@ -193,6 +195,8 @@ Legacy runtime:
 - The planning feedback overlay surfaces both an ETA countdown and an elapsed runtime timer. The ETA is derived from project planning telemetry (averaging active time per planning invocation) with a 3:00 fallback.
 - When editing a sprint that already has planned tasks, the composer offers `Replan` (discard and regenerate subtasks), `Append Tasks` (open a task-creation modal pre-scoped to the sprint with dependency selection from existing tasks), and `Save Draft` (update name/goal only)
 - The sprint composer includes a planning-agent selector that allows operators to choose an alternate planning preset (filtered for presets with a `planning` label) for the current sprint. Leaving this on the default `Planning agent` preserves existing behavior, and any selection is honored by `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan`.
+- Imported GitHub/GitLab issues render as linked issue cards directly under the Sprint Prompt field and are persisted with the sprint. The prompt receives a linked-issues markdown section so planning sees the imported issue scope.
+- Settings -> Sprint -> Git Flow includes `Auto-close linked issues`, which closes imported GitHub/GitLab issues only after sprint completion and the main merge gate is no longer blocking.
 - The sprint composer now features a visible, animated planning feedback overlay that replaces the generic spinner during `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan` actions.
 - Planning feedback is deterministic and staged, using an animated ship treatment (Wooden Ship for AI improvement, Container Ship for planning) that drifts across the composer based on elapsed time to make progress visible
 - Planning and prompt-improvement requests continue server-side if the browser tab is refreshed or closed. The overlay's `Cancel Active Request` action now sends an explicit cancellation request, while `New Sprint` detaches the current planning run from the composer and opens a fresh sprint form without blocking the active run.

@@ -2,17 +2,18 @@ import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import {
-  ClipboardList,
+  ExternalLink,
+  Github,
+  Gitlab,
+  Link as LinkIcon,
   Loader2,
-  RefreshCw,
-  Rocket,
-  Save,
   Sparkles,
+  Tag,
   Target,
   X,
-  AlertCircle
+  Users
 } from "lucide-preact";
-import type { Sprint, ExecutionConnectionSummary, AgentPreset } from "../../types.js";
+import type { Sprint, AgentPreset, SprintLinkedIssueInput } from "../../types.js";
 import { AvantgardeSelect } from "./AvantgardeSelect.js";
 import {
   useSprintComposerState, 
@@ -45,12 +46,15 @@ interface SprintComposerProps {
     routeOverride: PlanningRouteOption | null;
     modelOverride: string | null;
     planningAgentPresetId: string | null;
+    linkedIssues: SprintLinkedIssueInput[];
     clientRequestId?: string;
     signal?: AbortSignal;
   }) => Promise<void> | void;
   onCancelPlanningRequest?: (clientRequestId: string) => Promise<void> | void;
   onStartNewSprint?: () => void;
   onAppendTasks?: () => void;
+  linkedIssues?: SprintLinkedIssueInput[];
+  onRemoveLinkedIssue?: (issue: SprintLinkedIssueInput) => void;
 }
 
 export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
@@ -65,6 +69,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   onCancelPlanningRequest,
   onStartNewSprint,
   onAppendTasks,
+  linkedIssues,
+  onRemoveLinkedIssue,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
@@ -80,6 +86,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
 
   const state = useSprintComposerState(initialSprint);
+  const visibleLinkedIssues = linkedIssues ?? initialSprint?.linkedIssues ?? [];
 
   const createClientRequestId = (): string => {
     if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -282,6 +289,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         routeOverride: state.routeOverride,
         modelOverride: state.modelOverride,
         planningAgentPresetId: state.planningAgentPresetId,
+        linkedIssues: visibleLinkedIssues,
         clientRequestId,
       });
       const activeRequest = activeRequestRef.current;
@@ -488,6 +496,83 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 {isImproving ? PLANNING_ACTION_LABELS.improve : "Plan ahead with AI"}
               </button>
             </div>
+
+            {visibleLinkedIssues.length > 0 && (
+              <div data-composer-stagger className="rounded-[1.7rem] border border-black/[0.07] bg-white/62 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.04)] dark:border-white/[0.08] dark:bg-white/[0.035]">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="inline-flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                    <LinkIcon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
+                    Linked Issues
+                  </div>
+                  <div className="rounded-full border border-signal-500/18 bg-signal-500/[0.08] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
+                    {visibleLinkedIssues.length} imported
+                  </div>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {visibleLinkedIssues.map((issue) => {
+                    const ProviderIcon = issue.provider === "gitlab" ? Gitlab : Github;
+                    return (
+                      <article
+                        key={`${issue.provider}:${issue.repository}:${issue.issueNumber}`}
+                        className="group relative overflow-hidden rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 transition-all hover:-translate-y-0.5 hover:border-signal-500/24 hover:bg-white/88 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:bg-white/[0.055]"
+                      >
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-signal-500 via-ember-500 to-slate-300 opacity-70" />
+                        <div className="flex items-start gap-3">
+                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.85rem] border ${
+                            issue.provider === "gitlab"
+                              ? "border-ember-500/20 bg-ember-500/10 text-ember-600 dark:text-ember-400"
+                              : "border-slate-900/10 bg-slate-900/[0.06] text-slate-800 dark:border-white/10 dark:bg-white/[0.07] dark:text-white"
+                          }`}>
+                            <ProviderIcon className="h-4 w-4" strokeWidth={2.1} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                              <span>{issue.repository}</span>
+                              <span className="text-signal-600 dark:text-signal-300">{issue.issueKey || `#${issue.issueNumber}`}</span>
+                            </div>
+                            <h3 className="mt-1 line-clamp-2 text-sm font-black leading-snug text-slate-900 dark:text-white">
+                              {issue.title}
+                            </h3>
+                          </div>
+                          <a
+                            href={issue.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-900 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                            aria-label={`Open ${issue.title}`}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" strokeWidth={2.2} />
+                          </a>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {(issue.labels || []).slice(0, 5).map((label) => (
+                            <span key={label} className="inline-flex max-w-full items-center gap-1 rounded-full bg-signal-500/[0.08] px-2 py-1 text-[10px] font-semibold text-signal-700 dark:text-signal-300">
+                              <Tag className="h-3 w-3 shrink-0" strokeWidth={2} />
+                              <span className="truncate">{label}</span>
+                            </span>
+                          ))}
+                          {(issue.assignees || []).slice(0, 3).map((assignee) => (
+                            <span key={assignee} className="inline-flex max-w-full items-center gap-1 rounded-full bg-ember-500/[0.09] px-2 py-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                              <Users className="h-3 w-3 shrink-0" strokeWidth={2} />
+                              <span className="truncate">{assignee}</span>
+                            </span>
+                          ))}
+                        </div>
+                        {onRemoveLinkedIssue && !isBusy && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveLinkedIssue(issue)}
+                            className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-status-red"
+                          >
+                            Remove Link
+                          </button>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className={state.originalPrompt ? "grid gap-4 xl:grid-cols-2" : "grid gap-4"}>
               <div className={`rounded-[1.7rem] border transition-all ${

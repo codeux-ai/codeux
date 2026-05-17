@@ -89,7 +89,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
             mono
           />
         </Row>
-        <Row label="Auto-create PRs" description="Open pull requests automatically for remote git workflows." badge={getFieldBadge("git.autoCreatePr")} last>
+        <Row label="Auto-create PRs" description="Open pull requests automatically for remote git workflows." badge={getFieldBadge("git.autoCreatePr")}>
           <Toggle
             value={editableSettings.git.autoCreatePr}
             onChange={() => updateEditableSettings((current) => ({
@@ -97,6 +97,18 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
               git: {
                 ...current.git,
                 autoCreatePr: !current.git.autoCreatePr,
+              },
+            }))}
+          />
+        </Row>
+        <Row label="Auto-close linked issues" description="Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete." badge={getFieldBadge("git.autoCloseLinkedIssues")} last>
+          <Toggle
+            value={editableSettings.git.autoCloseLinkedIssues}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              git: {
+                ...current.git,
+                autoCloseLinkedIssues: !current.git.autoCloseLinkedIssues,
               },
             }))}
           />

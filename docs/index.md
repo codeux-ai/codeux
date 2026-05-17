@@ -10,8 +10,9 @@ Use this page as the main entrypoint.
 1. [Quickstart](./getting-started/quickstart.md)
 2. [System Overview](./architecture/system-overview.md)
 3. [Dashboard Guide](./dashboard/dashboard-guide.md)
-4. [Quicksprint Templates](./dashboard/quicksprint-templates.md)
-5. [Glossary](./reference/glossary.md)
+4. [Sprint Imports](./dashboard/sprint-imports.md)
+5. [Quicksprint Templates](./dashboard/quicksprint-templates.md)
+6. [Glossary](./reference/glossary.md)
 
 ### Path 2: Building or modifying orchestration behavior
 1. [System Overview](./architecture/system-overview.md)
@@ -110,6 +111,7 @@ Use this page as the main entrypoint.
 - [Instruction Template System](./instructions/markdown-template-system.md)
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
 - [Dashboard Onboarding](./dashboard/onboarding.md)
+- [Sprint Imports](./dashboard/sprint-imports.md)
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)

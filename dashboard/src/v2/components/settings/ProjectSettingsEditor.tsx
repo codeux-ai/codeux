@@ -153,6 +153,17 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             })}
           />
         </Row>
+        <Row label="Auto-close linked issues" description="Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete." badge={getBadge("git.autoCloseLinkedIssues")}>
+          <Toggle
+            value={settings.git.autoCloseLinkedIssues}
+            onChange={(value) => update({
+              git: {
+                ...settings.git,
+                autoCloseLinkedIssues: value,
+              },
+            })}
+          />
+        </Row>
       </Card>
 
       <Card

@@ -90,7 +90,7 @@ describe("SprintsPage", () => {
     expect(screen.getByTestId("sprint-markdown-modal")).toBeInTheDocument();
   });
 
-  it("shows Jira as a coming soon option without throwing an error", () => {
+  it("shows GitHub and GitLab issue import options without throwing an error", () => {
     vi.mocked(useSprintsPageData).mockReturnValue({
       selectedProject: { id: "proj-1" },
       planningRoute: { available: true },
@@ -116,9 +116,8 @@ describe("SprintsPage", () => {
     const importTrigger = importTriggers.find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || importTriggers.find((btn) => btn.textContent?.includes("Import"))!;
     fireEvent.click(importTrigger);
 
-    // Ensure Jira item exists
-    expect(screen.getAllByText("Jira")[0]).toBeInTheDocument();
-    expect(screen.getByText("Soon")).toBeInTheDocument();
+    expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("GitLab Issues")[0]).toBeInTheDocument();
   });
 
   it("closes the import menu on escape key press or outside click", () => {
@@ -148,7 +147,7 @@ describe("SprintsPage", () => {
     fireEvent.click(importTrigger);
 
     // Ensure menu is open
-    expect(screen.getAllByText("Jira")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
 
     // Escape key press
     fireEvent.keyDown(document, { key: "Escape" });

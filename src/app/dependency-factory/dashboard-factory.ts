@@ -22,6 +22,7 @@ export interface DashboardDependencies {
   executionControlService: ExecutionControlService;
   planningAgentService: PlanningAgentService;
   quicksprintService: QuicksprintService;
+  sprintIssueService: CoreDependencies["sprintIssueService"];
 }
 
 export function createDashboardDependencies(
@@ -342,5 +343,6 @@ export function createDashboardDependencies(
     executionControlService,
     planningAgentService,
     quicksprintService,
+    sprintIssueService: coreDeps.sprintIssueService,
   };
 }

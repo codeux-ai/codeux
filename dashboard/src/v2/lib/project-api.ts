@@ -10,6 +10,7 @@ import type {
   SprintCollectionResponse,
   SprintMarkdownExportBundle,
   SprintMarkdownImportInput,
+  SprintLinkedIssueInput,
   SprintRecord,
   TaskRecord,
   UpdateProjectInput,
@@ -90,6 +91,37 @@ export const setProjectPreferredWorker = async (
 
 export const fetchSprints = async (projectId: string, signal?: AbortSignal): Promise<SprintCollectionResponse> => {
   return fetchJson<SprintCollectionResponse>(`/api/projects/${encodeURIComponent(projectId)}/sprints`, { signal });
+};
+
+export interface RemoteIssueSummary extends SprintLinkedIssueInput {
+  bodyPreview: string;
+  updatedAt: string | null;
+}
+
+export const searchProjectIssues = async (
+  projectId: string,
+  input: {
+    provider?: "github" | "gitlab";
+    repository?: string;
+    hostDomain?: string;
+    search?: string;
+    state?: "open" | "closed" | "all";
+    labels?: string[];
+    assignee?: string;
+    limit?: number;
+  },
+  signal?: AbortSignal,
+): Promise<RemoteIssueSummary[]> => {
+  const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/issues`, window.location.origin);
+  if (input.provider) url.searchParams.set("provider", input.provider);
+  if (input.repository?.trim()) url.searchParams.set("repository", input.repository.trim());
+  if (input.hostDomain?.trim()) url.searchParams.set("hostDomain", input.hostDomain.trim());
+  if (input.search?.trim()) url.searchParams.set("search", input.search.trim());
+  if (input.state) url.searchParams.set("state", input.state);
+  if (input.labels?.length) url.searchParams.set("labels", input.labels.join(","));
+  if (input.assignee?.trim()) url.searchParams.set("assignee", input.assignee.trim());
+  if (input.limit) url.searchParams.set("limit", String(input.limit));
+  return fetchJson<RemoteIssueSummary[]>(`${url.pathname}${url.search}`, { signal });
 };
 
 export const selectSprint = async (projectId: string, sprintId: string | null): Promise<string | null> => {

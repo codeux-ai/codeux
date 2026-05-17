@@ -46,6 +46,7 @@
 - [Instruction Template System](./instructions/markdown-template-system.md)
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
 - [Dashboard Onboarding](./dashboard/onboarding.md)
+- [Sprint Imports](./dashboard/sprint-imports.md)
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)

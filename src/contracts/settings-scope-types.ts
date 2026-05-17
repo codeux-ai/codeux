@@ -53,6 +53,7 @@ export interface ProjectGitSettings {
   githubMode: DashboardSettings["git"]["githubMode"];
   defaultBranch: string;
   autoCreatePr: boolean;
+  autoCloseLinkedIssues: boolean;
   featureBranchPrefix: string;
   sprintBranchScheme: string;
 }

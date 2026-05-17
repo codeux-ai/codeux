@@ -50,6 +50,33 @@ describe("SprintComposer", () => {
     expect(getByPlaceholderText("Runtime hardening")).toBeInTheDocument();
   });
 
+  it("renders linked issue cards and submits them", async () => {
+    const onSubmit = vi.fn();
+    const issue = {
+      provider: "github" as const,
+      hostDomain: "github.com",
+      repository: "openai/example",
+      issueNumber: 12,
+      issueKey: "#12",
+      title: "Improve issue import",
+      url: "https://github.com/openai/example/issues/12",
+      labels: ["ux"],
+      assignees: ["pierre"],
+    };
+    const { getByText, getByPlaceholderText, getAllByText } = render(
+      <SprintComposer {...defaultProps} onSubmit={onSubmit} linkedIssues={[issue]} />
+    );
+
+    fireEvent.input(getByPlaceholderText("Runtime hardening"), { target: { value: "Import sprint" } });
+    expect(getByText("Improve issue import")).toBeInTheDocument();
+
+    fireEvent.click(getAllByText("Plan & Start").pop()!);
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalled();
+    });
+    expect(onSubmit.mock.calls[0]?.[0].linkedIssues).toEqual([issue]);
+  });
+
   it("shows planning overlay on submit and allows dismiss without cancel", async () => {
     let resolveSubmit: (val: any) => void;
     const submitPromise = new Promise((resolve) => {

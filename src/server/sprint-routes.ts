@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { toErrorResponse, syncRoute, requireTrimmedString, parseTrimmedString } from "./route-utils.js";
+import { asyncRoute, toErrorResponse, syncRoute, requireTrimmedString, parseTrimmedString } from "./route-utils.js";
 import type {
   CreateSprintInput,
   SprintMarkdownImportInput,
@@ -14,6 +14,33 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
       res.json(deps.listSprints(requireTrimmedString(req.params.projectId, "projectId")));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to list sprints"));
+    }
+  }));
+
+  router.get("/api/projects/:projectId/issues", asyncRoute(async (req, res) => {
+    if (!deps.sprintIssueService) {
+      res.status(501).json({ error: "Issue import service is not available." });
+      return;
+    }
+    try {
+      const labels = typeof req.query.labels === "string"
+        ? req.query.labels.split(",").map((label) => label.trim()).filter(Boolean)
+        : [];
+      res.json(await deps.sprintIssueService.searchIssues(
+        requireTrimmedString(req.params.projectId, "projectId"),
+        {
+          provider: req.query.provider === "gitlab" ? "gitlab" : req.query.provider === "github" ? "github" : undefined,
+          repository: parseTrimmedString(req.query.repository),
+          hostDomain: parseTrimmedString(req.query.hostDomain),
+          search: parseTrimmedString(req.query.search),
+          state: req.query.state === "closed" ? "closed" : req.query.state === "all" ? "all" : "open",
+          labels,
+          assignee: parseTrimmedString(req.query.assignee),
+          limit: typeof req.query.limit === "string" ? Number(req.query.limit) : undefined,
+        }
+      ));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to search repository issues"));
     }
   }));
 

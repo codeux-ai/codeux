@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { X, Download, Upload, Copy, Check } from "lucide-preact";
+import { X, Download, Upload, Copy, Check, FileText, ListChecks } from "lucide-preact";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
@@ -107,8 +107,35 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
 
   const title = mode === "import" ? "Import Sprint Markdown." : `Export ${sprintLabel || "Sprint"} Markdown.`;
   const subtitle = mode === "import"
-    ? "Paste one sprint markdown document and an optional task bundle."
+    ? "Paste structured sprint metadata plus optional task files. Formatting hints are shown inline."
     : "Copy the generated sprint and task markdown bundle from the database state.";
+
+  const loadExample = (): void => {
+    setSprintText([
+      "name: Runtime hardening",
+      "number: 12",
+      "status: idle",
+      "goal:",
+      "Stabilize the dashboard runtime, reduce noisy retries, and verify the health endpoints.",
+    ].join("\n"));
+    setTasksText([
+      "--- FILE: T01.md ---",
+      "title: Add request correlation logging",
+      "depends_on: []",
+      "is_independent: true",
+      "merged: false",
+      "prompt:",
+      "Objective: add correlation IDs across dashboard routes.",
+      "",
+      "--- FILE: T02.md ---",
+      "title: Verify health and readiness endpoints",
+      "depends_on: [\"T01\"]",
+      "is_independent: false",
+      "merged: false",
+      "prompt:",
+      "Objective: add tests for /health and /ready behavior.",
+    ].join("\n"));
+  };
 
   return (
     <div
@@ -160,11 +187,39 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-6 flex-1 min-h-0">
+            {mode === "import" && (
+              <div className="grid gap-3 md:grid-cols-3">
+                {[
+                  { icon: FileText, title: "Sprint Fields", text: "`name`, `number`, `status`, then `goal:` followed by markdown scope." },
+                  { icon: ListChecks, title: "Task Files", text: "Separate tasks with `--- FILE: T01.md ---`; dependencies use task keys." },
+                  { icon: Upload, title: "Import Result", text: "Creates one sprint and preserves task order, dependencies, and merge flags." },
+                ].map(({ icon: Icon, title: itemTitle, text }) => (
+                  <div key={itemTitle} className="rounded-[1.1rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.07] dark:bg-white/[0.035]">
+                    <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">
+                      <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+                      {itemTitle}
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                      {text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-5 flex-1 min-h-0">
               <div className="flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Markdown</label>
-                  {mode === "export" && (
+                  {mode === "import" ? (
+                    <button
+                      type="button"
+                      onClick={loadExample}
+                      className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:text-signal-500"
+                    >
+                      <FileText className="w-3 h-3" />
+                      Load Example
+                    </button>
+                  ) : (
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
@@ -190,7 +245,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                   onInput={(event) => setSprintText((event.target as HTMLTextAreaElement).value)}
                   readOnly={mode === "export"}
                   className="w-full min-h-[180px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
-                  placeholder="name: Sprint Name&#10;number: 1&#10;status: running&#10;goal:&#10;Describe the sprint scope."
+                  placeholder="name: Sprint Name&#10;number: 1&#10;status: idle&#10;goal:&#10;Describe outcomes, affected systems, acceptance criteria, and verification expectations."
                 />
               </div>
 
@@ -230,7 +285,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
 
             <div className="flex items-center justify-between pt-2">
               <div className="text-xs text-slate-400">
-                {mode === "import" ? "Task bundle markers are optional. If omitted, the full textarea is treated as one task." : "Export reflects current DB state, not repo-local markdown files."}
+                {mode === "import" ? "Task markers are optional. Supported fields: title, depends_on, is_independent, merged/is_merged, merge_indicator, status, prompt." : "Export reflects current DB state, not repo-local markdown files."}
               </div>
               <div className="flex items-center gap-3">
                 <button

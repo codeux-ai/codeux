@@ -75,6 +75,29 @@ CREATE TABLE IF NOT EXISTS tasks (
         FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
       );
 
+CREATE TABLE IF NOT EXISTS sprint_linked_issues (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        host_domain TEXT NOT NULL,
+        repository TEXT NOT NULL,
+        issue_number INTEGER NOT NULL,
+        issue_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        url TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'open',
+        labels_json TEXT NOT NULL DEFAULT '[]',
+        assignees_json TEXT NOT NULL DEFAULT '[]',
+        imported_at TEXT NOT NULL,
+        closed_at TEXT,
+        close_state TEXT NOT NULL DEFAULT 'open',
+        close_error TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
+      );
+
 CREATE TABLE IF NOT EXISTS task_dependencies (
         task_id TEXT NOT NULL,
         depends_on_task_id TEXT NOT NULL,

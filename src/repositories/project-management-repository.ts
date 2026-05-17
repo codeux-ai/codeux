@@ -10,6 +10,8 @@ import type {
   ProjectCollectionResponse,
   ProjectSourceType,
   ProjectSummary,
+  SprintLinkedIssueInput,
+  SprintLinkedIssueRecord,
   SprintRecord,
   SprintCollectionResponse,
   TaskRecord,
@@ -97,6 +99,27 @@ interface TaskRow {
 interface DependencyRow {
   task_id: string;
   depends_on_task_id: string;
+}
+
+interface LinkedIssueRow {
+  id: string;
+  project_id: string;
+  sprint_id: string;
+  provider: SprintLinkedIssueRecord["provider"];
+  host_domain: string;
+  repository: string;
+  issue_number: number | string;
+  issue_key: string;
+  title: string;
+  url: string;
+  state: string;
+  labels_json: string | null;
+  assignees_json: string | null;
+  imported_at: string;
+  closed_at: string | null;
+  close_state: SprintLinkedIssueRecord["closeState"];
+  close_error: string | null;
+  updated_at: string;
 }
 
 export class ProjectManagementRepository {
@@ -320,6 +343,10 @@ export class ProjectManagementRepository {
 
       this.touchProject(projectId, now);
       const created = this.requireSprint(id);
+      if (input.linkedIssues) {
+        this.replaceSprintLinkedIssues(projectId, id, input.linkedIssues);
+        created.linkedIssues = this.listSprintLinkedIssues(projectId, id);
+      }
       this.setSelectedSprintId(projectId, id);
       this.publishProjectStructureRefresh(projectId);
       return created;
@@ -359,6 +386,10 @@ export class ProjectManagementRepository {
 
       this.touchProject(current.projectId, now);
       const updated = this.requireSprint(sprintId);
+      if (input.linkedIssues) {
+        this.replaceSprintLinkedIssues(current.projectId, sprintId, input.linkedIssues);
+        updated.linkedIssues = this.listSprintLinkedIssues(current.projectId, sprintId);
+      }
       this.publishProjectStructureRefresh(current.projectId);
       return updated;
       } catch (error) {
@@ -413,6 +444,97 @@ export class ProjectManagementRepository {
       `).all(projectId);
 
     return this.inflateTasks(rows as unknown as TaskRow[]);
+  }
+
+  listSprintLinkedIssues(projectId: string, sprintId: string): SprintLinkedIssueRecord[] {
+    this.requireProject(projectId);
+    const sprint = this.requireSprint(sprintId);
+    if (sprint.projectId !== projectId) {
+      throw new ValidationError(`Sprint ${sprintId} does not belong to project ${projectId}`);
+    }
+
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM sprint_linked_issues
+      WHERE project_id = ? AND sprint_id = ?
+      ORDER BY provider ASC, repository ASC, issue_number ASC
+    `).all(projectId, sprintId) as unknown as LinkedIssueRow[];
+
+    return rows.map((row) => this.mapLinkedIssueRow(row));
+  }
+
+  replaceSprintLinkedIssues(projectId: string, sprintId: string, issues: SprintLinkedIssueInput[]): SprintLinkedIssueRecord[] {
+    this.requireProject(projectId);
+    const sprint = this.requireSprint(sprintId);
+    if (sprint.projectId !== projectId) {
+      throw new ValidationError(`Sprint ${sprintId} does not belong to project ${projectId}`);
+    }
+
+    const now = new Date().toISOString();
+    const normalized = normalizeLinkedIssueInputs(issues);
+    this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM sprint_linked_issues WHERE project_id = ? AND sprint_id = ?`).run(projectId, sprintId);
+      const insert = this.db.prepare(`
+        INSERT INTO sprint_linked_issues (
+          id, project_id, sprint_id, provider, host_domain, repository, issue_number, issue_key,
+          title, url, state, labels_json, assignees_json, imported_at, closed_at, close_state, close_error, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const issue of normalized) {
+        insert.run(
+          randomUUID(),
+          projectId,
+          sprintId,
+          issue.provider,
+          issue.hostDomain,
+          issue.repository,
+          issue.issueNumber,
+          issue.issueKey || `${issue.provider === "github" ? "#" : "!"}${issue.issueNumber}`,
+          issue.title,
+          issue.url,
+          issue.state || "open",
+          JSON.stringify(issue.labels || []),
+          JSON.stringify(issue.assignees || []),
+          now,
+          null,
+          "open",
+          null,
+          now,
+        );
+      }
+    });
+
+    this.touchProject(projectId, now);
+    this.publishProjectStructureRefresh(projectId);
+    return this.listSprintLinkedIssues(projectId, sprintId);
+  }
+
+  updateSprintLinkedIssueCloseState(
+    issueId: string,
+    state: Pick<SprintLinkedIssueRecord, "closeState"> & { closedAt?: string | null; closeError?: string | null; issueState?: string }
+  ): SprintLinkedIssueRecord {
+    const current = this.db.prepare(`SELECT * FROM sprint_linked_issues WHERE id = ?`).get(issueId) as LinkedIssueRow | undefined;
+    if (!current) {
+      throw new EntityNotFoundError(`Linked issue not found: ${issueId}`);
+    }
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      UPDATE sprint_linked_issues
+      SET state = ?, close_state = ?, closed_at = ?, close_error = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      state.issueState || current.state,
+      state.closeState,
+      state.closedAt === undefined ? current.closed_at : state.closedAt,
+      state.closeError === undefined ? current.close_error : state.closeError,
+      now,
+      issueId,
+    );
+    this.touchProject(current.project_id, now);
+    this.publishProjectStructureRefresh(current.project_id);
+    const updated = this.db.prepare(`SELECT * FROM sprint_linked_issues WHERE id = ?`).get(issueId) as LinkedIssueRow;
+    return this.mapLinkedIssueRow(updated);
   }
 
   createTask(projectId: string, input: CreateTaskInput): TaskRecord {
@@ -903,8 +1025,42 @@ export class ProjectManagementRepository {
       featureBranch: row.feature_branch,
       tasksCount,
       completion: tasksCount > 0 ? Math.round((completedTasks / tasksCount) * 100) : 0,
+      linkedIssues: this.listSprintLinkedIssuesUnchecked(row.project_id, row.id),
       latestReview,
       createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private listSprintLinkedIssuesUnchecked(projectId: string, sprintId: string): SprintLinkedIssueRecord[] {
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM sprint_linked_issues
+      WHERE project_id = ? AND sprint_id = ?
+      ORDER BY provider ASC, repository ASC, issue_number ASC
+    `).all(projectId, sprintId) as unknown as LinkedIssueRow[];
+    return rows.map((row) => this.mapLinkedIssueRow(row));
+  }
+
+  private mapLinkedIssueRow(row: LinkedIssueRow): SprintLinkedIssueRecord {
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      sprintId: row.sprint_id,
+      provider: row.provider,
+      hostDomain: row.host_domain,
+      repository: row.repository,
+      issueNumber: toNumber(row.issue_number),
+      issueKey: row.issue_key,
+      title: row.title,
+      url: row.url,
+      state: row.state,
+      labels: parseJsonStringArray(row.labels_json),
+      assignees: parseJsonStringArray(row.assignees_json),
+      importedAt: row.imported_at,
+      closedAt: row.closed_at,
+      closeState: row.close_state,
+      closeError: row.close_error,
       updatedAt: row.updated_at,
     };
   }
@@ -1080,6 +1236,53 @@ function mapEffectiveSprintStatus(
     default:
       return storedStatus;
   }
+}
+
+function parseJsonStringArray(value: string | null | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeLinkedIssueInputs(issues: SprintLinkedIssueInput[]): SprintLinkedIssueInput[] {
+  const seen = new Set<string>();
+  const normalized: SprintLinkedIssueInput[] = [];
+  for (const issue of issues) {
+    const hostDomain = issue.hostDomain.trim().toLowerCase();
+    const repository = issue.repository.trim().replace(/^\/+|\/+$/g, "");
+    const issueNumber = Math.trunc(issue.issueNumber);
+    const title = issue.title.trim();
+    const url = issue.url.trim();
+    if (!hostDomain || !repository || !title || !url || !Number.isFinite(issueNumber) || issueNumber < 1) {
+      continue;
+    }
+    const key = `${issue.provider}:${hostDomain}:${repository}:${issueNumber}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    normalized.push({
+      provider: issue.provider,
+      hostDomain,
+      repository,
+      issueNumber,
+      issueKey: issue.issueKey?.trim() || `${issue.provider === "github" ? "#" : "!"}${issueNumber}`,
+      title,
+      url,
+      state: issue.state?.trim() || "open",
+      labels: Array.from(new Set((issue.labels || []).map((label) => label.trim()).filter(Boolean))).slice(0, 12),
+      assignees: Array.from(new Set((issue.assignees || []).map((assignee) => assignee.trim()).filter(Boolean))).slice(0, 12),
+    });
+  }
+  return normalized.slice(0, 50);
 }
 
 function sameStringArray(left: string[], right: string[]): boolean {

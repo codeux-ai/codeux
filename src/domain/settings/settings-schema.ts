@@ -212,6 +212,9 @@ const validateGitSettings = (
   if (typeof value.autoCreatePr !== "boolean") {
     issues.push({ path: `${path}.autoCreatePr`, message: "Expected a boolean" });
   }
+  if (typeof value.autoCloseLinkedIssues !== "boolean") {
+    issues.push({ path: `${path}.autoCloseLinkedIssues`, message: "Expected a boolean" });
+  }
   if (typeof value.featureBranchPrefix !== "string") {
     issues.push({ path: `${path}.featureBranchPrefix`, message: "Expected a string" });
   }

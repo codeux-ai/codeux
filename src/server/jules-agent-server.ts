@@ -63,6 +63,7 @@ import { bootMcpHttpTransport, bootMcpTransport, type McpHttpTransportHandle } f
 import { McpApprovalTracker } from "../services/mcp-approval-tracker.js";
 import { getCodeUxSubtasksDir, CODE_UX_SERVICE_NAME } from "../shared/config/code-ux-paths.js";
 import { SprintMarkdownService } from "../services/sprint-markdown-service.js";
+import type { SprintIssueService } from "../services/sprint-issue-service.js";
 import { VirtualWorkerService } from "../services/virtual-worker-service.js";
 import type { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
@@ -134,6 +135,7 @@ export class JulesAgentServer {
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
   private sprintMarkdownService: SprintMarkdownService;
+  private sprintIssueService: SprintIssueService;
   private virtualWorkerService: VirtualWorkerService;
   private externalSettingsHints: ExternalSettingsHints;
   private instructionService: InstructionService;
@@ -197,6 +199,7 @@ export class JulesAgentServer {
       logger: this.logger.child({ component: "sprint-preview-service" }),
     });
     this.sprintMarkdownService = deps.sprintMarkdownService;
+    this.sprintIssueService = deps.sprintIssueService;
     this.virtualWorkerService = deps.virtualWorkerService;
     this.externalSettingsHints = deps.externalSettingsHints;
     this.instructionService = deps.instructionService;
@@ -922,6 +925,7 @@ export class JulesAgentServer {
         agentPresetRepository: this.agentPresetRepository,
         agentPresetSyncService: this.agentPresetSyncService,
         sprintMarkdownService: this.sprintMarkdownService,
+        sprintIssueService: this.sprintIssueService,
         activityCacheService: this.activityCacheService,
         taskRerunService: this.taskRerunService,
         executionControlService: this.executionControlService,

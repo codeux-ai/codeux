@@ -29,6 +29,7 @@ import { buildConflictSummaryMarkdown, selectMergedTaskContexts } from "./confli
 import { WorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
 import { evaluateSprintRunState, isMainMergeAttentionItem } from "./sprint-state-evaluator.js";
 import type { HeartbeatService } from "../../../services/heartbeat-service.js";
+import type { SprintIssueService } from "../../../services/sprint-issue-service.js";
 
 
 export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "finalizeSprintRunCancellationIfIdle" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "updateSprintRun" | "renewLease">;
@@ -44,6 +45,7 @@ export interface WatchLoopDependencies {
   resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
   memoryPromotionService?: MemoryPromotionService;
   qualityAssuranceService?: QualityAssuranceService;
+  sprintIssueService?: SprintIssueService;
   executionRepository: WatchLoopExecutionDependencies;
   projectAttentionService: WatchLoopAttentionDependencies;
   heartbeatService: HeartbeatService;
@@ -568,6 +570,10 @@ export class WatchLoopRunner {
           `sprint-completed:${sprintRunId}`
         );
         this.triggerAutoPromote(scopedExecutionContext.project.id, scopedExecutionContext.sprint.id);
+        const issueCloseOutcome = await this.deps.sprintIssueService?.closeLinkedIssues(
+          scopedExecutionContext.project.id,
+          scopedExecutionContext.sprint.id,
+        );
         await this.cleanupTerminalSprintCliWorkspaces({
           projectId: scopedExecutionContext.project.id,
           sprintId: scopedExecutionContext.sprint.id,
@@ -577,6 +583,9 @@ export class WatchLoopRunner {
         report += await this.deps.renderInstruction("cleanupAllMerged", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
         report += completionGuidance;
         report += mergeFeedback.text;
+        if (issueCloseOutcome?.reportText) {
+          report += issueCloseOutcome.reportText;
+        }
       } catch (cleanupError) {
         this.deps.logger.warn("Failed to finalize sprint run", {
           sprintRunId,
@@ -819,4 +828,3 @@ function buildMainMergeConflictSummary(args: {
     isMainMerge: true,
   });
 }
-

@@ -43,6 +43,43 @@ export interface SprintReviewSummary {
   finishedAt: string | null;
 }
 
+export type LinkedIssueProvider = "github" | "gitlab";
+export type LinkedIssueCloseState = "open" | "closed" | "close_failed";
+
+export interface SprintLinkedIssueRecord {
+  id: string;
+  projectId: string;
+  sprintId: string;
+  provider: LinkedIssueProvider;
+  hostDomain: string;
+  repository: string;
+  issueNumber: number;
+  issueKey: string;
+  title: string;
+  url: string;
+  state: string;
+  labels: string[];
+  assignees: string[];
+  importedAt: string;
+  closedAt: string | null;
+  closeState: LinkedIssueCloseState;
+  closeError: string | null;
+  updatedAt: string;
+}
+
+export interface SprintLinkedIssueInput {
+  provider: LinkedIssueProvider;
+  hostDomain: string;
+  repository: string;
+  issueNumber: number;
+  issueKey?: string;
+  title: string;
+  url: string;
+  state?: string;
+  labels?: string[];
+  assignees?: string[];
+}
+
 export interface SprintRecord {
   id: string;
   projectId: string;
@@ -58,6 +95,7 @@ export interface SprintRecord {
   featureBranch: string | null;
   tasksCount: number;
   completion: number;
+  linkedIssues: SprintLinkedIssueRecord[];
   latestReview?: SprintReviewSummary;
   createdAt: string;
   updatedAt: string;
@@ -123,6 +161,7 @@ export interface CreateSprintInput {
   name: string;
   originalPrompt?: string | null;
   goal?: string;
+  linkedIssues?: SprintLinkedIssueInput[];
   number?: number;
   status?: SprintStatus;
   showcasePinned?: boolean;
@@ -135,6 +174,7 @@ export interface UpdateSprintInput {
   name?: string;
   originalPrompt?: string | null;
   goal?: string;
+  linkedIssues?: SprintLinkedIssueInput[];
   number?: number | null;
   status?: SprintStatus;
   showcasePinned?: boolean;

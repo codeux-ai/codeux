@@ -23,6 +23,7 @@ import { AgentPresetSyncService } from "../../services/agent-preset-sync-service
 import { ActivitySummaryService } from "../../domain/sessions/activity-summary.js";
 import { JulesSourceResolver } from "../../services/jules-source-resolver.js";
 import { SprintMarkdownService } from "../../services/sprint-markdown-service.js";
+import { SprintIssueService } from "../../services/sprint-issue-service.js";
 import { ActiveDispatchRegistry } from "../../services/active-dispatch-registry.js";
 import { RuntimeCleanupService } from "../../services/runtime-cleanup-service.js";
 import { DockerRuntimePruneService } from "../../services/docker-runtime-prune-service.js";
@@ -71,6 +72,7 @@ export interface CoreDependencies {
   dashboardRealtimeEventRepository: DashboardRealtimeEventRepository;
   dashboardRealtimeService: DashboardRealtimeService;
   sprintMarkdownService: SprintMarkdownService;
+  sprintIssueService: SprintIssueService;
   activeDispatchRegistry: ActiveDispatchRegistry;
   runtimeCleanupService: RuntimeCleanupService;
   externalSettingsHints: ExternalSettingsHints;
@@ -165,6 +167,13 @@ export function createCoreDependencies(
   });
   const executionRepository = new ExecutionRepository(appDbStorage, dashboardRealtimeService);
   const sprintMarkdownService = new SprintMarkdownService(projectManagementRepository);
+  const sprintIssueService = new SprintIssueService({
+    projectManagementRepository,
+    getDashboardSettings: (scope) => scope?.projectId
+      ? resolveEffectiveDashboardSettings(settingsRepository, scope.projectId, scope.sprintId).settings
+      : settingsRepository.getDefaultDashboardSettings(),
+    logger: logger.child({ component: "sprint-issue-service" }),
+  });
   const activeDispatchRegistry = new ActiveDispatchRegistry();
   const dockerRuntimePruneService = new DockerRuntimePruneService(
     sessionTracking,
@@ -232,6 +241,7 @@ export function createCoreDependencies(
     dashboardRealtimeEventRepository,
     dashboardRealtimeService,
     sprintMarkdownService,
+    sprintIssueService,
     activeDispatchRegistry,
     runtimeCleanupService,
     externalSettingsHints,

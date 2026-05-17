@@ -50,6 +50,31 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "sprints", "original_prompt", "TEXT");
   ensureColumn(db, "tasks", "executor_type", "TEXT NOT NULL DEFAULT 'auto'");
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sprint_linked_issues (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      sprint_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      host_domain TEXT NOT NULL,
+      repository TEXT NOT NULL,
+      issue_number INTEGER NOT NULL,
+      issue_key TEXT NOT NULL,
+      title TEXT NOT NULL,
+      url TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'open',
+      labels_json TEXT NOT NULL DEFAULT '[]',
+      assignees_json TEXT NOT NULL DEFAULT '[]',
+      imported_at TEXT NOT NULL,
+      closed_at TEXT,
+      close_state TEXT NOT NULL DEFAULT 'open',
+      close_error TEXT,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
+    )
+  `);
+
   ensureColumn(db, "task_runs", "sprint_run_id", "TEXT");
   ensureColumn(db, "task_runs", "dispatch_id", "TEXT");
 
@@ -76,6 +101,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "execution_invocations", "last_retry_after_iso", "TEXT");
 
   ensureUniqueIndex(db, "idx_tasks_sprint_key", "tasks", "sprint_id, task_key");
+  ensureUniqueIndex(db, "idx_sprint_linked_issues_unique", "sprint_linked_issues", "sprint_id, provider, host_domain, repository, issue_number");
+  ensureIndex(db, "idx_sprint_linked_issues_sprint", "sprint_linked_issues", "project_id, sprint_id, close_state");
   ensureIndex(db, "idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
   ensureIndex(db, "idx_tasks_project_sprint_sort", "tasks", "project_id, sprint_id, sort_order ASC, created_at ASC, task_key ASC");
   ensureIndex(db, "idx_task_runs_project_started", "task_runs", "project_id, started_at DESC");

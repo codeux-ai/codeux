@@ -16,19 +16,19 @@ describe("SprintImportMenu", () => {
 
   it("renders disabled state", () => {
     const onImport = vi.fn();
-    render(<SprintImportMenu disabled={true} onImportMarkdown={onImport} />);
+    render(<SprintImportMenu disabled={true} onImportMarkdown={onImport} onImportIssues={vi.fn()} />);
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
     expect(trigger).toBeDisabled();
   });
 
   it("opens the menu and clicks markdown", () => {
     const onImport = vi.fn();
-    render(<SprintImportMenu disabled={false} onImportMarkdown={onImport} />);
+    render(<SprintImportMenu disabled={false} onImportMarkdown={onImport} onImportIssues={vi.fn()} />);
 
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
     fireEvent.click(trigger);
 
-    expect(screen.getAllByText("Jira")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
 
     const markdownBtn = screen.getByRole("menuitem", { name: /markdown/i });
     fireEvent.click(markdownBtn);
@@ -36,22 +36,34 @@ describe("SprintImportMenu", () => {
   });
 
   it("closes on escape key", () => {
-    render(<SprintImportMenu disabled={false} onImportMarkdown={vi.fn()} />);
+    render(<SprintImportMenu disabled={false} onImportMarkdown={vi.fn()} onImportIssues={vi.fn()} />);
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
 
     fireEvent.click(trigger);
-    expect(screen.getAllByText("Jira")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: "Escape" });
   });
 
   it("closes on outside click", () => {
-    render(<SprintImportMenu disabled={false} onImportMarkdown={vi.fn()} />);
+    render(<SprintImportMenu disabled={false} onImportMarkdown={vi.fn()} onImportIssues={vi.fn()} />);
     const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
 
     fireEvent.click(trigger);
-    expect(screen.getAllByText("Jira")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
 
     fireEvent.mouseDown(document.body);
+  });
+
+  it("clicks issue import", () => {
+    const onImportIssues = vi.fn();
+    render(<SprintImportMenu disabled={false} onImportMarkdown={vi.fn()} onImportIssues={onImportIssues} />);
+
+    const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
+    fireEvent.click(trigger);
+
+    const githubBtn = screen.getByRole("menuitem", { name: /github issues/i });
+    fireEvent.click(githubBtn);
+    expect(onImportIssues).toHaveBeenCalledTimes(1);
   });
 });

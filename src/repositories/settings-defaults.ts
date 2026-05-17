@@ -347,6 +347,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     gitlabToken: "",
     defaultBranch: "main",
     autoCreatePr: true,
+    autoCloseLinkedIssues: false,
     featureBranchPrefix: "feature/",
     sprintBranchScheme: DEFAULT_SPRINT_BRANCH_SCHEME,
   },

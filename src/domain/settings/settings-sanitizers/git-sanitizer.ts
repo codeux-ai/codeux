@@ -15,6 +15,9 @@ export const sanitizeGit = (
       ? gitInput.defaultBranch.trim()
       : DEFAULT_DASHBOARD_SETTINGS.git.defaultBranch,
     autoCreatePr: typeof gitInput.autoCreatePr === "boolean" ? gitInput.autoCreatePr : DEFAULT_DASHBOARD_SETTINGS.git.autoCreatePr,
+    autoCloseLinkedIssues: typeof gitInput.autoCloseLinkedIssues === "boolean"
+      ? gitInput.autoCloseLinkedIssues
+      : DEFAULT_DASHBOARD_SETTINGS.git.autoCloseLinkedIssues,
     featureBranchPrefix: typeof gitInput.featureBranchPrefix === "string" && gitInput.featureBranchPrefix.trim().length > 0
       ? gitInput.featureBranchPrefix.trim()
       : DEFAULT_DASHBOARD_SETTINGS.git.featureBranchPrefix,

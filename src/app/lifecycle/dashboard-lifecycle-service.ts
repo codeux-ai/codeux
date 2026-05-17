@@ -33,6 +33,7 @@ import type { AgentPresetRepository } from "../../repositories/agent-preset-repo
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
 import type { SprintMarkdownService } from "../../services/sprint-markdown-service.js";
+import type { SprintIssueService } from "../../services/sprint-issue-service.js";
 import type { ActivityCacheService } from "../../server/activity-cache-service.js";
 import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
@@ -74,6 +75,7 @@ export interface BootDashboardDeps {
   executionControlService: ExecutionControlService;
   planningAgentService: PlanningAgentService;
   quicksprintService: QuicksprintService;
+  sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   dashboardRealtimeService: DashboardRealtimeService;
   logger: Logger;
@@ -520,6 +522,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       return result;
     },
     quicksprintService: deps.quicksprintService,
+    sprintIssueService: deps.sprintIssueService,
     realtimeService: deps.dashboardRealtimeService,
     logger: deps.logger.child({ component: "dashboard-server" }),
     isReady: deps.isReady,

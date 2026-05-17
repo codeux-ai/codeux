@@ -1,4 +1,4 @@
-import type { SprintMarkdownExportBundle, SprintMarkdownImportTask } from "../types.js";
+import type { SprintLinkedIssueInput, SprintMarkdownExportBundle, SprintMarkdownImportTask } from "../types.js";
 
 const FILE_MARKER = /^---\s*FILE:\s*(.+?)\s*---$/gm;
 
@@ -28,4 +28,44 @@ export function parseTaskBundle(text: string): SprintMarkdownImportTask[] {
 
     return { taskKey, markdown };
   }).filter((entry) => entry.markdown.length > 0);
+}
+
+export function buildLinkedIssuePromptBlock(issues: SprintLinkedIssueInput[]): string {
+  const normalized = issues
+    .filter((issue) => issue.title.trim() && issue.url.trim())
+    .slice(0, 50);
+  if (normalized.length === 0) {
+    return "";
+  }
+
+  const lines = [
+    "## Linked Issues",
+    "",
+    "Use these imported issue links as sprint scope. Preserve their acceptance criteria and close them only after the sprint is finished and merged.",
+    "",
+    ...normalized.map((issue) => {
+      const labels = (issue.labels || []).slice(0, 8).map((label) => `\`${label}\``).join(", ");
+      const assignees = (issue.assignees || []).slice(0, 5).map((assignee) => `@${assignee}`).join(", ");
+      const meta = [
+        `${issue.provider.toUpperCase()} ${issue.repository}${issue.issueKey || `#${issue.issueNumber}`}`,
+        labels ? `labels: ${labels}` : "",
+        assignees ? `assignees: ${assignees}` : "",
+      ].filter(Boolean).join(" | ");
+      return `- [${issue.title}](${issue.url}) - ${meta}`;
+    }),
+  ];
+
+  return lines.join("\n");
+}
+
+export function mergePromptWithLinkedIssues(goal: string, issues: SprintLinkedIssueInput[]): string {
+  const block = buildLinkedIssuePromptBlock(issues);
+  const trimmedGoal = goal.trim();
+  if (!block) {
+    return trimmedGoal;
+  }
+  if (trimmedGoal.includes("## Linked Issues")) {
+    return trimmedGoal;
+  }
+  return `${trimmedGoal}\n\n${block}`.trim();
 }
