@@ -31,6 +31,7 @@ export function getPrimaryPausedInterventionRun(
   return snapshot.sprintRuns.find((run) => (
     run.status === "paused"
     && Boolean(run.humanIntervention)
+    && run.humanIntervention?.ownerType !== "worker"
     && (!selectedSprintId || run.sprintId === selectedSprintId)
   )) || null;
 }

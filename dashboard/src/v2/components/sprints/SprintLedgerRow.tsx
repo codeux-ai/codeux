@@ -52,6 +52,8 @@ const shortenId = (value: string): string => value.slice(0, 8);
 const formatTableDate = (value: string): string => TABLE_DATE_FORMATTER.format(new Date(value));
 const formatMetaDate = (value: string): string => TABLE_META_DATE_FORMATTER.format(new Date(value));
 
+const isSprintActionable = (status: SprintStatus): boolean => status === "running" || status === "paused";
+
 export interface SprintLedgerRowProps {
   sprint: Sprint;
   isSelected: boolean;
@@ -159,7 +161,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             Created {formatTableDate(sprint.createdAt)}
           </span>
         </div>
-        {humanIntervention && (
+        {humanIntervention && isSprintActionable(sprint.status) && humanIntervention.ownerType !== "worker" && (
           <div className="mt-3">
             <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="left" />
           </div>
@@ -176,7 +178,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <span className={`inline-flex rounded-full border px-3 py-1.5 text-[11px] font-bold ${STATUS_BADGE_TONES[sprint.status]}`}>
             {STATUS_LABELS[sprint.status]}
           </span>
-          {humanIntervention && (
+          {humanIntervention && isSprintActionable(sprint.status) && humanIntervention.ownerType !== "worker" && (
             <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-status-amber">
               <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.2} />
               Intervention

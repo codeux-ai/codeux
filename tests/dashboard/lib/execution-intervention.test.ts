@@ -17,7 +17,7 @@ const HUMAN_INTERVENTION: ExecutionHumanInterventionSummary = {
   instructions: "Merge the task PR, then resume the sprint.",
   attentionType: "merge_required",
   severity: "high",
-  ownerType: "worker",
+  ownerType: "human",
 };
 
 function createSnapshot(): ExecutionDashboardSnapshot {
