@@ -41,6 +41,8 @@ import { formatSprintDisplay } from "./lib/format-sprint.js";
 import { KanbanTaskCard } from "./components/tasks/KanbanTaskCard.js";
 import { STATUS_CFG } from "./lib/tasks-constants.js";
 import { buildTaskCardViewModel } from "./lib/tasks/task-card-view-model.js";
+import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
+import { buildLiveTaskEnrichmentMap } from "./lib/tasks/live-task-enrichment.js";
 
 const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "coding_completed", "QA_REVIEW_FAILED", "completed"];
 
@@ -310,6 +312,10 @@ export const TasksPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const { projects, selectedProject, createProject } = useProjectData();
+  const { execution, status } = useDashboardRuntimeData(
+    selectedProject?.id ?? null,
+    !!selectedProject,
+  );
   const {
     data: sprints,
     loading: sprintsLoading,
@@ -454,13 +460,31 @@ export const TasksPage: FunctionComponent = () => {
     return deriveTaskBoardState(allTasks, statusFilter, priorityFilter, listWindow);
   }, [allTasks, statusFilter, priorityFilter, listWindow]);
 
+  const scopedDispatches = useMemo(() =>
+    taskScopeSprintId
+      ? execution.taskDispatches.filter((d) => d.sprintId === taskScopeSprintId)
+      : execution.taskDispatches,
+    [execution.taskDispatches, taskScopeSprintId]
+  );
+  const scopedEvents = useMemo(() =>
+    taskScopeSprintId
+      ? execution.recentEvents.filter((e) => e.sprintId === taskScopeSprintId)
+      : execution.recentEvents,
+    [execution.recentEvents, taskScopeSprintId]
+  );
+
+  const liveEnrichmentMap = useMemo(
+    () => buildLiveTaskEnrichmentMap(status.subtasks ?? [], scopedDispatches, scopedEvents),
+    [status.subtasks, scopedDispatches, scopedEvents]
+  );
+
   const taskViewModels = useMemo(() => {
     const map = new Map<string, ReturnType<typeof buildTaskCardViewModel>>();
     allTasks.forEach(task => {
-      map.set(task.recordId, buildTaskCardViewModel(task, taskLookup));
+      map.set(task.recordId, buildTaskCardViewModel(task, taskLookup, liveEnrichmentMap.get(task.recordId)));
     });
     return map;
-  }, [allTasks, taskLookup]);
+  }, [allTasks, taskLookup, liveEnrichmentMap]);
 
   const selectedSprintModel = taskScopeSprintId ? sprints.find((sprint: Sprint) => sprint.id === taskScopeSprintId) || null : null;
   const isTaskScopeReady = !!selectedProject && sprints.length > 0;
