@@ -733,7 +733,72 @@ function buildAvatar(config: AgentAvatarConfig, mats: Mats) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
+ *  Resource bookkeeping — dispose every geometry / material / texture
+ *  reachable from a subtree exactly once. Necessary because the same
+ *  Material is shared across many meshes (mats.jade is on dozens of them),
+ *  and Three.js's dispose() should only be called once per resource.
+ * ════════════════════════════════════════════════════════════════════════ */
+function disposeSubtree(
+  root: THREE.Object3D,
+  extraTextures: (THREE.Texture | null | undefined)[] = [],
+) {
+  const seenMats = new Set<THREE.Material>();
+  const seenGeos = new Set<THREE.BufferGeometry>();
+  const seenTextures = new Set<THREE.Texture>();
+  root.traverse((obj: THREE.Object3D) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.geometry && !seenGeos.has(mesh.geometry)) {
+      seenGeos.add(mesh.geometry);
+      mesh.geometry.dispose();
+    }
+    const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+    if (!mat) return;
+    const mats = Array.isArray(mat) ? mat : [mat];
+    for (const m of mats) {
+      if (seenMats.has(m)) continue;
+      seenMats.add(m);
+      // Some materials hold textures we should free as well
+      const std = m as THREE.MeshStandardMaterial;
+      if (std.envMap && !seenTextures.has(std.envMap)) {
+        seenTextures.add(std.envMap);
+      }
+      if (std.normalMap && !seenTextures.has(std.normalMap)) {
+        seenTextures.add(std.normalMap);
+      }
+      m.dispose();
+    }
+  });
+  for (const tex of extraTextures) {
+    if (tex && !seenTextures.has(tex)) {
+      seenTextures.add(tex);
+    }
+  }
+  for (const tex of seenTextures) {
+    tex.dispose();
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
  *  Main component
+ *
+ *  Lifecycle is split into three effects so we never tear down the
+ *  WebGL context on a config change:
+ *
+ *    1. Mount  — creates the renderer, scene, camera, lights ONCE.
+ *                Disposes the GL context on unmount (with forceContextLoss
+ *                so the browser frees it immediately instead of waiting
+ *                for GC, which can evict other pages' contexts under load).
+ *
+ *    2. Config — when chassis / eyes / colors change, we only rebuild the
+ *                avatar group + particles + env map. The renderer, scene,
+ *                camera, and base lights persist.
+ *
+ *    3. Animate — drives the per-frame choreography. Re-runs only when
+ *                 the expression target changes (cheap).
+ *
+ *  Background animations on the page share the global WebGL context pool.
+ *  Recreating a renderer on every part-pick used to evict their contexts
+ *  under rapid randomization — that bug is fixed by this split.
  * ════════════════════════════════════════════════════════════════════════ */
 export function AgentAvatarScene({
   config = DEFAULT_AGENT_AVATAR_CONFIG,
@@ -745,14 +810,23 @@ export function AgentAvatarScene({
   const [webglError, setWebglError] = useState(false);
   const [isReducedMotion, setIsReducedMotion] = useState(false);
 
-  const sceneRef = useRef<{
+  /** Persistent across config changes. Created once on mount. */
+  const rendererRef = useRef<{
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     avatarGroup: THREE.Group;
-    parts: ReturnType<typeof buildAvatar>;
-    particles: THREE.Points | null;
+    ambient: THREE.AmbientLight;
+    rim: THREE.PointLight;
+    kicker: THREE.PointLight;
     animationId: number;
+  } | null>(null);
+
+  /** Rebuilt on every config change. */
+  const avatarRef = useRef<{
+    parts: ReturnType<typeof buildAvatar>;
+    particles: THREE.Points;
+    envMap: THREE.CubeTexture | null;
   } | null>(null);
 
   useEffect(() => {
@@ -766,28 +840,11 @@ export function AgentAvatarScene({
 
   const configKey = `${config.chassis}-${config.eyes}-${config.antenna}-${config.wings}-${config.headphones}-${config.accent}-${config.baseColor}-${config.visorColor}`;
 
+  /* ── Effect 1: mount renderer + scene (runs once per mount) ── */
   useEffect(() => {
     if (fallbackMode || webglError) return;
     const mount = mountRef.current;
     if (!mount) return;
-
-    // Tear down previous scene
-    if (sceneRef.current) {
-      cancelAnimationFrame(sceneRef.current.animationId);
-      if (mount.contains(sceneRef.current.renderer.domElement)) {
-        mount.removeChild(sceneRef.current.renderer.domElement);
-      }
-      sceneRef.current.renderer.dispose();
-      sceneRef.current.scene.traverse((obj: THREE.Object3D) => {
-        if ((obj as THREE.Mesh).geometry) (obj as THREE.Mesh).geometry.dispose();
-        const mat = (obj as THREE.Mesh).material;
-        if (mat) {
-          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-          else (mat as THREE.Material).dispose();
-        }
-      });
-      sceneRef.current = null;
-    }
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -809,16 +866,10 @@ export function AgentAvatarScene({
     camera.position.set(0, 0.2, 5.4);
     camera.lookAt(0, 0, 0);
 
-    const accent = hexInt(getAccentHex(config.accent), 0x00eaab);
-    // Shell = base color directly. Pearl base → white shell, onyx base → black, etc.
-    const shell = hexInt(getShellHex(config.baseColor), 0xfcfbfc);
-    // The "visor" is the inset face plate around the eyes. When the user
-    // picks a Visor Color it overrides the auto-contrast dark/light default.
-    const inset = hexInt(getInsetHex(config.baseColor, config.visorColor));
-    const light = isLightBase(config.baseColor);
-
-    /* 5-point lighting rig */
-    scene.add(new THREE.AmbientLight(0xffffff, light ? 0.55 : 0.4));
+    /* Lights — colors get updated when the accent changes in the config
+       effect, so we only ever need one of each. */
+    const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambient);
     const key = new THREE.DirectionalLight(0xffffff, 1.2);
     key.position.set(2.5, 4, 4.5);
     scene.add(key);
@@ -828,24 +879,83 @@ export function AgentAvatarScene({
     const back = new THREE.DirectionalLight(0xffd9a3, 0.32);
     back.position.set(0, 2.5, -4);
     scene.add(back);
-    // Jade rim from below — gives the silhouette its signature jade lift
-    const rim = new THREE.PointLight(accent, 1.1, 8);
+    const rim = new THREE.PointLight(0x00eaab, 1.1, 8);
     rim.position.set(0, -1.6, 2.0);
     scene.add(rim);
-    const kicker = new THREE.PointLight(accent, 0.35, 6);
+    const kicker = new THREE.PointLight(0x00eaab, 0.35, 6);
     kicker.position.set(0, 2.4, 1.5);
     scene.add(kicker);
-
-    const envMap = createEnvMap(accent);
-    const mats = makeMaterials({ shell, inset, accent, envMap, light });
 
     const avatarGroup = new THREE.Group();
     scene.add(avatarGroup);
 
-    const parts = buildAvatar(config, mats);
-    avatarGroup.add(parts.root);
+    rendererRef.current = { renderer, scene, camera, avatarGroup, ambient, rim, kicker, animationId: 0 };
 
-    // Particle ambient: jade motes drifting up around the head
+    const onResize = () => {
+      const r = rendererRef.current;
+      if (!mountRef.current || !r) return;
+      const { clientWidth: w, clientHeight: h2 } = mountRef.current;
+      r.renderer.setSize(w, h2);
+      r.camera.aspect = w / h2;
+      r.camera.updateProjectionMatrix();
+    };
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      const r = rendererRef.current;
+      if (!r) return;
+      cancelAnimationFrame(r.animationId);
+      // Dispose avatar contents first (geometries / materials / textures)
+      if (avatarRef.current) {
+        disposeSubtree(r.avatarGroup, [avatarRef.current.envMap]);
+        avatarRef.current = null;
+      }
+      // Dispose lights (no resources, but clear from scene for safety)
+      if (mount.contains(r.renderer.domElement)) {
+        mount.removeChild(r.renderer.domElement);
+      }
+      // Force the browser to release the GL context immediately instead
+      // of waiting for GC — keeps the global context pool clean so other
+      // WebGL surfaces (e.g. the page background) survive.
+      try { r.renderer.forceContextLoss(); } catch { /* older three.js */ }
+      r.renderer.dispose();
+      rendererRef.current = null;
+    };
+  }, [fallbackMode, webglError]);
+
+  /* ── Effect 2: rebuild avatar contents when config changes ── */
+  useEffect(() => {
+    const r = rendererRef.current;
+    if (!r || fallbackMode || webglError) return;
+
+    // 2a. Remove + dispose previous avatar contents
+    if (avatarRef.current) {
+      r.avatarGroup.remove(avatarRef.current.parts.root);
+      r.avatarGroup.remove(avatarRef.current.particles);
+      disposeSubtree(avatarRef.current.parts.root, [avatarRef.current.envMap]);
+      avatarRef.current.particles.geometry.dispose();
+      (avatarRef.current.particles.material as THREE.Material).dispose();
+      avatarRef.current = null;
+    }
+
+    // 2b. Compute the colors for this config
+    const accent = hexInt(getAccentHex(config.accent), 0x00eaab);
+    const shell = hexInt(getShellHex(config.baseColor), 0xfcfbfc);
+    const inset = hexInt(getInsetHex(config.baseColor, config.visorColor));
+    const light = isLightBase(config.baseColor);
+
+    // 2c. Update the persistent lights to the new accent + ambient
+    r.ambient.intensity = light ? 0.55 : 0.4;
+    r.rim.color.setHex(accent);
+    r.kicker.color.setHex(accent);
+
+    // 2d. Build new avatar + particles
+    const envMap = createEnvMap(accent);
+    const mats = makeMaterials({ shell, inset, accent, envMap, light });
+    const parts = buildAvatar(config, mats);
+    r.avatarGroup.add(parts.root);
+
     const pCount = config.wings === "dust" ? 36 : 16;
     const pGeo = new THREE.BufferGeometry();
     const pos = new Float32Array(pCount * 3);
@@ -862,50 +972,21 @@ export function AgentAvatarScene({
       opacity: config.wings === "dust" ? 0.7 : 0.4,
     });
     const particles = new THREE.Points(pGeo, pMat);
-    avatarGroup.add(particles);
+    r.avatarGroup.add(particles);
 
-    sceneRef.current = {
-      renderer, scene, camera, avatarGroup, parts, particles,
-      animationId: 0,
-    };
-
-    const onResize = () => {
-      if (!mountRef.current || !sceneRef.current) return;
-      const { clientWidth: w, clientHeight: h2 } = mountRef.current;
-      sceneRef.current.renderer.setSize(w, h2);
-      sceneRef.current.camera.aspect = w / h2;
-      sceneRef.current.camera.updateProjectionMatrix();
-    };
-    window.addEventListener("resize", onResize);
-
-    return () => {
-      window.removeEventListener("resize", onResize);
-      if (sceneRef.current) {
-        cancelAnimationFrame(sceneRef.current.animationId);
-        if (mount.contains(sceneRef.current.renderer.domElement)) {
-          mount.removeChild(sceneRef.current.renderer.domElement);
-        }
-        sceneRef.current.renderer.dispose();
-        sceneRef.current.scene.traverse((obj: THREE.Object3D) => {
-          if ((obj as THREE.Mesh).geometry) (obj as THREE.Mesh).geometry.dispose();
-          const mat = (obj as THREE.Mesh).material;
-          if (mat) {
-            if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-            else (mat as THREE.Material).dispose();
-          }
-        });
-        sceneRef.current = null;
-      }
-    };
+    avatarRef.current = { parts, particles, envMap };
   }, [configKey, fallbackMode, webglError]);
 
   /* ════════════════════════════════════════════════════════════════════════
    *  Animation loop — choreography per expression
+   *
+   *  Reads from rendererRef + avatarRef each frame so it survives config
+   *  changes. The function reference itself never changes during a mount
+   *  cycle — only the expression-driven target values are recomputed.
    * ════════════════════════════════════════════════════════════════════════ */
   useEffect(() => {
-    if (!sceneRef.current || fallbackMode || webglError) return;
-    const s = sceneRef.current;
-    const p = s.parts;
+    const r = rendererRef.current;
+    if (!r || fallbackMode || webglError) return;
     let t = 0;
     let nextBlink = 3 + Math.random() * 2;
 
@@ -961,32 +1042,31 @@ export function AgentAvatarScene({
         break;
     }
 
-    // Flip the smile arcs on sad/angry (frown)
-    if (p.eyesKind === "smile") {
-      if (eyeArcInvert) {
-        p.leftEye.scale.y = -Math.abs(p.leftEye.scale.y || 1);
-        if (p.rightEye) p.rightEye.scale.y = -Math.abs(p.rightEye.scale.y || 1);
-      } else {
-        p.leftEye.scale.y = Math.abs(p.leftEye.scale.y || 1);
-        if (p.rightEye) p.rightEye.scale.y = Math.abs(p.rightEye.scale.y || 1);
-      }
-    }
-
-    const antennaTipMat = p.antennaTip?.material as THREE.MeshStandardMaterial | undefined;
-
     const animate = () => {
-      if (!sceneRef.current) return;
-      sceneRef.current.animationId = requestAnimationFrame(animate);
+      // Read the current scene + avatar each frame so the loop survives
+      // config-driven avatar rebuilds without restarting.
+      const r2 = rendererRef.current;
+      if (!r2) return; // renderer gone — exit the loop on unmount
+      r2.animationId = requestAnimationFrame(animate);
 
-      if (isReducedMotion) {
-        s.renderer.render(s.scene, s.camera);
+      const a = avatarRef.current;
+      if (!a) {
+        // Mid-rebuild: render the empty scene this frame and try again next.
+        r2.renderer.render(r2.scene, r2.camera);
         return;
       }
 
+      if (isReducedMotion) {
+        r2.renderer.render(r2.scene, r2.camera);
+        return;
+      }
+
+      const p = a.parts;
+      const particles = a.particles;
       t += 0.016;
 
       // Idle float + breath
-      s.avatarGroup.position.y = Math.sin(t * bounceSpeed) * bounceAmp + 0.02;
+      r2.avatarGroup.position.y = Math.sin(t * bounceSpeed) * bounceAmp + 0.02;
       const breath = 1 + Math.sin(t * 1.5) * 0.012;
       p.headGroup.scale.set(breath, breath, breath);
 
@@ -1013,12 +1093,14 @@ export function AgentAvatarScene({
         else nextBlink = t + 3 + Math.random() * 3;
       }
       const targetEyeY = eyeScaleY * Math.max(0.08, blinkFactor);
-      const signedTarget = eyeArcInvert ? -targetEyeY : targetEyeY;
+      // For smile eyes we use a signed scale.y so frown → negative (visual flip).
+      const signedTarget = p.eyesKind === "smile" && eyeArcInvert ? -targetEyeY : targetEyeY;
       p.leftEye.scale.y = THREE.MathUtils.lerp(p.leftEye.scale.y, signedTarget, 0.35);
       if (p.rightEye) p.rightEye.scale.y = THREE.MathUtils.lerp(p.rightEye.scale.y, signedTarget, 0.35);
 
-      // Jewel + antenna pulse
+      // Antenna pulse
       const pulse = jewelIntensity * (0.85 + Math.sin(t * 2.4) * 0.2);
+      const antennaTipMat = p.antennaTip?.material as THREE.MeshStandardMaterial | undefined;
       if (antennaTipMat) antennaTipMat.emissiveIntensity = THREE.MathUtils.lerp(antennaTipMat.emissiveIntensity, pulse * 1.05, 0.08);
 
       // Aura ring pulse — three rings phase-offset
@@ -1048,30 +1130,29 @@ export function AgentAvatarScene({
       }
 
       // Particles drift up
-      if (s.particles) {
-        const attr = s.particles.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
-        if (attr && attr.count) {
-          for (let i = 0; i < attr.count; i++) {
-            let y = attr.getY(i);
-            y += 0.008;
-            if (y > 2.4) y = -1.6;
-            attr.setY(i, y);
-            attr.setX(i, attr.getX(i) + Math.sin(t + i * 0.4) * 0.0008);
-          }
-          attr.needsUpdate = true;
+      const attr = particles.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
+      if (attr && attr.count) {
+        for (let i = 0; i < attr.count; i++) {
+          let y = attr.getY(i);
+          y += 0.008;
+          if (y > 2.4) y = -1.6;
+          attr.setY(i, y);
+          attr.setX(i, attr.getX(i) + Math.sin(t + i * 0.4) * 0.0008);
         }
+        attr.needsUpdate = true;
       }
 
-      s.renderer.render(s.scene, s.camera);
+      r2.renderer.render(r2.scene, r2.camera);
     };
 
-    cancelAnimationFrame(s.animationId);
+    cancelAnimationFrame(r.animationId);
     animate();
 
     return () => {
-      if (sceneRef.current) cancelAnimationFrame(sceneRef.current.animationId);
+      const r2 = rendererRef.current;
+      if (r2) cancelAnimationFrame(r2.animationId);
     };
-  }, [expression, isReducedMotion, fallbackMode, webglError, configKey]);
+  }, [expression, isReducedMotion, fallbackMode, webglError]);
 
   if (fallbackMode || webglError) {
     return (
