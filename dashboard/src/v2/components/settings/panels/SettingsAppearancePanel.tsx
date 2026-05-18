@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { PillChoiceGroup } from "../SettingsFormFields.js";
 import { SectionCard, Row, getFieldBadge } from "./SharedPanelComponents.js";
+import { applyAppearanceSettings } from "../../../lib/apply-appearance.js";
 
 export const SettingsAppearancePanel: FunctionComponent<{
   state: SettingsPageState;
@@ -48,13 +49,15 @@ export const SettingsAppearancePanel: FunctionComponent<{
           <PillChoiceGroup
             value={appearance.theme}
             onChange={(val) => {
+              const newTheme = val as "LIGHT" | "DARK" | "SYSTEM";
               state.updateEditableSettings((current) => ({
                 ...current,
                 appearance: {
                   ...current.appearance,
-                  theme: val as "LIGHT" | "DARK" | "SYSTEM",
+                  theme: newTheme,
                 },
               }));
+              applyAppearanceSettings({ theme: newTheme });
             }}
             options={[
               { value: "LIGHT", label: "Light" },
@@ -73,13 +76,15 @@ export const SettingsAppearancePanel: FunctionComponent<{
           <PillChoiceGroup
             value={appearance.reducedMotion}
             onChange={(val) => {
+              const newReducedMotion = val as "AUTO" | "REDUCE" | "NONE";
               state.updateEditableSettings((current) => ({
                 ...current,
                 appearance: {
                   ...current.appearance,
-                  reducedMotion: val as "AUTO" | "REDUCE" | "NONE",
+                  reducedMotion: newReducedMotion,
                 },
               }));
+              applyAppearanceSettings({ reducedMotion: newReducedMotion });
             }}
             options={[
               { value: "AUTO", label: "Auto" },
