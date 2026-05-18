@@ -1,5 +1,5 @@
 import { FunctionComponent } from "preact";
-import { X } from "lucide-react";
+import { X } from "lucide-preact";
 import type { MemNode, Edge } from "../../lib/memory-graph.js";
 
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {

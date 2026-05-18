@@ -1,10 +1,11 @@
 import { useMemoryPageData } from "./hooks/use-memory-page-data.js";
 import { useEmbeddingModelStatus } from "./hooks/use-embedding-model-status.js";
 import { ModelCard } from "./components/memory/ModelCard.js";
+import { effect } from "@preact/signals";
 import { Inspector } from "./components/memory/Inspector.js";
-import { MemoryFilters, MemoryList, MemoryDetails, MemoryCard } from "./components/memory/index.js";
-import { MemorySearch } from "./components/memory/MemorySearch.js";
-import { searchQuerySignal, activeMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./components/memory/memoryState.js";
+import { MemoryFilters, MemoryDetails, MemoryCard } from "./components/memory/index.js";
+import MemorySidebar from "./components/memory/MemorySidebar.js";
+import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./components/memory/memoryState.js";
 
 import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
@@ -86,6 +87,13 @@ export const MemoryPage: FunctionComponent = () => {
     const headerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const wrapRef = useRef<HTMLDivElement>(null);
+
+    useLayoutEffect(() => {
+        return effect(() => {
+            memorySidebarExpandedSignal.value;
+            window.dispatchEvent(new Event("resize"));
+        });
+    }, []);
 
     const [lobotomize, setLobotomize] = useState(false);
 
@@ -804,18 +812,15 @@ export const MemoryPage: FunctionComponent = () => {
             )}
 
             {/* ── Neural Canvas ───────────────────────────────────────── */}
-            <div
-                ref={wrapRef}
-                className="relative w-full rounded-[2rem] overflow-hidden
-                           bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl
-                           border border-black/[0.05] dark:border-white/[0.05]
-                           shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)]"
-                style={{ height: "max(600px, calc(100vh - 440px))" }}
-            >
-                <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-
-                {/* Search overlay */}
-                <MemorySearch />
+            <div className="flex h-full w-full overflow-hidden" style={{ height: "max(600px, calc(100vh - 440px))" }}>
+                <div
+                    ref={wrapRef}
+                    className="flex-1 relative rounded-[2rem] overflow-hidden
+                               bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl
+                               border border-black/[0.05] dark:border-white/[0.05]
+                               shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)]"
+                >
+                    <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
                 {/* Zoom controls */}
                 <div className="absolute bottom-5 right-5 z-20 flex flex-col gap-1.5">
@@ -883,21 +888,12 @@ export const MemoryPage: FunctionComponent = () => {
                     onClose={() => { S.current.selectedIdx = -1; activeMemoryIdSignal.value = null; }}
                     onDelete={handleDelete}
                 />
-            </div>
+                </div>
 
-            <div className="w-[300px] border-l border-black/[0.06] dark:border-white/[0.06] bg-white/30 dark:bg-void-800/30 flex flex-col z-20 hidden lg:flex">
-                <div className="p-4 border-b border-black/[0.06] dark:border-white/[0.06] flex items-center justify-between">
-                     <span className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">List View</span>
-                     <span className="text-[10px] font-mono text-slate-400 px-2 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.04]">{memoryCount} Items</span>
-                </div>
-                <div className="flex-1 min-h-0 relative">
-                    {S.current.graph.nodes.length > 0 && (
-                        <MemoryList
-                            nodes={S.current.graph.nodes}
-                            onSelectNode={onSelectNode}
-                        />
-                    )}
-                </div>
+                <MemorySidebar
+                    nodes={S.current.graph.nodes}
+                    onSelectNode={onSelectNode}
+                />
             </div>
 
             {/* ── Category summary ────────────────────────────────────── */}

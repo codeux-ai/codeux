@@ -1,5 +1,5 @@
 import { FunctionComponent } from "preact";
-import { HardDrive, Download, Power, RefreshCw, Trash2, Loader2 } from "lucide-react";
+import { HardDrive, Download, Power, RefreshCw, Trash2, Loader2 } from "lucide-preact";
 import type { EmbeddingModelWithStatus } from "../../lib/memory-api.js";
 
 function formatBytes(bytes: number): string {
