@@ -65,6 +65,7 @@ const AppLayout = () => {
   const appearanceSettings = effectiveSettings?.settings.appearance || systemSettings?.defaults.appearance;
   const appearanceTheme = appearanceSettings?.theme || "SYSTEM";
   const reducedMotion = appearanceSettings?.reducedMotion || "AUTO";
+  const backgroundPattern = appearanceSettings?.backgroundPattern || "NONE";
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === "undefined") return true;
     if (appearanceTheme === "SYSTEM") {
@@ -109,6 +110,10 @@ const AppLayout = () => {
       root.removeAttribute("data-reduced-motion");
     }
   }, [reducedMotion]);
+
+  useEffect(() => {
+    applyAppearanceSettings({ backgroundPattern });
+  }, [backgroundPattern]);
 
   const toggleTheme = () => {
     setIsDark((prev) => !prev);

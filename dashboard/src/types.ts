@@ -56,7 +56,8 @@ import type {
   OnboardingDependencyCheck,
   OnboardingProviderCredentialStatus,
   LocalDirectoryBrowserEntry,
-  LocalDirectoryBrowserResponse
+  LocalDirectoryBrowserResponse,
+  BackgroundPattern
 } from "../../src/contracts/app-types.js";
 import type {
   EffectiveSettingsResponse,
@@ -128,6 +129,7 @@ export type {
   OnboardingProviderCredentialStatus,
   LocalDirectoryBrowserEntry,
   LocalDirectoryBrowserResponse,
+  BackgroundPattern,
   EffectiveSettingsResponse,
   ProjectProviderSettings,
   ProjectSettings,

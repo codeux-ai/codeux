@@ -634,6 +634,16 @@
   animation-duration: 12s;
 }
 
+html.has-bg-pattern::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: var(--bg-pattern);
+  background-repeat: repeat;
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* ============================================================
    Code UX brand motion — Reusable hover primitives.
    The brand mark itself uses the GSAP-driven <Atom> component.

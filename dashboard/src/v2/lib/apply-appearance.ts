@@ -1,3 +1,5 @@
+import { BACKGROUND_PATTERNS } from './background-patterns.js';
+
 export function applyAppearanceSettings(appearance: Partial<import('../../types.js').DashboardSettings['appearance']>): void {
   if (typeof window === 'undefined') return;
 
@@ -23,5 +25,17 @@ export function applyAppearanceSettings(appearance: Partial<import('../../types.
 
   if (appearance.reducedMotion !== undefined) {
     document.documentElement.dataset.reducedMotion = appearance.reducedMotion;
+  }
+
+  if (appearance.backgroundPattern !== undefined) {
+    const pattern = appearance.backgroundPattern;
+    const patternUrl = pattern && pattern !== 'NONE' ? BACKGROUND_PATTERNS[pattern] : '';
+    document.documentElement.style.setProperty('--bg-pattern', patternUrl);
+
+    if (pattern && pattern !== 'NONE') {
+      document.documentElement.classList.add('has-bg-pattern');
+    } else {
+      document.documentElement.classList.remove('has-bg-pattern');
+    }
   }
 }
