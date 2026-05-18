@@ -23,8 +23,11 @@ import { OnboardingExperience } from "./v2/components/onboarding/OnboardingExper
 import { GuidedDashboardTour } from "./v2/components/onboarding/GuidedDashboardTour.js";
 import "./styles.css";
 
-import { BackgroundManager } from "./v2/components/backgrounds/BackgroundManager.js";
 import { applyAppearanceSettings } from "./v2/lib/apply-appearance.js";
+
+const DeepOceanBackground = lazy(() => import("./v2/components/chat/DeepOceanBackground.js").then((module) => ({
+  default: module.DeepOceanBackground,
+})));
 
 // 0. AppLayout extracted to use context hooks
 const AppLayout = () => {
@@ -65,6 +68,7 @@ const AppLayout = () => {
   const appearanceSettings = effectiveSettings?.settings.appearance || systemSettings?.defaults.appearance;
   const appearanceTheme = appearanceSettings?.theme || "SYSTEM";
   const reducedMotion = appearanceSettings?.reducedMotion || "AUTO";
+  const backgroundImage = appearanceSettings?.backgroundImage;
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === "undefined") return true;
     if (appearanceTheme === "SYSTEM") {
@@ -101,6 +105,10 @@ const AppLayout = () => {
   }, [isDark]);
 
   useEffect(() => {
+    applyAppearanceSettings({ backgroundImage });
+  }, [backgroundImage]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const root = window.document.documentElement;
     if (reducedMotion === "REDUCE" || (reducedMotion === "AUTO" && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
@@ -125,14 +133,11 @@ const AppLayout = () => {
         <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:px-4 focus:py-2 focus:bg-white focus:text-slate-900 focus:font-bold focus:rounded-br-lg ">
           Skip to main content
         </a>
-        <Suspense fallback={null}>
-          <BackgroundManager 
-            mode={appearanceSettings?.backgroundMode || "ANIMATED"} 
-            animation={appearanceSettings?.animatedBackground || "deep-ocean"} 
-            staticColor={appearanceSettings?.staticBackgroundColor || "#0d0f12"} 
-            isDark={isDark} 
-          />
-        </Suspense>
+        {!backgroundImage && (
+          <Suspense fallback={null}>
+            <DeepOceanBackground forceDark={isDark} />
+          </Suspense>
+        )}
 
         <div className="flex-1 flex flex-col h-full relative z-10 overflow-hidden">
           <TopNav isDark={isDark} toggleTheme={toggleTheme} onMenuToggle={() => setIsMobileSidebarOpen(prev => !prev)} isMobile={isMobile} />

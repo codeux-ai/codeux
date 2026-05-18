@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { PillChoiceGroup } from "../SettingsFormFields.js";
 import { SectionCard, Row, getFieldBadge } from "./SharedPanelComponents.js";
@@ -14,6 +15,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
 
   const { activeScope, projectSources } = state;
   const appearance = settings.appearance;
+  const [showSizeWarning, setShowSizeWarning] = useState(false);
 
   return (
     <div className="flex flex-col gap-5">
@@ -92,6 +94,81 @@ export const SettingsAppearancePanel: FunctionComponent<{
               { value: "NONE", label: "None" },
             ]}
           />
+        </Row>
+      </SectionCard>
+
+      <SectionCard title="Background" watermark="BG">
+        <Row
+          label="Background Image"
+          description="Upload a custom background image."
+          badge={getFieldBadge(activeScope, projectSources, "appearance.backgroundImage")}
+        >
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-4">
+              {appearance.backgroundImage ? (
+                <>
+                  <img src={appearance.backgroundImage} alt="Background Thumbnail" className="h-16 w-16 rounded-lg object-cover border border-black/10 dark:border-white/10" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      state.updateEditableSettings((current) => ({
+                        ...current,
+                        appearance: {
+                          ...current.appearance,
+                          backgroundImage: null,
+                        },
+                      }));
+                      applyAppearanceSettings({ backgroundImage: null });
+                    }}
+                    className="rounded-lg px-3 py-1.5 text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-void-800"
+                  >
+                    Remove
+                  </button>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="bg-image-input"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (!file) return;
+
+                      setShowSizeWarning(file.size > 5 * 1024 * 1024);
+
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        const result = reader.result as string;
+                        state.updateEditableSettings((current) => ({
+                          ...current,
+                          appearance: {
+                            ...current.appearance,
+                            backgroundImage: result,
+                          },
+                        }));
+                        applyAppearanceSettings({ backgroundImage: result });
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('bg-image-input')?.click()}
+                    className="rounded-lg border border-black/10 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-void-800 dark:text-slate-200 dark:hover:bg-void-700"
+                  >
+                    Upload Image
+                  </button>
+                </>
+              )}
+            </div>
+            {showSizeWarning && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Large images may slow down the settings page.
+              </p>
+            )}
+          </div>
         </Row>
       </SectionCard>
 

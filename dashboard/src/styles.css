@@ -12,6 +12,13 @@
   - Tiny indicators: rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]
 */
 
+html.has-bg-image {
+  background-image: var(--bg-image) !important;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
 @layer base {
   :root {
     --status-green: #007A5E; /* WCAG AA on White (4.5:1) */
