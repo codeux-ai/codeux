@@ -24,6 +24,7 @@ import { GuidedDashboardTour } from "./v2/components/onboarding/GuidedDashboardT
 import "./styles.css";
 
 import { BackgroundManager } from "./v2/components/backgrounds/BackgroundManager.js";
+import { applyAppearanceSettings } from "./v2/lib/apply-appearance.js";
 
 // 0. AppLayout extracted to use context hooks
 const AppLayout = () => {
@@ -96,12 +97,7 @@ const AppLayout = () => {
   }, [appearanceTheme]);
 
   useEffect(() => {
-    const root = window.document.documentElement;
-    const bg = isDark ? "#0d0f12" : "#dbe8f8";
-    if (isDark) root.classList.add("dark");
-    else root.classList.remove("dark");
-    root.style.background = bg;
-    document.body.style.background = bg;
+    applyAppearanceSettings({ theme: isDark ? "DARK" : "LIGHT" });
   }, [isDark]);
 
   useEffect(() => {
