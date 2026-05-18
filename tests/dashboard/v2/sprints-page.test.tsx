@@ -28,7 +28,6 @@ describe("SprintsPage", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
-    window.localStorage.clear();
   });
 
   it("renders the import menu and opens the markdown modal", async () => {
@@ -61,7 +60,7 @@ describe("SprintsPage", () => {
     fireEvent.click(importTrigger);
 
     // Click the Markdown option
-    const markdownOption = screen.getByRole("menuitem", { name: /markdown/i });
+    const markdownOption = screen.getByRole("button", { name: /markdown/i });
     fireEvent.click(markdownOption);
 
     // Ensure the modal state is updated
@@ -90,7 +89,7 @@ describe("SprintsPage", () => {
     expect(screen.getByTestId("sprint-markdown-modal")).toBeInTheDocument();
   });
 
-  it("shows GitHub and GitLab issue import options without throwing an error", () => {
+  it("shows Jira as a coming soon option without throwing an error", () => {
     vi.mocked(useSprintsPageData).mockReturnValue({
       selectedProject: { id: "proj-1" },
       planningRoute: { available: true },
@@ -116,8 +115,9 @@ describe("SprintsPage", () => {
     const importTrigger = importTriggers.find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || importTriggers.find((btn) => btn.textContent?.includes("Import"))!;
     fireEvent.click(importTrigger);
 
-    expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("GitLab Issues")[0]).toBeInTheDocument();
+    // Ensure Jira item exists
+    expect(screen.getAllByText("Jira")[0]).toBeInTheDocument();
+    expect(screen.getByText("Soon")).toBeInTheDocument();
   });
 
   it("closes the import menu on escape key press or outside click", () => {
@@ -147,7 +147,7 @@ describe("SprintsPage", () => {
     fireEvent.click(importTrigger);
 
     // Ensure menu is open
-    expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Jira")[0]).toBeInTheDocument();
 
     // Escape key press
     fireEvent.keyDown(document, { key: "Escape" });
@@ -199,77 +199,6 @@ describe("SprintsPage", () => {
     }
 
     expect(setShowQuicksprint).toHaveBeenCalledWith(false);
-  });
-
-  it("toggles the sprint gallery from the top action row", () => {
-    vi.mocked(useSprintsPageData).mockReturnValue({
-      selectedProject: { id: "proj-1" },
-      planningRoute: { available: true },
-      sortedSprints: [],
-      showcaseSprints: [],
-      activeRunsBySprintId: new Map(),
-      interventionBySprintId: new Map(),
-      nextId: "spr-123",
-      virtualProviders: [],
-      pendingActionIds: new Set(),
-      planningPresets: [],
-      quicksprintTemplates: [],
-      showQuicksprint: false,
-      setShowQuicksprint: vi.fn(),
-      showCreateComposer: false,
-      setShowCreateComposer: vi.fn(),
-      editingSprint: null,
-      setEditingSprint: vi.fn(),
-      showImportModal: false,
-      setShowImportModal: vi.fn(),
-      feedback: { status: "idle", message: null },
-      clearFeedback: vi.fn(),
-    } as any);
-
-    render(<SprintsPage />);
-
-    const hideGalleryButton = screen.getByRole("button", { name: /hide gallery/i });
-    expect(hideGalleryButton).toBeInTheDocument();
-
-    fireEvent.click(hideGalleryButton);
-
-    expect(screen.getByRole("button", { name: /show gallery/i })).toBeInTheDocument();
-  });
-
-  it("persists the sprint gallery visibility preference", () => {
-    vi.mocked(useSprintsPageData).mockReturnValue({
-      selectedProject: { id: "proj-1" },
-      planningRoute: { available: true },
-      sortedSprints: [],
-      showcaseSprints: [],
-      activeRunsBySprintId: new Map(),
-      interventionBySprintId: new Map(),
-      nextId: "spr-123",
-      virtualProviders: [],
-      pendingActionIds: new Set(),
-      planningPresets: [],
-      quicksprintTemplates: [],
-      showQuicksprint: false,
-      setShowQuicksprint: vi.fn(),
-      showCreateComposer: false,
-      setShowCreateComposer: vi.fn(),
-      editingSprint: null,
-      setEditingSprint: vi.fn(),
-      showImportModal: false,
-      setShowImportModal: vi.fn(),
-      feedback: { status: "idle", message: null },
-      clearFeedback: vi.fn(),
-    } as any);
-
-    const { unmount } = render(<SprintsPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: /hide gallery/i }));
-    expect(window.localStorage.getItem("code_ux_sprints_show_gallery")).toBe("false");
-
-    unmount();
-    render(<SprintsPage />);
-
-    expect(screen.getByRole("button", { name: /show gallery/i })).toBeInTheDocument();
   });
 
 

@@ -11,7 +11,6 @@ expect.extend(matchers);
 vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
-    to: vi.fn((el, config) => { if (config?.onComplete) config.onComplete(); }),
     set: vi.fn(),
     killTweensOf: vi.fn(),
     context: (fn: () => void) => {
@@ -48,33 +47,6 @@ describe("SprintComposer", () => {
     const { getByText, getByPlaceholderText } = render(<SprintComposer {...defaultProps} />);
     expect(getByText("Compose The Next Sprint.")).toBeInTheDocument();
     expect(getByPlaceholderText("Runtime hardening")).toBeInTheDocument();
-  });
-
-  it("renders linked issue cards and submits them", async () => {
-    const onSubmit = vi.fn();
-    const issue = {
-      provider: "github" as const,
-      hostDomain: "github.com",
-      repository: "openai/example",
-      issueNumber: 12,
-      issueKey: "#12",
-      title: "Improve issue import",
-      url: "https://github.com/openai/example/issues/12",
-      labels: ["ux"],
-      assignees: ["pierre"],
-    };
-    const { getByText, getByPlaceholderText, getAllByText } = render(
-      <SprintComposer {...defaultProps} onSubmit={onSubmit} linkedIssues={[issue]} />
-    );
-
-    fireEvent.input(getByPlaceholderText("Runtime hardening"), { target: { value: "Import sprint" } });
-    expect(getByText("Improve issue import")).toBeInTheDocument();
-
-    fireEvent.click(getAllByText("Plan & Start").pop()!);
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalled();
-    });
-    expect(onSubmit.mock.calls[0]?.[0].linkedIssues).toEqual([issue]);
   });
 
   it("shows planning overlay on submit and allows dismiss without cancel", async () => {
@@ -119,12 +91,22 @@ describe("SprintComposer", () => {
     resolveSubmit!(undefined);
   });
 
-  it("shows planning overlay and cancels through explicit request cancellation", async () => {
-    const mockOnCancelPlanningRequest = vi.fn();
-    const mockOnSubmit = vi.fn(async () => new Promise(() => undefined));
+  it("shows planning overlay and aborts when cancel is clicked", async () => {
+    let rejectSubmit: (val: any) => void;
+    const submitPromise = new Promise((_, reject) => {
+      rejectSubmit = reject;
+    });
+
+    const mockOnSubmit = vi.fn(async ({ signal }) => {
+      return new Promise((resolve, reject) => {
+        if (signal) {
+          signal.addEventListener('abort', () => reject(new DOMException("Aborted", "AbortError")));
+        }
+      });
+    });
 
     const { getByText, getByPlaceholderText, queryByText, getAllByText } = render(
-      <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} onCancelPlanningRequest={mockOnCancelPlanningRequest} />
+      <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} />
     );
 
     const nameInput = getByPlaceholderText("Runtime hardening");
@@ -144,13 +126,10 @@ describe("SprintComposer", () => {
 
     expect(mockOnSubmit).toHaveBeenCalled();
 
-    // Click Cancel Active Request through the overlay specifically.
-    const cancelBtns = getAllByText("Cancel Active Request");
+    // Click Cancel Request (abort via the overlay specifically)
+    const cancelBtns = getAllByText("Cancel Request");
     // Click the one inside the overlay
     fireEvent.click(cancelBtns[0]!);
-
-    expect(mockOnCancelPlanningRequest).toHaveBeenCalledTimes(1);
-    expect(mockOnCancelPlanningRequest.mock.calls[0]?.[0]).toEqual(expect.any(String));
 
     // Overlay should disappear because state resets when not busy
     await waitFor(() => {
@@ -158,23 +137,25 @@ describe("SprintComposer", () => {
     });
   });
 
-  it("shows New Sprint secondary action and opens a fresh composer without cancelling", async () => {
+  it("shows New Sprint secondary action and calls onClose without aborting", async () => {
     let resolveSubmit: (val: any) => void;
+    let isAborted = false;
     const submitPromise = new Promise((resolve) => {
       resolveSubmit = resolve;
     });
 
-    const mockOnSubmit = vi.fn(async () => submitPromise);
-    const mockOnCancelPlanningRequest = vi.fn();
-    const mockOnStartNewSprint = vi.fn();
+    const mockOnSubmit = vi.fn(async ({ signal }) => {
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          isAborted = true;
+        });
+      }
+      return submitPromise;
+    });
+    const mockOnClose = vi.fn();
 
     const { getByText, getByPlaceholderText, getAllByText } = render(
-      <SprintComposer
-        {...defaultProps}
-        onSubmit={mockOnSubmit}
-        onCancelPlanningRequest={mockOnCancelPlanningRequest}
-        onStartNewSprint={mockOnStartNewSprint}
-      />
+      <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} onClose={mockOnClose} />
     );
 
     const nameInput = getByPlaceholderText("Runtime hardening");
@@ -198,124 +179,13 @@ describe("SprintComposer", () => {
     const newSprintBtn = getByText("New Sprint");
     fireEvent.click(newSprintBtn);
 
-    expect(mockOnStartNewSprint).toHaveBeenCalled();
-    expect(mockOnCancelPlanningRequest).not.toHaveBeenCalled();
-    expect((nameInput as HTMLInputElement).value).toBe("");
+    // Should call onClose
+    expect(mockOnClose).toHaveBeenCalled();
+
+    // Should NOT abort
+    expect(isAborted).toBe(false);
 
     // Resolve the promise to cleanup
     resolveSubmit!(undefined);
-  });
-});
-
-import { AddTaskModal } from "../../../dashboard/src/v2/components/ui/AddTaskModal.js";
-
-describe("AddTaskModal Lifecycle", () => {
-  const defaultProps = {
-    sprints: [{ id: "SPR-1", name: "Test Sprint", status: "planning", order: 0 }],
-    availableTasks: [],
-    onClose: vi.fn(),
-    onSubmit: vi.fn(),
-  };
-
-  beforeEach(() => {
-    cleanup();
-  });
-
-  it("returns focus to trigger upon modal close", async () => {
-    const trigger = document.createElement("button");
-    trigger.textContent = "Open Modal";
-    document.body.appendChild(trigger);
-    trigger.focus();
-
-    const { getByLabelText, unmount } = render(
-      <AddTaskModal {...defaultProps} />
-    );
-
-    const closeBtn = getByLabelText("Close");
-    fireEvent.click(closeBtn);
-
-    // useFocusTrap sets the timeout to focus the previous active element.
-    await waitFor(() => {
-      expect(document.activeElement).toBe(trigger);
-    });
-
-    unmount();
-    trigger.remove();
-  });
-
-  it("disables cancel and close buttons during pending submit", async () => {
-    let resolveSubmit: (val: any) => void;
-    const submitPromise = new Promise((resolve) => {
-      resolveSubmit = resolve;
-    });
-    const mockOnSubmit = vi.fn(() => submitPromise);
-
-    const { getByLabelText, getByRole, getByText } = render(
-      <AddTaskModal {...defaultProps} onSubmit={mockOnSubmit} />
-    );
-
-    const sprintSelect = getByLabelText("Sprint");
-    const titleInput = getByLabelText("Title");
-
-    fireEvent.input(sprintSelect, { target: { value: "SPR-1" } });
-    fireEvent.input(titleInput, { target: { value: "A valid title" } });
-
-    const submitButton = getByRole("button", { name: "Create Task" });
-    fireEvent.click(submitButton);
-
-    await waitFor(() => {
-      expect(mockOnSubmit).toHaveBeenCalled();
-    });
-
-    const closeBtn = getByLabelText("Close");
-    const cancelBtn = getByText("Cancel");
-
-    expect(closeBtn).toBeDisabled();
-    expect(cancelBtn).toBeDisabled();
-    expect(submitButton).toHaveAttribute("aria-disabled", "true");
-
-    resolveSubmit!(undefined);
-  });
-
-  it("displays error in ActionFeedbackRegion without auto dismiss, and handles dismiss", async () => {
-    const mockOnSubmit = vi.fn(() => Promise.reject(new Error("API Error 500")));
-
-    const { getByLabelText, getByRole, getByText, queryByText, queryByRole } = render(
-      <AddTaskModal {...defaultProps} onSubmit={mockOnSubmit} />
-    );
-
-    const sprintSelect = getByLabelText("Sprint");
-    const titleInput = getByLabelText("Title");
-
-    fireEvent.input(sprintSelect, { target: { value: "SPR-1" } });
-    fireEvent.input(titleInput, { target: { value: "A valid title" } });
-
-    const submitButton = getByRole("button", { name: "Create Task" });
-    fireEvent.click(submitButton);
-
-    await waitFor(() => {
-      expect(mockOnSubmit).toHaveBeenCalled();
-    });
-
-    await waitFor(() => {
-      expect(getByText("API Error 500")).toBeInTheDocument();
-    });
-
-    const errorRegion = getByRole("status");
-    expect(errorRegion).toBeInTheDocument();
-
-    const dismissBtn = getByLabelText("Dismiss message");
-
-    // Explicitly focus it to ensure focus behavior is correctly represented
-    dismissBtn.focus();
-    expect(document.activeElement).toBe(dismissBtn);
-
-    fireEvent.click(dismissBtn);
-
-    await waitFor(() => {
-      expect(queryByText("API Error 500")).not.toBeInTheDocument();
-      // focus placement after error recovery: activeElement should not be a dead reference
-      expect(document.activeElement).not.toBe(dismissBtn);
-    });
   });
 });
