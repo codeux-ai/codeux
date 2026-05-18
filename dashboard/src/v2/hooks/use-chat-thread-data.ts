@@ -397,15 +397,6 @@ export const useChatThreadData = (options: {
   }, [cache, composerRef, createThreadForCompose, execution, input, selectedProject, selectedThread, setMessagesSnapshot, workerRouting]);
 
   const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
-    const confirmed = await requestConfirm({
-      title: "Delete Thread?",
-      body: "Are you sure you want to delete this conversation?",
-      confirmLabel: "Delete",
-      destructive: true,
-    });
-
-    if (!confirmed) return;
-
     const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);
     const userNextThreads = nextThreads.filter((t) => t.scope === "project");
     const nextSelection = resolveSelectedItemId(userNextThreads, selectedThreadId === threadId ? null : selectedThreadId);
@@ -430,7 +421,7 @@ export const useChatThreadData = (options: {
     } finally {
       setDeletingThreadId((current) => current === threadId ? null : current);
     }
-  }, [activateThread, cache, requestConfirm, selectedProject, selectedThreadId, setSuccess, setThreadsSnapshot]);
+  }, [activateThread, cache, selectedProject, selectedThreadId, setSuccess, setThreadsSnapshot]);
 
   return {
     threads,
