@@ -160,5 +160,28 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_sprint_preview_sessions_project_updated", "sprint_preview_sessions", "project_id, updated_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_sprint", "sprint_preview_sessions", "sprint_id, updated_at DESC");
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS scheduler_entries (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      scheduled_for TEXT NOT NULL,
+      timezone TEXT NOT NULL DEFAULT 'UTC',
+      recurrence_json TEXT NOT NULL,
+      target_json TEXT NOT NULL,
+      next_run_at TEXT,
+      last_run_at TEXT,
+      run_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_scheduler_entries_project_time", "scheduler_entries", "project_id, scheduled_for ASC");
+  ensureIndex(db, "idx_scheduler_entries_due", "scheduler_entries", "status, next_run_at ASC");
+
   backfillEstimatedDockerCliUsage(db);
 }

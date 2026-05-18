@@ -1,5 +1,5 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import { Check, ChevronDown } from "lucide-preact";
 import gsap from "gsap";
@@ -21,6 +21,7 @@ interface AvantgardeSelectProps {
   /** Compact variant for inline/card usage (smaller text, no border bg) */
   variant?: "default" | "compact" | "card";
   className?: string;
+  searchable?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;
 }
@@ -56,10 +57,12 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   placeholder = "Select\u2026",
   variant = "default",
   className = "",
+  searchable = false,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledby,
 }) => {
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
   const [isRendered, setIsRendered] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -192,6 +195,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
       setActiveIndex(idx >= 0 ? idx : 0);
     } else {
       setActiveIndex(-1);
+      setFilter("");
     }
   }, [open, value, options]);
 
@@ -220,47 +224,54 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
 
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!open) return;
-      if (e.key === "Escape") {
-        e.preventDefault();
+  const filteredOptions = useMemo(() => {
+    if (!searchable || !filter.trim()) return options;
+    const lowerFilter = filter.toLowerCase();
+    return options.filter(o => o.label.toLowerCase().includes(lowerFilter));
+  }, [options, searchable, filter]);
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (!open) return;
+    // Don't intercept space if we are in the search input
+    if (e.key === " " && (e.target as HTMLElement).tagName === "INPUT") {
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+      return;
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+      return;
+    }
+    if (!filteredOptions.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex(prev => (prev + 1) % filteredOptions.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex(prev => (prev - 1 + filteredOptions.length) % filteredOptions.length);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      setActiveIndex(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      setActiveIndex(filteredOptions.length - 1);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (activeIndex >= 0 && activeIndex < filteredOptions.length) {
+        onChange(filteredOptions[activeIndex].value);
         setOpen(false);
         triggerRef.current?.focus();
-        return;
       }
-      if (e.key === "Tab") {
-        e.preventDefault();
-        setOpen(false);
-        triggerRef.current?.focus();
-        return;
-      }
-      if (!options.length) return;
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActiveIndex(prev => (prev + 1) % options.length);
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActiveIndex(prev => (prev - 1 + options.length) % options.length);
-      } else if (e.key === "Home") {
-        e.preventDefault();
-        setActiveIndex(0);
-      } else if (e.key === "End") {
-        e.preventDefault();
-        setActiveIndex(options.length - 1);
-      } else if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        if (activeIndex >= 0 && activeIndex < options.length) {
-          onChange(options[activeIndex].value);
-          setOpen(false);
-          triggerRef.current?.focus();
-        }
-      }
-    };
-
-
+    }
+  };
 
   const selected = options.find((o) => o.value === value);
-
 
   const activeOptionRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -313,9 +324,25 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
             onKeyDown={onKeyDown}
             aria-label={ariaLabel}
             aria-labelledby={ariaLabelledby}
-            aria-activedescendant={activeIndex >= 0 && options[activeIndex] ? `select-option-${options[activeIndex].value.replace(/\W/g, '-')}` : undefined}
+            aria-activedescendant={activeIndex >= 0 && filteredOptions[activeIndex] ? `select-option-${filteredOptions[activeIndex].value.replace(/\W/g, '-')}` : undefined}
           >
-            {options.map((option, idx) => {
+            {searchable && (
+              <div className="px-2 pt-1 pb-1.5 sticky -top-1.5 bg-white/[0.97] dark:bg-void-800/[0.97] z-20">
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={filter}
+                  onInput={(e) => {
+                    setFilter(e.currentTarget.value);
+                    setActiveIndex(0);
+                  }}
+                  onKeyDown={onKeyDown as any}
+                  className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30 text-slate-700 dark:text-slate-200"
+                  ref={(el) => { if (el && open) el.focus(); }}
+                />
+              </div>
+            )}
+            {filteredOptions.map((option, idx) => {
               const isSelected = option.value === value;
               const isFocused = idx === activeIndex;
               return (
@@ -347,7 +374,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
                 </button>
               );
             })}
-            {options.length === 0 && (
+            {filteredOptions.length === 0 && (
               <div className="px-3.5 py-4 text-xs font-medium text-slate-400">No options available.</div>
             )}
           </div>

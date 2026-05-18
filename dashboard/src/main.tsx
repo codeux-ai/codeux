@@ -163,6 +163,7 @@ const ChatPage      = lazy(() => import("./v2/ChatPage.js").then(m => ({ default
 const TasksPage     = lazy(() => import("./v2/TasksPage.js").then(m => ({ default: m.TasksPage })));
 const AgentsPage    = lazy(() => import("./v2/AgentsPage.js").then(m => ({ default: m.AgentsPage })));
 const StatsPage     = lazy(() => import("./v2/StatsPage.js").then(m => ({ default: m.StatsPage })));
+const SchedulerPage = lazy(() => import("./v2/SchedulerPage.js").then(m => ({ default: m.SchedulerPage })));
 const SettingsPage  = lazy(() => import("./v2/SettingsPage.js").then(m => ({ default: m.SettingsPage })));
 const MemoryPage    = lazy(() => import("./v2/MemoryPage.js").then(m => ({ default: m.MemoryPage })));
 const BrowserPage   = lazy(() => import("./v2/BrowserPage.js").then(m => ({ default: m.BrowserPage })));
@@ -221,6 +222,12 @@ const statsRoute = createRoute({
   component: StatsPage,
 });
 
+const schedulerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/scheduler",
+  component: SchedulerPage,
+});
+
 const liveRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/live",
@@ -246,7 +253,7 @@ const browserRoute = createRoute({
   component: BrowserPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, configRoute, memoryRoute, browserRoute, liveRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, browserRoute, liveRoute]);
 const router = createRouter({ routeTree });
 
 // 4. Entry

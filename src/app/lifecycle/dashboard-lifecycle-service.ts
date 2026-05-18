@@ -41,6 +41,7 @@ import type { DashboardRealtimeService } from "../../services/dashboard-realtime
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
+import type { SchedulerService } from "../../services/scheduler-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
@@ -75,6 +76,7 @@ export interface BootDashboardDeps {
   executionControlService: ExecutionControlService;
   planningAgentService: PlanningAgentService;
   quicksprintService: QuicksprintService;
+  schedulerService: SchedulerService;
   sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   dashboardRealtimeService: DashboardRealtimeService;
@@ -264,6 +266,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
   deps.embeddingModelManager.restorePreviousModel().catch((error) => {
     deps.logger.warn(`Embedding model auto-restore failed: ${error}`);
   });
+  deps.schedulerService?.start();
 
   const handle = await setupDashboardServer({
     app: deps.app,
@@ -522,6 +525,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       return result;
     },
     quicksprintService: deps.quicksprintService,
+    schedulerService: deps.schedulerService,
     sprintIssueService: deps.sprintIssueService,
     realtimeService: deps.dashboardRealtimeService,
     logger: deps.logger.child({ component: "dashboard-server" }),

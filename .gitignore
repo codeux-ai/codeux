@@ -2,7 +2,8 @@
 node_modules
 dist
 .env
-
+.playwright-mcp/
+.playwright-mcp/*
 .DS_Store
 server.log
 .pnpm-store

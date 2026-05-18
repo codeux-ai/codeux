@@ -148,6 +148,7 @@ export class JulesAgentServer {
   private executionControlService: ExecutionControlService;
   private planningAgentService: PlanningAgentService;
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
+  private schedulerService: import("../services/scheduler-service.js").SchedulerService;
   private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
   private runtimeCleanupService: RuntimeCleanupService;
   private runtimeStartupRecoveryService: RuntimeStartupRecoveryService;
@@ -215,6 +216,7 @@ export class JulesAgentServer {
     this.executionControlService = deps.executionControlService;
     this.planningAgentService = deps.planningAgentService;
     this.quicksprintService = deps.quicksprintService;
+    this.schedulerService = deps.schedulerService;
     this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
     this.runtimeCleanupService = deps.runtimeCleanupService;
     this.runtimeStartupRecoveryService = new RuntimeStartupRecoveryService({
@@ -273,6 +275,7 @@ export class JulesAgentServer {
       this.mcpHttpHandle = null;
     }
     this.virtualWorkerService.stop();
+    this.schedulerService.stop();
     await this.server.close();
     process.exit(0);
   }
@@ -931,6 +934,7 @@ export class JulesAgentServer {
         executionControlService: this.executionControlService,
         planningAgentService: this.planningAgentService,
         quicksprintService: this.quicksprintService,
+        schedulerService: this.schedulerService,
         chatThreadRuntimeService: this.chatThreadRuntimeService,
         dashboardRealtimeService: this.dashboardRealtimeService,
         logger: this.logger,
