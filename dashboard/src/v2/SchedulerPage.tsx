@@ -745,11 +745,17 @@ export const SchedulerPage: FunctionComponent = () => {
                         <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-slate-500 dark:bg-white/[0.06] dark:text-slate-400">
                           {entry.status}
                         </span>
+                        {entry.runCount > 0 && (
+                          <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-signal-600 dark:text-signal-400">
+                            Fired ({entry.runCount})
+                          </span>
+                        )}
                         <span className="text-[11px] font-bold text-slate-400">{recurrenceSummary(entry.recurrence)}</span>
                       </div>
                       <h4 className="mt-2 truncate text-sm font-black text-slate-900 dark:text-white">{entry.title}</h4>
                       <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                        Next run: {entry.nextRunAt ? new Date(entry.nextRunAt).toLocaleString() : "complete"} · Runs: {entry.runCount}
+                        Next run: {entry.nextRunAt ? new Date(entry.nextRunAt).toLocaleString() : "none"}
+                        {entry.lastRunAt && ` · Last fired: ${new Date(entry.lastRunAt).toLocaleString()}`}
                       </p>
                       {entry.lastError && (
                         <p className="mt-2 text-xs font-bold text-status-red">{entry.lastError}</p>

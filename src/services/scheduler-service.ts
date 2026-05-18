@@ -91,12 +91,14 @@ export class SchedulerService {
         continue;
       }
       this.inFlightEntryIds.add(entry.id);
-      try {
-        await this.executeEntry(entry);
-        const occurrenceIso = entry.nextRunAt ?? entry.scheduledFor;
-        const nextRunAt = computeNextRunAfterOccurrence(occurrenceIso, entry.recurrence, entry.runCount + 1);
-        this.deps.schedulerRepository.markRunSucceeded(entry.id, occurrenceIso, nextRunAt);
-      } catch (error) {
+      
+      const occurrenceIso = entry.nextRunAt ?? entry.scheduledFor;
+      const nextRunAt = computeNextRunAfterOccurrence(occurrenceIso, entry.recurrence, entry.runCount + 1);
+      
+      // Immediately mark as succeeded to prevent double firing if app restarts during execution
+      this.deps.schedulerRepository.markRunSucceeded(entry.id, occurrenceIso, nextRunAt);
+
+      this.executeEntry(entry).catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
         this.deps.logger.error("Scheduled entry execution failed", {
           entryId: entry.id,
@@ -105,9 +107,9 @@ export class SchedulerService {
           error: message,
         });
         this.deps.schedulerRepository.markRunFailed(entry.id, message);
-      } finally {
+      }).finally(() => {
         this.inFlightEntryIds.delete(entry.id);
-      }
+      });
     }
   }
 
