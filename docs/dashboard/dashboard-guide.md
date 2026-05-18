@@ -92,6 +92,14 @@ Project management:
 - The active thread header now supports explicit assignment and reassignment to a project-bound connection
 - Reassigning a thread re-queues any unprocessed dashboard messages so the newly assigned listener can receive them
 - Connection badges now reflect heartbeat-derived `stale` and `offline` states instead of keeping dead listeners permanently `connected`
+- `GET /api/projects/:projectId/scheduler?from=<iso>&to=<iso>`
+  - Lists persisted scheduler entries plus expanded calendar occurrences for the requested window
+- `POST /api/projects/:projectId/scheduler`
+  - Creates a scheduler entry for a sprint, quicksprint template, or chat message
+- `PATCH /api/scheduler/:entryId`
+  - Updates scheduler status, timing, recurrence, or target payload
+- `DELETE /api/scheduler/:entryId`
+  - Deletes a scheduler entry
 
 Legacy runtime:
 - `GET /api/status`
@@ -257,6 +265,7 @@ Legacy runtime:
 - Tasks page stores explicit task executor preference (`auto`, `docker_cli`, `jules`)
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
 - Stats page is project-scoped and visualizes tracked token, time, and Git usage (insertions, deletions, PRs) for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
+- Scheduler page is project-scoped and provides a calendar plus 24-hour day view for timed sprint starts, quicksprint launches, and `/chat` messages. Recurring entries expand into every visible day in the calendar and support endless, fixed-count, and end-date/time recurrence. See [Scheduler](./scheduler.md).
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
   - floating horizontal slider in its own top strip, with large-screen five-card visibility for preview selection
   - the browser window starts directly below the slider instead of sharing a stretched first-row layout with the sprint controls

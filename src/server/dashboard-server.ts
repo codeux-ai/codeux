@@ -40,6 +40,7 @@ import type {
   UpdateQuicksprintTemplateInput,
 } from "../contracts/quicksprint-types.js";
 import type { QuicksprintService } from "../services/quicksprint-service.js";
+import type { SchedulerService } from "../services/scheduler-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
 import type {
   AgentPresetRecord,
@@ -186,6 +187,7 @@ export interface DashboardServerOptions {
   improveSprintPrompt?: (projectId: string, input: ImprovePromptInput, signal?: AbortSignal) => Promise<unknown>;
   planSprint?: (projectId: string, sprintId: string, options: PlanSprintOptions, signal?: AbortSignal) => Promise<unknown>;
   quicksprintService?: QuicksprintService;
+  schedulerService?: SchedulerService;
   sprintIssueService?: SprintIssueService;
 
   pauseSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;

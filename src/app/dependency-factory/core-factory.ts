@@ -29,6 +29,7 @@ import { RuntimeCleanupService } from "../../services/runtime-cleanup-service.js
 import { DockerRuntimePruneService } from "../../services/docker-runtime-prune-service.js";
 import { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import { MemoryRepository } from "../../repositories/memory-repository.js";
+import { SchedulerRepository } from "../../repositories/scheduler-repository.js";
 import { EmbeddingService } from "../../services/embedding-service.js";
 import { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
 import { MemoryService } from "../../services/memory-service.js";
@@ -78,6 +79,7 @@ export interface CoreDependencies {
   externalSettingsHints: ExternalSettingsHints;
   dashboardSettings: DashboardSettings;
   memoryRepository: MemoryRepository;
+  schedulerRepository: SchedulerRepository;
   embeddingService: EmbeddingService;
   embeddingModelManager: EmbeddingModelManager;
   memoryService: MemoryService;
@@ -191,6 +193,7 @@ export function createCoreDependencies(
   const julesSourceResolver = new JulesSourceResolver(julesApi);
   const activitySummary = new ActivitySummaryService();
   const memoryRepository = new MemoryRepository(appDbStorage);
+  const schedulerRepository = new SchedulerRepository(appDbStorage, dashboardRealtimeService);
   const embeddingService = new EmbeddingService();
   const embeddingModelManager = new EmbeddingModelManager(
     embeddingService,
@@ -247,6 +250,7 @@ export function createCoreDependencies(
     externalSettingsHints,
     dashboardSettings,
     memoryRepository,
+    schedulerRepository,
     embeddingService,
     embeddingModelManager,
     memoryService,

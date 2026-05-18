@@ -15,6 +15,7 @@ import { registerAgentPresetRoutes } from "./agent-preset-routes.js";
 import { registerExecutionInvocationRoutes } from "./execution-invocation-routes.js";
 import { registerQuicksprintRoutes } from "./quicksprint-routes.js";
 import { registerLocalDirectoryRoutes } from "./local-directory-routes.js";
+import { registerSchedulerRoutes } from "./scheduler-routes.js";
 
 export const registerDashboardRoutes = (
   app: Express,
@@ -35,4 +36,5 @@ export const registerDashboardRoutes = (
   registerAgentPresetRoutes(app, deps);
   registerExecutionInvocationRoutes(app, deps);
   registerQuicksprintRoutes(app, deps);
+  registerSchedulerRoutes(app, deps);
 };

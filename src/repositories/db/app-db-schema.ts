@@ -541,4 +541,23 @@ CREATE TABLE IF NOT EXISTS sprint_preview_sessions (
         FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
         UNIQUE (project_id, sprint_id)
       );
+
+CREATE TABLE IF NOT EXISTS scheduler_entries (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        target_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'scheduled',
+        scheduled_for TEXT NOT NULL,
+        timezone TEXT NOT NULL DEFAULT 'UTC',
+        recurrence_json TEXT NOT NULL,
+        target_json TEXT NOT NULL,
+        next_run_at TEXT,
+        last_run_at TEXT,
+        run_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
 `;

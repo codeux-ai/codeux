@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Link, useRouterState } from "@tanstack/react-router";
 import gsap from "gsap";
-import { Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, MessageCircle, ChevronLeft, ChevronRight } from "lucide-preact";
+import { Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, MessageCircle, ChevronLeft, ChevronRight, CalendarDays } from "lucide-preact";
 import { useProjectData } from "../context/project-data.js";
 import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
@@ -15,6 +15,7 @@ const ALL_NAV_ITEMS = [
     { icon: ListChecks, label: "Tasks",    path: "/tasks" },
     { icon: Cpu,        label: "Agents",   path: "/agents" },
     { icon: BarChart3,  label: "Stats",    path: "/stats" },
+    { icon: CalendarDays, label: "Schedule", path: "/scheduler" },
     { icon: Inbox,    label: "Memory",   path: "/memory" },
     { icon: Compass,  label: "Browser",  path: "/browser" },
     { icon: Zap,      label: "Live",     path: "/live" },

@@ -12,7 +12,8 @@ Use this page as the main entrypoint.
 3. [Dashboard Guide](./dashboard/dashboard-guide.md)
 4. [Sprint Imports](./dashboard/sprint-imports.md)
 5. [Quicksprint Templates](./dashboard/quicksprint-templates.md)
-6. [Glossary](./reference/glossary.md)
+6. [Scheduler](./dashboard/scheduler.md)
+7. [Glossary](./reference/glossary.md)
 
 ### Path 2: Building or modifying orchestration behavior
 1. [System Overview](./architecture/system-overview.md)
@@ -113,6 +114,7 @@ Use this page as the main entrypoint.
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
+- [Scheduler](./dashboard/scheduler.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)
 - [Qwen Code Integration](./settings/qwen-code-integration.md)

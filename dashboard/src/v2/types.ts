@@ -75,6 +75,15 @@ import type {
   UpdateSprintInput,
   UpdateTaskInput,
 } from "../../../src/contracts/project-management-types.js";
+import type {
+  CreateSchedulerEntryInput,
+  SchedulerCollectionResponse,
+  SchedulerEntryRecord,
+  SchedulerOccurrence,
+  ScheduleRecurrenceRule,
+  ScheduleTargetType,
+  UpdateSchedulerEntryInput,
+} from "../../../src/contracts/scheduler-types.js";
 
 export interface SegmentDefinition {
   label: string;
@@ -185,6 +194,13 @@ export type {
   UpdateTaskInput,
   ProviderId,
   VirtualWorkerProvider,
+  CreateSchedulerEntryInput,
+  SchedulerCollectionResponse,
+  SchedulerEntryRecord,
+  SchedulerOccurrence,
+  ScheduleRecurrenceRule,
+  ScheduleTargetType,
+  UpdateSchedulerEntryInput,
 };
 
 export type { SprintReviewSummary };

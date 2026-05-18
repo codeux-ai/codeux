@@ -14,6 +14,7 @@ import { ManagementToolHandler } from "../../mcp/management-tool-handler.js";
 import { StructuredProviderResponseService } from "../../services/structured-provider-response-service.js";
 import { ChatManagementActionService } from "../../services/chat-management-action-service.js";
 import { ProviderExecutionService } from "../../services/provider-execution-service.js";
+import { SchedulerService } from "../../services/scheduler-service.js";
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
@@ -23,6 +24,7 @@ export interface DashboardDependencies {
   planningAgentService: PlanningAgentService;
   quicksprintService: QuicksprintService;
   sprintIssueService: CoreDependencies["sprintIssueService"];
+  schedulerService: SchedulerService;
 }
 
 export function createDashboardDependencies(
@@ -336,6 +338,15 @@ export function createDashboardDependencies(
     (agentPresetId) => coreDeps.agentPresetRepository.getAgentPreset(agentPresetId),
   );
 
+  const schedulerService = new SchedulerService({
+    schedulerRepository: coreDeps.schedulerRepository,
+    projectManagementRepository,
+    quicksprintService,
+    chatThreadRuntimeService,
+    executionControlService,
+    logger: logger.child({ component: "scheduler-service" }),
+  });
+
   return {
     chatThreadRuntimeService,
     activityCacheService,
@@ -344,5 +355,6 @@ export function createDashboardDependencies(
     planningAgentService,
     quicksprintService,
     sprintIssueService: coreDeps.sprintIssueService,
+    schedulerService,
   };
 }

@@ -48,6 +48,7 @@
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)
 - [Quicksprint Templates](./dashboard/quicksprint-templates.md)
+- [Scheduler](./dashboard/scheduler.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)
 - [Qwen Code Integration](./settings/qwen-code-integration.md)
