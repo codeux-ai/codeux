@@ -472,6 +472,15 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     createTask: (projectId, input) => deps.projectManagementRepository.createTask(projectId, input),
     updateTask: (taskId, input) => deps.projectManagementRepository.updateTask(taskId, input),
     deleteTask: (taskId) => deps.projectManagementRepository.deleteTask(taskId),
+    searchJiraIssues: (projectId, jql) => {
+      const settings = deps.settingsRepository.resolveProjectDashboardSettings(projectId);
+      if (!settings.settings.jira) {
+        throw new Error("Jira is not configured for this project.");
+      }
+      return deps.sprintIssueService.searchJiraIssues(settings.settings.jira.host, settings.settings.jira.email, settings.settings.jira.apiToken, jql);
+    },
+    listSprintLinkedIssues: (sprintId) => deps.sprintIssueService.getLinkedIssues(sprintId),
+    replaceSprintLinkedIssues: (sprintId, projectId, issues) => deps.sprintIssueService.replaceLinkedIssues(sprintId, projectId, issues),
     listConnections: (projectId) => deps.connectionChatRepository.listConnections(projectId),
     updateConnection: (connectionId, input) => deps.connectionChatRepository.updateConnection(connectionId, input),
     listAgentPresets: async (projectId) => await deps.agentPresetSyncService.listAgentPresets(projectId),

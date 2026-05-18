@@ -4,6 +4,7 @@ import { asyncRoute, toErrorResponse, syncRoute, requireTrimmedString, parseTrim
 import type {
   CreateSprintInput,
   IssuePromptContextInput,
+  SprintLinkedIssueInput,
   SprintMarkdownImportInput,
   UpdateSprintInput,
 } from "../contracts/project-management-types.js";
@@ -15,6 +16,35 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
       res.json(deps.listSprints(requireTrimmedString(req.params.projectId, "projectId")));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to list sprints"));
+    }
+  }));
+
+  router.get("/api/projects/:projectId/jira/search", asyncRoute(async (req, res) => {
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      const jql = requireTrimmedString(req.query.jql as string | undefined, "jql");
+      res.json(await deps.searchJiraIssues(projectId, jql));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to search Jira issues"));
+    }
+  }));
+
+  router.get("/api/sprints/:sprintId/linked-issues", syncRoute((req, res) => {
+    try {
+      res.json(deps.listSprintLinkedIssues(requireTrimmedString(req.params.sprintId, "sprintId")));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to list linked issues"));
+    }
+  }));
+
+  router.put("/api/sprints/:sprintId/linked-issues", syncRoute((req, res) => {
+    try {
+      const sprintId = requireTrimmedString(req.params.sprintId, "sprintId");
+      const projectId = requireTrimmedString(req.body.projectId, "projectId");
+      const issues = Array.isArray(req.body.issues) ? req.body.issues as SprintLinkedIssueInput[] : [];
+      res.status(201).json(deps.replaceSprintLinkedIssues(sprintId, projectId, issues));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to update linked issues"));
     }
   }));
 

@@ -6,6 +6,7 @@ import { createServer, request as httpRequest } from "http";
 import type { IncomingMessage } from "http";
 import net from "net";
 import type { Duplex } from "stream";
+import type { JiraIssueSearchResult } from "../services/jira-api-client.js";
 import type {
   DashboardStatus,
   ExecutionAttentionItemSummary,
@@ -77,6 +78,8 @@ import type {
   UpdateProjectInput,
   UpdateSprintInput,
   UpdateTaskInput,
+  SprintLinkedIssueInput,
+  SprintLinkedIssueRecord,
 } from "../contracts/project-management-types.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 
@@ -161,6 +164,9 @@ export interface DashboardServerOptions {
   createTask: (projectId: string, input: CreateTaskInput) => TaskRecord;
   updateTask: (taskId: string, input: UpdateTaskInput) => TaskRecord;
   deleteTask: (taskId: string) => void;
+  searchJiraIssues: (projectId: string, jql: string) => Promise<JiraIssueSearchResult[]>;
+  listSprintLinkedIssues: (sprintId: string) => SprintLinkedIssueRecord[];
+  replaceSprintLinkedIssues: (sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]) => SprintLinkedIssueRecord[];
   listConnections: (projectId: string) => McpConnectionRecord[];
   updateConnection: (connectionId: string, input: UpdateMcpConnectionInput) => McpConnectionRecord;
   listAgentPresets: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
