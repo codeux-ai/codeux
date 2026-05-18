@@ -1,4 +1,5 @@
 import type { Task, TaskStatus, TaskExecutorType } from "../../types.js";
+import { type LiveTaskEnrichment } from "./live-task-enrichment.js";
 
 export interface DependencyIndicator {
   recordId: string;
@@ -12,6 +13,11 @@ export interface TaskCardViewModel {
   humanizedCreatedAt: string;
   executorLabel: string;
   dependencyIndicators: DependencyIndicator[];
+  sessionId?: string;
+  sessionState?: string;
+  prUrl?: string;
+  liveRunningTime?: string;
+  liveStartedAt?: string | null;
 }
 
 const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
@@ -19,6 +25,17 @@ const EXECUTOR_LABEL: Record<TaskExecutorType, string> = {
   docker_cli: "CLI",
   jules: "Jules",
 };
+
+// Duplicates the function from LiveTaskCard.tsx intentionally to keep it in the utility layer
+export function formatDuration(totalSeconds: number): string {
+    if (totalSeconds <= 0) return "0s";
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
 
 export function formatTimeAgo(iso: string, now: number = Date.now()): string {
   const timestamp = new Date(iso).getTime();
@@ -40,7 +57,8 @@ export function getExecutorLabel(executorType: TaskExecutorType): string {
 
 export function buildTaskCardViewModel(
   task: Task,
-  taskLookup: Map<string, Task>
+  taskLookup: Map<string, Task>,
+  liveEnrichment?: LiveTaskEnrichment
 ): TaskCardViewModel {
   const dependencyIndicators: DependencyIndicator[] = (task.dependsOnTaskIds || []).map(depId => {
     const depTask = taskLookup.get(depId);
@@ -65,5 +83,12 @@ export function buildTaskCardViewModel(
     humanizedCreatedAt: formatTimeAgo(task.createdAt),
     executorLabel: getExecutorLabel(task.executorType),
     dependencyIndicators,
+    sessionId: liveEnrichment?.sessionId,
+    sessionState: liveEnrichment?.sessionState,
+    prUrl: liveEnrichment?.prUrl,
+    liveRunningTime: liveEnrichment?.liveTotalSeconds && liveEnrichment.liveTotalSeconds > 0
+      ? formatDuration(liveEnrichment.liveTotalSeconds)
+      : undefined,
+    liveStartedAt: liveEnrichment?.liveStartedAt,
   };
 }

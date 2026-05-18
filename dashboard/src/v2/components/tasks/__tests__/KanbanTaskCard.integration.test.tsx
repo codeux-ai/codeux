@@ -144,6 +144,33 @@ describe("KanbanTaskCard Integration", () => {
     expect(getByText("Auto")).toBeInTheDocument();
   });
 
+  const mockLiveViewModel: TaskCardViewModel = {
+    ...mockViewModel,
+    sessionId: "abc123",
+    sessionState: "ACTIVE",
+    prUrl: "https://github.com/org/repo/pull/42",
+    liveRunningTime: "4m 12s",
+  };
+
+  it("renders correctly with live execution fields", () => {
+    const { getByText } = render(
+      <KanbanTaskCard
+        viewModel={mockLiveViewModel}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    expect(getByText("abc123")).toBeInTheDocument();
+    expect(getByText("ACTIVE")).toBeInTheDocument();
+    expect(getByText("4m 12s")).toBeInTheDocument();
+
+    // Test that the PR link anchor tag exists by checking for "PR"
+    const prLink = getByText("PR").closest('a');
+    expect(prLink).toBeInTheDocument();
+    expect(prLink).toHaveAttribute("href", "https://github.com/org/repo/pull/42");
+  });
+
   it("provides accessible interaction targets and structure", async () => {
     const user = userEvent.setup();
     const { getByTitle, container, getByText } = render(

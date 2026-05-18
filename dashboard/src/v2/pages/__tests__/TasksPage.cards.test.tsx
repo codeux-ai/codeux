@@ -45,6 +45,12 @@ vi.mock("../../context/project-data.js", () => {
 vi.mock("../../../hooks/useSprints.js", () => ({
   useSprints: vi.fn(),
 }));
+vi.mock("../../../hooks/use-dashboard-runtime-data.js", () => ({
+  useDashboardRuntimeData: vi.fn(() => ({
+    execution: { taskDispatches: [], recentEvents: [], sprintRuns: [] },
+    status: { subtasks: [] }
+  })),
+}));
 vi.mock("../../hooks/use-project-tasks.js", () => ({
   useProjectTasks: vi.fn(),
 }));

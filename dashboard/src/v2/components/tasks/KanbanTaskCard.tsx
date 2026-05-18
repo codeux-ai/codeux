@@ -2,14 +2,14 @@ import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useRef } from "preact/hooks";
 import gsap from "gsap";
-import { Clock, FolderGit2, Settings, Trash2 } from "lucide-preact";
+import { Clock, FolderGit2, GitPullRequest, Settings, Trash2 } from "lucide-preact";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import type { Task } from "../../types.js";
 import { PRIORITY_CFG, STATUS_CFG } from "../../lib/tasks-constants.js";
 import { useTaskCardMotion } from "../../lib/motion/task-card-motion.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import type { TaskCardViewModel } from "../../lib/tasks/task-card-view-model.js";
+import { type TaskCardViewModel, formatTimeAgo } from "../../lib/tasks/task-card-view-model.js";
 import { DependencyStatusIndicators } from "./DependencyStatusIndicators.js";
 import './kanban-task-card.css';
 
@@ -19,7 +19,7 @@ export const KanbanTaskCard: FunctionComponent<{
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
 }> = memo(({ viewModel, index = 0, onEdit, onDelete }) => {
-  const { task, humanizedCreatedAt, dependencyIndicators } = viewModel;
+  const { task, humanizedCreatedAt, dependencyIndicators, sessionId, sessionState, prUrl, liveRunningTime, liveStartedAt } = viewModel;
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
   const isReducedMotion = useReducedMotion();
@@ -92,6 +92,16 @@ export const KanbanTaskCard: FunctionComponent<{
         <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1">
           {viewModel.executorLabel}
         </span>
+        {sessionState && (
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 max-w-[72px] truncate">
+            {sessionState}
+          </span>
+        )}
+        {sessionId && (
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono max-w-[80px] truncate">
+            {sessionId}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-3 mt-auto relative z-10">
@@ -115,11 +125,25 @@ export const KanbanTaskCard: FunctionComponent<{
       <DependencyStatusIndicators indicators={dependencyIndicators} />
 
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-black/[0.04] dark:border-white/[0.04] relative z-10">
-        <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-slate-300 dark:text-slate-600">
-          <Clock className="w-3 h-3 shrink-0" strokeWidth={2} />
-          <span className="font-mono truncate">{task.time || "Not started"}</span>
+        <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-slate-300 dark:text-slate-600">
+            <Clock className="w-3 h-3 shrink-0" strokeWidth={2} />
+            <span className="font-mono truncate">{liveRunningTime ?? task.time ?? "Not started"}</span>
+          </div>
+          {prUrl && (
+            <a
+              href={prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-[9px] font-mono text-signal-500 hover:text-signal-400 transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <GitPullRequest className="w-3 h-3" strokeWidth={2} />
+              <span>PR</span>
+            </a>
+          )}
         </div>
-        <span className="text-[9px] font-mono text-slate-300 dark:text-slate-700">{humanizedCreatedAt}</span>
+        <span className="text-[9px] font-mono text-slate-300 dark:text-slate-700">{liveStartedAt ? `· ${formatTimeAgo(liveStartedAt)}` : humanizedCreatedAt}</span>
       </div>
 
       <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-within:opacity-100 focus-within:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
@@ -158,6 +182,9 @@ export const KanbanTaskCard: FunctionComponent<{
          );
 
   return tasksEqual && depsEqual &&
+         prev.viewModel.prUrl === next.viewModel.prUrl &&
+         prev.viewModel.sessionId === next.viewModel.sessionId &&
+         prev.viewModel.liveRunningTime === next.viewModel.liveRunningTime &&
          prev.onEdit === next.onEdit &&
          prev.onDelete === next.onDelete;
 });
