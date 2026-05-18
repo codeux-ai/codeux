@@ -8,6 +8,7 @@ import { readBoolean, readPort, readString } from "../shared/config/value-reader
 import { sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { sanitizeAiProvider } from "../domain/settings/settings-sanitizers/ai-provider-sanitizer.js";
 import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitizer.js";
+import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-sanitizer.js";
 import { sanitizeCiIntelligence } from "../domain/settings/settings-sanitizers/ci-sanitizer.js";
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
@@ -194,15 +195,10 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
 
   const aiProvider = sanitizeAiProvider(input, { externalHints });
   const git = sanitizeGit(input, externalHints);
-  const jiraInput = (input.jira && typeof input.jira === "object" ? input.jira : {}) as Partial<DashboardSettings["jira"]>;
-  const jira = {
-    host: readString(jiraInput.host, DEFAULT_DASHBOARD_SETTINGS.jira.host),
-    email: readString(jiraInput.email, DEFAULT_DASHBOARD_SETTINGS.jira.email),
-    apiToken: externalHints?.resolved?.jiraToken || readString(jiraInput.apiToken, DEFAULT_DASHBOARD_SETTINGS.jira.apiToken),
-    autoCloseLinkedIssues: readBoolean(jiraInput.autoCloseLinkedIssues, DEFAULT_DASHBOARD_SETTINGS.jira.autoCloseLinkedIssues),
-    defaultProject: readString(jiraInput.defaultProject, DEFAULT_DASHBOARD_SETTINGS.jira.defaultProject),
-    closeTransitionName: readString(jiraInput.closeTransitionName, DEFAULT_DASHBOARD_SETTINGS.jira.closeTransitionName),
-  };
+  const jira = sanitizeJira(input.jira, DEFAULT_DASHBOARD_SETTINGS.jira);
+  if (externalHints?.resolved?.jiraToken) {
+    jira.apiToken = externalHints.resolved.jiraToken;
+  }
   const ciIntelligence = sanitizeCiIntelligence(input, git.githubMode);
   const sprintLoopSteps = sanitizeSprintLoopSteps(input);
   const cliWorkflow = sanitizeCliWorkflow(input);

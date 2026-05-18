@@ -230,6 +230,35 @@ const validateGitSettings = (
   }
 };
 
+const validateJiraSettings = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[]
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.host !== "string") {
+    issues.push({ path: `${path}.host`, message: "Expected a string" });
+  }
+  if (typeof value.email !== "string") {
+    issues.push({ path: `${path}.email`, message: "Expected a string" });
+  }
+  if (typeof value.apiToken !== "string") {
+    issues.push({ path: `${path}.apiToken`, message: "Expected a string" });
+  }
+  if (typeof value.autoCloseLinkedIssues !== "boolean") {
+    issues.push({ path: `${path}.autoCloseLinkedIssues`, message: "Expected a boolean" });
+  }
+  if (typeof value.defaultProject !== "string") {
+    issues.push({ path: `${path}.defaultProject`, message: "Expected a string" });
+  }
+  if (typeof value.closeTransitionName !== "string") {
+    issues.push({ path: `${path}.closeTransitionName`, message: "Expected a string" });
+  }
+};
+
 const validateCiIntelligence = (
   value: unknown,
   path: string,
@@ -524,6 +553,7 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
   validateAutomationInterventions(payload.automationInterventions, "automationInterventions", issues);
   validateAiProvider(payload.aiProvider, "aiProvider", issues);
   validateGitSettings(payload.git, "git", issues);
+  validateJiraSettings(payload.jira, "jira", issues);
   validateCiIntelligence(payload.ciIntelligence, "ciIntelligence", issues);
   validateSprintLoopSteps(payload.sprintLoopSteps, "sprintLoopSteps", issues);
   validateCliWorkflow(payload.cliWorkflow, "cliWorkflow", issues);

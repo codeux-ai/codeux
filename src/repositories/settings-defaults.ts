@@ -356,7 +356,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     host: "",
     email: "",
     apiToken: "",
-    autoCloseLinkedIssues: true,
+    autoCloseLinkedIssues: false,
     defaultProject: "",
     closeTransitionName: "Done",
   },
