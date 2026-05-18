@@ -3,13 +3,13 @@ import { h } from "preact";
 import { render, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
-import { MemoryCard } from "../MemoryCard.tsx";
-import { lobotomizeModeSignal, memoriesSignal } from "../memoryState.ts";
-import * as MemoryApi from "../../../lib/memory-api.ts";
+import { MemoryCard } from "../MemoryCard.js";
+import { lobotomizeModeSignal, memoriesSignal } from "../memoryState.js";
+import * as MemoryApi from "../../../lib/memory-api.js";
 
 expect.extend(matchers);
 
-vi.mock("../../../lib/memory-api.ts", () => ({
+vi.mock("../../../lib/memory-api.js", () => ({
     deleteMemory: vi.fn(),
 }));
 
