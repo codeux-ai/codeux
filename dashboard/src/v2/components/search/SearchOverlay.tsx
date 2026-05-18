@@ -18,6 +18,7 @@ export interface SearchResults {
 }
 
 interface SearchOverlayProps {
+    anchorRef?: preact.RefObject<HTMLDivElement | null>;
     isLoading?: boolean;
     isOpen: boolean;
     onClose: () => void;
@@ -26,7 +27,7 @@ interface SearchOverlayProps {
     results: SearchResults;
 }
 
-export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, onClose, searchQuery, onSearchChange, results, isLoading }) => {
+export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef, isOpen, onClose, searchQuery, onSearchChange, results, isLoading }) => {
     const overlayRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -54,6 +55,47 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
 
     const allItems = CATEGORIES.flatMap(c => c.items?.map(item => ({ ...item, category: c.id })));
     const reducedMotion = useReducedMotion();
+
+    const [modalStyle, setModalStyle] = useState({});
+
+    const updatePosition = () => {
+        if (anchorRef && anchorRef.current && isOpen) {
+            const rect = anchorRef.current.getBoundingClientRect();
+            const top = rect.bottom + 8;
+            let left = rect.left;
+
+            // max width is around 800px or full viewport
+            const modalWidth = Math.min(800, window.innerWidth - 32);
+            if (left + modalWidth > window.innerWidth - 16) {
+                left = window.innerWidth - modalWidth - 16;
+            }
+            if (left < 16) left = 16;
+
+            setModalStyle({
+                position: 'fixed',
+                top: `${top}px`,
+                left: `${left}px`,
+                width: `${modalWidth}px`,
+                maxHeight: `calc(100vh - ${top + 16}px)`
+            });
+        } else if (!anchorRef && isOpen) {
+            setModalStyle({});
+        }
+    };
+
+    useLayoutEffect(() => {
+        updatePosition();
+    }, [isOpen, anchorRef]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        window.addEventListener('resize', updatePosition);
+        window.addEventListener('scroll', updatePosition, true);
+        return () => {
+            window.removeEventListener('resize', updatePosition);
+            window.removeEventListener('scroll', updatePosition, true);
+        };
+    }, [isOpen, anchorRef]);
 
     useLayoutEffect(() => {
         if (!overlayRef.current || !containerRef.current) return;
@@ -138,7 +180,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
     return (
         <div
             ref={overlayRef}
-            className="fixed inset-0 z-[100] hidden items-start justify-center pt-16 px-4 sm:px-6"
+            className={anchorRef ? "fixed inset-0 z-[100] hidden" : "fixed inset-0 z-[100] hidden items-start justify-center pt-16 px-4 sm:px-6"}
             style={{ display: 'none' }}
         >
             <div
@@ -148,7 +190,8 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
 
             <div
                 ref={containerRef}
-                className="relative w-full max-w-4xl mx-auto flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10"
+                className={anchorRef ? "flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10" : "relative w-full max-w-4xl mx-auto flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10"}
+                style={anchorRef ? modalStyle : {}}
             >
                 {/* Search Header */}
                 <div className="flex items-center px-4 py-4 border-b border-black/5 dark:border-white/5">
