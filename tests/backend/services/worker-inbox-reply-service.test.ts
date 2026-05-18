@@ -455,8 +455,77 @@ describe("WorkerInboxReplyService", () => {
         type: "worker_reply",
       }),
     );
-    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", undefined, {
+    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", "dev", {
       githubToken: undefined,
+      gitlabToken: undefined,
+    });
+  });
+
+  it("refreshes the task worker branch before clarification replies when one is recorded", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "Only the clarification answer." });
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Code UX",
+          baseDir: "/repo",
+        }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn(),
+        listMessages: vi.fn(),
+      } as any,
+      taskService: {
+        resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
+      } as any,
+      agentPresetSyncService: {
+        getProjectManagerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Project manager guide fallback",
+        }),
+      } as any,
+      executionRepository: {
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-worker-branch" }),
+        updateProviderInvocationUsage: vi.fn(),
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-worker-branch" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
+      getDashboardSettings: () => settings,
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+    });
+
+    await service.generateClarificationReply({
+      projectId: "project-1",
+      sprintGoal: "Ship the fix",
+      subtasks: [{
+        id: "T1",
+        title: "Fix clarification handling",
+        prompt: "Repair the Jules clarification flow.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+        worker_branch: "feature/task-1",
+        activities: [],
+      }],
+      task: {
+        id: "T1",
+        title: "Fix clarification handling",
+        prompt: "Repair the Jules clarification flow.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+        worker_branch: "feature/task-1",
+        activities: [],
+      },
+    });
+
+    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", "feature/task-1", {
+      githubToken: undefined,
+      gitlabToken: undefined,
     });
   });
 

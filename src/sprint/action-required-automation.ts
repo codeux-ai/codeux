@@ -216,7 +216,8 @@ export const applyActionRequiredAutomation = async (
 
       if (task.session_state === "AWAITING_USER_FEEDBACK") {
         const clarificationKey = buildClarificationDedupKey(task);
-        const storedClarificationKey = args.lastAutomatedInterventionKeys?.get(getInterventionStateKey(sessionId, "clarification"));
+        const clarificationStateKey = getInterventionStateKey(sessionId, "clarification");
+        const storedClarificationKey = args.lastAutomatedInterventionKeys?.get(clarificationStateKey);
         if (storedClarificationKey === clarificationKey) {
           task.status = "RUNNING";
           task.intervention_owner = "AGENT";
@@ -228,6 +229,8 @@ export const applyActionRequiredAutomation = async (
           }, `duplicate-clarification:${sessionId}`);
           continue;
         }
+
+        args.lastAutomatedInterventionKeys?.set(clarificationStateKey, clarificationKey);
 
         let reply: string;
         if (args.settings.autoAnswerClarificationMode === "WORKER" && args.generateWorkerClarificationReply) {
@@ -242,7 +245,6 @@ export const applyActionRequiredAutomation = async (
         }
 
         await args.sendSessionMessage(sessionId, reply);
-        args.lastAutomatedInterventionKeys?.set(getInterventionStateKey(sessionId, "clarification"), clarificationKey);
         task.status = "RUNNING";
         emitTaskEvent(task, "action_required_auto_replied", {
           sessionId,
@@ -290,6 +292,13 @@ export const applyActionRequiredAutomation = async (
         sessionId,
         sessionState: task.session_state || null,
       }, `auto-failed:${sessionId}:${task.session_state || "unknown"}`);
+      if (task.session_state === "AWAITING_USER_FEEDBACK") {
+        const clarificationStateKey = getInterventionStateKey(sessionId, "clarification");
+        const clarificationKey = buildClarificationDedupKey(task);
+        if (args.lastAutomatedInterventionKeys?.get(clarificationStateKey) === clarificationKey) {
+          args.lastAutomatedInterventionKeys.delete(clarificationStateKey);
+        }
+      }
       reportText += `⚠️ **Auto-Intervention Failed:** Task \`${task.id}\` could not be unblocked automatically.\n`;
     }
   }

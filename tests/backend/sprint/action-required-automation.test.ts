@@ -373,6 +373,92 @@ describe("action-required-automation", () => {
     expect(result.subtasks[0].status).toBe("RUNNING");
   });
 
+  it("does not start a second worker clarification invocation while the same question is already in flight", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    let resolveWorkerReply!: (reply: string) => void;
+    const workerReply = new Promise<string>((resolve) => {
+      resolveWorkerReply = resolve;
+    });
+    const generateWorkerReply = vi.fn().mockReturnValue(workerReply);
+    const lastAutomatedInterventionKeys = new Map<string, string>();
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [{ agentMessaged: { agentMessage: "Should I use Prisma or raw SQL?" } }],
+    });
+    const commonArgs = {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL" as const,
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "WORKER" as const,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+        clarificationCooldownSeconds: 300,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      generateWorkerClarificationReply: generateWorkerReply,
+      lastAutomatedInterventionKeys,
+    };
+
+    const first = applyActionRequiredAutomation([{ ...task }], commonArgs);
+    const second = await applyActionRequiredAutomation([{ ...task }], commonArgs);
+
+    expect(generateWorkerReply).toHaveBeenCalledTimes(1);
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(second.subtasks[0].status).toBe("RUNNING");
+    expect(second.subtasks[0].intervention_hint).toContain("already answered automatically");
+
+    resolveWorkerReply("Worker generated answer");
+    await first;
+
+    expect(generateWorkerReply).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith("abc123", "Worker generated answer");
+  });
+
+  it("clears the clarification reservation when auto-answering fails", async () => {
+    const sendMessage = vi.fn()
+      .mockRejectedValueOnce(new Error("temporary Jules error"))
+      .mockResolvedValueOnce({});
+    const lastAutomatedInterventionKeys = new Map<string, string>();
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [{ agentMessaged: { agentMessage: "Should I use Prisma or raw SQL?" } }],
+    });
+    const commonArgs = {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL" as const,
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE" as const,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+        clarificationCooldownSeconds: 300,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      lastAutomatedInterventionKeys,
+    };
+
+    const failed = await applyActionRequiredAutomation([{ ...task }], commonArgs);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(failed.subtasks[0].intervention_hint).toContain("temporary Jules error");
+
+    const retried = await applyActionRequiredAutomation([{ ...task }], commonArgs);
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(retried.subtasks[0].status).toBe("RUNNING");
+    expect(retried.reportText).toContain("Auto-Answered Clarification");
+  });
+
   it("skips auto-reply when the latest clarification request was already answered", async () => {
     const sendMessage = vi.fn().mockResolvedValue({});
     const lastAutomatedInterventionKeys = new Map<string, string>();

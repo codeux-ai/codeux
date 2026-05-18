@@ -77,3 +77,16 @@ export function queryExecutionInvocationsByProviderInvocationId(
 
   return rows.map(mapExecutionInvocationRow);
 }
+
+export function queryRunningRetryExecutionInvocations(db: Database): ExecutionInvocationRecord[] {
+  const rows = db.prepare(`
+    SELECT *
+    FROM execution_invocations
+    WHERE status = 'running'
+      AND last_retry_after_iso IS NOT NULL
+      AND last_error_category IN ('QUOTA_EXHAUSTED', 'RATE_LIMITED')
+    ORDER BY started_at ASC, rowid ASC
+  `).all() as ExecutionInvocationRow[];
+
+  return rows.map(mapExecutionInvocationRow);
+}

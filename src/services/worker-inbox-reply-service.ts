@@ -64,14 +64,16 @@ export class WorkerInboxReplyService {
       return;
     }
 
+    const branchToSync = branch?.trim() || settings.git.defaultBranch?.trim() || undefined;
+
     try {
-      await syncRemoteBranchIfAvailable(repoPath, branch, {
+      await syncRemoteBranchIfAvailable(repoPath, branchToSync, {
         githubToken: settings.git.githubToken,
         gitlabToken: settings.git.gitlabToken,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const branchLabel = branch?.trim() || settings.git.defaultBranch || "the requested branch";
+      const branchLabel = branchToSync || "the requested branch";
       throw new Error(`Failed to refresh origin before generating clarification reply from ${branchLabel}: ${message}`);
     }
   }
