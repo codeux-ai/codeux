@@ -13,8 +13,8 @@ import {
   X,
 } from "lucide-preact";
 import type { ProjectSummary, SprintLinkedIssueInput } from "../../types.js";
-import { TopRowFilters } from "../../../pages/github-import/TopRowFilters.js";
 import { fetchProjectIssuePromptContexts, searchProjectIssues, type RemoteIssueSummary } from "../../lib/project-api.js";
+import { MultiSelect } from "../ui/MultiSelect.js";
 
 interface SprintIssueImportModalProps {
   project: ProjectSummary;
@@ -75,7 +75,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
         hostDomain,
         search,
         state,
-        labels: labels,
+        labels,
         limit: 40,
       }, controller.signal);
       setIssues(results);
@@ -270,18 +270,10 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
               Search
             </button>
             <div className="lg:col-span-5">
-              <TopRowFilters
-                selectedTags={labels}
-                onTagsChange={setLabels}
-                availableTags={[
-                  { value: "bug", label: "bug" },
-                  { value: "enhancement", label: "enhancement" },
-                  { value: "documentation", label: "documentation" },
-                  { value: "feature", label: "feature" },
-                  { value: "question", label: "question" },
-                  { value: "help-wanted", label: "help-wanted" },
-                  { value: "good-first-issue", label: "good-first-issue" }
-                ]}
+              <MultiSelect
+                value={labels}
+                onChange={setLabels}
+                placeholder="Optional labels filter, press Enter to add"
               />
             </div>
           </div>
