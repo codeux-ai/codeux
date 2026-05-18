@@ -605,6 +605,7 @@ export interface GitSettings {
   autoCloseLinkedIssues: boolean;
   featureBranchPrefix: string;
   sprintBranchScheme: string;
+  sprintKeyPrefix: string;
 }
 
 export interface CiIntelligenceSettings {

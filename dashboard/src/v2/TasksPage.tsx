@@ -38,6 +38,7 @@ import { SkeletonCard } from "./components/ui/ListSkeletons.js";
 import { FilterStrip } from "./components/ui/FilterStrip.js";
 import { PageContainer } from "./components/ui/PageContainer.js";
 import { formatSprintDisplay } from "./lib/format-sprint.js";
+import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { KanbanTaskCard } from "./components/tasks/KanbanTaskCard.js";
 import { STATUS_CFG } from "./lib/tasks-constants.js";
 import { buildTaskCardViewModel } from "./lib/tasks/task-card-view-model.js";
@@ -165,7 +166,8 @@ const SprintSelector: FunctionComponent<{
   sprints: Sprint[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-}> = memo(({ sprints, selectedId, onSelect }) => {
+  sprintKeyPrefix: string;
+}> = memo(({ sprints, selectedId, onSelect, sprintKeyPrefix }) => {
   const [open, setOpen] = useState(false);
   const selected = selectedId ? sprints.find((sprint: Sprint) => sprint.id === selectedId) : null;
 
@@ -181,7 +183,7 @@ const SprintSelector: FunctionComponent<{
       >
         <Target className={`w-4 h-4 ${selected ? "text-ember-500" : "text-slate-400"} transition-colors`} strokeWidth={2} />
         <span className={`text-sm font-bold tracking-tight ${selected ? "text-ember-600 dark:text-ember-400" : "text-slate-600 dark:text-slate-400"}`}>
-          {selected ? formatSprintDisplay(selected) : "All Sprints"}
+          {selected ? formatSprintDisplay(selected, sprintKeyPrefix) : "All Sprints"}
         </span>
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`} strokeWidth={2} />
       </button>
@@ -222,7 +224,7 @@ const SprintSelector: FunctionComponent<{
                 }`} />
                 <div className="flex-1 min-w-0">
                   <span className={`text-sm font-bold tracking-tight ${isActive ? "text-ember-600 dark:text-ember-400" : "text-slate-800 dark:text-white"}`}>
-                    {formatSprintDisplay(sprint)}
+                    {formatSprintDisplay(sprint, sprintKeyPrefix)}
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em]">{sprint.date}</span>
@@ -310,6 +312,9 @@ export const TasksPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const { projects, selectedProject, createProject } = useProjectData();
+  const projectId = selectedProject?.id || null;
+  const settings = useProjectEffectiveSettings(projectId);
+  const sprintKeyPrefix = settings.data?.settings.git.sprintKeyPrefix || "SPR";
   const {
     data: sprints,
     loading: sprintsLoading,
@@ -643,7 +648,7 @@ export const TasksPage: FunctionComponent = () => {
 
       {isTaskScopeReady && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 -mt-4">
-          <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} />
+          <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} sprintKeyPrefix={sprintKeyPrefix} />
 
           <FilterStrip
             options={[

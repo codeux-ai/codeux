@@ -66,6 +66,24 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           />
         </Row>
         <Row
+          label="Sprint key prefix"
+          description="Prefix used when generating sprint keys (e.g. SPR-1)."
+          badge={getFieldBadge("git.sprintKeyPrefix")}
+        >
+          <TextInput
+            value={editableSettings.git.sprintKeyPrefix}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              git: {
+                ...current.git,
+                // Automatically enforce uppercase and limit to 10 chars max
+                sprintKeyPrefix: value.toUpperCase().slice(0, 10),
+              },
+            }))}
+            mono
+          />
+        </Row>
+        <Row
           label="Branch name scheme"
           description="Template used when naming sprint branches."
           badge={getFieldBadge("git.sprintBranchScheme")}

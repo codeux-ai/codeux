@@ -24,5 +24,8 @@ export const sanitizeGit = (
     sprintBranchScheme: typeof gitInput.sprintBranchScheme === "string" && gitInput.sprintBranchScheme.trim().length > 0
       ? gitInput.sprintBranchScheme.trim()
       : DEFAULT_DASHBOARD_SETTINGS.git.sprintBranchScheme,
+    sprintKeyPrefix: typeof gitInput.sprintKeyPrefix === "string" && gitInput.sprintKeyPrefix.trim().length >= 2 && gitInput.sprintKeyPrefix.trim().length <= 10
+      ? gitInput.sprintKeyPrefix.trim().toUpperCase()
+      : DEFAULT_DASHBOARD_SETTINGS.git.sprintKeyPrefix,
   };
 };

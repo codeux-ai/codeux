@@ -18,6 +18,7 @@ import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import type { Sprint, SprintStatus } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js";
+import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 
 // Polished badge tones: increased contrast for backgrounds and borders where appropriate
 const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
@@ -81,6 +82,9 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   onSprintToggle,
   onOpenRowMenu,
 }) => {
+  const settings = useProjectEffectiveSettings(sprint.projectId);
+  const sprintKeyPrefix = settings.data?.settings.git.sprintKeyPrefix || "SPR";
+
   const pendingToggleActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
   const pinActionId = `sprint-showcase:${sprint.id}`;
   const deleteActionId = `sprint-delete:${sprint.id}`;
@@ -140,7 +144,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         </button>
       </td>
       <td className={`block px-4 py-3 align-middle lg:table-cell lg:min-w-[8rem] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
-        <div className="font-mono text-sm font-bold text-slate-800 dark:text-white truncate">{formatSprintKey(sprint)}</div>
+        <div className="font-mono text-sm font-bold text-slate-800 dark:text-white truncate">{formatSprintKey(sprint, sprintKeyPrefix)}</div>
         <div className="mt-1 text-[10px] font-bold text-slate-400 truncate">
           {shortenId(sprint.id)}
         </div>

@@ -38,4 +38,13 @@ describe("formatSprintDisplay", () => {
   it("returns Unnamed Sprint if only number property is present", () => {
     expect(formatSprintDisplay({ number: 102 })).toBe("SPR-102: Sprint 102");
   });
+
+  it("formats using custom sprint key prefix", () => {
+    expect(formatSprintDisplay({ name: "Some Feature", sprintNumber: 102 }, "TKT")).toBe("TKT-102: Some Feature");
+  });
+
+  it("extracts and strips custom prefix from name", () => {
+    expect(formatSprintDisplay({ name: "TKT-102: Some Feature" }, "TKT")).toBe("TKT-102: Some Feature");
+    expect(formatSprintDisplay({ name: "tkt-102-Some Feature" }, "TKT")).toBe("TKT-102: Some Feature");
+  });
 });

@@ -23,6 +23,7 @@ import { WaveFluid } from "./WaveFluid.js";
 import { BorderTrace } from "./BorderTrace.js";
 import { HumanInterventionBadge } from "./HumanInterventionBadge.js";
 import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
+import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -60,8 +61,8 @@ interface SprintBubbleProps {
   onMarkCompleted?: () => void;
 }
 
-const formatSprintKey = (sprint: Sprint): string => (
-  sprint.number ? `SPR-${sprint.number}` : sprint.slug.toUpperCase()
+const formatSprintKey = (sprint: Sprint, prefix: string = "SPR"): string => (
+  sprint.number ? `${prefix}-${sprint.number}` : sprint.slug.toUpperCase()
 );
 
 const formatCardDate = (value: string): string => CARD_DATE_FORMATTER.format(new Date(value));
@@ -81,6 +82,9 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
   onToggleShowcase,
   onMarkCompleted,
 }) => {
+  const settings = useProjectEffectiveSettings(sprint.projectId);
+  const sprintKeyPrefix = settings.data?.settings.git.sprintKeyPrefix || "SPR";
+
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -213,7 +217,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
 
         <div className={`inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1.5 font-mono text-[11px] font-bold tracking-[0.14em] transition-transform duration-300 group-hover:-translate-y-3 dark:border-white/[0.06] dark:bg-white/[0.03] ${accentColor}`}>
           <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />
-          {formatSprintKey(sprint)}
+          {formatSprintKey(sprint, sprintKeyPrefix)}
         </div>
 
         <div className="mt-4 flex w-full flex-col items-center justify-center gap-3 px-4 transition-transform duration-300 group-hover:-translate-y-3">

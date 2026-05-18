@@ -16,6 +16,7 @@ import { useSprints } from "../../hooks/useSprints.js";
 import type { Task } from "../types.js";
 import type { SprintPreviewSession } from "../../types.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
+import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
 import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
@@ -27,7 +28,6 @@ import {
     type WorkerRoutingPreference,
 } from "../lib/project-worker-options.js";
 import { saveProjectSettings } from "../lib/settings-api.js";
-import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
 import { useNotifications } from "../hooks/use-notifications.js";
 
 export function useDropdownKeyboard(
@@ -201,10 +201,12 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
         selectProject,
         loading,
     } = useProjectData();
+    const projectId = selectedProject?.id || null;
+    const settings = useProjectEffectiveSettings(projectId);
+    const sprintKeyPrefix = settings.data?.settings.git.sprintKeyPrefix || "SPR";
 
     const { data: execution, loading: executionLoading, refetch: refreshExecution } = useExecutions(selectedProject?.id || null);
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
-    const projectId = selectedProject?.id || null;
 
 
 
@@ -431,7 +433,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                                 <StatusDot status={selectedSprint.status} />
                             )}
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[180px]">
-                                {sprintSwitchBusy ? "Switching..." : (sprintsLoading ? "Loading..." : formatSprintDisplay(selectedSprint))}
+                                {sprintSwitchBusy ? "Switching..." : (sprintsLoading ? "Loading..." : formatSprintDisplay(selectedSprint, sprintKeyPrefix))}
                             </span>
                             {sprints.length > 0 && (
                                 <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${sprintDropdownOpen ? 'rotate-180' : ''}`} />
@@ -493,7 +495,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                                     >
                                         <StatusDot status={sprint.status} />
                                         <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === sprint.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
-                                            {formatSprintDisplay(sprint)}
+                                            {formatSprintDisplay(sprint, sprintKeyPrefix)}
                                         </span>
                                         {selectedSprintId === sprint.id && (
                                             <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />

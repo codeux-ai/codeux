@@ -221,6 +221,13 @@ const validateGitSettings = (
   if (typeof value.sprintBranchScheme !== "string") {
     issues.push({ path: `${path}.sprintBranchScheme`, message: "Expected a string" });
   }
+  if (typeof value.sprintKeyPrefix !== "string") {
+    issues.push({ path: `${path}.sprintKeyPrefix`, message: "Expected a string" });
+  } else if (value.sprintKeyPrefix.length < 2 || value.sprintKeyPrefix.length > 10) {
+    issues.push({ path: `${path}.sprintKeyPrefix`, message: "Expected length between 2 and 10 characters" });
+  } else if (value.sprintKeyPrefix !== value.sprintKeyPrefix.toUpperCase()) {
+    issues.push({ path: `${path}.sprintKeyPrefix`, message: "Expected an uppercase string" });
+  }
 };
 
 const validateCiIntelligence = (

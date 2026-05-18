@@ -138,6 +138,7 @@ describe("validateSettingsPayload", () => {
         autoCreatePr: "bad",
         featureBranchPrefix: 3,
         sprintBranchScheme: 4,
+        sprintKeyPrefix: 5,
       },
       ciIntelligence: {
         enabled: "bad",
@@ -228,6 +229,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("aiProvider.providers.jules.apiKey");
     expect(paths).toContain("aiProvider.providers.gemini");
     expect(paths).toContain("git.githubMode");
+    expect(paths).toContain("git.sprintKeyPrefix");
     expect(paths).toContain("ciIntelligence.featurePrAutoMergeMode");
     expect(paths).toContain("ciIntelligence.mainBranchAutoMergeMode");
     expect(paths).toContain("sprintLoopSteps.watchLoopOutputIntervalSeconds");
@@ -285,5 +287,41 @@ describe("maxParsingRetries validation", () => {
     const payload10 = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
     payload10.cliWorkflow.maxParsingRetries = 10;
     expect(validateSettingsPayload(payload10).success).toBe(true);
+  });
+});
+
+describe("sprintKeyPrefix validation", () => {
+  it("rejects values less than 2 characters", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.git.sprintKeyPrefix = "A";
+    const result = validateSettingsPayload(payload);
+    expect(result.success).toBe(false);
+    expect(result.issues.map(i => i.path)).toContain("git.sprintKeyPrefix");
+  });
+
+  it("rejects values greater than 10 characters", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.git.sprintKeyPrefix = "TOOLONGPREFIX";
+    const result = validateSettingsPayload(payload);
+    expect(result.success).toBe(false);
+    expect(result.issues.map(i => i.path)).toContain("git.sprintKeyPrefix");
+  });
+
+  it("rejects non-uppercase values", () => {
+    const payload = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload.git.sprintKeyPrefix = "spr";
+    const result = validateSettingsPayload(payload);
+    expect(result.success).toBe(false);
+    expect(result.issues.map(i => i.path)).toContain("git.sprintKeyPrefix");
+  });
+
+  it("accepts valid prefixes", () => {
+    const payload1 = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload1.git.sprintKeyPrefix = "SP";
+    expect(validateSettingsPayload(payload1).success).toBe(true);
+
+    const payload2 = cloneDefaults({ env: {}, settingsJson: {}, resolved: {} });
+    payload2.git.sprintKeyPrefix = "CUSTOMPROJ";
+    expect(validateSettingsPayload(payload2).success).toBe(true);
   });
 });

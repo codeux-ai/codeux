@@ -79,6 +79,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     autoCloseLinkedIssues: settings.git.autoCloseLinkedIssues,
     featureBranchPrefix: settings.git.featureBranchPrefix,
     sprintBranchScheme: settings.git.sprintBranchScheme,
+    sprintKeyPrefix: settings.git.sprintKeyPrefix,
   },
   ciIntelligence: {
     ...settings.ciIntelligence,

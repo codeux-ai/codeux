@@ -419,7 +419,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Key</div>
               <div className="mt-2 font-mono text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                {(initialSprint?.number ? `SPR-${initialSprint.number}` : nextId).toUpperCase()}
+                {(initialSprint?.number ? nextId.replace(/\d+$/, String(initialSprint.number)) : nextId).toUpperCase()}
               </div>
             </div>
 

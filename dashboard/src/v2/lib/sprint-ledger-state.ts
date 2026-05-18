@@ -45,8 +45,8 @@ const STATUS_ORDER: Record<SprintStatus, number> = {
 
 export { STATUS_LABELS, STATUS_ORDER };
 
-export const formatSprintKey = (sprint: Sprint): string => (
-  sprint.number ? `SPR-${sprint.number}` : sprint.slug.toUpperCase()
+export const formatSprintKey = (sprint: Sprint, prefix: string = "SPR"): string => (
+  sprint.number ? `${prefix}-${sprint.number}` : sprint.slug.toUpperCase()
 );
 
 const compareString = (left: string, right: string): number => (
@@ -57,7 +57,7 @@ const compareString = (left: string, right: string): number => (
  * Filter sprints by a search query. Matches against sprint key,
  * name, status label, and goal text (case-insensitive).
  */
-export function filterSprints(sprints: Sprint[], filters: LedgerFilters): Sprint[] {
+export function filterSprints(sprints: Sprint[], filters: LedgerFilters, sprintKeyPrefix: string = "SPR"): Sprint[] {
   let filtered = sprints;
 
   if (filters.status !== "all" && filters.status.size > 0) {
@@ -84,7 +84,7 @@ export function filterSprints(sprints: Sprint[], filters: LedgerFilters): Sprint
   }
   const lower = trimmed.toLowerCase();
   return filtered.filter((sprint) => {
-    const key = formatSprintKey(sprint).toLowerCase();
+    const key = formatSprintKey(sprint, sprintKeyPrefix).toLowerCase();
     const name = sprint.name.toLowerCase();
     const statusLabel = STATUS_LABELS[sprint.status].toLowerCase();
     const goal = (sprint.goal || "").toLowerCase();
@@ -101,7 +101,7 @@ export function filterSprints(sprints: Sprint[], filters: LedgerFilters): Sprint
  * Sort sprints by a given column key and direction.
  * Uses the same sort logic as the original SprintsPage table.
  */
-export function sortSprints(sprints: Sprint[], sort: LedgerSort): Sprint[] {
+export function sortSprints(sprints: Sprint[], sort: LedgerSort, sprintKeyPrefix: string = "SPR"): Sprint[] {
   const ordered = [...sprints].sort((left, right) => {
     switch (sort.key) {
       case "showcasePinned":
@@ -110,7 +110,7 @@ export function sortSprints(sprints: Sprint[], sort: LedgerSort): Sprint[] {
         if (left.number !== null && right.number !== null && left.number !== right.number) {
           return left.number - right.number;
         }
-        return compareString(formatSprintKey(left), formatSprintKey(right));
+        return compareString(formatSprintKey(left, sprintKeyPrefix), formatSprintKey(right, sprintKeyPrefix));
       case "name":
         return compareString(left.name, right.name);
       case "status":
@@ -134,8 +134,8 @@ export function sortSprints(sprints: Sprint[], sort: LedgerSort): Sprint[] {
 /**
  * Filter then sort sprints for ledger display.
  */
-export function getLedgerSprints(sprints: Sprint[], filters: LedgerFilters, sort: LedgerSort): Sprint[] {
-  return sortSprints(filterSprints(sprints, filters), sort);
+export function getLedgerSprints(sprints: Sprint[], filters: LedgerFilters, sort: LedgerSort, sprintKeyPrefix: string = "SPR"): Sprint[] {
+  return sortSprints(filterSprints(sprints, filters, sprintKeyPrefix), sort, sprintKeyPrefix);
 }
 
 /**

@@ -52,13 +52,19 @@ const sprints: Sprint[] = [
 
 describe("sprint-ledger-state", () => {
   describe("formatSprintKey", () => {
-    it("formats numbered sprints as SPR-N", () => {
+    it("formats numbered sprints as SPR-N by default", () => {
       expect(formatSprintKey(sprints[0])).toBe("SPR-1");
       expect(formatSprintKey(sprints[2])).toBe("SPR-3");
     });
 
-    it("formats slug-based sprints as uppercase slug", () => {
+    it("formats numbered sprints using a custom prefix", () => {
+      expect(formatSprintKey(sprints[0], "TKT")).toBe("TKT-1");
+      expect(formatSprintKey(sprints[2], "CUSTOM")).toBe("CUSTOM-3");
+    });
+
+    it("formats non-numbered sprints with uppercase slug regardless of prefix", () => {
       expect(formatSprintKey(sprints[3])).toBe("HOTFIX");
+      expect(formatSprintKey(sprints[3], "TKT")).toBe("HOTFIX");
     });
   });
 
@@ -86,6 +92,12 @@ describe("sprint-ledger-state", () => {
     it("filters by sprint key (SPR-N)", () => {
       const result = filterSprints(sprints, { ...DEFAULT_LEDGER_FILTERS, query: "SPR-1" });
       expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("a");
+    });
+
+    it("filters by custom sprint key prefix", () => {
+      const result = filterSprints(sprints, { ...DEFAULT_LEDGER_FILTERS, query: "TKT-1" }, "TKT");
+      expect(result.length).toBe(1);
       expect(result[0].id).toBe("a");
     });
 

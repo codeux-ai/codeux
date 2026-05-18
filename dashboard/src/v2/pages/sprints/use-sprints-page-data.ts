@@ -196,7 +196,8 @@ export function useSprintsPageData() {
   const nextSprintNumber = useMemo(() => (
     sprints.reduce((maxNumber: number, sprint: Sprint) => Math.max(maxNumber, sprint.number || 0), 0) + 1
   ), [sprints]);
-  const nextId = `SPR-${String(nextSprintNumber).padStart(2, "0")}`;
+  const sprintKeyPrefix = effectiveSettings?.settings.git.sprintKeyPrefix || "SPR";
+  const nextId = `${sprintKeyPrefix}-${String(nextSprintNumber).padStart(2, "0")}`;
 
   const actualActiveRunsBySprintId = useMemo(() => {
     const map = new Map<string, { id: string; status: string }>();

@@ -1,4 +1,4 @@
-export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: number | string | null; number?: number | string | null } | null): string {
+export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: number | string | null; number?: number | string | null } | null, sprintKeyPrefix: string = "SPR"): string {
     if (!sprint) return "All Sprints";
 
     let num = sprint.sprintNumber || sprint.number;
@@ -6,18 +6,20 @@ export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: num
 
     // Attempt to extract sprint number if not provided
     if (!num && name) {
-        const match = name.match(/^SPR-(\d+)/i);
+        const prefixEscaped = sprintKeyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const match = name.match(new RegExp(`^${prefixEscaped}-(\\d+)`, 'i'));
         if (match) {
             num = match[1];
         }
     }
 
     if (num) {
-        // Strip out existing SPR-<num> prefix from the name to prevent duplication
+        // Strip out existing prefix-<num> from the name to prevent duplication
         // It handles optional spaces and colons/hyphens
-        const prefixRegex = new RegExp(`^SPR-${num}\\s*[:\\-]?\\s*`, 'i');
+        const prefixEscaped = sprintKeyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const prefixRegex = new RegExp(`^${prefixEscaped}-${num}\\s*[:\\-]?\\s*`, 'i');
         const cleanName = name ? name.replace(prefixRegex, '') : `Sprint ${num}`;
-        return `SPR-${num}: ${cleanName}`;
+        return `${sprintKeyPrefix}-${num}: ${cleanName}`;
     }
 
     return name || "Unnamed Sprint";

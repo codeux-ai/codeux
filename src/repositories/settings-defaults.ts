@@ -350,6 +350,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     autoCloseLinkedIssues: false,
     featureBranchPrefix: "feature/",
     sprintBranchScheme: DEFAULT_SPRINT_BRANCH_SCHEME,
+    sprintKeyPrefix: "SPR",
   },
   ciIntelligence: {
     enabled: true,
