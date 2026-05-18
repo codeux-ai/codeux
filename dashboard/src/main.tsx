@@ -168,9 +168,11 @@ const SchedulerPage = lazy(() => import("./v2/SchedulerPage.js").then(m => ({ de
 const SettingsPage  = lazy(() => import("./v2/SettingsPage.js").then(m => ({ default: m.SettingsPage })));
 const MemoryPage    = lazy(() => import("./v2/MemoryPage.js").then(m => ({ default: m.MemoryPage })));
 const BrowserPage   = lazy(() => import("./v2/BrowserPage.js").then(m => ({ default: m.BrowserPage })));
+const ErrorPage     = lazy(() => import("./v2/ErrorPage.js").then(m => ({ default: m.ErrorPage })));
 
 // 1. Root layout route
 const rootRoute = createRootRoute({
+  notFoundComponent: ErrorPage,
   component: () => {
     return (
       <ToastProvider>
