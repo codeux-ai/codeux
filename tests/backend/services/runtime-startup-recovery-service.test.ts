@@ -669,6 +669,188 @@ describe("RuntimeStartupRecoveryService", () => {
     );
   });
 
+  it("fails interrupted quota-wait QA review invocations so QA can retry after startup", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Quota Wait QA Project",
+      sourceType: "local",
+      sourceRef: "/workspace/quota-wait-qa-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Quota Wait QA Sprint",
+      number: 57,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Review after quota reset",
+      executorType: "docker_cli",
+      status: "completed",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      provider: "gemini",
+      mode: "docker_cli",
+      state: "COMPLETED",
+      startedAt: "2026-05-18T00:00:00.000Z",
+      finishedAt: "2026-05-18T00:10:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      sessionId: "qa-review-gemini-quota",
+      provider: "gemini",
+      purpose: "qa_review",
+      status: "failed",
+      executionMode: "DOCKER",
+      startedAt: "2026-05-18T00:11:00.000Z",
+      finishedAt: "2026-05-18T00:12:00.000Z",
+    });
+    const executionInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      providerInvocationId: providerInvocation.id,
+      type: "qa_review",
+      status: "running",
+      provider: "gemini",
+      model: "default",
+      startedAt: "2026-05-18T00:11:00.000Z",
+      lastErrorCategory: "QUOTA_EXHAUSTED",
+      lastErrorMessage: "Gemini quota exhausted.",
+      lastRetryAfterIso: "2026-05-18T04:57:04.113Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledRetryInvocationIds).toEqual([executionInvocation.id]);
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      id: executionInvocation.id,
+      status: "failed",
+      errorMessage: expect.stringContaining("waiting for provider QUOTA_EXHAUSTED recovery"),
+    });
+    expect(executionRepository.listExecutionInvocationMessages(executionInvocation.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          contentMarkdown: expect.stringContaining("moved back to a retryable state"),
+          metadata: expect.objectContaining({
+            recovery: "startup_provider_retry_wait_reconcile",
+            retryAfterIso: "2026-05-18T04:57:04.113Z",
+          }),
+        }),
+      ]),
+    );
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      id: providerInvocation.id,
+      status: "failed",
+    });
+  });
+
+  it("requeues task execution interrupted while waiting for quota reset", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Quota Wait Task Project",
+      sourceType: "local",
+      sourceRef: "/workspace/quota-wait-task-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Quota Wait Task Sprint",
+      number: 58,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Continue after quota reset",
+      executorType: "docker_cli",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "gemini",
+      mode: "docker_cli",
+      sessionId: "cli-gemini-quota",
+      state: "RUNNING",
+      startedAt: "2026-05-18T00:00:00.000Z",
+    });
+    const executionInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      dispatchId: dispatch.id,
+      type: "cli_task_coding",
+      status: "running",
+      provider: "gemini",
+      model: "default",
+      startedAt: "2026-05-18T00:11:00.000Z",
+      lastErrorCategory: "QUOTA_EXHAUSTED",
+      lastErrorMessage: "Gemini quota exhausted.",
+      lastRetryAfterIso: "2026-05-18T04:57:04.113Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledRetryInvocationIds).toEqual([executionInvocation.id]);
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      id: dispatch.id,
+      status: "failed",
+      errorMessage: expect.stringContaining("Local CLI execution was interrupted"),
+    });
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      id: executionInvocation.id,
+      status: "failed",
+      errorMessage: expect.stringContaining("provider QUOTA_EXHAUSTED recovery"),
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      id: taskRun.id,
+      state: "FAILED",
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "cli_workflow_failed",
+          payload: expect.objectContaining({
+            reason: "runtime_restart_interrupted",
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("logs startup recovery activity and surfaces recoverSprintRun errors without aborting recovery", async () => {
     const logger = {
       info: vi.fn(),
@@ -708,6 +890,7 @@ describe("RuntimeStartupRecoveryService", () => {
       recoveredCliSessions: 0,
       reconciledLocalDispatches: 0,
       reconciledProviderDispatches: 0,
+      reconciledRetryInvocations: 0,
       reconciledContainerInvocations: 0,
       resumedSprintRuns: 1,
       supersededSprintRuns: 0,

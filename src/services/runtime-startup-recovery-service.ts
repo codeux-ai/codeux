@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { DashboardSettings, DashboardSettingsScope, DockerContainer, ProviderId } from "../contracts/app-types.js";
-import type { ProviderInvocationUsageRecord, TaskRunRecord } from "../contracts/execution-types.js";
+import type { ExecutionInvocationRecord, ProviderInvocationUsageRecord, TaskRunRecord } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
@@ -19,6 +19,7 @@ export interface RuntimeStartupRecoveryResult {
   reconciledLocalDispatchIds: string[];
   reconciledProviderDispatchIds: string[];
   reconciledContainerInvocationIds: string[];
+  reconciledRetryInvocationIds: string[];
   resumedSprintRunIds: string[];
   supersededSprintRunIds: string[];
 }
@@ -43,6 +44,7 @@ export class RuntimeStartupRecoveryService {
     const recoveredCliSessionIds = cliRecovery.sessionIds;
     const reconciledLocalDispatchIds = this.reconcileInterruptedLocalDispatches(new Set(recoveredCliSessionIds));
     const reconciledProviderDispatchIds = this.reconcileInterruptedProviderDispatches();
+    const reconciledRetryInvocationIds = this.reconcileInterruptedRetryWaits();
     const reconciledContainerInvocationIds = await this.reconcileInterruptedCliInvocations(new Set(recoveredCliSessionIds));
     const { resumedSprintRunIds, supersededSprintRunIds } = this.resumeRecoverableSprintRuns();
 
@@ -50,6 +52,7 @@ export class RuntimeStartupRecoveryService {
       recoveredCliSessionIds.length > 0
       || reconciledLocalDispatchIds.length > 0
       || reconciledProviderDispatchIds.length > 0
+      || reconciledRetryInvocationIds.length > 0
       || reconciledContainerInvocationIds.length > 0
       || resumedSprintRunIds.length > 0
       || supersededSprintRunIds.length > 0
@@ -58,6 +61,7 @@ export class RuntimeStartupRecoveryService {
         recoveredCliSessions: recoveredCliSessionIds.length,
         reconciledLocalDispatches: reconciledLocalDispatchIds.length,
         reconciledProviderDispatches: reconciledProviderDispatchIds.length,
+        reconciledRetryInvocations: reconciledRetryInvocationIds.length,
         reconciledContainerInvocations: reconciledContainerInvocationIds.length,
         resumedSprintRuns: resumedSprintRunIds.length,
         supersededSprintRuns: supersededSprintRunIds.length,
@@ -68,6 +72,7 @@ export class RuntimeStartupRecoveryService {
       recoveredCliSessionIds,
       reconciledLocalDispatchIds,
       reconciledProviderDispatchIds,
+      reconciledRetryInvocationIds,
       reconciledContainerInvocationIds,
       resumedSprintRunIds,
       supersededSprintRunIds,
@@ -130,6 +135,52 @@ export class RuntimeStartupRecoveryService {
 
       this.reconcileInterruptedTaskExecution(invocation, failureReason, reconciledAt);
 
+      reconciledInvocationIds.push(invocation.id);
+    }
+
+    return reconciledInvocationIds;
+  }
+
+  private reconcileInterruptedRetryWaits(): string[] {
+    const runningRetryInvocations = this.deps.executionRepository.listRunningRetryExecutionInvocations();
+    if (runningRetryInvocations.length === 0) {
+      return [];
+    }
+
+    const reconciledAt = new Date().toISOString();
+    const reconciledInvocationIds: string[] = [];
+
+    for (const invocation of runningRetryInvocations) {
+      const retryAt = invocation.lastRetryAfterIso || "unknown";
+      const retryAtMs = Date.parse(retryAt);
+      const retryWindow = Number.isFinite(retryAtMs) && retryAtMs > Date.now()
+        ? `The retry window is still active until ${retryAt}.`
+        : `The retry time ${retryAt} has passed.`;
+      const failureReason = [
+        `Recovered interrupted ${invocation.type} invocation after Code UX restart while waiting for provider ${invocation.lastErrorCategory || "retry"} recovery.`,
+        retryWindow,
+        "The invocation was moved back to a retryable state so recovered orchestration can start a fresh continuation.",
+      ].join(" ");
+
+      this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
+        status: "failed",
+        finishedAt: reconciledAt,
+        errorMessage: failureReason,
+      });
+      this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
+        role: "system",
+        contentMarkdown: failureReason,
+        metadata: {
+          recovery: "startup_provider_retry_wait_reconcile",
+          provider: invocation.provider,
+          model: invocation.model,
+          errorCategory: invocation.lastErrorCategory,
+          retryAfterIso: invocation.lastRetryAfterIso,
+        },
+        createdAt: reconciledAt,
+      });
+
+      this.reconcileInterruptedTaskExecutionInvocation(invocation, failureReason, reconciledAt);
       reconciledInvocationIds.push(invocation.id);
     }
 
@@ -410,6 +461,66 @@ export class RuntimeStartupRecoveryService {
           errorMessage: failureReason,
         }, {
           sourceEventKey: `startup-recovery:cli-invocation:${invocation.id}:${taskRun.id}`,
+        });
+      }
+    }
+
+    this.deps.projectManagementRepository.updateTask(invocation.taskId, {
+      status: "pending",
+    });
+
+    if (invocation.sprintRunId) {
+      this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(invocation.sprintRunId);
+    }
+  }
+
+  private reconcileInterruptedTaskExecutionInvocation(
+    invocation: ExecutionInvocationRecord,
+    failureReason: string,
+    reconciledAt: string,
+  ): void {
+    if (!["cli_task_coding", "cli_task_followup"].includes(invocation.type) || !invocation.taskId) {
+      return;
+    }
+
+    const task = this.deps.projectManagementRepository.getTask(invocation.taskId);
+    if (!task || task.status !== "in_progress") {
+      return;
+    }
+
+    if (invocation.dispatchId) {
+      const dispatch = this.deps.executionRepository.getTaskDispatch(invocation.dispatchId);
+      if (dispatch && ACTIVE_DISPATCH_STATUSES.includes(dispatch.status as (typeof ACTIVE_DISPATCH_STATUSES)[number])) {
+        this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+        this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+          connectionId: null,
+          status: "failed",
+          finishedAt: reconciledAt,
+          lastHeartbeatAt: reconciledAt,
+          errorMessage: failureReason,
+        });
+      }
+    }
+
+    if (invocation.taskRunId) {
+      const taskRun = this.deps.executionRepository.getTaskRun(invocation.taskRunId);
+      if (taskRun && !isTerminalTaskRunState(taskRun)) {
+        this.deps.executionRepository.updateTaskRun(taskRun.id, {
+          connectionId: null,
+          state: "FAILED",
+          finishedAt: reconciledAt,
+          durationMs: calculateDurationMs(taskRun, reconciledAt),
+        });
+      }
+      if (taskRun) {
+        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "cli_workflow_failed", "system", {
+          dispatchId: invocation.dispatchId || null,
+          executionInvocationId: invocation.id,
+          providerInvocationId: invocation.providerInvocationId || null,
+          reason: "runtime_restart_interrupted_retry_wait",
+          errorMessage: failureReason,
+        }, {
+          sourceEventKey: `startup-recovery:retry-wait:${invocation.id}:${taskRun.id}`,
         });
       }
     }

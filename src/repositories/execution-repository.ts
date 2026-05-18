@@ -8,6 +8,7 @@ import {
   queryExecutionInvocations,
   queryExecutionInvocationMessages,
   queryExecutionInvocationsByProviderInvocationId,
+  queryRunningRetryExecutionInvocations,
 } from "./execution/execution-invocations-query.js";
 import { randomUUID } from "crypto";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
@@ -429,6 +430,10 @@ export class ExecutionRepository {
     offset?: number;
   }): ExecutionInvocationRecord[] {
     return queryExecutionInvocations(this.db, params);
+  }
+
+  listRunningRetryExecutionInvocations(): ExecutionInvocationRecord[] {
+    return queryRunningRetryExecutionInvocations(this.db);
   }
 
   listExecutionInvocationMessages(invocationId: string): ExecutionInvocationMessageRecord[] {
