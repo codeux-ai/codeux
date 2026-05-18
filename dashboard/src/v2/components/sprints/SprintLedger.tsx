@@ -34,6 +34,7 @@ import { SprintLedgerBulkActions } from "./SprintLedgerBulkActions.js";
 import { SprintLedgerRow } from "./SprintLedgerRow.js";
 
 export interface SprintLedgerProps {
+  initialSprintKeyFilter?: string;
   sprints: Sprint[];
   isLoading?: boolean;
   listWindow: ListWindowOption;
@@ -51,6 +52,7 @@ export interface SprintLedgerProps {
 }
 
 export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
+  initialSprintKeyFilter,
   sprints,
   isLoading,
   listWindow,
@@ -66,7 +68,10 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   onBulkShowcaseEnable,
   onBulkShowcaseDisable,
 }) => {
-  const [filters, setFilters] = useState<LedgerFilters>(DEFAULT_LEDGER_FILTERS);
+  const [filters, setFilters] = useState<LedgerFilters>({
+    ...DEFAULT_LEDGER_FILTERS,
+    query: initialSprintKeyFilter || "",
+  });
   const [sort, setSort] = useState<LedgerSort>({ key: "createdAt", direction: "desc" });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { isOpen, options, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
