@@ -11,6 +11,7 @@ import { ProjectManagementRepository } from "../repositories/project-management-
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { resolveRepositoryHost } from "../infrastructure/git/repository-host-resolver.js";
 import { execFile } from "child_process";
+import * as jiraApiClient from "./jira-api-client.js";
 
 export interface IssueSearchInput {
   provider?: LinkedIssueProvider;
@@ -33,6 +34,7 @@ interface IssueServiceDeps {
   getDashboardSettings: (scope?: { projectId?: string; sprintId?: string }) => DashboardSettings;
   runCommand?: (command: string, args: string[]) => Promise<LocalCommandResult>;
   logger?: Logger;
+  jiraApiClient?: typeof jiraApiClient;
 }
 
 interface LocalCommandResult {
@@ -46,6 +48,25 @@ export class SprintIssueService {
 
   constructor(private readonly deps: IssueServiceDeps) {
     this.logger = deps.logger ?? createLogger({ bindings: { component: "sprint-issue-service" } });
+  }
+
+  async searchJiraIssues(host: string, email: string, apiToken: string, jql: string): Promise<jiraApiClient.JiraIssueSearchResult[]> {
+    if (!this.deps.jiraApiClient) {
+      throw new Error("Jira API client is not injected.");
+    }
+    return this.deps.jiraApiClient.searchIssues(host, email, apiToken, jql);
+  }
+
+  replaceLinkedIssues(sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]): SprintLinkedIssueRecord[] {
+    return this.deps.projectManagementRepository.replaceSprintLinkedIssues(projectId, sprintId, issues);
+  }
+
+  getLinkedIssues(sprintId: string): SprintLinkedIssueRecord[] {
+    const sprint = this.deps.projectManagementRepository.getSprint(sprintId);
+    if (!sprint) {
+      throw new Error(`Sprint not found: ${sprintId}`);
+    }
+    return this.deps.projectManagementRepository.listSprintLinkedIssues(sprint.projectId, sprintId);
   }
 
   async searchIssues(projectId: string, input: IssueSearchInput): Promise<RemoteIssueSummary[]> {
@@ -94,7 +115,9 @@ export class SprintIssueService {
   }
 
   async closeLinkedIssues(projectId: string, sprintId: string): Promise<{ reportText: string; closed: number; failed: number; skipped: number }> {
-    const settings = this.deps.getDashboardSettings({ projectId, sprintId });
+    const sprint = this.deps.projectManagementRepository.getSprint(sprintId);
+    const resolvedProjectId = sprint ? sprint.projectId : projectId;
+    const settings = this.deps.getDashboardSettings({ projectId: resolvedProjectId, sprintId });
     const linkedIssues = this.deps.projectManagementRepository
       .listSprintLinkedIssues(projectId, sprintId)
       .filter((issue) => issue.closeState !== "closed");
@@ -150,6 +173,33 @@ export class SprintIssueService {
   }
 
   private async closeRemoteIssue(issue: SprintLinkedIssueRecord, settings: DashboardSettings): Promise<void> {
+    if (issue.provider === "jira") {
+      if (!this.deps.jiraApiClient) {
+        throw new Error("Jira API client is not injected.");
+      }
+      const closeTransitionName = settings.jira.closeTransitionName?.trim() || "Done";
+      const transitions = await this.deps.jiraApiClient.getTransitions(
+        settings.jira.host,
+        settings.jira.email,
+        settings.jira.apiToken,
+        issue.issueKey
+      );
+      const closeTransition = transitions.find((t: jiraApiClient.JiraTransition) =>
+        t.name.toLowerCase() === closeTransitionName.toLowerCase()
+      );
+      if (!closeTransition) {
+        throw new Error(`Transition '${closeTransitionName}' not found for Jira issue ${issue.issueKey}`);
+      }
+      await this.deps.jiraApiClient.transitionIssue(
+        settings.jira.host,
+        settings.jira.email,
+        settings.jira.apiToken,
+        issue.issueKey,
+        closeTransition.id
+      );
+      return;
+    }
+
     if (issue.provider === "github") {
       const token = settings.git.githubToken?.trim();
       if (!token) {

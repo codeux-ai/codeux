@@ -288,6 +288,7 @@ describe("SprintIssueService", () => {
       projectManagementRepository: {
         listSprintLinkedIssues: () => [linkedIssue],
         updateSprintLinkedIssueCloseState,
+        getSprint: () => ({ projectId: project.id }),
       } as any,
       getDashboardSettings: () => ({
         ...DEFAULT_DASHBOARD_SETTINGS,
