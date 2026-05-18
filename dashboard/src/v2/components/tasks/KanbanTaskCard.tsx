@@ -10,7 +10,9 @@ import { PRIORITY_CFG, STATUS_CFG } from "../../lib/tasks-constants.js";
 import { useTaskCardMotion } from "../../lib/motion/task-card-motion.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { type TaskCardViewModel, formatTimeAgo } from "../../lib/tasks/task-card-view-model.js";
+import { useState, useEffect } from "preact/hooks";
 import { DependencyStatusIndicators } from "./DependencyStatusIndicators.js";
+import { LiveDurationBadge } from "../ui/LiveDurationBadge.js";
 import './kanban-task-card.css';
 
 export const KanbanTaskCard: FunctionComponent<{
@@ -23,6 +25,31 @@ export const KanbanTaskCard: FunctionComponent<{
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
   const isReducedMotion = useReducedMotion();
+
+  const [flashTriggerCount, setFlashTriggerCount] = useState(0);
+  const prevStatusRef = useRef(task.status);
+  const prevRunningTimeRef = useRef(liveRunningTime);
+
+  useEffect(() => {
+    let shouldFlash = false;
+
+    // Trigger flash if the task status changes
+    if (prevStatusRef.current !== task.status) {
+      shouldFlash = true;
+    }
+
+    // Trigger flash on initial data load (transition from null to value)
+    if (prevRunningTimeRef.current === null && liveRunningTime !== null) {
+      shouldFlash = true;
+    }
+
+    if (shouldFlash) {
+      setFlashTriggerCount((c) => c + 1);
+    }
+
+    prevStatusRef.current = task.status;
+    prevRunningTimeRef.current = liveRunningTime;
+  }, [task.status, liveRunningTime]);
 
   useTaskCardMotion(cardRef, task.status, isReducedMotion, index);
 
@@ -128,7 +155,10 @@ export const KanbanTaskCard: FunctionComponent<{
         <div className="flex items-center gap-3">
           <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-slate-300 dark:text-slate-600">
             <Clock className="w-3 h-3 shrink-0" strokeWidth={2} />
-            <span className="font-mono truncate">{liveRunningTime ?? task.time ?? "Not started"}</span>
+            <LiveDurationBadge
+              durationText={liveRunningTime ?? task.time ?? "Not started"}
+              flashTriggerCount={flashTriggerCount}
+            />
           </div>
           {prUrl && (
             <a
