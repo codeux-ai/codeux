@@ -1,10 +1,14 @@
 .kanban-card {
-  transition: box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1), scale 200ms cubic-bezier(0.4, 0, 0.2, 1);
   transform-style: preserve-3d;
   will-change: transform;
 }
 .kanban-card:hover {
+  scale: 1.02;
   box-shadow: var(--v2-shadow-premium);
+}
+.kanban-card:active:not(.kanban-card-reduced-motion) {
+  scale: 0.98;
 }
 .kanban-card:focus-visible {
   outline: none;
@@ -13,4 +17,5 @@
 .kanban-card-reduced-motion {
   transition: none !important;
   transform: none !important;
+  scale: 1 !important;
 }
