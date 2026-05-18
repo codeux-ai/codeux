@@ -6,6 +6,7 @@ import { Tooltip } from "./Tooltip.js";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useTaskComposerState, type TaskDraft } from "../../lib/task-composer-state.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
+import { Button } from "./Button.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
@@ -362,20 +363,16 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               position="top"
               className="bg-red-600"
             >
-              <button
+              <Button
                 type="submit"
+                variant="primary"
+                icon={state.isEditing ? Save : Plus}
                 disabled={!state.isValid || state.isSubmitting}
-                className="w-full inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:bg-white dark:text-void-900"
+                isLoading={state.isSubmitting}
+                className="!w-full !inline-flex !items-center !justify-center !gap-2.5 !rounded-[1.2rem] !px-5 !py-3 !text-sm !font-bold !shadow-[0_12px_28px_rgba(15,23,42,0.16)] !transition-all hover:!-translate-y-px hover:!opacity-92 active:!scale-95 disabled:!cursor-not-allowed disabled:!opacity-50"
               >
-                {state.isSubmitting ? (
-                  <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white dark:border-void-900/20 dark:border-t-void-900 animate-spin" />
-                ) : state.isEditing ? (
-                  <Save className="h-4 w-4" strokeWidth={2.3} />
-                ) : (
-                  <Plus className="h-4 w-4" strokeWidth={2.3} />
-                )}
-                {state.isSubmitting ? (state.isEditing ? "Saving Task..." : "Creating Task...") : state.isEditing ? "Save Task" : "Create Task"}
-              </button>
+                {state.isEditing ? "Save Task" : "Create Task"}
+              </Button>
             </Tooltip>
             <button
               type="button"

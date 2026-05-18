@@ -442,11 +442,11 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         <Button
                             type="button"
                             onClick={handleRerunClick}
-                            pending={isRerunning}
+                            isLoading={isRerunning}
                             variant="ghost"
+                            icon={RotateCcw}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
-                            <RotateCcw className="w-3 h-3" strokeWidth={2} />
                             Rerun
                         </Button>
                     </div>
