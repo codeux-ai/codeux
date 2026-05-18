@@ -83,6 +83,8 @@ export interface SprintComposerState {
   setModelOverride: (model: string | null) => void;
   planningAgentPresetId: string | null;
   setPlanningAgentPresetId: (id: string | null) => void;
+  sprintKeyOverride: string;
+  setSprintKeyOverride: (val: string) => void;
   isEditing: boolean;
   hasTasks: boolean;
   availableModes: CreateMode[];
@@ -136,7 +138,7 @@ export const getAvailableModes = (isEditing: boolean, hasTasks: boolean): Create
   ];
 };
 
-export const useSprintComposerState = (initialSprint: Sprint | null = null): SprintComposerState => {
+export const useSprintComposerState = (initialSprint: Sprint | null = null, defaultSprintKey: string = ""): SprintComposerState => {
   const [name, setName] = useState(initialSprint?.name || "");
   const [goal, setGoal] = useState(initialSprint?.goal || "");
   const [originalPrompt, setOriginalPrompt] = useState(initialSprint?.originalPrompt || null);
@@ -144,6 +146,7 @@ export const useSprintComposerState = (initialSprint: Sprint | null = null): Spr
   const [routeOverride, setRouteOverride] = useState<PlanningRouteOption | null>(null);
   const [modelOverride, setModelOverride] = useState<string | null>(null);
   const [planningAgentPresetId, setPlanningAgentPresetId] = useState<string | null>(null);
+  const [sprintKeyOverride, setSprintKeyOverride] = useState<string>(defaultSprintKey);
 
   const isEditing = Boolean(initialSprint);
   const hasTasks = Boolean(initialSprint && initialSprint.tasksCount > 0);
@@ -156,6 +159,8 @@ export const useSprintComposerState = (initialSprint: Sprint | null = null): Spr
     setRouteOverride(null);
     setModelOverride(null);
     setPlanningAgentPresetId(null);
+    setSprintKeyOverride(defaultSprintKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSprint?.id]);
 
   const availableModes = getAvailableModes(isEditing, hasTasks);
@@ -168,6 +173,7 @@ export const useSprintComposerState = (initialSprint: Sprint | null = null): Spr
     routeOverride, setRouteOverride,
     modelOverride, setModelOverride,
     planningAgentPresetId, setPlanningAgentPresetId,
+    sprintKeyOverride, setSprintKeyOverride,
     isEditing,
     hasTasks,
     availableModes,

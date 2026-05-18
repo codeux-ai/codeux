@@ -48,6 +48,7 @@ interface SprintComposerProps {
     planningAgentPresetId: string | null;
     linkedIssues: SprintLinkedIssueInput[];
     clientRequestId?: string;
+    sprintKeyOverride?: string;
     signal?: AbortSignal;
   }) => Promise<void> | void;
   onCancelPlanningRequest?: (clientRequestId: string) => Promise<void> | void;
@@ -85,7 +86,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
 
-  const state = useSprintComposerState(initialSprint);
+  const defaultSprintKey = initialSprint
+    ? (initialSprint.number ? nextId.replace(/\d+$/, String(initialSprint.number)).toUpperCase() : initialSprint.slug.toUpperCase())
+    : nextId.toUpperCase();
+  const state = useSprintComposerState(initialSprint, defaultSprintKey);
   const visibleLinkedIssues = linkedIssues ?? initialSprint?.linkedIssues ?? [];
 
   const createClientRequestId = (): string => {
@@ -291,6 +295,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         planningAgentPresetId: state.planningAgentPresetId,
         linkedIssues: visibleLinkedIssues,
         clientRequestId,
+        sprintKeyOverride: state.sprintKeyOverride.trim() || undefined,
       });
       const activeRequest = activeRequestRef.current;
       if (!isUnmountedRef.current && activeRequest?.id === clientRequestId && !activeRequest.detached && !activeRequest.cancelled) {
@@ -416,11 +421,17 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
           </div>
 
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <div className="group rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 transition-colors focus-within:bg-white dark:border-white/[0.06] dark:bg-white/[0.03] dark:focus-within:bg-black/[0.05]">
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Key</div>
-              <div className="mt-2 font-mono text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                {(initialSprint?.number ? nextId.replace(/\d+$/, String(initialSprint.number)) : nextId).toUpperCase()}
-              </div>
+              <input
+                type="text"
+                value={state.sprintKeyOverride}
+                onInput={(e) => state.setSprintKeyOverride((e.target as HTMLInputElement).value)}
+                disabled={isBusy}
+                className="mt-2 w-full min-w-0 bg-transparent font-mono text-3xl font-black tracking-tight text-slate-900 outline-none transition-colors hover:bg-black/[0.03] focus:bg-white dark:text-white dark:hover:bg-white/[0.03] dark:focus:bg-transparent disabled:cursor-not-allowed"
+                placeholder={defaultSprintKey}
+                aria-label="Sprint Key Override"
+              />
             </div>
 
             <div className={`rounded-[1.4rem] border p-4 transition-all ${

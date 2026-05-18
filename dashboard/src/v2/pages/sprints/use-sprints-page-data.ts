@@ -445,6 +445,7 @@ export function useSprintsPageData() {
     planningAgentPresetId: string | null;
     linkedIssues?: SprintLinkedIssueInput[];
     clientRequestId?: string;
+    sprintKeyOverride?: string;
     signal?: AbortSignal;
   }): Promise<void> => {
     if (!selectedProject) {
@@ -455,12 +456,28 @@ export function useSprintsPageData() {
     const linkedIssues = payload.linkedIssues || [];
     const goal = mergePromptWithLinkedIssues(payload.goal, linkedIssues);
 
+    let numberOverride: number | null | undefined = undefined;
+    let slugOverride: string | undefined = undefined;
+
+    if (payload.sprintKeyOverride) {
+      const prefixEscaped = sprintKeyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const match = payload.sprintKeyOverride.match(new RegExp(`^${prefixEscaped}-(\\d+)$`, 'i'));
+      if (match) {
+        numberOverride = parseInt(match[1], 10);
+      } else {
+        numberOverride = null;
+        slugOverride = payload.sprintKeyOverride;
+      }
+    }
+
     if (editingSprint) {
       await updateSprint(editingSprint.id, {
         name: payload.name,
         goal,
         originalPrompt: payload.originalPrompt,
         linkedIssues,
+        ...(numberOverride !== undefined ? { number: numberOverride } : {}),
+        ...(slugOverride !== undefined ? { slug: slugOverride } : {}),
       });
 
       if (payload.submitMode === "plan_only" || payload.submitMode === "replan") {
@@ -491,7 +508,8 @@ export function useSprintsPageData() {
       goal,
       originalPrompt: payload.originalPrompt,
       linkedIssues,
-      number: nextSprintNumber,
+      number: numberOverride !== undefined ? numberOverride : nextSprintNumber,
+      ...(slugOverride !== undefined ? { slug: slugOverride } : {}),
       status: "idle",
       showcasePinned: true,
       startDate: null,

@@ -181,7 +181,8 @@ export interface CreateSprintInput {
   originalPrompt?: string | null;
   goal?: string;
   linkedIssues?: SprintLinkedIssueInput[];
-  number?: number;
+  number?: number | null;
+  slug?: string;
   status?: SprintStatus;
   showcasePinned?: boolean;
   startDate?: string | null;
@@ -195,6 +196,7 @@ export interface UpdateSprintInput {
   goal?: string;
   linkedIssues?: SprintLinkedIssueInput[];
   number?: number | null;
+  slug?: string;
   status?: SprintStatus;
   showcasePinned?: boolean;
   startDate?: string | null;

@@ -317,9 +317,9 @@ export class ProjectManagementRepository {
 
       const id = randomUUID();
       const now = new Date().toISOString();
-      const number = input.number ?? this.getNextSprintNumber(projectId);
+      const number = input.number !== undefined ? input.number : this.getNextSprintNumber(projectId);
       const name = input.name.trim();
-      const slug = this.createUniqueSprintSlug(projectId, name);
+      const slug = input.slug ? input.slug.toLowerCase() : this.createUniqueSprintSlug(projectId, name);
 
       this.db.prepare(`
         INSERT INTO sprints (
@@ -364,7 +364,9 @@ export class ProjectManagementRepository {
       const current = this.requireSprint(sprintId);
       const now = new Date().toISOString();
       const nextName = input.name?.trim() || current.name;
-      const nextSlug = nextName === current.name ? current.slug : this.createUniqueSprintSlug(current.projectId, nextName, sprintId);
+      const nextSlug = input.slug
+        ? input.slug.toLowerCase()
+        : (nextName === current.name ? current.slug : this.createUniqueSprintSlug(current.projectId, nextName, sprintId));
 
       this.db.prepare(`
         UPDATE sprints
