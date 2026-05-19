@@ -3,7 +3,7 @@
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/preact";
+import { cleanup, renderHook, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import {
   clearEffectiveSettingsCacheForTests,
@@ -24,6 +24,7 @@ describe("useProjectEffectiveSettings", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
   });
 
@@ -191,6 +192,57 @@ describe("useProjectEffectiveSettings", () => {
     });
 
     await refreshPromise;
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(MOCK_SETTINGS_2);
+    });
+
+    expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it("silently refreshes when system settings are saved", async () => {
+    vi.mocked(fetchProjectEffectiveSettings)
+      .mockResolvedValueOnce(MOCK_SETTINGS as any)
+      .mockResolvedValueOnce(MOCK_SETTINGS_2 as any);
+
+    const { result } = renderHook(() => useProjectEffectiveSettings("proj-1"));
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(MOCK_SETTINGS);
+    });
+
+    window.dispatchEvent(new CustomEvent("codeux:settings-updated", {
+      detail: { scope: "system" },
+    }));
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(MOCK_SETTINGS_2);
+    });
+
+    expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it("silently refreshes only the matching project when project settings are saved", async () => {
+    vi.mocked(fetchProjectEffectiveSettings)
+      .mockResolvedValueOnce(MOCK_SETTINGS as any)
+      .mockResolvedValueOnce(MOCK_SETTINGS_2 as any);
+
+    const { result } = renderHook(() => useProjectEffectiveSettings("proj-1"));
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(MOCK_SETTINGS);
+    });
+
+    window.dispatchEvent(new CustomEvent("codeux:settings-updated", {
+      detail: { scope: "project", projectId: "other-project" },
+    }));
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(1);
+
+    window.dispatchEvent(new CustomEvent("codeux:settings-updated", {
+      detail: { scope: "project", projectId: "proj-1" },
+    }));
 
     await waitFor(() => {
       expect(result.current.data).toEqual(MOCK_SETTINGS_2);

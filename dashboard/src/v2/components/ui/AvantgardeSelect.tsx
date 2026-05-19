@@ -107,18 +107,18 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
     const top =
       direction === "down"
-        ? triggerRect.bottom + GAP + window.scrollY
-        : triggerRect.top - GAP + window.scrollY;
+        ? triggerRect.bottom + GAP
+        : triggerRect.top - GAP;
 
     // --- Horizontal: keep panel within bounds ---
-    let left = triggerRect.left + window.scrollX;
+    let left = triggerRect.left;
     const panelRight = left + panelWidth;
-    const boundsRight = bounds.right + window.scrollX;
-    const boundsLeft = bounds.left + window.scrollX;
+    const boundsRight = bounds.right;
+    const boundsLeft = bounds.left;
 
     if (panelRight > boundsRight - EDGE_MARGIN) {
       // Align right edge of panel with right edge of trigger (or boundary)
-      left = Math.max(boundsLeft + EDGE_MARGIN, triggerRect.right + window.scrollX - panelWidth);
+      left = Math.max(boundsLeft + EDGE_MARGIN, triggerRect.right - panelWidth);
     }
     if (left < boundsLeft + EDGE_MARGIN) {
       left = boundsLeft + EDGE_MARGIN;
@@ -325,7 +325,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         <div
           ref={panelRef}
           style={{
-            position: "absolute",
+            position: "fixed",
             left: `${position.left}px`,
             top: `${position.top}px`,
             width: `${position.width}px`,
