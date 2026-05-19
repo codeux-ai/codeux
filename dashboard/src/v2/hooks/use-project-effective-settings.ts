@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef } from "preact/hooks";
 import type { EffectiveSettingsResponse } from "../../types.js";
 import { fetchProjectEffectiveSettings } from "../lib/settings-api.js";
 import { useRealtimeResource } from "../../hooks/use-realtime-resource.js";
@@ -61,6 +61,30 @@ export function useProjectEffectiveSettings(projectId: string | null): {
     isAlreadyLoaded: projectCacheEntryRef.current.hadInitialCache || !projectId,
     refreshOnMount: false,
   });
+
+  useEffect(() => {
+    if (!projectId || typeof window === "undefined") {
+      return;
+    }
+
+    const handleSettingsUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ scope?: string; projectId?: string }>).detail;
+      if (detail?.scope === "project" && detail.projectId && detail.projectId !== projectId) {
+        return;
+      }
+
+      if (detail?.scope === "system" || !detail?.scope) {
+        effectiveSettingsCache.clear();
+      } else {
+        effectiveSettingsCache.delete(projectId);
+      }
+      effectiveSettingsInflightRequests.delete(projectId);
+      void refetch({ silent: true });
+    };
+
+    window.addEventListener("codeux:settings-updated", handleSettingsUpdated);
+    return () => window.removeEventListener("codeux:settings-updated", handleSettingsUpdated);
+  }, [projectId, refetch]);
 
   return useMemo(
     () => ({

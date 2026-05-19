@@ -66,7 +66,7 @@ Provider choices update:
 - Default project provider enablement
 - Legacy container auth-copy fields under `defaults.cliWorkflow` for compatibility
 
-Appearance choices update `defaults.appearance`, which is also used by the Settings page. The root dashboard shell listens for settings updates and reapplies theme and reduced-motion preferences without a page reload.
+Appearance choices update `defaults.appearance`, which is also used by the Settings page. The root dashboard shell listens for settings updates and Settings-page preview events, then reapplies theme, reduced-motion, navigation, background mode/style/color, uploaded image, and pattern preferences without a page reload.
 
 Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action clears only the browser-local onboarding completion marker and does not reset saved system or project settings.
 

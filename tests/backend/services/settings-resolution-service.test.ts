@@ -79,6 +79,36 @@ describe("Settings Resolution Service", () => {
       expect(settings.unknownKey).toBeUndefined();
       expect(settings.agents.someFakeAgent).toBeUndefined();
     });
+
+    it("preserves valid appearance background image and pattern settings", () => {
+      const settings = sanitizeProjectSettings({
+        appearance: {
+          backgroundMode: "STATIC",
+          animatedBackground: "aurora-borealis",
+          staticBackgroundColor: "#123456",
+          backgroundImage: "data:image/jpeg;base64,abc123",
+          backgroundPattern: "DOTS",
+        },
+      });
+
+      expect(settings.appearance.backgroundMode).toBe("STATIC");
+      expect(settings.appearance.animatedBackground).toBe("aurora-borealis");
+      expect(settings.appearance.staticBackgroundColor).toBe("#123456");
+      expect(settings.appearance.backgroundImage).toBe("data:image/jpeg;base64,abc123");
+      expect(settings.appearance.backgroundPattern).toBe("DOTS");
+    });
+
+    it("normalizes invalid appearance background image and pattern settings", () => {
+      const settings = sanitizeProjectSettings({
+        appearance: {
+          backgroundImage: "javascript:alert(1)",
+          backgroundPattern: "SPIRAL",
+        },
+      });
+
+      expect(settings.appearance.backgroundImage).toBe(null);
+      expect(settings.appearance.backgroundPattern).toBe("NONE");
+    });
   });
 
   describe("sanitizeSystemSettings", () => {
@@ -105,6 +135,25 @@ describe("Settings Resolution Service", () => {
       });
       expect(resolved.settings.automationLevel).toBe(baseProject.automationLevel);
       expect(resolved.settings.aiProvider.provider).toBe(baseProject.aiProvider.provider);
+    });
+
+    it("includes resolved appearance background image and pattern settings", () => {
+      const baseProject = buildDefaultProjectSettings();
+      baseProject.appearance.backgroundImage = "https://example.com/background.png";
+      baseProject.appearance.backgroundPattern = "HEXAGONS";
+      const systemSettings: SystemSettings = {
+        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
+        defaults: baseProject,
+        mcpTools: [],
+      };
+      const resolved = resolveDashboardSettings({
+        systemSettings,
+        projectOverride: null,
+      });
+
+      expect(resolved.settings.appearance.backgroundImage).toBe("https://example.com/background.png");
+      expect(resolved.settings.appearance.backgroundPattern).toBe("HEXAGONS");
     });
 
     it("should include API key when system integration settings provide it", () => {

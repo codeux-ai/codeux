@@ -82,6 +82,39 @@ describe("useSettingsPageState", () => {
     act(() => { result.current.updateEditableSettings((curr) => ({ ...curr, aiProvider: {} } as any)); });
   });
 
+  it("publishes appearance previews from unsaved settings edits", async () => {
+    const previews: Array<CustomEvent["detail"]> = [];
+    const listener = (event: Event) => {
+      previews.push((event as CustomEvent).detail);
+    };
+    window.addEventListener("codeux:appearance-preview", listener);
+
+    const { result, unmount } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.updateEditableSettings((current) => ({
+        ...current,
+        appearance: {
+          ...current.appearance,
+          backgroundMode: "STATIC",
+          staticBackgroundColor: "#123456",
+        },
+      }));
+    });
+
+    await waitFor(() => {
+      expect(previews.some((detail) => (
+        detail?.appearance?.backgroundMode === "STATIC"
+        && detail.appearance.staticBackgroundColor === "#123456"
+      ))).toBe(true);
+    });
+
+    unmount();
+    expect(previews[previews.length - 1]?.appearance).toBe(null);
+    window.removeEventListener("codeux:appearance-preview", listener);
+  });
+
   it("handles null selectedProject properly", async () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
     act(() => { result.current.setActiveScope("project"); });

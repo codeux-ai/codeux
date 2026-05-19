@@ -1,4 +1,5 @@
 import type {
+  BackgroundPattern,
   DashboardSettings,
   ExternalSettingsHints,
   McpToolToggle,
@@ -72,6 +73,39 @@ const sanitizeSkills = (value: unknown): SkillToggle[] => {
 
 const sanitizeMcpTools = (value: unknown): McpToolToggle[] => {
   return sanitizeMcpToolToggles(value).map((tool) => ({ ...tool }));
+};
+
+const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
+  "NONE",
+  "DIAGONAL_LINES",
+  "HORIZONTAL_LINES",
+  "VERTICAL_LINES",
+  "CROSSHATCH",
+  "DOTS",
+  "DIAMONDS",
+  "HEXAGONS",
+  "TRIANGLES",
+  "WAVES",
+  "NOISE",
+]);
+
+const sanitizeBackgroundImage = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.startsWith("data:image/") || trimmed.startsWith("http://") || trimmed.startsWith("https://")
+    ? trimmed
+    : null;
+};
+
+const sanitizeBackgroundPattern = (value: unknown): BackgroundPattern => {
+  return typeof value === "string" && BACKGROUND_PATTERNS.has(value as BackgroundPattern)
+    ? value as BackgroundPattern
+    : "NONE";
 };
 
 const sanitizeQualityAssuranceTrigger = (
@@ -159,6 +193,8 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED" as "ANIMATED" | "STATIC",
     animatedBackground: typeof appearanceInput.animatedBackground === "string" ? appearanceInput.animatedBackground : "deep-ocean",
     staticBackgroundColor: typeof appearanceInput.staticBackgroundColor === "string" ? appearanceInput.staticBackgroundColor : "#0d0f12",
+    backgroundImage: sanitizeBackgroundImage(appearanceInput.backgroundImage),
+    backgroundPattern: sanitizeBackgroundPattern(appearanceInput.backgroundPattern),
   };
 
   const automationLevel = input.automationLevel;

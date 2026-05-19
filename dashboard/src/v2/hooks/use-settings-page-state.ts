@@ -279,6 +279,26 @@ export const useSettingsPageState = (
   const editableSettings = activeScope === "system" ? systemSettings?.defaults ?? null : projectSettings;
   const activeCategoryConfig = categories.find((category) => category.id === activeCategory) ?? categories[0]!;
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("codeux:appearance-preview", {
+      detail: { appearance: editableSettings?.appearance ?? null },
+    }));
+  }, [editableSettings?.appearance]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    return () => {
+      window.dispatchEvent(new CustomEvent("codeux:appearance-preview", {
+        detail: { appearance: null },
+      }));
+    };
+  }, []);
+
   const normalizedSearch = settingsSearch.trim().toLowerCase();
   const filteredCategories = useMemo(() => {
     if (!normalizedSearch) {

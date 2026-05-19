@@ -139,6 +139,36 @@ describe("settings-sanitizer", () => {
     expect(settings.mcpTools.find((tool) => tool.name === "get_session")?.enabled).toBe(false);
   });
 
+  it("preserves valid appearance background image and pattern settings", () => {
+    const settings = sanitizeSettings({
+      appearance: {
+        backgroundMode: "STATIC",
+        animatedBackground: "neon-dreams",
+        staticBackgroundColor: "#123456",
+        backgroundImage: "data:image/png;base64,abc123",
+        backgroundPattern: "DIAGONAL_LINES",
+      },
+    });
+
+    expect(settings.appearance.backgroundMode).toBe("STATIC");
+    expect(settings.appearance.animatedBackground).toBe("neon-dreams");
+    expect(settings.appearance.staticBackgroundColor).toBe("#123456");
+    expect(settings.appearance.backgroundImage).toBe("data:image/png;base64,abc123");
+    expect(settings.appearance.backgroundPattern).toBe("DIAGONAL_LINES");
+  });
+
+  it("drops unsafe appearance background image and unknown pattern values", () => {
+    const settings = sanitizeSettings({
+      appearance: {
+        backgroundImage: "javascript:alert(1)",
+        backgroundPattern: "SPIRAL",
+      },
+    });
+
+    expect(settings.appearance.backgroundImage).toBe(null);
+    expect(settings.appearance.backgroundPattern).toBe("NONE");
+  });
+
   it("enforces git manager skill modes based on github mode", () => {
     const localSettings = sanitizeSettings({
       git: {

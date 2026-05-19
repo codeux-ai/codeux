@@ -1,4 +1,5 @@
 import type {
+  BackgroundPattern,
   DashboardSettings,
   ExternalSettingsHints,
   McpToolToggle,
@@ -32,6 +33,39 @@ import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTER
 function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
   return skills.map((skill) => ({ ...skill }));
 }
+
+const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
+  "NONE",
+  "DIAGONAL_LINES",
+  "HORIZONTAL_LINES",
+  "VERTICAL_LINES",
+  "CROSSHATCH",
+  "DOTS",
+  "DIAMONDS",
+  "HEXAGONS",
+  "TRIANGLES",
+  "WAVES",
+  "NOISE",
+]);
+
+const sanitizeBackgroundImage = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.startsWith("data:image/") || trimmed.startsWith("http://") || trimmed.startsWith("https://")
+    ? trimmed
+    : null;
+};
+
+const sanitizeBackgroundPattern = (value: unknown): BackgroundPattern => {
+  return typeof value === "string" && BACKGROUND_PATTERNS.has(value as BackgroundPattern)
+    ? value as BackgroundPattern
+    : "NONE";
+};
 
 function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
   return tools.map((tool) => ({ ...tool }));
@@ -400,6 +434,8 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       backgroundMode: appearanceInput.backgroundMode === "STATIC" ? "STATIC" : "ANIMATED",
       animatedBackground: typeof appearanceInput.animatedBackground === "string" ? appearanceInput.animatedBackground : "deep-ocean",
       staticBackgroundColor: typeof appearanceInput.staticBackgroundColor === "string" ? appearanceInput.staticBackgroundColor : "#0d0f12",
+      backgroundImage: sanitizeBackgroundImage(appearanceInput.backgroundImage),
+      backgroundPattern: sanitizeBackgroundPattern(appearanceInput.backgroundPattern),
     },
     automationLevel: input.automationLevel === "FULL" || input.automationLevel === "SEMI_AUTO" || input.automationLevel === "ALWAYS_ASK"
       ? input.automationLevel

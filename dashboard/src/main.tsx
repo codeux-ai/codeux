@@ -15,7 +15,7 @@ import { ProjectDataProvider, useProjectData } from "./v2/context/project-data.j
 import { ToastProvider } from "./v2/components/feedback/ToastProvider.js";
 import { useProjectEffectiveSettings } from "./v2/hooks/use-project-effective-settings.js";
 import { fetchSystemSettings } from "./v2/lib/settings-api.js";
-import type { SystemSettings } from "./types.js";
+import type { DashboardSettings, SystemSettings } from "./types.js";
 import { SkeletonPanel } from "./v2/components/ui/ListSkeletons.js";
 import { DashboardV2 } from "./v2/DashboardV2.js";
 import { LiveSessionPage } from "./v2/LiveSessionPage.js";
@@ -24,9 +24,10 @@ import { GuidedDashboardTour } from "./v2/components/onboarding/GuidedDashboardT
 import "./styles.css";
 
 import { applyAppearanceSettings } from "./v2/lib/apply-appearance.js";
+import { BACKGROUND_PATTERNS } from "./v2/lib/background-patterns.js";
 
-const DeepOceanBackground = lazy(() => import("./v2/components/chat/DeepOceanBackground.js").then((module) => ({
-  default: module.DeepOceanBackground,
+const BackgroundManager = lazy(() => import("./v2/components/backgrounds/BackgroundManager.js").then((module) => ({
+  default: module.BackgroundManager,
 })));
 
 // 0. AppLayout extracted to use context hooks
@@ -34,6 +35,7 @@ const AppLayout = () => {
   const { selectedProject } = useProjectData();
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
+  const [appearancePreview, setAppearancePreview] = useState<DashboardSettings["appearance"] | null>(null);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -65,11 +67,23 @@ const AppLayout = () => {
     };
   }, []);
 
-  const appearanceSettings = effectiveSettings?.settings.appearance || systemSettings?.defaults.appearance;
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ appearance?: DashboardSettings["appearance"] | null }>).detail;
+      setAppearancePreview(detail?.appearance ?? null);
+    };
+    window.addEventListener("codeux:appearance-preview", handler);
+    return () => window.removeEventListener("codeux:appearance-preview", handler);
+  }, []);
+
+  const appearanceSettings = appearancePreview || effectiveSettings?.settings.appearance || systemSettings?.defaults.appearance;
   const appearanceTheme = appearanceSettings?.theme || "SYSTEM";
   const reducedMotion = appearanceSettings?.reducedMotion || "AUTO";
   const backgroundPattern = appearanceSettings?.backgroundPattern || "NONE";
   const backgroundImage = appearanceSettings?.backgroundImage;
+  const backgroundMode = appearanceSettings?.backgroundMode || "ANIMATED";
+  const animatedBackground = appearanceSettings?.animatedBackground || "deep-ocean";
+  const staticBackgroundColor = appearanceSettings?.staticBackgroundColor || "#0d0f12";
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === "undefined") return true;
     if (appearanceTheme === "SYSTEM") {
@@ -138,10 +152,32 @@ const AppLayout = () => {
         <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:px-4 focus:py-2 focus:bg-white focus:text-slate-900 focus:font-bold focus:rounded-br-lg ">
           Skip to main content
         </a>
-        {!backgroundImage && (
+        {backgroundImage ? (
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 bg-cover bg-center bg-no-repeat"
+            style={{ backgroundImage: `url(${backgroundImage})`, zIndex: 0 }}
+          />
+        ) : (
           <Suspense fallback={null}>
-            <DeepOceanBackground forceDark={isDark} />
+            <BackgroundManager
+              mode={backgroundMode}
+              animation={animatedBackground}
+              staticColor={staticBackgroundColor}
+              isDark={isDark}
+            />
           </Suspense>
+        )}
+        {backgroundPattern !== "NONE" && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0"
+            style={{
+              backgroundImage: BACKGROUND_PATTERNS[backgroundPattern] || undefined,
+              backgroundRepeat: "repeat",
+              zIndex: 1,
+            }}
+          />
         )}
 
         <div className="flex-1 flex flex-col h-full relative z-10 overflow-hidden">

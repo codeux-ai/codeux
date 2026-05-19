@@ -33,6 +33,17 @@ interface DropdownPosition {
   direction: "down" | "up";
 }
 
+function focusWithoutScroll(element: HTMLElement | null): void {
+  if (!element) {
+    return;
+  }
+  try {
+    element.focus({ preventScroll: true });
+  } catch {
+    element.focus();
+  }
+}
+
 /** Walk up the DOM to find the nearest ancestor that acts as a visual boundary
  *  (has overflow clipping, a border-radius card, or is a dialog/modal). */
 function findBoundaryAncestor(el: HTMLElement): HTMLElement | null {
@@ -96,18 +107,18 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
     const top =
       direction === "down"
-        ? triggerRect.bottom + GAP + window.scrollY
-        : triggerRect.top - GAP + window.scrollY;
+        ? triggerRect.bottom + GAP
+        : triggerRect.top - GAP;
 
     // --- Horizontal: keep panel within bounds ---
-    let left = triggerRect.left + window.scrollX;
+    let left = triggerRect.left;
     const panelRight = left + panelWidth;
-    const boundsRight = bounds.right + window.scrollX;
-    const boundsLeft = bounds.left + window.scrollX;
+    const boundsRight = bounds.right;
+    const boundsLeft = bounds.left;
 
     if (panelRight > boundsRight - EDGE_MARGIN) {
       // Align right edge of panel with right edge of trigger (or boundary)
-      left = Math.max(boundsLeft + EDGE_MARGIN, triggerRect.right + window.scrollX - panelWidth);
+      left = Math.max(boundsLeft + EDGE_MARGIN, triggerRect.right - panelWidth);
     }
     if (left < boundsLeft + EDGE_MARGIN) {
       left = boundsLeft + EDGE_MARGIN;
@@ -202,7 +213,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
   useEffect(() => {
     if (open && listboxRef.current) {
-      listboxRef.current.focus();
+      focusWithoutScroll(listboxRef.current);
     }
   }, [open, position]);
 
@@ -239,13 +250,13 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     if (e.key === "Escape") {
       e.preventDefault();
       setOpen(false);
-      triggerRef.current?.focus();
+      focusWithoutScroll(triggerRef.current);
       return;
     }
     if (e.key === "Tab") {
       e.preventDefault();
       setOpen(false);
-      triggerRef.current?.focus();
+      focusWithoutScroll(triggerRef.current);
       return;
     }
     if (!filteredOptions.length) return;
@@ -266,7 +277,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
       if (activeIndex >= 0 && activeIndex < filteredOptions.length) {
         onChange(filteredOptions[activeIndex].value);
         setOpen(false);
-        triggerRef.current?.focus();
+        focusWithoutScroll(triggerRef.current);
       }
     }
   };
@@ -275,9 +286,17 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
   const activeOptionRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (open && activeOptionRef.current) {
-      if (typeof activeOptionRef.current.scrollIntoView === "function") {
-        activeOptionRef.current.scrollIntoView({ block: "nearest" });
+    const listbox = listboxRef.current;
+    const activeOption = activeOptionRef.current;
+    if (open && listbox && activeOption) {
+      const optionTop = activeOption.offsetTop;
+      const optionBottom = optionTop + activeOption.offsetHeight;
+      const visibleTop = listbox.scrollTop;
+      const visibleBottom = visibleTop + listbox.clientHeight;
+      if (optionTop < visibleTop) {
+        listbox.scrollTop = optionTop;
+      } else if (optionBottom > visibleBottom) {
+        listbox.scrollTop = optionBottom - listbox.clientHeight;
       }
     }
   }, [activeIndex, open]);
@@ -306,7 +325,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         <div
           ref={panelRef}
           style={{
-            position: "absolute",
+            position: "fixed",
             left: `${position.left}px`,
             top: `${position.top}px`,
             width: `${position.width}px`,
@@ -338,7 +357,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
                   }}
                   onKeyDown={onKeyDown as any}
                   className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30 text-slate-700 dark:text-slate-200"
-                  ref={(el) => { if (el && open) el.focus(); }}
+                  ref={(el) => { if (el && open) focusWithoutScroll(el); }}
                 />
               </div>
             )}
@@ -356,7 +375,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
                   onClick={() => {
                     onChange(option.value);
                     setOpen(false);
-                    triggerRef.current?.focus();
+                    focusWithoutScroll(triggerRef.current);
                   }}
                   className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors ${
                     isFocused ? "bg-signal-500/10 shadow-[inset_2px_0_0_0_var(--color-signal-500)] text-signal-600 dark:text-signal-300 z-10 relative" : ""
