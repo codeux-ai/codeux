@@ -77,6 +77,12 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { isOpen, options, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
 
+  useEffect(() => {
+    if (initialQuery !== undefined) {
+      setFilters(prev => ({ ...prev, query: initialQuery }));
+    }
+  }, [initialQuery]);
+
   const filteredSprints = useMemo(
     () => filterSprints(sprints, filters),
     [sprints, filters],

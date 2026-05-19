@@ -97,6 +97,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             id: t.id,
             title: t.title,
             sprint: t.sprint,
+            sprintId: t.sprintId,
             status: t.status
         }));
 

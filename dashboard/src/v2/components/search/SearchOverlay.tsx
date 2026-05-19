@@ -8,7 +8,7 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 
-export type SearchItem = { id: string; title?: string; name?: string; status?: string; sprint?: string; avatarConfig?: any };
+export type SearchItem = { id: string; title?: string; name?: string; status?: string; sprint?: string; sprintId?: string; avatarConfig?: any };
 
 export interface SearchResults {
     sprints: SearchItem[];
@@ -41,7 +41,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 const sprintKey = match ? match[1] : undefined;
                 navigate({ to: '/sprints', search: { sprintId: selectedItem.id, sprintKey } as any });
             }
-            else if (selectedItem.category === 'tasks') navigate({ to: '/tasks', search: { taskId: selectedItem.id } as any });
+            else if (selectedItem.category === 'tasks') navigate({ to: '/tasks', search: { taskId: selectedItem.id, sprintId: selectedItem.sprintId } as any });
             else if (selectedItem.category === 'agents') navigate({ to: '/agents', search: { agentId: selectedItem.id } as any });
             else if (selectedItem.category === 'containers') navigate({ to: '/browser', search: { containerId: selectedItem.id } as any });
         }

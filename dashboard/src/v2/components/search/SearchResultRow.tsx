@@ -52,7 +52,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     } else if (categoryType === 'tasks') {
         Icon = ListChecks;
         targetTo = "/tasks";
-        targetSearch = { taskId: item.id };
+        targetSearch = { taskId: item.id, sprintId: item.sprintId };
         // Typically tsk-something
         itemId = item.id.substring(0, 8);
         badgeText = item.status || 'Open';
