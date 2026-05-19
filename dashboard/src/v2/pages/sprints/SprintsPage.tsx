@@ -33,6 +33,7 @@ import { SprintMarkdownModal } from "../../components/ui/SprintMarkdownModal.js"
 import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsOverrideModal.js";
 import { SprintImportMenu } from "../../components/sprints/SprintImportMenu.js";
 import { SprintIssueImportModal } from "../../components/sprints/SprintIssueImportModal.js";
+import { SprintJiraImportModal } from "../../components/sprints/SprintJiraImportModal.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { useProgressiveList } from "../../hooks/use-progressive-list.js";
@@ -145,6 +146,7 @@ export const SprintsPage: FunctionComponent = () => {
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [showSprintGallery, setShowSprintGallery] = useState(readStoredSprintGalleryVisibility);
   const [showIssueImportModal, setShowIssueImportModal] = useState(false);
+  const [isJiraModalOpen, setIsJiraModalOpen] = useState(false);
   const [linkedIssues, setLinkedIssues] = useState<SprintLinkedIssueInput[]>([]);
 
   const {
@@ -415,6 +417,7 @@ export const SprintsPage: FunctionComponent = () => {
               disabled={!selectedProject}
               onImportMarkdown={() => setShowImportModal(true)}
               onImportIssues={() => setShowIssueImportModal(true)}
+              onImportJira={() => setIsJiraModalOpen(true)}
             />
             <button
               type="button"
@@ -750,6 +753,14 @@ export const SprintsPage: FunctionComponent = () => {
               setShowCreateComposer(true);
             }
           }}
+        />
+      )}
+
+      {isJiraModalOpen && selectedProject && editingSprint && (
+        <SprintJiraImportModal
+          sprintId={editingSprint.id}
+          projectId={selectedProject.id}
+          onClose={() => setIsJiraModalOpen(false)}
         />
       )}
 

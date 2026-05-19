@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS sprint_linked_issues (
         sprint_id TEXT NOT NULL,
         provider TEXT NOT NULL,
         host_domain TEXT NOT NULL,
+        project_key TEXT,
         repository TEXT NOT NULL,
         issue_number INTEGER NOT NULL,
         issue_key TEXT NOT NULL,

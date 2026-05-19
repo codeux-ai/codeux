@@ -608,6 +608,15 @@ export interface GitSettings {
   sprintKeyPrefix: string;
 }
 
+export interface JiraSettings {
+  host: string;               // e.g. "https://company.atlassian.net"
+  email: string;              // used for Basic Auth on Jira Cloud
+  apiToken: string;
+  autoCloseLinkedIssues: boolean;
+  defaultProject: string;     // default project key shown in import modal
+  closeTransitionName: string; // transition name for closing, default "Done"
+}
+
 export interface CiIntelligenceSettings {
   enabled: boolean;
   enableLivePrMonitoring: boolean;
@@ -744,6 +753,7 @@ export interface DashboardSettings {
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: AiProviderSettings;
   git: GitSettings;
+  jira: JiraSettings;
   ciIntelligence: CiIntelligenceSettings;
   sprintLoopSteps: SprintLoopStepSettings;
   cliWorkflow: CliWorkflowSettings;
@@ -846,6 +856,7 @@ export interface ExternalSettingsHints {
     openCodeApiKey: string;
     githubToken: string;
     gitlabToken?: string;
+    jiraToken?: string;
   };
   settingsJson: {
     julesApiKey: string;
@@ -856,6 +867,7 @@ export interface ExternalSettingsHints {
     openCodeApiKey: string;
     githubToken: string;
     gitlabToken?: string;
+    jiraToken?: string;
   };
   resolved: {
     julesApiKey: string;
@@ -866,6 +878,7 @@ export interface ExternalSettingsHints {
     openCodeApiKey: string;
     githubToken: string;
     gitlabToken?: string;
+    jiraToken?: string;
   };
   providerAvailability: {
     jules: { hasApiKey: boolean; hasLocalAuth: boolean };

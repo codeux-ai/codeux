@@ -352,6 +352,14 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     sprintBranchScheme: DEFAULT_SPRINT_BRANCH_SCHEME,
     sprintKeyPrefix: "SPR",
   },
+  jira: {
+    host: "",
+    email: "",
+    apiToken: "",
+    autoCloseLinkedIssues: false,
+    defaultProject: "",
+    closeTransitionName: "Done",
+  },
   ciIntelligence: {
     enabled: true,
     enableLivePrMonitoring: true,

@@ -68,6 +68,8 @@ describe("Dashboard Factory", () => {
           { id: "task2", dependsOnTaskIds: ["task1"] },
         ]),
         updateTask: vi.fn(),
+        replaceSprintLinkedIssues: vi.fn(),
+        listSprintLinkedIssues: vi.fn(),
       },
       executionRepository: {
         findActiveSprintRun: vi.fn().mockReturnValue({ id: "run-1" }),
@@ -104,6 +106,10 @@ describe("Dashboard Factory", () => {
       memoryService: {},
       agentPresetRepository: {
         getAgentPreset: vi.fn(),
+      },
+      sprintIssueService: {
+        searchJiraIssues: vi.fn(),
+        closeLinkedIssues: vi.fn(),
       },
     };
 

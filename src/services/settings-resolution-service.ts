@@ -572,6 +572,11 @@ export function resolveDashboardSettings(args: {
       githubToken: args.systemSettings.integrations.githubToken,
       gitlabToken: args.systemSettings.integrations.gitlabToken,
     },
+    jira: {
+      ...DEFAULT_DASHBOARD_SETTINGS.jira,
+      // For now, mapping fallback or just passing it correctly if added later.
+      // The sprintSettings might not have jira yet if it wasn't added to overrides, but we default it.
+    },
     ciIntelligence: { ...sprintSettings.ciIntelligence },
     sprintLoopSteps: { ...sprintSettings.sprintLoopSteps },
     cliWorkflow: { ...sprintSettings.cliWorkflow },

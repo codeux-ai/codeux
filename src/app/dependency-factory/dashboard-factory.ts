@@ -25,6 +25,10 @@ export interface DashboardDependencies {
   quicksprintService: QuicksprintService;
   sprintIssueService: CoreDependencies["sprintIssueService"];
   schedulerService: SchedulerService;
+  searchJiraIssues: CoreDependencies["sprintIssueService"]["searchJiraIssues"];
+  replaceSprintLinkedIssues: CoreDependencies["projectManagementRepository"]["replaceSprintLinkedIssues"];
+  listSprintLinkedIssues: CoreDependencies["projectManagementRepository"]["listSprintLinkedIssues"];
+  closeSprintLinkedIssues: CoreDependencies["sprintIssueService"]["closeLinkedIssues"];
 }
 
 export function createDashboardDependencies(
@@ -356,5 +360,9 @@ export function createDashboardDependencies(
     quicksprintService,
     sprintIssueService: coreDeps.sprintIssueService,
     schedulerService,
+    searchJiraIssues: coreDeps.sprintIssueService.searchJiraIssues.bind(coreDeps.sprintIssueService),
+    replaceSprintLinkedIssues: projectManagementRepository.replaceSprintLinkedIssues.bind(projectManagementRepository),
+    listSprintLinkedIssues: projectManagementRepository.listSprintLinkedIssues.bind(projectManagementRepository),
+    closeSprintLinkedIssues: coreDeps.sprintIssueService.closeLinkedIssues.bind(coreDeps.sprintIssueService),
   };
 }

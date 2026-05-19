@@ -682,7 +682,20 @@ export class WatchLoopRunner {
           })]);
           break;
         }
-        case "completed":
+        case "completed": {
+          const settings = this.deps.getDashboardSettings({ projectId: scopedExecutionContext.project.id, sprintId: scopedExecutionContext.sprint.id });
+          if (settings.jira?.autoCloseLinkedIssues) {
+            try {
+              const issueCloseOutcome = await this.deps.sprintIssueService?.closeLinkedIssues(scopedExecutionContext.project.id, scopedExecutionContext.sprint.id);
+              if (issueCloseOutcome?.reportText) {
+                report += issueCloseOutcome.reportText;
+              }
+            } catch (err) {
+              this.deps.logger.warn("Failed to auto-close linked issues", { sprintRunId, error: err instanceof Error ? err.message : String(err) });
+            }
+          }
+          break;
+        }
         case "unhandled":
           break;
       }

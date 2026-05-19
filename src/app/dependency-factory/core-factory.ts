@@ -44,6 +44,7 @@ import { ProviderRunner } from "../../infrastructure/providers/cli/provider-runn
 import { DockerRunner } from "../../infrastructure/providers/cli/docker-runner.js";
 import type { IProviderRunner } from "../../infrastructure/providers/cli/provider-runner.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
+import * as jiraApiClient from "../../services/jira-api-client.js";
 
 export interface CoreDependencies {
   providerRunner: IProviderRunner;
@@ -175,6 +176,7 @@ export function createCoreDependencies(
       ? resolveEffectiveDashboardSettings(settingsRepository, scope.projectId, scope.sprintId).settings
       : settingsRepository.getDefaultDashboardSettings(),
     logger: logger.child({ component: "sprint-issue-service" }),
+    jiraApiClient,
   });
   const activeDispatchRegistry = new ActiveDispatchRegistry();
   const dockerRuntimePruneService = new DockerRuntimePruneService(

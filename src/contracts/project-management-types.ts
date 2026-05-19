@@ -43,7 +43,7 @@ export interface SprintReviewSummary {
   finishedAt: string | null;
 }
 
-export type LinkedIssueProvider = "github" | "gitlab";
+export type LinkedIssueProvider = "github" | "gitlab" | "jira";
 export type LinkedIssueCloseState = "open" | "closed" | "close_failed";
 
 export interface SprintLinkedIssueRecord {
@@ -52,6 +52,7 @@ export interface SprintLinkedIssueRecord {
   sprintId: string;
   provider: LinkedIssueProvider;
   hostDomain: string;
+  projectKey?: string;
   repository: string;
   issueNumber: number;
   issueKey: string;
@@ -70,6 +71,7 @@ export interface SprintLinkedIssueRecord {
 export interface SprintLinkedIssueInput {
   provider: LinkedIssueProvider;
   hostDomain: string;
+  projectKey?: string;
   repository: string;
   issueNumber: number;
   issueKey?: string;

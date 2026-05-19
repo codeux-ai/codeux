@@ -22,6 +22,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
     },
   },
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
+  jira: { ...DEFAULT_DASHBOARD_SETTINGS.jira },
   ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },
   sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps },
   cliWorkflow: { ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow },
@@ -76,5 +77,9 @@ export const applyExternalSettingsHints = (
     ...settings.git,
     githubToken: settings.git.githubToken.trim().length > 0 ? settings.git.githubToken : hints.resolved.githubToken,
     gitlabToken: settings.git.gitlabToken?.trim().length ? settings.git.gitlabToken : hints.resolved.gitlabToken || "",
+  },
+  jira: {
+    ...settings.jira,
+    apiToken: settings.jira.apiToken.trim().length > 0 ? settings.jira.apiToken : hints.resolved.jiraToken || "",
   },
 });

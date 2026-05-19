@@ -8,6 +8,7 @@ import { readBoolean, readPort, readString } from "../shared/config/value-reader
 import { sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { sanitizeAiProvider } from "../domain/settings/settings-sanitizers/ai-provider-sanitizer.js";
 import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitizer.js";
+import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-sanitizer.js";
 import { sanitizeCiIntelligence } from "../domain/settings/settings-sanitizers/ci-sanitizer.js";
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
@@ -106,6 +107,10 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
     githubToken: externalHints?.resolved.githubToken || DEFAULT_DASHBOARD_SETTINGS.git.githubToken,
     gitlabToken: externalHints?.resolved.gitlabToken || DEFAULT_DASHBOARD_SETTINGS.git.gitlabToken,
   },
+  jira: {
+    ...DEFAULT_DASHBOARD_SETTINGS.jira,
+    apiToken: externalHints?.resolved?.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
+  },
   ciIntelligence: {
     ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
   },
@@ -190,6 +195,10 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
 
   const aiProvider = sanitizeAiProvider(input, { externalHints });
   const git = sanitizeGit(input, externalHints);
+  const jira = sanitizeJira(input.jira, DEFAULT_DASHBOARD_SETTINGS.jira);
+  if (externalHints?.resolved?.jiraToken) {
+    jira.apiToken = externalHints.resolved.jiraToken;
+  }
   const ciIntelligence = sanitizeCiIntelligence(input, git.githubMode);
   const sprintLoopSteps = sanitizeSprintLoopSteps(input);
   const cliWorkflow = sanitizeCliWorkflow(input);
@@ -313,6 +322,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       invocationRouting: aiProvider.invocationRouting,
     },
     git,
+    jira,
     ciIntelligence,
     sprintLoopSteps,
     cliWorkflow,
