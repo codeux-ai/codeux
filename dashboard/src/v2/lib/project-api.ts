@@ -13,12 +13,23 @@ import type {
   SprintMarkdownExportBundle,
   SprintMarkdownImportInput,
   SprintLinkedIssueInput,
+  SprintLinkedIssueRecord,
   SprintRecord,
   TaskRecord,
   UpdateProjectInput,
   UpdateSprintInput,
   UpdateTaskInput,
 } from "../types.js";
+
+export interface JiraIssueSearchResult {
+  key: string;
+  title: string;
+  url: string;
+  state: string;
+  labels: string[];
+  assignees: string[];
+  projectKey: string;
+}
 import type {
   ExecutionAssignedWorkerSummary,
   ExecutionDashboardSnapshot,
@@ -99,6 +110,42 @@ export interface RemoteIssueSummary extends SprintLinkedIssueInput {
   bodyPreview: string;
   updatedAt: string | null;
 }
+
+export const searchJiraIssues = async (
+  projectId: string,
+  jql: string,
+  signal?: AbortSignal,
+): Promise<JiraIssueSearchResult[]> => {
+  return fetchJson<JiraIssueSearchResult[]>(
+    `/api/projects/${encodeURIComponent(projectId)}/jira/search?jql=${encodeURIComponent(jql)}`,
+    { signal }
+  );
+};
+
+export const listSprintLinkedIssues = async (
+  sprintId: string,
+  signal?: AbortSignal,
+): Promise<SprintLinkedIssueRecord[]> => {
+  return fetchJson<SprintLinkedIssueRecord[]>(
+    `/api/sprints/${encodeURIComponent(sprintId)}/linked-issues`,
+    { signal }
+  );
+};
+
+export const replaceSprintLinkedIssues = async (
+  sprintId: string,
+  projectId: string,
+  issues: SprintLinkedIssueInput[],
+): Promise<SprintLinkedIssueRecord[]> => {
+  return fetchJson<SprintLinkedIssueRecord[]>(
+    `/api/sprints/${encodeURIComponent(sprintId)}/linked-issues`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, issues }),
+    }
+  );
+};
 
 export const searchProjectIssues = async (
   projectId: string,
