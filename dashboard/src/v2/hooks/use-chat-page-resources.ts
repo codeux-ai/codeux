@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "preact/hooks";
 import type { MutableRef } from "preact/hooks";
-import type { AgentConnection, ChatThread, ExecutionInvocationRecord, ChatMessageRecord } from "../types.js";
+import type { AgentConnection, ChatThread, ExecutionInvocationRecord, ExecutionInvocationMessageRecord, ChatMessageRecord } from "../types.js";
 import type { DashboardRealtimeServerMessage, ExecutionDashboardSnapshot, ExecutionConnectionSummary } from "../../types.js";
 import { useMessageCache } from "./useMessageCache.js";
 import { fetchConversationThreads, fetchProjectConnections } from "../lib/connection-api.js";
@@ -72,7 +72,7 @@ export const useChatPageResources = (options: {
   invocationData: {
     selectedInvocationIdRef: MutableRef<string | null>;
     setInvocationsSnapshot: (invs: ExecutionInvocationRecord[]) => void;
-    setInvocationMessagesSnapshot: (messages: any[]) => void;
+    setInvocationMessagesSnapshot: (messages: ExecutionInvocationMessageRecord[]) => void;
     setSelectedInvocationId: (id: string | null) => void;
     setError: (error: string | null) => void;
     activateInvocation: (id: string | null, options?: { foreground?: boolean; preferredInvocation?: ExecutionInvocationRecord | null }) => Promise<void>;
