@@ -113,11 +113,15 @@ export class PlanningAgentService {
 
   async improveSprintPrompt(projectId: string, input: ImprovePromptInput, signal?: AbortSignal): Promise<ImprovePromptResult> {
     const project = this.requireProject(projectId);
+    const runtime = this.resolvePlanningRuntime(projectId, input.overrides);
+    const planningAgentPresetId = input.overrides?.planningAgentPresetId
+      || input.planningAgentPresetId
+      || runtime.settings.agents?.routing?.planning?.agentPresetId
+      || undefined;
     const planningAgent = await this.deps.agentPresetSyncService.resolveTargetedPlanningAgent(
       projectId,
-      input.overrides?.planningAgentPresetId,
+      planningAgentPresetId,
     );
-    const runtime = this.resolvePlanningRuntime(projectId, input.overrides);
     const invocation = this.deps.executionRepository?.createExecutionInvocation({
       projectId,
       skipValidation: true,
@@ -228,11 +232,15 @@ export class PlanningAgentService {
   async planSprint(projectId: string, sprintId: string, options: PlanSprintOptions, signal?: AbortSignal): Promise<PlanSprintResult> {
     const project = this.requireProject(projectId);
     const sprint = this.requireSprint(projectId, sprintId);
+    const runtime = this.resolvePlanningRuntime(projectId, options.overrides);
+    const planningAgentPresetId = options.overrides?.planningAgentPresetId
+      || options.planningAgentPresetId
+      || runtime.settings.agents?.routing?.planning?.agentPresetId
+      || undefined;
     const planningAgent = await this.deps.agentPresetSyncService.resolveTargetedPlanningAgent(
       projectId,
-      options.overrides?.planningAgentPresetId,
+      planningAgentPresetId,
     );
-    const runtime = this.resolvePlanningRuntime(projectId, options.overrides);
     const existingTasks = this.deps.projectManagementRepository.listTasks(projectId, sprintId);
     if (existingTasks.length > 0 && !options.replan) {
       throw new Error(`Sprint ${sprint.name} already has ${existingTasks.length} task(s). Clear or edit them before running Planning agent.`);
@@ -253,10 +261,14 @@ export class PlanningAgentService {
     const learningsInstruction = (runtime.settings.memory?.enabled && runtime.settings.memory?.autoCaptureSprint)
       ? resolveAgentMemoryInstructions(planningAgent, runtime.settings.memory?.workerLearningsInstruction)
       : undefined;
+    const codingAgentRoster = await this.resolveCodingAgentRoster(projectId, runtime.settings, options.overrides);
+    const allowedAgentPresetIds = codingAgentRoster.map((agent) => agent.id);
+    const manualCodingAgent = await this.resolveManualCodingAgent(projectId, runtime.settings, options.overrides);
 
     const prompt = PlanningPromptBuilder.buildPlanPrompt({
       projectName: project.name,
       planningAgent,
+      codingAgentRoster,
       sprintNumber: sprint.number,
       sprintName: sprint.name,
       goal: sprint.goal,
@@ -285,7 +297,7 @@ export class PlanningAgentService {
         rawPrompt: prompt,
         overrides: options.overrides,
         signal,
-        parseFn: (bodyMarkdown) => parsePlannedSprintReply(bodyMarkdown),
+        parseFn: (bodyMarkdown) => parsePlannedSprintReply(bodyMarkdown, { allowedAgentPresetIds }),
         buildRetryPrompt: (lastError) => [
           "Your previous output could not be parsed as valid JSON.",
           `Parse error: ${lastError.message}`,
@@ -352,6 +364,7 @@ export class PlanningAgentService {
       sprintId,
       payload.tasks,
       this.deps.projectManagementRepository,
+      { defaultAgentPresetId: manualCodingAgent?.id || null },
     );
 
     const titles: string[] = [];
@@ -404,6 +417,40 @@ export class PlanningAgentService {
       settings,
       connection: null,
     };
+  }
+
+  private getTaskCodingRoutingMode(settings: DashboardSettings, overrides?: PlanningOverrides): "MANUAL" | "ORCHESTRATOR" {
+    return overrides?.agentRoutingMode || settings.agents?.routing?.taskCoding?.mode || "MANUAL";
+  }
+
+  private async resolveManualCodingAgent(
+    projectId: string,
+    settings: DashboardSettings,
+    overrides?: PlanningOverrides,
+  ): Promise<AgentPresetRecord | null> {
+    if (this.getTaskCodingRoutingMode(settings, overrides) !== "MANUAL") {
+      return null;
+    }
+    const agentPresetId = overrides?.workerAgentPresetId || settings.agents?.routing?.taskCoding?.agentPresetId || null;
+    if (!agentPresetId) {
+      return null;
+    }
+    return await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(projectId, agentPresetId);
+  }
+
+  private async resolveCodingAgentRoster(projectId: string, settings: DashboardSettings, overrides?: PlanningOverrides): Promise<AgentPresetRecord[]> {
+    const routing = settings.agents?.routing?.taskCoding;
+    if (!routing || this.getTaskCodingRoutingMode(settings, overrides) !== "ORCHESTRATOR") {
+      return [];
+    }
+
+    const selectedIds = new Set(routing.orchestratorAgentPresetIds);
+    if (selectedIds.size === 0) {
+      return [];
+    }
+
+    const presets = await this.deps.agentPresetSyncService.listAgentPresets(projectId);
+    return presets.filter((preset) => selectedIds.has(preset.id));
   }
 
   private async runVirtualPlanningRequest<T>(args: {

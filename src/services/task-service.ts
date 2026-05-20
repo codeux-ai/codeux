@@ -160,10 +160,24 @@ export class TaskService {
     return this.resolveInvocationProvider("task_coding", task, { scope, cliOnly: true }).provider as Exclude<ProviderId, "jules">;
   }
 
-  private async buildPrompt(repoPath: string, sectionTitle: string, taskPrompt: string): Promise<string> {
-    const workerGuide = (await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(repoPath))
-      ?.instructionMarkdown
-      ?.trim() || "";
+  private async buildPrompt(
+    repoPath: string,
+    sectionTitle: string,
+    taskPrompt: string,
+    projectId?: string,
+    agentPresetId?: string | null,
+  ): Promise<string> {
+    const settings = projectId ? this.deps.getDashboardSettings({ projectId }) : undefined;
+    const configuredAgentPresetId = settings?.agents?.routing?.taskCoding?.mode === "MANUAL"
+      ? settings.agents.routing.taskCoding.agentPresetId
+      : null;
+    const workerAgent = projectId
+      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
+        projectId,
+        agentPresetId || configuredAgentPresetId,
+      ).catch(() => null)
+      : await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(repoPath);
+    const workerGuide = workerAgent?.instructionMarkdown?.trim() || "";
 
     return workerGuide
       ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerGuide}\n\n---\n\n## ${sectionTitle}\n\n${taskPrompt}`
@@ -294,6 +308,7 @@ export class TaskService {
         featureBranch: baseBranch,
         sprintNumber,
         settingsScope,
+        agentPresetId: task.agentPresetId || null,
         dispatchId,
         taskRunId,
       });
@@ -304,7 +319,13 @@ export class TaskService {
       repoPath,
       sourceId,
     });
-    const fullPrompt = await this.buildPrompt(repoPath, "SUBTASK TO EXECUTE", task.prompt);
+    const fullPrompt = await this.buildPrompt(
+      repoPath,
+      "SUBTASK TO EXECUTE",
+      task.prompt,
+      settingsScope?.projectId,
+      task.agentPresetId,
+    );
 
     const data: JulesCreateSessionRequest = {
       prompt: fullPrompt,

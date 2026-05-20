@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS tasks (
         status TEXT NOT NULL DEFAULT 'pending',
         priority TEXT NOT NULL DEFAULT 'medium',
         executor_type TEXT NOT NULL DEFAULT 'auto',
+        agent_preset_id TEXT,
         sort_order INTEGER NOT NULL DEFAULT 0,
         is_independent INTEGER NOT NULL DEFAULT 0,
         is_merged INTEGER NOT NULL DEFAULT 0,
@@ -72,7 +73,8 @@ CREATE TABLE IF NOT EXISTS tasks (
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE SET NULL
       );
 
 CREATE TABLE IF NOT EXISTS sprint_linked_issues (
@@ -345,6 +347,7 @@ CREATE TABLE IF NOT EXISTS agent_presets (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
         name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
         instruction_markdown TEXT NOT NULL DEFAULT '',
         labels_json TEXT,
         source_path TEXT,

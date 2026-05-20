@@ -19,6 +19,7 @@
  * forehead jewel intensity so the bot's mood reads at a glance.
  */
 import { h } from "preact";
+import { useMemo } from "preact/hooks";
 import type { AgentAvatarConfig } from "../../types.js";
 import {
   BRAND_COLORS,
@@ -37,6 +38,8 @@ interface AgentAvatarSvgProps {
   /** Disable the floating + breathing micro-animations (for high-density UIs). */
   static?: boolean;
 }
+
+let agentAvatarSvgInstanceCounter = 0;
 
 /* ════════════════════════════════════════════════════════════════════════
  *  Logo path bank — verbatim from the production brand mark.
@@ -525,7 +528,7 @@ function renderAntenna(
 /* ════════════════════════════════════════════════════════════════════════
  *  Aura — ambient flourish behind the tile
  * ════════════════════════════════════════════════════════════════════════ */
-function renderAura(wingsId: string | undefined, accent: string, jadeBright: string): h.JSX.Element | null {
+function renderAura(wingsId: string | undefined, accent: string, jadeBright: string, orbitPathId: string): h.JSX.Element | null {
   if (!wingsId || wingsId === "none") return null;
 
   /* ── Halo: stacked tilted ellipses — a celestial-feeling crown ── */
@@ -610,21 +613,24 @@ function renderAura(wingsId: string | undefined, accent: string, jadeBright: str
 
   /* ── Orbit: 3 jade satellites circling on a tilted elliptical path ── */
   if (wingsId === "orbit") {
+    const orbitPathProps = {
+      d: "M 627 200 a 540 180 0 1 0 0.001 0",
+      fill: "none",
+      stroke: accent,
+      strokeOpacity: "0.18",
+      strokeWidth: "3",
+      strokeDasharray: "6 8",
+    };
     const orbitPath = (
       <path
-        id="cux-orbit-path"
-        d="M 627 200 a 540 180 0 1 0 0.001 0"
-        fill="none"
-        stroke={accent}
-        strokeOpacity="0.18"
-        strokeWidth="3"
-        strokeDasharray="6 8"
+        id={orbitPathId}
+        {...orbitPathProps}
       />
     );
     const satellite = (delay: string, r: number, fill: string, opacity: number) => (
       <circle r={r} fill={fill} opacity={opacity}>
         <animateMotion dur="6s" repeatCount="indefinite" begin={delay} rotate="auto">
-          <mpath href="#cux-orbit-path" />
+          <mpath href={`#${orbitPathId}`} />
         </animateMotion>
         <animate attributeName="opacity" values={`${opacity};${opacity * 0.4};${opacity}`} dur="6s" repeatCount="indefinite" begin={delay} />
       </circle>
@@ -632,7 +638,7 @@ function renderAura(wingsId: string | undefined, accent: string, jadeBright: str
     return (
       <g>
         <defs>{orbitPath}</defs>
-        {orbitPath}
+        <path {...orbitPathProps} />
         {satellite("0s",   18, accent, 0.95)}
         {satellite("-2s",  14, jadeBright, 0.85)}
         {satellite("-4s",  10, accent, 0.75)}
@@ -803,6 +809,15 @@ export function AgentAvatarSvg({
   const jadeBright = BRAND_COLORS.jadeBright;
 
   const innerScale = `translate(627 627) scale(${chassisSpec.scaleX} ${chassisSpec.scaleY}) translate(-627 -627)`;
+  const svgId = useMemo(() => {
+    agentAvatarSvgInstanceCounter += 1;
+    return `cux-agent-avatar-${agentAvatarSvgInstanceCounter}`;
+  }, []);
+  const shellGradientId = `${svgId}-shell-grad`;
+  const insetGradientId = `${svgId}-inset-grad`;
+  const auraGlowId = `${svgId}-aura-glow`;
+  const botShadowId = `${svgId}-bot-shadow`;
+  const orbitPathId = `${svgId}-orbit-path`;
 
   return (
     <svg
@@ -815,20 +830,20 @@ export function AgentAvatarSvg({
       aria-hidden="true"
     >
       <defs>
-        <radialGradient id="cux-shell-grad" cx="50%" cy="32%" r="75%">
+        <radialGradient id={shellGradientId} cx="50%" cy="32%" r="75%">
           <stop offset="0%" stopColor={lighten(shellHex, 0.06)} />
           <stop offset="55%" stopColor={shellHex} />
           <stop offset="100%" stopColor={darken(shellHex, 0.08)} />
         </radialGradient>
-        <radialGradient id="cux-inset-grad" cx="50%" cy="30%" r="75%">
+        <radialGradient id={insetGradientId} cx="50%" cy="30%" r="75%">
           <stop offset="0%" stopColor={lighten(insetHex, 0.12)} />
           <stop offset="100%" stopColor={insetHex} />
         </radialGradient>
-        <radialGradient id="cux-aura-glow" cx="50%" cy="50%" r="50%">
+        <radialGradient id={auraGlowId} cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor={accent} stopOpacity="0.55" />
           <stop offset="100%" stopColor={accent} stopOpacity="0" />
         </radialGradient>
-        <filter id="cux-bot-shadow" x="-12%" y="-12%" width="124%" height="124%">
+        <filter id={botShadowId} x="-12%" y="-12%" width="124%" height="124%">
           <feGaussianBlur in="SourceAlpha" stdDeviation="18" />
           <feOffset dy="14" result="off" />
           <feComponentTransfer><feFuncA type="linear" slope={light ? "0.18" : "0.42"} /></feComponentTransfer>
@@ -837,15 +852,15 @@ export function AgentAvatarSvg({
       </defs>
 
       {/* Ambient aura — sits behind the tile */}
-      {renderAura(wingsId, accent, jadeBright)}
+      {renderAura(wingsId, accent, jadeBright, orbitPathId)}
 
       {/* Big soft jade glow behind the tile */}
-      <ellipse cx="627" cy="700" rx="600" ry="560" fill="url(#cux-aura-glow)" opacity="0.55" />
+      <ellipse cx="627" cy="700" rx="600" ry="560" fill={`url(#${auraGlowId})`} opacity="0.55" />
 
       {/* Float wrap — bot only (no surrounding tile). The drop-shadow
           filter wraps every layer so the floating bot casts a soft shadow
           on whatever background the host provides. */}
-      <g filter="url(#cux-bot-shadow)">
+      <g filter={`url(#${botShadowId})`}>
         {!isStatic && (
           <animateTransform
             attributeName="transform"
@@ -861,9 +876,9 @@ export function AgentAvatarSvg({
 
         <g transform={innerScale}>
           {/* White face shell + ear caps — the bot's body */}
-          <path d={PATH_FACE_SHELL} fill="url(#cux-shell-grad)" />
-          <path d={PATH_EAR_LEFT} fill="url(#cux-shell-grad)" />
-          <path d={PATH_EAR_RIGHT} fill="url(#cux-shell-grad)" />
+          <path d={PATH_FACE_SHELL} fill={`url(#${shellGradientId})`} />
+          <path d={PATH_EAR_LEFT} fill={`url(#${shellGradientId})`} />
+          <path d={PATH_EAR_RIGHT} fill={`url(#${shellGradientId})`} />
 
           {/* Subtle inner edge highlight on top of the shell */}
           <path
@@ -878,7 +893,7 @@ export function AgentAvatarSvg({
           {renderHeadphones(headphonesId, accent, jadeBright, shellHex)}
 
           {/* Dark inset face — the screen */}
-          <path d={PATH_INSET_FACE} fill="url(#cux-inset-grad)" />
+          <path d={PATH_INSET_FACE} fill={`url(#${insetGradientId})`} />
 
           {/* Bezel sliver — the dark line above the inset */}
           <path d={PATH_BEZEL_SLIVER} fill={bezelHex} />
@@ -887,7 +902,7 @@ export function AgentAvatarSvg({
           {renderEyes(eyesId, expression, accent, jadeBright)}
 
           {/* Inner glow inside the inset face — pulses subtly */}
-          <ellipse cx={627} cy={700} rx="220" ry="120" fill="url(#cux-aura-glow)" opacity="0.18" pointerEvents="none">
+          <ellipse cx={627} cy={700} rx="220" ry="120" fill={`url(#${auraGlowId})`} opacity="0.18" pointerEvents="none">
             <animate attributeName="opacity" values="0.18;0.08;0.18" dur="3s" repeatCount="indefinite" />
           </ellipse>
         </g>

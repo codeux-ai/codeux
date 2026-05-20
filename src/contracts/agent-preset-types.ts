@@ -24,6 +24,7 @@ export interface AgentPresetRecord {
   id: string;
   projectId: string;
   name: string;
+  description: string;
   instructionMarkdown: string;
   labels: string[];
   sourcePath: string | null;
@@ -41,6 +42,7 @@ export interface AgentPresetRecord {
 
 export interface CreateAgentPresetInput {
   name: string;
+  description?: string;
   instructionMarkdown?: string;
   labels?: string[];
   avatarConfig?: AgentAvatarConfig;
@@ -50,6 +52,7 @@ export interface CreateAgentPresetInput {
 
 export interface UpdateAgentPresetInput {
   name?: string;
+  description?: string;
   instructionMarkdown?: string;
   labels?: string[];
   avatarConfig?: AgentAvatarConfig;

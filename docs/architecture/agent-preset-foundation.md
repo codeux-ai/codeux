@@ -22,6 +22,7 @@ Foundation fields:
 - `id`
 - `project_id`
 - `name`
+- `description`
 - `instruction_markdown`
 - `labels_json`
 - `created_at`
@@ -59,8 +60,10 @@ The v2 `Agents` page now manages project-scoped presets only.
 Foundation-supported fields:
 
 - preset name
-- labels
+- short routing description
 - instruction markdown
+
+Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead, including tags for built-in fallback selections on Planning agent, Worker, Project manager, and Quality assurance agent.
 
 This foundation gave Code UX a clean product base for:
 

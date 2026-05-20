@@ -1,6 +1,7 @@
 import type { Request, Response, RequestHandler } from "express";
 import type {
   ImprovePromptInput,
+  PlanningOverrides,
   PlanSprintOptions,
 } from "../contracts/project-management-types.js";
 import type {
@@ -43,6 +44,33 @@ export function parseThreadRouteInput(body: unknown): { routeKind: "worker" | "v
   };
 }
 
+function parsePlanningOverrides(value: unknown): PlanningOverrides | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const input = value as Record<string, unknown>;
+  const overrides: PlanningOverrides = {};
+  if (typeof input.workerId === "string" && input.workerId.trim()) {
+    overrides.workerId = input.workerId.trim();
+  }
+  if (typeof input.virtualProvider === "string" && input.virtualProvider.trim()) {
+    overrides.virtualProvider = input.virtualProvider.trim() as PlanningOverrides["virtualProvider"];
+  }
+  if (typeof input.virtualModel === "string" && input.virtualModel.trim()) {
+    overrides.virtualModel = input.virtualModel.trim();
+  }
+  if (typeof input.planningAgentPresetId === "string" && input.planningAgentPresetId.trim()) {
+    overrides.planningAgentPresetId = input.planningAgentPresetId.trim();
+  }
+  if (input.agentRoutingMode === "MANUAL" || input.agentRoutingMode === "ORCHESTRATOR") {
+    overrides.agentRoutingMode = input.agentRoutingMode;
+  }
+  if (typeof input.workerAgentPresetId === "string" && input.workerAgentPresetId.trim()) {
+    overrides.workerAgentPresetId = input.workerAgentPresetId.trim();
+  }
+  return Object.keys(overrides).length > 0 ? overrides : undefined;
+}
+
 export function parseImprovePromptInput(body: unknown): ImprovePromptInput {
   if (!body || typeof body !== "object") {
     throw new Error("Invalid input: body must be an object");
@@ -53,7 +81,7 @@ export function parseImprovePromptInput(body: unknown): ImprovePromptInput {
     goal: typeof typedBody.goal === "string" ? typedBody.goal : "",
     clientRequestId: typeof typedBody.clientRequestId === "string" ? typedBody.clientRequestId.trim() : undefined,
     planningAgentPresetId: typeof typedBody.planningAgentPresetId === "string" ? typedBody.planningAgentPresetId.trim() : undefined,
-    overrides: typedBody.overrides as ImprovePromptInput["overrides"],
+    overrides: parsePlanningOverrides(typedBody.overrides),
   };
 }
 
@@ -67,7 +95,7 @@ export function parsePlanSprintOptions(body: unknown): PlanSprintOptions {
     replan: Boolean(typedBody.replan),
     clientRequestId: typeof typedBody.clientRequestId === "string" ? typedBody.clientRequestId.trim() : undefined,
     planningAgentPresetId: typeof typedBody.planningAgentPresetId === "string" ? typedBody.planningAgentPresetId.trim() : undefined,
-    overrides: typedBody.overrides as PlanSprintOptions["overrides"],
+    overrides: parsePlanningOverrides(typedBody.overrides),
   };
 }
 

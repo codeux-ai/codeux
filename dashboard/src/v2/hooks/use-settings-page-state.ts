@@ -25,6 +25,7 @@ import type {
   SystemSettings,
   ThinkingMode,
 } from "../../types.js";
+import type { AgentAvatarConfig } from "../types.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 type SettingsScope = "system" | "project";
@@ -125,8 +126,8 @@ const AGENT_INSTRUCTION_TEMPLATE_OPTIONS: Array<{
 const QA_PRESET_LABEL_PATTERN = /(?:^|[\s_-])qa(?:$|[\s_-])|quality[\s_-]*assurance/i;
 
 const sortAgentPresetOptions = (
-  presets: Array<{ id: string; name: string; labels?: string[] }>,
-): Array<{ value: string; label: string }> => (
+  presets: Array<{ id: string; name: string; labels?: string[]; avatarConfig?: AgentAvatarConfig }>,
+): Array<{ value: string; label: string; avatarConfig?: AgentAvatarConfig }> => (
   [...presets]
     .sort((left, right) => {
       const leftIsQa = (left.labels || []).some((label) => QA_PRESET_LABEL_PATTERN.test(label));
@@ -139,6 +140,7 @@ const sortAgentPresetOptions = (
     .map((preset) => ({
       value: preset.id,
       label: preset.name,
+      avatarConfig: preset.avatarConfig,
     }))
 );
 
@@ -196,7 +198,7 @@ export const useSettingsPageState = (
   const [resettingDatabase, setResettingDatabase] = useState(false);
   const [importingHints, setImportingHints] = useState(false);
   const [externalHints, setExternalHints] = useState<import("../../types.js").ExternalSettingsHints | null>(null);
-  const [projectAgentPresetOptions, setProjectAgentPresetOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [projectAgentPresetOptions, setProjectAgentPresetOptions] = useState<Array<{ value: string; label: string; avatarConfig?: AgentAvatarConfig }>>([]);
 
   const loadSettings = useCallback(async (): Promise<void> => {
     setLoading(true);

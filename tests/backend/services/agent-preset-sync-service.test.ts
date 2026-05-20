@@ -365,7 +365,7 @@ describe("AgentPresetSyncService", () => {
       expect(resolved.name).toBe("Planning agent");
     });
 
-    it("falls back to default planning agent if targeted preset lacks 'planning' label", async () => {
+    it("accepts targeted planning agent presets without requiring a planning label", async () => {
       const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-resolve-unlabeled-"));
       tempDirs.push(dir);
       const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -390,7 +390,7 @@ describe("AgentPresetSyncService", () => {
       });
 
       const resolved = await syncService.resolveTargetedPlanningAgent(project.id, unlabeled.id);
-      expect(resolved.name).toBe("Planning agent");
+      expect(resolved.name).toBe("Just a Worker");
     });
   });
 });

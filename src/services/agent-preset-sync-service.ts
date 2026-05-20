@@ -22,6 +22,7 @@ interface AgentSourceFile {
   sourcePath: string;
   sourceScope: AgentSourceScope;
   sourceUpdatedAt: string;
+  description?: string;
   instructionMarkdown: string;
   avatarConfig?: AgentAvatarConfig;
   memoryTemplateOverrideEnabled?: boolean;
@@ -38,6 +39,7 @@ export class AgentPresetSyncService {
 
   async createAgentPreset(projectId: string, input: {
     name: string;
+    description?: string;
     instructionMarkdown?: string;
     labels?: string[];
     avatarConfig?: AgentAvatarConfig;
@@ -52,6 +54,7 @@ export class AgentPresetSyncService {
       const source = await this.writeProjectAgentFile({
         projectBaseDir: project.baseDir,
         name: nextName,
+        description: input.description?.trim() || "",
         instructionMarkdown: input.instructionMarkdown?.trim() || "",
         avatarConfig: input.avatarConfig,
         memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
@@ -59,6 +62,7 @@ export class AgentPresetSyncService {
       });
       const created = this.deps.agentPresetRepository.importAgentPresetFromSource(projectId, {
         name: nextName,
+        description: source.description ?? input.description,
         instructionMarkdown: source.instructionMarkdown,
         labels: input.labels,
         sourcePath: source.sourcePath,
@@ -78,6 +82,7 @@ export class AgentPresetSyncService {
 
   async updateAgentPreset(agentPresetId: string, input: {
     name?: string;
+    description?: string;
     instructionMarkdown?: string;
     labels?: string[];
     avatarConfig?: AgentAvatarConfig;
@@ -101,6 +106,7 @@ export class AgentPresetSyncService {
       const source = await this.writeProjectAgentFile({
         projectBaseDir: project.baseDir,
         name: nextName,
+        description: input.description === undefined ? existing.description : input.description,
         instructionMarkdown: nextInstructionMarkdown,
         avatarConfig: input.avatarConfig === undefined ? existing.avatarConfig : input.avatarConfig,
         memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled === undefined ? existing.memoryTemplateOverrideEnabled : input.memoryTemplateOverrideEnabled,
@@ -151,6 +157,7 @@ export class AgentPresetSyncService {
         const labels = this.inferLabelsForSource(source.normalizedName);
         const created = this.deps.agentPresetRepository.importAgentPresetFromSource(projectId, {
           name: source.name,
+          description: source.description,
           instructionMarkdown: source.instructionMarkdown,
           labels,
           sourcePath: source.sourcePath,
@@ -180,14 +187,16 @@ export class AgentPresetSyncService {
       }
 
       const contentChanged = source.instructionMarkdown.trim() !== existing.instructionMarkdown.trim();
+      const descriptionChanged = (source.description || "") !== (existing.description || "");
       const nameChanged = source.normalizedName !== this.normalizeName(existing.name);
       const avatarChanged = JSON.stringify(source.avatarConfig || {}) !== JSON.stringify(existing.avatarConfig || {});
       const memoryEnabledChanged = Boolean(source.memoryTemplateOverrideEnabled) !== Boolean(existing.memoryTemplateOverrideEnabled);
       const memoryMarkdownChanged = (source.memoryTemplateMarkdown || "") !== (existing.memoryTemplateMarkdown || "");
 
-      if (contentChanged || nameChanged || avatarChanged || memoryEnabledChanged || memoryMarkdownChanged) {
+      if (contentChanged || descriptionChanged || nameChanged || avatarChanged || memoryEnabledChanged || memoryMarkdownChanged) {
         const imported = this.deps.agentPresetRepository.importLinkedAgentPreset(existing.id, {
           name: source.sourceScope === "project" ? existing.name : source.name,
+          description: source.description,
           instructionMarkdown: source.instructionMarkdown,
           sourceUpdatedAt: source.sourceUpdatedAt,
           avatarConfig: source.avatarConfig,
@@ -212,6 +221,7 @@ export class AgentPresetSyncService {
     const source = await this.readAgentSourceFile(existing.sourcePath, existing.sourceScope || "project");
     const updated = this.deps.agentPresetRepository.importLinkedAgentPreset(agentPresetId, {
       name: existing.sourceScope === "project" ? existing.name : source.name,
+      description: source.description,
       instructionMarkdown: source.instructionMarkdown,
       sourceUpdatedAt: source.sourceUpdatedAt,
       avatarConfig: source.avatarConfig,
@@ -244,7 +254,7 @@ export class AgentPresetSyncService {
 
     if (planningAgentPresetId) {
       const targeted = this.deps.agentPresetRepository.getAgentPreset(planningAgentPresetId);
-      if (targeted && targeted.projectId === projectId && targeted.labels.includes("planning")) {
+      if (targeted && targeted.projectId === projectId) {
         return await this.decorateAgentPreset(targeted);
       }
     }
@@ -275,6 +285,19 @@ export class AgentPresetSyncService {
     }
 
     return await this.getQualityAssuranceAgent(projectId);
+  }
+
+  async resolveTargetedCodingAgent(projectId: string, agentPresetId?: string | null): Promise<AgentPresetRecord> {
+    await this.syncProjectAgents(projectId);
+
+    if (agentPresetId) {
+      const targeted = this.deps.agentPresetRepository.getAgentPreset(agentPresetId);
+      if (targeted && targeted.projectId === projectId) {
+        return await this.decorateAgentPreset(targeted);
+      }
+    }
+
+    return await this.getWorkerAgent(projectId);
   }
 
   async getOptionalWorkerAgentForRepoPath(repoPath: string): Promise<AgentPresetRecord | null> {
@@ -319,6 +342,7 @@ export class AgentPresetSyncService {
     try {
       const source = await this.readAgentSourceFile(preset.sourcePath, preset.sourceScope || "project");
       const sourceDiffersFromDb = this.normalizeName(source.name) !== this.normalizeName(preset.name)
+        || (source.description || "") !== (preset.description || "")
         || source.instructionMarkdown.trim() !== preset.instructionMarkdown.trim();
       return {
         ...preset,
@@ -376,6 +400,7 @@ export class AgentPresetSyncService {
       sourcePath,
       sourceScope,
       sourceUpdatedAt: stats.mtime.toISOString(),
+      description: parsed.description,
       instructionMarkdown: parsed.instructionMarkdown,
       avatarConfig: parsed.avatarConfig,
       memoryTemplateOverrideEnabled: parsed.memoryTemplateOverrideEnabled,
@@ -434,6 +459,7 @@ export class AgentPresetSyncService {
   private async writeProjectAgentFile(args: {
     projectBaseDir: string;
     name: string;
+    description?: string;
     instructionMarkdown: string;
     avatarConfig?: AgentAvatarConfig;
     memoryTemplateOverrideEnabled?: boolean;
@@ -454,6 +480,7 @@ export class AgentPresetSyncService {
     }
 
     const fileContent = formatAgentMarkdown({
+      description: args.description,
       instructionMarkdown: args.instructionMarkdown,
       avatarConfig: args.avatarConfig,
       memoryTemplateOverrideEnabled: args.memoryTemplateOverrideEnabled,

@@ -1,5 +1,9 @@
 import type { TaskExecutorType, TaskPriority, PlannedTaskDraft, PlannedSprintPayload } from "../contracts/project-management-types.js";
 
+export interface PlanningPayloadValidatorOptions {
+  allowedAgentPresetIds?: string[];
+}
+
 export class PlanningPayloadValidator {
   private static readonly REQUIRED_PROMPT_SECTIONS = [
     "## Objective",
@@ -12,7 +16,7 @@ export class PlanningPayloadValidator {
   private static readonly VALID_PRIORITIES: TaskPriority[] = ["critical", "high", "medium", "low"];
   private static readonly VALID_EXECUTORS: TaskExecutorType[] = ["auto", "docker_cli", "jules"];
 
-  public validate(payload: any): PlannedSprintPayload {
+  public validate(payload: any, options: PlanningPayloadValidatorOptions = {}): PlannedSprintPayload {
     if (!payload || typeof payload !== "object") {
       throw new Error("Planning payload must be an object.");
     }
@@ -36,7 +40,7 @@ export class PlanningPayloadValidator {
         throw new Error(`Task at index ${i} is not an object.`);
       }
 
-      const normalizedTask = this.normalizeTask(rawTask, i);
+      const normalizedTask = this.normalizeTask(rawTask, i, options);
 
       if (!normalizedTask.key) {
         throw new Error(`Task at index ${i} is missing a key.`);
@@ -67,7 +71,7 @@ export class PlanningPayloadValidator {
     return { goal, tasks };
   }
 
-  private normalizeTask(raw: any, index: number): PlannedTaskDraft {
+  private normalizeTask(raw: any, index: number, options: PlanningPayloadValidatorOptions): PlannedTaskDraft {
     const legacyAliases = ["id", "name", "prompt", "instructions", "depends_on", "dependencies"];
     for (const alias of legacyAliases) {
       if (alias in raw) {
@@ -133,6 +137,12 @@ export class PlanningPayloadValidator {
     }
 
     const dependsOn = dependsOnRaw || [];
+    const agentPresetId = typeof raw.agentPresetId === "string" && raw.agentPresetId.trim().length > 0
+      ? raw.agentPresetId.trim()
+      : null;
+    if (agentPresetId && options.allowedAgentPresetIds && !options.allowedAgentPresetIds.includes(agentPresetId)) {
+      throw new Error(`Task "${raw.key}" agentPresetId "${agentPresetId}" is not in the allowed coding-agent roster.`);
+    }
 
     return {
       key: raw.key,
@@ -141,6 +151,7 @@ export class PlanningPayloadValidator {
       promptMarkdown: raw.promptMarkdown,
       priority: priority as TaskPriority,
       executorType: executorType as TaskExecutorType,
+      agentPresetId,
       dependsOn
     };
   }

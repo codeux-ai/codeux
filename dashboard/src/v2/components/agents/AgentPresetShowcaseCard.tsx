@@ -21,9 +21,10 @@ const syncBadge = (preset: AgentPreset) => {
 
 export const AgentPresetShowcaseCard: FunctionComponent<{
   preset: AgentPreset;
+  routeTags: string[];
   isSelected: boolean;
   onClick: () => void;
-}> = ({ preset, isSelected, onClick }) => {
+}> = ({ preset, routeTags, isSelected, onClick }) => {
   const cardRef = useRef<HTMLButtonElement>(null);
   const accentHex = getAccentHex(preset.avatarConfig?.accent);
   const badge = syncBadge(preset);
@@ -80,17 +81,17 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
             {preset.name}
           </h3>
           <div className="flex flex-wrap items-center gap-1.5">
-            {preset.labels.slice(0, 2).map((l) => (
+            {routeTags.slice(0, 2).map((tag) => (
               <span
-                key={l}
+                key={tag}
                 className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]"
                 style={{ backgroundColor: `${accentHex}10`, color: accentHex }}
               >
-                {l}
+                {tag}
               </span>
             ))}
-            {preset.labels.length > 2 && (
-              <span className="text-[9px] font-bold text-slate-400">+{preset.labels.length - 2}</span>
+            {routeTags.length > 2 && (
+              <span className="text-[9px] font-bold text-slate-400">+{routeTags.length - 2}</span>
             )}
             <span className={`ml-auto inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] ${badge.cls}`}>
               {badge.icon && <AlertTriangle className="h-2.5 w-2.5" strokeWidth={2.5} />}

@@ -69,12 +69,13 @@ const syncStatusDisplay = (preset: AgentPreset) => {
 
 export const AgentPresetDetailPanel: FunctionComponent<{
   preset: AgentPreset;
+  routeTags: string[];
   onEdit: () => void;
   onDelete: (id: string) => void;
   onImport: (id: string) => void;
   deleting: boolean;
   importing: boolean;
-}> = ({ preset, onEdit, onDelete, onImport, deleting, importing }) => {
+}> = ({ preset, routeTags, onEdit, onDelete, onImport, deleting, importing }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const [activeExpression, setActiveExpression] = useState<AgentAvatarExpression>("happy");
   const [instructionExpanded, setInstructionExpanded] = useState(false);
@@ -170,15 +171,20 @@ export const AgentPresetDetailPanel: FunctionComponent<{
               {preset.name}
             </h2>
             <div className="flex flex-wrap items-center gap-2">
-              {preset.labels.map((l) => (
+              {routeTags.map((tag) => (
                 <span
-                  key={l}
+                  key={tag}
                   className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
                   style={{ backgroundColor: `${accentHex}10`, color: accentHex }}
                 >
-                  {l}
+                  {tag}
                 </span>
               ))}
+              {routeTags.length === 0 && (
+                <span className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500">
+                  No assigned routes
+                </span>
+              )}
               <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${sync.cls}`}>
                 {preset.syncStatus === "out_of_sync" && <AlertTriangle className="h-3 w-3" strokeWidth={2.2} />}
                 {sync.label}

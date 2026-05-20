@@ -90,6 +90,22 @@ function cloneQualityAssuranceSettings(
   };
 }
 
+function cloneAgentRoutingSettings(
+  settings: ProjectSettings["agents"]["routing"],
+): ProjectSettings["agents"]["routing"] {
+  return {
+    planning: { ...settings.planning },
+    taskCoding: {
+      ...settings.taskCoding,
+      orchestratorAgentPresetIds: [...settings.taskCoding.orchestratorAgentPresetIds],
+    },
+    ciFix: { ...settings.ciFix },
+    mergeConflict: { ...settings.mergeConflict },
+    dashboardReply: { ...settings.dashboardReply },
+    clarificationReply: { ...settings.clarificationReply },
+  };
+}
+
 function cloneInvocationRouting(
   routing: ProjectSettings["aiProvider"]["invocationRouting"],
 ): ProjectSettings["aiProvider"]["invocationRouting"] {
@@ -266,6 +282,37 @@ function sanitizeQualityAssuranceTriggerSettings(
   };
 }
 
+function sanitizeManualAgentRoutingSettings(value: unknown): ProjectSettings["agents"]["routing"]["ciFix"] {
+  const input = toRecord(value);
+  return {
+    agentPresetId: typeof input.agentPresetId === "string" && input.agentPresetId.trim().length > 0
+      ? input.agentPresetId.trim()
+      : null,
+  };
+}
+
+function sanitizeAgentRoutingSettings(value: unknown): ProjectSettings["agents"]["routing"] {
+  const input = toRecord(value);
+  const taskCoding = toRecord(input.taskCoding);
+
+  return {
+    planning: sanitizeManualAgentRoutingSettings(input.planning),
+    taskCoding: {
+      mode: taskCoding.mode === "ORCHESTRATOR" ? "ORCHESTRATOR" : "MANUAL",
+      agentPresetId: typeof taskCoding.agentPresetId === "string" && taskCoding.agentPresetId.trim().length > 0
+        ? taskCoding.agentPresetId.trim()
+        : null,
+      orchestratorAgentPresetIds: Array.isArray(taskCoding.orchestratorAgentPresetIds)
+        ? taskCoding.orchestratorAgentPresetIds.map((entry) => String(entry || "").trim()).filter(Boolean)
+        : [],
+    },
+    ciFix: sanitizeManualAgentRoutingSettings(input.ciFix),
+    mergeConflict: sanitizeManualAgentRoutingSettings(input.mergeConflict),
+    dashboardReply: sanitizeManualAgentRoutingSettings(input.dashboardReply),
+    clarificationReply: sanitizeManualAgentRoutingSettings(input.clarificationReply),
+  };
+}
+
 function sanitizeQualityAssuranceSettings(
   value: unknown,
 ): ProjectSettings["agents"]["qualityAssurance"] {
@@ -378,6 +425,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     workers,
     agents: {
       saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
+      routing: cloneAgentRoutingSettings(DEFAULT_DASHBOARD_SETTINGS.agents.routing),
       instructionTemplates: cloneInstructionTemplates(DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates),
       qualityAssurance: cloneQualityAssuranceSettings(DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance),
     },
@@ -495,6 +543,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       saveToProjectDirectory: typeof toRecord(input.agents).saveToProjectDirectory === "boolean"
         ? Boolean(toRecord(input.agents).saveToProjectDirectory)
         : DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
+      routing: sanitizeAgentRoutingSettings(toRecord(input.agents).routing),
       instructionTemplates: sanitizeInstructionTemplates(toRecord(input.agents).instructionTemplates),
       qualityAssurance: sanitizeQualityAssuranceSettings(toRecord(input.agents).qualityAssurance),
     },
@@ -630,6 +679,7 @@ export function resolveDashboardSettings(args: {
     workers: { ...sprintSettings.workers },
     agents: {
       saveToProjectDirectory: sprintSettings.agents.saveToProjectDirectory,
+      routing: cloneAgentRoutingSettings(sprintSettings.agents.routing),
       instructionTemplates: cloneInstructionTemplates(sprintSettings.agents.instructionTemplates),
       qualityAssurance: cloneQualityAssuranceSettings(sprintSettings.agents.qualityAssurance),
     },

@@ -28,6 +28,7 @@ describe("AgentPresetRepository", () => {
 
     const created = agentPresetRepository.createAgentPreset(project.id, {
       name: "Project Manager",
+      description: "Plans cross-functional backend and frontend work.",
       instructionMarkdown: "Coordinate planning and summarize blockers.",
       labels: ["planning", "review"],
       avatarConfig: { body: "alien", face: "happy" },
@@ -38,6 +39,7 @@ describe("AgentPresetRepository", () => {
     expect(created).toMatchObject({
       projectId: project.id,
       name: "Project Manager",
+      description: "Plans cross-functional backend and frontend work.",
       instructionMarkdown: "Coordinate planning and summarize blockers.",
       labels: ["planning", "review"],
       avatarConfig: { body: "alien", face: "happy" },
@@ -47,6 +49,7 @@ describe("AgentPresetRepository", () => {
 
     const updated = agentPresetRepository.updateAgentPreset(created.id, {
       name: "Worker",
+      description: "Executes implementation tasks.",
       instructionMarkdown: "Pick up tasks and report progress.",
       labels: ["execution"],
       avatarConfig: { body: "human" },
@@ -54,6 +57,7 @@ describe("AgentPresetRepository", () => {
     });
     expect(updated).toMatchObject({
       name: "Worker",
+      description: "Executes implementation tasks.",
       instructionMarkdown: "Pick up tasks and report progress.",
       labels: ["execution"],
       avatarConfig: { body: "human" },

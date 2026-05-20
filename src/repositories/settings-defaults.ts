@@ -438,6 +438,18 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   agents: {
     saveToProjectDirectory: true,
+    routing: {
+      planning: { agentPresetId: null },
+      taskCoding: {
+        mode: "MANUAL",
+        agentPresetId: null,
+        orchestratorAgentPresetIds: [],
+      },
+      ciFix: { agentPresetId: null },
+      mergeConflict: { agentPresetId: null },
+      dashboardReply: { agentPresetId: null },
+      clarificationReply: { agentPresetId: null },
+    },
     instructionTemplates: { ...DEFAULT_INSTRUCTION_TEMPLATES },
     qualityAssurance: {
       enabled: false,

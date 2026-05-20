@@ -15,6 +15,7 @@ export const createAgentPreset = async (
 ): Promise<AgentPreset> => {
   const payload = {
     name: input.name,
+    description: input.description,
     instructionMarkdown: input.instructionMarkdown,
     labels: input.labels,
     avatarConfig: input.avatarConfig,
@@ -34,6 +35,7 @@ export const updateAgentPreset = async (
 ): Promise<AgentPreset> => {
   const payload = {
     name: input.name,
+    description: input.description,
     instructionMarkdown: input.instructionMarkdown,
     labels: input.labels,
     avatarConfig: input.avatarConfig,

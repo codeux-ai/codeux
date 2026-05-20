@@ -166,4 +166,21 @@ describe("PlanningPayloadValidator", () => {
     expect(result.tasks[0]?.priority).toEqual("medium");
     expect(result.tasks[0]?.executorType).toEqual("auto"); // worker translates to auto
   });
+
+  it("accepts allowed agentPresetId and rejects unlisted agents", () => {
+    const payload = {
+      tasks: [
+        {
+          key: "T1",
+          title: "Task 1",
+          description: "Desc",
+          promptMarkdown: validPromptMarkdown,
+          agentPresetId: "frontend-agent",
+        },
+      ],
+    };
+
+    expect(validator.validate(payload, { allowedAgentPresetIds: ["frontend-agent"] }).tasks[0]?.agentPresetId).toBe("frontend-agent");
+    expect(() => validator.validate(payload, { allowedAgentPresetIds: ["backend-agent"] })).toThrow("not in the allowed coding-agent roster");
+  });
 });

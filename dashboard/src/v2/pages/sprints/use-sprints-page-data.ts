@@ -127,11 +127,7 @@ export function useSprintsPageData() {
       });
   }, [selectedProject?.id]);
 
-  const planningPresets = useMemo(() => {
-    return agentPresets.filter(p => 
-      p.labels.some(label => label.trim().toLowerCase() === "planning")
-    );
-  }, [agentPresets]);
+  const planningPresets = useMemo(() => agentPresets, [agentPresets]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -197,6 +193,7 @@ export function useSprintsPageData() {
     sprints.reduce((maxNumber: number, sprint: Sprint) => Math.max(maxNumber, sprint.number || 0), 0) + 1
   ), [sprints]);
   const sprintKeyPrefix = effectiveSettings?.settings.git.sprintKeyPrefix || "SPR";
+  const defaultAgentRouting = effectiveSettings?.settings.agents.routing;
   const nextId = `${sprintKeyPrefix}-${String(nextSprintNumber).padStart(2, "0")}`;
 
   const actualActiveRunsBySprintId = useMemo(() => {
@@ -443,6 +440,8 @@ export function useSprintsPageData() {
     routeOverride: PlanningRouteOption | null;
     modelOverride: string | null;
     planningAgentPresetId: string | null;
+    agentRoutingMode: "MANUAL" | "ORCHESTRATOR";
+    workerAgentPresetId: string | null;
     linkedIssues?: SprintLinkedIssueInput[];
     clientRequestId?: string;
     sprintKeyOverride?: string;
@@ -452,7 +451,13 @@ export function useSprintsPageData() {
       return;
     }
 
-    const overrides = toPlanningOverrides(payload.routeOverride, payload.modelOverride, payload.planningAgentPresetId);
+    const overrides = toPlanningOverrides(
+      payload.routeOverride,
+      payload.modelOverride,
+      payload.planningAgentPresetId,
+      payload.agentRoutingMode,
+      payload.workerAgentPresetId,
+    );
     const linkedIssues = payload.linkedIssues || [];
     const goal = mergePromptWithLinkedIssues(payload.goal, linkedIssues);
 
@@ -726,10 +731,13 @@ export function useSprintsPageData() {
     virtualProviders,
     planningEta,
     planningPresets,
+    agentPresets,
+    defaultPlanningAgentPresetId: defaultAgentRouting?.planning.agentPresetId || null,
+    defaultAgentRoutingMode: defaultAgentRouting?.taskCoding.mode || "MANUAL",
+    defaultWorkerAgentPresetId: defaultAgentRouting?.taskCoding.agentPresetId || null,
     showQuicksprint, setShowQuicksprint,
     quicksprintTemplates,
     quicksprintLoading,
-    agentPresets,
     handleQuicksprintExecute,
     handleCreateQuicksprintTemplate,
     handleUpdateQuicksprintTemplate,

@@ -11,6 +11,7 @@ export function persistPlannedTasks(
   sprintId: string,
   tasks: readonly PlannedTaskDraft[],
   repository: ProjectManagementRepository,
+  options: { defaultAgentPresetId?: string | null } = {},
 ): PersistPlannedTasksResult {
   const createdTaskIds: string[] = [];
   const taskIdsByKey = new Map<string, string>();
@@ -39,6 +40,9 @@ export function persistPlannedTasks(
       promptMarkdown: task.promptMarkdown,
       priority: task.priority || "medium",
       executorType: task.executorType || "auto",
+      ...(task.agentPresetId || options.defaultAgentPresetId
+        ? { agentPresetId: task.agentPresetId || options.defaultAgentPresetId }
+        : {}),
       dependsOnTaskIds,
       sortOrder: index,
       status: "pending",

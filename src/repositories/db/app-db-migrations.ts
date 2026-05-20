@@ -77,10 +77,12 @@ export function runMigrations(db: DatabaseAdapter): void {
 
   ensureColumn(db, "task_runs", "sprint_run_id", "TEXT");
   ensureColumn(db, "task_runs", "dispatch_id", "TEXT");
+  ensureColumn(db, "tasks", "agent_preset_id", "TEXT");
 
   ensureColumn(db, "task_run_events", "source_event_key", "TEXT");
 
   ensureColumn(db, "agent_presets", "source_path", "TEXT");
+  ensureColumn(db, "agent_presets", "description", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "agent_presets", "source_scope", "TEXT");
   ensureColumn(db, "agent_presets", "source_updated_at", "TEXT");
   ensureColumn(db, "agent_presets", "source_imported_at", "TEXT");

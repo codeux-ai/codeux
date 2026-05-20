@@ -55,6 +55,7 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
     status: task.status,
     priority: task.priority,
     executorType: task.executorType,
+    agentPresetId: task.agentPresetId,
     assignee,
     time,
     createdAt: task.createdAt,

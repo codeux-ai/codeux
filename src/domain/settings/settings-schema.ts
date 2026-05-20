@@ -405,6 +405,41 @@ const validateAgents = (
   if (typeof value.saveToProjectDirectory !== "boolean") {
     issues.push({ path: `${path}.saveToProjectDirectory`, message: "Expected a boolean" });
   }
+  const routing = value.routing;
+  if (!isRecord(routing)) {
+    issues.push({ path: `${path}.routing`, message: "Expected an object" });
+  } else {
+    const planning = routing.planning;
+    if (!isRecord(planning)) {
+      issues.push({ path: `${path}.routing.planning`, message: "Expected an object" });
+    } else if (planning.agentPresetId !== null && planning.agentPresetId !== undefined && typeof planning.agentPresetId !== "string") {
+      issues.push({ path: `${path}.routing.planning.agentPresetId`, message: "Expected null or a string" });
+    }
+    const taskCoding = routing.taskCoding;
+    if (!isRecord(taskCoding)) {
+      issues.push({ path: `${path}.routing.taskCoding`, message: "Expected an object" });
+    } else {
+      if (taskCoding.mode !== "MANUAL" && taskCoding.mode !== "ORCHESTRATOR") {
+        issues.push({ path: `${path}.routing.taskCoding.mode`, message: "Expected MANUAL or ORCHESTRATOR" });
+      }
+      if (taskCoding.agentPresetId !== null && taskCoding.agentPresetId !== undefined && typeof taskCoding.agentPresetId !== "string") {
+        issues.push({ path: `${path}.routing.taskCoding.agentPresetId`, message: "Expected null or a string" });
+      }
+      if (!Array.isArray(taskCoding.orchestratorAgentPresetIds) || taskCoding.orchestratorAgentPresetIds.some((entry) => typeof entry !== "string")) {
+        issues.push({ path: `${path}.routing.taskCoding.orchestratorAgentPresetIds`, message: "Expected an array of strings" });
+      }
+    }
+    for (const routeId of ["ciFix", "mergeConflict", "dashboardReply", "clarificationReply"] as const) {
+      const route = routing[routeId];
+      if (!isRecord(route)) {
+        issues.push({ path: `${path}.routing.${routeId}`, message: "Expected an object" });
+        continue;
+      }
+      if (route.agentPresetId !== null && route.agentPresetId !== undefined && typeof route.agentPresetId !== "string") {
+        issues.push({ path: `${path}.routing.${routeId}.agentPresetId`, message: "Expected null or a string" });
+      }
+    }
+  }
   if (!isRecord(value.instructionTemplates)) {
     issues.push({ path: `${path}.instructionTemplates`, message: "Expected an object" });
     return;

@@ -19,6 +19,7 @@ export interface ImprovePromptArgs {
 export interface PlanPromptArgs {
   projectName: string;
   planningAgent: AgentPresetRecord;
+  codingAgentRoster?: AgentPresetRecord[];
   sprintNumber: number | null;
   sprintName: string;
   goal: string;
@@ -73,6 +74,7 @@ export function buildImprovePrompt(args: ImprovePromptArgs): string {
  */
 export function buildPlanPrompt(args: PlanPromptArgs): string {
   const memorySection = args.memoryContext ? `\n${args.memoryContext}\n` : "";
+  const codingAgents = args.codingAgentRoster || [];
   const parts = [
     "You are Code UX's Planning agent.",
     "",
@@ -88,6 +90,12 @@ export function buildPlanPrompt(args: PlanPromptArgs): string {
     "## Sprint Goal",
     args.goal.trim() || "No sprint goal provided.",
     memorySection,
+    ...(codingAgents.length > 0 ? [
+      "",
+      "## Coding Agent Routing",
+      "The project uses orchestrated coding-agent routing. Choose the best coding agent for each task by setting `agentPresetId` to one of these IDs.",
+      ...codingAgents.map((agent) => `- ${agent.id}: ${agent.name}${agent.description.trim() ? ` - ${agent.description.trim()}` : ""}`),
+    ] : []),
     "",
     "## Constraints",
     "- Plan as a DAG, not as a flat checklist.",
@@ -99,6 +107,7 @@ export function buildPlanPrompt(args: PlanPromptArgs): string {
     "- Do not create branch, PR, merge, coordination, analysis-only, or placeholder tasks.",
     "- Use `auto` executor unless a task clearly needs `docker_cli` or `jules`.",
     "- `description` must be one concise sentence.",
+    ...(codingAgents.length > 0 ? ["- `agentPresetId` must be one of the available coding agent IDs listed above."] : []),
     "- `promptMarkdown` must use this exact section order: `## Objective`, `## Scope`, `## Implementation Requirements`, `## Constraints`, `## Verification`.",
     "- `promptMarkdown` must name exact files, modules, or symbols whenever they can be inferred.",
     "",
@@ -116,6 +125,7 @@ export function buildPlanPrompt(args: PlanPromptArgs): string {
     '  "promptMarkdown": "## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...",',
     '  "priority": "medium",',
     '  "executorType": "auto",',
+    ...(codingAgents.length > 0 ? ['  "agentPresetId": "agent-preset-id",'] : []),
     '  "dependsOn": []',
     "}",
     "",
@@ -171,7 +181,9 @@ export function buildPlanPrompt(args: PlanPromptArgs): string {
     "",
     "## Required Output",
     "Return JSON only with this exact shape and no surrounding commentary:",
-    '{"goal":"Optional refined sprint goal","tasks":[{"key":"T01","title":"Task title","description":"Short intent","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...","priority":"medium","executorType":"auto","dependsOn":[]}]}',
+    codingAgents.length > 0
+      ? '{"goal":"Optional refined sprint goal","tasks":[{"key":"T01","title":"Task title","description":"Short intent","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...","priority":"medium","executorType":"auto","agentPresetId":"agent-preset-id","dependsOn":[]}]}'
+      : '{"goal":"Optional refined sprint goal","tasks":[{"key":"T01","title":"Task title","description":"Short intent","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...","priority":"medium","executorType":"auto","dependsOn":[]}]}',
   ];
 
   if (args.learningsInstruction) {

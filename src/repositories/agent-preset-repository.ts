@@ -13,6 +13,7 @@ interface AgentPresetRow {
   id: string;
   project_id: string;
   name: string;
+  description: string | null;
   instruction_markdown: string;
   labels_json: string | null;
   source_path: string | null;
@@ -104,6 +105,7 @@ export class AgentPresetRepository {
         id,
         project_id,
         name,
+        description,
         instruction_markdown,
         labels_json,
         source_path,
@@ -115,11 +117,12 @@ export class AgentPresetRepository {
         memory_template_markdown,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
       input.name.trim(),
+      input.description?.trim() || "",
       input.instructionMarkdown?.trim() || "",
       JSON.stringify(this.normalizeLabels(input.labels)),
       null,
@@ -147,6 +150,7 @@ export class AgentPresetRepository {
         id,
         project_id,
         name,
+        description,
         instruction_markdown,
         labels_json,
         source_path,
@@ -158,11 +162,12 @@ export class AgentPresetRepository {
         memory_template_markdown,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
       input.name.trim(),
+      input.description?.trim() || "",
       input.instructionMarkdown?.trim() || "",
       JSON.stringify(this.normalizeLabels(input.labels)),
       input.sourcePath,
@@ -184,10 +189,11 @@ export class AgentPresetRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name?.trim() || current.name,
+      input.description === undefined ? current.description : input.description.trim(),
       input.instructionMarkdown === undefined ? current.instructionMarkdown : input.instructionMarkdown.trim(),
       JSON.stringify(input.labels === undefined ? current.labels : this.normalizeLabels(input.labels)),
       input.avatarConfig === undefined
@@ -228,6 +234,7 @@ export class AgentPresetRepository {
 
   importLinkedAgentPreset(agentPresetId: string, input: {
     name: string;
+    description?: string;
     instructionMarkdown: string;
     sourceUpdatedAt: string;
     avatarConfig?: AgentPresetRecord["avatarConfig"];
@@ -242,10 +249,11 @@ export class AgentPresetRepository {
 
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name.trim(),
+      input.description === undefined ? current.description : input.description.trim(),
       input.instructionMarkdown.trim(),
       input.sourceUpdatedAt,
       input.sourceUpdatedAt,
@@ -286,6 +294,7 @@ export class AgentPresetRepository {
       id: row.id,
       projectId: row.project_id,
       name: row.name,
+      description: row.description || "",
       instructionMarkdown: row.instruction_markdown,
       labels: parseLabels(row.labels_json),
       sourcePath: row.source_path,

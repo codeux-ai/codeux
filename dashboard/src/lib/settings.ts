@@ -30,6 +30,17 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   workers: { ...DEFAULT_DASHBOARD_SETTINGS.workers },
   agents: {
     saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
+    routing: {
+      planning: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.planning },
+      taskCoding: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.taskCoding,
+        orchestratorAgentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.routing.taskCoding.orchestratorAgentPresetIds],
+      },
+      ciFix: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.ciFix },
+      mergeConflict: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.mergeConflict },
+      dashboardReply: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.dashboardReply },
+      clarificationReply: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.clarificationReply },
+    },
     instructionTemplates: { ...DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates },
     qualityAssurance: {
       enabled: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.enabled,

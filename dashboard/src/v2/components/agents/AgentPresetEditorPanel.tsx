@@ -7,7 +7,6 @@ import {
   RefreshCw,
   AlertCircle,
   Tag,
-  Hash,
   FileText,
   BrainCircuit,
   Sparkles,
@@ -25,21 +24,20 @@ import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
  * Validation rules
  * ──────────────────────────────────────────────────────── */
 const NAME_MAX = 60;
-const LABEL_MAX = 24;
-const LABEL_COUNT_MAX = 12;
+const DESCRIPTION_MAX = 180;
 const INSTRUCTION_SOFT_MAX = 8000;
 
-type FormErrors = Partial<Record<"name" | "labels" | "instruction" | "memory", string>>;
+type FormErrors = Partial<Record<"name" | "description" | "instruction" | "memory", string>>;
 
 function validate({
   name,
-  labels,
+  description,
   instruction,
   memoryEnabled,
   memory,
 }: {
   name: string;
-  labels: string[];
+  description: string;
   instruction: string;
   memoryEnabled: boolean;
   memory: string;
@@ -52,12 +50,8 @@ function validate({
     errors.name = `Name must be ${NAME_MAX} characters or fewer`;
   }
 
-  if (labels.length > LABEL_COUNT_MAX) {
-    errors.labels = `Use at most ${LABEL_COUNT_MAX} labels`;
-  } else if (labels.some((l) => l.length > LABEL_MAX)) {
-    errors.labels = `Each label must be ${LABEL_MAX} characters or fewer`;
-  } else if (new Set(labels.map((l) => l.toLowerCase())).size !== labels.length) {
-    errors.labels = "Duplicate labels are not allowed";
+  if (description.trim().length > DESCRIPTION_MAX) {
+    errors.description = `Description must be ${DESCRIPTION_MAX} characters or fewer`;
   }
 
   if (instruction.length > INSTRUCTION_SOFT_MAX * 1.5) {
@@ -70,113 +64,6 @@ function validate({
 
   return errors;
 }
-
-/* ─────────────────────────────────────────────────────────
- * Label chip input
- * ──────────────────────────────────────────────────────── */
-const LabelChipInput: FunctionComponent<{
-  labels: string[];
-  onChange: (next: string[]) => void;
-  accentHex: string;
-  disabled?: boolean;
-  errorId?: string;
-  invalid?: boolean;
-}> = ({ labels, onChange, accentHex, disabled, errorId, invalid }) => {
-  const [draft, setDraft] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const commit = useCallback(
-    (raw: string) => {
-      const value = raw.trim();
-      if (!value) return;
-      if (labels.some((l) => l.toLowerCase() === value.toLowerCase())) {
-        setDraft("");
-        return;
-      }
-      onChange([...labels, value]);
-      setDraft("");
-    },
-    [labels, onChange]
-  );
-
-  const handleKey = (event: JSX.TargetedKeyboardEvent<HTMLInputElement>) => {
-    if (disabled) return;
-    if (event.key === "Enter" || event.key === ",") {
-      event.preventDefault();
-      commit(draft);
-      return;
-    }
-    if (event.key === "Tab" && draft.trim()) {
-      event.preventDefault();
-      commit(draft);
-      return;
-    }
-    if (event.key === "Backspace" && !draft && labels.length > 0) {
-      event.preventDefault();
-      onChange(labels.slice(0, -1));
-    }
-  };
-
-  const handleBlur = () => {
-    if (draft.trim()) commit(draft);
-  };
-
-  const removeAt = (index: number) => {
-    onChange(labels.filter((_, i) => i !== index));
-    inputRef.current?.focus();
-  };
-
-  const containerClass = useMemo(() => {
-    return [
-      "flex flex-wrap items-center gap-1.5 rounded-2xl border bg-white/40 px-3 py-2 backdrop-blur-md transition-all focus-within:border-signal-500 focus-within:ring-4 focus-within:ring-signal-500/10 dark:bg-white/[0.03] dark:focus-within:ring-signal-500/15",
-      invalid
-        ? "border-status-red/50"
-        : "border-black/[0.05] dark:border-white/[0.07]",
-      disabled ? "opacity-60" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-  }, [invalid, disabled]);
-
-  return (
-    <div className={containerClass} onClick={() => inputRef.current?.focus()}>
-      {labels.map((label, index) => (
-        <span
-          key={`${label}-${index}`}
-          className="group/chip inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-bold transition-colors"
-          style={{ backgroundColor: `${accentHex}15`, color: accentHex }}
-        >
-          <span className="max-w-[10rem] truncate">{label}</span>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              removeAt(index);
-            }}
-            disabled={disabled}
-            aria-label={`Remove label ${label}`}
-            className="flex h-4 w-4 items-center justify-center rounded-full opacity-50 transition-all hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
-          >
-            <X className="h-3 w-3" strokeWidth={2.5} />
-          </button>
-        </span>
-      ))}
-      <input
-        ref={inputRef}
-        type="text"
-        value={draft}
-        onInput={(event) => setDraft(event.currentTarget.value)}
-        onKeyDown={handleKey}
-        onBlur={handleBlur}
-        disabled={disabled || labels.length >= LABEL_COUNT_MAX}
-        placeholder={labels.length === 0 ? "Type a label and press Enter" : "Add another…"}
-        aria-invalid={invalid || undefined}
-        aria-errormessage={errorId}
-        className="min-w-[8rem] flex-1 bg-transparent px-1 py-1 text-[13px] font-medium text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed dark:text-white dark:placeholder:text-slate-600"
-      />
-    </div>
-  );
-};
 
 /* ─────────────────────────────────────────────────────────
  * Field helpers
@@ -261,7 +148,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const memoryRef = useRef<HTMLTextAreaElement>(null);
 
   const [name, setName] = useState(preset.name);
-  const [labels, setLabels] = useState<string[]>(preset.labels);
+  const [description, setDescription] = useState(preset.description || "");
   const [instructionMarkdown, setInstructionMarkdown] = useState(preset.instructionMarkdown);
   const [memoryOverrideEnabled, setMemoryOverrideEnabled] = useState(
     !!preset.memoryTemplateOverrideEnabled
@@ -276,7 +163,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   /* Reset when preset switches */
   useEffect(() => {
     setName(preset.name);
-    setLabels(preset.labels);
+    setDescription(preset.description || "");
     setInstructionMarkdown(preset.instructionMarkdown);
     setMemoryOverrideEnabled(!!preset.memoryTemplateOverrideEnabled);
     setMemoryMarkdown(preset.memoryTemplateMarkdown ?? "");
@@ -315,20 +202,19 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     () =>
       validate({
         name,
-        labels,
+        description,
         instruction: instructionMarkdown,
         memoryEnabled: memoryOverrideEnabled,
         memory: memoryMarkdown,
       }),
-    [name, labels, instructionMarkdown, memoryOverrideEnabled, memoryMarkdown]
+    [name, description, instructionMarkdown, memoryOverrideEnabled, memoryMarkdown]
   );
 
   const hasErrors = Object.keys(errors).length > 0;
 
   const isDirty = useMemo(() => {
     if (name !== preset.name) return true;
-    const presetLabels = preset.labels.join("|");
-    if (labels.join("|") !== presetLabels) return true;
+    if (description !== (preset.description || "")) return true;
     if (instructionMarkdown !== preset.instructionMarkdown) return true;
     if (memoryOverrideEnabled !== !!preset.memoryTemplateOverrideEnabled) return true;
     if ((preset.memoryTemplateMarkdown ?? "") !== memoryMarkdown && memoryOverrideEnabled) return true;
@@ -336,7 +222,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     return false;
   }, [
     name,
-    labels,
+    description,
     instructionMarkdown,
     memoryOverrideEnabled,
     memoryMarkdown,
@@ -349,11 +235,11 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   /* Submit */
   const handleSubmit = (event: Event) => {
     event.preventDefault();
-    setTouched({ name: true, labels: true, instruction: true, memory: true });
+    setTouched({ name: true, description: true, instruction: true, memory: true });
     if (hasErrors || !isDirty) return;
     onSave(preset.id, {
       name: name.trim(),
-      labels,
+      description: description.trim(),
       instructionMarkdown,
       memoryTemplateOverrideEnabled: memoryOverrideEnabled,
       memoryTemplateMarkdown: memoryOverrideEnabled ? memoryMarkdown : undefined,
@@ -509,25 +395,32 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               </FieldShell>
 
               <FieldShell
-                icon={Hash}
-                label="Labels"
-                helper="Tag this agent for routing — e.g. planning, review, runtime. Press Enter or comma to add."
-                counter={`${labels.length}/${LABEL_COUNT_MAX}`}
-                error={touched.labels ? errors.labels : undefined}
-                errorId="agent-labels-error"
+                icon={FileText}
+                label="Short Description"
+                htmlFor="agent-description"
+                helper="Used by the Planning agent when orchestrator routing chooses the best coding specialist for each task."
+                counter={`${description.length}/${DESCRIPTION_MAX}`}
+                error={touched.description ? errors.description : undefined}
+                errorId="agent-description-error"
               >
-                <LabelChipInput
-                  labels={labels}
-                  onChange={(next) => {
-                    setLabels(next);
-                    setTouched((t) => ({ ...t, labels: true }));
-                  }}
-                  accentHex={accentHex}
-                  disabled={saving}
-                  invalid={touched.labels && !!errors.labels}
-                  errorId="agent-labels-error"
+                <textarea
+                  id="agent-description"
+                  value={description}
+                  onInput={(event) => setDescription(event.currentTarget.value)}
+                  onBlur={() => setTouched((t) => ({ ...t, description: true }))}
+                  placeholder="e.g. Frontend specialist for Preact, Tailwind, responsive UI, and accessibility work."
+                  rows={3}
+                  maxLength={DESCRIPTION_MAX + 60}
+                  aria-invalid={touched.description && !!errors.description}
+                  aria-errormessage={touched.description && errors.description ? "agent-description-error" : undefined}
+                  className={`block w-full resize-none rounded-2xl border bg-white/40 px-4 py-3 text-[13px] leading-relaxed text-slate-900 outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15 ${
+                    touched.description && errors.description
+                      ? "border-status-red/50"
+                      : "border-black/[0.05] dark:border-white/[0.07]"
+                  }`}
                 />
               </FieldShell>
+
             </SectionCard>
 
             <SectionCard eyebrow="Step 2" title="Behavior">

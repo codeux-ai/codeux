@@ -42,6 +42,7 @@ import type {
   ProjectStatsQuery,
   ProjectStatsWindow,
   ProviderId,
+  AgentRoutingMode,
   VirtualWorkerProvider,
   LocalDirectoryBrowserEntry,
   LocalDirectoryBrowserResponse,
@@ -114,6 +115,7 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   executorType: TaskExecutorType;
+  agentPresetId?: string | null;
   assignee: string;
   time: string;
   createdAt: string;
@@ -193,6 +195,7 @@ export type {
   UpdateSprintInput,
   UpdateTaskInput,
   ProviderId,
+  AgentRoutingMode,
   VirtualWorkerProvider,
   CreateSchedulerEntryInput,
   SchedulerCollectionResponse,

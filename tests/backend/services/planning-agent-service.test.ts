@@ -918,6 +918,88 @@ describe("PlanningAgentService", () => {
     expect(lastPrompt).not.toContain("Default planning instructions.");
   });
 
+  it("uses default planning and manual worker routing from project settings", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-routing-defaults-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
+      "Default planning instructions.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        text: JSON.stringify({
+          goal: "Routed goal",
+          tasks: [{ key: "T01", title: "Routed task", description: "D", promptMarkdown: "## Objective\\nP\\n\\n## Scope\\n- S\\n\\n## Implementation Requirements\\n1. R\\n\\n## Constraints\\n- C\\n\\n## Verification\\n- V", priority: "medium", executorType: "auto", dependsOn: [] }],
+        }),
+        usageTelemetry: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: null },
+      }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: repoPath });
+    const sprint = projectRepository.createSprint(project.id, { name: "S1", goal: "G1" });
+    const defaultPlanner = agentPresetRepository.createAgentPreset(project.id, {
+      name: "Default Planning Override",
+      instructionMarkdown: "DEFAULT_PLANNER_FROM_SETTINGS",
+      labels: [],
+    });
+    const defaultWorker = agentPresetRepository.createAgentPreset(project.id, {
+      name: "Default Worker Override",
+      instructionMarkdown: "DEFAULT_WORKER_FROM_SETTINGS",
+      labels: [],
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      agents: {
+        routing: {
+          planning: { agentPresetId: defaultPlanner.id },
+          taskCoding: {
+            mode: "MANUAL",
+            agentPresetId: defaultWorker.id,
+            orchestratorAgentPresetIds: [],
+          },
+        },
+      },
+    });
+
+    await service.planSprint(project.id, sprint.id, { autoStart: false });
+
+    const prompt = vi.mocked(providerRunner.runProviderForText).mock.calls[0]?.[0]?.prompt ?? "";
+    expect(prompt).toContain("DEFAULT_PLANNER_FROM_SETTINGS");
+    expect(prompt).not.toContain("Default planning instructions.");
+    expect(projectRepository.listTasks(project.id, sprint.id)[0]?.agentPresetId).toBe(defaultWorker.id);
+  });
+
   it("aborts a virtual improveSprintPrompt request immediately without leaving side-effects", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-abort-improve-"));
     tempDirs.push(dir);

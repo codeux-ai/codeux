@@ -75,6 +75,7 @@ export type CliExecutionMode = "DOCKER" | "HOST";
 export type FeaturePrAutoMergeMode = "OFF" | "CREATE_PR" | "WHEN_GREEN" | "ALWAYS";
 export type WorkerExecutionMode = "VIRTUAL";
 export type VirtualWorkerProvider = Exclude<ProviderId, "jules">;
+export type AgentRoutingMode = "MANUAL" | "ORCHESTRATOR";
 
 export interface Subtask {
   record_id?: string;
@@ -89,6 +90,7 @@ export interface Subtask {
   session_name?: string;
   session_state?: string;
   provider?: ProviderId;
+  agentPresetId?: string | null;
   worker_branch?: string;
   pr_url?: string;
   activities?: JulesActivity[];
@@ -721,8 +723,28 @@ export interface QualityAssuranceSettings {
   completedTaskWithoutPr: QualityAssuranceTriggerSettings;
 }
 
+export interface CodingAgentRoutingSettings {
+  mode: AgentRoutingMode;
+  agentPresetId: string | null;
+  orchestratorAgentPresetIds: string[];
+}
+
+export interface ManualAgentRoutingSettings {
+  agentPresetId: string | null;
+}
+
+export interface AgentRoutingSettings {
+  planning: ManualAgentRoutingSettings;
+  taskCoding: CodingAgentRoutingSettings;
+  ciFix: ManualAgentRoutingSettings;
+  mergeConflict: ManualAgentRoutingSettings;
+  dashboardReply: ManualAgentRoutingSettings;
+  clarificationReply: ManualAgentRoutingSettings;
+}
+
 export interface AgentSettings {
   saveToProjectDirectory: boolean;
+  routing: AgentRoutingSettings;
   instructionTemplates: Record<InstructionTemplateId, string>;
   qualityAssurance: QualityAssuranceSettings;
 }

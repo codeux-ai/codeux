@@ -1,5 +1,5 @@
 {
-  "name": "jules-subagents",
+  "name": "code-ux",
   "version": "1.2.0",
   "description": "Model Context Protocol server for the Jules Agent API.",
   "packageManager": "pnpm@10.33.0",

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "preact/hooks";
 import { Rocket, ClipboardList, Save, RefreshCw, ListPlus } from "lucide-preact";
-import type { PlanningOverrides, Sprint, VirtualWorkerProvider } from "../types.js";
+import type { AgentRoutingMode, PlanningOverrides, Sprint, VirtualWorkerProvider } from "../types.js";
 
 export type SprintSubmitMode = "plan_and_start" | "plan_only" | "draft" | "replan" | "append_tasks";
 
@@ -43,8 +43,10 @@ export function toPlanningOverrides(
   routeOverride: PlanningRouteOption | null,
   modelOverride: string | null,
   planningAgentPresetId: string | null = null,
+  agentRoutingMode?: AgentRoutingMode | null,
+  workerAgentPresetId?: string | null,
 ): PlanningOverrides | undefined {
-  if (!routeOverride && !modelOverride && !planningAgentPresetId) {
+  if (!routeOverride && !modelOverride && !planningAgentPresetId && !agentRoutingMode && !workerAgentPresetId) {
     return undefined;
   }
 
@@ -63,6 +65,12 @@ export function toPlanningOverrides(
 
   if (planningAgentPresetId) {
     overrides.planningAgentPresetId = planningAgentPresetId;
+  }
+  if (agentRoutingMode) {
+    overrides.agentRoutingMode = agentRoutingMode;
+  }
+  if (workerAgentPresetId) {
+    overrides.workerAgentPresetId = workerAgentPresetId;
   }
 
   return Object.keys(overrides).length > 0 ? overrides : undefined;
@@ -83,6 +91,10 @@ export interface SprintComposerState {
   setModelOverride: (model: string | null) => void;
   planningAgentPresetId: string | null;
   setPlanningAgentPresetId: (id: string | null) => void;
+  agentRoutingMode: AgentRoutingMode;
+  setAgentRoutingMode: (mode: AgentRoutingMode) => void;
+  workerAgentPresetId: string | null;
+  setWorkerAgentPresetId: (id: string | null) => void;
   sprintKeyOverride: string;
   setSprintKeyOverride: (val: string) => void;
   isEditing: boolean;
@@ -138,14 +150,24 @@ export const getAvailableModes = (isEditing: boolean, hasTasks: boolean): Create
   ];
 };
 
-export const useSprintComposerState = (initialSprint: Sprint | null = null, defaultSprintKey: string = ""): SprintComposerState => {
+export const useSprintComposerState = (
+  initialSprint: Sprint | null = null,
+  defaultSprintKey: string = "",
+  defaults: {
+    planningAgentPresetId?: string | null;
+    agentRoutingMode?: AgentRoutingMode;
+    workerAgentPresetId?: string | null;
+  } = {},
+): SprintComposerState => {
   const [name, setName] = useState(initialSprint?.name || "");
   const [goal, setGoal] = useState(initialSprint?.goal || "");
   const [originalPrompt, setOriginalPrompt] = useState(initialSprint?.originalPrompt || null);
   const [submitMode, setSubmitMode] = useState<SprintSubmitMode>("plan_and_start");
   const [routeOverride, setRouteOverride] = useState<PlanningRouteOption | null>(null);
   const [modelOverride, setModelOverride] = useState<string | null>(null);
-  const [planningAgentPresetId, setPlanningAgentPresetId] = useState<string | null>(null);
+  const [planningAgentPresetId, setPlanningAgentPresetId] = useState<string | null>(defaults.planningAgentPresetId || null);
+  const [agentRoutingMode, setAgentRoutingMode] = useState<AgentRoutingMode>(defaults.agentRoutingMode || "MANUAL");
+  const [workerAgentPresetId, setWorkerAgentPresetId] = useState<string | null>(defaults.workerAgentPresetId || null);
   const [sprintKeyOverride, setSprintKeyOverride] = useState<string>(defaultSprintKey);
 
   const isEditing = Boolean(initialSprint);
@@ -158,7 +180,9 @@ export const useSprintComposerState = (initialSprint: Sprint | null = null, defa
     setSubmitMode(initialSprint ? (initialSprint.tasksCount > 0 ? "replan" : "plan_and_start") : "plan_and_start");
     setRouteOverride(null);
     setModelOverride(null);
-    setPlanningAgentPresetId(null);
+    setPlanningAgentPresetId(defaults.planningAgentPresetId || null);
+    setAgentRoutingMode(defaults.agentRoutingMode || "MANUAL");
+    setWorkerAgentPresetId(defaults.workerAgentPresetId || null);
     setSprintKeyOverride(defaultSprintKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSprint?.id]);
@@ -173,6 +197,8 @@ export const useSprintComposerState = (initialSprint: Sprint | null = null, defa
     routeOverride, setRouteOverride,
     modelOverride, setModelOverride,
     planningAgentPresetId, setPlanningAgentPresetId,
+    agentRoutingMode, setAgentRoutingMode,
+    workerAgentPresetId, setWorkerAgentPresetId,
     sprintKeyOverride, setSprintKeyOverride,
     isEditing,
     hasTasks,

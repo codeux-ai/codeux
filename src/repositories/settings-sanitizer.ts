@@ -120,6 +120,46 @@ const sanitizeQualityAssuranceTrigger = (
   };
 };
 
+const cloneAgentRouting = (): DashboardSettings["agents"]["routing"] => ({
+  planning: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.planning },
+  taskCoding: {
+    ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.taskCoding,
+    orchestratorAgentPresetIds: [...DEFAULT_DASHBOARD_SETTINGS.agents.routing.taskCoding.orchestratorAgentPresetIds],
+  },
+  ciFix: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.ciFix },
+  mergeConflict: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.mergeConflict },
+  dashboardReply: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.dashboardReply },
+  clarificationReply: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.clarificationReply },
+});
+
+const sanitizeManualAgentRouting = (value: unknown): DashboardSettings["agents"]["routing"]["ciFix"] => {
+  const input = value && typeof value === "object" ? value as { agentPresetId?: unknown } : {};
+  return {
+    agentPresetId: readString(input.agentPresetId, "").trim() || null,
+  };
+};
+
+const sanitizeAgentRouting = (value: unknown): DashboardSettings["agents"]["routing"] => {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const taskCoding = input.taskCoding && typeof input.taskCoding === "object"
+    ? input.taskCoding as Record<string, unknown>
+    : {};
+  return {
+    planning: sanitizeManualAgentRouting(input.planning),
+    taskCoding: {
+      mode: taskCoding.mode === "ORCHESTRATOR" ? "ORCHESTRATOR" : "MANUAL",
+      agentPresetId: readString(taskCoding.agentPresetId, "").trim() || null,
+      orchestratorAgentPresetIds: Array.isArray(taskCoding.orchestratorAgentPresetIds)
+        ? taskCoding.orchestratorAgentPresetIds.map((entry) => String(entry || "").trim()).filter(Boolean)
+        : [],
+    },
+    ciFix: sanitizeManualAgentRouting(input.ciFix),
+    mergeConflict: sanitizeManualAgentRouting(input.mergeConflict),
+    dashboardReply: sanitizeManualAgentRouting(input.dashboardReply),
+    clarificationReply: sanitizeManualAgentRouting(input.clarificationReply),
+  };
+};
+
 export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
   dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
   enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
@@ -162,6 +202,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   },
   agents: {
     saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
+    routing: cloneAgentRouting(),
     instructionTemplates: { ...DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates },
     qualityAssurance: {
       enabled: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.enabled,
@@ -303,6 +344,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       agentsInput.saveToProjectDirectory,
       DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
     ),
+    routing: sanitizeAgentRouting(agentsInput.routing),
     instructionTemplates: {
       ...DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates,
       ...(agentsInput.instructionTemplates && typeof agentsInput.instructionTemplates === "object"

@@ -226,6 +226,15 @@ Dashboard behavior:
 
 - `saveToProjectDirectory`
 - `instructionTemplates`
+- `routing`
+  - `planning.agentPresetId`
+  - `taskCoding.mode`
+  - `taskCoding.agentPresetId`
+  - `taskCoding.orchestratorAgentPresetIds`
+  - `ciFix.agentPresetId`
+  - `mergeConflict.agentPresetId`
+  - `dashboardReply.agentPresetId`
+  - `clarificationReply.agentPresetId`
 - `qualityAssurance`
   - `enabled` (default `false`)
   - `maxTaskReviewRuns` (default `1`)

@@ -10,7 +10,7 @@ import { SettingsAgentsPanel } from "../../../dashboard/src/v2/components/settin
 expect.extend(matchers);
 
 describe("SettingsAgentsPanel", () => {
-  it("shows QA above templates and keeps QA preset selectors enabled with project presets", async () => {
+  it("shows QA after agent routing and keeps QA preset selectors enabled with project presets", async () => {
     const setActiveScope = vi.fn();
     const updateProject = vi.fn();
     const updateEditableSettings = vi.fn();
@@ -65,10 +65,14 @@ describe("SettingsAgentsPanel", () => {
     );
 
     const qaHeading = screen.getByText("Quality Assurance");
-    const templateHeading = screen.getByText("Instruction Templates");
+    const routingHeading = screen.getByText("Agent Routing");
     expect(
-      Boolean(qaHeading.compareDocumentPosition(templateHeading) & Node.DOCUMENT_POSITION_FOLLOWING),
+      Boolean(routingHeading.compareDocumentPosition(qaHeading) & Node.DOCUMENT_POSITION_FOLLOWING),
     ).toBe(true);
+    expect(screen.queryByText("Instruction Templates")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agent sync behavior")).not.toBeInTheDocument();
+    expect(screen.queryByText("Quality assurance behavior")).not.toBeInTheDocument();
+    expect(screen.queryByText("Instruction template storage")).not.toBeInTheDocument();
 
     const presetTrigger = screen.getByRole("button", { name: "Task completion QA agent preset" });
     expect(presetTrigger).not.toBeDisabled();

@@ -53,7 +53,7 @@ export const Toggle: FunctionComponent<{
 export const SelectInput: FunctionComponent<{
   value: string;
   onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: string; label: string; icon?: ComponentChildren | (() => ComponentChildren) }>;
   disabled?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;

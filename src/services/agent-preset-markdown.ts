@@ -1,6 +1,7 @@
 import type { AgentAvatarConfig } from "../contracts/agent-preset-types.js";
 
 export interface ParsedAgentMarkdown {
+  description?: string;
   instructionMarkdown: string;
   avatarConfig?: AgentAvatarConfig;
   memoryTemplateOverrideEnabled?: boolean;
@@ -26,6 +27,7 @@ export function parseAgentMarkdown(rawMarkdown: string): ParsedAgentMarkdown {
 
   return {
     instructionMarkdown: body !== undefined ? body : "",
+    description: typeof parsedMetadata.description === "string" ? parsedMetadata.description : undefined,
     avatarConfig: parsedMetadata.avatarConfig,
     memoryTemplateOverrideEnabled: parsedMetadata.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: parsedMetadata.memoryTemplateMarkdown,
@@ -34,14 +36,18 @@ export function parseAgentMarkdown(rawMarkdown: string): ParsedAgentMarkdown {
 
 export function formatAgentMarkdown(input: ParsedAgentMarkdown): string {
   const hasAvatarConfig = input.avatarConfig !== undefined;
+  const hasDescription = input.description !== undefined;
   const hasMemoryTemplateOverrideEnabled = input.memoryTemplateOverrideEnabled !== undefined;
   const hasMemoryTemplateMarkdown = input.memoryTemplateMarkdown !== undefined;
 
-  if (!hasAvatarConfig && !hasMemoryTemplateOverrideEnabled && !hasMemoryTemplateMarkdown) {
+  if (!hasAvatarConfig && !hasDescription && !hasMemoryTemplateOverrideEnabled && !hasMemoryTemplateMarkdown) {
     return input.instructionMarkdown;
   }
 
   const metadata: any = {};
+  if (hasDescription) {
+    metadata.description = input.description;
+  }
   if (hasAvatarConfig) {
     metadata.avatarConfig = input.avatarConfig;
   }

@@ -108,6 +108,24 @@ describe("PlanningPromptBuilder", () => {
       expect(prompt).toContain("## LEARNINGS CAPTURE (Required)");
       expect(prompt).toContain("Note these learnings.");
     });
+
+    it("includes coding agent roster when orchestrator routing is active", () => {
+      const prompt = buildPlanPrompt({
+        projectName: "Test Project",
+        planningAgent: mockAgent,
+        codingAgentRoster: [
+          { ...mockAgent, id: "frontend-agent", name: "Frontend Coder", description: "Preact UI and accessibility." },
+          { ...mockAgent, id: "backend-agent", name: "Backend Coder", description: "API and persistence." },
+        ],
+        sprintNumber: 1,
+        sprintName: "Sprint One",
+        goal: "Plan this",
+      });
+
+      expect(prompt).toContain("## Coding Agent Routing");
+      expect(prompt).toContain("frontend-agent: Frontend Coder - Preact UI and accessibility.");
+      expect(prompt).toContain('"agentPresetId": "agent-preset-id"');
+    });
   });
 
   describe("buildMemoryContext", () => {

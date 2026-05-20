@@ -80,6 +80,7 @@ interface StartCliTaskInput {
   featureBranch: string;
   sprintNumber: number;
   settingsScope?: DashboardSettingsScope;
+  agentPresetId?: string | null;
   dispatchId?: string;
   taskRunId?: string;
 }
@@ -217,7 +218,15 @@ export class CliWorkflowService {
       && (qaSettings.taskCompletion.enabled || qaSettings.completedTaskWithoutPr.enabled);
 
     // Resolve worker agent preset for per-agent memory tagging
-    const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath).catch(() => null);
+    const manualAgentPresetId = settings.agents?.routing?.taskCoding?.mode === "MANUAL"
+      ? settings.agents.routing.taskCoding.agentPresetId
+      : null;
+    const workerAgent = args.settingsScope?.projectId
+      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
+        args.settingsScope.projectId,
+        args.agentPresetId || manualAgentPresetId,
+      ).catch(() => null)
+      : await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath).catch(() => null);
 
     const ctx: PipelineContext = {
       ...args,
@@ -240,9 +249,10 @@ export class CliWorkflowService {
       deps: {
         ...this.deps,
         getWorkerInstruction: async (repoPath: string) => (
-          (await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(repoPath))
-            ?.instructionMarkdown
-            ?.trim() || ""
+          workerAgent?.instructionMarkdown?.trim()
+          || (await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(repoPath))
+            ?.instructionMarkdown?.trim()
+          || ""
         ),
       },
       runCommand: (command, commandArgs, cwd, env = process.env) =>

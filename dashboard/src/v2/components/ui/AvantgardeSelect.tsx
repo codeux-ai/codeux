@@ -9,7 +9,7 @@ import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
 export interface SelectOption {
   value: string;
   label: string;
-  icon?: ComponentChildren;
+  icon?: ComponentChildren | (() => ComponentChildren);
 }
 
 interface AvantgardeSelectProps {
@@ -42,6 +42,10 @@ function focusWithoutScroll(element: HTMLElement | null): void {
   } catch {
     element.focus();
   }
+}
+
+function renderOptionIcon(icon: SelectOption["icon"]): ComponentChildren {
+  return typeof icon === "function" ? icon() : icon;
 }
 
 /** Walk up the DOM to find the nearest ancestor that acts as a visual boundary
@@ -385,7 +389,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
                       : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-void-700"
                   }`}
                 >
-                  {option.icon && <span className="flex-shrink-0">{option.icon}</span>}
+                  {option.icon && <span className="flex-shrink-0">{renderOptionIcon(option.icon)}</span>}
                   <span className="truncate">{option.label}</span>
                   {isSelected && (
                     <Check className="ml-auto h-3.5 w-3.5 flex-shrink-0 text-signal-500" strokeWidth={2.5} />
@@ -421,6 +425,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledby}
       >
+        {selected?.icon ? <span className="flex-shrink-0">{renderOptionIcon(selected.icon)}</span> : null}
         <span className="truncate">{selected?.label || placeholder}</span>
         <ChevronDown
           className={`h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`}

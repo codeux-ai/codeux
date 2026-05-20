@@ -90,7 +90,12 @@ export class WorkerInboxReplyService {
     let rawPrompt = input.bodyMarkdown.trim();
 
     if (input.mode !== "compact_thread") {
-      const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(input.projectId)).instructionMarkdown.trim();
+      const settings = this.deps.getDashboardSettings({ projectId: input.projectId });
+      const dashboardReplyAgentPresetId = settings.agents?.routing?.dashboardReply?.agentPresetId ?? null;
+      const dashboardReplyAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
+        ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(input.projectId, dashboardReplyAgentPresetId)
+        : await this.deps.agentPresetSyncService.getWorkerAgent(input.projectId);
+      const workerInstructions = dashboardReplyAgent.instructionMarkdown.trim();
       rawPrompt = buildChatReplayPrompt({
         projectId: input.projectId,
         repoPath: project.baseDir,
@@ -217,7 +222,18 @@ export class WorkerInboxReplyService {
       ? args.task.record_id.trim()
       : null;
 
-    const projectManagerInstructions = (await this.deps.agentPresetSyncService.getProjectManagerAgent(args.projectId))
+    const settings = this.deps.getDashboardSettings({
+      projectId: args.projectId,
+      sprintId: typeof args.task.sprint_id === "string" ? args.task.sprint_id : undefined,
+    });
+    const clarificationAgentPresetId = settings.agents?.routing?.clarificationReply?.agentPresetId ?? null;
+    const clarificationAgent = clarificationAgentPresetId
+      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
+        args.projectId,
+        clarificationAgentPresetId,
+      )
+      : await this.deps.agentPresetSyncService.getProjectManagerAgent(args.projectId);
+    const projectManagerInstructions = clarificationAgent
       .instructionMarkdown
       .trim();
 

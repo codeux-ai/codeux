@@ -1,4 +1,4 @@
-import { PlanningPayloadValidator } from "./planning-payload-validator.js";
+import { PlanningPayloadValidator, type PlanningPayloadValidatorOptions } from "./planning-payload-validator.js";
 import type { PlannedSprintPayload } from "../contracts/project-management-types.js";
 import { findAllJsonCandidates, type ExtractJsonResult, extractJsonFromText } from "../domain/llm/json-extraction.js";
 
@@ -150,7 +150,7 @@ export function extractJsonLikeBlock(bodyMarkdown: string): string {
   return JSON.stringify(result.data);
 }
 
-export function parsePlannedSprintReply(bodyMarkdown: string): PlannedSprintPayload {
+export function parsePlannedSprintReply(bodyMarkdown: string, options: PlanningPayloadValidatorOptions = {}): PlannedSprintPayload {
   const result = extractPlanningJsonFromText(bodyMarkdown);
   if (!result.success) {
     throw new PlanningParseError("Planning agent reply was not valid JSON.", 0, bodyMarkdown);
@@ -173,7 +173,7 @@ export function parsePlannedSprintReply(bodyMarkdown: string): PlannedSprintPayl
 
   const validator = new PlanningPayloadValidator();
   try {
-    return validator.validate(payload);
+    return validator.validate(payload, options);
   } catch (error) {
     throw new PlanningParseError(error instanceof Error ? error.message : String(error), 0, bodyMarkdown);
   }

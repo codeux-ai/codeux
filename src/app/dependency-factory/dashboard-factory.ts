@@ -164,6 +164,7 @@ export function createDashboardDependencies(
         prompt: taskRecord.promptMarkdown || taskRecord.description,
         depends_on: taskRecord.dependsOnTaskIds,
         status: "PENDING",
+        agentPresetId: taskRecord.agentPresetId,
         is_independent: taskRecord.isIndependent,
         is_merged: taskRecord.isMerged,
       };

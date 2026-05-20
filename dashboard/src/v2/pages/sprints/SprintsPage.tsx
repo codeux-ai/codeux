@@ -175,6 +175,9 @@ export const SprintsPage: FunctionComponent = () => {
     virtualProviders,
     planningEta,
     planningPresets,
+    defaultPlanningAgentPresetId,
+    defaultAgentRoutingMode,
+    defaultWorkerAgentPresetId,
     showQuicksprint, setShowQuicksprint,
     quicksprintTemplates,
     quicksprintLoading,
@@ -557,6 +560,10 @@ export const SprintsPage: FunctionComponent = () => {
                     linkedIssues={linkedIssues}
                     virtualProviders={virtualProviders}
                     planningPresets={planningPresets}
+                    agentPresets={agentPresets}
+                    defaultPlanningAgentPresetId={defaultPlanningAgentPresetId}
+                    defaultAgentRoutingMode={defaultAgentRoutingMode}
+                    defaultWorkerAgentPresetId={defaultWorkerAgentPresetId}
                     planningEta={planningEta}
                     onClose={() => {
                       setShowCreateComposer(false);

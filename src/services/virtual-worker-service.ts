@@ -89,7 +89,7 @@ export interface VirtualWorkerServiceDependencies {
   approveSessionPlan: (sessionId: string) => Promise<unknown>;
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
   memoryService?: MemoryService;
-  agentPresetSyncService?: Pick<AgentPresetSyncService, "getOptionalWorkerAgentForRepoPath">;
+  agentPresetSyncService?: Pick<AgentPresetSyncService, "getOptionalWorkerAgentForRepoPath" | "resolveTargetedCodingAgent">;
   logger?: Logger;
 }
 
@@ -548,7 +548,10 @@ export class VirtualWorkerService {
     const title = item.title;
     let succeeded = false;
     let initialHead = "";
-    const workerAgent = await this.deps.agentPresetSyncService?.getOptionalWorkerAgentForRepoPath(repoPath).catch(() => null);
+    const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
+      item.projectId,
+      settings.agents?.routing?.mergeConflict?.agentPresetId ?? null,
+    ).catch(() => null);
     const memoryContext = workerAgent?.id
       ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
       : undefined;
@@ -604,6 +607,7 @@ export class VirtualWorkerService {
             sourceBranch,
             targetBranch,
             workspaceGuidance,
+            workerAgent?.instructionMarkdown,
             memoryContext,
             memoryInstructions,
           ),
@@ -789,7 +793,10 @@ export class VirtualWorkerService {
     const title = item.title;
     let succeeded = false;
     let initialHead = "";
-    const workerAgent = await this.deps.agentPresetSyncService?.getOptionalWorkerAgentForRepoPath(repoPath).catch(() => null);
+    const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
+      item.projectId,
+      settings.agents?.routing?.ciFix?.agentPresetId ?? null,
+    ).catch(() => null);
     const memoryContext = workerAgent?.id
       ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
       : undefined;
@@ -843,6 +850,7 @@ export class VirtualWorkerService {
           item,
           branchName,
           workspaceGuidance,
+          workerAgent?.instructionMarkdown,
           memoryContext,
           memoryInstructions,
         ),
@@ -1010,6 +1018,7 @@ export class VirtualWorkerService {
     item: ProjectAttentionItemRecord,
     branchName: string,
     workspaceGuidance: string,
+    workerInstruction?: string,
     memoryContext?: string,
     memoryInstructions?: string,
   ): string {
@@ -1023,6 +1032,7 @@ export class VirtualWorkerService {
 
     return [
       `CI checks have failed for PR #${prNumber} on branch \`${branchName}\`.`,
+      workerInstruction?.trim() ? `## Agent Instructions\n\n${workerInstruction.trim()}` : null,
       prUrl ? `PR URL: ${prUrl}` : null,
       "",
       memoryContext?.trim() || null,
@@ -1194,6 +1204,7 @@ export class VirtualWorkerService {
     sourceBranch: string,
     targetBranch: string,
     workspaceGuidance: string,
+    workerInstruction?: string,
     memoryContext?: string,
     memoryInstructions?: string,
   ): string {
@@ -1209,6 +1220,7 @@ export class VirtualWorkerService {
 
     return [
       "Resolve the active Git merge conflict already present in this worktree.",
+      workerInstruction?.trim() ? `## Agent Instructions\n\n${workerInstruction.trim()}` : null,
       `Source branch: ${sourceBranch}`,
       `Target branch: ${targetBranch}`,
       "",
