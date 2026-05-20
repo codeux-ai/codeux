@@ -5,7 +5,7 @@ import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { SqliteDatabaseAdapter } from "./db/sqlite-database-adapter.js";
 import { APP_DB_SCHEMA_TABLES } from "./db/app-db-schema.js";
 import { runMigrations } from "./db/app-db-migrations.js";
-import { executeChunkedInQuery } from "./repository-utils.js";
+import { executeChunkedInQuery, SQLiteParam } from "./repository-utils.js";
 
 interface TableRow {
   name: string;
@@ -57,8 +57,8 @@ export class AppDbStorage {
     sqlPrefix: string;
     sqlSuffix?: string;
     items: string[];
-    bindParamsBefore?: any[];
-    bindParamsAfter?: any[];
+    bindParamsBefore?: SQLiteParam[];
+    bindParamsAfter?: SQLiteParam[];
   }): T[] {
     return executeChunkedInQuery<T>((sql) => this.getCachedStatement(sql), params);
   }
