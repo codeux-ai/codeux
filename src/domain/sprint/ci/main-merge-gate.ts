@@ -58,10 +58,24 @@ export class MainMergeGateService {
       gitStatus,
     } = context;
 
+    if (githubMode === "LOCAL") {
+      return {
+        text: `\n### Main Merge\n- ℹ️ **Local Mode:** To finalize this sprint, run \`git checkout ${defaultBranch} && git merge ${featureBranch}\` locally.\n`,
+        state: "ready_for_merge",
+        prNumber: null,
+        prUrl: null,
+        hasMergeConflict: false,
+        mergeStateStatus: null,
+        hasFailedChecks: false,
+        hasPendingChecks: false,
+        hasReviewBlockers: false,
+        failedChecks: [],
+      };
+    }
+
     if (
       !ciIntelligence.enabled
       || !ciIntelligence.enableLivePrMonitoring
-      || githubMode !== "REMOTE"
     ) {
       return {
         text: "",
