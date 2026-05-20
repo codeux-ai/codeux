@@ -18,6 +18,7 @@ import {
 import type { ChatManagementActionService } from "./chat-management-action-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
+import { getCorrelationId } from "../shared/logging/correlation-id.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -398,7 +399,8 @@ export class ChatThreadRuntimeService {
     // In MCP-native mode, check if the worker triggered an approval-gated action
     if (mcpAvailable && !newPendingAction) {
       const tracker = this.deps.getMcpApprovalTracker?.();
-      const pendingApproval = tracker?.takePending() ?? null;
+      const correlationId = getCorrelationId() ?? thread.id;
+      const pendingApproval = tracker?.takePending(correlationId) ?? null;
       if (pendingApproval) {
         newPendingAction = {
           action: pendingApproval.action,

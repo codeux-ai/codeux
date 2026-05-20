@@ -1,12 +1,17 @@
 import type { FunctionComponent } from "preact";
 import { Layers3 } from "lucide-preact";
+import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
 import {
   PANEL_CLASS,
   StudioHeader,
 } from "./StatsShared.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
 
-export const TelemetrySectionsSection: FunctionComponent<any> = ({ stats }) => {
+export interface TelemetrySectionsSectionProps {
+  stats: ProjectExecutionStatsSnapshot;
+}
+
+export const TelemetrySectionsSection: FunctionComponent<TelemetrySectionsSectionProps> = ({ stats }) => {
   return (
     <section className="space-y-6">
       <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>

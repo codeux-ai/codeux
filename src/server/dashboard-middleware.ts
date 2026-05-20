@@ -7,6 +7,10 @@ import { createPreviewHostMiddleware } from "./preview-host-middleware.js";
 import { parsePreviewSessionIdFromHost } from "./preview-host-utils.js";
 import type { DashboardServerOptions } from "./dashboard-server.js";
 
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
 export const applyDashboardPreRouteMiddleware = (
   app: Express,
   options: DashboardServerOptions,
@@ -49,9 +53,12 @@ export const applyDashboardPostRouteMiddleware = (
 
     if (isGet && !isApi && isExtensionless && !isPreviewHost) {
       const indexPath = path.join(path.resolve(staticDir), "index.html");
-      res.sendFile(indexPath, (err: any) => {
+      res.sendFile(indexPath, (err: unknown) => {
         if (err) {
-          if ((err as any).code === "ENOENT" || (err as any).status === 404) {
+          const isEnoent = isErrnoException(err) && err.code === "ENOENT";
+          const is404 = typeof err === "object" && err !== null && "status" in err && (err as { status: number }).status === 404;
+
+          if (isEnoent || is404) {
             next();
           } else {
             next(err);

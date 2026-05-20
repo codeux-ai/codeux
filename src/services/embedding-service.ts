@@ -4,15 +4,23 @@ import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 import { EMBEDDING_MODEL_CATALOG } from "./embedding-model-catalog.js";
 import { EmbeddingTokenizer } from "./embedding-tokenizer.js";
 import type { EmbeddingModelId } from "../contracts/memory-types.js";
+import type { InferenceSession } from "onnxruntime-node";
 
 const MODELS_DIR = getHomeCodeUxPath("models");
+
+interface TypedInferenceSession extends Omit<InferenceSession, "inputMetadata"> {
+  inputMetadata: Record<string, {
+    dims?: (number | string)[];
+    type?: string;
+  }>;
+}
 
 /**
  * Loads ONNX models and runs embedding inference on CPU.
  * Uses dynamic import for onnxruntime-node to avoid hard dependency at startup.
  */
 export class EmbeddingService {
-  private session: any = null;
+  private session: TypedInferenceSession | null = null;
   private tokenizer: EmbeddingTokenizer | null = null;
   private currentModelId: EmbeddingModelId | null = null;
 
@@ -31,10 +39,10 @@ export class EmbeddingService {
     }
 
     const ort = await import("onnxruntime-node");
-    this.session = await ort.InferenceSession.create(modelPath, {
+    this.session = (await ort.InferenceSession.create(modelPath, {
       executionProviders: ["cpu"],
       graphOptimizationLevel: "all",
-    });
+    })) as unknown as TypedInferenceSession;
 
     this.tokenizer = new EmbeddingTokenizer(tokenizerPath);
     this.currentModelId = modelId;
@@ -93,8 +101,8 @@ export class EmbeddingService {
     // Shape: [batch=1, num_kv_heads, past_seq_len=0, head_dim] — inferred from session metadata.
     for (const name of inputNames) {
       if (!name.startsWith("past_key_values") || feeds[name]) continue;
-      const meta = (this.session as any).inputMetadata?.[name];
-      const dims: (number | string)[] | undefined = meta?.dims;
+      const meta = this.session.inputMetadata?.[name];
+      const dims = meta?.dims;
       // Replace dynamic axes with 0 (empty past), fix batch=1
       const shape = dims?.map((d: number | string) => typeof d === "number" ? d : 0) ?? [1, 1, 0, 1];
       if (shape.length > 0) shape[0] = 1;

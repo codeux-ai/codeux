@@ -1,5 +1,11 @@
 import type { FunctionComponent } from "preact";
 import { BarChart3 } from "lucide-preact";
+import type {
+  Source,
+  ProjectExecutionStatsSnapshot,
+  ProjectStatsQuery,
+  ProjectStatsWindow,
+} from "../../../types.js";
 import { formatDateTime } from "../stats-utils.js";
 import {
   PANEL_CLASS,
@@ -7,7 +13,19 @@ import {
   RangeToggle,
 } from "./StatsShared.js";
 
-export const StatsPageHero: FunctionComponent<any> = ({
+export interface StatsPageHeroProps {
+  selectedProject: Source | null;
+  stats: ProjectExecutionStatsSnapshot | null;
+  activeQuery: ProjectStatsQuery;
+  customFrom: string;
+  customTo: string;
+  applyPresetWindow: (window: Exclude<ProjectStatsWindow, "custom">) => void;
+  setCustomFrom: (value: string) => void;
+  setCustomTo: (value: string) => void;
+  applyCustomRange: () => void;
+}
+
+export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   selectedProject,
   stats,
   activeQuery,

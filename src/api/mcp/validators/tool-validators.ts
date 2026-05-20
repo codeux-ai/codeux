@@ -1,17 +1,16 @@
-import AjvModule from "ajv";
-import type { ErrorObject } from "ajv";
+import { Ajv } from "ajv";
+import type { ErrorObject, ValidateFunction } from "ajv";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { TOOL_DEFINITIONS } from "../../../contracts/mcp-tool-definitions.js";
 
-const Ajv = AjvModule.default || AjvModule;
-const ajv = new (Ajv as any)({ allErrors: true });
+const ajv = new Ajv({ allErrors: true });
 
 // Compile schemas for all tools
-const validators = new Map<string, any>();
+const validators = new Map<string, ValidateFunction>();
 
 for (const tool of TOOL_DEFINITIONS) {
   if (tool.inputSchema) {
-    validators.set(tool.name, ajv.compile(tool.inputSchema as any));
+    validators.set(tool.name, ajv.compile(tool.inputSchema));
   }
 }
 

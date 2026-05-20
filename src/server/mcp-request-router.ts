@@ -10,6 +10,7 @@ import type { ManagementToolHandler } from "../mcp/management-tool-handler.js";
 import { getEnabledToolDefinitions, isToolEnabled } from "../mcp/mcp-tool-availability.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
+import { getCorrelationId } from "../shared/logging/correlation-id.js";
 
 export interface McpRequestRouterArgs {
   server: Server;
@@ -21,6 +22,7 @@ export interface McpRequestRouterArgs {
   formatError: (error: unknown) => { content: Array<{ type: string; text: string }>; isError: true };
   logger?: Logger;
   withCorrelationContext?: <T>(request: unknown, operation: () => Promise<T>) => Promise<T>;
+  getMcpApprovalTracker?: () => import("../services/mcp-approval-tracker.js").McpApprovalTracker;
 }
 
 export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => {
@@ -63,6 +65,24 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
         validateToolArguments(name, toolArgs);
 
         const response = await toolRegistry.dispatch(name, toolArgs);
+
+        if (name === "manage_code_ux" && Array.isArray(response.content) && response.content[0]?.type === "text") {
+          try {
+            const parsed = JSON.parse(response.content[0].text);
+            if (parsed && parsed.approvalRequired) {
+              const req = request as { id?: string | number };
+              const correlationId = getCorrelationId() ?? String(req.id || Date.now());
+              args.getMcpApprovalTracker?.()?.setPending(correlationId, {
+                action: toolArgs as any,
+                approvalMessage: parsed.approvalMessage || "Action requires approval",
+                proposedAt: new Date().toISOString()
+              });
+            }
+          } catch (e) {
+            // ignore parsing errors for tracking
+          }
+        }
+
         logger?.info("MCP tool request succeeded", { toolName: name });
         return response;
       } catch (error: unknown) {

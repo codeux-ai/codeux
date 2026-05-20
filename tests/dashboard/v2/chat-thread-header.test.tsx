@@ -6,35 +6,36 @@ import { render, screen, fireEvent } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { ChatThreadHeader } from "../../../dashboard/src/v2/components/chat/ChatThreadHeader.js";
+import { buildMockChatThread, buildMockWorkerOption } from "../factories/chat-fixture-factory.js";
 
 expect.extend(matchers);
 
 describe("ChatThreadHeader", () => {
   const mockOptions = [
-    { id: "conn-1", label: "Worker 1", status: "online", isPrimary: false, type: "connection", isSelectable: true },
-    { id: "virtual:gemini", label: "Virtual Gemini", status: "available", isPrimary: true, type: "virtual", isSelectable: true, providerId: "gemini" },
+    buildMockWorkerOption({ id: "conn-1", label: "Worker 1", status: "online", isPrimary: false, type: "connection", isSelectable: true }),
+    buildMockWorkerOption({ id: "virtual:gemini", label: "Virtual Gemini", status: "available", isPrimary: true, type: "virtual", isSelectable: true, providerId: "gemini" }),
   ];
 
-  const baseThread = {
+  const baseThread = buildMockChatThread({
     id: "t1",
     projectId: "p1",
     connectionId: null,
     scope: "project",
     title: "Test Thread",
-    status: "active",
+    status: "open",
     createdAt: "2023-01-01T00:00:00Z",
     updatedAt: "2023-01-01T00:00:00Z",
     messageCount: 5,
     pendingMessageCount: 0,
     lastMessageAt: null,
     lastMessagePreview: null,
-  } as any;
+  });
 
   it("renders thread title and message count", () => {
     render(
       <ChatThreadHeader
         thread={baseThread}
-        workerOptions={mockOptions as any}
+        workerOptions={mockOptions}
         isAssigning={false}
         onAssignRoute={() => {}}
         onCompact={() => {}}
@@ -50,7 +51,7 @@ describe("ChatThreadHeader", () => {
     render(
       <ChatThreadHeader
         thread={thread}
-        workerOptions={mockOptions as any}
+        workerOptions={mockOptions}
         isAssigning={false}
         onAssignRoute={() => {}}
         onCompact={() => {}}
@@ -65,7 +66,7 @@ describe("ChatThreadHeader", () => {
     const { rerender } = render(
       <ChatThreadHeader
         thread={threadActive}
-        workerOptions={mockOptions as any}
+        workerOptions={mockOptions}
         isAssigning={false}
         onAssignRoute={() => {}}
         onCompact={() => {}}
@@ -78,7 +79,7 @@ describe("ChatThreadHeader", () => {
     rerender(
       <ChatThreadHeader
         thread={threadReplay}
-        workerOptions={mockOptions as any}
+        workerOptions={mockOptions}
         isAssigning={false}
         onAssignRoute={() => {}}
         onCompact={() => {}}
@@ -94,7 +95,7 @@ describe("ChatThreadHeader", () => {
     const { container } = render(
       <ChatThreadHeader
         thread={baseThread}
-        workerOptions={mockOptions as any}
+        workerOptions={mockOptions}
         isAssigning={false}
         onAssignRoute={() => {}}
         onCompact={onCompact}
@@ -120,7 +121,7 @@ describe("ChatThreadHeader", () => {
     render(
       <ChatThreadHeader
         thread={thread}
-        workerOptions={mockOptions as any}
+        workerOptions={mockOptions}
         isAssigning={false}
         onAssignRoute={() => {}}
         onCompact={() => {}}
@@ -138,7 +139,7 @@ describe("ChatThreadHeader", () => {
     render(
       <ChatThreadHeader
         thread={thread}
-        workerOptions={mockOptions as any}
+        workerOptions={mockOptions}
         isAssigning={true}
         onAssignRoute={() => {}}
         onCompact={() => {}}
@@ -157,7 +158,7 @@ describe("ChatThreadHeader", () => {
     render(
       <ChatThreadHeader
         thread={thread}
-        workerOptions={mockOptions as any}
+        workerOptions={mockOptions}
         isAssigning={false}
         onAssignRoute={onAssignRoute}
         onCompact={() => {}}

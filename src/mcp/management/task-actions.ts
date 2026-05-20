@@ -3,7 +3,21 @@ import type { ProjectManagementRepository } from "../../repositories/project-man
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
 import type { TaskRerunService } from "../../services/task-rerun-service.js";
+import type { TaskPriority, UpdateTaskInput } from "../../contracts/project-management-types.js";
+import type { ProviderId } from "../../contracts/app-types.js";
 import { randomUUID } from "crypto";
+
+const VALID_PRIORITIES: TaskPriority[] = ["critical", "high", "medium", "low"];
+
+function parsePriority(val: unknown): TaskPriority | undefined {
+  if (typeof val === "string") {
+    const normalized = val.toLowerCase();
+    if (VALID_PRIORITIES.includes(normalized as TaskPriority)) {
+      return normalized as TaskPriority;
+    }
+  }
+  return undefined;
+}
 
 export class TaskActions {
   constructor(
@@ -80,14 +94,14 @@ export class TaskActions {
     const title = typeof payload.title === "string" ? payload.title : "New Task";
     const promptMarkdown = typeof payload.promptMarkdown === "string" ? payload.promptMarkdown : "";
     const description = typeof payload.description === "string" ? payload.description : "";
-    const priority = typeof payload.priority === "string" ? payload.priority : "P2";
+    const priority = parsePriority(payload.priority) || "medium";
 
     const task = this.projectManagementRepository.createTask(projectId, {
       sprintId,
       title,
       promptMarkdown,
       description,
-      priority: priority as any,
+      priority,
       dependsOnTaskIds: Array.isArray(payload.dependsOnTaskIds) ? payload.dependsOnTaskIds.filter(id => typeof id === 'string') : [],
       executorType: "auto",
       status: "pending"
@@ -102,11 +116,16 @@ export class TaskActions {
       throw new Error("taskId is required");
     }
 
-    const updateInput: Record<string, any> = {};
+    const updateInput: UpdateTaskInput = {};
     if (typeof payload.title === "string") updateInput.title = payload.title;
     if (typeof payload.promptMarkdown === "string") updateInput.promptMarkdown = payload.promptMarkdown;
     if (typeof payload.description === "string") updateInput.description = payload.description;
-    if (typeof payload.priority === "string") updateInput.priority = payload.priority;
+
+    const priority = parsePriority(payload.priority);
+    if (priority) {
+      updateInput.priority = priority;
+    }
+
     if (Array.isArray(payload.dependsOnTaskIds)) {
         updateInput.dependsOnTaskIds = payload.dependsOnTaskIds.filter(id => typeof id === "string");
     }
@@ -142,8 +161,11 @@ export class TaskActions {
       throw new Error("taskId is required");
     }
 
+    const providerStr = typeof payload.provider === "string" ? payload.provider : undefined;
+    const providerId = providerStr as ProviderId | undefined;
+
     const task = await this.taskRerunService.rerunTask(taskId, {
-        provider: typeof payload.provider === "string" ? payload.provider as any : undefined,
+        provider: providerId,
     });
     return { result: { task } };
   }

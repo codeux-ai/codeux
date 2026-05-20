@@ -1,4 +1,4 @@
-import type { JulesActivity, JulesSession, JulesSource } from "../../contracts/app-types.js";
+import type { JulesActivity, JulesSession, JulesSource, ActivitySummary } from "../../contracts/app-types.js";
 
 export class ActivitySummaryService {
   private static readonly ACTIVITY_PREVIEW_CHAR_LIMIT = 180;
@@ -47,8 +47,8 @@ export class ActivitySummaryService {
     return undefined;
   }
 
-  public toActivitySummary(activity: JulesActivity): Record<string, unknown> {
-    const summary: Record<string, unknown> = {
+  public toActivitySummary(activity: JulesActivity): ActivitySummary {
+    const summary: ActivitySummary = {
       id: activity.id,
       name: activity.name,
       createTime: activity.createTime,

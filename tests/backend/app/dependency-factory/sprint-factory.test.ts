@@ -68,7 +68,7 @@ describe("Sprint Factory", () => {
       isActionRequiredState: vi.fn(),
       resolveSessionName: vi.fn(),
       extractSessionId: vi.fn(),
-      fetchRecentActivities: vi.fn(),
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
       listSessionsForSync: vi.fn(),
       getCiStatusForScope: vi.fn(),
       autoMergeFeaturePr: vi.fn(),

@@ -45,6 +45,8 @@ import { DockerRunner } from "../../infrastructure/providers/cli/docker-runner.j
 import type { IProviderRunner } from "../../infrastructure/providers/cli/provider-runner.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
 import * as jiraApiClient from "../../services/jira-api-client.js";
+import { SprintPreviewService } from "../../services/sprint-preview-service.js";
+import { SprintPreviewRepository } from "../../repositories/sprint-preview-repository.js";
 
 export interface CoreDependencies {
   providerRunner: IProviderRunner;
@@ -85,6 +87,8 @@ export interface CoreDependencies {
   embeddingModelManager: EmbeddingModelManager;
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
+  sprintPreviewService: SprintPreviewService;
+  sprintPreviewRepository: SprintPreviewRepository;
 }
 
 export function createCoreDependencies(
@@ -169,6 +173,14 @@ export function createCoreDependencies(
     logger: logger.child({ component: "agent-preset-sync-service" }),
   });
   const executionRepository = new ExecutionRepository(appDbStorage, dashboardRealtimeService);
+  const sprintPreviewRepository = new SprintPreviewRepository(appDbStorage);
+  const sprintPreviewService = new SprintPreviewService({
+    sprintPreviewRepository,
+    projectManagementRepository,
+    executionRepository,
+    settingsRepository,
+    logger: logger.child({ component: "sprint-preview-service" }),
+  });
   const sprintMarkdownService = new SprintMarkdownService(projectManagementRepository);
   const sprintIssueService = new SprintIssueService({
     projectManagementRepository,
@@ -257,5 +269,7 @@ export function createCoreDependencies(
     embeddingModelManager,
     memoryService,
     memoryPromotionService,
+    sprintPreviewService,
+    sprintPreviewRepository,
   };
 }

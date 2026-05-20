@@ -1,10 +1,15 @@
 import type { FunctionComponent } from "preact";
 import { useState } from "preact/hooks";
+import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
 import { TelemetryLedger } from "./TelemetryLedger.js";
 import { GitTelemetryTab } from "./GitTelemetryTab.js";
 import { PANEL_CLASS } from "./StatsShared.js";
 
-export const TelemetryLedgerTabs: FunctionComponent<any> = ({ stats }) => {
+export interface TelemetryLedgerTabsProps {
+  stats: ProjectExecutionStatsSnapshot;
+}
+
+export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = ({ stats }) => {
   const [activeTab, setActiveTab] = useState<"tasks" | "sprints" | "git">("tasks");
 
   return (

@@ -1,11 +1,13 @@
+export type SQLiteParam = string | number | null | Buffer;
+
 export function executeChunkedInQuery<T>(
-  statementProvider: (sql: string) => { all: (...params: any[]) => any[] },
+  statementProvider: (sql: string) => { all: (...params: SQLiteParam[]) => any[] },
   params: {
     sqlPrefix: string;
     sqlSuffix?: string;
     items: string[];
-    bindParamsBefore?: any[];
-    bindParamsAfter?: any[];
+    bindParamsBefore?: SQLiteParam[];
+    bindParamsAfter?: SQLiteParam[];
   }
 ): T[] {
   const { sqlPrefix, items } = params;

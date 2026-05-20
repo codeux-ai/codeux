@@ -191,14 +191,8 @@ export class JulesAgentServer {
     this.agentPresetRepository = deps.agentPresetRepository;
     this.agentPresetSyncService = deps.agentPresetSyncService;
     this.executionRepository = deps.executionRepository;
-    this.sprintPreviewRepository = new SprintPreviewRepository(this.appDbStorage);
-    this.sprintPreviewService = new SprintPreviewService({
-      sprintPreviewRepository: this.sprintPreviewRepository,
-      projectManagementRepository: this.projectManagementRepository,
-      executionRepository: this.executionRepository,
-      settingsRepository: this.settingsRepository,
-      logger: this.logger.child({ component: "sprint-preview-service" }),
-    });
+    this.sprintPreviewRepository = deps.sprintPreviewRepository;
+    this.sprintPreviewService = deps.sprintPreviewService;
     this.sprintMarkdownService = deps.sprintMarkdownService;
     this.sprintIssueService = deps.sprintIssueService;
     this.virtualWorkerService = deps.virtualWorkerService;
@@ -209,8 +203,7 @@ export class JulesAgentServer {
     this.coreToolHandler = deps.coreToolHandler;
     this.agentToolHandler = deps.agentToolHandler;
     this.managementToolHandler = deps.managementToolHandler;
-    // Re-inject dependencies since sprintPreviewService is created late
-    (this.managementToolHandler as any).deps.sprintPreviewService = this.sprintPreviewService;
+
     this.activityCacheService = deps.activityCacheService;
     this.taskRerunService = deps.taskRerunService;
     this.executionControlService = deps.executionControlService;
@@ -291,6 +284,7 @@ export class JulesAgentServer {
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),
       withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),
+      getMcpApprovalTracker: () => this.mcpApprovalTracker,
     });
 
     server.onerror = (error) => {

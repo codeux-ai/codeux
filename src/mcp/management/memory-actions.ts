@@ -2,6 +2,28 @@ import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contrac
 import type { MemoryService } from "../../services/memory-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
+import { type MemoryScope, type MemoryCategory, MEMORY_SCOPES, MEMORY_CATEGORIES } from "../../contracts/memory-types.js";
+import type { UpdateMemoryInput } from "../../contracts/memory-types.js";
+
+function parseMemoryScope(val: unknown): MemoryScope | undefined {
+  if (typeof val === "string") {
+    const normalized = val.toLowerCase();
+    if (MEMORY_SCOPES.includes(normalized as MemoryScope)) {
+      return normalized as MemoryScope;
+    }
+  }
+  return undefined;
+}
+
+function parseMemoryCategory(val: unknown): MemoryCategory | undefined {
+  if (typeof val === "string") {
+    const normalized = val.toLowerCase();
+    if (MEMORY_CATEGORIES.includes(normalized as MemoryCategory)) {
+      return normalized as MemoryCategory;
+    }
+  }
+  return undefined;
+}
 
 export class MemoryActions {
   constructor(
@@ -46,10 +68,12 @@ export class MemoryActions {
     const query = typeof payload.query === "string" ? payload.query : undefined;
     if (!projectId || !query) throw new Error("projectId and query are required");
 
+    const scope = parseMemoryScope(payload.scope);
+
     const results = await this.memoryService.search({
       projectId,
       query,
-      scope: typeof payload.scope === "string" ? payload.scope as any : undefined,
+      scope,
       sprintId: typeof payload.sprintId === "string" ? payload.sprintId : undefined,
       agentPresetId: typeof payload.agentPresetId === "string" ? payload.agentPresetId : undefined,
       limit: typeof payload.limit === "number" ? payload.limit : undefined,
@@ -63,7 +87,7 @@ export class MemoryActions {
     const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
     if (!projectId) throw new Error("projectId is required");
 
-    const scope = typeof payload.scope === "string" ? payload.scope as any : undefined;
+    const scope = parseMemoryScope(payload.scope);
     const limit = typeof payload.limit === "number" ? payload.limit : undefined;
     const sprintId = typeof payload.sprintId === "string" ? payload.sprintId : undefined;
     const agentPresetId = typeof payload.agentPresetId === "string" ? payload.agentPresetId : undefined;
@@ -100,10 +124,13 @@ export class MemoryActions {
     const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
     if (!projectId) throw new Error("projectId is required");
 
+    const category = parseMemoryCategory(payload.category) || "context";
+    const scope = parseMemoryScope(payload.scope) || "project";
+
     const memory = await this.memoryService.createMemory(projectId, {
       content: typeof payload.content === "string" ? payload.content : "",
-      category: typeof payload.category === "string" ? payload.category as any : "context",
-      scope: typeof payload.scope === "string" ? payload.scope as any : "project",
+      category,
+      scope,
       strength: typeof payload.strength === "number" ? payload.strength : 1.0,
       sprintId: typeof payload.sprintId === "string" ? payload.sprintId : undefined,
       agentPresetId: typeof payload.agentPresetId === "string" ? payload.agentPresetId : undefined,
@@ -116,9 +143,12 @@ export class MemoryActions {
     const memoryId = typeof payload.memoryId === "string" ? payload.memoryId : undefined;
     if (!memoryId) throw new Error("memoryId is required");
 
-    const updateInput: Record<string, any> = {};
+    const updateInput: UpdateMemoryInput = {};
     if (typeof payload.content === "string") updateInput.content = payload.content;
-    if (typeof payload.category === "string") updateInput.category = payload.category;
+
+    const category = parseMemoryCategory(payload.category);
+    if (category) updateInput.category = category;
+
     if (typeof payload.strength === "number") updateInput.strength = payload.strength;
 
     const memory = this.memoryService.updateMemory(memoryId, updateInput);
@@ -160,7 +190,7 @@ export class MemoryActions {
     const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
     if (!projectId) throw new Error("projectId is required");
 
-    const scope = typeof payload.scope === "string" ? payload.scope as any : undefined;
+    const scope = parseMemoryScope(payload.scope);
     const sprintId = typeof payload.sprintId === "string" ? payload.sprintId : undefined;
     const agentPresetId = typeof payload.agentPresetId === "string" ? payload.agentPresetId : undefined;
     const topKPerNode = typeof payload.topKPerNode === "number" ? payload.topKPerNode : undefined;
@@ -171,7 +201,7 @@ export class MemoryActions {
 
   private countMemories(payload: Record<string, unknown>): ManagementResponseEnvelope {
     const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    const scope = typeof payload.scope === "string" ? payload.scope as any : undefined;
+    const scope = parseMemoryScope(payload.scope);
     if (!projectId || !scope) throw new Error("projectId and scope are required");
 
     const count = this.memoryService.countByScope(projectId, scope);

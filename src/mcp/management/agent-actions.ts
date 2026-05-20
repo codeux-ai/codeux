@@ -1,5 +1,15 @@
 import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
+import type { AgentAvatarConfig } from "../../contracts/agent-preset-types.js";
+
+interface UpdateAgentInput {
+  name?: string;
+  instructionMarkdown?: string;
+  labels?: string[];
+  avatarConfig?: AgentAvatarConfig;
+  memoryTemplateOverrideEnabled?: boolean;
+  memoryTemplateMarkdown?: string;
+}
 
 export class AgentActions {
   constructor(private readonly agentPresetSyncService: AgentPresetSyncService) {}
@@ -72,7 +82,7 @@ export class AgentActions {
 
     const name = typeof payload.name === "string" ? payload.name : "New Agent";
     const instructionMarkdown = typeof payload.instructionMarkdown === "string" ? payload.instructionMarkdown : "";
-    const avatarConfig = payload.avatarConfig as any;
+    const avatarConfig = (typeof payload.avatarConfig === "object" && payload.avatarConfig !== null) ? payload.avatarConfig as AgentAvatarConfig : undefined;
 
     const agent = await this.agentPresetSyncService.createAgentPreset(projectId, {
       name,
@@ -91,11 +101,11 @@ export class AgentActions {
     const presetId = typeof payload.presetId === "string" ? payload.presetId : undefined;
     if (!projectId || !presetId) throw new Error("projectId and presetId are required");
 
-    const updateInput: Record<string, any> = {};
+    const updateInput: UpdateAgentInput = {};
     if (typeof payload.name === "string") updateInput.name = payload.name;
     if (typeof payload.instructionMarkdown === "string") updateInput.instructionMarkdown = payload.instructionMarkdown;
     if (Array.isArray(payload.labels)) updateInput.labels = payload.labels.filter((l: any) => typeof l === "string");
-    if (payload.avatarConfig !== undefined) updateInput.avatarConfig = payload.avatarConfig;
+    if (typeof payload.avatarConfig === "object" && payload.avatarConfig !== null) updateInput.avatarConfig = payload.avatarConfig as AgentAvatarConfig;
     if (typeof payload.memoryTemplateOverrideEnabled === "boolean") updateInput.memoryTemplateOverrideEnabled = payload.memoryTemplateOverrideEnabled;
     if (typeof payload.memoryTemplateMarkdown === "string") updateInput.memoryTemplateMarkdown = payload.memoryTemplateMarkdown;
 

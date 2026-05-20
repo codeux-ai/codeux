@@ -30,6 +30,16 @@ export interface JulesSession {
   outputs?: SessionOutput[];
 }
 
+export interface ActivitySummary {
+  id: string;
+  name: string;
+  createTime: string;
+  originator: string;
+  kind: string;
+  preview?: string;
+  [key: string]: unknown;
+}
+
 export interface JulesActivity {
   name: string;
   id: string;

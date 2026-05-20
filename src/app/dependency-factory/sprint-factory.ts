@@ -201,8 +201,14 @@ export function createSprintDependencies(
     isActionRequiredState: (state) => context.isActionRequiredState(state),
     resolveSessionName: (session) => context.resolveSessionName(session),
     extractSessionId: (session) => context.extractSessionId(session),
-    fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
-    listAllActivities: (sessionId: string) => coreDeps.julesApi.listAllActivities(sessionId),
+    fetchRecentActivities: async (sessionName, pageSize) => {
+      const activities = await context.fetchRecentActivities(sessionName, pageSize);
+      return activities.map(a => coreDeps.activitySummary.toActivitySummary(a));
+    },
+    listAllActivities: async (sessionId: string) => {
+      const activities = await coreDeps.julesApi.listAllActivities(sessionId);
+      return activities.map(a => coreDeps.activitySummary.toActivitySummary(a));
+    },
     getSession: (sessionId: string) => coreDeps.julesApi.getSession(sessionId),
     listSessions: () => context.listSessionsForSync(),
     projectManagementRepository,

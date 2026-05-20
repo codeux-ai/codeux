@@ -1,9 +1,10 @@
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
+import type { SprintRunStatus, UpdateSprintRunInput } from "../../../contracts/execution-types.js";
 
 export function transitionSprintRun(
   executionRepository: Pick<ExecutionRepository, "updateSprintRun" | "appendSprintRunEvent">,
   sprintRunId: string,
-  status: string,
+  status: SprintRunStatus,
   eventType: string,
   eventPayload: Record<string, unknown>,
   sourceEventKeySuffix: string
@@ -11,7 +12,7 @@ export function transitionSprintRun(
   const now = new Date().toISOString();
   const isTerminal = status === "completed" || status === "failed" || status === "cancelled";
 
-  const updatePayload: Record<string, unknown> = {
+  const updatePayload: UpdateSprintRunInput = {
     status,
     lastHeartbeatAt: now,
   };
@@ -19,7 +20,7 @@ export function transitionSprintRun(
     updatePayload.finishedAt = now;
   }
 
-  executionRepository.updateSprintRun(sprintRunId, updatePayload as any);
+  executionRepository.updateSprintRun(sprintRunId, updatePayload);
   executionRepository.appendSprintRunEvent(
     sprintRunId,
     eventType,
