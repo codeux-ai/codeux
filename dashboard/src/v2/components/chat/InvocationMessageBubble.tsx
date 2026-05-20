@@ -1,4 +1,5 @@
 import { type FunctionComponent } from "preact";
+import { Cloud } from "lucide-preact";
 import type { ExecutionInvocationMessageRecord } from "../../types.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
 import { getInvocationWidgetData } from "../../lib/chat-widget-view-models.js";
@@ -47,6 +48,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const modelLabel = message.metadata?.model as string | undefined;
   const errorLabel = formatErrorCategory(message.metadata?.errorCategory);
   const createdAtLabel = formatChatTime(message.createdAt);
+  const isExternalApi = Boolean(message.metadata?.isExternalApi);
 
   return (
     <div className={`flex ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
@@ -62,7 +64,10 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
         }`}>
           {/* Header Row */}
           <div className={`flex items-center gap-3 mb-2 text-[11px] font-mono text-slate-400 ${fromUser || fromTool ? "justify-end flex-row-reverse" : "justify-start"}`}>
-            <span className="font-semibold text-slate-300 capitalize">{message.role}</span>
+            <span className="font-semibold text-slate-300 capitalize flex items-center gap-1.5">
+              {message.role}
+              {isExternalApi && <Cloud className="h-3 w-3 text-signal-500" />}
+            </span>
             {providerLabel && (
               <span className="px-1.5 py-0.5 rounded-sm bg-black/20 text-slate-300">
                 {providerLabel}
