@@ -1,4 +1,15 @@
-import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../contracts/internal-management-types.js";
+import type {
+  ManageCodeUxArgs,
+  ManagementResponseEnvelope,
+  ManageProjectsArgs,
+  ManageSprintsArgs,
+  ManageTasksArgs,
+  ManageAgentsArgs,
+  ManageMemoryArgs,
+  ManageSettingsArgs,
+  ManagePreviewArgs,
+  ManageTelemetryArgs
+} from "../contracts/internal-management-types.js";
 import type { SprintPreviewService } from "../services/sprint-preview-service.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { DashboardSettings } from "../contracts/app-types.js";
@@ -119,6 +130,85 @@ export class ManagementToolHandler {
         },
       };
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    }
+  }
+
+  async handleManageProjects(args: ManageProjectsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = await handleProjectAction(
+        args.action,
+        args as unknown as Record<string, unknown>,
+        this.deps.projectManagementRepository,
+        "projects",
+        args.approval
+      );
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "projects", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+    }
+  }
+
+  async handleManageSprints(args: ManageSprintsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = await this.sprintActions.handleSprintAction({ domain: "sprints", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "sprints", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+    }
+  }
+
+  async handleManageTasks(args: ManageTasksArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = await this.taskActions.handleTaskAction({ domain: "tasks", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "tasks", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+    }
+  }
+
+  async handleManageAgents(args: ManageAgentsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = await this.agentActions.handleAgentAction({ domain: "agents", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "agents", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+    }
+  }
+
+  async handleManageMemory(args: ManageMemoryArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = await this.memoryActions.handleMemoryAction({ domain: "memory", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "memory", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+    }
+  }
+
+  async handleManageSettings(args: ManageSettingsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = await this.settingsActions.handleSettingsAction({ domain: "settings", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "settings", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+    }
+  }
+
+  async handleManagePreview(args: ManagePreviewArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const currentHost = null; // fallback to localhost
+      const envelope = await this.previewActions.handlePreviewAction({ domain: "preview", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval }, currentHost);
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "preview", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+    }
+  }
+
+  async handleManageTelemetry(args: ManageTelemetryArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const envelope = await handleTelemetryActions({ domain: "telemetry", action: args.action, payload: args as unknown as Record<string, unknown> }, this.deps.executionRepository);
+      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "telemetry", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
     }
   }
 }

@@ -33,14 +33,14 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("post_listen_reply", (input) => args.coreToolHandler.handlePostListenReply(input))
     .register("generate_dashboard_reply", async (input) => (await args.agentToolHandler.handleGenerateDashboardReply(input)) as McpToolResponse)
     .register("manage_code_ux", async (input) => (await args.managementToolHandler.handleManageCodeUx(input)) as McpToolResponse)
-    .register("manage_projects", async (input) => (await args.managementToolHandler.handleManageCodeUx({ domain: "projects", action: input.action, payload: input as unknown as Record<string, unknown>, approval: input.approval })) as McpToolResponse)
-    .register("manage_sprints", async (input) => (await args.managementToolHandler.handleManageCodeUx({ domain: "sprints", action: input.action, payload: input as unknown as Record<string, unknown>, approval: input.approval })) as McpToolResponse)
-    .register("manage_tasks", async (input) => (await args.managementToolHandler.handleManageCodeUx({ domain: "tasks", action: input.action, payload: input as unknown as Record<string, unknown>, approval: input.approval })) as McpToolResponse)
-    .register("manage_agents", async (input) => (await args.managementToolHandler.handleManageCodeUx({ domain: "agents", action: input.action, payload: input as unknown as Record<string, unknown>, approval: input.approval })) as McpToolResponse)
-    .register("manage_memory", async (input) => (await args.managementToolHandler.handleManageCodeUx({ domain: "memory", action: input.action, payload: input as unknown as Record<string, unknown>, approval: input.approval })) as McpToolResponse)
-    .register("manage_settings", async (input) => (await args.managementToolHandler.handleManageCodeUx({ domain: "settings", action: input.action, payload: input as unknown as Record<string, unknown>, approval: input.approval })) as McpToolResponse)
-    .register("manage_preview", async (input) => (await args.managementToolHandler.handleManageCodeUx({ domain: "preview", action: input.action, payload: input as unknown as Record<string, unknown>, approval: input.approval })) as McpToolResponse)
-    .register("manage_telemetry", async (input) => (await args.managementToolHandler.handleManageCodeUx({ domain: "telemetry", action: input.action, payload: input as unknown as Record<string, unknown> })) as McpToolResponse);
+    .register("manage_projects", async (input) => (await args.managementToolHandler.handleManageProjects(input)) as McpToolResponse)
+    .register("manage_sprints", async (input) => (await args.managementToolHandler.handleManageSprints(input)) as McpToolResponse)
+    .register("manage_tasks", async (input) => (await args.managementToolHandler.handleManageTasks(input)) as McpToolResponse)
+    .register("manage_agents", async (input) => (await args.managementToolHandler.handleManageAgents(input)) as McpToolResponse)
+    .register("manage_memory", async (input) => (await args.managementToolHandler.handleManageMemory(input)) as McpToolResponse)
+    .register("manage_settings", async (input) => (await args.managementToolHandler.handleManageSettings(input)) as McpToolResponse)
+    .register("manage_preview", async (input) => (await args.managementToolHandler.handleManagePreview(input)) as McpToolResponse)
+    .register("manage_telemetry", async (input) => (await args.managementToolHandler.handleManageTelemetry(input)) as McpToolResponse);
 
   args.server.setRequestHandler(ListToolsRequestSchema, async () => {
     logger?.debug("MCP list_tools request received");
