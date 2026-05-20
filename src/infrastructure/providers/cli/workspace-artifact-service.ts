@@ -112,6 +112,7 @@ export class WorkspaceArtifactService {
     commitMessage: string;
     parentRefs?: string[];
     gitAuth?: GitHttpAuthOptions;
+    skipPush?: boolean;
   }): Promise<AppliedWorkspacePatchResult> {
     if (!args.patchText.trim()) {
       return { hasChanges: false };
@@ -151,13 +152,15 @@ export class WorkspaceArtifactService {
       )).stdout.trim();
 
       await runCommandStrict("git", ["update-ref", `refs/heads/${args.workerBranch}`, commitSha], args.repoPath);
-      const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, args.gitAuth ?? {});
-      await runCommandStrict(
-        "git",
-        ["push", "-u", "origin", `refs/heads/${args.workerBranch}:refs/heads/${args.workerBranch}`],
-        args.repoPath,
-        pushEnv ?? process.env,
-      );
+      if (!args.skipPush) {
+        const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, args.gitAuth ?? {});
+        await runCommandStrict(
+          "git",
+          ["push", "-u", "origin", `refs/heads/${args.workerBranch}:refs/heads/${args.workerBranch}`],
+          args.repoPath,
+          pushEnv ?? process.env,
+        );
+      }
 
       const diffOutput = (await runCommandStrict(
         "git",

@@ -60,7 +60,7 @@ const createMockContext = (): PipelineContext => {
       },
       git: {
         autoCreatePr: true,
-        githubMode: "LOCAL",
+        githubMode: "REMOTE",
         githubToken: "token",
         defaultBranch: "main",
         featureBranchPrefix: "feature/",
@@ -209,6 +209,7 @@ describe("executePrepareStage", () => {
       "feature-branch",
       undefined,
       { githubToken: "token", gitlabToken: undefined },
+      "REMOTE"
     );
   });
 
@@ -417,6 +418,7 @@ describe("executeGitFinalizeStage", () => {
       patchText: "",
       commitMessage: `feat(task ${ctx.task.id}): implement via ${ctx.provider}`,
       gitAuth: { githubToken: "token", gitlabToken: undefined },
+      skipPush: false,
     });
     expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED" });
   });
@@ -485,6 +487,21 @@ describe("executeGitFinalizeStage", () => {
 });
 
 describe("executePrFinalizeStage", () => {
+  it("merges locally when githubMode is LOCAL and updates session state to COMPLETED", async () => {
+    const ctx = createMockContext();
+    ctx.settings.git.githubMode = "LOCAL";
+    vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "", stderr: "" });
+
+    const result = await executePrFinalizeStage(ctx);
+
+    expect(ctx.workflowSucceeded).toBe(true);
+    expect(ctx.runCommand).toHaveBeenNthCalledWith(1, "git", ["checkout", "feature-branch"], "/repo");
+    expect(ctx.runCommand).toHaveBeenNthCalledWith(2, "git", ["merge", "--no-ff", "-m", "Merge worker branch worker-branch", "worker-branch"], "/repo");
+    expect(ctx.runCommand).toHaveBeenNthCalledWith(3, "git", ["checkout", "worker-branch"], "/repo");
+    expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED" });
+    expect(result).toEqual({});
+  });
+
   it("resolves PR and updates session state to COMPLETED", async () => {
     const ctx = createMockContext();
     vi.mocked(ctx.prService.resolveOrCreateFeaturePr).mockResolvedValue("https://github.com/pr/1");

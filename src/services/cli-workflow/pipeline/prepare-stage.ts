@@ -77,6 +77,7 @@ export async function executePrepareStage(
       githubToken: ctx.settings.git.githubToken,
       gitlabToken: ctx.settings.git.gitlabToken,
     },
+    ctx.settings.git.githubMode
   );
 
   ctx.worktreePath = finalPath;

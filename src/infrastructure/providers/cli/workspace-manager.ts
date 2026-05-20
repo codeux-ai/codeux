@@ -29,7 +29,7 @@ export interface IWorkspaceManager {
   buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   createSnapshotWorkspace(repoPath: string, sessionId: string): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
-  prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string, gitAuth?: GitHttpAuthOptions): Promise<{ worktreePath: string; resumed: boolean }>;
+  prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string, gitAuth?: GitHttpAuthOptions, githubMode?: "REMOTE" | "LOCAL"): Promise<{ worktreePath: string; resumed: boolean }>;
   removeWorktree(repoPath: string, worktreePath: string): Promise<void>;
   buildWorkspaceGuidance(taskPrompt: string, worktreePath: string): Promise<string>;
   runWorkspaceCommand(worktreePath: string, command: string, args: string[], options?: WorkspaceCommandOptions): Promise<CommandResult>;
@@ -110,17 +110,20 @@ export class WorkspaceManager implements IWorkspaceManager {
     featureBranch: string,
     resumeSessionId?: string,
     gitAuth?: GitHttpAuthOptions,
+    githubMode?: "REMOTE" | "LOCAL"
   ): Promise<{ worktreePath: string; resumed: boolean }> {
     let resumed = false;
     const workspaceRef = worktreePath;
 
     await this.withRepoLock(repoPath, async () => {
       await this.assertExactGitWorktreeRoot(repoPath);
-      try {
-        const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
-        await runCommandStrict("git", ["fetch", "origin"], repoPath, fetchEnv ?? process.env);
-      } catch {
-        // continue with local refs when origin is unavailable
+      if (githubMode !== "LOCAL") {
+        try {
+          const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
+          await runCommandStrict("git", ["fetch", "origin"], repoPath, fetchEnv ?? process.env);
+        } catch {
+          // continue with local refs when origin is unavailable
+        }
       }
 
       if (resumeSessionId && await this.workspaceExists(workspaceRef) && await this.canResumeExistingWorkspace(workspaceRef, workerBranch)) {

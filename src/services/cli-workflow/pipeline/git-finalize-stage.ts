@@ -24,6 +24,7 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     patchText,
     commitMessage: `feat(task ${ctx.task.id}): implement via ${ctx.provider}`,
     gitAuth,
+    skipPush: ctx.settings.git.githubMode === "LOCAL",
   });
 
   if (applied.hasChanges) {
@@ -46,7 +47,7 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     return { hasChanges: false, committedChanges: false };
   }
 
-  if (hasUnpushed) {
+  if (hasUnpushed && ctx.settings.git.githubMode !== "LOCAL") {
     const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(ctx.repoPath, gitAuth);
     await ctx.runCommand(
       "git",
