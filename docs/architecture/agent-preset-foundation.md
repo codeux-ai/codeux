@@ -63,7 +63,7 @@ Foundation-supported fields:
 - short routing description
 - instruction markdown
 
-Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead.
+Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead, including tags for built-in fallback selections on Worker, Project manager, and Quality assurance agent.
 
 This foundation gave Code UX a clean product base for:
 

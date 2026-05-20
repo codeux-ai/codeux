@@ -76,6 +76,6 @@ Virtual CI-fix and merge-conflict workers use their dedicated manual agent route
 - orchestrator mode exposes a selectable project-agent roster
 - CI fix, merge conflict, dashboard reply, and clarification reply routes each select one agent
 
-The Agents page shows route assignment tags on each preset card and in the detail panel. These tags are computed from the current effective project settings, so they reflect manual routes, the coding orchestrator roster, and enabled QA routes instead of user-authored labels.
+The Agents page shows route assignment tags on each preset card and in the detail panel. These tags are computed from the current effective project settings, so they reflect manual routes, the coding orchestrator roster, and enabled QA routes instead of user-authored labels. Built-in route selections are shown on the synced fallback presets as well: Worker for coding, CI fix, merge conflict, and dashboard reply; Project manager for clarification reply; and Quality assurance agent for QA routes.
 
 The Agents editor includes a short description field for every preset. That field is the Planning agent's primary signal when choosing among frontend, backend, prototype, or other custom coding specialists. Custom label editing is intentionally not exposed in the dashboard; labels remain internal metadata for markdown sync and built-in convention handling.

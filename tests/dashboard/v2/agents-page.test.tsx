@@ -313,6 +313,83 @@ describe("AgentsPage", () => {
     expect(screen.getAllByText("QA Task").length).toBeGreaterThan(0);
   });
 
+  it("tags built-in fallback agents when route settings use built-in selections", async () => {
+    mockPresets = [
+      {
+        id: "worker-agent",
+        projectId: "project-1",
+        name: "Worker",
+        labels: ["worker"],
+        instructionMarkdown: "Default worker",
+        syncStatus: "synced",
+        sourcePath: ".code-ux/agents/worker.md",
+        sourceScope: "default",
+        sourceExists: true,
+        avatarConfig: { body: "female" },
+        createdAt: "2023-01-01T00:00:00.000Z",
+        updatedAt: "2023-01-01T00:00:00.000Z",
+      },
+      {
+        id: "project-manager-agent",
+        projectId: "project-1",
+        name: "Project manager",
+        labels: [],
+        instructionMarkdown: "Default project manager",
+        syncStatus: "synced",
+        sourcePath: ".code-ux/agents/project_manager.md",
+        sourceScope: "default",
+        sourceExists: true,
+        avatarConfig: { body: "female" },
+        createdAt: "2023-01-01T00:00:00.000Z",
+        updatedAt: "2023-01-01T00:00:00.000Z",
+      },
+      {
+        id: "qa-agent",
+        projectId: "project-1",
+        name: "Quality assurance agent",
+        labels: ["qa", "review"],
+        instructionMarkdown: "Default QA",
+        syncStatus: "synced",
+        sourcePath: ".code-ux/agents/quality_assurance_agent.md",
+        sourceScope: "default",
+        sourceExists: true,
+        avatarConfig: { body: "male" },
+        createdAt: "2023-01-01T00:00:00.000Z",
+        updatedAt: "2023-01-01T00:00:00.000Z",
+      },
+    ];
+    vi.mocked(agentPresetApi.fetchAgentPresets).mockResolvedValue(mockPresets as any);
+
+    const effective = createEffectiveSettings();
+    effective.settings.agents.routing.taskCoding = {
+      mode: "MANUAL",
+      agentPresetId: null,
+      orchestratorAgentPresetIds: [],
+    };
+    effective.settings.agents.routing.ciFix.agentPresetId = null;
+    effective.settings.agents.routing.mergeConflict.agentPresetId = null;
+    effective.settings.agents.routing.dashboardReply.agentPresetId = null;
+    effective.settings.agents.routing.clarificationReply.agentPresetId = null;
+    effective.settings.agents.qualityAssurance.enabled = true;
+    effective.settings.agents.qualityAssurance.taskCompletion = { enabled: true, agentPresetId: null };
+    effective.settings.agents.qualityAssurance.sprintCompletion = { enabled: true, agentPresetId: null };
+    effective.settings.agents.qualityAssurance.completedTaskWithoutPr = { enabled: true, agentPresetId: null };
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(effective as any);
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Coding").length).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByText("CI Fix").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Merge Conflict").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Dashboard Reply").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Clarification Reply").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("QA Task").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("QA Sprint").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("QA No PR").length).toBeGreaterThan(0);
+  });
+
   it("creates a new agent with a random avatar and enters edit mode", async () => {
     vi.mocked(agentPresetApi.createAgentPreset).mockResolvedValue({
       id: "agent-new",

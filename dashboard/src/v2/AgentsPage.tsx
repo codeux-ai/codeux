@@ -57,6 +57,10 @@ const RosterStat: FunctionComponent<RosterStatProps> = ({ label, value, accent, 
   );
 };
 
+const normalizeAgentName = (value: string): string => (
+  value.trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ").toLowerCase()
+);
+
 /* ── Empty State ── */
 const EmptyState: FunctionComponent<{ hasProject: boolean; onCreate?: () => void }> = ({ hasProject, onCreate }) => (
   <div className="relative flex flex-col items-center justify-center overflow-hidden rounded-[2rem] border border-dashed border-signal-500/20 bg-white/55 px-8 py-24 text-center shadow-[0_2px_20px_rgba(0,0,0,0.03)] backdrop-blur-2xl dark:border-signal-500/20 dark:bg-void-800/50 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -240,6 +244,21 @@ export const AgentsPage: FunctionComponent = () => {
         tags.set(agentPresetId, [...current, label]);
       }
     };
+    const addBuiltIn = (label: string, builtInName: string) => {
+      const agentPresetId = presets.find((preset) => normalizeAgentName(preset.name) === normalizeAgentName(builtInName))?.id;
+      add(agentPresetId, label);
+    };
+    const addManualRoute = (
+      agentPresetId: string | null | undefined,
+      label: string,
+      builtInName: string,
+    ) => {
+      if (agentPresetId) {
+        add(agentPresetId, label);
+      } else {
+        addBuiltIn(label, builtInName);
+      }
+    };
 
     const routing = effectiveSettings?.settings.agents.routing;
     const qa = effectiveSettings?.settings.agents.qualityAssurance;
@@ -249,22 +268,28 @@ export const AgentsPage: FunctionComponent = () => {
         add(agentPresetId, "Coding Roster");
       }
     } else {
-      add(routing?.taskCoding.agentPresetId, "Coding");
+      addManualRoute(routing?.taskCoding.agentPresetId, "Coding", "Worker");
     }
 
-    add(routing?.ciFix.agentPresetId, "CI Fix");
-    add(routing?.mergeConflict.agentPresetId, "Merge Conflict");
-    add(routing?.dashboardReply.agentPresetId, "Dashboard Reply");
-    add(routing?.clarificationReply.agentPresetId, "Clarification Reply");
+    addManualRoute(routing?.ciFix.agentPresetId, "CI Fix", "Worker");
+    addManualRoute(routing?.mergeConflict.agentPresetId, "Merge Conflict", "Worker");
+    addManualRoute(routing?.dashboardReply.agentPresetId, "Dashboard Reply", "Worker");
+    addManualRoute(routing?.clarificationReply.agentPresetId, "Clarification Reply", "Project manager");
 
     if (qa?.enabled) {
-      if (qa.taskCompletion.enabled) add(qa.taskCompletion.agentPresetId, "QA Task");
-      if (qa.sprintCompletion.enabled) add(qa.sprintCompletion.agentPresetId, "QA Sprint");
-      if (qa.completedTaskWithoutPr.enabled) add(qa.completedTaskWithoutPr.agentPresetId, "QA No PR");
+      if (qa.taskCompletion.enabled) {
+        addManualRoute(qa.taskCompletion.agentPresetId, "QA Task", "Quality assurance agent");
+      }
+      if (qa.sprintCompletion.enabled) {
+        addManualRoute(qa.sprintCompletion.agentPresetId, "QA Sprint", "Quality assurance agent");
+      }
+      if (qa.completedTaskWithoutPr.enabled) {
+        addManualRoute(qa.completedTaskWithoutPr.agentPresetId, "QA No PR", "Quality assurance agent");
+      }
     }
 
     return tags;
-  }, [effectiveSettings]);
+  }, [effectiveSettings, presets]);
 
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
 
