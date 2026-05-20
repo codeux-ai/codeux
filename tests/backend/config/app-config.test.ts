@@ -136,7 +136,7 @@ describe("dashboardPortLoader", () => {
 describe("loadAppConfig", () => {
   it("assembles full config with CLI arg precedence", () => {
     process.env.JULES_API_KEY = "env-key";
-    const config = loadAppConfig(["node", "index.js", "--api-key", "cli-key"], tempDir);
+    const config = loadAppConfig(["node", "index.js", "--api-key", "cli-key", "--no-mcp-https"], tempDir);
     expect(config.apiKey).toBe("cli-key");
     expect(config.apiKeyArg).toBe("cli-key");
     expect(config.dashboardPort).toBe(4444);
@@ -156,7 +156,7 @@ describe("loadAppConfig", () => {
   });
 
   it("ignores legacy worker-host runtime flags and keeps project-manager defaults", () => {
-    const config = loadAppConfig(["node", "index.js", "--runtime-role", "worker-host"], tempDir);
+    const config = loadAppConfig(["node", "index.js", "--runtime-role", "worker-host", "--no-mcp-https"], tempDir);
     expect(config.runtimeRole).toBe("project_manager");
     expect(config.dashboardEnabled).toBe(true);
     expect(config.mcpHttpEnabled).toBe(false);
@@ -172,14 +172,14 @@ describe("loadAppConfig", () => {
     const config = loadAppConfig([
       "node",
       "index.js",
-      "--mcp-http",
-      "--mcp-http-port",
+      "--mcp-https",
+      "--mcp-https-port",
       "5555",
-      "--mcp-http-host",
+      "--mcp-https-host",
       "127.0.0.1",
-      "--mcp-http-path",
+      "--mcp-https-path",
       "remote-mcp",
-      "--mcp-http-auth-token",
+      "--mcp-https-auth-token",
       "secret-token",
     ], tempDir);
 
@@ -191,11 +191,11 @@ describe("loadAppConfig", () => {
   });
 
   it("enables MCP HTTP worker gateway from env", () => {
-    process.env.MCP_HTTP_ENABLED = "true";
-    process.env.MCP_HTTP_PORT = "7777";
-    process.env.MCP_HTTP_HOST = "localhost";
-    process.env.MCP_HTTP_PATH = "/workers";
-    process.env.MCP_HTTP_AUTH_TOKEN = "env-token";
+    process.env.MCP_HTTPS_ENABLED = "true";
+    process.env.MCP_HTTPS_PORT = "7777";
+    process.env.MCP_HTTPS_HOST = "localhost";
+    process.env.MCP_HTTPS_PATH = "/workers";
+    process.env.MCP_HTTPS_AUTH_TOKEN = "env-token";
 
     const config = loadAppConfig(["node", "index.js"], tempDir);
     expect(config.mcpHttpEnabled).toBe(true);
@@ -209,9 +209,9 @@ describe("loadAppConfig", () => {
     expect(() => loadAppConfig([
       "node",
       "index.js",
-      "--mcp-http",
-      "--mcp-http-host",
+      "--mcp-https",
+      "--mcp-https-host",
       "0.0.0.0",
-    ], tempDir)).toThrow("MCP HTTP auth token is required");
+    ], tempDir)).toThrow("MCP HTTPS auth token is required");
   });
 });

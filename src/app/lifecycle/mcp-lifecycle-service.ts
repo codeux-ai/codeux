@@ -171,7 +171,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         }
       }
     } catch (error) {
-      deps.logger.error("MCP HTTP request failed", { error, path: req.path, method: req.method });
+      deps.logger.error("MCP HTTPS request failed", { error, path: req.path, method: req.method });
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: "2.0",
@@ -205,7 +205,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
     deps.logger.error("Failed to recover runtime state on startup", { error });
   }
 
-  deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTP server running`, {
+  deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP HTTPS server running`, {
     host: deps.host,
     port: resolvedPort,
     path: deps.path,

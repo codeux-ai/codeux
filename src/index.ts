@@ -35,23 +35,24 @@ export async function main(args: string[] = process.argv): Promise<void> {
     console.log("  --runtime-role VALUE");
     console.log("                    Runtime role: project_manager (default) or worker-host");
     console.log("  --headless        Start MCP-only without binding the dashboard");
-    console.log("  --mcp-http        Enable the remote MCP HTTP worker gateway");
-    console.log("  --mcp-http-port N Port for the remote MCP HTTP worker gateway");
-    console.log("  --mcp-http-host H Host/interface for the remote MCP HTTP worker gateway");
-    console.log("  --mcp-http-path P Path for the remote MCP HTTP worker gateway (default: /mcp)");
-    console.log("  --mcp-http-auth-token VALUE");
-    console.log("                    Bearer token required for MCP HTTP requests when enabled");
+    console.log("  --mcp-https       Enable the remote MCP HTTPS worker gateway (enabled by default)");
+    console.log("  --no-mcp-https    Disable the remote MCP HTTPS worker gateway");
+    console.log("  --mcp-https-port N Port for the remote MCP HTTPS worker gateway");
+    console.log("  --mcp-https-host H Host/interface for the remote MCP HTTPS worker gateway");
+    console.log("  --mcp-https-path P Path for the remote MCP HTTPS worker gateway (default: /mcp)");
+    console.log("  --mcp-https-auth-token VALUE");
+    console.log("                    Bearer token required for MCP HTTPS requests when on non-loopback host");
     console.log("  --help, -h        Show this help message");
     console.log("");
     console.log("Environment Variables:");
-    console.log("  JULES_API_KEY     Jules API key");
-    console.log("  DASHBOARD_PORT    Port for the dashboard (default: 4444)");
-    console.log("  MCP_HTTP_ENABLED  Enable the MCP HTTP worker gateway");
-    console.log("  MCP_HTTP_PORT     Port for the MCP HTTP worker gateway");
-    console.log("  MCP_HTTP_HOST     Host/interface for the MCP HTTP worker gateway");
-    console.log("  MCP_HTTP_PATH     Path for the MCP HTTP worker gateway");
-    console.log("  MCP_HTTP_AUTH_TOKEN");
-    console.log("                    Bearer token for MCP HTTP requests");
+    console.log("  JULES_API_KEY      Jules API key");
+    console.log("  DASHBOARD_PORT     Port for the dashboard (default: 4444)");
+    console.log("  MCP_HTTPS_ENABLED  Enable the MCP HTTPS worker gateway (default: true)");
+    console.log("  MCP_HTTPS_PORT     Port for the MCP HTTPS worker gateway");
+    console.log("  MCP_HTTPS_HOST     Host/interface for the MCP HTTPS worker gateway");
+    console.log("  MCP_HTTPS_PATH     Path for the MCP HTTPS worker gateway");
+    console.log("  MCP_HTTPS_AUTH_TOKEN");
+    console.log("                     Bearer token for MCP HTTPS requests");
     process.exit(0);
   }
 
