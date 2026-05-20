@@ -79,32 +79,132 @@ export const InteractiveUsageChart: FunctionComponent<{
 
   const buckets = stats.buckets;
 
-  const [dimensions, setDimensions] = useState({ width: 1200, height: 540 });
+  const dimensionsRef = useRef({ width: 1200, height: 540 });
+  const statsRef = useRef(stats);
+  const viewStartRef = useRef(zoomRange?.start ?? 0);
+  const viewEndRef = useRef(zoomRange?.end ?? Math.max(0, buckets.length - 1));
+  const hoveredIndexRef = useRef(hoveredIndex);
+
+  // Update refs to latest render values
+  statsRef.current = stats;
+  viewStartRef.current = zoomRange?.start ?? 0;
+  viewEndRef.current = zoomRange?.end ?? Math.max(0, buckets.length - 1);
+  hoveredIndexRef.current = hoveredIndex;
+
+  const padding = 34;
+  const viewStart = viewStartRef.current;
+  const viewEnd = viewEndRef.current;
+  const visibleBuckets = getVisibleBuckets(buckets, viewStart, viewEnd);
+
+  // Keep the visibleBucketsRef updated
+  const visibleBucketsRef = useRef(visibleBuckets);
+  visibleBucketsRef.current = visibleBuckets;
+
+  const chartData = useMemo(() => {
+    return normalizeChartSeries(stats.chartSeries, visibleBuckets, viewStart, dimensionsRef.current.width, dimensionsRef.current.height, padding);
+  }, [stats.chartSeries, visibleBuckets, viewStart, padding]); // Intentionally omitting dimensions to prevent React re-renders
 
   useLayoutEffect(() => {
     if (!svgContainerRef.current || typeof ResizeObserver === 'undefined') return;
+
+    const updateChartDOM = (width: number, height: number) => {
+      const svg = svgContainerRef.current?.querySelector('svg');
+      if (!svg) return;
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+      const newChartData = normalizeChartSeries(
+        statsRef.current.chartSeries,
+        visibleBucketsRef.current,
+        viewStartRef.current,
+        width,
+        height,
+        padding
+      );
+      const newXPositions = newChartData[0]?.points.map((p) => p.x) ?? [];
+
+      const gridLines = svg.querySelectorAll('[data-grid-line]');
+      gridLines.forEach((line, index) => {
+        line.setAttribute('x2', String(width - padding));
+        line.setAttribute('y1', String(padding + ((height - padding * 2) / 4) * index));
+        line.setAttribute('y2', String(padding + ((height - padding * 2) / 4) * index));
+      });
+
+      const areas = svg.querySelectorAll('[data-chart-area]');
+      areas.forEach((area) => {
+        const seriesId = area.getAttribute('data-series-id');
+        const series = newChartData.find(s => s.id === seriesId);
+        if (series) area.setAttribute('d', series.areaPath);
+      });
+
+      const paths = svg.querySelectorAll('[data-chart-path]');
+      paths.forEach((path) => {
+        const seriesId = path.getAttribute('data-series-id');
+        const series = newChartData.find(s => s.id === seriesId);
+        if (series) path.setAttribute('d', series.path);
+      });
+
+      const hoverLine = svg.querySelector('[data-hover-line]');
+      if (hoverLine && hoveredIndexRef.current !== null && newXPositions[hoveredIndexRef.current]) {
+        hoverLine.setAttribute('x1', String(newXPositions[hoveredIndexRef.current]));
+        hoverLine.setAttribute('x2', String(newXPositions[hoveredIndexRef.current]));
+        hoverLine.setAttribute('y2', String(height - padding));
+      }
+
+      const points = svg.querySelectorAll('[data-chart-point]');
+      points.forEach((point) => {
+        const seriesId = point.getAttribute('data-series-id');
+        const index = parseInt(point.getAttribute('data-point-index') || '0', 10);
+        const series = newChartData.find(s => s.id === seriesId);
+        if (series && series.points[index]) {
+          point.setAttribute('cx', String(series.points[index].x));
+          point.setAttribute('cy', String(series.points[index].y));
+        }
+      });
+
+      const hoverRects = svg.querySelectorAll('[data-hover-rect]');
+      hoverRects.forEach((rect) => {
+        const index = parseInt(rect.getAttribute('data-rect-index') || '0', 10);
+        const x = newXPositions[index];
+        if (x === undefined) return;
+        const startX = index === 0 ? padding : (newXPositions[index - 1]! + x) / 2;
+        const endX = index === newXPositions.length - 1 ? width - padding : (x + newXPositions[index + 1]!) / 2;
+        const rectWidth = Math.max(8, endX - startX);
+        rect.setAttribute('x', String(startX));
+        rect.setAttribute('width', String(rectWidth));
+        rect.setAttribute('height', String(height - padding * 2));
+      });
+
+      const axisLabels = svg.querySelectorAll('[data-axis-label]');
+      axisLabels.forEach((label) => {
+        const index = parseInt(label.getAttribute('data-label-index') || '0', 10);
+        if (newXPositions[index] !== undefined) {
+          label.setAttribute('x', String(newXPositions[index]));
+          label.setAttribute('y', String(height - 8));
+        }
+      });
+    };
+
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry && entry.contentRect.width > 0) {
-        setDimensions({
-          width: entry.contentRect.width,
-          height: Math.max(540, entry.contentRect.height) // maintain a minimum height
-        });
+        const newWidth = entry.contentRect.width;
+        const newHeight = Math.max(540, entry.contentRect.height);
+
+        // Only update if dimensions actually changed
+        if (dimensionsRef.current.width !== newWidth || dimensionsRef.current.height !== newHeight) {
+          dimensionsRef.current = { width: newWidth, height: newHeight };
+          // Update DOM directly bypassing React render loop
+          requestAnimationFrame(() => updateChartDOM(newWidth, newHeight));
+        }
       }
     });
+
     observer.observe(svgContainerRef.current);
+
     return () => observer.disconnect();
-  }, []);
+  }, [padding]); // Add dependencies as needed, though refs are mutable
 
-  const { width, height } = dimensions;
-  const padding = 34;
-  const viewStart = zoomRange?.start ?? 0;
-  const viewEnd = zoomRange?.end ?? Math.max(0, buckets.length - 1);
-  const visibleBuckets = getVisibleBuckets(buckets, viewStart, viewEnd);
-
-  const chartData = useMemo(() => {
-    return normalizeChartSeries(stats.chartSeries, visibleBuckets, viewStart, width, height, padding);
-  }, [stats.chartSeries, visibleBuckets, viewStart, width, height, padding]);
+  const { width, height } = dimensionsRef.current;
 
   const seriesGroups = useMemo(() => groupChartSeries(stats.chartSeries), [stats.chartSeries]);
   const activeSeriesCount = Object.values(enabledSeries).filter(Boolean).length;
