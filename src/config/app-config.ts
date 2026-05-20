@@ -168,12 +168,12 @@ export const dashboardPortLoader = (projectRoot: string): number => {
 };
 
 const mcpHttpPortLoader = (argv: string[], projectRoot: string, dashboardPort: number): number | null => {
-  const cliPort = readPort(parseStringFlag(argv, "--mcp-http-port"), -1);
+  const cliPort = readPort(parseStringFlag(argv, "--mcp-https-port") ?? parseStringFlag(argv, "--mcp-http-port"), -1);
   if (cliPort !== -1) {
     return cliPort;
   }
 
-  const envPort = readPort(process.env.MCP_HTTP_PORT, -1);
+  const envPort = readPort(process.env.MCP_HTTPS_PORT ?? process.env.MCP_HTTP_PORT, -1);
   if (envPort !== -1) {
     return envPort;
   }
@@ -188,6 +188,9 @@ const mcpHttpPortLoader = (argv: string[], projectRoot: string, dashboardPort: n
       const raw = fs.readFileSync(configPath, "utf-8");
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const candidates: unknown[] = [
+        parsed.mcpHttpsPort,
+        parsed.MCP_HTTPS_PORT,
+        (parsed.mcpHttps as Record<string, unknown> | undefined)?.port,
         parsed.mcpHttpPort,
         parsed.MCP_HTTP_PORT,
         (parsed.mcpHttp as Record<string, unknown> | undefined)?.port,
@@ -201,8 +204,13 @@ const mcpHttpPortLoader = (argv: string[], projectRoot: string, dashboardPort: n
     }
   }
 
-  const explicitEnable = hasFlag(argv, "--mcp-http") || parseBooleanEnv(process.env.MCP_HTTP_ENABLED) === true;
-  return explicitEnable ? dashboardPort + 1 : null;
+  const explicitDisable = hasFlag(argv, "--no-mcp") ||
+    hasFlag(argv, "--no-mcp-https") ||
+    hasFlag(argv, "--no-mcp-http") ||
+    parseBooleanEnv(process.env.MCP_HTTPS_ENABLED) === false ||
+    parseBooleanEnv(process.env.MCP_HTTP_ENABLED) === false;
+
+  return explicitDisable ? null : dashboardPort + 1;
 };
 
 /**
@@ -215,21 +223,28 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
   const dashboardPort = dashboardPortLoader(projectRoot);
   const runtimeRole = parseRuntimeRoleArg(argv);
   const dashboardEnabled = !hasHeadlessArg(argv);
-  const mcpHttpHost = (parseStringFlag(argv, "--mcp-http-host")?.trim()
+  const mcpHttpHost = (parseStringFlag(argv, "--mcp-https-host")?.trim()
+    || parseStringFlag(argv, "--mcp-http-host")?.trim()
+    || process.env.MCP_HTTPS_HOST?.trim()
     || process.env.MCP_HTTP_HOST?.trim()
     || "127.0.0.1");
   const mcpHttpPort = mcpHttpPortLoader(argv, projectRoot, dashboardPort);
   const mcpHttpEnabled = mcpHttpPort !== null && mcpHttpPort > 0;
   const mcpHttpPath = normalizePathValue(
-    parseStringFlag(argv, "--mcp-http-path")?.trim() || process.env.MCP_HTTP_PATH?.trim(),
+    parseStringFlag(argv, "--mcp-https-path")?.trim()
+    || parseStringFlag(argv, "--mcp-http-path")?.trim()
+    || process.env.MCP_HTTPS_PATH?.trim()
+    || process.env.MCP_HTTP_PATH?.trim(),
     "/mcp",
   );
-  const mcpHttpAuthToken = parseStringFlag(argv, "--mcp-http-auth-token")?.trim()
+  const mcpHttpAuthToken = parseStringFlag(argv, "--mcp-https-auth-token")?.trim()
+    || parseStringFlag(argv, "--mcp-http-auth-token")?.trim()
+    || process.env.MCP_HTTPS_AUTH_TOKEN?.trim()
     || process.env.MCP_HTTP_AUTH_TOKEN?.trim()
     || null;
 
   if (mcpHttpEnabled && !isLoopbackHost(mcpHttpHost) && !mcpHttpAuthToken) {
-    throw new Error("MCP HTTP auth token is required when binding the MCP HTTP server to a non-loopback host.");
+    throw new Error("MCP HTTPS auth token is required when binding the MCP HTTPS server to a non-loopback host.");
   }
 
   return {
