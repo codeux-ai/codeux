@@ -9,6 +9,7 @@ import type {
   UpdateSprintInput,
 } from "../contracts/project-management-types.js";
 import type { SprintSettingsOverride } from "../contracts/settings-scope-types.js";
+import type { JiraIssueSearchAssignee, JiraIssueSearchStatus } from "../services/jira-api-client.js";
 
 export function registerSprintRoutes(router: Express, deps: DashboardDependencies): void {
   router.get("/api/projects/:projectId/sprints", syncRoute((req, res) => {
@@ -22,8 +23,21 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
   router.get("/api/projects/:projectId/jira/search", asyncRoute(async (req, res) => {
     try {
       const projectId = requireTrimmedString(req.params.projectId, "projectId");
-      const jql = requireTrimmedString(req.query.jql as string | undefined, "jql");
-      res.json(await deps.searchJiraIssues(projectId, jql));
+      const labels = typeof req.query.labels === "string"
+        ? req.query.labels.split(",").map((label) => label.trim()).filter(Boolean)
+        : [];
+      const status = parseJiraStatus(req.query.status);
+      const assignee = parseJiraAssignee(req.query.assignee);
+      res.json(await deps.searchJiraIssues(projectId, {
+        jql: parseTrimmedString(req.query.jql),
+        projectKey: parseTrimmedString(req.query.projectKey),
+        search: parseTrimmedString(req.query.search),
+        status,
+        assignee,
+        assigneeText: parseTrimmedString(req.query.assigneeText),
+        labels,
+        maxResults: typeof req.query.limit === "string" ? Number(req.query.limit) : undefined,
+      }));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to search Jira issues"));
     }
@@ -182,4 +196,16 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
       res.status(400).json(toErrorResponse(error, "Failed to delete sprint"));
     }
   }));
+}
+
+function parseJiraStatus(value: unknown): JiraIssueSearchStatus | undefined {
+  return value === "all" || value === "done" || value === "in_progress" || value === "open"
+    ? value
+    : undefined;
+}
+
+function parseJiraAssignee(value: unknown): JiraIssueSearchAssignee | undefined {
+  return value === "me" || value === "unassigned" || value === "any"
+    ? value
+    : undefined;
 }

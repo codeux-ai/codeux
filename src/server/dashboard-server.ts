@@ -6,7 +6,7 @@ import { createServer, request as httpRequest } from "http";
 import type { IncomingMessage } from "http";
 import net from "net";
 import type { Duplex } from "stream";
-import type { JiraIssueSearchResult } from "../services/jira-api-client.js";
+import type { JiraIssueSearchInput, JiraIssueSearchResult } from "../services/jira-api-client.js";
 import type {
   DashboardStatus,
   ExecutionAttentionItemSummary,
@@ -164,7 +164,7 @@ export interface DashboardServerOptions {
   createTask: (projectId: string, input: CreateTaskInput) => TaskRecord;
   updateTask: (taskId: string, input: UpdateTaskInput) => TaskRecord;
   deleteTask: (taskId: string) => void;
-  searchJiraIssues: (projectId: string, jql: string) => Promise<JiraIssueSearchResult[]>;
+  searchJiraIssues: (projectId: string, input: JiraIssueSearchInput) => Promise<JiraIssueSearchResult[]>;
   listSprintLinkedIssues: (sprintId: string) => SprintLinkedIssueRecord[];
   replaceSprintLinkedIssues: (sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]) => SprintLinkedIssueRecord[];
   listConnections: (projectId: string) => McpConnectionRecord[];

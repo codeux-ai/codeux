@@ -29,6 +29,10 @@ export interface JiraIssueSearchResult {
   labels: string[];
   assignees: string[];
   projectKey: string;
+  issueType: string | null;
+  priority: string | null;
+  bodyPreview: string;
+  updatedAt: string | null;
 }
 import type {
   ExecutionAssignedWorkerSummary,
@@ -113,11 +117,29 @@ export interface RemoteIssueSummary extends SprintLinkedIssueInput {
 
 export const searchJiraIssues = async (
   projectId: string,
-  jql: string,
+  input: {
+    projectKey?: string;
+    search?: string;
+    status?: "open" | "in_progress" | "done" | "all";
+    assignee?: "any" | "me" | "unassigned";
+    assigneeText?: string;
+    labels?: string[];
+    limit?: number;
+    jql?: string;
+  },
   signal?: AbortSignal,
 ): Promise<JiraIssueSearchResult[]> => {
+  const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/jira/search`, window.location.origin);
+  if (input.projectKey?.trim()) url.searchParams.set("projectKey", input.projectKey.trim());
+  if (input.search?.trim()) url.searchParams.set("search", input.search.trim());
+  if (input.status) url.searchParams.set("status", input.status);
+  if (input.assignee) url.searchParams.set("assignee", input.assignee);
+  if (input.assigneeText?.trim()) url.searchParams.set("assigneeText", input.assigneeText.trim());
+  if (input.labels?.length) url.searchParams.set("labels", input.labels.join(","));
+  if (input.limit) url.searchParams.set("limit", String(input.limit));
+  if (input.jql?.trim()) url.searchParams.set("jql", input.jql.trim());
   return fetchJson<JiraIssueSearchResult[]>(
-    `/api/projects/${encodeURIComponent(projectId)}/jira/search?jql=${encodeURIComponent(jql)}`,
+    `${url.pathname}${url.search}`,
     { signal }
   );
 };

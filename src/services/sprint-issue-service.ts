@@ -50,14 +50,23 @@ export class SprintIssueService {
     this.logger = deps.logger ?? createLogger({ bindings: { component: "sprint-issue-service" } });
   }
 
-  async searchJiraIssues(host: string, email: string, apiToken: string, jql: string): Promise<jiraApiClient.JiraIssueSearchResult[]> {
+  async searchJiraIssues(
+    host: string,
+    email: string,
+    apiToken: string,
+    input: string | jiraApiClient.JiraIssueSearchInput,
+    defaultProjectKey = '',
+  ): Promise<jiraApiClient.JiraIssueSearchResult[]> {
     if (!this.deps.jiraApiClient) {
       throw new Error("Jira API client is not injected.");
     }
     if (!host.trim() || !apiToken.trim()) {
       throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
     }
-    return this.deps.jiraApiClient.searchIssues(host, email, apiToken, jql);
+    const searchInput = typeof input === "string"
+      ? input
+      : { ...input, projectKey: input.projectKey || defaultProjectKey };
+    return this.deps.jiraApiClient.searchIssues(host, email, apiToken, searchInput);
   }
 
   replaceLinkedIssues(sprintId: string, projectId: string, issues: SprintLinkedIssueInput[]): SprintLinkedIssueRecord[] {

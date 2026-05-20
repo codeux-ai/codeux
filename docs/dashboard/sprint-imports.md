@@ -56,7 +56,11 @@ When the GitHub token is empty, the server falls back to local `gh` CLI authenti
 
 ## Jira Issue Import
 
-Use `Import -> Jira Issues` to search Jira with JQL, multi-select issues, and attach them to the sprint composer. The Jira modal uses `Settings -> Integrations -> Jira -> Default project` to prefill a query such as `project = OPS ORDER BY updated DESC`, and operators can replace it with any valid JQL.
+Use `Import -> Jira Issues` to search Jira with guided filters, multi-select issues, and attach them to the sprint composer. The Jira modal follows the same interaction model as the GitHub/GitLab importer: project key, search text, status, assignee text, optional labels, selectable issue cards, source links, and per-issue `Append Conversation` toggles.
+
+Operators do not need to write JQL in the dashboard. The server builds the Jira query from the selected filters, defaults to open issues sorted by recent updates, and uses `Settings -> Integrations -> Jira -> Default project` to prefill the project key when available.
+
+The assignee field accepts a Jira user full name, email address, or account ID. It also accepts `me` / `currentUser()` for the connected Jira account and `unassigned` / `empty` for issues without an assignee.
 
 Jira uses system-scoped settings from `Settings -> Integrations -> Jira`:
 - site URL, for example `https://company.atlassian.net`
@@ -66,7 +70,7 @@ Jira uses system-scoped settings from `Settings -> Integrations -> Jira`:
 - close transition name, defaulting to `Done`
 - Jira-specific auto-close toggle
 
-Selected Jira issues are loaded through the same prompt-context path as GitHub/GitLab imports. The sprint prompt receives the Jira description and, when `Append Conversation` is enabled, Jira comments. Imported Jira cards are persisted as linked sprint issues with provider `jira`, project key, issue key, labels, assignees, status, and source URL.
+Selected Jira issues are loaded through the same prompt-context path as GitHub/GitLab imports. The sprint prompt receives the Jira description and, when `Append Conversation` is enabled, Jira comments. Imported Jira cards are persisted as linked sprint issues with provider `jira`, project key, issue key, labels, assignees, status, and source URL. The import result cards also surface Jira issue type, priority, assignee, labels, status, and a description preview when Jira returns those fields.
 
 ## Auto-Close
 
