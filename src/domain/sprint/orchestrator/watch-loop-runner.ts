@@ -533,7 +533,7 @@ export class WatchLoopRunner {
           sprintNumber: scopedExecutionContext.sprintNumber,
         });
 
-        if (decision) {
+        if (decision && !(githubMode === "LOCAL" && subtasks.every(task => isCompletedTaskSettled(task) && task.is_merged))) {
           report += completionGuidance;
           report += mergeFeedback.text;
 

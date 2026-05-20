@@ -25,6 +25,10 @@ const buildMainCommentsLine = (settings: CiIntelligenceSettings): string => {
 };
 
 export const runCompletionStep = async (options: CompletionStepOptions): Promise<string> => {
+  if (options.githubMode === "LOCAL") {
+    return `\n## 🏁 SPRINT COMPLETION STEPS\n1. **Final Merge**: Run \`git checkout ${options.defaultBranch} && git merge ${options.featureBranch}\` locally.\n2. **Next Sprint**: Proceed with Sprint ${options.sprintNumber + 1} once \`${options.defaultBranch}\` is green.\n`;
+  }
+
   return await options.renderInstruction("completionSteps", {
     git_manager_skill: options.githubMode === "REMOTE" ? "`git_manager_remote`" : "`git_manager_local`",
     feature_branch: options.featureBranch,
