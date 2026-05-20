@@ -1,6 +1,25 @@
 import type { ProviderId } from "../../contracts/app-types.js";
 import type { CommandResult } from "../subprocess/command-runner.js";
 
+export function isErrorWithMessage(error: unknown): error is { message: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as Record<string, unknown>).message === "string"
+  );
+}
+
+export function getErrorMessage(error: unknown, fallback: string = "An unknown error occurred"): string {
+  if (typeof error === "string") {
+    return error;
+  }
+  if (isErrorWithMessage(error)) {
+    return error.message;
+  }
+  return fallback;
+}
+
 export class ProviderQuotaError extends Error {
   readonly category: ProviderErrorCategory;
   readonly retryAfterIso: string | null;

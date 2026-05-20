@@ -4,6 +4,7 @@ import { asNonEmptyString, parsePayloadJson, stripMarkdown } from "./execution-u
 import { ExecutionHumanInterventionSummary, ExecutionRuntimeEventSummary } from "../../contracts/app-types.js";
 import { ProjectAttentionSummaryRow } from "./execution-repository-types.js";
 import { ExecutionRuntimeEventSummaryRow } from "./execution-repository-types.js";
+import { getErrorMessage } from "../../shared/providers/provider-error-classifier.js";
 
 export function isOperatorInterventionAttentionRow(row: ProjectAttentionSummaryRow): boolean {
   return [
@@ -193,10 +194,10 @@ function buildHumanInterventionSummaryFromEvents(
 
   for (const errorEvent of errorEvents) {
     const payload = parsePayloadJson(errorEvent.payload_json);
-    if (!payload?.error) {
+    if (!payload || !("error" in payload)) {
       continue;
     }
-    const reason = typeof payload.error === "string" ? payload.error : (payload.error as any).message || "An unknown execution error occurred";
+    const reason = getErrorMessage(payload.error, "An unknown execution error occurred");
     const shortReason = reason.length > 500 ? reason.substring(0, 500) + "..." : reason;
 
     if (errorEvent.event_type === "dispatch_error") {
