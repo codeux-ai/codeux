@@ -72,6 +72,18 @@ export class ManagementToolHandler {
     this.previewActions = new PreviewActions(deps.sprintPreviewService);
   }
 
+  private formatError(domain: string, action: string, error: unknown): { content: Array<{ type: string; text: string }> } {
+    const envelope: ManagementResponseEnvelope = {
+      result: {
+        status: "error",
+        domain,
+        action,
+        message: error instanceof Error ? error.message : String(error),
+      },
+    };
+    return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+  }
+
   async handleManageCodeUx(args: ManageCodeUxArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
     try {
       let envelope: ManagementResponseEnvelope;
@@ -121,15 +133,7 @@ export class ManagementToolHandler {
 
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
-      const envelope: ManagementResponseEnvelope = {
-        result: {
-          status: "error",
-          domain: args.domain,
-          action: args.action,
-          message: error instanceof Error ? error.message : String(error),
-        },
-      };
-      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
+      return this.formatError(args.domain, args.action, error);
     }
   }
 
@@ -144,7 +148,7 @@ export class ManagementToolHandler {
       );
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
-      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "projects", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+      return this.formatError("projects", args.action, error);
     }
   }
 
@@ -153,7 +157,7 @@ export class ManagementToolHandler {
       const envelope = await this.sprintActions.handleSprintAction({ domain: "sprints", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
-      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "sprints", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+      return this.formatError("sprints", args.action, error);
     }
   }
 
@@ -162,7 +166,7 @@ export class ManagementToolHandler {
       const envelope = await this.taskActions.handleTaskAction({ domain: "tasks", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
-      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "tasks", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+      return this.formatError("tasks", args.action, error);
     }
   }
 
@@ -171,7 +175,7 @@ export class ManagementToolHandler {
       const envelope = await this.agentActions.handleAgentAction({ domain: "agents", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
-      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "agents", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+      return this.formatError("agents", args.action, error);
     }
   }
 
@@ -180,7 +184,7 @@ export class ManagementToolHandler {
       const envelope = await this.memoryActions.handleMemoryAction({ domain: "memory", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
-      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "memory", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+      return this.formatError("memory", args.action, error);
     }
   }
 
@@ -189,7 +193,7 @@ export class ManagementToolHandler {
       const envelope = await this.settingsActions.handleSettingsAction({ domain: "settings", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval });
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
-      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "settings", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+      return this.formatError("settings", args.action, error);
     }
   }
 
@@ -199,7 +203,7 @@ export class ManagementToolHandler {
       const envelope = await this.previewActions.handlePreviewAction({ domain: "preview", action: args.action, payload: args as unknown as Record<string, unknown>, approval: args.approval }, currentHost);
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
-      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "preview", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+      return this.formatError("preview", args.action, error);
     }
   }
 
@@ -208,7 +212,7 @@ export class ManagementToolHandler {
       const envelope = await handleTelemetryActions({ domain: "telemetry", action: args.action, payload: args as unknown as Record<string, unknown> }, this.deps.executionRepository);
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
-      return { content: [{ type: "text", text: JSON.stringify({ result: { status: "error", domain: "telemetry", action: args.action, message: error instanceof Error ? error.message : String(error) } }, null, 2) }] };
+      return this.formatError("telemetry", args.action, error);
     }
   }
 }
