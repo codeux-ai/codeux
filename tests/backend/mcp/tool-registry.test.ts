@@ -53,6 +53,21 @@ describe("ToolRegistry", () => {
       payload: {},
     });
   });
+
+  it("can register and dispatch manage_projects", async () => {
+    const registry = new ToolRegistry<McpToolArgsByName, string>();
+    const handler = vi.fn(async (args: McpToolArgsByName["manage_projects"]) => `manage_projects:${args.action}`);
+
+    registry.register("manage_projects", handler);
+
+    const result = await registry.dispatch("manage_projects", {
+      action: "list",
+    });
+    expect(result).toBe("manage_projects:list");
+    expect(handler).toHaveBeenCalledWith({
+      action: "list",
+    });
+  });
 });
 
 const compileTimeTypeChecks = (): void => {

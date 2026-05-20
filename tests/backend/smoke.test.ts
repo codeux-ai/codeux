@@ -49,6 +49,8 @@ describe("Smoke Test", () => {
     expect(toolNames).toContain("listen");
     expect(toolNames).toContain("generate_dashboard_reply");
     expect(toolNames).toContain("manage_code_ux");
+    expect(toolNames).toContain("manage_projects");
+    expect(toolNames).toContain("manage_sprints");
 
     errorSpy.mockRestore();
     warnSpy.mockRestore();
