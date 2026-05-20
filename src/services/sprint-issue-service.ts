@@ -54,6 +54,9 @@ export class SprintIssueService {
     if (!this.deps.jiraApiClient) {
       throw new Error("Jira API client is not injected.");
     }
+    if (!host.trim() || !apiToken.trim()) {
+      throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
+    }
     return this.deps.jiraApiClient.searchIssues(host, email, apiToken, jql);
   }
 
@@ -107,8 +110,10 @@ export class SprintIssueService {
     for (const issue of normalized) {
       if (issue.provider === "github") {
         contexts.push(await this.getGitHubIssuePromptContext(issue, settings.git.githubToken || ""));
-      } else {
+      } else if (issue.provider === "gitlab") {
         contexts.push(await this.getGitLabIssuePromptContext(issue, settings.git.gitlabToken || ""));
+      } else {
+        contexts.push(await this.getJiraIssuePromptContext(issue, settings));
       }
     }
     return contexts;
@@ -126,7 +131,13 @@ export class SprintIssueService {
       return { reportText: "", closed: 0, failed: 0, skipped: 0 };
     }
 
-    if (!settings.git.autoCloseLinkedIssues) {
+    const closableIssues = linkedIssues.filter((issue) => (
+      issue.provider === "jira"
+        ? settings.jira.autoCloseLinkedIssues
+        : settings.git.autoCloseLinkedIssues
+    ));
+
+    if (closableIssues.length === 0) {
       return {
         reportText: `\n### Linked Issues\n- Auto-close is disabled. ${linkedIssues.length} linked issue${linkedIssues.length === 1 ? "" : "s"} left open.\n`,
         closed: 0,
@@ -137,8 +148,12 @@ export class SprintIssueService {
 
     let closed = 0;
     let failed = 0;
+    const skipped = linkedIssues.length - closableIssues.length;
     const lines = ["", "### Linked Issues"];
-    for (const issue of linkedIssues) {
+    if (skipped > 0) {
+      lines.push(`- Auto-close is disabled for ${skipped} linked issue${skipped === 1 ? "" : "s"}.`);
+    }
+    for (const issue of closableIssues) {
       try {
         await this.closeRemoteIssue(issue, settings);
         this.deps.projectManagementRepository.updateSprintLinkedIssueCloseState(issue.id, {
@@ -169,7 +184,7 @@ export class SprintIssueService {
       }
     }
 
-    return { reportText: `${lines.join("\n")}\n`, closed, failed, skipped: 0 };
+    return { reportText: `${lines.join("\n")}\n`, closed, failed, skipped };
   }
 
   private async closeRemoteIssue(issue: SprintLinkedIssueRecord, settings: DashboardSettings): Promise<void> {
@@ -505,6 +520,36 @@ export class SprintIssueService {
     });
   }
 
+  private async getJiraIssuePromptContext(input: IssuePromptContextInput, settings: DashboardSettings): Promise<IssuePromptContext> {
+    if (!this.deps.jiraApiClient) {
+      throw new Error("Jira API client is not injected.");
+    }
+    if (!settings.jira.host.trim() || !settings.jira.apiToken.trim()) {
+      throw new Error("Jira site URL and API token must be configured in Settings -> Integrations.");
+    }
+
+    const issue = await this.deps.jiraApiClient.getIssue(
+      settings.jira.host,
+      settings.jira.email,
+      settings.jira.apiToken,
+      input.issueKey || input.title,
+    );
+
+    return buildIssuePromptContext(input, {
+      title: issue.title,
+      url: issue.url,
+      state: issue.state,
+      body: issue.descriptionMarkdown || "",
+      author: null,
+      createdAt: null,
+      updatedAt: null,
+      labels: issue.labels,
+      assignees: issue.assignees,
+      conversationMarkdown: issue.commentsMarkdown || "",
+      includeConversation: input.includeConversation !== false,
+    });
+  }
+
   private requireProject(projectId: string): ProjectSummary {
     const project = this.deps.projectManagementRepository.getProject(projectId);
     if (!project) {
@@ -645,7 +690,7 @@ function normalizeIssuePromptContextInputs(issues: IssuePromptContextInput[]): I
     const issueNumber = Math.trunc(issue.issueNumber);
     const title = issue.title.trim();
     const url = issue.url.trim();
-    if ((issue.provider !== "github" && issue.provider !== "gitlab") || !hostDomain || !repository || !title || !url || !Number.isFinite(issueNumber) || issueNumber < 1) {
+    if ((issue.provider !== "github" && issue.provider !== "gitlab" && issue.provider !== "jira") || !hostDomain || !repository || !title || !url || !Number.isFinite(issueNumber) || issueNumber < 1) {
       continue;
     }
     const key = `${issue.provider}:${hostDomain}:${repository}:${issueNumber}`;
@@ -658,7 +703,7 @@ function normalizeIssuePromptContextInputs(issues: IssuePromptContextInput[]): I
       hostDomain,
       repository,
       issueNumber,
-      issueKey: issue.issueKey?.trim() || `${issue.provider === "github" ? "#" : "!"}${issueNumber}`,
+      issueKey: issue.issueKey?.trim() || `${issue.provider === "github" ? "#" : issue.provider === "gitlab" ? "!" : ""}${issueNumber}`,
       title,
       url,
       state: issue.state?.trim() || "open",

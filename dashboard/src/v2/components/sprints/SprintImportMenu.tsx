@@ -1,7 +1,8 @@
 /* istanbul ignore file */
 import { h } from "preact";
 import { useState, useRef, useEffect } from "preact/hooks";
-import { Download, FileText, Github, Gitlab, Trello } from "lucide-preact";
+import { Download, FileText, Github, Gitlab } from "lucide-preact";
+import { JiraIcon } from "../icons/JiraIcon.js";
 
 interface SprintImportMenuProps {
   disabled?: boolean;
@@ -141,7 +142,7 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown, onImportIssues, o
             className="group flex w-full items-center gap-3 rounded-[0.9rem] px-3 py-2.5 text-left transition-all hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0052CC]/10 text-[#0052CC] transition-transform group-hover:scale-110 group-hover:bg-[#0052CC]/20 dark:bg-[#4C9AFF]/10 dark:text-[#4C9AFF] dark:group-hover:bg-[#4C9AFF]/20">
-              <Trello className="h-4 w-4" strokeWidth={2} />
+              <JiraIcon className="h-4 w-4" />
             </div>
             <div className="flex flex-1 flex-col">
               <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-white">

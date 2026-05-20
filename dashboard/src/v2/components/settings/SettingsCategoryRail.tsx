@@ -25,7 +25,7 @@ export const CATEGORY_SEARCH_HINTS: Record<CategoryId, string[]> = {
   browser: ["browser", "preview", "container", "port", "routing", "rebuild", "launch", "concurrent", "iframe"],
   agents: ["agent", "prompt", "template", "markdown", "instruction"],
   memory: ["memory", "embedding", "capture", "promotion", "learning"],
-  integrations: ["github", "gitlab", "token", "api key", "auth", "credential", "integration"],
+  integrations: ["github", "gitlab", "jira", "atlassian", "token", "api key", "auth", "credential", "integration"],
   danger: ["reset", "delete", "danger", "database", "wipe"],
 };
 

@@ -261,6 +261,64 @@ describe("SprintIssueService", () => {
     expect(contexts[0]?.issueConversationMarkdown).toContain("CLI comment");
   });
 
+  it("loads Jira issue prompt context with comments when requested", async () => {
+    const jiraApiClient = {
+      getIssue: vi.fn(async () => ({
+        key: "OPS-123",
+        title: "Ship Jira import",
+        url: "https://acme.atlassian.net/browse/OPS-123",
+        state: "In Progress",
+        labels: ["integration"],
+        assignees: ["Pierre"],
+        projectKey: "OPS",
+        descriptionMarkdown: "Full Jira description",
+        commentsMarkdown: "##### Comment 1 - @unknown\n\nJira comment",
+      })),
+    };
+
+    const service = new SprintIssueService({
+      projectManagementRepository: {
+        getProject: () => project,
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        jira: {
+          ...DEFAULT_DASHBOARD_SETTINGS.jira,
+          host: "https://acme.atlassian.net",
+          email: "ops@acme.test",
+          apiToken: "jira-token",
+        },
+      }),
+      jiraApiClient: jiraApiClient as any,
+    });
+
+    const contexts = await service.getIssuePromptContexts(project.id, [{
+      provider: "jira",
+      hostDomain: "acme.atlassian.net",
+      repository: "OPS",
+      projectKey: "OPS",
+      issueNumber: 123,
+      issueKey: "OPS-123",
+      title: "Ship Jira import",
+      url: "https://acme.atlassian.net/browse/OPS-123",
+      includeConversation: true,
+    }]);
+
+    expect(jiraApiClient.getIssue).toHaveBeenCalledWith(
+      "https://acme.atlassian.net",
+      "ops@acme.test",
+      "jira-token",
+      "OPS-123",
+    );
+    expect(contexts[0]).toEqual(expect.objectContaining({
+      provider: "jira",
+      issueBodyMarkdown: "Full Jira description",
+      issueConversationMarkdown: "##### Comment 1 - @unknown\n\nJira comment",
+      labels: ["integration"],
+      assignees: ["Pierre"],
+    }));
+  });
+
   it("falls back to local gh auth when auto-closing linked GitHub issues", async () => {
     const linkedIssue: SprintLinkedIssueRecord = {
       id: "issue-1",

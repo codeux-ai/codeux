@@ -106,4 +106,75 @@ describe("SettingsIntegrationsPanel", () => {
     expect(detailPane.style.display).toBe("block");
     expect(detailPane.style.position).toBe("relative");
   });
+
+  it("renders system-owned Jira configuration controls", async () => {
+    const state = {
+      activeScope: "system",
+      selectedProject: null,
+      editableSettings: {
+        cliWorkflow: {
+          executionMode: "DOCKER",
+          containerMountGithubAuth: false,
+          containerGithubAuthPath: "~/.config/gh",
+          containerMountGitConfig: true,
+        },
+        git: {
+          githubMode: "REMOTE",
+          defaultBranch: "main",
+          featureBranchPrefix: "feature/",
+          sprintBranchScheme: "feature/sprint{sprint}",
+          autoCreatePr: true,
+        },
+      },
+      systemSettings: {
+        integrations: {
+          providers: {},
+          githubToken: "",
+          gitlabToken: "",
+          jira: {
+            host: "https://acme.atlassian.net",
+            email: "ops@acme.test",
+            apiToken: "jira-token",
+            autoCloseLinkedIssues: true,
+            defaultProject: "OPS",
+            closeTransitionName: "Done",
+          },
+        },
+      },
+      projectSources: {},
+      selectedIntegration: "jira",
+      setSelectedIntegration: vi.fn(),
+      integrations: [
+        { id: "jira", label: "Jira", description: "Issue tracker" },
+      ],
+      importingHints: false,
+      externalHints: {
+        resolved: {
+          julesApiKey: "",
+          geminiApiKey: "",
+          codexApiKey: "",
+          claudeCodeApiKey: "",
+          githubToken: "",
+          gitlabToken: "",
+          jiraToken: "",
+        },
+      },
+      handleImportHints: vi.fn(),
+      updateEditableSettings: vi.fn(),
+      updateSystem: vi.fn(),
+    } as any;
+
+    const { container } = render(<SettingsIntegrationsPanel state={state} />);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Jira Configuration");
+    });
+
+    expect(container.textContent).toContain("Jira site URL");
+    expect(container.textContent).toContain("Default project");
+    expect(container.textContent).toContain("Auto-close Jira issues");
+    const inputValues = Array.from(container.querySelectorAll("input")).map((input) => input.value);
+    expect(inputValues).toContain("https://acme.atlassian.net");
+    expect(inputValues).toContain("OPS");
+  });
 });

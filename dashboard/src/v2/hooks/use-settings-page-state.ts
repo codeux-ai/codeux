@@ -78,7 +78,7 @@ const routingProfileOptions = [
   { value: "WORKER", label: "Worker defaults" },
 ];
 
-type IntegrationId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "github" | "gitlab";
+type IntegrationId = "jules" | "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "github" | "gitlab" | "jira";
 
 interface IntegrationDefinition {
   id: IntegrationId;
@@ -95,6 +95,7 @@ const INTEGRATIONS: IntegrationDefinition[] = [
   { id: "opencode", label: "OpenCode", description: "OpenCode CLI with local auth, provider keys, and custom OpenAI-compatible endpoints" },
   { id: "github", label: "GitHub", description: "Repository, pull request, branch, and CI integration" },
   { id: "gitlab", label: "GitLab", description: "GitLab repository, merge request, and CI token integration" },
+  { id: "jira", label: "Jira", description: "Atlassian Jira issue search, sprint linking, and completion transitions" },
 ];
 
 const AGENT_INSTRUCTION_TEMPLATE_OPTIONS: Array<{

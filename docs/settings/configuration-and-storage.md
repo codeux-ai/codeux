@@ -165,9 +165,10 @@ Dashboard behavior:
   - invocation routing is edited in a split-pane route workspace with resolved default, provider-pool, and override summaries
 - common 2-3 option settings such as routing strategy, worker execution mode, execution runtime, and merge mode use pill controls for faster scanning than dropdown-heavy forms
 - the Integrations panel restores the Git host workspace:
-  - system scope edits the GitHub token and per-instance CLI auth sources
+  - system scope edits the GitHub token, GitLab token, Jira connection, and per-instance CLI auth sources
   - project and sprint scopes edit GitHub auth-copy mounts and gitconfig sharing for Docker runs
-- integration and AI model provider tiles use vendored, pinned Lobe Icons SVG brand marks for Jules/Google, Gemini, Codex, Claude, Qwen, OpenCode, GitHub, and GitLab identity.
+- Jira integration settings include the site URL, account email, API token, default project key used by sprint import JQL, close transition name, and a Jira-specific linked-issue auto-close toggle. Effective dashboard settings project this system-owned Jira connection into `settings.jira` for Jira search, issue context loading, and completion transitions.
+- integration and AI model provider tiles use vendored, pinned Lobe Icons SVG brand marks for Jules/Google, Gemini, Codex, Claude, Qwen, OpenCode, GitHub, and GitLab identity; Jira uses the in-app Jira mark.
 
 `aiProvider` contains:
 - `provider` (`ProviderConfigId|null`)

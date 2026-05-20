@@ -30,6 +30,15 @@ const cloneIntegrationProviders = (
     Object.entries(providers).map(([providerConfigId, provider]) => [providerConfigId, { ...provider }]),
   )
 );
+
+const defaultJiraSettings = (): SystemSettings["integrations"]["jira"] => ({
+  host: "",
+  email: "",
+  apiToken: "",
+  autoCloseLinkedIssues: false,
+  defaultProject: "",
+  closeTransitionName: "Done",
+});
 const cloneInvocationRouting = (
   routing: ProjectSettings["aiProvider"]["invocationRouting"],
 ): ProjectSettings["aiProvider"]["invocationRouting"] => (
@@ -162,6 +171,7 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   },
   integrations: {
     ...settings.integrations,
+    jira: settings.integrations.jira ? { ...settings.integrations.jira } : defaultJiraSettings(),
     providers: cloneIntegrationProviders(settings.integrations.providers),
   },
   defaults: cloneProjectSettings(settings.defaults),
@@ -190,12 +200,18 @@ export const applyExternalHintsToSystemSettings = (
     }
   }
 
+  const currentJira = settings.integrations.jira || defaultJiraSettings();
+
   return {
     ...cloneSystemSettings(settings),
     integrations: {
       providers: nextProviders,
       githubToken: settings.integrations.githubToken || hints.resolved.githubToken || "",
       gitlabToken: settings.integrations.gitlabToken || hints.resolved.gitlabToken || "",
+      jira: {
+        ...currentJira,
+        apiToken: currentJira.apiToken || hints.resolved.jiraToken || "",
+      },
     },
   };
 };

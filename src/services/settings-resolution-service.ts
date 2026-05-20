@@ -18,6 +18,7 @@ import { sanitizeAiProvider } from "../domain/settings/settings-sanitizers/ai-pr
 import { sanitizeCiIntelligence } from "../domain/settings/settings-sanitizers/ci-sanitizer.js";
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
 import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitizer.js";
+import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-sanitizer.js";
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
@@ -396,6 +397,10 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
       providers: buildDefaultIntegrationProviders(externalHints),
       githubToken: externalHints?.resolved.githubToken || "",
       gitlabToken: externalHints?.resolved.gitlabToken || "",
+      jira: {
+        ...DEFAULT_DASHBOARD_SETTINGS.jira,
+        apiToken: externalHints?.resolved.jiraToken || "",
+      },
     },
     defaults: buildDefaultProjectSettings(externalHints),
     mcpTools: cloneMcpTools(DEFAULT_DASHBOARD_SETTINGS.mcpTools),
@@ -503,6 +508,11 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   const input = toRecord(value);
   const runtime = toRecord(input.runtime);
   const integrations = normalizeSystemIntegrationProviders(input.integrations, externalHints);
+  const integrationInput = toRecord(input.integrations);
+  const jiraSettings = sanitizeJira(integrationInput.jira, {
+    ...DEFAULT_DASHBOARD_SETTINGS.jira,
+    apiToken: externalHints?.resolved.jiraToken || DEFAULT_DASHBOARD_SETTINGS.jira.apiToken,
+  });
 
   const dashboardPort = typeof runtime.dashboardPort === "number" ? runtime.dashboardPort : defaults.runtime.dashboardPort;
   const enableDebugLogFile = typeof runtime.enableDebugLogFile === "boolean"
@@ -522,6 +532,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       gitlabToken: typeof toRecord(input.integrations).gitlabToken === "string"
         ? toRecord(input.integrations).gitlabToken
         : defaults.integrations.gitlabToken,
+      jira: jiraSettings,
     },
   }, externalHints);
 
@@ -539,6 +550,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       gitlabToken: typeof toRecord(input.integrations).gitlabToken === "string"
         ? toRecord(input.integrations).gitlabToken as string
         : defaults.integrations.gitlabToken,
+      jira: jiraSettings,
     },
     defaults: defaultsInput,
     mcpTools: sanitizeMcpToolToggles(input.mcpTools ?? defaults.mcpTools).map((tool) => ({ ...tool })),
@@ -609,9 +621,7 @@ export function resolveDashboardSettings(args: {
       gitlabToken: args.systemSettings.integrations.gitlabToken,
     },
     jira: {
-      ...DEFAULT_DASHBOARD_SETTINGS.jira,
-      // For now, mapping fallback or just passing it correctly if added later.
-      // The sprintSettings might not have jira yet if it wasn't added to overrides, but we default it.
+      ...args.systemSettings.integrations.jira,
     },
     ciIntelligence: { ...sprintSettings.ciIntelligence },
     sprintLoopSteps: { ...sprintSettings.sprintLoopSteps },

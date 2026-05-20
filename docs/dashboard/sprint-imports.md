@@ -1,6 +1,6 @@
 # Sprint Imports
 
-Sprint imports support two production paths from the Sprints page: structured markdown bundles and GitHub/GitLab issue imports.
+Sprint imports support three production paths from the Sprints page: structured markdown bundles, GitHub/GitLab issue imports, and Jira issue imports.
 
 ## Markdown Import
 
@@ -38,7 +38,7 @@ Objective: add tests for /health and /ready behavior.
 
 Supported task fields include `title`, `depends_on`, `is_independent`, `merged` / `is_merged`, `merge_indicator`, `status`, and `prompt`.
 
-## Issue Import
+## GitHub/GitLab Issue Import
 
 Use `Import -> GitHub Issues` or `Import -> GitLab Issues` to search the selected project's remote backlog. The import modal supports provider selection, repository override, full-text search, state filtering, label filtering, and multi-select.
 
@@ -54,8 +54,22 @@ Issue import uses the saved integration tokens:
 
 When the GitHub token is empty, the server falls back to local `gh` CLI authentication for search, issue context loading, and auto-close (`gh issue list` / `gh issue view` / `gh issue close`). This uses the dashboard host environment's GitHub auth; Docker auth-copy mount settings help worker containers, but the dashboard import itself needs either a saved token or a working local `gh auth login`.
 
+## Jira Issue Import
+
+Use `Import -> Jira Issues` to search Jira with JQL, multi-select issues, and attach them to the sprint composer. The Jira modal uses `Settings -> Integrations -> Jira -> Default project` to prefill a query such as `project = OPS ORDER BY updated DESC`, and operators can replace it with any valid JQL.
+
+Jira uses system-scoped settings from `Settings -> Integrations -> Jira`:
+- site URL, for example `https://company.atlassian.net`
+- account email for Jira Cloud basic auth
+- API token
+- default project key
+- close transition name, defaulting to `Done`
+- Jira-specific auto-close toggle
+
+Selected Jira issues are loaded through the same prompt-context path as GitHub/GitLab imports. The sprint prompt receives the Jira description and, when `Append Conversation` is enabled, Jira comments. Imported Jira cards are persisted as linked sprint issues with provider `jira`, project key, issue key, labels, assignees, status, and source URL.
+
 ## Auto-Close
 
-`Settings -> Sprint -> Git Flow -> Auto-close linked issues` controls whether imported GitHub/GitLab issues are closed automatically.
+`Settings -> Sprint -> Git Flow -> Auto-close linked issues` controls whether imported GitHub/GitLab issues are closed automatically. `Settings -> Integrations -> Jira -> Auto-close Jira issues` separately controls Jira transitions.
 
-When enabled, the sprint loop closes linked issues only after the sprint reaches terminal completion and the main merge gate is no longer blocking. Closing failures are recorded per issue and surfaced in the sprint completion report without hiding the sprint result.
+When enabled, the sprint loop closes linked issues only after the sprint reaches terminal completion and the main merge gate is no longer blocking. GitHub/GitLab issues are closed through their host APIs or `gh`; Jira issues are moved through the configured transition. Closing failures are recorded per issue and surfaced in the sprint completion report without hiding the sprint result.

@@ -18,6 +18,7 @@ import type {
   ThinkingMode,
   WorkerSettings,
   ConsoleLogLevel,
+  JiraSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
@@ -105,6 +106,7 @@ export interface SystemIntegrationSettings {
   providers: Record<ProviderConfigId, SystemProviderCredentialSettings>;
   githubToken: string;
   gitlabToken?: string;
+  jira: JiraSettings;
 }
 
 export interface QwenModelProviderSettings {

@@ -37,6 +37,7 @@ const PROVIDER_KEY_MAP = {
   openCodeApiKey: ["openCodeApiKey", "OPENCODE_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GITHUB_TOKEN"],
   githubToken: ["githubToken", "GITHUB_TOKEN", "GH_TOKEN"],
   gitlabToken: ["gitlabToken", "GITLAB_TOKEN", "GLAB_TOKEN"],
+  jiraToken: ["jiraToken", "JIRA_API_TOKEN", "JIRA_TOKEN"],
 } as const;
 
 type ProviderKey = keyof typeof PROVIDER_KEY_MAP;

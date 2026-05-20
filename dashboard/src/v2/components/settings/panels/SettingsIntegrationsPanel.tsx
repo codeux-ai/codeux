@@ -6,6 +6,7 @@ import type { SettingsPageState, IntegrationId } from "../../../hooks/use-settin
 import { NoticePanel, ActionButton } from "../SettingsSurface.js";
 import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
 import { ProviderBrandIcon } from "../../providers/ProviderBrandIcon.js";
+import { JiraIcon } from "../../icons/JiraIcon.js";
 import type { ProjectSettings, ProviderConfigId, ProviderId, SystemSettings } from "../../../../types.js";
 import {
   countConnectedProviders,
@@ -20,6 +21,15 @@ import {
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 
 const PROVIDER_TYPES: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode"];
+
+const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
+  host: "",
+  email: "",
+  apiToken: "",
+  autoCloseLinkedIssues: false,
+  defaultProject: "",
+  closeTransitionName: "Done",
+};
 
 const getProviderWatermark = (providerId: ProviderId): string => (
   providerId === "jules" ? "JLS"
@@ -504,6 +514,59 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       );
     }
 
+    if (integrationId === "jira") {
+      const jiraSettings = systemSettings.integrations.jira || DEFAULT_JIRA_SETTINGS;
+      const updateJira = (updates: Partial<SystemSettings["integrations"]["jira"]>): void => {
+        updateSystem((current) => ({
+          ...current,
+          integrations: {
+            ...current.integrations,
+            jira: {
+              ...(current.integrations.jira || DEFAULT_JIRA_SETTINGS),
+              ...updates,
+            },
+          },
+        }));
+      };
+
+      return (
+        <>
+          {backButton}
+          <SectionCard title="Jira Configuration" watermark="JRA">
+            {activeScope === "system" ? (
+              <>
+                <Row label="Jira site URL" description="Base URL for Jira Cloud or Data Center, for example `https://company.atlassian.net`.">
+                  <TextInput value={jiraSettings.host} onChange={(value) => updateJira({ host: value })} mono />
+                </Row>
+                <Row label="Account email" description="Email used with Jira Cloud API tokens. Leave empty for bearer-token Jira deployments.">
+                  <TextInput value={jiraSettings.email} onChange={(value) => updateJira({ email: value })} mono />
+                </Row>
+                <Row label="API token" description="Jira API token used for issue search, issue context loading, and transitions.">
+                  <TextInput value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
+                </Row>
+                <Row label="Default project" description="Project key used to prefill the Jira import JQL.">
+                  <TextInput value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />
+                </Row>
+                <Row label="Close transition" description="Transition name used when auto-closing linked Jira issues after sprint completion.">
+                  <TextInput value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
+                </Row>
+                <Row label="Auto-close Jira issues" description="Move linked Jira issues through the configured transition after the sprint completes." last>
+                  <Toggle
+                    value={jiraSettings.autoCloseLinkedIssues}
+                    onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })}
+                  />
+                </Row>
+              </>
+            ) : (
+              <NoticePanel title="System-owned Jira connection">
+                Jira site, account, API token, import defaults, and close transition are stored at system scope so every project uses the same trusted integration.
+              </NoticePanel>
+            )}
+          </SectionCard>
+        </>
+      );
+    }
+
     const providerId = integrationId as ProviderId;
     const providerEntries = sortProviderConfigEntries(getSystemProvidersByType(systemSettings, providerId));
 
@@ -755,23 +818,37 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
 
               <div className="grid gap-3 xl:grid-cols-2">
                 {integrations.map((integration) => {
-                  if (integration.id === "github" || integration.id === "gitlab") {
+                  if (integration.id === "github" || integration.id === "gitlab" || integration.id === "jira") {
                     const isGitLab = integration.id === "gitlab";
+                    const isJira = integration.id === "jira";
+                    const jiraConfigured = Boolean(systemSettings.integrations.jira?.host.trim() && systemSettings.integrations.jira?.apiToken.trim());
                     return (
                       <div key={integration.id} className="group relative min-h-[156px] overflow-hidden rounded-[1.35rem] border border-black/[0.06] bg-white/88 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.035)] transition-[border-color,background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-black/[0.12] hover:bg-white hover:shadow-[0_18px_42px_rgba(15,23,42,0.07)] dark:border-white/[0.08] dark:bg-void-800/80 dark:hover:border-white/[0.14] dark:hover:bg-void-800/90">
                         <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.12]" />
                         <div className="flex h-full flex-col gap-4">
                           <div className="flex items-start gap-3">
-                            <ProviderBrandIcon id={integration.id} />
+                            {isJira ? (
+                              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] border border-[#0052CC]/18 bg-[#0052CC]/10 text-[#0052CC] dark:border-[#4C9AFF]/18 dark:bg-[#4C9AFF]/10 dark:text-[#4C9AFF]" aria-hidden title="Jira">
+                                <JiraIcon className="h-6 w-6" />
+                              </span>
+                            ) : (
+                              <ProviderBrandIcon id={integration.id} />
+                            )}
                             <div className="min-w-0">
-                              <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="text-sm font-semibold text-slate-900 dark:text-white">{integration.label}</div>
+                                {isJira && jiraConfigured ? <IntegrationPill label="Active" tone="active" /> : null}
+                              </div>
                               <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{integration.description}</div>
                             </div>
                           </div>
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pl-14">
                             <div className="flex flex-wrap gap-2">
-                              <IntegrationPill label="Git host" />
-                              <IntegrationPill label={isGitLab ? "Token + CI" : "Token + auth mount"} tone="muted" />
+                              <IntegrationPill label={isJira ? "Issue tracker" : "Git host"} />
+                              <IntegrationPill
+                                label={isJira ? (jiraConfigured ? "Search + transitions" : "Not configured") : isGitLab ? "Token + CI" : "Token + auth mount"}
+                                tone={isJira && jiraConfigured ? "neutral" : "muted"}
+                              />
                             </div>
                             <CatalogActionButton label="Manage" icon={Settings2} onClick={() => setSelectedIntegration(integration.id)} />
                           </div>

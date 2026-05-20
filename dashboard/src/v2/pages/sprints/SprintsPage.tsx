@@ -756,11 +756,18 @@ export const SprintsPage: FunctionComponent = () => {
         />
       )}
 
-      {isJiraModalOpen && selectedProject && editingSprint && (
+      {isJiraModalOpen && selectedProject && (
         <SprintJiraImportModal
-          sprintId={editingSprint.id}
           projectId={selectedProject.id}
           onClose={() => setIsJiraModalOpen(false)}
+          onImport={(issues) => {
+            mergeLinkedIssues(issues);
+            setIsJiraModalOpen(false);
+            setShowQuicksprint(false);
+            if (!editingSprint) {
+              setShowCreateComposer(true);
+            }
+          }}
         />
       )}
 

@@ -215,6 +215,7 @@ export class SettingsRepository {
           claudeCodeApiKey: legacySettings.aiProvider?.providers?.["claude-code"]?.apiKey || "",
           githubToken: legacySettings.git?.githubToken || "",
           gitlabToken: legacySettings.git?.gitlabToken || "",
+          jira: legacySettings.jira || undefined,
         },
         defaults: {
           automationLevel: legacySettings.automationLevel,

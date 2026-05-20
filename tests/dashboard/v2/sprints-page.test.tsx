@@ -24,6 +24,14 @@ vi.mock("../../../dashboard/src/v2/components/ui/SprintMarkdownModal", () => ({
   )
 }));
 
+vi.mock("../../../dashboard/src/v2/components/sprints/SprintJiraImportModal", () => ({
+  SprintJiraImportModal: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="sprint-jira-import-modal">
+      <button onClick={onClose} data-testid="close-jira-modal">Close</button>
+    </div>
+  )
+}));
+
 describe("SprintsPage", () => {
   beforeEach(() => {
     cleanup();
@@ -118,6 +126,38 @@ describe("SprintsPage", () => {
 
     expect(screen.getAllByText("GitHub Issues")[0]).toBeInTheDocument();
     expect(screen.getAllByText("GitLab Issues")[0]).toBeInTheDocument();
+  });
+
+  it("opens the Jira import modal from the import menu without requiring an edited sprint", () => {
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [],
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      editingSprint: null,
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+    } as any);
+
+    render(<SprintsPage />);
+
+    const importTriggers = screen.getAllByRole("button");
+    const importTrigger = importTriggers.find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || importTriggers.find((btn) => btn.textContent?.includes("Import"))!;
+    fireEvent.click(importTrigger);
+
+    const jiraOption = screen.getByRole("menuitem", { name: /jira issues/i });
+    fireEvent.click(jiraOption);
+
+    expect(screen.getByTestId("sprint-jira-import-modal")).toBeInTheDocument();
   });
 
   it("closes the import menu on escape key press or outside click", () => {

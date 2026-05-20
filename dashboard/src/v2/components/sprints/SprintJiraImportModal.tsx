@@ -1,31 +1,31 @@
 import { h } from "preact";
 import { useEffect, useState, useRef } from "preact/hooks";
 import { Check, ExternalLink, Loader2, Search, Tag, X } from "lucide-preact";
-import { useSignal } from "@preact/signals";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import type { JiraIssueSearchResult } from "../../lib/project-api.js";
-import { listSprintLinkedIssues, replaceSprintLinkedIssues, searchJiraIssues } from "../../lib/project-api.js";
-import type { SprintLinkedIssueInput, SprintLinkedIssueRecord } from "../../types.js";
+import { fetchProjectIssuePromptContexts, searchJiraIssues } from "../../lib/project-api.js";
+import { fetchProjectEffectiveSettings } from "../../lib/settings-api.js";
+import type { SprintLinkedIssueInput } from "../../types.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import gsap from "gsap";
 
 interface SprintJiraImportModalProps {
-  sprintId: string;
   projectId: string;
   onClose: () => void;
+  onImport: (issues: SprintLinkedIssueInput[]) => void;
 }
 
-export const SprintJiraImportModal = ({ sprintId, projectId, onClose }: SprintJiraImportModalProps) => {
+export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJiraImportModalProps) => {
   const [jql, setJql] = useState("");
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [existingIssues, setExistingIssues] = useState<SprintLinkedIssueRecord[]>([]);
   const [results, setResults] = useState<JiraIssueSearchResult[] | null>(null);
 
   // Set of issue keys
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [conversationDisabledKeys, setConversationDisabledKeys] = useState<Set<string>>(new Set());
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -50,17 +50,19 @@ export const SprintJiraImportModal = ({ sprintId, projectId, onClose }: SprintJi
   }, [prefersReducedMotion]);
 
   useEffect(() => {
-    const fetchExisting = async () => {
+    const loadDefaultJql = async () => {
       try {
-        const existing = await listSprintLinkedIssues(sprintId);
-        setExistingIssues(existing);
-      } catch (err: any) {
-        // Soft error, doesn't prevent usage
-        console.error("Failed to list linked issues", err);
+        const effective = await fetchProjectEffectiveSettings(projectId);
+        const defaultProject = effective.settings.jira.defaultProject.trim();
+        if (defaultProject) {
+          setJql((current) => current.trim() ? current : `project = ${defaultProject} ORDER BY updated DESC`);
+        }
+      } catch (err) {
+        console.error("Failed to load Jira defaults", err);
       }
     };
-    void fetchExisting();
-  }, [sprintId]);
+    void loadDefaultJql();
+  }, [projectId]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -98,6 +100,16 @@ export const SprintJiraImportModal = ({ sprintId, projectId, onClose }: SprintJi
     setSelectedKeys(next);
   };
 
+  const toggleConversation = (issue: JiraIssueSearchResult) => {
+    const next = new Set(conversationDisabledKeys);
+    if (next.has(issue.key)) {
+      next.delete(issue.key);
+    } else {
+      next.add(issue.key);
+    }
+    setConversationDisabledKeys(next);
+  };
+
   const handleImport = async () => {
     if (selectedKeys.size === 0) return;
 
@@ -106,10 +118,10 @@ export const SprintJiraImportModal = ({ sprintId, projectId, onClose }: SprintJi
       .map((issue) => {
         const matches = issue.key.match(/^([A-Z0-9]+)-(\d+)$/);
         const issueNumber = matches ? parseInt(matches[2], 10) : 0;
-        const urlObj = new URL(issue.url);
+        const hostDomain = extractHostDomain(issue.url);
         return {
           provider: "jira",
-          hostDomain: urlObj.hostname,
+          hostDomain,
           projectKey: issue.projectKey || (matches ? matches[1] : undefined),
           repository: issue.projectKey || (matches ? matches[1] : ""),
           issueNumber,
@@ -118,15 +130,18 @@ export const SprintJiraImportModal = ({ sprintId, projectId, onClose }: SprintJi
           url: issue.url,
           state: issue.state,
           labels: issue.labels,
+          assignees: issue.assignees,
+          includeConversation: !conversationDisabledKeys.has(issue.key),
         };
       });
 
     setImporting(true);
     try {
-      await replaceSprintLinkedIssues(sprintId, projectId, selectedIssues);
+      const contexts = await fetchProjectIssuePromptContexts(projectId, selectedIssues);
+      onImport(contexts);
       onClose();
     } catch (err: any) {
-      setError(err.message || "Failed to link issues to sprint.");
+      setError(err.message || "Failed to import Jira issues.");
       setImporting(false);
     }
   };
@@ -150,11 +165,9 @@ export const SprintJiraImportModal = ({ sprintId, projectId, onClose }: SprintJi
             </div>
             <div>
               <h2 className="text-xl font-black text-slate-900 dark:text-white">Import from Jira</h2>
-              {existingIssues.length > 0 && (
-                <p className="mt-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
-                  This will replace {existingIssues.length} existing linked issue{existingIssues.length === 1 ? "" : "s"}.
-                </p>
-              )}
+              <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Search Jira, select issues, and attach them to the sprint composer.
+              </p>
             </div>
           </div>
           <button
@@ -254,6 +267,18 @@ export const SprintJiraImportModal = ({ sprintId, projectId, onClose }: SprintJi
                             </span>
                           ))}
                         </div>
+                        <label
+                          className="mt-3 inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!conversationDisabledKeys.has(issue.key)}
+                            onChange={() => toggleConversation(issue)}
+                            className="h-3.5 w-3.5 rounded border-slate-300 text-[#0052CC] focus:ring-[#0052CC] dark:border-white/[0.18] dark:bg-transparent"
+                          />
+                          Append Conversation
+                        </label>
                       </div>
                       <a
                         href={issue.url}
@@ -302,4 +327,12 @@ export const SprintJiraImportModal = ({ sprintId, projectId, onClose }: SprintJi
       </div>
     </div>
   );
+};
+
+const extractHostDomain = (url: string): string => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
 };

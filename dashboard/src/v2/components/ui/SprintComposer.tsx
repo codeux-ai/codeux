@@ -29,6 +29,7 @@ import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
+import { JiraIcon } from "../icons/JiraIcon.js";
 
 interface SprintComposerProps {
   nextId: string;
@@ -521,7 +522,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 </div>
                 <div className="grid gap-3 lg:grid-cols-2">
                   {visibleLinkedIssues.map((issue) => {
-                    const ProviderIcon = issue.provider === "gitlab" ? Gitlab : Github;
+                    const ProviderIcon = issue.provider === "gitlab" ? Gitlab : issue.provider === "jira" ? JiraIcon : Github;
                     return (
                       <article
                         key={`${issue.provider}:${issue.repository}:${issue.issueNumber}`}
@@ -530,7 +531,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                         <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-signal-500 via-ember-500 to-slate-300 opacity-70" />
                         <div className="flex items-start gap-3">
                           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.85rem] border ${
-                            issue.provider === "gitlab"
+                            issue.provider === "jira"
+                              ? "border-[#0052CC]/20 bg-[#0052CC]/10 text-[#0052CC] dark:border-[#4C9AFF]/20 dark:bg-[#4C9AFF]/10 dark:text-[#4C9AFF]"
+                              : issue.provider === "gitlab"
                               ? "border-ember-500/20 bg-ember-500/10 text-ember-600 dark:text-ember-400"
                               : "border-slate-900/10 bg-slate-900/[0.06] text-slate-800 dark:border-white/10 dark:bg-white/[0.07] dark:text-white"
                           }`}>

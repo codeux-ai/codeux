@@ -66,4 +66,23 @@ describe("SprintImportMenu", () => {
     fireEvent.click(githubBtn);
     expect(onImportIssues).toHaveBeenCalledTimes(1);
   });
+
+  it("clicks Jira issue import", () => {
+    const onImportJira = vi.fn();
+    render(
+      <SprintImportMenu
+        disabled={false}
+        onImportMarkdown={vi.fn()}
+        onImportIssues={vi.fn()}
+        onImportJira={onImportJira}
+      />
+    );
+
+    const trigger = screen.getAllByRole("button").find(btn => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown"));
+    fireEvent.click(trigger);
+
+    const jiraBtn = screen.getByRole("menuitem", { name: /jira issues/i });
+    fireEvent.click(jiraBtn);
+    expect(onImportJira).toHaveBeenCalledTimes(1);
+  });
 });
