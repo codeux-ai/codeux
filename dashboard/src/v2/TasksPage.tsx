@@ -334,7 +334,8 @@ export const TasksPage: FunctionComponent = () => {
   const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
   const initialSprint = useMemo(() => {
     const params = new URLSearchParams(locationSearch);
-    return params.get("sprint");
+    // Support both "sprint" and "sprintId"
+    return params.get("sprintId") || params.get("sprint");
   }, [locationSearch]);
   const routeSprintId = useMemo(() => {
     if (!initialSprint) {
@@ -343,6 +344,7 @@ export const TasksPage: FunctionComponent = () => {
     return sprints.some((sprint: Sprint) => sprint.id === initialSprint) ? initialSprint : null;
   }, [initialSprint, sprints]);
   const taskScopeSprintId = routeSprintId ?? selectedSprintId;
+
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
@@ -359,6 +361,26 @@ export const TasksPage: FunctionComponent = () => {
     sprints,
     taskScopeSprintId
   );
+
+  // Handle route taskId resolution for scroll-to-focus
+  useEffect(() => {
+    if (!loading && tasks.length > 0) {
+      const params = new URLSearchParams(locationSearch);
+      const taskId = params.get("taskId");
+      if (taskId && tasks.some(t => t.id === taskId || t.recordId === taskId)) {
+        // Find the actual recordId (in case the route passed the short ID)
+        const targetTask = tasks.find(t => t.id === taskId || t.recordId === taskId);
+        if (targetTask) {
+          setResolvedTaskId(targetTask.recordId);
+          // Clean up URL so it doesn't keep refocusing on subsequent renders
+          params.delete("taskId");
+          const nextSearch = params.toString();
+          const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+          window.history.replaceState(window.history.state, "", nextUrl);
+        }
+      }
+    }
+  }, [locationSearch, loading, tasks]);
 
   const reducedMotion = useReducedMotion();
   const [showSkeletons, setShowSkeletons] = useState(false);
@@ -427,6 +449,8 @@ export const TasksPage: FunctionComponent = () => {
     if (resolvedTaskId && boardRef.current) {
       const el = boardRef.current.querySelector(`[data-task-id="${resolvedTaskId}"] .kanban-card`) as HTMLDivElement;
       if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
         const flashEl = document.createElement("div");
         flashEl.style.position = "absolute";
         flashEl.style.inset = "0";

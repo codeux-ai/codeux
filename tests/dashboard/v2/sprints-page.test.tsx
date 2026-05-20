@@ -15,6 +15,15 @@ vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () 
   useProjectEffectiveSettings: vi.fn().mockReturnValue({ data: null, loading: false, error: null, refresh: vi.fn() }),
 }));
 
+vi.mock("@tanstack/react-router", async () => {
+  const actual = await vi.importActual<typeof import("@tanstack/react-router")>("@tanstack/react-router");
+  return {
+    ...actual,
+    useSearch: vi.fn().mockReturnValue({ sprintKey: undefined }),
+    Link: ({ children, ...props }: any) => <a {...props}>{children}</a>,
+  };
+});
+
 vi.mock("../../../dashboard/src/v2/pages/sprints/use-sprints-page-data");
 vi.mock("../../../dashboard/src/v2/components/ui/SprintMarkdownModal", () => ({
   SprintMarkdownModal: ({ onClose }: { onClose: () => void }) => (

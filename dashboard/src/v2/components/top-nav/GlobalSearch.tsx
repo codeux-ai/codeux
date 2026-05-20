@@ -6,7 +6,8 @@ import { SearchOverlay } from "../search/SearchOverlay.js";
 import { useProjectTasks } from "../../hooks/use-project-tasks.js";
 import { usePreviewSessions } from "../../hooks/use-preview-sessions.js";
 import type { SprintPreviewSession } from "../../../types.js";
-import type { Task, Source, Sprint } from "../../types.js";
+import type { Task, Source, Sprint, AgentPreset } from "../../types.js";
+import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
 
 interface GlobalSearchProps {
     projectId: string | null;
@@ -21,9 +22,18 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
+    const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
 
     const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null);
     const { sessions } = usePreviewSessions({ projectId: isSearchOpen ? projectId : null, pollInterval: 0 });
+
+    useEffect(() => {
+        if (isSearchOpen && selectedProject?.id) {
+            void fetchAgentPresets(selectedProject.id)
+                .then(setAgentPresets)
+                .catch(console.error);
+        }
+    }, [isSearchOpen, selectedProject?.id]);
 
     useEffect(() => {
         const timer = setTimeout(() => setDebouncedQuery(searchQuery), 200);
@@ -87,17 +97,22 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             id: t.id,
             title: t.title,
             sprint: t.sprint,
+            sprintId: t.sprintId,
             status: t.status
         }));
 
         const filteredAgents = (selectedProject?.agentBindings || []).filter(a =>
             a.workerDisplayName?.toLowerCase().includes(lowerQuery) ||
             a.workerEndpointType?.toLowerCase().includes(lowerQuery)
-        ).map(a => ({
-            id: a.id || `${a.workerEndpointType}-${a.workerDisplayName}`,
-            name: a.workerDisplayName || a.workerEndpointType,
-            status: 'idle'
-        }));
+        ).map(a => {
+            const preset = agentPresets.find(p => p.id === a.workerEndpointId);
+            return {
+                id: a.id || `${a.workerEndpointType}-${a.workerDisplayName}`,
+                name: a.workerDisplayName || a.workerEndpointType,
+                status: 'idle',
+                avatarConfig: preset?.avatarConfig
+            };
+        });
 
         const filteredContainers = sessions.filter((s: SprintPreviewSession) =>
             (s.containerName && s.containerName.toLowerCase().includes(lowerQuery)) ||
@@ -143,6 +158,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             </div>
 
             <SearchOverlay
+                anchorRef={searchBarContainerRef}
                 isOpen={isSearchOpen}
                 onClose={() => setIsSearchOpen(false)}
                 searchQuery={searchQuery}

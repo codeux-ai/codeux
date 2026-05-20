@@ -1,6 +1,6 @@
 /* istanbul ignore file */
 import type { FunctionComponent } from "preact";
-import { Link } from "@tanstack/react-router";
+import { Link, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import {
@@ -139,6 +139,7 @@ const SprintsProjectPlaceholder: FunctionComponent<{
 );
 
 export const SprintsPage: FunctionComponent = () => {
+  const searchParams = useSearch({ strict: false });
   const headerRef = useRef<HTMLDivElement>(null);
   const bubblesRef = useRef<HTMLDivElement>(null);
   const createStageRef = useRef<HTMLDivElement>(null);
@@ -614,6 +615,7 @@ export const SprintsPage: FunctionComponent = () => {
 
             <div className="rounded-[2.2rem] border border-black/[0.06] bg-white/70 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
               <SprintLedger
+                initialQuery={searchParams?.sprintKey as string | undefined}
                 sprints={progressiveSprints}
                 isLoading={loading}
                 listWindow={listWindow}

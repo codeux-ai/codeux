@@ -1,5 +1,7 @@
 import { FunctionComponent } from "preact";
 import { Target, ListChecks, Cpu, Compass, ArrowRight } from "lucide-preact";
+import { Link } from "@tanstack/react-router";
+import { AgentAvatarSvg } from "../agents/AgentAvatarSvg.js";
 import type { SearchItem } from "./SearchOverlay";
 
 interface SearchResultRowProps {
@@ -28,8 +30,12 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     let showDot = false;
     let dotColorClass = 'bg-slate-400';
 
+    let targetTo = "";
+    let targetSearch = {};
+
     if (categoryType === 'sprints') {
         Icon = Target;
+        targetTo = "/sprints";
         // The TopNav formats title as `SPR-XX: Name`, let's extract it
         const match = title?.match(/^(SPR-\d+):\s*(.*)$/);
         if (match) {
@@ -39,11 +45,14 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
              // fallback if format isn't matched
             itemId = 'SPR';
         }
+        targetSearch = { sprintId: item.id };
         badgeText = item.status || 'Active';
         if (item.status === 'completed') badgeColorClass = 'text-status-green bg-status-green/10';
         else if (item.status === 'active') badgeColorClass = 'text-signal-500 bg-signal-500/10';
     } else if (categoryType === 'tasks') {
         Icon = ListChecks;
+        targetTo = "/tasks";
+        targetSearch = { taskId: item.id, sprintId: item.sprintId };
         // Typically tsk-something
         itemId = item.id.substring(0, 8);
         badgeText = item.status || 'Open';
@@ -51,6 +60,8 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
         else if (item.status === 'in_progress') badgeColorClass = 'text-signal-500 bg-signal-500/10';
     } else if (categoryType === 'agents') {
         Icon = Cpu;
+        targetTo = "/agents";
+        targetSearch = { agentId: item.id };
         showDot = true;
         itemId = item.id.split('-')[0] || 'AGT'; // Or however it's formatted
         badgeText = item.status || 'Offline';
@@ -58,6 +69,8 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
         else if (item.status === 'running' || item.status === 'active') dotColorClass = 'bg-status-green animate-pulse';
     } else if (categoryType === 'containers') {
         Icon = Compass;
+        targetTo = "/browser";
+        targetSearch = { containerId: item.id };
         showDot = true;
         itemId = item.id.substring(0, 8);
         badgeText = item.status || 'Stopped';
@@ -70,9 +83,11 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     }
 
     return (
-        <button
+        <Link
+            to={targetTo as any}
+            search={targetSearch as any}
             onClick={onClick}
-            ref={activeItemRef}
+            ref={activeItemRef as any}
             onMouseEnter={onFocus}
             aria-label={`${categoryType} result: ${title}`}
             role="option"
@@ -92,7 +107,13 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                 <div className={`p-2 rounded-xl transition-colors duration-200 shrink-0 ${
                     isFocused ? 'bg-signal-500/15 text-signal-500' : 'bg-black/5 dark:bg-white/5 text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
                 }`}>
-                    <Icon className="w-5 h-5" strokeWidth={isFocused ? 2 : 1.5} />
+                    {item.avatarConfig ? (
+                        <div className="w-5 h-5 flex items-center justify-center shrink-0">
+                            <AgentAvatarSvg config={item.avatarConfig} expression="happy" size={20} static />
+                        </div>
+                    ) : (
+                        <Icon className="w-5 h-5" strokeWidth={isFocused ? 2 : 1.5} />
+                    )}
                 </div>
 
                 <div className="flex flex-col min-w-0 flex-1 gap-0.5">
@@ -133,6 +154,6 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                     <ArrowRight className="w-5 h-5" strokeWidth={2} />
                 </div>
             </div>
-        </button>
+        </Link>
     );
 };

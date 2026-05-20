@@ -74,7 +74,7 @@ import { chromium } from 'playwright';
   });
 
   try {
-    await page.goto('http://localhost:4446/');
+    await page.goto('http://localhost:4444/');
 
     await page.waitForTimeout(2000); // Give it time to load data and render
 
