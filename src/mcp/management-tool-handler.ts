@@ -14,7 +14,7 @@ import type { EmbeddingModelManager } from "../services/embedding-model-manager.
 import type { PlanningAgentService } from "../services/planning-agent-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
 
-import { handlePreviewActions } from "./management/preview-actions.js";
+import { PreviewActions } from "./management/preview-actions.js";
 import { handleTelemetryActions } from "./management/telemetry-actions.js";
 import { handleProjectAction } from "./management/project-actions.js";
 import { SprintActions } from "./management/sprint-actions.js";
@@ -45,6 +45,7 @@ export class ManagementToolHandler {
   private readonly settingsActions: SettingsActions;
   private readonly agentActions: AgentActions;
   private readonly memoryActions: MemoryActions;
+  private readonly previewActions: PreviewActions;
 
   constructor(private readonly deps: ManagementToolHandlerDeps) {
     this.sprintActions = new SprintActions(deps);
@@ -57,6 +58,7 @@ export class ManagementToolHandler {
     this.settingsActions = new SettingsActions(deps.settingsRepository);
     this.agentActions = new AgentActions(deps.agentPresetSyncService);
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
+    this.previewActions = new PreviewActions(deps.sprintPreviewService);
   }
 
   async handleManageCodeUx(args: ManageCodeUxArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -83,7 +85,7 @@ export class ManagementToolHandler {
         envelope = await this.memoryActions.handleMemoryAction(args);
       } else if (args.domain === "preview") {
         const currentHost = null; // serverHost is not available on DashboardSettings, we'll fall back to localhost in preview-origin
-        envelope = await handlePreviewActions(args, this.deps.sprintPreviewService, currentHost);
+        envelope = await this.previewActions.handlePreviewAction(args, currentHost);
       } else if (args.domain === "telemetry") {
         envelope = await handleTelemetryActions(args, this.deps.executionRepository);
       } else {
