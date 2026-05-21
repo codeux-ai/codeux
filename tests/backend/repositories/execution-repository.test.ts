@@ -161,6 +161,7 @@ describe("ExecutionRepository", () => {
       provider: "openai",
       model: "gpt-4",
       systemPrompt: "You are a helpful planner.",
+      startedAt: "2026-05-21T07:29:52.000Z",
     });
 
     expect(invocation1.id).toMatch(/^xi_/);
@@ -208,21 +209,18 @@ describe("ExecutionRepository", () => {
     expect(messages[1]!.id).toBe(message2.id);
 
     // Create a second invocation to check sorting and listing
-    // We explicitly delay to ensure a different startedAt
-    await new Promise(resolve => setTimeout(resolve, 50));
-
     const invocation2 = executionRepository.createExecutionInvocation({
       projectId: project.id,
       type: "coding",
       status: "running",
+      startedAt: "2026-05-21T07:29:53.000Z",
     });
-
-    await new Promise(resolve => setTimeout(resolve, 50));
 
     const invocation3 = executionRepository.createExecutionInvocation({
       projectId: project.id,
       type: "coding",
       status: "running",
+      startedAt: "2026-05-21T07:29:54.000Z",
     });
 
     const list = executionRepository.listExecutionInvocations({ projectId: project.id });

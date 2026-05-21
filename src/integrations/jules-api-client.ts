@@ -97,6 +97,40 @@ export class JulesApiClient implements JulesClient {
       config.headers = headers;
       return config;
     });
+
+    const retryCounts = new WeakMap<object, number>();
+
+    this.axiosInstance.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const config = error.config;
+        if (!config) {
+          return Promise.reject(error);
+        }
+
+        if (error.response && error.response.status === 429) {
+          const retryCount = retryCounts.get(config) || 0;
+          const maxRetries = 5;
+
+          if (retryCount < maxRetries) {
+            const nextCount = retryCount + 1;
+            retryCounts.set(config, nextCount);
+
+            // Exponential backoff: 1s, 2s, 4s, 8s, 16s with 0-500ms jitter
+            const delay = Math.pow(2, nextCount - 1) * 1000 + Math.random() * 500;
+            
+            console.warn(`Jules API returned 429. Retrying request to ${config.url} (Attempt ${nextCount}/${maxRetries}) after ${Math.round(delay)}ms...`);
+
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            
+            return this.axiosInstance(config);
+          }
+        }
+
+        return Promise.reject(error);
+      }
+    );
+
   }
 
   setApiKey(apiKey?: string | null): void {

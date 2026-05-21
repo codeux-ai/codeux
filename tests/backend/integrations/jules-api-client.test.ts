@@ -2,17 +2,26 @@ import { describe, expect, it, vi } from "vitest";
 import { JulesApiClient } from "../../../src/integrations/jules-api-client.js";
 import axios from "axios";
 
-const mockInstance = {
-  get: vi.fn(),
-  post: vi.fn(),
-  interceptors: {
-    request: {
-      use: vi.fn((cb) => {
-        (mockInstance.interceptors.request as any)._cb = cb;
-      }),
+const mockInstance = Object.assign(
+  vi.fn(),
+  {
+    get: vi.fn(),
+    post: vi.fn(),
+    interceptors: {
+      request: {
+        use: vi.fn((cb) => {
+          (mockInstance.interceptors.request as any)._cb = cb;
+        }),
+      },
+      response: {
+        use: vi.fn((successCb, errorCb) => {
+          (mockInstance.interceptors.response as any)._successCb = successCb;
+          (mockInstance.interceptors.response as any)._errorCb = errorCb;
+        }),
+      }
     }
   }
-};
+);
 
 vi.mock("axios", () => {
   return {
@@ -82,5 +91,28 @@ describe("JulesApiClient coverage", () => {
         const cb = (mockInstance.interceptors.request as any)._cb;
         const config = cb({ headers: { "X-Goog-Api-Key": "test" } });
         expect(config.headers["X-Goog-Api-Key"]).toBeUndefined();
+    });
+
+    it("interceptor retries on 429", async () => {
+        vi.useFakeTimers();
+        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
+        const errorCb = (mockInstance.interceptors.response as any)._errorCb;
+        
+        mockInstance.mockResolvedValue({ data: "success" });
+
+        const mockError = {
+          config: { url: "http://url/test" },
+          response: { status: 429 }
+        };
+
+        const promise = errorCb(mockError);
+        
+        await vi.runAllTimersAsync();
+        
+        const result = await promise;
+        expect(result.data).toBe("success");
+        expect(mockInstance).toHaveBeenCalledWith(mockError.config);
+        
+        vi.useRealTimers();
     });
 });

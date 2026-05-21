@@ -442,6 +442,35 @@ export class ExecutionRepository {
     return queryExecutionInvocationMessages(this.db, invocationId);
   }
 
+  clearExecutionInvocationMessages(invocationId: string): void {
+    try {
+      const invocation = this.getExecutionInvocation(invocationId);
+      if (!invocation) {
+        throw new EntityNotFoundError(`Execution invocation not found: ${invocationId}`);
+      }
+
+      this.db.prepare(`
+        DELETE FROM execution_invocation_messages
+        WHERE invocation_id = ?
+      `).run(invocationId);
+
+      this.db.prepare(`
+        UPDATE execution_invocations
+        SET message_count = 0,
+            last_message_at = null,
+            updated_at = ?
+        WHERE id = ?
+      `).run(new Date().toISOString(), invocationId);
+
+      this.notifyRealtime(invocation.projectId, false);
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, invocationId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
+
   appendExecutionInvocationMessage(invocationId: string, input: AppendExecutionInvocationMessageInput): ExecutionInvocationMessageRecord {
     try {
       const invocation = this.getExecutionInvocation(invocationId);
