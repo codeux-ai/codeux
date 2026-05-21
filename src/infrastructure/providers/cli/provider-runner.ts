@@ -4,6 +4,7 @@ import { CommandResult, runStreamingCommand } from "../../../services/cli-proces
 import type { IDockerRunner } from "./docker-runner.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import * as fs from "fs/promises";
+import * as os from "os";
 import * as path from "path";
 import * as pathPosix from "path/posix";
 import { randomUUID } from "crypto";
@@ -491,7 +492,12 @@ export class ProviderRunner implements IProviderRunner {
           env.GITHUB_TOKEN ||= resolvedApiKey;
         }
       }
-      env.OPENCODE_CONFIG_CONTENT = this.buildOpenCodeConfigContent(model, providerConfig, providerConfig?.mcpConnection || null);
+      env.OPENCODE_CONFIG_CONTENT = this.buildOpenCodeConfigContent(
+        model,
+        providerConfig,
+        providerConfig?.mcpConnection || null,
+        this.shouldRewriteDockerLoopbackUrls(workflowSettings),
+      );
     }
     return env;
   }
@@ -500,6 +506,7 @@ export class ProviderRunner implements IProviderRunner {
     model: string,
     config?: OpenCodeRuntimeSettings,
     conn?: McpConnectionInfo | null,
+    rewriteDockerLoopbackUrls = false,
   ): string {
     const authMode = config?.openCodeAuthMode || "LOCAL_AUTH";
     const providerId = (config?.openCodeProviderId || model.split("/")[0] || "anthropic").trim();
@@ -529,7 +536,7 @@ export class ProviderRunner implements IProviderRunner {
           npm: config?.openCodePackage || "@ai-sdk/openai-compatible",
           name: providerId,
           options: {
-            baseURL: config?.openCodeBaseUrl || "https://api.openai.com/v1",
+            baseURL: this.rewriteLoopbackUrlForDocker(config?.openCodeBaseUrl || "https://api.openai.com/v1", rewriteDockerLoopbackUrls),
             apiKey: "{env:OPENCODE_API_KEY}",
           },
           models: {
@@ -549,7 +556,7 @@ export class ProviderRunner implements IProviderRunner {
       runtimeConfig.mcp = {
         code_ux: {
           type: "remote",
-          url: conn.url,
+          url: this.rewriteLoopbackUrlForDocker(conn.url, rewriteDockerLoopbackUrls),
           enabled: true,
           ...(Object.keys(headers).length > 0 ? { headers } : {}),
         },
@@ -557,6 +564,38 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     return JSON.stringify(runtimeConfig);
+  }
+
+  private shouldRewriteDockerLoopbackUrls(workflowSettings: CliWorkflowSettings): boolean {
+    if (workflowSettings.executionMode !== "DOCKER") {
+      return false;
+    }
+    const override = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+    if (override === "0" || override === "false") {
+      return false;
+    }
+    if (override === "1" || override === "true") {
+      return true;
+    }
+    return process.platform === "darwin"
+      || process.platform === "win32"
+      || os.release().toLowerCase().includes("microsoft");
+  }
+
+  private rewriteLoopbackUrlForDocker(rawUrl: string, enabled: boolean): string {
+    if (!enabled) {
+      return rawUrl;
+    }
+    try {
+      const url = new URL(rawUrl);
+      if (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1") {
+        url.hostname = "host.docker.internal";
+        return url.toString();
+      }
+    } catch {
+      return rawUrl;
+    }
+    return rawUrl;
   }
 
   private isTransientCodexTransportError(result: CommandResult): boolean {

@@ -159,21 +159,32 @@ describe("ProviderRunner", () => {
   });
 
   it("uses the configured OpenCode custom provider model instead of a stale placeholder", async () => {
-    await runner.runProvider({
-      provider: "opencode",
-      prompt: "hello",
-      cwd: "/repo",
-      model: "custom/model",
-      apiKey: "sk-open-test",
-      openCodeAuthMode: "CUSTOM_PROVIDER",
-      openCodeProviderId: "ollama",
-      openCodeModelId: "glm-4.7-flash",
-      openCodeBaseUrl: "http://127.0.0.1:11434/v1",
-      sessionId: "session-1",
-      workflowSettings: { executionMode: "DOCKER" } as any,
-      repoPath: "/repo",
-      onActivity: vi.fn(),
-    });
+    const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+    process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
+    try {
+      await runner.runProvider({
+        provider: "opencode",
+        prompt: "hello",
+        cwd: "/repo",
+        model: "custom/model",
+        apiKey: "sk-open-test",
+        openCodeAuthMode: "CUSTOM_PROVIDER",
+        openCodeProviderId: "ollama",
+        openCodeModelId: "glm-4.7-flash",
+        openCodeBaseUrl: "http://127.0.0.1:11434/v1",
+        sessionId: "session-1",
+        workflowSettings: { executionMode: "DOCKER" } as any,
+        repoPath: "/repo",
+        mcpConnection: { url: "http://127.0.0.1:4445/mcp", authToken: null },
+        onActivity: vi.fn(),
+      });
+    } finally {
+      if (originalRewrite === undefined) {
+        delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+      } else {
+        process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = originalRewrite;
+      }
+    }
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "opencode",
@@ -182,6 +193,21 @@ describe("ProviderRunner", () => {
         OPENCODE_CONFIG_CONTENT: expect.stringContaining("\"model\":\"ollama/glm-4.7-flash\""),
       }),
     }));
+    const env = dockerRunner.runProviderInDocker.mock.calls[0][0].providerEnv;
+    expect(JSON.parse(env.OPENCODE_CONFIG_CONTENT)).toMatchObject({
+      provider: {
+        ollama: {
+          options: {
+            baseURL: "http://host.docker.internal:11434/v1",
+          },
+        },
+      },
+      mcp: {
+        code_ux: {
+          url: "http://host.docker.internal:4445/mcp",
+        },
+      },
+    });
   });
 
   it("materializes generated OpenCode config for host execution", async () => {

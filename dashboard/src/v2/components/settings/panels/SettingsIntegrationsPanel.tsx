@@ -126,9 +126,26 @@ const splitOpenCodeModel = (model: string): { providerId: string; modelId: strin
   };
 };
 
+const rewriteDockerLoopbackUrl = (rawUrl: string, dockerExecutionEnabled: boolean): string => {
+  if (!dockerExecutionEnabled) {
+    return rawUrl;
+  }
+  try {
+    const url = new URL(rawUrl);
+    if (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1" || url.hostname === "[::1]") {
+      url.hostname = "host.docker.internal";
+      return url.toString();
+    }
+  } catch {
+    return rawUrl;
+  }
+  return rawUrl;
+};
+
 const buildOpenCodeConfigPreview = (
   provider: SystemSettings["integrations"]["providers"][ProviderConfigId],
   model: string,
+  dockerExecutionEnabled: boolean,
 ): string => {
   const authMode = provider.openCodeAuthMode || "LOCAL_AUTH";
   const modelParts = splitOpenCodeModel(model);
@@ -155,7 +172,7 @@ const buildOpenCodeConfigPreview = (
         npm: provider.openCodePackage || "@ai-sdk/openai-compatible",
         name: providerId,
         options: {
-          baseURL: provider.openCodeBaseUrl || "https://api.openai.com/v1",
+          baseURL: rewriteDockerLoopbackUrl(provider.openCodeBaseUrl || "https://api.openai.com/v1", dockerExecutionEnabled),
           apiKey: "{env:OPENCODE_API_KEY}",
         },
         models: {
@@ -763,7 +780,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                     ) : null}
                     <Row label="Generated config preview" description="Masked OpenCode config materialized from OPENCODE_CONFIG_CONTENT for host and Docker runs." last={index === providerEntries.length - 1}>
                       <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
-                        {buildOpenCodeConfigPreview(provider, providerModel)}
+                        {buildOpenCodeConfigPreview(provider, providerModel, dockerExecutionEnabled)}
                       </pre>
                     </Row>
                   </>
