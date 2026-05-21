@@ -84,10 +84,10 @@ export class WorkerInboxReplyService {
       throw new Error(`Project not found: ${input.projectId}`);
     }
 
-    const route = this.resolveProviderRoute("dashboard_reply", input.bodyMarkdown);
     const thread = this.deps.connectionChatRepository.getThread(input.threadId);
     const messages = this.deps.connectionChatRepository.listMessages(input.threadId);
     let rawPrompt = input.bodyMarkdown.trim();
+    let agentProvider: { providerConfigId?: string | null; model?: string | null } | null = null;
 
     if (input.mode !== "compact_thread") {
       const settings = this.deps.getDashboardSettings({ projectId: input.projectId });
@@ -95,6 +95,10 @@ export class WorkerInboxReplyService {
       const dashboardReplyAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
         ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(input.projectId, dashboardReplyAgentPresetId)
         : await this.deps.agentPresetSyncService.getWorkerAgent(input.projectId);
+      agentProvider = {
+        providerConfigId: dashboardReplyAgent.providerConfigId,
+        model: dashboardReplyAgent.model,
+      };
       const workerInstructions = dashboardReplyAgent.instructionMarkdown.trim();
       rawPrompt = buildChatReplayPrompt({
         projectId: input.projectId,
@@ -108,6 +112,7 @@ export class WorkerInboxReplyService {
         isDashboardReply: true,
       });
     }
+    const route = this.resolveProviderRoute("dashboard_reply", input.bodyMarkdown, agentProvider);
     const providerConfigId = route.providerConfigId || route.provider;
     const providerSettings = route.providers[providerConfigId];
     const prompt = buildProviderPrompt(rawPrompt, providerSettings.thinkingMode);
@@ -219,7 +224,6 @@ export class WorkerInboxReplyService {
       },
     );
 
-    const route = this.resolveProviderRoute("clarification_reply", args.task.prompt || args.task.title);
     const invocationTaskId = typeof args.task.record_id === "string" && args.task.record_id.trim().length > 0
       ? args.task.record_id.trim()
       : null;
@@ -235,6 +239,10 @@ export class WorkerInboxReplyService {
         clarificationAgentPresetId,
       )
       : await this.deps.agentPresetSyncService.getProjectManagerAgent(args.projectId);
+    const route = this.resolveProviderRoute("clarification_reply", args.task.prompt || args.task.title, {
+      providerConfigId: clarificationAgent.providerConfigId,
+      model: clarificationAgent.model,
+    });
     const projectManagerInstructions = clarificationAgent
       .instructionMarkdown
       .trim();
@@ -394,6 +402,7 @@ export class WorkerInboxReplyService {
   private resolveProviderRoute(
     invocation: "dashboard_reply" | "clarification_reply",
     bodyMarkdown: string,
+    agentProvider?: { providerConfigId?: string | null; model?: string | null } | null,
   ): ResolvedProviderRoute & { provider: Exclude<ProviderId, "jules"> } {
     const pseudoTask: Subtask = {
       id: "dashboard-reply",
@@ -406,6 +415,7 @@ export class WorkerInboxReplyService {
 
     const route = this.deps.taskService.resolveInvocationProvider(invocation, pseudoTask, {
       cliOnly: true,
+      agentProvider,
     });
     if (!route.provider) {
       throw new Error(`Invocation ${invocation} requires an enabled CLI provider, but none was resolved.`);

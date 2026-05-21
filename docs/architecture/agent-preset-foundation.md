@@ -25,6 +25,8 @@ Foundation fields:
 - `description`
 - `instruction_markdown`
 - `labels_json`
+- `provider_config_id`
+- `model`
 - `created_at`
 - `updated_at`
 
@@ -62,8 +64,12 @@ Foundation-supported fields:
 - preset name
 - short routing description
 - instruction markdown
+- optional provider instance preference
+- optional model override
 
 Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead, including tags for built-in fallback selections on Planning agent, Worker, Project manager, and Quality assurance agent.
+
+Provider and model preferences are intentionally nullable. They only take effect when a provider invocation route uses the `AGENT` strategy; otherwise the agent inherits the configured route, worker, or global defaults.
 
 This foundation gave Code UX a clean product base for:
 

@@ -12,6 +12,7 @@ import { AI_MODEL_CATALOG, DEFAULT_INVOCATION_ROUTING } from "../repositories/se
 interface RoutingDecisionContext {
   strategy: ProviderStrategy;
   manualProvider: ProviderConfigId | null;
+  agentProvider?: ProviderConfigId | null;
   providers: Record<ProviderConfigId, ProviderSettings>;
   enabledProviders: ProviderConfigId[];
 }
@@ -26,6 +27,10 @@ export interface ResolveProviderForInvocationInput {
   invocation: InvocationRoutingId;
   task: Subtask;
   providerPool?: ProviderId[];
+  agentProvider?: {
+    providerConfigId?: ProviderConfigId | null;
+    model?: string | null;
+  } | null;
 }
 
 export interface ProviderRoutingStrategy {
@@ -45,30 +50,11 @@ const resolveWeightedSeed = (task: Subtask): string => {
   return `${task.id}:${prompt}`;
 };
 
-const routeInheritsGlobalStrategy = (
-  settings: DashboardSettings,
-  invocation: InvocationRoutingId,
-): boolean => {
-  const route = settings.aiProvider.invocationRouting?.[invocation] || DEFAULT_INVOCATION_ROUTING[invocation];
-  const defaults = DEFAULT_INVOCATION_ROUTING[invocation];
-
-  return route.profile === "GLOBAL"
-    && route.strategy === defaults.strategy
-    && route.provider === defaults.provider
-    && route.allowedProviders.length === 0
-    && Object.keys(route.providers).length === 0;
-};
-
 const resolveInvocationStrategy = (
   settings: DashboardSettings,
   invocation: InvocationRoutingId,
 ): ProviderStrategy => {
   const route = settings.aiProvider.invocationRouting?.[invocation] || DEFAULT_INVOCATION_ROUTING[invocation];
-
-  if (routeInheritsGlobalStrategy(settings, invocation)) {
-    return settings.aiProvider.strategy;
-  }
-
   return route.strategy;
 };
 
@@ -87,6 +73,9 @@ const inferProviderTypeFromConfigId = (providerConfigId: ProviderConfigId): Prov
   }
   if (providerConfigId === "qwen-code" || providerConfigId.startsWith("qwen-code-") || providerConfigId.startsWith("qwen-")) {
     return "qwen-code";
+  }
+  if (providerConfigId === "opencode" || providerConfigId.startsWith("opencode-")) {
+    return "opencode";
   }
   return null;
 };
@@ -152,7 +141,8 @@ export const resolveWorkerModelForProvider = (
 const buildRouteProviders = (
   settings: DashboardSettings,
   invocation: InvocationRoutingId,
-): { manualProvider: ProviderConfigId | null; providers: Record<ProviderConfigId, ProviderSettings> } => {
+  agentProvider?: ResolveProviderForInvocationInput["agentProvider"],
+): { manualProvider: ProviderConfigId | null; agentProviderConfigId: ProviderConfigId | null; providers: Record<ProviderConfigId, ProviderSettings> } => {
   const route = settings.aiProvider.invocationRouting?.[invocation] || DEFAULT_INVOCATION_ROUTING[invocation];
   const providers: Record<ProviderConfigId, ProviderSettings> = Object.fromEntries(
     Object.entries(settings.aiProvider.providers).map(([providerConfigId, provider]) => [
@@ -164,21 +154,22 @@ const buildRouteProviders = (
     ]),
   );
 
-  const manualProvider = route.profile === "WORKER"
+  const inheritedManualProvider = route.profile === "WORKER"
     ? settings.workers.virtualWorkerProvider
     : settings.aiProvider.provider;
+  const manualProvider = route.provider ?? inheritedManualProvider;
 
-  if (route.profile === "WORKER" && manualProvider && providers[manualProvider]) {
-    const workerProviderType = providers[manualProvider].provider;
-    providers[manualProvider] = {
-      ...providers[manualProvider],
+  if (route.profile === "WORKER" && inheritedManualProvider && providers[inheritedManualProvider]) {
+    const workerProviderType = providers[inheritedManualProvider].provider;
+    providers[inheritedManualProvider] = {
+      ...providers[inheritedManualProvider],
       enabled: true,
       model: workerProviderType === "jules"
-        ? providers[manualProvider].model
+        ? providers[inheritedManualProvider].model
         : resolveWorkerModelForProvider(
           workerProviderType,
           settings.workers.model,
-          providers[manualProvider].model,
+          providers[inheritedManualProvider].model,
         ),
     };
   }
@@ -196,7 +187,29 @@ const buildRouteProviders = (
     };
   }
 
-  return { manualProvider, providers };
+  if (route.provider && providers[route.provider] && route.providers[route.provider]?.enabled !== false) {
+    providers[route.provider] = {
+      ...providers[route.provider],
+      enabled: true,
+    };
+  }
+
+  const agentProviderConfigId = route.strategy === "AGENT"
+    ? agentProvider?.providerConfigId?.trim() || null
+    : null;
+  const agentModel = route.strategy === "AGENT"
+    ? agentProvider?.model?.trim() || null
+    : null;
+
+  if (agentProviderConfigId && providers[agentProviderConfigId] && route.providers[agentProviderConfigId]?.enabled !== false) {
+    providers[agentProviderConfigId] = {
+      ...providers[agentProviderConfigId],
+      enabled: true,
+      ...(agentModel && agentModel !== "default" ? { model: agentModel } : {}),
+    };
+  }
+
+  return { manualProvider, agentProviderConfigId, providers };
 };
 
 const getEnabledProviders = (
@@ -218,7 +231,7 @@ const getEnabledProviders = (
       if (settings.git.githubMode === "LOCAL" && provider.provider === "jules") {
         return false;
       }
-      if (allowedProviders && !allowedProviders.has(providerConfigId)) {
+      if (allowedProviders && !allowedProviders.has(providerConfigId) && route.provider !== providerConfigId) {
         return false;
       }
       if (providerPool && !providerPool.has(provider.provider)) {
@@ -249,43 +262,19 @@ export class WeightedRoutingStrategy implements ProviderRoutingStrategy {
   }
 }
 
-export class OrchestratedRoutingStrategy implements ProviderRoutingStrategy {
-  private readonly weightedFallback = new WeightedRoutingStrategy();
+export class AgentRoutingStrategy implements ProviderRoutingStrategy {
+  private readonly manualFallback = new ManualRoutingStrategy();
 
   choose(context: RoutingDecisionContext, task: Subtask): ProviderConfigId {
     if (context.enabledProviders.length === 0) {
       return getEmergencyFallbackProvider(context);
     }
 
-    const promptText = typeof task.prompt === "string" ? task.prompt : "";
-    const prompt = promptText.toLowerCase();
-    const dependencyCount = Array.isArray(task.depends_on) ? task.depends_on.length : 0;
-    const complexKeyword = /(refactor|architecture|migration|orchestrator|integration|performance|atomic|multi-step)/i.test(prompt);
-    const longPrompt = promptText.length > 800;
-    const simplePrompt = promptText.length < 260;
-
-    const chooseByType = (providerId: ProviderId): ProviderConfigId | null => {
-      const matchingProviders = context.enabledProviders.filter((providerConfigId) => getProviderType(context.providers, providerConfigId) === providerId);
-      if (matchingProviders.length === 0) {
-        return null;
-      }
-      return chooseWeightedConfig(context.providers, matchingProviders, task);
-    };
-
-    if (complexKeyword || longPrompt || dependencyCount > 1) {
-      return chooseByType("claude-code")
-        || chooseByType("codex")
-        || chooseByType("jules")
-        || this.weightedFallback.choose(context, task);
+    if (context.agentProvider && context.enabledProviders.includes(context.agentProvider)) {
+      return context.agentProvider;
     }
 
-    if (simplePrompt && dependencyCount === 0) {
-      return chooseByType("gemini")
-        || chooseByType("jules")
-        || this.weightedFallback.choose(context, task);
-    }
-
-    return chooseByType("jules") || this.weightedFallback.choose(context, task);
+    return this.manualFallback.choose(context, task);
   }
 }
 
@@ -295,9 +284,9 @@ const resolveStrategy = (strategy: ProviderStrategy): ProviderRoutingStrategy =>
       return new ManualRoutingStrategy();
     case "WEIGHTED":
       return new WeightedRoutingStrategy();
-    case "ORCHESTRATOR":
+    case "AGENT":
     default:
-      return new OrchestratedRoutingStrategy();
+      return new AgentRoutingStrategy();
   }
 };
 
@@ -307,12 +296,13 @@ export const resolveProviderForInvocation = (
 ): ResolvedProviderRoute => {
   const route = settings.aiProvider.invocationRouting?.[input.invocation] || DEFAULT_INVOCATION_ROUTING[input.invocation];
   const strategy = resolveInvocationStrategy(settings, input.invocation);
-  const base = buildRouteProviders(settings, input.invocation);
-  const manualProvider = route.provider ?? base.manualProvider;
+  const base = buildRouteProviders(settings, input.invocation, input.agentProvider);
+  const manualProvider = base.manualProvider;
   const enabledProviders = getEnabledProviders(settings, input, base.providers);
   const context: RoutingDecisionContext = {
     strategy,
     manualProvider,
+    agentProvider: base.agentProviderConfigId,
     providers: base.providers,
     enabledProviders,
   };

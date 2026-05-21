@@ -4,10 +4,13 @@ import gsap from "gsap";
 import {
   Edit2, FileUp, Trash2, RefreshCw, AlertTriangle,
   Smile, Frown, Angry, Meh, Zap, ChevronDown, ChevronUp,
+  Cpu, Route,
 } from "lucide-preact";
 import type { AgentPreset } from "../../types.js";
+import type { AgentProviderOption } from "./AgentPresetEditorPanel.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { LazyAgentAvatarScene } from "./LazyAgentAvatarScene.js";
+import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { SHOWCASE_EXPRESSIONS, getAccentHex } from "../../lib/agent-avatar.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
@@ -70,18 +73,20 @@ const syncStatusDisplay = (preset: AgentPreset) => {
 export const AgentPresetDetailPanel: FunctionComponent<{
   preset: AgentPreset;
   routeTags: string[];
+  providerOptions?: AgentProviderOption[];
   onEdit: () => void;
   onDelete: (id: string) => void;
   onImport: (id: string) => void;
   deleting: boolean;
   importing: boolean;
-}> = ({ preset, routeTags, onEdit, onDelete, onImport, deleting, importing }) => {
+}> = ({ preset, routeTags, providerOptions = [], onEdit, onDelete, onImport, deleting, importing }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const [activeExpression, setActiveExpression] = useState<AgentAvatarExpression>("happy");
   const [instructionExpanded, setInstructionExpanded] = useState(false);
   const [memoryExpanded, setMemoryExpanded] = useState(false);
   const accentHex = getAccentHex(preset.avatarConfig?.accent);
   const sync = syncStatusDisplay(preset);
+  const selectedProvider = providerOptions.find((option) => option.value === preset.providerConfigId) || null;
 
   useLayoutEffect(() => {
     if (!panelRef.current) return;
@@ -199,6 +204,36 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             <Edit2 className="h-4 w-4" strokeWidth={2.5} />
             Edit
           </button>
+        </div>
+
+        {/* Route Preference */}
+        <div className="grid gap-3 rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] md:grid-cols-2">
+          <div className="flex items-center gap-3">
+            {selectedProvider ? (
+              <ProviderBrandIcon id={selectedProvider.provider} disabled={!selectedProvider.enabled} className="h-10 w-10 rounded-xl" imageClassName="h-5 w-5" />
+            ) : (
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-black/[0.04] text-slate-400 dark:bg-white/[0.04]">
+                <Route className="h-5 w-5" strokeWidth={2.2} />
+              </span>
+            )}
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Agent provider</div>
+              <div className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                {selectedProvider?.label || "Inherits route default"}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-black/[0.04] text-slate-400 dark:bg-white/[0.04]">
+              <Cpu className="h-5 w-5" strokeWidth={2.2} />
+            </span>
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Agent model</div>
+              <div className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                {preset.model || "Inherits provider model"}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* System Instructions */}

@@ -34,7 +34,7 @@ export const DEFAULT_SKILLS: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => 
 
 export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode"];
 export const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
-export const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "ORCHESTRATOR"];
+export const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "AGENT"];
 export const INVOCATION_ROUTING_PROFILES: InvocationRoutingProfile[] = ["GLOBAL", "WORKER"];
 export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
   "task_coding",

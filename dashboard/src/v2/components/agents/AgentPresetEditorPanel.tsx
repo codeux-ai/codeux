@@ -9,12 +9,15 @@ import {
   Tag,
   FileText,
   BrainCircuit,
+  Cpu,
   Sparkles,
   Plus,
   Check,
+  Route,
 } from "lucide-preact";
 import type { AgentPreset } from "../../types.js";
 import { AgentAvatarCustomizer } from "./AgentAvatarCustomizer.js";
+import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { getAccentHex } from "../../lib/agent-avatar.js";
@@ -28,6 +31,14 @@ const DESCRIPTION_MAX = 180;
 const INSTRUCTION_SOFT_MAX = 8000;
 
 type FormErrors = Partial<Record<"name" | "description" | "instruction" | "memory", string>>;
+
+export interface AgentProviderOption {
+  value: string;
+  label: string;
+  provider: string;
+  model: string;
+  enabled: boolean;
+}
 
 function validate({
   name,
@@ -140,9 +151,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   preset: AgentPreset;
   saving: boolean;
   defaultMemoryInstruction?: string;
+  providerOptions?: AgentProviderOption[];
   onSave: (id: string, updates: Partial<AgentPreset>) => void;
   onCancel: () => void;
-}> = ({ preset, saving, defaultMemoryInstruction = "", onSave, onCancel }) => {
+}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], onSave, onCancel }) => {
   const panelRef = useRef<HTMLFormElement>(null);
   const instructionRef = useRef<HTMLTextAreaElement>(null);
   const memoryRef = useRef<HTMLTextAreaElement>(null);
@@ -154,6 +166,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     !!preset.memoryTemplateOverrideEnabled
   );
   const [memoryMarkdown, setMemoryMarkdown] = useState(preset.memoryTemplateMarkdown ?? "");
+  const [providerConfigId, setProviderConfigId] = useState(preset.providerConfigId || "");
+  const [model, setModel] = useState(preset.model || "");
   const [avatarConfig, setAvatarConfig] = useState(preset.avatarConfig);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -167,6 +181,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     setInstructionMarkdown(preset.instructionMarkdown);
     setMemoryOverrideEnabled(!!preset.memoryTemplateOverrideEnabled);
     setMemoryMarkdown(preset.memoryTemplateMarkdown ?? "");
+    setProviderConfigId(preset.providerConfigId || "");
+    setModel(preset.model || "");
     setAvatarConfig(preset.avatarConfig);
     setTouched({});
   }, [preset.id]);
@@ -218,6 +234,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     if (instructionMarkdown !== preset.instructionMarkdown) return true;
     if (memoryOverrideEnabled !== !!preset.memoryTemplateOverrideEnabled) return true;
     if ((preset.memoryTemplateMarkdown ?? "") !== memoryMarkdown && memoryOverrideEnabled) return true;
+    if (providerConfigId !== (preset.providerConfigId || "")) return true;
+    if (model !== (preset.model || "")) return true;
     if (JSON.stringify(avatarConfig ?? {}) !== JSON.stringify(preset.avatarConfig ?? {})) return true;
     return false;
   }, [
@@ -226,6 +244,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     instructionMarkdown,
     memoryOverrideEnabled,
     memoryMarkdown,
+    providerConfigId,
+    model,
     avatarConfig,
     preset,
   ]);
@@ -243,6 +263,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       instructionMarkdown,
       memoryTemplateOverrideEnabled: memoryOverrideEnabled,
       memoryTemplateMarkdown: memoryOverrideEnabled ? memoryMarkdown : undefined,
+      providerConfigId: providerConfigId || null,
+      model: model.trim() || null,
       avatarConfig,
     });
   };
@@ -289,6 +311,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const instructionOver = instructionLength > INSTRUCTION_SOFT_MAX;
   const instructionTokens = estimateTokens(instructionMarkdown);
   const memoryTokens = estimateTokens(memoryMarkdown);
+  const selectedProvider = providerOptions.find((option) => option.value === providerConfigId) || null;
 
   return (
     <>
@@ -398,7 +421,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 icon={FileText}
                 label="Short Description"
                 htmlFor="agent-description"
-                helper="Used by the Planning agent when orchestrator routing chooses the best coding specialist for each task."
+                helper="Used by the Planning agent when it chooses the best coding specialist for each task."
                 counter={`${description.length}/${DESCRIPTION_MAX}`}
                 error={touched.description ? errors.description : undefined}
                 errorId="agent-description-error"
@@ -584,7 +607,69 @@ export const AgentPresetEditorPanel: FunctionComponent<{
 
           {/* Right column: avatar */}
           <div className="flex min-w-0 flex-col gap-5">
-            <SectionCard eyebrow="Step 3" title="Avatar">
+            <SectionCard eyebrow="Step 3" title="Route Preference">
+              <div className="rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
+                <div className="flex items-start gap-4">
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] text-slate-500 dark:bg-white/[0.04] dark:text-slate-300">
+                    <Route className="h-4 w-4" strokeWidth={2.2} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                      Optional Agent Provider
+                    </div>
+                    <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                      Used only when a route is set to the Agent strategy. Blank agents inherit that route's primary instance.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-4">
+                  <FieldShell icon={Cpu} label="Provider Instance" htmlFor="agent-provider" helper="Leave unset to inherit route, worker, or global defaults.">
+                    <select
+                      id="agent-provider"
+                      value={providerConfigId}
+                      onChange={(event) => {
+                        const nextProviderConfigId = event.currentTarget.value;
+                        setProviderConfigId(nextProviderConfigId);
+                        setModel("");
+                      }}
+                      disabled={saving || providerOptions.length === 0}
+                      className="rounded-2xl border border-black/[0.05] bg-white/40 px-4 py-3 text-[13px] font-medium text-slate-900 outline-none backdrop-blur-md transition-all focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 disabled:opacity-50 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:focus:ring-signal-500/15"
+                    >
+                      <option value="">Inherit route default</option>
+                      {providerOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}{option.enabled ? "" : " (paused)"}
+                        </option>
+                      ))}
+                    </select>
+                  </FieldShell>
+
+                  {selectedProvider ? (
+                    <div className="flex items-center gap-3 rounded-2xl border border-black/[0.05] bg-black/[0.025] px-4 py-3 dark:border-white/[0.05] dark:bg-white/[0.035]">
+                      <ProviderBrandIcon id={selectedProvider.provider} disabled={!selectedProvider.enabled} className="h-9 w-9 rounded-xl" imageClassName="h-5 w-5" />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{selectedProvider.label}</div>
+                        <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">{selectedProvider.model || "default model"}</div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <FieldShell icon={Sparkles} label="Model Override" htmlFor="agent-model" helper="Optional. Leave blank to use the selected provider instance model.">
+                    <input
+                      id="agent-model"
+                      type="text"
+                      value={model}
+                      onInput={(event) => setModel(event.currentTarget.value)}
+                      disabled={saving || !providerConfigId}
+                      placeholder={selectedProvider?.model || "Inherited"}
+                      className="rounded-2xl border border-black/[0.05] bg-white/40 px-4 py-3 text-[13px] font-medium text-slate-900 outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 disabled:opacity-50 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
+                    />
+                  </FieldShell>
+                </div>
+              </div>
+            </SectionCard>
+            <SectionCard eyebrow="Step 4" title="Avatar">
               <AgentAvatarCustomizer
                 config={avatarConfig || {}}
                 onChange={setAvatarConfig}

@@ -4,6 +4,8 @@ export interface ParsedAgentMarkdown {
   description?: string;
   instructionMarkdown: string;
   avatarConfig?: AgentAvatarConfig;
+  providerConfigId?: string | null;
+  model?: string | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
 }
@@ -29,6 +31,8 @@ export function parseAgentMarkdown(rawMarkdown: string): ParsedAgentMarkdown {
     instructionMarkdown: body !== undefined ? body : "",
     description: typeof parsedMetadata.description === "string" ? parsedMetadata.description : undefined,
     avatarConfig: parsedMetadata.avatarConfig,
+    providerConfigId: typeof parsedMetadata.providerConfigId === "string" ? parsedMetadata.providerConfigId : undefined,
+    model: typeof parsedMetadata.model === "string" ? parsedMetadata.model : undefined,
     memoryTemplateOverrideEnabled: parsedMetadata.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: parsedMetadata.memoryTemplateMarkdown,
   };
@@ -37,10 +41,12 @@ export function parseAgentMarkdown(rawMarkdown: string): ParsedAgentMarkdown {
 export function formatAgentMarkdown(input: ParsedAgentMarkdown): string {
   const hasAvatarConfig = input.avatarConfig !== undefined;
   const hasDescription = input.description !== undefined;
+  const hasProviderConfigId = input.providerConfigId !== undefined && input.providerConfigId !== null;
+  const hasModel = input.model !== undefined && input.model !== null;
   const hasMemoryTemplateOverrideEnabled = input.memoryTemplateOverrideEnabled !== undefined;
   const hasMemoryTemplateMarkdown = input.memoryTemplateMarkdown !== undefined;
 
-  if (!hasAvatarConfig && !hasDescription && !hasMemoryTemplateOverrideEnabled && !hasMemoryTemplateMarkdown) {
+  if (!hasAvatarConfig && !hasDescription && !hasProviderConfigId && !hasModel && !hasMemoryTemplateOverrideEnabled && !hasMemoryTemplateMarkdown) {
     return input.instructionMarkdown;
   }
 
@@ -50,6 +56,12 @@ export function formatAgentMarkdown(input: ParsedAgentMarkdown): string {
   }
   if (hasAvatarConfig) {
     metadata.avatarConfig = input.avatarConfig;
+  }
+  if (hasProviderConfigId) {
+    metadata.providerConfigId = input.providerConfigId;
+  }
+  if (hasModel) {
+    metadata.model = input.model;
   }
   if (hasMemoryTemplateOverrideEnabled) {
     metadata.memoryTemplateOverrideEnabled = input.memoryTemplateOverrideEnabled;

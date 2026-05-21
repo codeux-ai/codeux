@@ -87,6 +87,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "agent_presets", "source_updated_at", "TEXT");
   ensureColumn(db, "agent_presets", "source_imported_at", "TEXT");
   ensureColumn(db, "agent_presets", "avatar_config_json", "TEXT");
+  ensureColumn(db, "agent_presets", "provider_config_id", "TEXT");
+  ensureColumn(db, "agent_presets", "model", "TEXT");
   ensureColumn(db, "agent_presets", "memory_template_override_enabled", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "agent_presets", "memory_template_markdown", "TEXT");
 

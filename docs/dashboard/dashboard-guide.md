@@ -516,7 +516,7 @@ AI Provider settings now support:
 - Routing strategy:
   - `MANUAL` (single default provider instance)
   - `WEIGHTED` (weight-based distribution across enabled instances)
-  - `ORCHESTRATOR` (rule-based routing with weighted fallback)
+  - `AGENT` (uses the selected agent preset's optional provider/model preference, then inherits route defaults)
 - Provider-instance toggles (`enabled`)
 - Model selection
   - Gemini: curated model list in UI

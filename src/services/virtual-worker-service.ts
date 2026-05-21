@@ -521,6 +521,10 @@ export class VirtualWorkerService {
 
   private async resolveMergeConflictAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
+    const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
+      item.projectId,
+      settings.agents?.routing?.mergeConflict?.agentPresetId ?? null,
+    ).catch(() => null);
     const route = resolveProviderForInvocation(settings, {
       invocation: "merge_conflict",
       task: {
@@ -532,6 +536,12 @@ export class VirtualWorkerService {
         status: "PENDING",
       },
       providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode"],
+      agentProvider: workerAgent
+        ? {
+          providerConfigId: workerAgent.providerConfigId,
+          model: workerAgent.model,
+        }
+        : null,
     });
     const provider = route.provider as Exclude<ProviderId, "jules">;
     const providerConfigId = route.providerConfigId || route.provider;
@@ -550,10 +560,6 @@ export class VirtualWorkerService {
     const title = item.title;
     let succeeded = false;
     let initialHead = "";
-    const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
-      item.projectId,
-      settings.agents?.routing?.mergeConflict?.agentPresetId ?? null,
-    ).catch(() => null);
     const memoryContext = workerAgent?.id
       ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
       : undefined;
@@ -748,6 +754,10 @@ export class VirtualWorkerService {
 
   private async resolveCiFixAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
+    const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
+      item.projectId,
+      settings.agents?.routing?.ciFix?.agentPresetId ?? null,
+    ).catch(() => null);
     const route = resolveProviderForInvocation(settings, {
       invocation: "ci_fix",
       task: {
@@ -759,6 +769,12 @@ export class VirtualWorkerService {
         status: "PENDING",
       },
       providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode"],
+      agentProvider: workerAgent
+        ? {
+          providerConfigId: workerAgent.providerConfigId,
+          model: workerAgent.model,
+        }
+        : null,
     });
     const provider = route.provider as Exclude<ProviderId, "jules">;
     const providerConfigId = route.providerConfigId || route.provider;
@@ -797,10 +813,6 @@ export class VirtualWorkerService {
     const title = item.title;
     let succeeded = false;
     let initialHead = "";
-    const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
-      item.projectId,
-      settings.agents?.routing?.ciFix?.agentPresetId ?? null,
-    ).catch(() => null);
     const memoryContext = workerAgent?.id
       ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
       : undefined;

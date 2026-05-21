@@ -119,39 +119,50 @@ describe("ChatThreadRuntimeService", () => {
     );
   });
 
-  it("honors an explicitly routed virtual provider before falling back to global routing using chatManagementActionService", async () => {
+  it("uses route mapping instead of stale thread virtual provider state", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-4", threadId: "t1", bodyMarkdown: "hello" });
     deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
       connectionId: null,
       runtimeState: {
         routeKind: "virtual",
-        virtualProvider: "codex",
+        virtualProvider: "gemini",
+        modelLabel: "gemini-2.5-flash",
+        sessionIds: ["gemini-session"],
       }
     });
     deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
     deps.taskService.resolveInvocationProvider.mockReturnValue({
-      provider: "jules",
+      provider: "opencode",
+      providerConfigId: "opencode",
       providers: {
-        jules: { model: "default", apiKey: "", thinkingMode: "MEDIUM" },
-        codex: { model: "gpt-5.3-codex", apiKey: "codex-key", thinkingMode: "HIGH" },
+        gemini: { model: "gemini-2.5-flash", apiKey: "gemini-key", thinkingMode: "MEDIUM" },
+        opencode: { model: "openai/gpt-5", apiKey: "opencode-key", thinkingMode: "HIGH" },
       }
     });
     deps.connectionChatRepository.listMessages.mockReturnValue([
       { authorType: "dashboard_user", bodyMarkdown: "first" },
     ]);
     deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec1" });
-    deps.chatManagementActionService.processManagementAction.mockResolvedValue({ replyMarkdown: "codex reply", action: null, approvalRequired: false });
+    deps.chatManagementActionService.processManagementAction.mockResolvedValue({ replyMarkdown: "opencode reply", action: null, approvalRequired: false });
 
     await service.postMessage("p1", { bodyMarkdown: "hello" });
 
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
-        provider: "codex",
-        model: "gpt-5.3-codex",
-        apiKey: "codex-key",
+        provider: "opencode",
+        model: "openai/gpt-5",
+        apiKey: "opencode-key",
+        sessionId: "t1",
       })
     );
+    expect(deps.connectionChatRepository.updateThread).toHaveBeenCalledWith("t1", expect.objectContaining({
+      runtimeState: expect.objectContaining({
+        routeKind: "virtual",
+        virtualProvider: "opencode",
+        sessionIds: ["t1"],
+      })
+    }));
   });
 
   it("handles user approval for a pending management action directly", async () => {

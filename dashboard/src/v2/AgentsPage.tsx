@@ -293,6 +293,16 @@ export const AgentsPage: FunctionComponent = () => {
     return tags;
   }, [effectiveSettings, presets]);
 
+  const providerOptions = useMemo(() => (
+    Object.entries(effectiveSettings?.settings.aiProvider.providers || {}).map(([providerConfigId, provider]) => ({
+      value: providerConfigId,
+      label: provider.name,
+      provider: provider.provider,
+      model: provider.model,
+      enabled: provider.enabled,
+    }))
+  ), [effectiveSettings]);
+
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
 
   const rosterStats = useMemo(() => {
@@ -394,6 +404,7 @@ export const AgentsPage: FunctionComponent = () => {
                   preset={selectedPreset}
                   saving={savingId === selectedPreset.id}
                   defaultMemoryInstruction={effectiveSettings?.settings.memory.workerLearningsInstruction || ""}
+                  providerOptions={providerOptions}
                   onSave={handleSave}
                   onCancel={() => setIsEditing(false)}
                 />
@@ -401,6 +412,7 @@ export const AgentsPage: FunctionComponent = () => {
                 <AgentPresetDetailPanel
                   preset={selectedPreset}
                   routeTags={routeTagsByPresetId.get(selectedPreset.id) ?? []}
+                  providerOptions={providerOptions}
                   onEdit={() => setIsEditing(true)}
                   onDelete={handleDelete}
                   onImport={handleImport}

@@ -19,6 +19,8 @@ export const createAgentPreset = async (
     instructionMarkdown: input.instructionMarkdown,
     labels: input.labels,
     avatarConfig: input.avatarConfig,
+    providerConfigId: input.providerConfigId,
+    model: input.model,
     memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
   };
@@ -39,6 +41,8 @@ export const updateAgentPreset = async (
     instructionMarkdown: input.instructionMarkdown,
     labels: input.labels,
     avatarConfig: input.avatarConfig,
+    providerConfigId: input.providerConfigId,
+    model: input.model,
     memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
   };

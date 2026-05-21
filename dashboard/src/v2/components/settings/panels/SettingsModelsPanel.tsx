@@ -1,8 +1,10 @@
-import type { FunctionComponent } from "preact";
+import type { ComponentChildren, FunctionComponent } from "preact";
+import { CheckCircle2, Cpu, GitBranch, Network, Route, RotateCcw, Settings2, SlidersHorizontal } from "lucide-preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel } from "../SettingsSurface.js";
-import { MetricPill, NumberInput, PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
+import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SelectInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { ProviderBrandIcon } from "../../providers/ProviderBrandIcon.js";
 import type {
   InvocationRoutingId,
   ProjectSettings,
@@ -11,19 +13,64 @@ import type {
 } from "../../../../types.js";
 import {
   getEligibleProviders,
-  getProviderInstanceAuthLabel,
   getProviderInstanceLabel,
   getProviderInstanceModelOptions,
   getProviderModelOptions,
   getProviderTypeLabel,
-  isProviderInstanceAvailable,
   providerSupportsModelSelection,
   providerSupportsThinkingMode,
-  PROVIDER_CARD_TOKENS,
   sortProviderConfigEntries,
 } from "../../../lib/settings-view-models.js";
 
 const INHERIT_VALUE = "__inherit__";
+const providerSelectIcon = (providerId: string, disabled = false) => () => (
+  <ProviderBrandIcon id={providerId} disabled={disabled} className="h-7 w-7 rounded-[0.7rem]" imageClassName="h-4 w-4" />
+);
+
+const StrategyBadge: FunctionComponent<{ strategy: string }> = ({ strategy }) => {
+  const tone = strategy === "MANUAL"
+    ? "border-signal-500/24 bg-black/[0.035] text-signal-700 dark:border-signal-400/24 dark:bg-white/[0.055] dark:text-signal-200"
+    : "border-black/[0.08] bg-black/[0.035] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-slate-300";
+  return (
+    <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] ${tone}`}>
+      {strategy.toLowerCase()}
+    </span>
+  );
+};
+
+const StatusPill: FunctionComponent<{ active: boolean; label?: string }> = ({ active, label }) => (
+  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] ${
+    active
+      ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-700 dark:border-signal-400/20 dark:bg-signal-400/[0.1] dark:text-signal-200"
+      : "border-black/[0.08] bg-black/[0.03] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400"
+  }`}>
+    <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-signal-500 dark:bg-signal-300" : "bg-slate-400 dark:bg-slate-500"}`} />
+    {label || (active ? "Active" : "Inactive")}
+  </span>
+);
+
+const RouteFlowStep: FunctionComponent<{
+  icon: ComponentChildren;
+  label: string;
+  value: string;
+  tone?: "signal" | "neutral";
+}> = ({ icon, label, value, tone = "neutral" }) => (
+  <div className={`relative overflow-hidden rounded-[1.15rem] border px-4 py-3 ${
+    tone === "signal"
+      ? "border-signal-500/24 bg-black/[0.035] dark:border-signal-400/24 dark:bg-white/[0.055]"
+      : "border-black/[0.06] bg-black/[0.025] dark:border-white/[0.06] dark:bg-white/[0.035]"
+  }`}>
+    <div className="flex items-center gap-2">
+      <span className={tone === "signal" ? "text-signal-600 dark:text-signal-300" : "text-slate-400"}>
+        {icon}
+      </span>
+      <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</span>
+    </div>
+    <div className={`mt-1 truncate text-sm font-black ${tone === "signal" ? "text-signal-700 dark:text-signal-200" : "text-slate-900 dark:text-white"}`}>
+      {value}
+    </div>
+  </div>
+);
 
 export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
@@ -32,11 +79,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
     projectSources,
     systemSettings,
     externalHints,
-    activeProviderPanel,
-    setActiveProviderPanel,
     activeInvocationRoute,
     setActiveInvocationRoute,
-    providerLabels,
     thinkingModeOptions,
     invocationRouteDefinitions,
     routingProfileOptions,
@@ -53,13 +97,14 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   const providerEntries = sortProviderConfigEntries(Object.entries(editableSettings.aiProvider.providers));
   const eligibleProviderConfigIds = getEligibleProviders(systemSettings, editableSettings, externalHints);
   const workerProviderEntries = providerEntries.filter(([, provider]) => provider.provider !== "jules");
-  const activeProviderConfigId = providerEntries.some(([providerConfigId]) => providerConfigId === activeProviderPanel)
-    ? activeProviderPanel
-    : providerEntries[0]?.[0] || null;
-  const activeProviderEntry = activeProviderConfigId
-    ? editableSettings.aiProvider.providers[activeProviderConfigId]
-    : null;
 
+  const globalProviderSettings = editableSettings.aiProvider.provider
+    ? editableSettings.aiProvider.providers[editableSettings.aiProvider.provider]
+    : null;
+  const globalProviderType = globalProviderSettings?.provider || "jules";
+  const globalModelOptions = globalProviderSettings
+    ? getProviderInstanceModelOptions(editableSettings.aiProvider.provider || "", globalProviderSettings, systemSettings)
+    : getProviderModelOptions(globalProviderType);
   const workerProviderSettings = editableSettings.aiProvider.providers[editableSettings.workers.virtualWorkerProvider];
   const workerProviderType = workerProviderSettings?.provider || "codex";
   const workerModelOptions = workerProviderSettings
@@ -184,21 +229,119 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   const routePool = activeRoute.allowedProviders.length > 0
     ? activeRoute.allowedProviders.filter((providerConfigId) => editableSettings.aiProvider.providers[providerConfigId])
     : providerEntries.map(([providerConfigId]) => providerConfigId);
-  const routeResolvedDefault = activeRoute.profile === "WORKER"
+  const routeResolvedDefault = activeRoute.provider
+    ? editableSettings.aiProvider.providers[activeRoute.provider]
+    : activeRoute.profile === "WORKER"
     ? editableSettings.aiProvider.providers[editableSettings.workers.virtualWorkerProvider]
     : (editableSettings.aiProvider.provider ? editableSettings.aiProvider.providers[editableSettings.aiProvider.provider] : null);
+  const enabledProviderCount = providerEntries.filter(([, provider]) => provider.enabled).length;
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Worker Runtime" watermark="WRK" badge={getBadge("workers")}>
-        <Row label="Worker execution mode" description="Worker-owned supervision runs through an internal virtual worker instance." badge={getFieldBadge("workers.executionMode")}>
-          <PillChoiceGroup
-            value="VIRTUAL"
-            onChange={() => undefined}
-            options={[{ value: "VIRTUAL", label: "Virtual", hint: "Spin up a short-lived worker instance only when needed." }]}
+      <section className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-black/[0.035] p-5 shadow-[0_18px_48px_rgba(15,23,42,0.055)] backdrop-blur-2xl dark:border-white/[0.07] dark:bg-white/[0.045] dark:shadow-[0_22px_54px_rgba(0,0,0,0.28)]">
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-300">
+              <Route className="h-3.5 w-3.5" strokeWidth={2.4} />
+              AI routing console
+            </div>
+            <h3 className="mt-3 font-display text-3xl font-black tracking-tight text-slate-950 dark:text-white">Provider defaults, route decisions, and runtime capacity in one place.</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              Global and worker anchors define the inherited defaults. Base provider configuration defines each instance. Route mapping decides how work is assigned.
+            </p>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <div className="rounded-[1.35rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
+                <div className="flex items-start gap-3">
+                  {globalProviderSettings ? <ProviderLogo providerId={globalProviderSettings.provider} disabled={!globalProviderSettings.enabled} /> : null}
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Global anchor</div>
+                    <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{globalProviderSettings ? getProviderInstanceLabel(globalProviderSettings) : "None"}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{globalProviderSettings?.model || "default"}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-[1.35rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
+                <div className="flex items-start gap-3">
+                  {workerProviderSettings ? <ProviderLogo providerId={workerProviderSettings.provider} disabled={!workerProviderSettings.enabled} /> : null}
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Worker anchor</div>
+                    <div className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{workerProviderSettings ? getProviderInstanceLabel(workerProviderSettings) : "None"}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{editableSettings.workers.model === "default" ? `Default (${workerProviderSettings?.model || "default"})` : editableSettings.workers.model}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+            <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
+              <div className="flex items-center justify-between gap-3">
+                <Cpu className="h-4 w-4 text-slate-400" />
+                <span className="text-2xl font-black text-slate-900 dark:text-white">{providerEntries.length}</span>
+              </div>
+              <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Provider instances</div>
+            </div>
+            <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
+              <div className="flex items-center justify-between gap-3">
+                <SlidersHorizontal className="h-4 w-4 text-slate-400" />
+                <span className="text-2xl font-black text-slate-900 dark:text-white">{enabledProviderCount}</span>
+              </div>
+              <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Eligible by default</div>
+            </div>
+            <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
+              <div className="flex items-center justify-between gap-3">
+                <GitBranch className="h-4 w-4 text-slate-400" />
+                <span className="text-2xl font-black text-slate-900 dark:text-white">{invocationRouteDefinitions.length}</span>
+              </div>
+              <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Invocation routes</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <SectionCard title="Default Routing Anchors" watermark="DEF" badge={getBadge("aiProvider", "workers")}>
+        {providerEntries.length === 0 ? (
+          <NoticePanel title="No provider credentials">
+            Add provider credentials in Integrations before configuring AI routes.
+          </NoticePanel>
+        ) : null}
+        <Row label="Global default instance" description="Fallback instance for global-profile routes that inherit their primary provider." badge={getFieldBadge("aiProvider.provider")}>
+          <SelectInput
+            value={editableSettings.aiProvider.provider || providerEntries[0]?.[0] || ""}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              aiProvider: {
+                ...current.aiProvider,
+                provider: value,
+                providers: {
+                  ...current.aiProvider.providers,
+                  [value]: {
+                    ...current.aiProvider.providers[value],
+                    enabled: true,
+                  },
+                },
+              },
+            }))}
+            options={providerEntries.map(([providerConfigId, provider]) => ({
+              value: providerConfigId,
+              label: getProviderInstanceLabel(provider),
+              icon: providerSelectIcon(provider.provider),
+            }))}
           />
         </Row>
-        <Row label="Worker provider instance" description="Select the exact provider instance used by worker-profile routes." badge={getFieldBadge("workers.virtualWorkerProvider")}>
+        <Row label="Global default model" description="Base model used when the global default instance is selected without a route-specific model override." badge={getFieldBadge("aiProvider.providers")}>
+          <SelectInput
+            value={globalProviderSettings?.model || "default"}
+            onChange={(value) => editableSettings.aiProvider.provider
+              ? updateProviderSettings(editableSettings.aiProvider.provider, { model: value })
+              : undefined}
+            disabled={!globalProviderSettings || !providerSupportsModelSelection(globalProviderSettings.provider)}
+            options={globalProviderSettings && providerSupportsModelSelection(globalProviderSettings.provider)
+              ? globalModelOptions
+              : [{ value: "default", label: "Managed by provider" }]}
+          />
+        </Row>
+        <Row label="Worker default instance" description="Fallback instance for worker-profile routes that inherit their primary provider." badge={getFieldBadge("workers.virtualWorkerProvider")}>
           <SelectInput
             value={editableSettings.workers.virtualWorkerProvider}
             onChange={(value) => updateEditableSettings((current) => ({
@@ -212,10 +355,11 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
             options={workerProviderEntries.map(([providerConfigId, provider]) => ({
               value: providerConfigId,
               label: getProviderInstanceLabel(provider),
+              icon: providerSelectIcon(provider.provider),
             }))}
           />
         </Row>
-        <Row label="Worker model" description="Override the selected worker instance model. Default uses that instance’s base model." badge={getFieldBadge("workers.model")}>
+        <Row label="Worker default model" description="Model used by inherited worker-profile routes. Default uses the selected worker instance’s base model." badge={getFieldBadge("workers.model")}>
           <SelectInput
             value={editableSettings.workers.model || "default"}
             onChange={(value) => updateEditableSettings((current) => ({
@@ -245,201 +389,84 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         </Row>
       </SectionCard>
 
-      <SectionCard title="Provider Instances" watermark="MDL" badge={getBadge("aiProvider")}>
-        <Row label="Routing strategy" description="Manual pins one exact instance, weighted distributes across enabled instances, orchestrator chooses an instance at runtime." badge={getFieldBadge("aiProvider.strategy")} last={editableSettings.aiProvider.strategy !== "MANUAL"}>
-          <PillChoiceGroup
-            value={editableSettings.aiProvider.strategy}
-            onChange={(value) => updateEditableSettings((current) => ({
-              ...current,
-              aiProvider: {
-                ...current.aiProvider,
-                strategy: value as ProjectSettings["aiProvider"]["strategy"],
-              },
-            }))}
-            options={[
-              { value: "MANUAL", label: "Manual", hint: "Choose one exact instance." },
-              { value: "WEIGHTED", label: "Weighted", hint: "Distribute by instance weight." },
-              { value: "ORCHESTRATOR", label: "Orchestrator", hint: "Runtime can choose the best instance." },
-            ]}
-          />
-        </Row>
-        {editableSettings.aiProvider.strategy === "MANUAL" ? (
-          <Row label="Primary provider instance" description="Global default instance for manual routing." badge={getFieldBadge("aiProvider.provider")} last>
-            <SelectInput
-              value={editableSettings.aiProvider.provider || providerEntries[0]?.[0] || ""}
-              onChange={(value) => updateEditableSettings((current) => ({
-                ...current,
-                aiProvider: {
-                  ...current.aiProvider,
-                  provider: value,
-                },
-              }))}
-              options={providerEntries.map(([providerConfigId, provider]) => ({
-                value: providerConfigId,
-                label: getProviderInstanceLabel(provider),
-              }))}
-            />
-          </Row>
-        ) : null}
-
-        {providerEntries.length === 0 ? (
-          <NoticePanel title="No provider instances">
-            Add provider credentials in Integrations before configuring AI Models.
-          </NoticePanel>
-        ) : (
-          <div className="mt-6 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <div className="rounded-[1.6rem] border border-black/[0.06] bg-black/[0.02] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="mb-3 px-2">
-                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Provider instances</div>
-                <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                  Every named instance routes independently. Weighted mode treats each item here as its own target.
+      <SectionCard title="Base Provider Configuration" watermark="BASE" badge={getBadge("aiProvider.providers")}>
+        <div className="mb-4 rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+          These values are the inheritance baseline for every route. Route mapping owns manual, weighted, or agent-based selection; this section defines each provider instance’s default model, reasoning depth, weight, and capacity.
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {providerEntries.map(([providerConfigId, provider]) => (
+            <div key={`base-${providerConfigId}`} className={`relative overflow-hidden rounded-[1.35rem] border p-4 shadow-[0_14px_32px_rgba(15,23,42,0.035)] transition-colors dark:shadow-[0_16px_34px_rgba(0,0,0,0.18)] ${
+              provider.enabled
+                ? "border-signal-500/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,255,255,0.72))] dark:border-signal-400/15 dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.075),rgba(255,255,255,0.04))]"
+                : "border-black/[0.06] bg-white/62 opacity-85 dark:border-white/[0.06] dark:bg-white/[0.035]"
+            }`}>
+              <div aria-hidden className={`absolute inset-x-0 top-0 h-1 ${provider.enabled ? "bg-signal-500/55" : "bg-slate-300/55 dark:bg-white/15"}`} />
+              <div className="mb-3 flex items-start justify-between gap-3 border-b border-black/[0.06] pb-3 dark:border-white/[0.06]">
+                <div className="flex items-start gap-3">
+                  <ProviderLogo providerId={provider.provider} disabled={!provider.enabled} />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">{provider.name}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{getProviderTypeLabel(provider.provider)} baseline</div>
+                  </div>
+                </div>
+                <StatusPill active={provider.enabled} label={provider.enabled ? "Eligible" : "Paused"} />
+              </div>
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
+                  <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{provider.weight}</div>
+                </div>
+                <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking</div>
+                  <div className="mt-1 truncate text-sm font-black text-slate-900 dark:text-white">{provider.provider === "jules" ? "n/a" : provider.thinkingMode}</div>
+                </div>
+                <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
+                  <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{provider.maxConcurrentTasks || "∞"}</div>
                 </div>
               </div>
-              <div className="flex flex-col gap-2">
-                {providerEntries.map(([providerConfigId, provider]) => {
-                  const authLabel = getProviderInstanceAuthLabel(
-                    providerConfigId,
-                    systemSettings,
-                    editableSettings.cliWorkflow.executionMode === "DOCKER",
-                  );
-                  const available = isProviderInstanceAvailable(providerConfigId, systemSettings);
-                  const isGlobalDefault = editableSettings.aiProvider.provider === providerConfigId;
-                  const isWorkerDefault = editableSettings.workers.virtualWorkerProvider === providerConfigId;
-                  return (
-                    <button
-                      key={providerConfigId}
-                      type="button"
-                      onClick={() => setActiveProviderPanel(providerConfigId)}
-                      className={`rounded-[1.2rem] border px-4 py-3 text-left transition-all duration-200 ${
-                        providerConfigId === activeProviderConfigId
-                          ? "border-signal-500/25 bg-signal-500/[0.08] shadow-[0_12px_24px_rgba(0,224,160,0.08)] dark:border-signal-400/25 dark:bg-signal-400/[0.12]"
-                          : "border-black/[0.06] bg-white/78 hover:border-black/[0.1] hover:bg-white dark:border-white/[0.06] dark:bg-void-900/50 dark:hover:border-white/[0.1]"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <ProviderLogo providerId={provider.provider} disabled={!provider.enabled} />
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{provider.name}</div>
-                          <div className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                            {getProviderTypeLabel(provider.provider)} · {provider.provider === "jules" ? "Managed model" : provider.model}
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {authLabel ? (
-                              <span className="rounded-full border border-black/[0.08] bg-black/[0.03] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
-                                {authLabel}
-                              </span>
-                            ) : null}
-                            {!available ? (
-                              <span className="rounded-full border border-status-red/20 bg-status-red/[0.08] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-status-red">
-                                Unavailable
-                              </span>
-                            ) : null}
-                            {isGlobalDefault ? (
-                              <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-signal-700 dark:text-signal-200">
-                                Global default
-                              </span>
-                            ) : null}
-                            {isWorkerDefault ? (
-                              <span className="rounded-full border border-amber-500/20 bg-amber-500/[0.08] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-200">
-                                Worker default
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+              <div className="grid gap-3">
+                <Row label="Eligible by default" description="Controls whether this instance participates before route-specific overrides are applied.">
+                  <Toggle value={provider.enabled} onChange={(value) => updateProviderSettings(providerConfigId, { enabled: value })} />
+                </Row>
+                {providerSupportsModelSelection(provider.provider) ? (
+                  <Row label="Base model" description="Inherited by routes unless a route-specific model override is set.">
+                    <SelectInput
+                      value={provider.model}
+                      onChange={(value) => updateProviderSettings(providerConfigId, { model: value })}
+                      options={getProviderInstanceModelOptions(providerConfigId, provider, systemSettings)}
+                    />
+                  </Row>
+                ) : null}
+                {providerSupportsThinkingMode(provider.provider) ? (
+                  <Row label="Base thinking" description="Inherited reasoning depth for this provider instance.">
+                    <SelectInput
+                      value={provider.thinkingMode}
+                      onChange={(value) => updateProviderSettings(providerConfigId, { thinkingMode: value as ThinkingMode })}
+                      options={thinkingModeOptions}
+                    />
+                  </Row>
+                ) : null}
+                <Row label="Base weight" description="Used by weighted route strategies unless overridden.">
+                  <NumberInput value={provider.weight} min={0} max={100} onChange={(value) => updateProviderSettings(providerConfigId, { weight: value })} />
+                </Row>
+                <Row label="Max concurrent tasks" description="Provider-level cap; 0 means unlimited." last>
+                  <NumberInput value={provider.maxConcurrentTasks} min={0} max={50} onChange={(value) => updateProviderSettings(providerConfigId, { maxConcurrentTasks: value })} />
+                </Row>
               </div>
             </div>
-
-            {activeProviderEntry && activeProviderConfigId ? (
-              <div className={`group relative overflow-hidden rounded-[1.7rem] border border-black/[0.06] bg-white/74 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_20px_44px_rgba(0,0,0,0.22)] ${activeProviderEntry.enabled ? "" : "opacity-80"}`}>
-                <div aria-hidden className={`pointer-events-none absolute inset-0 ${PROVIDER_CARD_TOKENS[activeProviderEntry.provider].glowClassName}`} />
-                <div aria-hidden className={`absolute left-0 top-6 bottom-6 w-1 rounded-r-full ${PROVIDER_CARD_TOKENS[activeProviderEntry.provider].railClassName}`} />
-                <div className="relative z-10 flex flex-col gap-5">
-                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
-                    <div className="flex items-start gap-3">
-                      <ProviderLogo providerId={activeProviderEntry.provider} disabled={!activeProviderEntry.enabled} />
-                      <div>
-                        <div className="mb-2 flex flex-wrap gap-2">
-                          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] ${PROVIDER_CARD_TOKENS[activeProviderEntry.provider].badgeClassName}`}>
-                            {getProviderTypeLabel(activeProviderEntry.provider)}
-                          </span>
-                          {eligibleProviderConfigIds.includes(activeProviderConfigId) ? (
-                            <span className="inline-flex items-center rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-signal-700 dark:text-signal-200">
-                              Routable
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="text-xl font-semibold text-slate-900 dark:text-white">{activeProviderEntry.name}</div>
-                        <div className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                          Configure this named instance independently. Weighted routing treats it as its own target, even when several instances share the same CLI type.
-                        </div>
-                      </div>
-                    </div>
-                    <Toggle value={activeProviderEntry.enabled} onChange={() => updateProviderSettings(activeProviderConfigId, { enabled: !activeProviderEntry.enabled })} />
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <MetricPill label="Type" value={getProviderTypeLabel(activeProviderEntry.provider)} tone="signal" />
-                    <MetricPill label="Model" value={activeProviderEntry.provider === "jules" ? "Managed" : activeProviderEntry.model} />
-                    <MetricPill label="Weight" value={String(activeProviderEntry.weight)} />
-                    <MetricPill label="Routing" value={eligibleProviderConfigIds.includes(activeProviderConfigId) ? "Eligible" : "Not eligible"} />
-                  </div>
-
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div>
-                      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Display name</div>
-                      <TextInput value={activeProviderEntry.name} onChange={(value) => updateProviderSettings(activeProviderConfigId, { name: value })} />
-                    </div>
-                    <div>
-                      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Max concurrent tasks</div>
-                      <NumberInput value={activeProviderEntry.maxConcurrentTasks} min={0} onChange={(value) => updateProviderSettings(activeProviderConfigId, { maxConcurrentTasks: value })} />
-                    </div>
-                    {providerSupportsModelSelection(activeProviderEntry.provider) ? (
-                      <div>
-                        <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Base model</div>
-                        <SelectInput
-                          value={activeProviderEntry.model}
-                          onChange={(value) => updateProviderSettings(activeProviderConfigId, { model: value })}
-                          options={getProviderInstanceModelOptions(activeProviderConfigId, activeProviderEntry, systemSettings)}
-                        />
-                      </div>
-                    ) : null}
-                    {providerSupportsThinkingMode(activeProviderEntry.provider) ? (
-                      <div>
-                        <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking mode</div>
-                        <SelectInput
-                          value={activeProviderEntry.thinkingMode}
-                          onChange={(value) => updateProviderSettings(activeProviderConfigId, { thinkingMode: value as ThinkingMode })}
-                          options={thinkingModeOptions}
-                        />
-                      </div>
-                    ) : null}
-                    <div>
-                      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
-                      <NumberInput value={activeProviderEntry.weight} min={0} max={100} onChange={(value) => updateProviderSettings(activeProviderConfigId, { weight: value })} />
-                    </div>
-                  </div>
-
-                  {activeProviderEntry.provider === "jules" ? (
-                    <div className="rounded-2xl border border-black/[0.08] bg-black/[0.03] px-4 py-3 text-xs font-medium leading-relaxed text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
-                      Jules remains a provider-managed API backend. It still routes like any other instance, but model and thinking controls stay API-managed.
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        )}
+          ))}
+        </div>
       </SectionCard>
 
       <SectionCard title="Route Mapping" watermark="MAP" badge={getBadge("aiProvider.invocationRouting")}>
-        <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="rounded-[1.6rem] border border-black/[0.06] bg-black/[0.02] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            <div className="mb-3 px-2">
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Invocation routes</div>
+        <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="rounded-[1.6rem] border border-black/[0.06] bg-[linear-gradient(180deg,rgba(15,23,42,0.028),rgba(15,23,42,0.012))] p-3 dark:border-white/[0.06] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.02))]">
+            <div className="mb-3 px-2.5 pt-1">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                <Network className="h-3.5 w-3.5" strokeWidth={2.4} />
+                Invocation routes
+              </div>
               <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                 Each route can inherit a default instance, choose a manual instance, or distribute across a weighted pool of exact instances.
               </div>
@@ -447,23 +474,45 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
             <div className="flex flex-col gap-2">
               {invocationRouteDefinitions.map((definition) => {
                 const route = editableSettings.aiProvider.invocationRouting[definition.id];
+                const resolvedProvider = route.provider
+                  ? editableSettings.aiProvider.providers[route.provider]
+                  : route.profile === "WORKER"
+                    ? workerProviderSettings
+                    : globalProviderSettings;
                 const poolCount = route.allowedProviders.length || providerEntries.length;
+                const overridesCount = Object.keys(route.providers).length;
                 return (
                   <button
                     key={definition.id}
                     type="button"
                     onClick={() => setActiveInvocationRoute(definition.id)}
-                    className={`rounded-[1.2rem] border px-4 py-3 text-left transition-all duration-200 ${
+                    className={`group relative overflow-hidden rounded-[1.25rem] border px-4 py-3 text-left transition-all duration-200 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 ${
                       definition.id === activeInvocationRoute
-                        ? "border-signal-500/25 bg-signal-500/[0.08] shadow-[0_12px_24px_rgba(0,224,160,0.08)] dark:border-signal-400/25 dark:bg-signal-400/[0.12]"
-                        : "border-black/[0.06] bg-white/78 hover:border-black/[0.1] hover:bg-white dark:border-white/[0.06] dark:bg-void-900/50 dark:hover:border-white/[0.1]"
+                        ? "border-signal-500/30 bg-black/[0.045] shadow-[0_18px_34px_rgba(15,23,42,0.08)] dark:border-signal-400/30 dark:bg-white/[0.07]"
+                        : "border-black/[0.06] bg-black/[0.025] hover:-translate-y-0.5 hover:border-black/[0.12] hover:bg-black/[0.04] hover:shadow-[0_14px_28px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.035] dark:hover:border-white/[0.12] dark:hover:bg-white/[0.06]"
                     }`}
                   >
-                    <div className="text-sm font-semibold text-slate-900 dark:text-white">{definition.label}</div>
+                    {definition.id === activeInvocationRoute ? (
+                      <div aria-hidden className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-signal-500 dark:bg-signal-300" />
+                    ) : null}
+                    <div className="flex items-start gap-3">
+                      {resolvedProvider ? <ProviderBrandIcon id={resolvedProvider.provider} disabled={!resolvedProvider.enabled} className="h-8 w-8 rounded-[0.75rem]" imageClassName="h-4 w-4" /> : null}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{definition.label}</div>
+                          {definition.id === activeInvocationRoute ? <CheckCircle2 className="h-4 w-4 shrink-0 text-signal-600 dark:text-signal-300" /> : null}
+                        </div>
+                        <div className="mt-0.5 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          {resolvedProvider ? getProviderInstanceLabel(resolvedProvider) : "No provider"}
+                        </div>
+                      </div>
+                    </div>
                     <div className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">{definition.description}</div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                      <span>{route.profile}</span>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      <span className="rounded-full bg-black/[0.04] px-2 py-1 dark:bg-white/[0.04]">{route.profile}</span>
+                      <StrategyBadge strategy={route.strategy} />
                       <span className="rounded-full bg-black/[0.04] px-2 py-1 dark:bg-white/[0.04]">{poolCount} instances</span>
+                      {overridesCount > 0 ? <span className="rounded-full bg-black/[0.04] px-2 py-1 dark:bg-white/[0.04]">{overridesCount} overrides</span> : null}
                     </div>
                   </button>
                 );
@@ -471,22 +520,48 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
             </div>
           </div>
 
-          <div className="rounded-[1.6rem] border border-black/[0.06] bg-white/78 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.05)] dark:border-white/[0.06] dark:bg-void-900/52 dark:shadow-[0_20px_44px_rgba(0,0,0,0.24)]">
+          <div className="relative overflow-hidden rounded-[1.6rem] border border-black/[0.06] bg-black/[0.035] p-5 shadow-[0_18px_44px_rgba(15,23,42,0.05)] dark:border-white/[0.06] dark:bg-white/[0.045] dark:shadow-[0_20px_44px_rgba(0,0,0,0.24)]">
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/35 to-transparent" />
             <div className="mb-5 flex flex-wrap items-start justify-between gap-4 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
-              <div>
-                <div className="text-lg font-semibold text-slate-900 dark:text-white">{activeRouteDefinition.label}</div>
-                <div className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">{activeRouteDefinition.description}</div>
+              <div className="flex min-w-0 items-start gap-3">
+                {routeResolvedDefault ? <ProviderLogo providerId={routeResolvedDefault.provider} disabled={!routeResolvedDefault.enabled} /> : null}
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-300">Active route</div>
+                  <div className="mt-1 text-xl font-black text-slate-950 dark:text-white">{activeRouteDefinition.label}</div>
+                  <div className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">{activeRouteDefinition.description}</div>
+                  <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Inherits from <span className="font-semibold text-slate-700 dark:text-slate-200">{routeResolvedDefault ? getProviderInstanceLabel(routeResolvedDefault) : "no configured provider"}</span>
+                  </div>
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">{activeRoute.profile} profile</span>
-                <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">{activeRoute.strategy}</span>
+                <StrategyBadge strategy={activeRoute.strategy} />
               </div>
             </div>
 
-            <div className="mb-4 grid gap-3 md:grid-cols-3">
-              <MetricPill label="Resolved default" value={routeResolvedDefault ? getProviderInstanceLabel(routeResolvedDefault) : "None"} tone="signal" />
-              <MetricPill label="Pool size" value={`${routePool.length} instance${routePool.length === 1 ? "" : "s"}`} />
-              <MetricPill label="Overrides" value={`${Object.keys(activeRoute.providers).length} instance${Object.keys(activeRoute.providers).length === 1 ? "" : "s"}`} />
+            <div className="mb-5 grid gap-3 md:grid-cols-4">
+              <RouteFlowStep
+                icon={<Route className="h-4 w-4" />}
+                label="Profile"
+                value={activeRoute.profile.toLowerCase()}
+                tone="signal"
+              />
+              <RouteFlowStep
+                icon={<SlidersHorizontal className="h-4 w-4" />}
+                label="Strategy"
+                value={activeRoute.strategy.toLowerCase()}
+              />
+              <RouteFlowStep
+                icon={routeResolvedDefault ? <ProviderBrandIcon id={routeResolvedDefault.provider} disabled={!routeResolvedDefault.enabled} className="h-6 w-6 rounded-[0.55rem]" imageClassName="h-3.5 w-3.5" /> : <Cpu className="h-4 w-4" />}
+                label="Primary"
+                value={routeResolvedDefault ? routeResolvedDefault.name : "None"}
+              />
+              <RouteFlowStep
+                icon={<Network className="h-4 w-4" />}
+                label="Pool"
+                value={`${routePool.length} / ${providerEntries.length}`}
+              />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -511,7 +586,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   options={[
                     { value: "MANUAL", label: "Manual", hint: "Pin one exact instance." },
                     { value: "WEIGHTED", label: "Weighted", hint: "Distribute by instance weight." },
-                    { value: "ORCHESTRATOR", label: "Orchestrator", hint: "Runtime chooses an instance." },
+                    { value: "AGENT", label: "Agent", hint: "Use agent provider/model." },
                   ]}
                 />
               </div>
@@ -521,10 +596,16 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Primary instance</div>
               <SelectInput
                 value={activeRoute.provider || INHERIT_VALUE}
-                onChange={(value) => updateRouteSettings(activeRouteDefinition.id, {
-                  provider: value === INHERIT_VALUE ? null : value,
-                })}
-                disabled={activeRoute.strategy !== "MANUAL"}
+                onChange={(value) => {
+                  const providerConfigId = value === INHERIT_VALUE ? null : value;
+                  updateRouteSettings(activeRouteDefinition.id, {
+                    provider: providerConfigId,
+                  });
+                  if (providerConfigId) {
+                    updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { enabled: true });
+                  }
+                }}
+                disabled={activeRoute.strategy === "WEIGHTED"}
                 options={[
                   {
                     value: INHERIT_VALUE,
@@ -535,19 +616,23 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   ...providerEntries.map(([providerConfigId, provider]) => ({
                     value: providerConfigId,
                     label: getProviderInstanceLabel(provider),
+                    icon: providerSelectIcon(provider.provider, !provider.enabled),
                   })),
                 ]}
               />
             </div>
 
-            <div className="mt-5 rounded-[1.35rem] border border-black/[0.06] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Allowed pool</div>
+            <div className="mt-5 rounded-[1.35rem] border border-black/[0.06] bg-[linear-gradient(180deg,rgba(15,23,42,0.025),rgba(15,23,42,0.01))] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                  <Network className="h-3.5 w-3.5" strokeWidth={2.4} />
+                  Allowed pool
+                </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">
                   {activeRoute.allowedProviders.length === 0 ? "Using all configured instances" : `${activeRoute.allowedProviders.length} pinned`}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {providerEntries.map(([providerConfigId, provider]) => {
                   const active = activeRoute.allowedProviders.length === 0 || activeRoute.allowedProviders.includes(providerConfigId);
                   const available = eligibleProviderConfigIds.includes(providerConfigId);
@@ -555,16 +640,25 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                     <button
                       key={`${activeRouteDefinition.id}-${providerConfigId}`}
                       type="button"
+                      aria-pressed={active}
                       onClick={() => toggleAllowedProvider(activeRouteDefinition.id, providerConfigId)}
-                      className={`rounded-full border px-3 py-2 text-[11px] font-semibold tracking-wide transition-colors ${
+                      className={`group flex min-h-[68px] items-center justify-between gap-3 rounded-[1rem] border px-3 py-2.5 text-left transition-all duration-200 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 ${
                         active
-                          ? "border-signal-500/35 bg-signal-500/12 text-signal-700 dark:border-signal-400/35 dark:bg-signal-400/12 dark:text-signal-200"
-                          : "border-black/[0.08] bg-white/78 text-slate-500 dark:border-white/[0.08] dark:bg-void-900/60 dark:text-slate-400"
+                          ? "border-signal-500/30 bg-black/[0.045] text-slate-900 shadow-[0_10px_20px_rgba(15,23,42,0.06)] dark:border-signal-400/30 dark:bg-white/[0.065] dark:text-white"
+                          : "border-black/[0.08] bg-black/[0.025] text-slate-500 hover:border-black/[0.12] hover:bg-black/[0.04] dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.06]"
                       }`}
                     >
-                      {provider.name}
-                      <span className="ml-1.5 text-[10px] opacity-70">{getProviderTypeLabel(provider.provider)}</span>
-                      {!available ? <span className="ml-1.5 text-[10px] opacity-70">unavailable</span> : null}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <ProviderBrandIcon id={provider.provider} disabled={!active || !provider.enabled} className="h-7 w-7 rounded-[0.7rem]" imageClassName="h-4 w-4" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-bold">{provider.name}</span>
+                          <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.12em] opacity-65">{getProviderTypeLabel(provider.provider)}</span>
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 flex-col items-end gap-1">
+                        {active ? <CheckCircle2 className="h-4 w-4 text-signal-600 dark:text-signal-300" /> : <span className="h-4 w-4 rounded-full border border-black/[0.12] dark:border-white/[0.16]" />}
+                        {!available ? <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-amber-600 dark:text-amber-300">Unavailable</span> : null}
+                      </span>
                     </button>
                   );
                 })}
@@ -578,19 +672,45 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 if (!provider) {
                   return null;
                 }
+                const participationEnabled = override.enabled ?? provider.enabled;
+                const overrideCount = [
+                  typeof override.enabled === "boolean",
+                  typeof override.model === "string",
+                  typeof override.thinkingMode === "string",
+                  typeof override.weight === "number",
+                ].filter(Boolean).length;
                 return (
-                  <div key={`${activeRouteDefinition.id}-${providerConfigId}`} className="rounded-[1.35rem] border border-black/[0.06] bg-white/82 p-4 dark:border-white/[0.06] dark:bg-white/[0.04]">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900 dark:text-white">{provider.name}</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">{getProviderTypeLabel(provider.provider)}</div>
+                  <div key={`${activeRouteDefinition.id}-${providerConfigId}`} className={`relative overflow-hidden rounded-[1.35rem] border p-4 shadow-[0_14px_32px_rgba(15,23,42,0.035)] dark:shadow-[0_16px_34px_rgba(0,0,0,0.18)] ${
+                    participationEnabled
+                      ? "border-signal-500/18 bg-black/[0.04] dark:border-signal-400/18 dark:bg-white/[0.055]"
+                      : "border-black/[0.06] bg-black/[0.025] opacity-85 dark:border-white/[0.06] dark:bg-white/[0.035]"
+                  }`}>
+                    <div aria-hidden className={`absolute inset-x-0 top-0 h-1 ${participationEnabled ? "bg-signal-500/55" : "bg-slate-300/60 dark:bg-white/15"}`} />
+                    <div className="mb-3 flex items-center justify-between gap-3 border-b border-black/[0.06] pb-3 dark:border-white/[0.06]">
+                      <div className="flex items-start gap-3">
+                        <ProviderLogo providerId={provider.provider} disabled={!participationEnabled} />
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{provider.name}</div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                            <span>{getProviderTypeLabel(provider.provider)}</span>
+                            <StatusPill active={participationEnabled} label={participationEnabled ? "In route" : "Paused"} />
+                            {overrideCount > 0 ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/[0.08] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/[0.1] dark:text-amber-200">
+                                <Settings2 className="h-3 w-3" />
+                                {overrideCount}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
                       <button
                         type="button"
+                        title="Reset route overrides"
+                        aria-label={`Reset ${provider.name} route overrides`}
                         onClick={() => clearRouteProviderOverride(activeRouteDefinition.id, providerConfigId)}
-                        className="rounded-full border border-black/[0.08] bg-black/[0.03] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.08] bg-black/[0.03] text-slate-500 transition-colors hover:bg-black/[0.06] hover:text-slate-800 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white"
                       >
-                        Reset
+                        <RotateCcw className="h-3.5 w-3.5" />
                       </button>
                     </div>
                     <div className="grid gap-3">
@@ -624,9 +744,6 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               })}
             </div>
 
-            <div className="mt-5 rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-              Official provider logos are intentionally not embedded here. The dashboard uses in-house neutral identity badges and type labels so the app stays safe to ship in open source without relying on third-party trademark assets.
-            </div>
           </div>
         </div>
       </SectionCard>

@@ -32,6 +32,8 @@ describe("AgentPresetRepository", () => {
       instructionMarkdown: "Coordinate planning and summarize blockers.",
       labels: ["planning", "review"],
       avatarConfig: { body: "alien", face: "happy" },
+      providerConfigId: "opencode",
+      model: "openai/gpt-5",
       memoryTemplateOverrideEnabled: true,
       memoryTemplateMarkdown: "Memory format",
     });
@@ -43,6 +45,8 @@ describe("AgentPresetRepository", () => {
       instructionMarkdown: "Coordinate planning and summarize blockers.",
       labels: ["planning", "review"],
       avatarConfig: { body: "alien", face: "happy" },
+      providerConfigId: "opencode",
+      model: "openai/gpt-5",
       memoryTemplateOverrideEnabled: true,
       memoryTemplateMarkdown: "Memory format",
     });
@@ -53,6 +57,8 @@ describe("AgentPresetRepository", () => {
       instructionMarkdown: "Pick up tasks and report progress.",
       labels: ["execution"],
       avatarConfig: { body: "human" },
+      providerConfigId: null,
+      model: "gpt-5.4",
       memoryTemplateOverrideEnabled: false,
     });
     expect(updated).toMatchObject({
@@ -61,6 +67,8 @@ describe("AgentPresetRepository", () => {
       instructionMarkdown: "Pick up tasks and report progress.",
       labels: ["execution"],
       avatarConfig: { body: "human" },
+      providerConfigId: null,
+      model: "gpt-5.4",
       memoryTemplateOverrideEnabled: false,
       memoryTemplateMarkdown: "Memory format",
     });

@@ -21,6 +21,8 @@ interface AgentPresetRow {
   source_updated_at: string | null;
   source_imported_at: string | null;
   avatar_config_json: string | null;
+  provider_config_id: string | null;
+  model: string | null;
   memory_template_override_enabled: number;
   memory_template_markdown: string | null;
   created_at: string;
@@ -113,11 +115,13 @@ export class AgentPresetRepository {
         source_updated_at,
         source_imported_at,
         avatar_config_json,
+        provider_config_id,
+        model,
         memory_template_override_enabled,
         memory_template_markdown,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -130,6 +134,8 @@ export class AgentPresetRepository {
       null,
       null,
       input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
+      input.providerConfigId?.trim() || null,
+      input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
       now,
@@ -158,11 +164,13 @@ export class AgentPresetRepository {
         source_updated_at,
         source_imported_at,
         avatar_config_json,
+        provider_config_id,
+        model,
         memory_template_override_enabled,
         memory_template_markdown,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -175,6 +183,8 @@ export class AgentPresetRepository {
       input.sourceUpdatedAt,
       importedAt,
       input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
+      input.providerConfigId?.trim() || null,
+      input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
       now,
@@ -189,7 +199,7 @@ export class AgentPresetRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name?.trim() || current.name,
@@ -199,6 +209,8 @@ export class AgentPresetRepository {
       input.avatarConfig === undefined
         ? (current.avatarConfig ? JSON.stringify(current.avatarConfig) : null)
         : (input.avatarConfig ? JSON.stringify(input.avatarConfig) : null),
+      input.providerConfigId === undefined ? current.providerConfigId || null : input.providerConfigId?.trim() || null,
+      input.model === undefined ? current.model || null : input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled === undefined ? (current.memoryTemplateOverrideEnabled ? 1 : 0) : (input.memoryTemplateOverrideEnabled ? 1 : 0),
       input.memoryTemplateMarkdown === undefined ? (current.memoryTemplateMarkdown || null) : (input.memoryTemplateMarkdown || null),
       now,
@@ -238,6 +250,8 @@ export class AgentPresetRepository {
     instructionMarkdown: string;
     sourceUpdatedAt: string;
     avatarConfig?: AgentPresetRecord["avatarConfig"];
+    providerConfigId?: string | null;
+    model?: string | null;
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
   }): AgentPresetRecord {
@@ -249,7 +263,7 @@ export class AgentPresetRepository {
 
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, description = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name.trim(),
@@ -258,6 +272,8 @@ export class AgentPresetRepository {
       input.sourceUpdatedAt,
       input.sourceUpdatedAt,
       input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
+      input.providerConfigId === undefined ? current.providerConfigId || null : input.providerConfigId?.trim() || null,
+      input.model === undefined ? current.model || null : input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
       now,
@@ -304,6 +320,8 @@ export class AgentPresetRepository {
       sourceExists: Boolean(row.source_path),
       syncStatus: row.source_path ? "synced" : "manual",
       avatarConfig: parseAvatarConfig(row.avatar_config_json),
+      providerConfigId: row.provider_config_id || null,
+      model: row.model || null,
       memoryTemplateOverrideEnabled: Boolean(row.memory_template_override_enabled),
       memoryTemplateMarkdown: row.memory_template_markdown || undefined,
       createdAt: row.created_at,

@@ -25,6 +25,8 @@ interface AgentSourceFile {
   description?: string;
   instructionMarkdown: string;
   avatarConfig?: AgentAvatarConfig;
+  providerConfigId?: string | null;
+  model?: string | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
 }
@@ -43,6 +45,8 @@ export class AgentPresetSyncService {
     instructionMarkdown?: string;
     labels?: string[];
     avatarConfig?: AgentAvatarConfig;
+    providerConfigId?: string | null;
+    model?: string | null;
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
   }): Promise<AgentPresetRecord> {
@@ -57,6 +61,8 @@ export class AgentPresetSyncService {
         description: input.description?.trim() || "",
         instructionMarkdown: input.instructionMarkdown?.trim() || "",
         avatarConfig: input.avatarConfig,
+        providerConfigId: input.providerConfigId,
+        model: input.model,
         memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
         memoryTemplateMarkdown: input.memoryTemplateMarkdown,
       });
@@ -70,6 +76,8 @@ export class AgentPresetSyncService {
         sourceUpdatedAt: source.sourceUpdatedAt,
         sourceImportedAt: source.sourceUpdatedAt,
         avatarConfig: source.avatarConfig,
+        providerConfigId: source.providerConfigId,
+        model: source.model,
         memoryTemplateOverrideEnabled: source.memoryTemplateOverrideEnabled,
         memoryTemplateMarkdown: source.memoryTemplateMarkdown,
       });
@@ -86,6 +94,8 @@ export class AgentPresetSyncService {
     instructionMarkdown?: string;
     labels?: string[];
     avatarConfig?: AgentAvatarConfig;
+    providerConfigId?: string | null;
+    model?: string | null;
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
   }): Promise<AgentPresetRecord> {
@@ -109,6 +119,8 @@ export class AgentPresetSyncService {
         description: input.description === undefined ? existing.description : input.description,
         instructionMarkdown: nextInstructionMarkdown,
         avatarConfig: input.avatarConfig === undefined ? existing.avatarConfig : input.avatarConfig,
+        providerConfigId: input.providerConfigId === undefined ? existing.providerConfigId : input.providerConfigId,
+        model: input.model === undefined ? existing.model : input.model,
         memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled === undefined ? existing.memoryTemplateOverrideEnabled : input.memoryTemplateOverrideEnabled,
         memoryTemplateMarkdown: input.memoryTemplateMarkdown === undefined ? existing.memoryTemplateMarkdown : input.memoryTemplateMarkdown,
         previousProjectSourcePath: existing.sourceScope === "project" ? existing.sourcePath : null,
@@ -165,6 +177,8 @@ export class AgentPresetSyncService {
           sourceUpdatedAt: source.sourceUpdatedAt,
           sourceImportedAt: source.sourceUpdatedAt,
           avatarConfig: source.avatarConfig,
+          providerConfigId: source.providerConfigId,
+          model: source.model,
           memoryTemplateOverrideEnabled: source.memoryTemplateOverrideEnabled,
           memoryTemplateMarkdown: source.memoryTemplateMarkdown,
         });
@@ -190,16 +204,20 @@ export class AgentPresetSyncService {
       const descriptionChanged = (source.description || "") !== (existing.description || "");
       const nameChanged = source.normalizedName !== this.normalizeName(existing.name);
       const avatarChanged = JSON.stringify(source.avatarConfig || {}) !== JSON.stringify(existing.avatarConfig || {});
+      const providerChanged = (source.providerConfigId || "") !== (existing.providerConfigId || "");
+      const modelChanged = (source.model || "") !== (existing.model || "");
       const memoryEnabledChanged = Boolean(source.memoryTemplateOverrideEnabled) !== Boolean(existing.memoryTemplateOverrideEnabled);
       const memoryMarkdownChanged = (source.memoryTemplateMarkdown || "") !== (existing.memoryTemplateMarkdown || "");
 
-      if (contentChanged || descriptionChanged || nameChanged || avatarChanged || memoryEnabledChanged || memoryMarkdownChanged) {
+      if (contentChanged || descriptionChanged || nameChanged || avatarChanged || providerChanged || modelChanged || memoryEnabledChanged || memoryMarkdownChanged) {
         const imported = this.deps.agentPresetRepository.importLinkedAgentPreset(existing.id, {
           name: source.sourceScope === "project" ? existing.name : source.name,
           description: source.description,
           instructionMarkdown: source.instructionMarkdown,
           sourceUpdatedAt: source.sourceUpdatedAt,
           avatarConfig: source.avatarConfig,
+          providerConfigId: source.providerConfigId,
+          model: source.model,
           memoryTemplateOverrideEnabled: source.memoryTemplateOverrideEnabled,
           memoryTemplateMarkdown: source.memoryTemplateMarkdown,
         });
@@ -225,6 +243,8 @@ export class AgentPresetSyncService {
       instructionMarkdown: source.instructionMarkdown,
       sourceUpdatedAt: source.sourceUpdatedAt,
       avatarConfig: source.avatarConfig,
+      providerConfigId: source.providerConfigId,
+      model: source.model,
       memoryTemplateOverrideEnabled: source.memoryTemplateOverrideEnabled,
       memoryTemplateMarkdown: source.memoryTemplateMarkdown,
     });
@@ -403,6 +423,8 @@ export class AgentPresetSyncService {
       description: parsed.description,
       instructionMarkdown: parsed.instructionMarkdown,
       avatarConfig: parsed.avatarConfig,
+      providerConfigId: parsed.providerConfigId,
+      model: parsed.model,
       memoryTemplateOverrideEnabled: parsed.memoryTemplateOverrideEnabled,
       memoryTemplateMarkdown: parsed.memoryTemplateMarkdown,
     };
@@ -462,6 +484,8 @@ export class AgentPresetSyncService {
     description?: string;
     instructionMarkdown: string;
     avatarConfig?: AgentAvatarConfig;
+    providerConfigId?: string | null;
+    model?: string | null;
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
     previousProjectSourcePath?: string | null;
@@ -483,6 +507,8 @@ export class AgentPresetSyncService {
       description: args.description,
       instructionMarkdown: args.instructionMarkdown,
       avatarConfig: args.avatarConfig,
+      providerConfigId: args.providerConfigId,
+      model: args.model,
       memoryTemplateOverrideEnabled: args.memoryTemplateOverrideEnabled,
       memoryTemplateMarkdown: args.memoryTemplateMarkdown,
     });

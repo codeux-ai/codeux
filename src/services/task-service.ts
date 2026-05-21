@@ -99,6 +99,10 @@ export class TaskService {
       scope?: DashboardSettingsScope;
       cliOnly?: boolean;
       providerPool?: ProviderId[];
+      agentProvider?: {
+        providerConfigId?: string | null;
+        model?: string | null;
+      } | null;
     },
   ): ResolvedProviderRoute {
     const settings = this.deps.getDashboardSettings(options?.scope);
@@ -106,6 +110,7 @@ export class TaskService {
       invocation,
       task,
       providerPool,
+      agentProvider: options?.agentProvider,
     });
     const getEnabledProviderTypes = (resolvedRoute: ResolvedProviderRoute): ProviderId[] => (
       resolvedRoute.enabledProviders
@@ -272,7 +277,25 @@ export class TaskService {
     taskRunId?: string,
   ): Promise<JulesSession> {
     // Respect task.provider if already set (e.g. from a rerun with provider override)
-    const route = this.resolveInvocationProvider("task_coding", task, { scope: settingsScope });
+    const settings = this.deps.getDashboardSettings(settingsScope);
+    const configuredAgentPresetId = settings.agents?.routing?.taskCoding?.mode === "MANUAL"
+      ? settings.agents.routing.taskCoding.agentPresetId
+      : null;
+    const routingAgent = settingsScope?.projectId
+      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
+        settingsScope.projectId,
+        task.agentPresetId || configuredAgentPresetId,
+      ).catch(() => null)
+      : null;
+    const route = this.resolveInvocationProvider("task_coding", task, {
+      scope: settingsScope,
+      agentProvider: routingAgent
+        ? {
+          providerConfigId: routingAgent.providerConfigId,
+          model: routingAgent.model,
+        }
+        : null,
+    });
     const provider = task.provider || route.provider;
     const selectedProviderConfigId = task.provider
       ? this.resolveProviderConfigIdForProvider(route, task.provider)

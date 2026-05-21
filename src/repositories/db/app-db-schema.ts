@@ -357,6 +357,8 @@ CREATE TABLE IF NOT EXISTS agent_presets (
         source_updated_at TEXT,
         source_imported_at TEXT,
         avatar_config_json TEXT,
+        provider_config_id TEXT,
+        model TEXT,
         memory_template_override_enabled INTEGER NOT NULL DEFAULT 0,
         memory_template_markdown TEXT,
         created_at TEXT NOT NULL,

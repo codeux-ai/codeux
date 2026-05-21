@@ -1,3 +1,5 @@
+import type { ProviderConfigId } from "./app-types.js";
+
 export type AgentSourceScope = "project" | "home" | "default";
 export type AgentSyncStatus = "manual" | "synced" | "out_of_sync" | "missing_source";
 
@@ -34,6 +36,8 @@ export interface AgentPresetRecord {
   sourceExists: boolean;
   syncStatus: AgentSyncStatus;
   avatarConfig?: AgentAvatarConfig;
+  providerConfigId?: ProviderConfigId | null;
+  model?: string | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
   createdAt: string;
@@ -46,6 +50,8 @@ export interface CreateAgentPresetInput {
   instructionMarkdown?: string;
   labels?: string[];
   avatarConfig?: AgentAvatarConfig;
+  providerConfigId?: ProviderConfigId | null;
+  model?: string | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
 }
@@ -56,6 +62,8 @@ export interface UpdateAgentPresetInput {
   instructionMarkdown?: string;
   labels?: string[];
   avatarConfig?: AgentAvatarConfig;
+  providerConfigId?: ProviderConfigId | null;
+  model?: string | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
 }

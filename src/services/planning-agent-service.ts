@@ -475,10 +475,20 @@ export class PlanningAgentService {
       is_independent: true,
       status: "PENDING",
     };
+    const planningAgent = await this.deps.agentPresetSyncService.resolveTargetedPlanningAgent(
+      args.projectId,
+      args.settings.agents?.routing?.planning?.agentPresetId || undefined,
+    ).catch(() => null);
     const route = resolveProviderForInvocation(args.settings, {
       invocation: "planning",
       task: routingTask,
       providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode"],
+      agentProvider: planningAgent
+        ? {
+          providerConfigId: planningAgent.providerConfigId,
+          model: planningAgent.model,
+        }
+        : null,
     });
     const providerConfigId = args.overrides?.virtualProvider
       ? Object.entries(route.providers).find(([, candidate]) => candidate.provider === args.overrides?.virtualProvider)?.[0] || route.providerConfigId

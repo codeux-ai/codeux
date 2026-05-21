@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ManualRoutingStrategy,
-  OrchestratedRoutingStrategy,
+  AgentRoutingStrategy,
   resolveWorkerModelForProvider,
   WeightedRoutingStrategy,
   chooseProviderForTask,
@@ -17,10 +17,12 @@ const buildProviders = (
   gemini: { enabled: enabledProviders.gemini ?? true, weight: 25, thinkingMode: "MEDIUM", model: "gemini-2.5-pro", apiKey: "g-key" },
   codex: { enabled: enabledProviders.codex ?? true, weight: 25, thinkingMode: "HIGH", model: "gpt-5.4", apiKey: "o-key" },
   "claude-code": { enabled: enabledProviders["claude-code"] ?? true, weight: 0, thinkingMode: "HIGH", model: "default", apiKey: "c-key" },
+  "qwen-code": { enabled: enabledProviders["qwen-code"] ?? false, weight: 0, thinkingMode: "HIGH", model: "qwen3-coder-plus", apiKey: "q-key" },
+  opencode: { enabled: enabledProviders.opencode ?? false, weight: 0, thinkingMode: "HIGH", model: "anthropic/claude-sonnet-4-5", apiKey: "opencode-key" },
 });
 
 const mockSettings = (
-  strategy: "MANUAL" | "WEIGHTED" | "ORCHESTRATOR",
+  strategy: "MANUAL" | "WEIGHTED" | "AGENT",
   provider: ProviderId,
   enabledProviders: Partial<Record<ProviderId, boolean>> = {},
 ): DashboardSettings => ({
@@ -117,32 +119,34 @@ describe("Provider Routing Logic", () => {
     });
   });
 
-  describe("OrchestratedRoutingStrategy", () => {
-    const strategy = new OrchestratedRoutingStrategy();
+  describe("AgentRoutingStrategy", () => {
+    const strategy = new AgentRoutingStrategy();
 
-    it("chooses claude-code for complex tasks", () => {
-      const task = mockTask({ prompt: "Refactor the architecture of the system", depends_on: ["T-1", "T-2"] });
+    it("chooses the configured agent provider when it is eligible", () => {
+      const task = mockTask({ prompt: "Refactor the architecture of the system" });
       const result = strategy.choose({
-        strategy: "ORCHESTRATOR",
+        strategy: "AGENT",
         manualProvider: null,
+        agentProvider: "claude-code",
         providers: buildProviders(),
         enabledProviders: ["jules", "claude-code"],
       }, task);
       expect(result).toBe("claude-code");
     });
 
-    it("chooses gemini for simple tasks", () => {
+    it("falls back to the route manual provider when the agent has no provider", () => {
       const task = mockTask({ prompt: "Fix typo", depends_on: [] });
       const result = strategy.choose({
-        strategy: "ORCHESTRATOR",
-        manualProvider: null,
+        strategy: "AGENT",
+        manualProvider: "gemini",
+        agentProvider: null,
         providers: buildProviders(),
         enabledProviders: ["jules", "gemini"],
       }, task);
       expect(result).toBe("gemini");
     });
 
-    it("treats missing dependency metadata as a simple task", () => {
+    it("falls back when the agent provider is outside the eligible pool", () => {
       const task = {
         id: "T-2",
         title: "Loose task shape",
@@ -151,19 +155,20 @@ describe("Provider Routing Logic", () => {
         status: "PENDING",
       } as Subtask;
       const result = strategy.choose({
-        strategy: "ORCHESTRATOR",
-        manualProvider: null,
+        strategy: "AGENT",
+        manualProvider: "jules",
+        agentProvider: "codex",
         providers: buildProviders(),
         enabledProviders: ["jules", "gemini"],
       }, task);
 
-      expect(result).toBe("gemini");
+      expect(result).toBe("jules");
     });
   });
 
   describe("resolveProviderForInvocation", () => {
   it("filters out jules when githubMode is LOCAL", () => {
-    const settings = mockSettings("ORCHESTRATOR", "jules", { jules: true, gemini: true });
+    const settings = mockSettings("AGENT", "jules", { jules: true, gemini: true });
     settings.git.githubMode = "LOCAL";
     const result = resolveProviderForInvocation(settings, {
       invocation: "task_coding",
@@ -174,6 +179,32 @@ describe("Provider Routing Logic", () => {
     expect(result.enabledProviders).not.toContain("jules");
     expect(result.enabledProviders).toContain("gemini");
   });
+    it("uses an agent provider and model when the route strategy is Agent", () => {
+      const settings = mockSettings("AGENT", "jules", { gemini: true, opencode: false });
+      settings.aiProvider.invocationRouting.dashboard_reply = {
+        ...settings.aiProvider.invocationRouting.dashboard_reply,
+        profile: "WORKER",
+        strategy: "AGENT",
+        provider: null,
+        allowedProviders: [],
+        providers: {},
+      };
+
+      const result = resolveProviderForInvocation(settings, {
+        invocation: "dashboard_reply",
+        task: mockTask({ prompt: "Reply to the dashboard thread" }),
+        providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode"],
+        agentProvider: {
+          providerConfigId: "opencode",
+          model: "openai/gpt-5",
+        },
+      });
+
+      expect(result.provider).toBe("opencode");
+      expect(result.providerConfigId).toBe("opencode");
+      expect(result.enabledProviders).toContain("opencode");
+      expect(result.providers.opencode.model).toBe("openai/gpt-5");
+    });
     it("uses worker profile defaults for dashboard replies", () => {
       const settings = mockSettings("MANUAL", "jules");
 
@@ -246,6 +277,58 @@ describe("Provider Routing Logic", () => {
       expect(result.provider).toBe("codex");
       expect(result.providers.codex.model).toBe("gpt-5.3-codex");
     });
+
+    it("treats a manually selected route provider as eligible even when the base provider is disabled", () => {
+      const settings = mockSettings("MANUAL", "jules", { gemini: true, opencode: false });
+      settings.aiProvider.invocationRouting.dashboard_reply = {
+        ...settings.aiProvider.invocationRouting.dashboard_reply,
+        profile: "WORKER",
+        strategy: "MANUAL",
+        provider: "opencode",
+        allowedProviders: [],
+        providers: {
+          opencode: {
+            model: "openai/gpt-5",
+          },
+        },
+      };
+
+      const result = resolveProviderForInvocation(settings, {
+        invocation: "dashboard_reply",
+        task: mockTask({ prompt: "Reply to the dashboard thread" }),
+        providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode"],
+      });
+
+      expect(result.provider).toBe("opencode");
+      expect(result.providerConfigId).toBe("opencode");
+      expect(result.enabledProviders).toContain("opencode");
+      expect(result.providers.opencode.model).toBe("openai/gpt-5");
+    });
+
+    it("respects an explicit disabled override for the manually selected route provider", () => {
+      const settings = mockSettings("MANUAL", "jules", { gemini: true, opencode: false });
+      settings.aiProvider.invocationRouting.dashboard_reply = {
+        ...settings.aiProvider.invocationRouting.dashboard_reply,
+        profile: "WORKER",
+        strategy: "MANUAL",
+        provider: "opencode",
+        allowedProviders: [],
+        providers: {
+          opencode: {
+            enabled: false,
+          },
+        },
+      };
+
+      const result = resolveProviderForInvocation(settings, {
+        invocation: "dashboard_reply",
+        task: mockTask({ prompt: "Reply to the dashboard thread" }),
+        providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode"],
+      });
+
+      expect(result.provider).toBe("gemini");
+      expect(result.enabledProviders).not.toContain("opencode");
+    });
   });
 
   describe("chooseProviderForTask", () => {
@@ -260,7 +343,7 @@ describe("Provider Routing Logic", () => {
       expect(result).toBe("jules");
     });
 
-    it("inherits the global weighted strategy for the default task route", () => {
+    it("ignores the legacy global strategy and uses the route strategy", () => {
       const settings = mockSettings("MANUAL", "gemini");
       settings.aiProvider.strategy = "WEIGHTED";
       settings.aiProvider.providers.jules.weight = 100;
@@ -268,10 +351,10 @@ describe("Provider Routing Logic", () => {
       settings.aiProvider.providers.codex.weight = 0;
       settings.aiProvider.providers["claude-code"].weight = 0;
 
-      expect(chooseProviderForTask(settings, mockTask())).toBe("jules");
+      expect(chooseProviderForTask(settings, mockTask())).toBe("gemini");
     });
 
-    it("keeps explicit task route overrides ahead of the global strategy", () => {
+    it("keeps explicit task route overrides independent of the legacy global strategy", () => {
       const settings = mockSettings("MANUAL", "gemini");
       settings.aiProvider.strategy = "WEIGHTED";
       settings.aiProvider.invocationRouting.task_coding = {

@@ -500,7 +500,7 @@ Added provider strategy and per-provider runtime settings:
 - Strategies:
   - `MANUAL`
   - `WEIGHTED`
-  - `ORCHESTRATOR`
+  - `AGENT`
 - Per-provider controls:
   - `enabled`
   - `model`

@@ -157,6 +157,22 @@ describe("settings-sanitizer", () => {
     expect(settings.appearance.backgroundPattern).toBe("DIAGONAL_LINES");
   });
 
+  it("normalizes legacy orchestrator provider routing to agent routing", () => {
+    const settings = sanitizeSettings({
+      aiProvider: {
+        strategy: "ORCHESTRATOR",
+        invocationRouting: {
+          dashboard_reply: {
+            strategy: "ORCHESTRATOR",
+          },
+        },
+      },
+    } as any);
+
+    expect(settings.aiProvider.strategy).toBe("AGENT");
+    expect(settings.aiProvider.invocationRouting.dashboard_reply.strategy).toBe("AGENT");
+  });
+
   it("drops unsafe appearance background image and unknown pattern values", () => {
     const settings = sanitizeSettings({
       appearance: {

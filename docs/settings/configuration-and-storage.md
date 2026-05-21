@@ -162,7 +162,8 @@ Dashboard behavior:
 - AI provider configuration and catalog metadata are centralized in `settings-view-models.ts` instead of directly within the editor.
 - AI provider configuration now uses compact focused workspaces instead of only long card grids:
   - one provider is edited at a time in the provider deck detail panel
-  - invocation routing is edited in a split-pane route workspace with resolved default, provider-pool, and override summaries
+  - AI Models separates global/worker default anchors from base provider configuration, so provider instance defaults for model, thinking mode, weight, and concurrency are edited independently from routing strategy
+  - invocation routing is edited in a split-pane route workspace with provider icons, resolved default, provider-pool, and override summaries
 - common 2-3 option settings such as routing strategy, worker execution mode, execution runtime, and merge mode use pill controls for faster scanning than dropdown-heavy forms
 - the Integrations panel restores the Git host workspace:
   - system scope edits the GitHub token, GitLab token, Jira connection, and per-instance CLI auth sources
@@ -172,9 +173,10 @@ Dashboard behavior:
 
 `aiProvider` contains:
 - `provider` (`ProviderConfigId|null`)
-- `strategy` (`MANUAL|WEIGHTED|ORCHESTRATOR`)
+- `strategy` (`MANUAL|WEIGHTED|AGENT`, legacy compatibility field; invocation routes carry the active routing strategy)
 - `providers` map keyed by provider config id
   - each provider config stores `provider`, `name`, `enabled`, `model`, `weight`, `thinkingMode`, and `maxConcurrentTasks`
+  - provider config entries are base defaults for route inheritance; manual, weighted, or agent-based selection is controlled by each invocation route rather than by the base provider configuration panel
   - multiple entries may share the same underlying provider type, so weighted/manual routing can target separate Codex, Gemini, Claude, or Jules instances independently
   - Jules remains routable with `enabled` and `weight`, but the current Jules REST API does not expose model-selection or thinking controls.
   - Dashboard settings editors therefore hide `model` and `thinkingMode` for Jules and show an informational note instead.
@@ -193,9 +195,10 @@ Dashboard behavior:
     - `merge_conflict`
   - each route contains:
     - `profile` (`GLOBAL|WORKER`)
-      - `GLOBAL`: inherit the top-level `aiProvider.provider`, `aiProvider.strategy`, and per-provider defaults
+      - `GLOBAL`: inherit the top-level `aiProvider.provider` and per-provider base defaults
       - `WORKER`: inherit the worker runtime preference (`workers.virtualWorkerProvider`) and worker model override (`workers.model`) as the default baseline for that invocation
-    - `strategy` (`MANUAL|WEIGHTED|ORCHESTRATOR`)
+    - `strategy` (`MANUAL|WEIGHTED|AGENT`)
+      - legacy `ORCHESTRATOR` values are normalized to `AGENT` on load
     - `provider` (`ProviderConfigId|null`)
       - `null` means "inherit the profile default provider"
     - `allowedProviders` (`ProviderConfigId[]`)
@@ -235,6 +238,10 @@ Dashboard behavior:
   - `mergeConflict.agentPresetId`
   - `dashboardReply.agentPresetId`
   - `clarificationReply.agentPresetId`
+- agent presets also carry optional routing preferences:
+  - `providerConfigId` (`ProviderConfigId|null`)
+  - `model` (`string|null`)
+  - these fields are only applied by invocation routes using the `AGENT` provider strategy; blank values inherit the route, worker, or global default
 - `qualityAssurance`
   - `enabled` (default `false`)
   - `maxTaskReviewRuns` (default `1`)

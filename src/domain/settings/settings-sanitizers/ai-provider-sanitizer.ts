@@ -34,6 +34,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === "object" && value !== null && !Array.isArray(value)
 );
 
+const normalizeProviderStrategy = (
+  value: unknown,
+  fallback: ProviderStrategy,
+): ProviderStrategy => {
+  if (value === "ORCHESTRATOR") {
+    return "AGENT";
+  }
+  return PROVIDER_STRATEGIES.includes(value as ProviderStrategy)
+    ? value as ProviderStrategy
+    : fallback;
+};
+
 const normalizeInvocationRouting = (
   input: unknown,
   availableProviders: Record<string, ProjectProviderSettings>,
@@ -71,9 +83,7 @@ const normalizeInvocationRouting = (
 
     result[routeId] = {
       profile: normalizedProfile,
-      strategy: PROVIDER_STRATEGIES.includes(source?.strategy as ProviderStrategy)
-        ? source?.strategy as ProviderStrategy
-        : defaults.strategy,
+      strategy: normalizeProviderStrategy(source?.strategy, defaults.strategy),
       provider: resolveProviderConfigId(source?.provider, availableProviders),
       allowedProviders: resolveAllowedProviderConfigIds(source?.allowedProviders, availableProviders),
       providers: resolveInvocationProviderOverrides(source?.providers, availableProviders),
@@ -101,9 +111,7 @@ export const sanitizeAiProvider = (
       providers,
       defaultProviderId ? providers[defaultProviderId]?.provider || "jules" : "jules",
     ) || defaultProviderId,
-    strategy: PROVIDER_STRATEGIES.includes(aiProviderInput.strategy as ProviderStrategy)
-      ? aiProviderInput.strategy as ProviderStrategy
-      : DEFAULT_DASHBOARD_SETTINGS.aiProvider.strategy,
+    strategy: normalizeProviderStrategy(aiProviderInput.strategy, DEFAULT_DASHBOARD_SETTINGS.aiProvider.strategy),
     providers,
     invocationRouting: normalizeInvocationRouting(aiProviderInput.invocationRouting, providers),
   };

@@ -63,7 +63,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
 
       <Card
         title="AI Models"
-        description="Select the provider strategy, model mix, and worker runtime settings this scope should use."
+        description="Set provider defaults, invocation routing, model mix, and worker runtime settings this scope should use."
         badge={providerSource || workerSource ? sourceLabel(providerSource === workerSource ? (providerSource || "system") : "mixed") : undefined}
       >
         <WorkerPanel
