@@ -115,15 +115,15 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
               {Icon && <Icon className="w-4 h-4" />}
             </div>
 
-            <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isPending ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}>
+            <div key={`pending-${feedback.status}`} className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isPending ? "scale-100 opacity-100 motion-safe:animate-[icon-pop_0.18s_ease-out]" : "scale-0 opacity-0 pointer-events-none"}`}>
               <Loader2 className="w-4 h-4 animate-spin" />
             </div>
 
-            <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isSuccess ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}>
+            <div key={`success-${feedback.status}`} className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isSuccess ? "scale-100 opacity-100 motion-safe:animate-[icon-pop_0.18s_ease-out]" : "scale-0 opacity-0 pointer-events-none"}`}>
               <Check className="w-4 h-4" strokeWidth={3} />
             </div>
 
-            <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isError ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"}`}>
+            <div key={`error-${feedback.status}`} className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isError ? "scale-100 opacity-100 motion-safe:animate-[icon-pop_0.18s_ease-out]" : "scale-0 opacity-0 pointer-events-none"}`}>
               <X className="w-4 h-4" strokeWidth={3} />
             </div>
           </div>

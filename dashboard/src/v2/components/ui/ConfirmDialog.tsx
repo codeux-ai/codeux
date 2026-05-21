@@ -6,7 +6,7 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 
-import { Loader2 } from "lucide-preact";
+import { Loader2, AlertTriangle } from "lucide-preact";
 
 function DestructiveConfirmButton({
   onConfirm,
@@ -133,17 +133,18 @@ function DestructiveConfirmButton({
       onContextMenu={(e) => e.preventDefault()}
       className={`relative overflow-hidden ${className} ${isShaking && !reducedMotion ? "animate-shake" : ""}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+      aria-label={isHolding ? `Holding — ${Math.round(progress)}% complete, release to cancel` : `Hold to ${label}`}
     >
       {isHolding && (
         <div
-          className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left"
-          style={{
-            transform: `scaleX(${progress / 100})`,
-            transition: reducedMotion ? 'none' : 'transform 0.1s linear'
-          }}
+          className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left transition-transform duration-100"
+          style={{ transform: `scaleX(${progress / 100})` }}
         />
       )}
 
+      <span aria-live="polite" aria-atomic="true" className="sr-only">
+        {isHolding ? `Holding ${Math.round(progress)} percent — release to cancel` : `Hold button to ${label}`}
+      </span>
       <span className="relative z-10 flex items-center justify-center gap-2">
         {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
         {isHolding ? `Hold to ${label}` : isLoading ? "Processing..." : label}
@@ -276,7 +277,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
           {destructive && (
             <div className="mt-4 p-3 bg-status-red/10 border border-status-red/20 rounded-lg">
               <p className="text-xs font-medium text-status-red">
-                ⚠️ This action is permanent and cannot be undone.
+                <span className="inline-flex items-start gap-1.5"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />This action is permanent and cannot be undone.</span>
               </p>
             </div>
           )}

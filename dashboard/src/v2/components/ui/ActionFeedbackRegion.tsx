@@ -102,28 +102,23 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     if (autoDismiss === false || retryAction) return;
 
     const ctx = gsap.context(() => {
-      if (reducedMotion) {
-        gsap.set(progressRef.current, { width: "0%" });
-      } else {
-        const totalDuration = autoDismissMs / 1000;
-        const fadeDuration = durations.fast;
-
-        const tl = gsap.timeline();
-        tl.fromTo(
-          progressRef.current,
-          { width: "100%", opacity: 0.2 },
-          { width: "0%", duration: totalDuration, ease: GSAP_EASINGS.linear },
-          0
-        );
-
-        if (totalDuration > fadeDuration) {
-          tl.to(
-            progressRef.current,
-            { opacity: 0, duration: fadeDuration, ease: GSAP_EASINGS.linear },
-            totalDuration - fadeDuration
-          );
+      const tl = gsap.timeline();
+      tl.fromTo(
+        progressRef.current,
+        { width: "100%" },
+        { width: "0%", duration: autoDismissMs / 1000, ease: "linear" }
+      );
+      tl.to(
+        containerRef.current,
+        {
+          y: reducedMotion ? 0 : 8,
+          opacity: 0,
+          scale: reducedMotion ? 1 : 0.97,
+          duration: reducedMotion ? 0 : 0.25,
+          ease: "power3.in",
+          onComplete: () => onDismiss?.(),
         }
-      }
+      );
     });
 
     return () => ctx.revert();
@@ -143,7 +138,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       aria-live={ariaLive}
       className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl border ${config.colors} ${className}`}
     >
-      <Icon className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""}`} />
+      <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out]`} />
       <div className="flex-1 text-sm font-medium mt-0.5 relative">
         <div ref={messageRef}>
           {displayedMessage}
