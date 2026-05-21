@@ -6,6 +6,7 @@ import { getInvocationWidgetData } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
+import type { AgentAvatarConfig } from "../../types.js";
 
 const formatErrorCategory = (value: unknown): string | null => {
   switch (value) {
@@ -26,9 +27,10 @@ const formatErrorCategory = (value: unknown): string | null => {
 
 export interface InvocationMessageBubbleProps {
   message: ExecutionInvocationMessageRecord;
+  agentAvatarConfig?: AgentAvatarConfig | null;
 }
 
-export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleProps> = ({ message }) => {
+export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleProps> = ({ message, agentAvatarConfig }) => {
   const fromUser = message.role === "user";
   const fromTool = message.role === "tool";
   const fromSystem = message.role === "system";
@@ -54,7 +56,12 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
     <div className={`flex ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
       <div className={`flex max-w-[760px] items-start w-full gap-3 ${fromUser || fromTool ? "flex-row-reverse" : "flex-row"}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
-          <ChatAvatar role={role} provider={providerLabel} agentName={senderName} />
+          <ChatAvatar
+            role={role}
+            provider={providerLabel}
+            agentName={senderName}
+            avatarConfig={message.role === "assistant" ? (agentAvatarConfig ?? undefined) : undefined}
+          />
         </div>
 
         <div className={`flex flex-col w-full max-w-[calc(100%-3rem)] rounded-2xl border bg-white/5 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
