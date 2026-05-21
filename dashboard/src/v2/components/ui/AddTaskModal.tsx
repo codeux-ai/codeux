@@ -49,6 +49,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   onSubmit,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const fieldsRef = useRef<HTMLFormElement>(null);
   const [sprintId, setSprintId] = useState(initialTask?.sprintId || defaultSprintId || initialSprintId || sprints[0]?.id || "");
   const [title, setTitle] = useState(initialTask?.title || "");
   const [description, setDescription] = useState(initialTask?.description || "");
@@ -82,6 +83,19 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
       { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
       { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease, clearProps: "filter" }
     );
+    if (fieldsRef.current) {
+      gsap.fromTo(Array.from(fieldsRef.current.children),
+        { y: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.yStart, opacity: 0 },
+        {
+          y: 0,
+          opacity: 1,
+          stagger: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.stagger,
+          duration: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.duration,
+          ease: MODAL_MOTION.fieldStagger.ease,
+          delay: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.delay
+        }
+      );
+    }
   }, [reducedMotion]);
 
   const handleClose = () => {
@@ -207,7 +221,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          <form ref={fieldsRef} onSubmit={handleSubmit} className="flex flex-col gap-6">
             <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} autoDismiss={feedback.autoDismiss} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="group/field">

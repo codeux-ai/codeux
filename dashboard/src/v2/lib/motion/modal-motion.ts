@@ -60,5 +60,12 @@ export const MODAL_MOTION = {
     xEnd: 0,
     opacityStart: 0,
     opacityEnd: 1
+  },
+  fieldStagger: {
+    stagger: 0.07,
+    delay: 0.25,
+    duration: 0.45,
+    ease: "power3.out",
+    yStart: 18
   }
 };

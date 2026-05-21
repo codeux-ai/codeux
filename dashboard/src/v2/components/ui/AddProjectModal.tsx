@@ -58,8 +58,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     useLayoutEffect(() => {
         const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
         const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
-        const d_fields = reducedMotion ? 0 : 0.45;
-
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
         gsap.fromTo(cardRef.current,
             { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
@@ -67,8 +65,15 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         );
         if (fieldsRef.current) {
             gsap.fromTo(Array.from(fieldsRef.current.children),
-                { y: reducedMotion ? 0 : 18, opacity: 0 },
-                { y: 0, opacity: 1, stagger: reducedMotion ? 0 : 0.07, duration: d_fields, ease: "power3.out", delay: reducedMotion ? 0 : 0.25 }
+                { y: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.yStart, opacity: 0 },
+                {
+                    y: 0,
+                    opacity: 1,
+                    stagger: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.stagger,
+                    duration: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.duration,
+                    ease: MODAL_MOTION.fieldStagger.ease,
+                    delay: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.delay
+                }
             );
         }
     }, [reducedMotion]);
