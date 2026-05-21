@@ -201,6 +201,16 @@ const syncExecutionRunState = async (
     return;
   }
 
+  const wasTerminal = taskRun.state === "COMPLETED" || taskRun.state === "FAILED";
+  const currentDispatch = taskRun.dispatchId
+    ? deps.executionRepository.getTaskDispatch(taskRun.dispatchId)
+    : null;
+  const wasDispatchTerminal = !currentDispatch || currentDispatch.finishedAt !== null;
+
+  if (wasTerminal && wasDispatchTerminal) {
+    return;
+  }
+
   const sessionName = deps.resolveSessionName(session) || taskRun.sessionName;
   const sessionId = deps.extractSessionId(session) || taskRun.sessionId;
   const provider = session.provider || taskRun.provider;
@@ -208,9 +218,6 @@ const syncExecutionRunState = async (
   const prUrl = resolvePrUrl(session) || taskRun.prUrl;
   const nextRunState = mapSessionStateToTaskRunState(session.state, deps.isActionRequiredState);
   const now = new Date().toISOString();
-  const currentDispatch = taskRun.dispatchId
-    ? deps.executionRepository.getTaskDispatch(taskRun.dispatchId)
-    : null;
   const nextFinishedAt = nextRunState === "RUNNING"
     ? null
     : (taskRun.finishedAt || currentDispatch?.finishedAt || now);
@@ -290,8 +297,9 @@ const syncExecutionRunState = async (
   }
 
   const isTerminal = nextRunState === "COMPLETED" || nextRunState === "FAILED";
+  const transitionedToTerminal = !wasTerminal && isTerminal;
 
-  if (isTerminal && deps.getSession && deps.listAllActivities) {
+  if (transitionedToTerminal && deps.getSession && deps.listAllActivities) {
     try {
       const gitMetrics = extractGitMetrics(session);
       if (gitMetrics && (gitMetrics.filesChanged !== undefined || gitMetrics.insertions !== undefined || gitMetrics.deletions !== undefined)) {
@@ -312,11 +320,15 @@ const syncExecutionRunState = async (
           });
       }
 
-      if (deps.julesUsage && task.project_id && task.record_id && (sessionId || sessionName || taskRun.id)) {
+      const hasCalculatedUsage = existingUsage && existingUsage.totalTokens !== undefined && existingUsage.totalTokens !== null && existingUsage.totalTokens > 0;
+
+      if (!hasCalculatedUsage && deps.julesUsage && task.project_id && task.record_id && (sessionId || sessionName || taskRun.id)) {
         deps.julesUsage.calculateAndSaveUsageForTask(
           task.project_id,
           task.record_id,
-          sessionId || sessionName || taskRun.id
+          sessionId || sessionName || taskRun.id,
+          session.prompt,
+          gitMetrics
         ).catch((err) => {
           deps.logger.warn("Failed non-blocking token tracking", { error: err });
         });
@@ -362,12 +374,18 @@ export const runSessionSyncStep = async (
     if (match) {
       const sessionName = deps.resolveSessionName(match);
       if (sessionName) {
-        // Skip fetching activities if the session is already fully synchronized and terminal locally
+        // Skip fetching activities if the session is already terminal locally
         let isFullySynced = false;
-        if (deps.executionRepository && task.record_id && deps.sprintRunId) {
-          const taskRun = deps.executionRepository.getLatestTaskRun(task.record_id, deps.sprintRunId);
-          if (taskRun && (taskRun.state === "COMPLETED" || taskRun.state === "FAILED")) {
-            isFullySynced = true;
+        if (deps.executionRepository) {
+          if (typeof deps.executionRepository.isSessionTerminal === "function") {
+            if (deps.executionRepository.isSessionTerminal(sessionName)) {
+              isFullySynced = true;
+            }
+          } else if (task.record_id && deps.sprintRunId) {
+            const taskRun = deps.executionRepository.getLatestTaskRun(task.record_id, deps.sprintRunId);
+            if (taskRun && (taskRun.state === "COMPLETED" || taskRun.state === "FAILED")) {
+              isFullySynced = true;
+            }
           }
         }
 

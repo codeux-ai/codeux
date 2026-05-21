@@ -35,6 +35,12 @@ export interface SessionSyncDependencies {
   sprintRunId?: string;
   logger: Logger;
   julesUsage?: {
-    calculateAndSaveUsageForTask: (projectId: string, taskId: string, sessionId: string) => Promise<void>;
+    calculateAndSaveUsageForTask: (
+      projectId: string,
+      taskId: string,
+      sessionId: string,
+      sessionPrompt?: string,
+      gitMetrics?: { insertions?: number; deletions?: number; filesChanged?: number } | null
+    ) => Promise<void>;
   };
 }

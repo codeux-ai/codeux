@@ -11,7 +11,13 @@ export class JulesUsageService {
     private readonly logger: Logger
   ) {}
 
-  async calculateAndSaveUsageForTask(projectId: string, taskId: string, sessionId: string): Promise<void> {
+  async calculateAndSaveUsageForTask(
+    projectId: string,
+    taskId: string,
+    sessionId: string,
+    passedPrompt?: string,
+    gitMetrics?: { insertions?: number; deletions?: number; filesChanged?: number } | null
+  ): Promise<void> {
     try {
       const existingRecord = this.executionRepository.getLatestProviderInvocationUsageBySession(sessionId, "task_coding");
       if (existingRecord && existingRecord.totalTokens && existingRecord.totalTokens > 0) {
@@ -21,36 +27,39 @@ export class JulesUsageService {
 
       const activities = await this.julesClient.getFullConversation(sessionId);
 
-      let sessionPrompt = "";
-      let gitInsertions = 0;
-      let gitDeletions = 0;
-      let gitFilesChanged = 0;
-      try {
-        const session = await this.julesClient.getSession(sessionId);
-        sessionPrompt = session.prompt || "";
+      let sessionPrompt = passedPrompt || "";
+      let gitInsertions = gitMetrics?.insertions ?? 0;
+      let gitDeletions = gitMetrics?.deletions ?? 0;
+      let gitFilesChanged = gitMetrics?.filesChanged ?? 0;
 
-        const pullRequestOutput = Array.isArray(session.outputs)
-          ? session.outputs.find((entry) => entry && typeof entry === "object" && "pullRequest" in entry)
-          : undefined;
-        const pr = pullRequestOutput && typeof pullRequestOutput.pullRequest === "object"
-          ? pullRequestOutput.pullRequest as Record<string, unknown>
-          : null;
+      if (!sessionPrompt && !gitMetrics) {
+        try {
+          const session = await this.julesClient.getSession(sessionId);
+          sessionPrompt = session.prompt || "";
 
-        if (pr) {
-          const parseStat = (val: unknown) => {
-            if (typeof val === "number" && !isNaN(val)) return val;
-            if (typeof val === "string") {
-              const parsed = parseInt(val, 10);
-              if (!isNaN(parsed)) return parsed;
-            }
-            return 0;
-          };
-          gitInsertions = parseStat(pr.insertions);
-          gitDeletions = parseStat(pr.deletions);
-          gitFilesChanged = parseStat(pr.filesChanged);
+          const pullRequestOutput = Array.isArray(session.outputs)
+            ? session.outputs.find((entry) => entry && typeof entry === "object" && "pullRequest" in entry)
+            : undefined;
+          const pr = pullRequestOutput && typeof pullRequestOutput.pullRequest === "object"
+            ? pullRequestOutput.pullRequest as Record<string, unknown>
+            : null;
+
+          if (pr) {
+            const parseStat = (val: unknown) => {
+              if (typeof val === "number" && !isNaN(val)) return val;
+              if (typeof val === "string") {
+                const parsed = parseInt(val, 10);
+                if (!isNaN(parsed)) return parsed;
+              }
+              return 0;
+            };
+            gitInsertions = parseStat(pr.insertions);
+            gitDeletions = parseStat(pr.deletions);
+            gitFilesChanged = parseStat(pr.filesChanged);
+          }
+        } catch (err) {
+          this.logger.warn("Failed to fetch Jules session details", { sessionId, error: err });
         }
-      } catch (err) {
-        this.logger.warn("Failed to fetch Jules session details", { sessionId, error: err });
       }
 
       let inputTokens = 0;

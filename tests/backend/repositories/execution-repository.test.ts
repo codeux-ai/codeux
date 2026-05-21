@@ -2173,3 +2173,109 @@ describe("ExecutionRepository", () => {
       expect(claimed).toBeNull();
     });
   });
+
+  describe("isSessionTerminal", () => {
+    it("matches terminal states correctly across prefixes", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Terminal Check Project",
+        sourceType: "local",
+        sourceRef: "/workspace/terminal-check",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Sprint 1",
+      });
+      const task = projectRepository.createTask(project.id, {
+        title: "Task 1",
+        sprintId: sprint.id,
+      });
+
+      // 1. Raw ID in DB, Prefixed query
+      executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sessionId: "raw-id-123",
+        state: "COMPLETED",
+      });
+      expect(executionRepository.isSessionTerminal("sessions/raw-id-123")).toBe(true);
+      expect(executionRepository.isSessionTerminal("raw-id-123")).toBe(true);
+
+      // 2. Prefixed name in DB, Raw query and prefixed query
+      executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sessionId: "prefixed-session-123",
+        sessionName: "sessions/prefixed-session-123",
+        state: "FAILED",
+      });
+      expect(executionRepository.isSessionTerminal("sessions/prefixed-session-123")).toBe(true);
+      expect(executionRepository.isSessionTerminal("prefixed-session-123")).toBe(true);
+
+      // 3. Non-terminal state should return false
+      executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sessionId: "running-session-123",
+        state: "RUNNING",
+      });
+      expect(executionRepository.isSessionTerminal("sessions/running-session-123")).toBe(false);
+
+      // 4. Non-existent session should return false
+      expect(executionRepository.isSessionTerminal("sessions/non-existent")).toBe(false);
+      expect(executionRepository.isSessionTerminal("")).toBe(false);
+    });
+  });
+
+  describe("getLatestProviderInvocationUsageBySession", () => {
+    it("normalizes and retrieves provider invocation usage across prefixes correctly", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Telemetry Test Project",
+        sourceType: "local",
+        sourceRef: "/workspace/telemetry-test",
+      });
+
+      // 1. Raw ID stored in DB, retrieved with prefixed or raw query
+      const usage1 = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "raw-usage-id",
+        provider: "jules",
+        purpose: "task_coding",
+        status: "completed",
+        invocationSource: "EXTERNAL_API",
+      });
+
+      const retrieved1Prefixed = executionRepository.getLatestProviderInvocationUsageBySession("sessions/raw-usage-id", "task_coding");
+      const retrieved1Raw = executionRepository.getLatestProviderInvocationUsageBySession("raw-usage-id", "task_coding");
+
+      expect(retrieved1Prefixed).not.toBeNull();
+      expect(retrieved1Prefixed!.id).toBe(usage1.id);
+      expect(retrieved1Raw).not.toBeNull();
+      expect(retrieved1Raw!.id).toBe(usage1.id);
+
+      // 2. Prefixed name stored in DB, retrieved with prefixed or raw query
+      const usage2 = executionRepository.createProviderInvocationUsage({
+        projectId: project.id,
+        sessionId: "sessions/prefixed-usage-id",
+        provider: "jules",
+        purpose: "task_coding",
+        status: "completed",
+        invocationSource: "EXTERNAL_API",
+      });
+
+      const retrieved2Prefixed = executionRepository.getLatestProviderInvocationUsageBySession("sessions/prefixed-usage-id", "task_coding");
+      const retrieved2Raw = executionRepository.getLatestProviderInvocationUsageBySession("prefixed-usage-id", "task_coding");
+
+      expect(retrieved2Prefixed).not.toBeNull();
+      expect(retrieved2Prefixed!.id).toBe(usage2.id);
+      expect(retrieved2Raw).not.toBeNull();
+      expect(retrieved2Raw!.id).toBe(usage2.id);
+
+      // 3. Querying non-existent sessionId returns null
+      const nonExistent = executionRepository.getLatestProviderInvocationUsageBySession("sessions/non-existent", "task_coding");
+      expect(nonExistent).toBeNull();
+    });
+  });

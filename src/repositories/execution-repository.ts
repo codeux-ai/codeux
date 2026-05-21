@@ -1058,15 +1058,20 @@ export class ExecutionRepository {
     if (!normalized) {
       return false;
     }
+    const rawId = normalized.replace(/^sessions\//, "");
+    const prefixedName = `sessions/${rawId}`;
+
     const row = this.db.prepare(`
       SELECT state
       FROM task_runs
       WHERE session_name = ? OR session_id = ?
+         OR session_name = ? OR session_id = ?
       ORDER BY rowid DESC
       LIMIT 1
-    `).get(normalized, normalized) as { state: string } | undefined;
+    `).get(normalized, normalized, prefixedName, rawId) as { state: string } | undefined;
     return row ? (row.state === "COMPLETED" || row.state === "FAILED") : false;
   }
+
 
 
   getTaskDispatch(dispatchId: string): TaskDispatchRecord | null {

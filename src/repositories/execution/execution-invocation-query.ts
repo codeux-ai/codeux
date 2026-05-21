@@ -48,22 +48,25 @@ export function queryLatestProviderInvocationUsageBySession(
     return null;
   }
 
+  const rawId = trimmedSessionId.replace(/^sessions\//, "");
+  const prefixedName = `sessions/${rawId}`;
+
   const row = purpose
     ? db.prepare(`
       SELECT *
       FROM provider_invocations
-      WHERE session_id = ?
+      WHERE (session_id = ? OR session_id = ?)
         AND purpose = ?
       ORDER BY started_at DESC, rowid DESC
       LIMIT 1
-    `).get(trimmedSessionId, purpose) as ProviderInvocationUsageRow | undefined
+    `).get(rawId, prefixedName, purpose) as ProviderInvocationUsageRow | undefined
     : db.prepare(`
       SELECT *
       FROM provider_invocations
-      WHERE session_id = ?
+      WHERE (session_id = ? OR session_id = ?)
       ORDER BY started_at DESC, rowid DESC
       LIMIT 1
-    `).get(trimmedSessionId) as ProviderInvocationUsageRow | undefined;
+    `).get(rawId, prefixedName) as ProviderInvocationUsageRow | undefined;
 
   return row ? mapProviderInvocationUsageRow(row) : null;
 }
