@@ -1,5 +1,6 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
-import { CheckCircle2, Cpu, GitBranch, Network, Route, RotateCcw, Settings2, SlidersHorizontal } from "lucide-preact";
+import { useState } from "preact/hooks";
+import { CheckCircle2, ChevronDown, Cpu, GitBranch, Network, Route, RotateCcw, Settings2, SlidersHorizontal } from "lucide-preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SelectInput, Toggle } from "../SettingsFormFields.js";
@@ -49,6 +50,52 @@ const StatusPill: FunctionComponent<{ active: boolean; label?: string }> = ({ ac
   </span>
 );
 
+const WeightSlider: FunctionComponent<{
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  ariaLabel?: string;
+}> = ({ value, onChange, min = 0, max = 100, ariaLabel = "Weight" }) => {
+  const clamped = Math.max(min, Math.min(max, value));
+  const pct = ((clamped - min) / (max - min)) * 100;
+  return (
+    <div className="group/slider flex w-[17rem] items-center gap-3">
+      <div className="relative flex h-6 flex-1 items-center">
+        <div className="absolute inset-x-0 h-2 rounded-full bg-black/[0.07] shadow-[inset_0_1px_2px_rgba(15,23,42,0.08)] dark:bg-white/[0.08] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.32)]" />
+        <div
+          className="pointer-events-none absolute left-0 h-2 rounded-full bg-gradient-to-r from-signal-400 via-signal-500 to-signal-600 shadow-[0_0_14px_rgba(56,189,248,0.45)] transition-[width] duration-150 dark:from-signal-300 dark:via-signal-400 dark:to-signal-500"
+          style={{ width: `${pct}%` }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={clamped}
+          aria-label={ariaLabel}
+          aria-valuenow={clamped}
+          aria-valuemin={min}
+          aria-valuemax={max}
+          onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
+          className="peer absolute inset-x-0 z-10 h-6 w-full cursor-grab appearance-none bg-transparent opacity-0 focus:outline-none active:cursor-grabbing"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -translate-x-1/2 transition-[transform,box-shadow,left] duration-150 ease-out group-hover/slider:scale-110 peer-active:scale-110"
+          style={{ left: `${pct}%` }}
+        >
+          <div className="relative h-5 w-5 rounded-full border-[1.5px] border-signal-500 bg-white shadow-[0_3px_10px_rgba(15,23,42,0.22)] dark:border-signal-300 dark:bg-void-800">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/80 to-transparent dark:from-white/15" />
+          </div>
+        </div>
+      </div>
+      <span className="inline-flex h-9 min-w-[2.75rem] shrink-0 items-center justify-center rounded-[0.85rem] border border-black/[0.08] bg-white/85 px-2.5 text-sm font-bold tabular-nums text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-100">
+        {clamped}
+      </span>
+    </div>
+  );
+};
+
 const RouteFlowStep: FunctionComponent<{
   icon: ComponentChildren;
   label: string;
@@ -89,6 +136,14 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
 
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
   const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path);
+
+  const [expandedProviderCards, setExpandedProviderCards] = useState<Record<string, boolean>>({});
+  const toggleProviderCard = (providerConfigId: string): void => {
+    setExpandedProviderCards((current) => ({
+      ...current,
+      [providerConfigId]: !current[providerConfigId],
+    }));
+  };
 
   if (!editableSettings || !systemSettings) {
     return null;
@@ -238,7 +293,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
 
   return (
     <div className="flex flex-col gap-5">
-      <section className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-black/[0.035] p-5 shadow-[0_18px_48px_rgba(15,23,42,0.055)] backdrop-blur-2xl dark:border-white/[0.07] dark:bg-white/[0.045] dark:shadow-[0_22px_54px_rgba(0,0,0,0.28)]">
+      <section className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div>
@@ -394,7 +449,10 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
           These values are the inheritance baseline for every route. Route mapping owns manual, weighted, or agent-based selection; this section defines each provider instance’s default model, reasoning depth, weight, and capacity.
         </div>
         <div className="grid gap-3 lg:grid-cols-2">
-          {providerEntries.map(([providerConfigId, provider]) => (
+          {providerEntries.map(([providerConfigId, provider]) => {
+            const expanded = !!expandedProviderCards[providerConfigId];
+            const detailsId = `base-provider-details-${providerConfigId}`;
+            return (
             <div key={`base-${providerConfigId}`} className={`relative overflow-hidden rounded-[1.35rem] border p-4 shadow-[0_14px_32px_rgba(15,23,42,0.035)] transition-colors dark:shadow-[0_16px_34px_rgba(0,0,0,0.18)] ${
               provider.enabled
                 ? "border-signal-500/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(255,255,255,0.72))] dark:border-signal-400/15 dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.075),rgba(255,255,255,0.04))]"
@@ -409,53 +467,87 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                     <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{getProviderTypeLabel(provider.provider)} baseline</div>
                   </div>
                 </div>
-                <StatusPill active={provider.enabled} label={provider.enabled ? "Eligible" : "Paused"} />
+                <div className="flex items-center gap-2">
+                  <StatusPill active={provider.enabled} label={provider.enabled ? "Eligible" : "Paused"} />
+                  <button
+                    type="button"
+                    onClick={() => toggleProviderCard(providerConfigId)}
+                    aria-expanded={expanded}
+                    aria-controls={detailsId}
+                    aria-label={expanded ? `Collapse ${provider.name} settings` : `Expand ${provider.name} settings`}
+                    title={expanded ? "Collapse settings" : "Expand settings"}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-black/[0.08] bg-white/80 text-slate-500 transition-colors hover:border-signal-500/30 hover:bg-signal-500/[0.06] hover:text-signal-600 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-signal-300/30 dark:hover:bg-signal-300/[0.08] dark:hover:text-signal-200"
+                  >
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform duration-200 ${expanded ? "rotate-180" : "rotate-0"}`}
+                      strokeWidth={2.4}
+                    />
+                  </button>
+                </div>
               </div>
-              <div className="mb-3 grid grid-cols-3 gap-2">
-                <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
-                  <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{provider.weight}</div>
+              <div className={`grid gap-2 ${expanded ? "mb-3" : ""}`}>
+                <div className="rounded-xl border border-signal-500/15 bg-signal-500/[0.05] px-3 py-2 dark:border-signal-400/15 dark:bg-signal-400/[0.06]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-700/70 dark:text-signal-200/80">Model</div>
+                    <Cpu className="h-3 w-3 text-signal-600/70 dark:text-signal-300/70" strokeWidth={2.4} />
+                  </div>
+                  <div className="mt-1 truncate font-mono text-sm font-bold text-slate-900 dark:text-white" title={providerSupportsModelSelection(provider.provider) ? provider.model : undefined}>
+                    {providerSupportsModelSelection(provider.provider) ? provider.model : "Managed by provider"}
+                  </div>
                 </div>
-                <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking</div>
-                  <div className="mt-1 truncate text-sm font-black text-slate-900 dark:text-white">{provider.provider === "jules" ? "n/a" : provider.thinkingMode}</div>
-                </div>
-                <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
-                  <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{provider.maxConcurrentTasks || "∞"}</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
+                    <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{provider.weight}</div>
+                  </div>
+                  <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking</div>
+                    <div className="mt-1 truncate text-sm font-black text-slate-900 dark:text-white">{provider.provider === "jules" ? "n/a" : provider.thinkingMode}</div>
+                  </div>
+                  <div className="rounded-xl border border-black/[0.05] bg-black/[0.025] px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.035]">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cap</div>
+                    <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{provider.maxConcurrentTasks || "∞"}</div>
+                  </div>
                 </div>
               </div>
-              <div className="grid gap-3">
-                <Row label="Eligible by default" description="Controls whether this instance participates before route-specific overrides are applied.">
-                  <Toggle value={provider.enabled} onChange={(value) => updateProviderSettings(providerConfigId, { enabled: value })} />
-                </Row>
-                {providerSupportsModelSelection(provider.provider) ? (
-                  <Row label="Base model" description="Inherited by routes unless a route-specific model override is set.">
-                    <SelectInput
-                      value={provider.model}
-                      onChange={(value) => updateProviderSettings(providerConfigId, { model: value })}
-                      options={getProviderInstanceModelOptions(providerConfigId, provider, systemSettings)}
+              {expanded ? (
+                <div id={detailsId} className="grid gap-3">
+                  <Row label="Eligible by default" description="Controls whether this instance participates before route-specific overrides are applied.">
+                    <Toggle value={provider.enabled} onChange={(value) => updateProviderSettings(providerConfigId, { enabled: value })} />
+                  </Row>
+                  {providerSupportsModelSelection(provider.provider) ? (
+                    <Row label="Base model" description="Inherited by routes unless a route-specific model override is set.">
+                      <SelectInput
+                        value={provider.model}
+                        onChange={(value) => updateProviderSettings(providerConfigId, { model: value })}
+                        options={getProviderInstanceModelOptions(providerConfigId, provider, systemSettings)}
+                      />
+                    </Row>
+                  ) : null}
+                  {providerSupportsThinkingMode(provider.provider) ? (
+                    <Row label="Base thinking" description="Inherited reasoning depth for this provider instance.">
+                      <SelectInput
+                        value={provider.thinkingMode}
+                        onChange={(value) => updateProviderSettings(providerConfigId, { thinkingMode: value as ThinkingMode })}
+                        options={thinkingModeOptions}
+                      />
+                    </Row>
+                  ) : null}
+                  <Row label="Base weight" description="Used by weighted route strategies unless overridden.">
+                    <WeightSlider
+                      value={provider.weight}
+                      onChange={(value) => updateProviderSettings(providerConfigId, { weight: value })}
+                      ariaLabel={`${provider.name} base weight`}
                     />
                   </Row>
-                ) : null}
-                {providerSupportsThinkingMode(provider.provider) ? (
-                  <Row label="Base thinking" description="Inherited reasoning depth for this provider instance.">
-                    <SelectInput
-                      value={provider.thinkingMode}
-                      onChange={(value) => updateProviderSettings(providerConfigId, { thinkingMode: value as ThinkingMode })}
-                      options={thinkingModeOptions}
-                    />
+                  <Row label="Max concurrent tasks" description="Provider-level cap; 0 means unlimited." last>
+                    <NumberInput value={provider.maxConcurrentTasks} min={0} max={50} onChange={(value) => updateProviderSettings(providerConfigId, { maxConcurrentTasks: value })} />
                   </Row>
-                ) : null}
-                <Row label="Base weight" description="Used by weighted route strategies unless overridden.">
-                  <NumberInput value={provider.weight} min={0} max={100} onChange={(value) => updateProviderSettings(providerConfigId, { weight: value })} />
-                </Row>
-                <Row label="Max concurrent tasks" description="Provider-level cap; 0 means unlimited." last>
-                  <NumberInput value={provider.maxConcurrentTasks} min={0} max={50} onChange={(value) => updateProviderSettings(providerConfigId, { maxConcurrentTasks: value })} />
-                </Row>
-              </div>
+                </div>
+              ) : null}
             </div>
-          ))}
+            );
+          })}
         </div>
       </SectionCard>
 
