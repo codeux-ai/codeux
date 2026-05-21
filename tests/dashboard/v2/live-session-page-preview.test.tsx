@@ -94,7 +94,7 @@ describe("Reduced Motion Support", () => {
         render(<SearchOverlay isOpen={true} onClose={() => {}} searchQuery="" onSearchChange={() => {}} results={results} />);
 
         expect(screen.getByPlaceholderText(/Search sprints, tasks, agents/i)).toBeInTheDocument();
-        expect(screen.getByText(/Start typing to search/i)).toBeInTheDocument();
+        expect(screen.getByText(/Quick navigation/i)).toBeInTheDocument();
     });
 
     it("renders CollapsiblePanel cleanly under reduced motion", () => {

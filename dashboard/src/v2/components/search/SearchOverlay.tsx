@@ -111,11 +111,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
             triggerElementRef.current = document.activeElement as HTMLElement;
             gsap.set(overlayRef.current, { display: 'flex' });
 
-            const tl = gsap.timeline({
-                onComplete: () => {
-                    inputRef.current?.focus();
-                }
-            });
+            const tl = gsap.timeline();
 
             tl.fromTo(overlayRef.current,
                 { opacity: 0 },
@@ -124,7 +120,13 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
 
             tl.fromTo(containerRef.current,
                 { y: reducedMotion ? 0 : -20, opacity: 0 },
-                { y: 0, opacity: 1, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.cardEntry, ease: MODAL_MOTION.overlay.cardEntryEase },
+                {
+                    y: 0,
+                    opacity: 1,
+                    duration: reducedMotion ? 0 : MODAL_MOTION.overlay.cardEntry,
+                    ease: MODAL_MOTION.overlay.cardEntryEase,
+                    onComplete: () => inputRef.current?.focus()
+                },
                 reducedMotion ? 0 : "-=0.2"
             );
         } else {
@@ -217,12 +219,51 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 </div>
 
                 {/* Results Area */}
-                <div className="flex-1 max-h-[60vh] overflow-y-auto custom-scrollbar p-2">
+                <div className="flex-1 max-h-[60vh] overflow-y-auto dashboard-scrollbar p-2">
                     {searchQuery.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center p-8">
-                                <Inbox className="w-8 h-8 mb-4 opacity-50 text-slate-500 dark:text-slate-400" />
-                                <span>Start typing to search across your workspace...</span>
+                        <div className="flex flex-col">
+                            <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 px-3 py-2">
+                                Quick navigation
+                            </h3>
+                            <div className="flex flex-wrap gap-2 px-3 pb-4">
+                                <a
+                                    href="/sprints"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        onClose();
+                                        navigate({ to: '/sprints' });
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
+                                >
+                                    <Layers className="w-4 h-4" />
+                                    Sprints
+                                </a>
+                                <a
+                                    href="/tasks"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        onClose();
+                                        navigate({ to: '/tasks' });
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
+                                >
+                                    <Activity className="w-4 h-4" />
+                                    Tasks
+                                </a>
+                                <a
+                                    href="/agents"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        onClose();
+                                        navigate({ to: '/agents' });
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
+                                >
+                                    <Cpu className="w-4 h-4" />
+                                    Agents
+                                </a>
                             </div>
+                        </div>
                     ) : isLoading ? (
                         <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
                             <Loader2 className="w-8 h-8 mb-4 animate-spin opacity-50" />
