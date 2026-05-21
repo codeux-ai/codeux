@@ -49,6 +49,8 @@ const ProjectCard: FunctionComponent<{
     const cardRef  = useRef<HTMLDivElement>(null);
     const label    = statusLabel[source.status];
     const color    = statusColor[source.status];
+    const isRunning = source.status === 'running';
+    const accentHex = '#00AB84';
     const watermark = source.name.slice(0, 3).toUpperCase();
     const total     = source.completedTasks + source.openTasks;
     const completion = total > 0 ? Math.round((source.completedTasks / total) * 100) : 0;
@@ -81,17 +83,38 @@ const ProjectCard: FunctionComponent<{
             onClick={onSelect}
             onMouseEnter={onEnter}
             onMouseLeave={onLeave}
-            className={`group relative flex flex-col
-                       bg-white/70 dark:bg-void-800/60
+            className="group relative"
+        >
+          {/* Running project: stable layered breathing glow aura */}
+          {isRunning && (
+            <div
+              className="absolute inset-0 rounded-[1.75rem] pointer-events-none scale-[1.012]"
+              style={{ zIndex: 0 }}
+            >
+              {/* Crisp accent border */}
+              <div
+                className="absolute inset-0 rounded-[1.75rem]"
+                style={{ border: `1px solid ${accentHex}70` }}
+              />
+              {/* Ambient breathing glow */}
+              <div
+                className="absolute inset-0 rounded-[1.75rem] animate-[pulse_3.5s_ease-in-out_infinite]"
+                style={{ boxShadow: `0 0 20px ${accentHex}40, inset 0 0 10px ${accentHex}20` }}
+              />
+            </div>
+          )}
+          <div
+            className={`relative flex flex-col
                        backdrop-blur-2xl
                        rounded-[1.75rem]
                        p-7
                        overflow-hidden cursor-pointer
+                       ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/70 dark:bg-void-800/60"}
                        ${isSelected
                          ? "border border-ember-500/45 shadow-[0_8px_30px_rgba(255,184,0,0.08)] ring-1 ring-ember-500/18"
                          : "border border-black/[0.06] dark:border-white/[0.06] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
                        }`}
-        >
+          >
             {/* Ghost watermark */}
             <div
                 aria-hidden="true"
@@ -219,6 +242,7 @@ const ProjectCard: FunctionComponent<{
                     </button>
                 </div>
             </div>
+          </div>
         </div>
     );
 };

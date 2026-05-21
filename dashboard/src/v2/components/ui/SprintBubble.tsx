@@ -163,7 +163,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
       />
 
       <div
-        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-white/70 bg-white/55 backdrop-blur-3xl transition-all duration-700 transform-gpu dark:border-white/[0.06] dark:bg-void-800/65 ${animationClass} ${isCompleted ? "opacity-80" : ""}`}
+        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-white/70 backdrop-blur-3xl transition-all duration-700 transform-gpu dark:border-white/[0.06] ${animationClass} ${isCompleted ? "opacity-80" : ""} ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
         style={{
 
           WebkitMaskImage: "-webkit-radial-gradient(white, black)",
@@ -173,19 +173,45 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
         <div className={`absolute inset-0 pointer-events-none shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] ${animationClass}`} />
         <WaveFluid accentHex={state.accentHex} />
         <BorderTrace accentHex={state.accentHex} />
-        {state.ring && !isCompleted && (
+      </div>
+
+      {state.ring && !isCompleted && (
+        <div
+          className={`absolute inset-0 pointer-events-none mix-blend-screen scale-[1.012] ${animationClass}`}
+          style={{
+            zIndex: 10,
+          }}
+        >
+          {/* High-fidelity outer accent border */}
           <div
-            className={`absolute inset-0 rounded-[1.75rem] border-2 bg-transparent pointer-events-none mix-blend-screen scale-105 animate-[spin_5s_linear_infinite] ${state.ring}`}
-            style={{ clipPath: "inset(-10px)" }}
+            className="absolute inset-0 rounded-[inherit] border border-status-green/50 dark:mix-blend-screen"
+            style={{
+              borderColor: `${state.accentHex}70`,
+            }}
           />
-        )}
-        {sprint.latestReview?.status === 'running' && (
+          {/* Breathtaking ambient breathing glow */}
           <div
-            className="absolute inset-0 rounded-[1.75rem] border-2 border-signal-500/30 pointer-events-none animate-ping"
+            className="absolute inset-0 rounded-[inherit] animate-[pulse_3.5s_ease-in-out_infinite]"
+            style={{
+              boxShadow: `0 0 20px ${state.accentHex}40, inset 0 0 10px ${state.accentHex}20`,
+            }}
+          />
+        </div>
+      )}
+
+      {sprint.latestReview?.status === 'running' && (
+        <div
+          className={`absolute inset-0 pointer-events-none ${animationClass}`}
+          style={{
+            zIndex: 10,
+          }}
+        >
+          <div
+            className="absolute inset-0 rounded-[inherit] border-2 border-signal-500/40 animate-ping"
             style={{ animationDuration: '2s' }}
           />
-        )}
-      </div>
+        </div>
+      )}
 
       {isCompleted && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
