@@ -21,18 +21,18 @@ export function queryProjectGitStats(
   taskUsage: Map<string, ExecutionGitMetrics>;
   sprintUsage: Map<string, ExecutionGitMetrics>;
 } {
-  const gitTotals = { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 };
+  const gitTotals = { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0, mergeConflictCount: 0 };
   const gitBuckets = buckets.map(b => ({
     bucketStart: b.bucketStart,
     bucketEnd: b.bucketEnd,
     label: b.label,
-    metrics: { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 }
+    metrics: { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0, mergeConflictCount: 0 }
   }));
   const gitTaskUsage = new Map<string, ExecutionGitMetrics>();
   const gitSprintUsage = new Map<string, ExecutionGitMetrics>();
 
   const getGitMetrics = (map: Map<string, ExecutionGitMetrics>, key: string) => {
-    if (!map.has(key)) map.set(key, { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 });
+    if (!map.has(key)) map.set(key, { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0, mergeConflictCount: 0 });
     return map.get(key)!;
   };
 
@@ -150,6 +150,46 @@ export function queryProjectGitStats(
     const sprintMetrics = getGitMetrics(gitSprintUsage, row.sprint_key);
     sprintMetrics.prCount += prCount;
     sprintMetrics.mergedCount += mergedCount;
+  }
+
+  // Process merge conflicts
+  const mergeConflictAggregations = db.prepare(`
+    SELECT
+      task_id,
+      COALESCE(sprint_run_id, sprint_id) as sprint_key,
+      (CAST(strftime('%s', opened_at) AS REAL) * 1000 - ?) / ? as raw_bucket_index,
+      COUNT(id) as conflict_count
+    FROM project_attention_items
+    WHERE project_id = ?
+      AND attention_type = 'merge_conflict'
+      AND opened_at >= ?
+      AND opened_at < ?
+      AND task_id IS NOT NULL
+    GROUP BY task_id, COALESCE(sprint_run_id, sprint_id), raw_bucket_index
+  `).all(firstBucketStartMs, bucketSizeMs, projectId, rangeStartIso, rangeEndIso) as Array<{
+    task_id: string;
+    sprint_key: string;
+    raw_bucket_index: number | null;
+    conflict_count: number;
+  }>;
+
+  for (const row of mergeConflictAggregations) {
+    const conflictCount = row.conflict_count || 0;
+
+    gitTotals.mergeConflictCount += conflictCount;
+
+    if (row.raw_bucket_index !== null) {
+      const bucketIndex = Math.floor(row.raw_bucket_index);
+      if (bucketIndex >= 0 && bucketIndex < gitBuckets.length) {
+        gitBuckets[bucketIndex]!.metrics.mergeConflictCount += conflictCount;
+      }
+    }
+
+    const taskMetrics = getGitMetrics(gitTaskUsage, row.task_id);
+    taskMetrics.mergeConflictCount += conflictCount;
+
+    const sprintMetrics = getGitMetrics(gitSprintUsage, row.sprint_key);
+    sprintMetrics.mergeConflictCount += conflictCount;
   }
 
   return { totals: gitTotals, buckets: gitBuckets, taskUsage: gitTaskUsage, sprintUsage: gitSprintUsage };

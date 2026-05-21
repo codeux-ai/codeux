@@ -160,7 +160,7 @@ describe("queryProjectStatsSnapshot", () => {
     expect(snapshot.projectName).toBe("Project 1");
     expect(snapshot.window).toBe("7d");
     expect(snapshot.git).toBeDefined();
-    expect(snapshot.git.totals).toEqual({ insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 });
+    expect(snapshot.git.totals).toEqual({ insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0, mergeConflictCount: 0 });
     expect(snapshot.activeSprint?.sprintId).toBe("sprint-1");
 
     // Assert git series
