@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel } from "../SettingsSurface.js";
-import { MetricPill, NumberInput, PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
+import { MetricPill, NumberInput, PillChoiceGroup, Row, SelectInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import type {
   InvocationRoutingId,
@@ -11,15 +11,12 @@ import type {
 } from "../../../../types.js";
 import {
   getEligibleProviders,
-  getProviderInstanceAuthLabel,
   getProviderInstanceLabel,
   getProviderInstanceModelOptions,
   getProviderModelOptions,
   getProviderTypeLabel,
-  isProviderInstanceAvailable,
   providerSupportsModelSelection,
   providerSupportsThinkingMode,
-  PROVIDER_CARD_TOKENS,
   sortProviderConfigEntries,
 } from "../../../lib/settings-view-models.js";
 
@@ -32,11 +29,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
     projectSources,
     systemSettings,
     externalHints,
-    activeProviderPanel,
-    setActiveProviderPanel,
     activeInvocationRoute,
     setActiveInvocationRoute,
-    providerLabels,
     thinkingModeOptions,
     invocationRouteDefinitions,
     routingProfileOptions,
@@ -53,13 +47,14 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   const providerEntries = sortProviderConfigEntries(Object.entries(editableSettings.aiProvider.providers));
   const eligibleProviderConfigIds = getEligibleProviders(systemSettings, editableSettings, externalHints);
   const workerProviderEntries = providerEntries.filter(([, provider]) => provider.provider !== "jules");
-  const activeProviderConfigId = providerEntries.some(([providerConfigId]) => providerConfigId === activeProviderPanel)
-    ? activeProviderPanel
-    : providerEntries[0]?.[0] || null;
-  const activeProviderEntry = activeProviderConfigId
-    ? editableSettings.aiProvider.providers[activeProviderConfigId]
-    : null;
 
+  const globalProviderSettings = editableSettings.aiProvider.provider
+    ? editableSettings.aiProvider.providers[editableSettings.aiProvider.provider]
+    : null;
+  const globalProviderType = globalProviderSettings?.provider || "jules";
+  const globalModelOptions = globalProviderSettings
+    ? getProviderInstanceModelOptions(editableSettings.aiProvider.provider || "", globalProviderSettings, systemSettings)
+    : getProviderModelOptions(globalProviderType);
   const workerProviderSettings = editableSettings.aiProvider.providers[editableSettings.workers.virtualWorkerProvider];
   const workerProviderType = workerProviderSettings?.provider || "codex";
   const workerModelOptions = workerProviderSettings
@@ -184,21 +179,56 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
   const routePool = activeRoute.allowedProviders.length > 0
     ? activeRoute.allowedProviders.filter((providerConfigId) => editableSettings.aiProvider.providers[providerConfigId])
     : providerEntries.map(([providerConfigId]) => providerConfigId);
-  const routeResolvedDefault = activeRoute.profile === "WORKER"
+  const routeResolvedDefault = activeRoute.provider
+    ? editableSettings.aiProvider.providers[activeRoute.provider]
+    : activeRoute.profile === "WORKER"
     ? editableSettings.aiProvider.providers[editableSettings.workers.virtualWorkerProvider]
     : (editableSettings.aiProvider.provider ? editableSettings.aiProvider.providers[editableSettings.aiProvider.provider] : null);
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Worker Runtime" watermark="WRK" badge={getBadge("workers")}>
-        <Row label="Worker execution mode" description="Worker-owned supervision runs through an internal virtual worker instance." badge={getFieldBadge("workers.executionMode")}>
-          <PillChoiceGroup
-            value="VIRTUAL"
-            onChange={() => undefined}
-            options={[{ value: "VIRTUAL", label: "Virtual", hint: "Spin up a short-lived worker instance only when needed." }]}
+      <SectionCard title="Default Instances" watermark="AI" badge={getBadge("aiProvider", "workers")}>
+        {providerEntries.length === 0 ? (
+          <NoticePanel title="No provider credentials">
+            Add provider credentials in Integrations before configuring AI routes.
+          </NoticePanel>
+        ) : null}
+        <Row label="Global default instance" description="Fallback instance for global-profile routes that inherit their primary provider." badge={getFieldBadge("aiProvider.provider")}>
+          <SelectInput
+            value={editableSettings.aiProvider.provider || providerEntries[0]?.[0] || ""}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              aiProvider: {
+                ...current.aiProvider,
+                provider: value,
+                providers: {
+                  ...current.aiProvider.providers,
+                  [value]: {
+                    ...current.aiProvider.providers[value],
+                    enabled: true,
+                  },
+                },
+              },
+            }))}
+            options={providerEntries.map(([providerConfigId, provider]) => ({
+              value: providerConfigId,
+              label: getProviderInstanceLabel(provider),
+            }))}
           />
         </Row>
-        <Row label="Worker provider instance" description="Select the exact provider instance used by worker-profile routes." badge={getFieldBadge("workers.virtualWorkerProvider")}>
+        <Row label="Global default model" description="Base model used when the global default instance is selected without a route-specific model override." badge={getFieldBadge("aiProvider.providers")}>
+          <SelectInput
+            value={globalProviderSettings?.model || "default"}
+            onChange={(value) => editableSettings.aiProvider.provider
+              ? updateProviderSettings(editableSettings.aiProvider.provider, { model: value })
+              : undefined}
+            disabled={!globalProviderSettings || !providerSupportsModelSelection(globalProviderSettings.provider)}
+            options={globalProviderSettings && providerSupportsModelSelection(globalProviderSettings.provider)
+              ? globalModelOptions
+              : [{ value: "default", label: "Managed by provider" }]}
+          />
+        </Row>
+        <Row label="Worker default instance" description="Fallback instance for worker-profile routes that inherit their primary provider." badge={getFieldBadge("workers.virtualWorkerProvider")}>
           <SelectInput
             value={editableSettings.workers.virtualWorkerProvider}
             onChange={(value) => updateEditableSettings((current) => ({
@@ -215,7 +245,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
             }))}
           />
         </Row>
-        <Row label="Worker model" description="Override the selected worker instance model. Default uses that instance’s base model." badge={getFieldBadge("workers.model")}>
+        <Row label="Worker default model" description="Model used by inherited worker-profile routes. Default uses the selected worker instance’s base model." badge={getFieldBadge("workers.model")}>
           <SelectInput
             value={editableSettings.workers.model || "default"}
             onChange={(value) => updateEditableSettings((current) => ({
@@ -243,196 +273,6 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
             workers: { ...current.workers, timeoutSeconds: value },
           }))} />
         </Row>
-      </SectionCard>
-
-      <SectionCard title="Provider Instances" watermark="MDL" badge={getBadge("aiProvider")}>
-        <Row label="Routing strategy" description="Manual pins one exact instance, weighted distributes across enabled instances, orchestrator chooses an instance at runtime." badge={getFieldBadge("aiProvider.strategy")} last={editableSettings.aiProvider.strategy !== "MANUAL"}>
-          <PillChoiceGroup
-            value={editableSettings.aiProvider.strategy}
-            onChange={(value) => updateEditableSettings((current) => ({
-              ...current,
-              aiProvider: {
-                ...current.aiProvider,
-                strategy: value as ProjectSettings["aiProvider"]["strategy"],
-              },
-            }))}
-            options={[
-              { value: "MANUAL", label: "Manual", hint: "Choose one exact instance." },
-              { value: "WEIGHTED", label: "Weighted", hint: "Distribute by instance weight." },
-              { value: "ORCHESTRATOR", label: "Orchestrator", hint: "Runtime can choose the best instance." },
-            ]}
-          />
-        </Row>
-        {editableSettings.aiProvider.strategy === "MANUAL" ? (
-          <Row label="Primary provider instance" description="Global default instance for manual routing." badge={getFieldBadge("aiProvider.provider")} last>
-            <SelectInput
-              value={editableSettings.aiProvider.provider || providerEntries[0]?.[0] || ""}
-              onChange={(value) => updateEditableSettings((current) => ({
-                ...current,
-                aiProvider: {
-                  ...current.aiProvider,
-                  provider: value,
-                },
-              }))}
-              options={providerEntries.map(([providerConfigId, provider]) => ({
-                value: providerConfigId,
-                label: getProviderInstanceLabel(provider),
-              }))}
-            />
-          </Row>
-        ) : null}
-
-        {providerEntries.length === 0 ? (
-          <NoticePanel title="No provider instances">
-            Add provider credentials in Integrations before configuring AI Models.
-          </NoticePanel>
-        ) : (
-          <div className="mt-6 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <div className="rounded-[1.6rem] border border-black/[0.06] bg-black/[0.02] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="mb-3 px-2">
-                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Provider instances</div>
-                <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                  Every named instance routes independently. Weighted mode treats each item here as its own target.
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                {providerEntries.map(([providerConfigId, provider]) => {
-                  const authLabel = getProviderInstanceAuthLabel(
-                    providerConfigId,
-                    systemSettings,
-                    editableSettings.cliWorkflow.executionMode === "DOCKER",
-                  );
-                  const available = isProviderInstanceAvailable(providerConfigId, systemSettings);
-                  const isGlobalDefault = editableSettings.aiProvider.provider === providerConfigId;
-                  const isWorkerDefault = editableSettings.workers.virtualWorkerProvider === providerConfigId;
-                  return (
-                    <button
-                      key={providerConfigId}
-                      type="button"
-                      onClick={() => setActiveProviderPanel(providerConfigId)}
-                      className={`rounded-[1.2rem] border px-4 py-3 text-left transition-all duration-200 ${
-                        providerConfigId === activeProviderConfigId
-                          ? "border-signal-500/25 bg-signal-500/[0.08] shadow-[0_12px_24px_rgba(0,224,160,0.08)] dark:border-signal-400/25 dark:bg-signal-400/[0.12]"
-                          : "border-black/[0.06] bg-white/78 hover:border-black/[0.1] hover:bg-white dark:border-white/[0.06] dark:bg-void-900/50 dark:hover:border-white/[0.1]"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <ProviderLogo providerId={provider.provider} disabled={!provider.enabled} />
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{provider.name}</div>
-                          <div className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                            {getProviderTypeLabel(provider.provider)} · {provider.provider === "jules" ? "Managed model" : provider.model}
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {authLabel ? (
-                              <span className="rounded-full border border-black/[0.08] bg-black/[0.03] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
-                                {authLabel}
-                              </span>
-                            ) : null}
-                            {!available ? (
-                              <span className="rounded-full border border-status-red/20 bg-status-red/[0.08] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-status-red">
-                                Unavailable
-                              </span>
-                            ) : null}
-                            {isGlobalDefault ? (
-                              <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-signal-700 dark:text-signal-200">
-                                Global default
-                              </span>
-                            ) : null}
-                            {isWorkerDefault ? (
-                              <span className="rounded-full border border-amber-500/20 bg-amber-500/[0.08] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-200">
-                                Worker default
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {activeProviderEntry && activeProviderConfigId ? (
-              <div className={`group relative overflow-hidden rounded-[1.7rem] border border-black/[0.06] bg-white/74 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_20px_44px_rgba(0,0,0,0.22)] ${activeProviderEntry.enabled ? "" : "opacity-80"}`}>
-                <div aria-hidden className={`pointer-events-none absolute inset-0 ${PROVIDER_CARD_TOKENS[activeProviderEntry.provider].glowClassName}`} />
-                <div aria-hidden className={`absolute left-0 top-6 bottom-6 w-1 rounded-r-full ${PROVIDER_CARD_TOKENS[activeProviderEntry.provider].railClassName}`} />
-                <div className="relative z-10 flex flex-col gap-5">
-                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
-                    <div className="flex items-start gap-3">
-                      <ProviderLogo providerId={activeProviderEntry.provider} disabled={!activeProviderEntry.enabled} />
-                      <div>
-                        <div className="mb-2 flex flex-wrap gap-2">
-                          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] ${PROVIDER_CARD_TOKENS[activeProviderEntry.provider].badgeClassName}`}>
-                            {getProviderTypeLabel(activeProviderEntry.provider)}
-                          </span>
-                          {eligibleProviderConfigIds.includes(activeProviderConfigId) ? (
-                            <span className="inline-flex items-center rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-signal-700 dark:text-signal-200">
-                              Routable
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="text-xl font-semibold text-slate-900 dark:text-white">{activeProviderEntry.name}</div>
-                        <div className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                          Configure this named instance independently. Weighted routing treats it as its own target, even when several instances share the same CLI type.
-                        </div>
-                      </div>
-                    </div>
-                    <Toggle value={activeProviderEntry.enabled} onChange={() => updateProviderSettings(activeProviderConfigId, { enabled: !activeProviderEntry.enabled })} />
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <MetricPill label="Type" value={getProviderTypeLabel(activeProviderEntry.provider)} tone="signal" />
-                    <MetricPill label="Model" value={activeProviderEntry.provider === "jules" ? "Managed" : activeProviderEntry.model} />
-                    <MetricPill label="Weight" value={String(activeProviderEntry.weight)} />
-                    <MetricPill label="Routing" value={eligibleProviderConfigIds.includes(activeProviderConfigId) ? "Eligible" : "Not eligible"} />
-                  </div>
-
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div>
-                      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Display name</div>
-                      <TextInput value={activeProviderEntry.name} onChange={(value) => updateProviderSettings(activeProviderConfigId, { name: value })} />
-                    </div>
-                    <div>
-                      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Max concurrent tasks</div>
-                      <NumberInput value={activeProviderEntry.maxConcurrentTasks} min={0} onChange={(value) => updateProviderSettings(activeProviderConfigId, { maxConcurrentTasks: value })} />
-                    </div>
-                    {providerSupportsModelSelection(activeProviderEntry.provider) ? (
-                      <div>
-                        <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Base model</div>
-                        <SelectInput
-                          value={activeProviderEntry.model}
-                          onChange={(value) => updateProviderSettings(activeProviderConfigId, { model: value })}
-                          options={getProviderInstanceModelOptions(activeProviderConfigId, activeProviderEntry, systemSettings)}
-                        />
-                      </div>
-                    ) : null}
-                    {providerSupportsThinkingMode(activeProviderEntry.provider) ? (
-                      <div>
-                        <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking mode</div>
-                        <SelectInput
-                          value={activeProviderEntry.thinkingMode}
-                          onChange={(value) => updateProviderSettings(activeProviderConfigId, { thinkingMode: value as ThinkingMode })}
-                          options={thinkingModeOptions}
-                        />
-                      </div>
-                    ) : null}
-                    <div>
-                      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
-                      <NumberInput value={activeProviderEntry.weight} min={0} max={100} onChange={(value) => updateProviderSettings(activeProviderConfigId, { weight: value })} />
-                    </div>
-                  </div>
-
-                  {activeProviderEntry.provider === "jules" ? (
-                    <div className="rounded-2xl border border-black/[0.08] bg-black/[0.03] px-4 py-3 text-xs font-medium leading-relaxed text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300">
-                      Jules remains a provider-managed API backend. It still routes like any other instance, but model and thinking controls stay API-managed.
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        )}
       </SectionCard>
 
       <SectionCard title="Route Mapping" watermark="MAP" badge={getBadge("aiProvider.invocationRouting")}>
@@ -521,9 +361,15 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Primary instance</div>
               <SelectInput
                 value={activeRoute.provider || INHERIT_VALUE}
-                onChange={(value) => updateRouteSettings(activeRouteDefinition.id, {
-                  provider: value === INHERIT_VALUE ? null : value,
-                })}
+                onChange={(value) => {
+                  const providerConfigId = value === INHERIT_VALUE ? null : value;
+                  updateRouteSettings(activeRouteDefinition.id, {
+                    provider: providerConfigId,
+                  });
+                  if (providerConfigId) {
+                    updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { enabled: true });
+                  }
+                }}
                 disabled={activeRoute.strategy !== "MANUAL"}
                 options={[
                   {

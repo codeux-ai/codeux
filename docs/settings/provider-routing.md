@@ -15,7 +15,7 @@ Code UX now separates:
 - global provider defaults
 - worker runtime defaults
 - invocation-specific routing rules
-- named provider instances per CLI type
+- provider credentials/instances managed by Integrations
 
 *(Note: In routing contexts, `available` means detected credentials/auth presence or local auth enabled on that exact provider instance, whereas `enabled` means user-approved routing participation.)*
 
@@ -52,6 +52,8 @@ Provider instances are first-class routing targets:
 - `WEIGHTED` distributes across enabled instances, even when several share the same provider type
 - `ORCHESTRATOR` picks a provider type first, then selects a matching enabled instance within that type
 
+Manual route selection is authoritative for that route. If a route sets `provider` to a concrete instance such as `opencode`, Code UX treats that instance as enabled for that route even if its base provider entry is disabled by default. An explicit route override of `providers.<id>.enabled = false` still disables it. This prevents disabled-by-default optional providers from losing to the first enabled default after the user pins a route to them.
+
 ## Supported Invocation Routes
 
 - `task_coding`: primary provider-routed task execution
@@ -66,10 +68,10 @@ Provider instances are first-class routing targets:
 
 1. Start from the selected route.
 2. Build the baseline provider-instance catalog from the route profile.
-3. Apply worker-profile defaults when `profile = WORKER`. (WORKER-profile routes no longer silently re-enable disabled CLI providers, and incompatible worker model overrides are ignored instead of being forwarded to a different provider.)
+3. Apply worker-profile defaults when `profile = WORKER`. The inherited worker default instance is enabled for worker-profile routes, and incompatible worker model overrides are ignored instead of being forwarded to a different provider.
 4. If a `GLOBAL` route is still using its untouched default routing block, inherit the top-level `aiProvider.strategy`.
 5. Apply invocation-specific per-provider overrides.
-6. Filter by `allowedProviders`, then by any runtime provider pool restriction.
+6. Filter by `allowedProviders`, then by any runtime provider pool restriction. A manually pinned route provider remains eligible even if an older allowed-pool setting did not include it.
 7. Run the selected strategy.
 8. If Jules is selected but unavailable, Code UX reroutes within the remaining eligible providers.
 9. When a CLI instance is selected for Docker execution, Code UX forwards that instance's `mountAuth` and `authPath` into the runtime so the chosen route controls which local credential directory is copied.
@@ -89,6 +91,7 @@ Provider instances are first-class routing targets:
 That means:
 - task coding inherits the top-level global routing strategy unless the task route itself is explicitly customized
 - dashboard chat replies, clarification auto-answer, and QA review runs follow the preferred worker CLI provider/model by default instead of inheriting the global primary provider
+- dashboard chat replies resolve from Route Mapping on every turn; stale thread runtime state is used only to decide whether a chat session can continue or must replay after the provider changes
 
 ## Services Using Invocation Routing
 
@@ -109,7 +112,8 @@ That means:
 ## Dashboard Surface
 
 The v2 settings page exposes:
-- global provider-instance defaults
+- global default instance and model
+- worker default instance and model
 - invocation route profile and strategy
 - per-route provider-instance subset selection
 - per-route model and thinking-mode overrides
@@ -118,8 +122,7 @@ The v2 settings page exposes:
 - OpenCode setup panels for local auth, built-in provider keys, and custom OpenAI-compatible endpoints
 - restored Git Flow controls plus GitHub auth-copy controls in the live panel set
 - quick category search with `/` focus
-- a compact provider deck that edits one named provider instance in a focused detail panel
-- a split-pane invocation route workspace with route summaries, provider-pool counts, and override counts
+- Route Mapping as the main AI routing workspace with route summaries, provider-pool counts, and override counts
 - pill-style controls for common mode switches such as profile, strategy, execution mode, and merge policy
 
 File:

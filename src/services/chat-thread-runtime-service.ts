@@ -82,41 +82,14 @@ export class ChatThreadRuntimeService {
 
     const route = this.deps.taskService.resolveInvocationProvider("dashboard_reply", pseudoTask, { cliOnly: true });
 
-    if (this.isVirtualProvider(runtimeState?.virtualProvider) && runtimeState?.routeKind === "virtual") {
-      const providerId = runtimeState.virtualProvider;
-      const providerSettings = route.providers[providerId];
-
-      return {
-        mode: "VIRTUAL",
-        providerId,
-        model: runtimeState.modelLabel || providerSettings.model,
-        apiKey: providerSettings.apiKey,
-      qwenAuthMode: providerSettings.qwenAuthMode,
-      qwenRegion: providerSettings.qwenRegion,
-      qwenBaseUrl: providerSettings.qwenBaseUrl,
-      qwenEnvKey: providerSettings.qwenEnvKey,
-      qwenModelId: providerSettings.qwenModelId,
-      qwenProtocol: providerSettings.qwenProtocol,
-      qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
-        openCodeAuthMode: providerSettings.openCodeAuthMode,
-        openCodeProviderId: providerSettings.openCodeProviderId,
-        openCodeModelId: providerSettings.openCodeModelId,
-        openCodeBaseUrl: providerSettings.openCodeBaseUrl,
-        openCodeEnvKey: providerSettings.openCodeEnvKey,
-        openCodePackage: providerSettings.openCodePackage,
-        providerMountAuth: providerSettings.mountAuth,
-        providerAuthPath: providerSettings.authPath,
-        thinkingMode: providerSettings.thinkingMode,
-      };
-    }
-
     const providerId = route.provider as Exclude<ProviderId, "jules"> | undefined;
     if (!providerId) {
       throw new Error("Dashboard replies require an enabled CLI provider, but no eligible provider was resolved.");
     }
-    const providerSettings = route.providers[providerId];
+    const providerConfigId = route.providerConfigId || providerId;
+    const providerSettings = route.providers[providerConfigId];
     if (!providerSettings) {
-      throw new Error(`Dashboard reply routing resolved provider ${providerId}, but no provider settings were available.`);
+      throw new Error(`Dashboard reply routing resolved provider ${providerConfigId}, but no provider settings were available.`);
     }
 
     return {
@@ -442,10 +415,6 @@ export class ChatThreadRuntimeService {
       connectionId: null,
       runtimeState: newRuntimeState,
     });
-  }
-
-  private isVirtualProvider(value: string | undefined | null): value is Exclude<ProviderId, "jules"> {
-    return value === "gemini" || value === "codex" || value === "claude-code" || value === "qwen-code" || value === "opencode";
   }
 
   private async generateThreadCompaction(

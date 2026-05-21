@@ -88,6 +88,9 @@ const inferProviderTypeFromConfigId = (providerConfigId: ProviderConfigId): Prov
   if (providerConfigId === "qwen-code" || providerConfigId.startsWith("qwen-code-") || providerConfigId.startsWith("qwen-")) {
     return "qwen-code";
   }
+  if (providerConfigId === "opencode" || providerConfigId.startsWith("opencode-")) {
+    return "opencode";
+  }
   return null;
 };
 
@@ -164,21 +167,22 @@ const buildRouteProviders = (
     ]),
   );
 
-  const manualProvider = route.profile === "WORKER"
+  const inheritedManualProvider = route.profile === "WORKER"
     ? settings.workers.virtualWorkerProvider
     : settings.aiProvider.provider;
+  const manualProvider = route.provider ?? inheritedManualProvider;
 
-  if (route.profile === "WORKER" && manualProvider && providers[manualProvider]) {
-    const workerProviderType = providers[manualProvider].provider;
-    providers[manualProvider] = {
-      ...providers[manualProvider],
+  if (route.profile === "WORKER" && inheritedManualProvider && providers[inheritedManualProvider]) {
+    const workerProviderType = providers[inheritedManualProvider].provider;
+    providers[inheritedManualProvider] = {
+      ...providers[inheritedManualProvider],
       enabled: true,
       model: workerProviderType === "jules"
-        ? providers[manualProvider].model
+        ? providers[inheritedManualProvider].model
         : resolveWorkerModelForProvider(
           workerProviderType,
           settings.workers.model,
-          providers[manualProvider].model,
+          providers[inheritedManualProvider].model,
         ),
     };
   }
@@ -193,6 +197,13 @@ const buildRouteProviders = (
       ...(typeof overrides.model === "string" ? { model: overrides.model } : {}),
       ...(typeof overrides.weight === "number" ? { weight: overrides.weight } : {}),
       ...(typeof overrides.thinkingMode === "string" ? { thinkingMode: overrides.thinkingMode } : {}),
+    };
+  }
+
+  if (route.provider && providers[route.provider] && route.providers[route.provider]?.enabled !== false) {
+    providers[route.provider] = {
+      ...providers[route.provider],
+      enabled: true,
     };
   }
 
@@ -218,7 +229,7 @@ const getEnabledProviders = (
       if (settings.git.githubMode === "LOCAL" && provider.provider === "jules") {
         return false;
       }
-      if (allowedProviders && !allowedProviders.has(providerConfigId)) {
+      if (allowedProviders && !allowedProviders.has(providerConfigId) && route.provider !== providerConfigId) {
         return false;
       }
       if (providerPool && !providerPool.has(provider.provider)) {
@@ -308,7 +319,7 @@ export const resolveProviderForInvocation = (
   const route = settings.aiProvider.invocationRouting?.[input.invocation] || DEFAULT_INVOCATION_ROUTING[input.invocation];
   const strategy = resolveInvocationStrategy(settings, input.invocation);
   const base = buildRouteProviders(settings, input.invocation);
-  const manualProvider = route.provider ?? base.manualProvider;
+  const manualProvider = base.manualProvider;
   const enabledProviders = getEnabledProviders(settings, input, base.providers);
   const context: RoutingDecisionContext = {
     strategy,

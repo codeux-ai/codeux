@@ -17,6 +17,8 @@ const buildProviders = (
   gemini: { enabled: enabledProviders.gemini ?? true, weight: 25, thinkingMode: "MEDIUM", model: "gemini-2.5-pro", apiKey: "g-key" },
   codex: { enabled: enabledProviders.codex ?? true, weight: 25, thinkingMode: "HIGH", model: "gpt-5.4", apiKey: "o-key" },
   "claude-code": { enabled: enabledProviders["claude-code"] ?? true, weight: 0, thinkingMode: "HIGH", model: "default", apiKey: "c-key" },
+  "qwen-code": { enabled: enabledProviders["qwen-code"] ?? false, weight: 0, thinkingMode: "HIGH", model: "qwen3-coder-plus", apiKey: "q-key" },
+  opencode: { enabled: enabledProviders.opencode ?? false, weight: 0, thinkingMode: "HIGH", model: "anthropic/claude-sonnet-4-5", apiKey: "opencode-key" },
 });
 
 const mockSettings = (
@@ -245,6 +247,58 @@ describe("Provider Routing Logic", () => {
       expect(result.enabledProviders).toEqual(["codex"]);
       expect(result.provider).toBe("codex");
       expect(result.providers.codex.model).toBe("gpt-5.3-codex");
+    });
+
+    it("treats a manually selected route provider as eligible even when the base provider is disabled", () => {
+      const settings = mockSettings("MANUAL", "jules", { gemini: true, opencode: false });
+      settings.aiProvider.invocationRouting.dashboard_reply = {
+        ...settings.aiProvider.invocationRouting.dashboard_reply,
+        profile: "WORKER",
+        strategy: "MANUAL",
+        provider: "opencode",
+        allowedProviders: [],
+        providers: {
+          opencode: {
+            model: "openai/gpt-5",
+          },
+        },
+      };
+
+      const result = resolveProviderForInvocation(settings, {
+        invocation: "dashboard_reply",
+        task: mockTask({ prompt: "Reply to the dashboard thread" }),
+        providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode"],
+      });
+
+      expect(result.provider).toBe("opencode");
+      expect(result.providerConfigId).toBe("opencode");
+      expect(result.enabledProviders).toContain("opencode");
+      expect(result.providers.opencode.model).toBe("openai/gpt-5");
+    });
+
+    it("respects an explicit disabled override for the manually selected route provider", () => {
+      const settings = mockSettings("MANUAL", "jules", { gemini: true, opencode: false });
+      settings.aiProvider.invocationRouting.dashboard_reply = {
+        ...settings.aiProvider.invocationRouting.dashboard_reply,
+        profile: "WORKER",
+        strategy: "MANUAL",
+        provider: "opencode",
+        allowedProviders: [],
+        providers: {
+          opencode: {
+            enabled: false,
+          },
+        },
+      };
+
+      const result = resolveProviderForInvocation(settings, {
+        invocation: "dashboard_reply",
+        task: mockTask({ prompt: "Reply to the dashboard thread" }),
+        providerPool: ["gemini", "codex", "claude-code", "qwen-code", "opencode"],
+      });
+
+      expect(result.provider).toBe("gemini");
+      expect(result.enabledProviders).not.toContain("opencode");
     });
   });
 
