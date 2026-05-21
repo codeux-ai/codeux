@@ -1,8 +1,9 @@
 import { type FunctionComponent } from "preact";
-import { User, Terminal } from "lucide-preact";
+import { User, Terminal, Bot } from "lucide-preact";
 import { ContainerShipDef } from "../ui/PlanningShip.js";
 import { RobotLogo } from "../brand/RobotLogo.js";
 import { AgentAvatarSvg } from "../agents/AgentAvatarSvg.js";
+import { normalizeAgentAvatarConfig } from "../../lib/agent-avatar.js";
 import type { AgentAvatarConfig } from "../../types.js";
 
 export type AvatarRole = "user" | "jules" | "system" | "agent" | "container";
@@ -81,20 +82,19 @@ export const ChatAvatar: FunctionComponent<ChatAvatarProps> = ({
         // Logo-faithful mini robot. If we have a config use it, otherwise
         // pick a deterministic variant from the agent's name so different
         // agents are visually distinct in the chat.
-        const fallbackVariant = variantFromName(agentName ?? "agent");
-        const config: AgentAvatarConfig = avatarConfig ?? {
-          chassis: fallbackVariant.chassis,
-          eyes: "smile",
-          antenna: "jewel",
-          wings: "none",
-          accent: fallbackVariant.accent,
-          baseColor: "onyx",
-        };
-        return (
-          <div class="w-full h-full p-0.5" data-cux-agent-name={agentName ?? ""}>
-            <AgentAvatarSvg config={config} expression="happy" className="w-full h-full" />
-          </div>
-        );
+        if (avatarConfig) {
+          try {
+            const config = normalizeAgentAvatarConfig(avatarConfig);
+            return (
+              <div class="w-full h-full p-0.5 overflow-hidden" data-cux-agent-name={agentName ?? ""}>
+                <AgentAvatarSvg config={config} size={32} expression="happy" className="w-full h-full" />
+              </div>
+            );
+          } catch (err) {
+            // Fall back to Bot icon if config is invalid
+          }
+        }
+        return <Bot class="w-5 h-5 text-slate-400" aria-hidden="true" />;
       }
     }
   };

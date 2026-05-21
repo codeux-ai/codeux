@@ -54,24 +54,28 @@ describe('ChatAvatar', () => {
     expect(img.innerHTML).toContain('lucide-terminal');
   });
 
-  it('renders an Agent avatar with custom name as the brand robot', () => {
+  it('renders an Agent avatar with custom name falling back to Bot icon', () => {
     const { getByRole } = render(<ChatAvatar role="agent" agentName="CodeBot" />);
     const img = getByRole('img');
     expect(img).toBeInTheDocument();
     expect(img.getAttribute('aria-label')).toBe('CodeBot');
-    // Agent avatars now render the logo-faithful brand robot via AgentAvatarSvg
-    const svg = img.querySelector('svg[data-testid="agent-avatar-svg"]');
-    expect(svg).toBeInTheDocument();
-    // Each agent's variant is deterministic from its name
-    expect(img.innerHTML).toContain('data-cux-agent-name="CodeBot"');
+    // Agent avatars without config now fall back to the Bot icon
+    expect(img.innerHTML).toContain('lucide-bot');
   });
 
-  it('gives different agent names visually distinct robot variants', () => {
-    const { container: a } = render(<ChatAvatar role="agent" agentName="Alpha" />);
-    cleanup();
-    const { container: b } = render(<ChatAvatar role="agent" agentName="Beta" />);
-    // Both render the brand robot SVG, but their inner content differs because
-    // the chassis / accent variant is derived deterministically from the name.
-    expect(a.innerHTML).not.toEqual(b.innerHTML);
+  it('renders a custom robot when avatarConfig is provided', () => {
+    const { getByRole } = render(
+      <ChatAvatar
+        role="agent"
+        agentName="CustomBot"
+        avatarConfig={{ chassis: 'square', accent: 'amber', eyes: 'smile' } as any}
+      />
+    );
+    const img = getByRole('img');
+    expect(img).toBeInTheDocument();
+    expect(img.getAttribute('aria-label')).toBe('CustomBot');
+    const svg = img.querySelector('svg[data-testid="agent-avatar-svg"]');
+    expect(svg).toBeInTheDocument();
+    expect(img.innerHTML).toContain('data-cux-agent-name="CustomBot"');
   });
 });
