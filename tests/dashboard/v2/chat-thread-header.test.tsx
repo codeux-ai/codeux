@@ -6,16 +6,11 @@ import { render, screen, fireEvent } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { ChatThreadHeader } from "../../../dashboard/src/v2/components/chat/ChatThreadHeader.js";
-import { buildMockChatThread, buildMockWorkerOption } from "../factories/chat-fixture-factory.js";
+import { buildMockChatThread } from "../factories/chat-fixture-factory.js";
 
 expect.extend(matchers);
 
 describe("ChatThreadHeader", () => {
-  const mockOptions = [
-    buildMockWorkerOption({ id: "conn-1", label: "Worker 1", status: "online", isPrimary: false, type: "connection", isSelectable: true }),
-    buildMockWorkerOption({ id: "virtual:gemini", label: "Virtual Gemini", status: "available", isPrimary: true, type: "virtual", isSelectable: true, providerId: "gemini" }),
-  ];
-
   const baseThread = buildMockChatThread({
     id: "t1",
     projectId: "p1",
@@ -35,9 +30,6 @@ describe("ChatThreadHeader", () => {
     render(
       <ChatThreadHeader
         thread={baseThread}
-        workerOptions={mockOptions}
-        isAssigning={false}
-        onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
       />
@@ -51,9 +43,6 @@ describe("ChatThreadHeader", () => {
     render(
       <ChatThreadHeader
         thread={thread}
-        workerOptions={mockOptions}
-        isAssigning={false}
-        onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
       />
@@ -66,9 +55,6 @@ describe("ChatThreadHeader", () => {
     const { rerender } = render(
       <ChatThreadHeader
         thread={threadActive}
-        workerOptions={mockOptions}
-        isAssigning={false}
-        onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
       />
@@ -79,9 +65,6 @@ describe("ChatThreadHeader", () => {
     rerender(
       <ChatThreadHeader
         thread={threadReplay}
-        workerOptions={mockOptions}
-        isAssigning={false}
-        onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
       />
@@ -95,9 +78,6 @@ describe("ChatThreadHeader", () => {
     const { container } = render(
       <ChatThreadHeader
         thread={baseThread}
-        workerOptions={mockOptions}
-        isAssigning={false}
-        onAssignRoute={() => {}}
         onCompact={onCompact}
         isCompacting={false}
       />
@@ -113,7 +93,7 @@ describe("ChatThreadHeader", () => {
     const thread = {
       ...baseThread,
       runtimeState: {
-        routeKind: "virtual",
+        routeKind: "virtual" as const,
         virtualProvider: "gemini",
       },
     };
@@ -121,53 +101,24 @@ describe("ChatThreadHeader", () => {
     render(
       <ChatThreadHeader
         thread={thread}
-        workerOptions={mockOptions}
-        isAssigning={false}
-        onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
       />
     );
 
-    const selects = screen.getAllByRole("combobox");
-    const select = selects[selects.length - 1] as HTMLSelectElement;
-    expect(select.value).toBe("virtual:gemini");
+    expect(screen.getByText("Virtual gemini")).toBeInTheDocument();
   });
 
-  it("disables select when assigning", () => {
-    const thread = { ...baseThread, title: "Select Test Thread" };
+  it("shows unassigned when thread is unassigned", () => {
+    const thread = { ...baseThread, connectionId: null, runtimeState: null };
     render(
       <ChatThreadHeader
         thread={thread}
-        workerOptions={mockOptions}
-        isAssigning={true}
-        onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
       />
     );
-    const selects = screen.getAllByRole("combobox");
-    const select = selects[selects.length - 1]; // Use the last one to be sure
-    expect(select).toBeDisabled();
-  });
 
-  it("calls onAssignRoute with correctly selected option when a new worker is selected", async () => {
-    const user = userEvent.setup();
-    const onAssignRoute = vi.fn();
-    const thread = { ...baseThread, title: "Select Change Test Thread" };
-    render(
-      <ChatThreadHeader
-        thread={thread}
-        workerOptions={mockOptions}
-        isAssigning={false}
-        onAssignRoute={onAssignRoute}
-        onCompact={() => {}}
-        isCompacting={false}
-      />
-    );
-    const selects = screen.getAllByRole("combobox");
-    const select = selects[selects.length - 1];
-    await user.selectOptions(select, "virtual:gemini");
-    expect(onAssignRoute).toHaveBeenCalledWith(mockOptions[1]);
+    expect(screen.getAllByText("Unassigned")[0]).toBeInTheDocument();
   });
 });

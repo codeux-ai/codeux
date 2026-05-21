@@ -53,7 +53,6 @@ export const ChatPage: FunctionComponent = () => {
     manualRefreshing,
     deletingThreadId,
     sending,
-    assigningRoute,
     compacting,
     error,
     selectedThread,
@@ -69,12 +68,10 @@ export const ChatPage: FunctionComponent = () => {
     refreshThreads,
     activateThread,
     activateInvocation,
-    handleAssignRoute,
     handleCompactThread,
     handleSend,
     handleDeleteThread,
     createThreadForCompose,
-    workerOptions,
     threadIndex,
     invocationIndex,
     selectedProject,
@@ -161,9 +158,6 @@ export const ChatPage: FunctionComponent = () => {
           )}
           <ChatThreadHeader
             thread={selectedThread}
-            workerOptions={workerOptions}
-            isAssigning={assigningRoute}
-            onAssignRoute={(option) => void handleAssignRoute(option)}
             onCompact={() => void handleCompactThread()}
             isCompacting={compacting}
           />

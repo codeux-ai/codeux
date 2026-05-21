@@ -3,12 +3,7 @@ import { h, render } from "preact";
 import { ChatThreadHeader } from "./v2/components/chat/ChatThreadHeader.js";
 import "./styles.css";
 
-import { buildMockChatThread, buildMockWorkerOption } from "../../tests/dashboard/factories/chat-fixture-factory.js";
-
-const mockWorkerOptions = [
-  buildMockWorkerOption({ id: "w1", label: "Worker 1", status: "online", isPrimary: true, type: "connection", isSelectable: true, connectionId: "w1" }),
-  buildMockWorkerOption({ id: "w2", label: "Worker 2", status: "offline", isPrimary: false, type: "connection", isSelectable: true, connectionId: "w2" }),
-];
+import { buildMockChatThread } from "../../tests/dashboard/factories/chat-fixture-factory.js";
 
 const mockThreadActive = buildMockChatThread({
   id: "t1",
@@ -39,9 +34,6 @@ const App = () => (
     <div className="border border-white/10 rounded-xl overflow-hidden bg-black dark:bg-void-900">
       <ChatThreadHeader
         thread={mockThreadActive}
-        workerOptions={mockWorkerOptions}
-        isAssigning={false}
-        onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
       />
@@ -49,9 +41,6 @@ const App = () => (
     <div className="border border-white/10 rounded-xl overflow-hidden bg-black dark:bg-void-900">
       <ChatThreadHeader
         thread={mockThreadReplay}
-        workerOptions={mockWorkerOptions}
-        isAssigning={false}
-        onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
       />
@@ -59,9 +48,6 @@ const App = () => (
     <div className="border border-white/10 rounded-xl overflow-hidden bg-black dark:bg-void-900">
       <ChatThreadHeader
         thread={mockThreadNew}
-        workerOptions={mockWorkerOptions}
-        isAssigning={false}
-        onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
       />

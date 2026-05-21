@@ -1,56 +1,44 @@
 import { h, type FunctionComponent } from "preact";
 import { AlertCircle, Zap, Activity } from "lucide-preact";
 import type { ChatThread } from "../../types.js";
-import { buildWorkerOptionIndex } from "../../lib/chat-entity-index.js";
-import type { WorkerOption } from "../../lib/project-worker-options.js";
 
-const resolveSelectedRouteId = (thread: ChatThread | null, workerOptions: WorkerOption[]): string => {
-  const index = buildWorkerOptionIndex(workerOptions);
-
+const resolveAssignedLabel = (thread: ChatThread | null): string => {
   if (!thread) {
-    return index.primary?.id || "";
+    return "Unassigned";
   }
 
   if (thread.runtimeState?.routeKind === "virtual" && thread.runtimeState.virtualProvider) {
-    return index.byProvider.get(thread.runtimeState.virtualProvider)?.id || "";
+    return `Virtual ${thread.runtimeState.virtualProvider}`;
   }
 
   if (thread.runtimeState?.routeKind === "worker") {
     if (thread.runtimeState.workerEndpointId) {
-      const option = index.byEndpoint.get(thread.runtimeState.workerEndpointId);
-      if (option) return option.id;
+      return thread.runtimeState.workerEndpointId;
     }
     if (thread.connectionId) {
-      const option = index.byConnection.get(thread.connectionId);
-      if (option) return option.id;
+      return thread.connectionId;
     }
   }
 
   if (thread.connectionId) {
-    return index.byConnection.get(thread.connectionId)?.id || "";
+    return thread.connectionId;
   }
 
-  return index.primary?.id || "";
+  return "Unassigned";
 };
 
 interface ChatThreadHeaderProps {
   thread: ChatThread | null;
-  workerOptions: WorkerOption[];
-  isAssigning: boolean;
-  onAssignRoute: (option: WorkerOption) => void;
   onCompact: () => void;
   isCompacting: boolean;
 }
 
 export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
   thread,
-  workerOptions,
-  isAssigning,
-  onAssignRoute,
   onCompact,
   isCompacting,
 }) => {
-  const selectedRouteId = resolveSelectedRouteId(thread, workerOptions);
+  const assignedLabel = resolveAssignedLabel(thread);
 
   const isReplayRequired = thread?.runtimeState?.replayRequired;
   const hasActiveSession = thread?.runtimeState?.sessionIds && thread.runtimeState.sessionIds.length > 0;
@@ -101,30 +89,12 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                 {isCompacting ? "Compacting session..." : "Compact"}
               </button>
             )}
-            <label className="inline-flex items-center gap-2">
+            <div className="inline-flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Worker:</span>
-              <select
-                value={selectedRouteId}
-                onChange={(event) => {
-                  const val = event.currentTarget.value;
-                  const option = workerOptions.find((o) => o.id === val);
-                  if (option) {
-                    onAssignRoute(option);
-                  } else if (!val) {
-                    onAssignRoute({ id: "", label: "Unassigned", status: "unassigned", isPrimary: false, type: "connection", isSelectable: true, connectionId: null });
-                  }
-                }}
-                disabled={!thread || isAssigning}
-                className="rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300"
-              >
-                <option value="">Unassigned</option>
-                {workerOptions.map((option) => (
-                  <option key={option.id} value={option.id} disabled={!option.isSelectable}>
-                    {option.label} {option.subLabel ? `· ${option.subLabel}` : ""} {option.status ? `· ${option.status}` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <span className="rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300">
+                {assignedLabel}
+              </span>
+            </div>
           </div>
         </div>
       </div>

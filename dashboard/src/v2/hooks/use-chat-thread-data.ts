@@ -7,7 +7,6 @@ import {
   fetchConversationMessages,
   postConversationMessage,
   updateConversationThread,
-  updateThreadRoute,
   compactThreadSession,
 } from "../lib/connection-api.js";
 import { resolveSelectedItemId } from "../lib/chat-page-state-utils.js";
@@ -16,7 +15,6 @@ import { buildThreadIndex } from "../lib/chat-entity-index.js";
 import { toChatTimestampMs } from "../lib/chat-time.js";
 import { useActionFeedback } from "./use-action-feedback.js";
 import { useConfirmDialog } from "./use-confirm-dialog.js";
-import { getProjectWorkerOptions, type WorkerRoutingPreference } from "../lib/project-worker-options.js";
 import type { RefObject } from "preact";
 import type { ExecutionDashboardSnapshot } from "../../types.js";
 
@@ -83,11 +81,10 @@ export const useChatThreadData = (options: {
   selectedProject: { id: string } | null;
   cache: ReturnType<typeof useMessageCache>;
   execution: ExecutionDashboardSnapshot | null;
-  workerRouting: WorkerRoutingPreference | null;
   composerRef?: RefObject<HTMLTextAreaElement>;
   messagesRef?: RefObject<HTMLDivElement>;
 }) => {
-  const { selectedProject, cache, execution, workerRouting, composerRef, messagesRef } = options;
+  const { selectedProject, cache, execution, composerRef, messagesRef } = options;
 
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -96,7 +93,6 @@ export const useChatThreadData = (options: {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [assigningRoute, setAssigningRoute] = useState(false);
   const [compacting, setCompacting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -265,52 +261,6 @@ export const useChatThreadData = (options: {
     return thread;
   }, [activateThread, cache, selectedProject, setThreadsSnapshot]);
 
-  const handleAssignRoute = useCallback(async (option: { id: string, label: string, status: string, isPrimary: boolean, type: string, isSelectable: boolean, connectionId?: string | null, workerEndpointId?: string | null, providerId?: string }): Promise<void> => {
-    if (!selectedThread) {
-      return;
-    }
-
-    const confirmed = await requestConfirm({
-      title: "Reassign Route?",
-      body: "This will route future messages in this thread to a different connection.",
-      confirmLabel: "Reassign",
-    });
-
-    if (!confirmed) return;
-
-    setAssigningRoute(true);
-    try {
-      let updated: ChatThread;
-      if (!option.id) {
-         updated = await updateConversationThread(selectedThread.id, {
-           connectionId: null,
-         });
-      } else {
-        const routeKind = option.type === "virtual" ? "virtual" : "worker";
-        updated = await updateThreadRoute(selectedThread.id, {
-          routeKind,
-          virtualProvider: routeKind === "virtual" ? option.providerId : undefined,
-          workerEndpointId: routeKind === "worker" ? (option.workerEndpointId || option.connectionId || undefined) : undefined,
-        });
-      }
-
-      const nextThreads = (cache.getThreads(selectedProject?.id || "") || threadsRef.current).map((thread) => (
-        thread.id === updated.id ? updated : thread
-      ));
-      if (selectedProject) {
-        cache.setThreads(selectedProject.id, nextThreads);
-      }
-      setThreadsSnapshot(nextThreads);
-      await refreshMessages(updated.id);
-      setError(null);
-      setSuccess("Route updated.");
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : String(updateError));
-    } finally {
-      setAssigningRoute(false);
-    }
-  }, [cache, refreshMessages, requestConfirm, selectedProject, selectedThread, setSuccess, setThreadsSnapshot]);
-
   const handleCompactThread = useCallback(async (): Promise<void> => {
     if (!selectedThread) {
       return;
@@ -354,24 +304,6 @@ export const useChatThreadData = (options: {
     try {
       let thread = selectedThread || await createThreadForCompose();
 
-      if (thread.messageCount === 0 && !thread.connectionId && !thread.runtimeState?.virtualProvider && !thread.runtimeState?.workerEndpointId) {
-        const { options: defaultOptions, selectedOption } = getProjectWorkerOptions(execution, workerRouting, false);
-        const hasActiveRoute = selectedOption !== null;
-
-        if (hasActiveRoute && selectedOption) {
-          try {
-            const routeKind = selectedOption.type === "virtual" ? "virtual" : "worker";
-            thread = await updateThreadRoute(thread.id, {
-              routeKind,
-              virtualProvider: routeKind === "virtual" ? selectedOption.providerId : undefined,
-              workerEndpointId: routeKind === "worker" ? (selectedOption.workerEndpointId || selectedOption.connectionId || undefined) : undefined,
-            });
-          } catch (err) {
-            console.warn("Failed to set default route for thread before sending", err);
-          }
-        }
-      }
-
       const created = await postConversationMessage(selectedProject.id, {
         threadId: thread.id,
         bodyMarkdown,
@@ -394,7 +326,7 @@ export const useChatThreadData = (options: {
     } finally {
       setSending(false);
     }
-  }, [cache, composerRef, createThreadForCompose, execution, input, selectedProject, selectedThread, setMessagesSnapshot, workerRouting]);
+  }, [cache, composerRef, createThreadForCompose, execution, input, selectedProject, selectedThread, setMessagesSnapshot]);
 
   const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
     const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);
@@ -437,7 +369,6 @@ export const useChatThreadData = (options: {
     messagesLoading,
     deletingThreadId,
     sending,
-    assigningRoute,
     compacting,
     error,
     setError,
@@ -446,7 +377,6 @@ export const useChatThreadData = (options: {
     activateThread,
     refreshMessages,
     createThreadForCompose,
-    handleAssignRoute,
     handleCompactThread,
     handleSend,
     handleDeleteThread,
