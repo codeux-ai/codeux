@@ -52,6 +52,14 @@ For OpenAI-compatible providers, Code UX also forwards `OPENAI_API_KEY` and `OPE
 
 Custom endpoint instances appear on the AI Models page with their configured model id, such as `glm-4.7-flash`, instead of stale placeholders such as `custom/model` or `local-model`.
 
+When Custom endpoint is selected for a fresh Qwen instance, the settings form pre-fills an Ollama-compatible local endpoint:
+
+- API key: `your_api_key`
+- Base URL: `http://127.0.0.1:11434/v1`
+- Environment key: `OLLAMA_API_KEY`
+- Model id: `glm-4.7-flash`
+- Protocol: `openai`
+
 ## Docker Runtime
 
 Docker execution prepares Qwen in the same bootstrap path as other CLI providers:

@@ -313,9 +313,9 @@ export class ProviderRunner implements IProviderRunner {
   ): string {
     if (provider === "qwen-code" && config.qwenAuthMode === "MODEL_PROVIDER") {
       if (model === "custom/model" || model === "local-model") {
-        return (config.qwenModelId || "qwen3-coder-plus").trim();
+        return (config.qwenModelId || "glm-4.7-flash").trim();
       }
-      return (config.qwenModelId || model || "qwen3-coder-plus").trim();
+      return (config.qwenModelId || model || "glm-4.7-flash").trim();
     }
     if (provider !== "opencode" || config.openCodeAuthMode !== "CUSTOM_PROVIDER") {
       return model;
@@ -480,7 +480,7 @@ export class ProviderRunner implements IProviderRunner {
       const qwenEnvKeys = new Set<string>();
       const primaryEnvKey = providerConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"
         ? "BAILIAN_CODING_PLAN_API_KEY"
-        : providerConfig?.qwenEnvKey || "DASHSCOPE_API_KEY";
+        : providerConfig?.qwenEnvKey || "OLLAMA_API_KEY";
       qwenEnvKeys.add(primaryEnvKey);
       if (apiKey && !useProviderMount) {
         env[primaryEnvKey] = apiKey;
@@ -495,7 +495,9 @@ export class ProviderRunner implements IProviderRunner {
         ? providerConfig.qwenRegion === "china"
           ? "https://coding.dashscope.aliyuncs.com/v1"
           : "https://coding-intl.dashscope.aliyuncs.com/v1"
-        : providerConfig?.qwenBaseUrl;
+        : providerConfig?.qwenAuthMode === "MODEL_PROVIDER"
+          ? providerConfig.qwenBaseUrl || "http://127.0.0.1:11434/v1"
+          : undefined;
       if (baseUrl) {
         env.OPENAI_BASE_URL = this.rewriteLoopbackUrlForDocker(baseUrl, this.shouldRewriteDockerLoopbackUrls(workflowSettings));
       }
@@ -517,7 +519,7 @@ export class ProviderRunner implements IProviderRunner {
         this.shouldRewriteDockerLoopbackUrls(workflowSettings),
       );
     } else if (provider === "opencode") {
-      const envKey = providerConfig?.openCodeEnvKey || "ANTHROPIC_API_KEY";
+      const envKey = providerConfig?.openCodeEnvKey || (providerConfig?.openCodeAuthMode === "CUSTOM_PROVIDER" ? "OLLAMA_API_KEY" : "ANTHROPIC_API_KEY");
       const resolvedApiKey = apiKey || process.env[envKey] || "";
       if (resolvedApiKey && !useProviderMount) {
         env[envKey] = resolvedApiKey;
@@ -552,14 +554,16 @@ export class ProviderRunner implements IProviderRunner {
     const protocol = config?.qwenProtocol || "openai";
     const envKey = authMode === "ALIBABA_CODING_PLAN"
       ? "BAILIAN_CODING_PLAN_API_KEY"
-      : config?.qwenEnvKey || "DASHSCOPE_API_KEY";
+      : config?.qwenEnvKey || "OLLAMA_API_KEY";
     const baseUrl = authMode === "ALIBABA_CODING_PLAN"
       ? config?.qwenRegion === "china"
         ? "https://coding.dashscope.aliyuncs.com/v1"
         : "https://coding-intl.dashscope.aliyuncs.com/v1"
-      : config?.qwenBaseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1";
+      : authMode === "MODEL_PROVIDER"
+        ? config?.qwenBaseUrl || "http://127.0.0.1:11434/v1"
+        : config?.qwenBaseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1";
     const selectedModel = authMode === "MODEL_PROVIDER"
-      ? (config?.qwenModelId || (model === "custom/model" || model === "local-model" ? "qwen3-coder-plus" : model) || "qwen3-coder-plus").trim()
+      ? (config?.qwenModelId || (model === "custom/model" || model === "local-model" ? "glm-4.7-flash" : model) || "glm-4.7-flash").trim()
       : model && model !== "default"
         ? model
         : "qwen3-coder-plus";
@@ -619,8 +623,8 @@ export class ProviderRunner implements IProviderRunner {
     rewriteDockerLoopbackUrls = false,
   ): string {
     const authMode = config?.openCodeAuthMode || "LOCAL_AUTH";
-    const providerId = (config?.openCodeProviderId || model.split("/")[0] || "anthropic").trim();
-    const modelId = (config?.openCodeModelId || model.split("/").slice(1).join("/") || "claude-sonnet-4-5").trim();
+    const providerId = (config?.openCodeProviderId || model.split("/")[0] || (authMode === "CUSTOM_PROVIDER" ? "ollama" : "anthropic")).trim();
+    const modelId = (config?.openCodeModelId || model.split("/").slice(1).join("/") || (authMode === "CUSTOM_PROVIDER" ? "glm-4.7-flash" : "claude-sonnet-4-5")).trim();
     const selectedModel = authMode === "CUSTOM_PROVIDER"
       ? `${providerId}/${modelId}`
       : model && model !== "default"
@@ -646,7 +650,7 @@ export class ProviderRunner implements IProviderRunner {
           npm: config?.openCodePackage || "@ai-sdk/openai-compatible",
           name: providerId,
           options: {
-            baseURL: this.rewriteLoopbackUrlForDocker(config?.openCodeBaseUrl || "https://api.openai.com/v1", rewriteDockerLoopbackUrls),
+            baseURL: this.rewriteLoopbackUrlForDocker(config?.openCodeBaseUrl || "http://127.0.0.1:11434/v1", rewriteDockerLoopbackUrls),
             apiKey: "{env:OPENCODE_API_KEY}",
           },
           models: {

@@ -325,18 +325,18 @@ export const createSystemProviderDraft = (
   ...(providerId === "qwen-code" ? {
     qwenAuthMode: "LOCAL_AUTH" as const,
     qwenRegion: "international" as const,
-    qwenBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    qwenEnvKey: "DASHSCOPE_API_KEY",
-    qwenModelId: "qwen3-coder-plus",
+    qwenBaseUrl: "http://127.0.0.1:11434/v1",
+    qwenEnvKey: "OLLAMA_API_KEY",
+    qwenModelId: "glm-4.7-flash",
     qwenProtocol: "openai" as const,
     qwenAdditionalModelProviders: [],
   } : {}),
   ...(providerId === "opencode" ? {
     openCodeAuthMode: "LOCAL_AUTH" as const,
-    openCodeProviderId: "anthropic",
-    openCodeModelId: "claude-sonnet-4-5",
-    openCodeBaseUrl: "https://api.openai.com/v1",
-    openCodeEnvKey: "ANTHROPIC_API_KEY",
+    openCodeProviderId: "ollama",
+    openCodeModelId: "glm-4.7-flash",
+    openCodeBaseUrl: "http://127.0.0.1:11434/v1",
+    openCodeEnvKey: "OLLAMA_API_KEY",
     openCodePackage: "@ai-sdk/openai-compatible",
   } : {}),
 });
@@ -520,18 +520,18 @@ const getSystemIntegrationProviders = (
       ...(providerId === "qwen-code" ? {
         qwenAuthMode: "LOCAL_AUTH" as const,
         qwenRegion: "international" as const,
-        qwenBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        qwenEnvKey: "DASHSCOPE_API_KEY",
-        qwenModelId: "qwen3-coder-plus",
+        qwenBaseUrl: "http://127.0.0.1:11434/v1",
+        qwenEnvKey: "OLLAMA_API_KEY",
+        qwenModelId: "glm-4.7-flash",
         qwenProtocol: "openai" as const,
         qwenAdditionalModelProviders: [],
       } : {}),
       ...(providerId === "opencode" ? {
         openCodeAuthMode: "LOCAL_AUTH" as const,
-        openCodeProviderId: "anthropic",
-        openCodeModelId: "claude-sonnet-4-5",
-        openCodeBaseUrl: "https://api.openai.com/v1",
-        openCodeEnvKey: "ANTHROPIC_API_KEY",
+        openCodeProviderId: "ollama",
+        openCodeModelId: "glm-4.7-flash",
+        openCodeBaseUrl: "http://127.0.0.1:11434/v1",
+        openCodeEnvKey: "OLLAMA_API_KEY",
         openCodePackage: "@ai-sdk/openai-compatible",
       } : {}),
     };
@@ -715,15 +715,15 @@ export const getOpenCodeConfiguredModel = (
 
 export const getQwenConfiguredModel = (
   provider: Pick<SystemProviderCredentialSettings, "qwenAuthMode" | "qwenModelId"> | null | undefined,
-  fallbackModel = "qwen3-coder-plus",
+  fallbackModel = "glm-4.7-flash",
 ): string | null => {
   if (provider?.qwenAuthMode !== "MODEL_PROVIDER") {
     return null;
   }
   const fallback = fallbackModel === "custom/model" || fallbackModel === "local-model"
-    ? "qwen3-coder-plus"
+    ? "glm-4.7-flash"
     : fallbackModel;
-  return (provider.qwenModelId || fallback || "qwen3-coder-plus").trim();
+  return (provider.qwenModelId || fallback || "glm-4.7-flash").trim();
 };
 
 export const getProviderInstanceModelOptions = (

@@ -14,6 +14,7 @@ import {
   sourceLabel,
   thinkingModeOptions,
   providerLabels,
+  createSystemProviderDraft,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints } from "../../../dashboard/src/types.js";
 
@@ -141,6 +142,23 @@ describe("settings view model source helpers", () => {
       { value: "glm-4.7-flash", label: "glm-4.7-flash (configured)" },
       { value: "custom/model", label: "custom/model" },
     ]));
+  });
+
+  it("prefills new Qwen and OpenCode custom endpoint settings for local Ollama", () => {
+    expect(createSystemProviderDraft("qwen-code", "Qwen Ollama")).toMatchObject({
+      apiKey: "",
+      qwenBaseUrl: "http://127.0.0.1:11434/v1",
+      qwenEnvKey: "OLLAMA_API_KEY",
+      qwenModelId: "glm-4.7-flash",
+      qwenProtocol: "openai",
+    });
+    expect(createSystemProviderDraft("opencode", "OpenCode Ollama")).toMatchObject({
+      apiKey: "",
+      openCodeProviderId: "ollama",
+      openCodeModelId: "glm-4.7-flash",
+      openCodeBaseUrl: "http://127.0.0.1:11434/v1",
+      openCodeEnvKey: "OLLAMA_API_KEY",
+    });
   });
 });
 

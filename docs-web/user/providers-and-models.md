@@ -49,7 +49,7 @@ qwen3-max, qwen3-max-2026-01-23,
 qwen-plus, qwen-max
 ```
 
-Qwen custom-endpoint instances define their model id in Settings -> Providers. Code UX adds that configured model to the AI Models selector and writes it into Qwen Code `modelProviders` at runtime. For local OpenAI-compatible endpoints such as Ollama, use a base URL such as `http://127.0.0.1:11434/v1`; in Docker mode on Docker Desktop, WSL, macOS, or Windows, Code UX rewrites that loopback URL to `host.docker.internal` inside the container.
+Qwen custom-endpoint instances define their model id in Settings -> Providers. Code UX adds that configured model to the AI Models selector and writes it into Qwen Code `modelProviders` at runtime. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, model `glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode on Docker Desktop, WSL, macOS, or Windows, Code UX rewrites that loopback URL to `host.docker.internal` inside the container.
 
 ### OpenCode
 ```
@@ -59,7 +59,7 @@ github-copilot/gpt-5,
 openrouter/anthropic/claude-sonnet-4.5
 ```
 
-OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode config. Code UX writes that generated config to a temporary `opencode.json`, sets `OPENCODE_CONFIG`, and maps the saved key to `OPENCODE_API_KEY`. For OpenAI-compatible local endpoints such as Ollama, use a provider/model selector like `ollama/<model>` and a base URL such as `http://127.0.0.1:11434/v1`. In Docker mode on Docker Desktop, WSL, macOS, or Windows, Code UX rewrites that loopback URL to `host.docker.internal` inside the container.
+OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode config. Code UX writes that generated config to a temporary `opencode.json`, sets `OPENCODE_CONFIG`, and maps the saved key to `OPENCODE_API_KEY`. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, provider/model `ollama/glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode on Docker Desktop, WSL, macOS, or Windows, Code UX rewrites that loopback URL to `host.docker.internal` inside the container.
 
 ### Default per provider
 

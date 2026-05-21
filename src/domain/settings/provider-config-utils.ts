@@ -87,9 +87,9 @@ export const buildDefaultIntegrationProviders = (
     authPath: DEFAULT_PROVIDER_AUTH_PATHS["qwen-code"],
     qwenAuthMode: "LOCAL_AUTH",
     qwenRegion: "international",
-    qwenBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    qwenEnvKey: "DASHSCOPE_API_KEY",
-    qwenModelId: "qwen3-coder-plus",
+    qwenBaseUrl: "http://127.0.0.1:11434/v1",
+    qwenEnvKey: "OLLAMA_API_KEY",
+    qwenModelId: "glm-4.7-flash",
     qwenProtocol: "openai",
     qwenAdditionalModelProviders: [],
   },
@@ -100,10 +100,10 @@ export const buildDefaultIntegrationProviders = (
     mountAuth: false,
     authPath: DEFAULT_PROVIDER_AUTH_PATHS.opencode,
     openCodeAuthMode: "LOCAL_AUTH",
-    openCodeProviderId: "anthropic",
-    openCodeModelId: "claude-sonnet-4-5",
-    openCodeBaseUrl: "https://api.openai.com/v1",
-    openCodeEnvKey: "ANTHROPIC_API_KEY",
+    openCodeProviderId: "ollama",
+    openCodeModelId: "glm-4.7-flash",
+    openCodeBaseUrl: "http://127.0.0.1:11434/v1",
+    openCodeEnvKey: "OLLAMA_API_KEY",
     openCodePackage: "@ai-sdk/openai-compatible",
   },
 });
@@ -185,11 +185,11 @@ export const normalizeSystemIntegrationProviders = (
         qwenRegion: normalizeQwenRegion(rawValue.qwenRegion),
         qwenBaseUrl: typeof rawValue.qwenBaseUrl === "string" && rawValue.qwenBaseUrl.trim().length > 0
           ? rawValue.qwenBaseUrl.trim()
-          : "https://dashscope.aliyuncs.com/compatible-mode/v1",
+          : "http://127.0.0.1:11434/v1",
         qwenEnvKey: typeof rawValue.qwenEnvKey === "string" && rawValue.qwenEnvKey.trim().length > 0
           ? rawValue.qwenEnvKey.trim()
-          : "DASHSCOPE_API_KEY",
-        qwenModelId: normalizeNonEmptyString(rawValue.qwenModelId, "qwen3-coder-plus"),
+          : "OLLAMA_API_KEY",
+        qwenModelId: normalizeNonEmptyString(rawValue.qwenModelId, "glm-4.7-flash"),
         qwenProtocol: normalizeQwenProtocol(rawValue.qwenProtocol),
         qwenAdditionalModelProviders: Array.isArray(rawValue.qwenAdditionalModelProviders)
           ? rawValue.qwenAdditionalModelProviders
@@ -208,10 +208,10 @@ export const normalizeSystemIntegrationProviders = (
       } : {}),
       ...(providerId === "opencode" ? {
         openCodeAuthMode: normalizeOpenCodeAuthMode(rawValue.openCodeAuthMode),
-        openCodeProviderId: normalizeNonEmptyString(rawValue.openCodeProviderId, "anthropic"),
-        openCodeModelId: normalizeNonEmptyString(rawValue.openCodeModelId, "claude-sonnet-4-5"),
-        openCodeBaseUrl: normalizeNonEmptyString(rawValue.openCodeBaseUrl, "https://api.openai.com/v1"),
-        openCodeEnvKey: normalizeNonEmptyString(rawValue.openCodeEnvKey, "ANTHROPIC_API_KEY"),
+        openCodeProviderId: normalizeNonEmptyString(rawValue.openCodeProviderId, "ollama"),
+        openCodeModelId: normalizeNonEmptyString(rawValue.openCodeModelId, "glm-4.7-flash"),
+        openCodeBaseUrl: normalizeNonEmptyString(rawValue.openCodeBaseUrl, "http://127.0.0.1:11434/v1"),
+        openCodeEnvKey: normalizeNonEmptyString(rawValue.openCodeEnvKey, "OLLAMA_API_KEY"),
         openCodePackage: normalizeNonEmptyString(rawValue.openCodePackage, "@ai-sdk/openai-compatible"),
       } : {}),
     };

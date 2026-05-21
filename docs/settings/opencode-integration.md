@@ -65,6 +65,14 @@ Code UX builds an inline OpenCode config in `OPENCODE_CONFIG_CONTENT`, writes it
 
 This covers OpenRouter, LiteLLM, Ollama, vLLM, LM Studio, private gateways, and other OpenAI-compatible services.
 
+When Custom endpoint is selected for a fresh OpenCode instance, the settings form pre-fills an Ollama-compatible local endpoint:
+
+- API key: `your_api_key`
+- Provider id: `ollama`
+- Model id: `glm-4.7-flash`
+- Base URL: `http://127.0.0.1:11434/v1`
+- Environment key: `OLLAMA_API_KEY`
+
 ## MCP Tools
 
 OpenCode reads MCP servers from the `mcp` section of its config. Code UX includes the management MCP server in the same generated config payload used for provider settings:

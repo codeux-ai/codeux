@@ -455,6 +455,13 @@ export const OnboardingExperience: FunctionComponent = () => {
       configureProviderInstance(providerConfigId, {
         qwenAuthMode: mode === "API_KEY" || mode === "CUSTOM_PROVIDER" ? "MODEL_PROVIDER" : mode,
         mountAuth: mode === "LOCAL_AUTH",
+        ...(mode === "CUSTOM_PROVIDER" ? {
+          apiKey: provider.apiKey || "your_api_key",
+          qwenBaseUrl: provider.qwenBaseUrl || "http://127.0.0.1:11434/v1",
+          qwenEnvKey: provider.qwenEnvKey || "OLLAMA_API_KEY",
+          qwenModelId: provider.qwenModelId || "glm-4.7-flash",
+          qwenProtocol: "openai" as const,
+        } : {}),
       });
       return;
     }
@@ -462,6 +469,14 @@ export const OnboardingExperience: FunctionComponent = () => {
       configureProviderInstance(providerConfigId, {
         openCodeAuthMode: mode === "API_KEY" ? "ENV_KEY" : mode === "CUSTOM_PROVIDER" ? "CUSTOM_PROVIDER" : "LOCAL_AUTH",
         mountAuth: mode === "LOCAL_AUTH",
+        ...(mode === "CUSTOM_PROVIDER" ? {
+          apiKey: provider.apiKey || "your_api_key",
+          openCodeProviderId: provider.openCodeProviderId || "ollama",
+          openCodeModelId: provider.openCodeModelId || "glm-4.7-flash",
+          openCodeBaseUrl: provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1",
+          openCodeEnvKey: provider.openCodeEnvKey || "OLLAMA_API_KEY",
+          openCodePackage: provider.openCodePackage || "@ai-sdk/openai-compatible",
+        } : {}),
       });
       return;
     }
@@ -949,16 +964,17 @@ export const OnboardingExperience: FunctionComponent = () => {
                                 ) : null}
                                 {providerId === "qwen-code" && authMode === "CUSTOM_PROVIDER" ? (
                                   <>
-                                    <ProviderTextField label="Base URL" value={integrationProvider.qwenBaseUrl || ""} onInput={(value) => configureProviderInstance(providerConfigId, { qwenBaseUrl: value })} />
-                                    <ProviderTextField label="Env key" value={integrationProvider.qwenEnvKey || "DASHSCOPE_API_KEY"} onInput={(value) => configureProviderInstance(providerConfigId, { qwenEnvKey: value })} />
+                                    <ProviderTextField label="Base URL" value={integrationProvider.qwenBaseUrl || "http://127.0.0.1:11434/v1"} onInput={(value) => configureProviderInstance(providerConfigId, { qwenBaseUrl: value })} />
+                                    <ProviderTextField label="Env key" value={integrationProvider.qwenEnvKey || "OLLAMA_API_KEY"} onInput={(value) => configureProviderInstance(providerConfigId, { qwenEnvKey: value })} />
+                                    <ProviderTextField label="Model id" value={integrationProvider.qwenModelId || "glm-4.7-flash"} onInput={(value) => configureProviderInstance(providerConfigId, { qwenModelId: value })} />
                                   </>
                                 ) : null}
                                 {providerId === "opencode" && authMode === "CUSTOM_PROVIDER" ? (
                                   <>
-                                    <ProviderTextField label="Provider id" value={integrationProvider.openCodeProviderId || "anthropic"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeProviderId: value })} />
-                                    <ProviderTextField label="Model id" value={integrationProvider.openCodeModelId || "claude-sonnet-4-5"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeModelId: value })} />
-                                    <ProviderTextField label="Base URL" value={integrationProvider.openCodeBaseUrl || ""} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeBaseUrl: value })} />
-                                    <ProviderTextField label="Env key" value={integrationProvider.openCodeEnvKey || "ANTHROPIC_API_KEY"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeEnvKey: value })} />
+                                    <ProviderTextField label="Provider id" value={integrationProvider.openCodeProviderId || "ollama"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeProviderId: value })} />
+                                    <ProviderTextField label="Model id" value={integrationProvider.openCodeModelId || "glm-4.7-flash"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeModelId: value })} />
+                                    <ProviderTextField label="Base URL" value={integrationProvider.openCodeBaseUrl || "http://127.0.0.1:11434/v1"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeBaseUrl: value })} />
+                                    <ProviderTextField label="Env key" value={integrationProvider.openCodeEnvKey || "OLLAMA_API_KEY"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeEnvKey: value })} />
                                   </>
                                 ) : null}
                               </div>

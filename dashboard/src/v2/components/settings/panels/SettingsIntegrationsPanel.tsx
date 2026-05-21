@@ -81,13 +81,13 @@ const buildQwenSettingsPreview = (
   const authMode = provider.qwenAuthMode || "LOCAL_AUTH";
   const envKey = authMode === "ALIBABA_CODING_PLAN"
     ? "BAILIAN_CODING_PLAN_API_KEY"
-    : provider.qwenEnvKey || "DASHSCOPE_API_KEY";
+    : provider.qwenEnvKey || "OLLAMA_API_KEY";
   const baseUrl = authMode === "ALIBABA_CODING_PLAN"
     ? getQwenEndpointForRegion(provider.qwenRegion)
-    : provider.qwenBaseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1";
+    : provider.qwenBaseUrl || "http://127.0.0.1:11434/v1";
   const protocol = provider.qwenProtocol || "openai";
   const modelId = authMode === "MODEL_PROVIDER"
-    ? (provider.qwenModelId || (model === "custom/model" || model === "local-model" ? "qwen3-coder-plus" : model) || "qwen3-coder-plus")
+    ? (provider.qwenModelId || (model === "custom/model" || model === "local-model" ? "glm-4.7-flash" : model) || "glm-4.7-flash")
     : model || "qwen3-coder-plus";
   const primaryProvider = {
     id: modelId,
@@ -177,7 +177,7 @@ const buildOpenCodeConfigPreview = (
         npm: provider.openCodePackage || "@ai-sdk/openai-compatible",
         name: providerId,
         options: {
-          baseURL: rewriteDockerLoopbackUrl(provider.openCodeBaseUrl || "https://api.openai.com/v1", dockerExecutionEnabled),
+          baseURL: rewriteDockerLoopbackUrl(provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1", dockerExecutionEnabled),
           apiKey: "{env:OPENCODE_API_KEY}",
         },
         models: {
@@ -189,7 +189,7 @@ const buildOpenCodeConfigPreview = (
   return JSON.stringify({
     ...config,
     env: {
-      [provider.openCodeEnvKey || "ANTHROPIC_API_KEY"]: maskSecret(provider.apiKey),
+      [provider.openCodeEnvKey || "OLLAMA_API_KEY"]: maskSecret(provider.apiKey),
       OPENCODE_API_KEY: maskSecret(provider.apiKey),
     },
   }, null, 2);
@@ -684,7 +684,16 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                     <Row label="Authentication mode" description="Choose how this Qwen instance should authenticate and generate its runtime settings.">
                       <PillChoiceGroup
                         value={provider.qwenAuthMode || "LOCAL_AUTH"}
-                        onChange={(value) => updateProviderInstance(providerConfigId, { qwenAuthMode: value as SystemSettings["integrations"]["providers"][ProviderConfigId]["qwenAuthMode"] })}
+                        onChange={(value) => updateProviderInstance(providerConfigId, {
+                          qwenAuthMode: value as SystemSettings["integrations"]["providers"][ProviderConfigId]["qwenAuthMode"],
+                          ...(value === "MODEL_PROVIDER" ? {
+                            apiKey: provider.apiKey || "your_api_key",
+                            qwenBaseUrl: provider.qwenBaseUrl || "http://127.0.0.1:11434/v1",
+                            qwenEnvKey: provider.qwenEnvKey || "OLLAMA_API_KEY",
+                            qwenModelId: provider.qwenModelId || "glm-4.7-flash",
+                            qwenProtocol: "openai" as const,
+                          } : {}),
+                        })}
                         options={qwenAuthModeOptions}
                       />
                     </Row>
@@ -730,13 +739,13 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                           />
                         </Row>
                         <Row label="Environment key" description="Variable name Qwen reads for this instance's API key.">
-                          <TextInput value={provider.qwenEnvKey || "DASHSCOPE_API_KEY"} onChange={(value) => updateProviderInstance(providerConfigId, { qwenEnvKey: value })} mono />
+                          <TextInput value={provider.qwenEnvKey || "OLLAMA_API_KEY"} onChange={(value) => updateProviderInstance(providerConfigId, { qwenEnvKey: value })} mono />
                         </Row>
                         <Row label="Model id" description="The custom model registered in Qwen Code modelProviders and shown on the AI Models page.">
-                          <TextInput value={provider.qwenModelId || providerModel || "qwen3-coder-plus"} onChange={(value) => updateProviderInstance(providerConfigId, { qwenModelId: value })} mono />
+                          <TextInput value={provider.qwenModelId || providerModel || "glm-4.7-flash"} onChange={(value) => updateProviderInstance(providerConfigId, { qwenModelId: value })} mono />
                         </Row>
                         <Row label="Base URL" description="OpenAI-compatible, Anthropic, Gemini, or local endpoint used by this model entry.">
-                          <TextInput value={provider.qwenBaseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1"} onChange={(value) => updateProviderInstance(providerConfigId, { qwenBaseUrl: value })} mono />
+                          <TextInput value={provider.qwenBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => updateProviderInstance(providerConfigId, { qwenBaseUrl: value })} mono />
                         </Row>
                       </>
                     ) : null}
@@ -751,7 +760,17 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                     <Row label="Authentication mode" description="Choose how this OpenCode instance authenticates and how its runtime opencode.json is generated.">
                       <PillChoiceGroup
                         value={provider.openCodeAuthMode || "LOCAL_AUTH"}
-                        onChange={(value) => updateProviderInstance(providerConfigId, { openCodeAuthMode: value as SystemSettings["integrations"]["providers"][ProviderConfigId]["openCodeAuthMode"] })}
+                        onChange={(value) => updateProviderInstance(providerConfigId, {
+                          openCodeAuthMode: value as SystemSettings["integrations"]["providers"][ProviderConfigId]["openCodeAuthMode"],
+                          ...(value === "CUSTOM_PROVIDER" ? {
+                            apiKey: provider.apiKey || "your_api_key",
+                            openCodeProviderId: provider.openCodeProviderId || "ollama",
+                            openCodeModelId: provider.openCodeModelId || "glm-4.7-flash",
+                            openCodeBaseUrl: provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1",
+                            openCodeEnvKey: provider.openCodeEnvKey || "OLLAMA_API_KEY",
+                            openCodePackage: provider.openCodePackage || "@ai-sdk/openai-compatible",
+                          } : {}),
+                        })}
                         options={openCodeAuthModeOptions}
                       />
                     </Row>
@@ -774,7 +793,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                           <TextInput value={provider.openCodeProviderId || splitOpenCodeModel(providerModel).providerId} onChange={(value) => updateProviderInstance(providerConfigId, { openCodeProviderId: value })} mono />
                         </Row>
                         <Row label="Environment key" description="Host environment variable to import when the stored API key is empty. Runtime config maps it to OPENCODE_API_KEY.">
-                          <TextInput value={provider.openCodeEnvKey || "ANTHROPIC_API_KEY"} onChange={(value) => updateProviderInstance(providerConfigId, { openCodeEnvKey: value })} mono />
+                          <TextInput value={provider.openCodeEnvKey || "OLLAMA_API_KEY"} onChange={(value) => updateProviderInstance(providerConfigId, { openCodeEnvKey: value })} mono />
                         </Row>
                       </>
                     ) : null}
@@ -787,7 +806,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                           <TextInput value={provider.openCodePackage || "@ai-sdk/openai-compatible"} onChange={(value) => updateProviderInstance(providerConfigId, { openCodePackage: value })} mono />
                         </Row>
                         <Row label="Base URL" description="OpenAI-compatible endpoint for OpenRouter, Ollama, vLLM, LM Studio, LiteLLM, or a private gateway.">
-                          <TextInput value={provider.openCodeBaseUrl || "https://api.openai.com/v1"} onChange={(value) => updateProviderInstance(providerConfigId, { openCodeBaseUrl: value })} mono />
+                          <TextInput value={provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => updateProviderInstance(providerConfigId, { openCodeBaseUrl: value })} mono />
                         </Row>
                       </>
                     ) : null}
