@@ -42,9 +42,11 @@ export const PillChoiceGroup: FunctionComponent<{
               : "border-black/[0.06] bg-white/70 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:bg-black/[0.02] hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.08] dark:hover:text-white"
           }`}
         >
-          {active ? (
-            <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-signal-500 dark:bg-signal-400" />
-          ) : null}
+          <div
+            className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-signal-500 dark:bg-signal-400 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+              active ? "opacity-100 transform-none" : "opacity-0 -translate-x-full"
+            }`}
+          />
           <div className="text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
           {option.hint ? (
             <div className={`mt-1 text-[11px] leading-relaxed transition-colors duration-200 ${active ? "text-signal-600/80 dark:text-signal-300/80" : "text-slate-400 dark:text-slate-500"}`}>

@@ -530,13 +530,6 @@ html.has-bg-image {
     animation: widget-queued-border 2.5s ease-in-out infinite;
   }
 
-  @media (prefers-reduced-motion: no-preference) {
-    @keyframes icon-pop {
-      from { transform: scale(0.6); opacity: 0; }
-      to   { transform: scale(1);   opacity: 1; }
-    }
-  }
-
   /* Reduced motion fallback */
   @media (prefers-reduced-motion: reduce) {
     *,

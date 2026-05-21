@@ -1,5 +1,7 @@
 import type { FunctionComponent } from "preact";
+import { useEffect, useRef } from "preact/hooks";
 import { Heart, Loader2, Play, Trash2, X } from "lucide-preact";
+import gsap from "gsap";
 
 export interface SprintLedgerBulkActionsProps {
   selectedCount: number;
@@ -28,11 +30,34 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   onBulkShowcaseDisable,
   onClearSelection,
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    if (selectedCount > 0) {
+      gsap.to(el, {
+        height: "auto",
+        opacity: 1,
+        duration: 0.3,
+        ease: "power2.out",
+      });
+    } else {
+      gsap.to(el, {
+        height: 0,
+        opacity: 0,
+        duration: 0.3,
+        ease: "power2.inOut",
+      });
+    }
+  }, [selectedCount]);
+
   return (
     <div
-      className={`overflow-hidden transition-all duration-300 ease-in-out ${
-        selectedCount > 0 ? "max-h-48 opacity-100" : "max-h-0 opacity-0"
-      }`}
+      ref={containerRef}
+      className="overflow-hidden opacity-0"
+      style={{ height: 0 }}
     >
       <div className="flex flex-col gap-3 border-b border-signal-500/20 bg-signal-500/[0.08] px-4 py-3 backdrop-blur-xl dark:bg-signal-500/[0.1] sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
