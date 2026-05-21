@@ -1,4 +1,7 @@
 import type { FunctionComponent } from "preact";
+import { useRef, useEffect } from "preact/hooks";
+import gsap from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { Heart, Loader2, Play, Trash2, X } from "lucide-preact";
 
 export interface SprintLedgerBulkActionsProps {
@@ -28,11 +31,30 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   onBulkShowcaseDisable,
   onClearSelection,
 }) => {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+    gsap.killTweensOf(wrapperRef.current);
+    if (selectedCount > 0) {
+      gsap.fromTo(
+        wrapperRef.current,
+        { height: 0, opacity: 0 },
+        { height: "auto", opacity: 1, duration: reducedMotion ? 0 : 0.35, ease: "power4.out" }
+      );
+    } else {
+      gsap.to(wrapperRef.current, { height: 0, opacity: 0, duration: reducedMotion ? 0 : 0.25, ease: "power3.in" });
+    }
+  }, [selectedCount, reducedMotion]);
+
   return (
     <div
-      className={`overflow-hidden transition-all duration-300 ease-in-out ${
-        selectedCount > 0 ? "max-h-48 opacity-100" : "max-h-0 opacity-0"
-      }`}
+      ref={wrapperRef}
+      className="overflow-hidden"
+      style={{ height: 0, opacity: 0 }}
+      aria-live="polite"
+      aria-label={selectedCount > 0 ? `${selectedCount} sprint${selectedCount > 1 ? 's' : ''} selected` : undefined}
     >
       <div className="flex flex-col gap-3 border-b border-signal-500/20 bg-signal-500/[0.08] px-4 py-3 backdrop-blur-xl dark:bg-signal-500/[0.1] sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
