@@ -207,8 +207,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
           }}
         >
           <div
-            className="absolute inset-0 rounded-[inherit] border-2 border-signal-500/40 animate-ping"
-            style={{ animationDuration: '2s' }}
+            className="absolute inset-0 rounded-[inherit] border-2 border-blue-400/55"
           />
         </div>
       )}
