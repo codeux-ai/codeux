@@ -112,9 +112,10 @@ interface TopNavProps {
     toggleTheme: () => void;
     onMenuToggle?: () => void;
     isMobile?: boolean;
+    hideLogo?: boolean;
 }
 
-export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, onMenuToggle, isMobile }) => {
+export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, onMenuToggle, isMobile, hideLogo }) => {
     const navRef = useRef<HTMLElement>(null);
 
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -315,7 +316,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
             </a>
             <nav aria-label="Primary navigation" className="contents">
             <div className="flex items-center gap-4 md:gap-10 flex-1">
-                <BrandSection isMobile={isMobile} onMenuToggle={onMenuToggle} />
+                <BrandSection isMobile={isMobile} onMenuToggle={onMenuToggle} hideLogo={hideLogo} />
 
                 <GlobalSearch projectId={projectId} selectedProject={selectedProject} sprints={sprints} />
             </div>

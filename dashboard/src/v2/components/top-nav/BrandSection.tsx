@@ -7,10 +7,15 @@ import { RobotLogo } from "../brand/RobotLogo.js";
 interface BrandSectionProps {
     isMobile?: boolean;
     onMenuToggle?: () => void;
+    hideLogo?: boolean;
 }
 
-export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, onMenuToggle }) => {
+export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, onMenuToggle, hideLogo }) => {
     const [brandActive, setBrandActive] = useState(false);
+
+    if (hideLogo && !isMobile) {
+        return null;
+    }
 
     return (
         <div className="flex shrink-0 items-center gap-4 md:gap-10">

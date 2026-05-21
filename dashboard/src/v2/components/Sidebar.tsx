@@ -147,8 +147,8 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                     <RobotLogo size={40} rounded={false} active={brandActive} className="transition-transform duration-500 ease-out group-hover:scale-[1.06]" />
                 </div>
                 <div className={`overflow-hidden transition-all duration-500 ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}>
-                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex flex-col leading-none font-display whitespace-nowrap">
-                        Code <span className="text-[9px] uppercase font-bold font-mono tracking-[0.2em] text-signal-500 mt-1 opacity-90">UX Runtime</span>
+                    <h1 className="font-display font-bold text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-0.5 whitespace-nowrap">
+                        Code<span className="text-signal-500">UX</span>
                     </h1>
                 </div>
             </a>
@@ -233,7 +233,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                         ) : (
                             <ChevronLeft aria-hidden="true" className="relative z-10 w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-signal-500 transition-colors duration-300" strokeWidth={1.5} />
                         )}
-                        <div className={`relative z-10 overflow-hidden transition-all duration-500 flex-1 text-left ${isMinimized ? 'w-0 opacity-0' : 'opacity-100'}`}>
+                        <div className={`relative z-10 overflow-hidden transition-all duration-500 text-left ${isMinimized ? 'w-0 opacity-0 pointer-events-none' : 'flex-1 opacity-100'}`}>
                             <span className="font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300 whitespace-nowrap">
                                 Collapse
                             </span>

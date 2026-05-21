@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { ArrowLeft, ArrowRight, Box, Check, Compass, EyeOff, FolderOpen, MessageCircle, Sparkles } from "lucide-preact";
+import { ArrowLeft, ArrowRight, Box, CalendarDays, Check, Compass, EyeOff, FolderOpen, MessageCircle, Sparkles } from "lucide-preact";
 import { DASHBOARD_TOUR_START_EVENT, DASHBOARD_TOUR_STORAGE_KEY } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
@@ -93,6 +93,14 @@ const TOUR_STEPS: TourStep[] = [
     title: "Stats",
     body: "Stats turns execution history into signal: usage, throughput, code movement, and trends that help you understand delivery quality.",
     accent: "ember",
+  },
+  {
+    id: "schedule",
+    targetId: "nav-schedule",
+    eyebrow: "Orchestration",
+    title: "Schedule",
+    body: "Schedule lets you manage recurring cron triggers, automated pipeline schedules, or one-shot timers to orchestrate workflows asynchronously.",
+    accent: "signal",
   },
   {
     id: "memory",
@@ -429,7 +437,7 @@ export const GuidedDashboardTour: FunctionComponent = () => {
 
           <div className="mt-5 flex items-start gap-4">
             <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${accent.bgPanel} ${accent.text} ring-1 ring-white/10`}>
-              {activeStep.id === "projects" ? <FolderOpen className="h-5 w-5" /> : activeStep.id === "docker" ? <Box className="h-5 w-5" /> : activeStep.id === "chat" ? <MessageCircle className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
+              {activeStep.id === "projects" ? <FolderOpen className="h-5 w-5" /> : activeStep.id === "docker" ? <Box className="h-5 w-5" /> : activeStep.id === "chat" ? <MessageCircle className="h-5 w-5" /> : activeStep.id === "schedule" ? <CalendarDays className="h-5 w-5" /> : <Compass className="h-5 w-5" />}
             </div>
             <div>
               <h2 className="font-display text-2xl font-black leading-none tracking-tight">{activeStep.title}</h2>

@@ -181,7 +181,13 @@ const AppLayout = () => {
         )}
 
         <div className="flex-1 flex flex-col h-full relative z-10 overflow-hidden">
-          <TopNav isDark={isDark} toggleTheme={toggleTheme} onMenuToggle={() => setIsMobileSidebarOpen(prev => !prev)} isMobile={isMobile} />
+          <TopNav
+            isDark={isDark}
+            toggleTheme={toggleTheme}
+            onMenuToggle={() => setIsMobileSidebarOpen(prev => !prev)}
+            isMobile={isMobile}
+            hideLogo={!isMobile && navMode === "SIDEBAR"}
+          />
 
           <main id="main-content" tabIndex={-1} aria-label="Main content" className={`flex-1 overflow-y-auto dashboard-scrollbar relative ${showSidebar ? '' : 'pb-32'}`}>
             <Suspense fallback={<div className="flex-1 p-8"><SkeletonPanel /></div>}>
