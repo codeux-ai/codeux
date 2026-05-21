@@ -4,16 +4,12 @@ import gsap from "gsap";
 import { useProjectData } from "../../context/project-data.js";
 import {
   formatTokens,
-  formatDuration,
-  createSeries,
 } from "./stats-utils.js";
 import { useStatsPageData } from "./use-stats-page-data.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { StatsPageHero } from "./components/StatsPageHero.js";
 import { AnalysisStudioSection } from "./components/AnalysisStudioSection.js";
 import { StatsMetricCard } from "../../components/stats/StatsMetricCard.js";
-import { TopCardsModeRenderer } from "../../components/stats/TopCardsModeRenderer.js";
-import { STATS_COLORS } from "../../lib/stats/color-tokens.js";
 import { buildMetricSeries } from "../../lib/stats/series-builders.js";
 import { Button } from "../../components/ui/Button.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
@@ -98,14 +94,40 @@ export const StatsPage: FunctionComponent = () => {
         </div>
       ) : stats ? (
         <>
-
-          <TopCardsModeRenderer
-            mode={visualMode}
-            stats={stats}
-            providerSegments={providerSegments}
-            tokenSegments={tokenSegments}
-            sourceSegments={sourceSegments}
-          />
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
+            <StatsMetricCard
+              label="Active Providers"
+              value={String(providerSegments.length)}
+              detail="Total number of unique model providers utilized in this window"
+              accentHex="#10B981"
+              sparkline={[]}
+              signalLabel="Composition"
+            />
+            <StatsMetricCard
+              label="Top Provider"
+              value={providerSegments.length > 0 ? providerSegments[0]!.label : "None"}
+              detail={providerSegments.length > 0 ? `Leading provider by token volume: ${formatTokens(providerSegments[0]!.value)}` : "No provider data"}
+              accentHex="#0EA5E9"
+              sparkline={[]}
+              signalLabel="Composition"
+            />
+            <StatsMetricCard
+              label="Input Tokens"
+              value={formatTokens(stats.usage.inputTokens || 0)}
+              detail="Total number of input tokens processed"
+              accentHex="#00E0A0"
+              sparkline={buildMetricSeries(stats).coreInputTokens}
+              signalLabel="Composition"
+            />
+            <StatsMetricCard
+              label="Output Tokens"
+              value={formatTokens(stats.usage.outputTokens || 0)}
+              detail="Total number of output tokens generated"
+              accentHex="#FFB800"
+              sparkline={buildMetricSeries(stats).coreOutputTokens}
+              signalLabel="Composition"
+            />
+          </section>
 
           <section className={styles.telemetryStack}>
 

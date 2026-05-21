@@ -1,0 +1,107 @@
+/**
+ * @vitest-environment jsdom
+ */
+/// <reference types="@testing-library/jest-dom" />
+import { h } from "preact";
+import { render, screen, cleanup } from "@testing-library/preact";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import * as matchers from "@testing-library/jest-dom/matchers";
+import { TopCardsModeRenderer } from "../../../src/v2/components/stats/TopCardsModeRenderer.js";
+
+expect.extend(matchers);
+
+// Setup GSAP mock
+vi.mock("gsap", () => ({
+  default: {
+    killTweensOf: vi.fn(),
+    fromTo: vi.fn().mockImplementation((el, from, to) => {
+      if (to?.onComplete) to.onComplete();
+    }),
+    to: vi.fn().mockImplementation((el, config) => {
+      if (config?.onComplete) config.onComplete();
+    }),
+    set: vi.fn(),
+    context: vi.fn().mockImplementation((cb) => { cb(); return { revert: vi.fn() }; })
+  }
+}));
+
+const mockStats = {
+  purposes: [
+    { id: "task_coding", usage: { totalTokens: 1000 } },
+    { id: "ci_fix", usage: { totalTokens: 500 } },
+    { id: "qa_review", usage: { totalTokens: 200 } },
+    { id: "planning", usage: { totalTokens: 100 } }
+  ],
+  usage: {
+    wallTimeMs: 120000,
+    inputTokens: 1500,
+    outputTokens: 300,
+    reportedInvocationCount: 40,
+    estimatedInvocationCount: 5,
+    unavailableInvocationCount: 1,
+    unsupportedInvocationCount: 0
+  },
+  providers: [
+    { name: "provider_a", totalTokens: 1200 }
+  ],
+  ledgers: {
+    tasks: [{}, {}],
+    invocations: [{}, {}, {}]
+  }
+};
+
+const mockProviderSegments = [
+  { id: "p_a", label: "Provider A", value: 1200, color: "#111" }
+];
+
+const defaultProps = {
+  stats: mockStats as any,
+  providerSegments: mockProviderSegments,
+  tokenSegments: [],
+  sourceSegments: []
+};
+
+describe("TopCardsModeRenderer Mode Regression", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders trend mode cards correctly", () => {
+    render(<TopCardsModeRenderer mode="trend" {...defaultProps} />);
+    expect(screen.getByText("Active Providers")).toBeInTheDocument();
+    expect(screen.getByText("Top Provider")).toBeInTheDocument();
+    expect(screen.getByText("Input Tokens")).toBeInTheDocument();
+    expect(screen.getByText("Output Tokens")).toBeInTheDocument();
+  });
+
+  it("renders composition mode cards correctly", () => {
+    render(<TopCardsModeRenderer mode="composition" {...defaultProps} />);
+    expect(screen.getByText("Active Providers")).toBeInTheDocument();
+    expect(screen.getByText("Top Provider")).toBeInTheDocument();
+    expect(screen.getByText("Provider A")).toBeInTheDocument();
+    expect(screen.getByText("Input Tokens")).toBeInTheDocument();
+    expect(screen.getByText("Output Tokens")).toBeInTheDocument();
+  });
+
+  it("renders reliability mode cards correctly", () => {
+    const propsWithProviders = {
+      ...defaultProps,
+      stats: {
+        ...defaultProps.stats,
+        providers: [
+          { id: "test-provider", label: "Test Provider", usage: { totalTokens: 100 } }
+        ] as any
+      }
+    };
+    render(<TopCardsModeRenderer mode="reliability" {...propsWithProviders} />);
+    expect(screen.getByText("Test Provider")).toBeInTheDocument();
+  });
+
+  it("renders ledgers mode cards correctly", () => {
+    render(<TopCardsModeRenderer mode="ledgers" {...defaultProps} />);
+    expect(screen.getByText("Insertions")).toBeInTheDocument();
+    expect(screen.getByText("Deletions")).toBeInTheDocument();
+    expect(screen.getByText("Pull Requests")).toBeInTheDocument();
+    expect(screen.getByText("Merged Commits")).toBeInTheDocument();
+  });
+});

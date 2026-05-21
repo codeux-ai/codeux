@@ -87,9 +87,11 @@ describe('StatsPage visual tests', () => {
     });
   });
 
-  it('renders StatsPage with execution purpose cards in trend mode', () => {
+  it('renders StatsPage with composition cards in the top row', () => {
     const { getByText } = render(<StatsPage />);
-    expect(getByText('Task Coding')).toBeTruthy();
-    expect(getByText('CI Fix')).toBeTruthy();
+    expect(getByText('Active Providers')).toBeTruthy();
+    expect(getByText('Top Provider')).toBeTruthy();
+    expect(getByText('Input Tokens')).toBeTruthy();
+    expect(getByText('Output Tokens')).toBeTruthy();
   });
 });

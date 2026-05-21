@@ -249,9 +249,10 @@ expect(gsap.fromTo).toHaveBeenCalled();
 
   it("renders metric cards", () => {
     render(<StatsPage />);
-    expect(screen.getByText("Task Coding")).toBeInTheDocument();
-    expect(screen.getByText("CI Fix")).toBeInTheDocument();
-    expect(screen.getByText("Wall Runtime")).toBeInTheDocument();
+    expect(screen.getByText("Active Providers")).toBeInTheDocument();
+    expect(screen.getByText("Top Provider")).toBeInTheDocument();
+    expect(screen.getByText("Input Tokens")).toBeInTheDocument();
+    expect(screen.getByText("Output Tokens")).toBeInTheDocument();
   });
 
 
