@@ -26,6 +26,7 @@ export function buildMetricSeries(stats: ProjectExecutionStatsSnapshot | null) {
     coreOutputTokens: extractChartSeries(stats, "core_output_tokens"),
     gitInsertions: extractChartSeries(stats, "git_insertions"),
     gitDeletions: extractChartSeries(stats, "git_deletions"),
+    gitFilesChanged: extractChartSeries(stats, "git_files_changed"),
     gitPrs: extractChartSeries(stats, "git_prs"),
     gitMerges: extractChartSeries(stats, "git_merges"),
   };

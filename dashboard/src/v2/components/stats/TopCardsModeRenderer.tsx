@@ -200,6 +200,15 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
           sparkline={metricSeries.gitMerges}
           signalLabel="Git Activity"
         />
+        {/* Added Files Changed as the 5th metric because it naturally complements Insertions, Deletions, Pull Requests, and Merged Commits as a measure of Git activity scope. */}
+        <StatsMetricCard
+          label="Files Changed"
+          value={formatTokens(stats.git?.totals?.filesChanged || 0)}
+          detail="Files modified across repositories"
+          accentHex="#3B82F6"
+          sparkline={metricSeries.gitFilesChanged}
+          signalLabel="Git Activity"
+        />
       </>
     );
   };
