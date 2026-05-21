@@ -82,6 +82,18 @@ describe("DockerBootstrapBuilder", () => {
     expect(script).toContain(`merge_json_file "/opt/provider-config/qwen-settings.json" "$HOME/.qwen/settings.json"`);
   });
 
+  it("writes generated OpenCode config content to the runtime config path", () => {
+    const script = builder.build({
+      runtimeNpmPrefix: "/runtime/npm-global",
+      runtimeNpmCache: "/runtime/npm-cache",
+    });
+
+    expect(script).toContain("materialize_opencode_config()");
+    expect(script).toContain("printf '%s\\n' \"$OPENCODE_CONFIG_CONTENT\" > \"$destination\"");
+    expect(script).toContain("export OPENCODE_CONFIG=\"$destination\"");
+    expect(script).toContain("  materialize_opencode_config");
+  });
+
   it("should not include fallback install if no providers specified", () => {
     const options = {
       runtimeNpmPrefix: "/runtime/npm-global",

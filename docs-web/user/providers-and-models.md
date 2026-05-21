@@ -58,6 +58,8 @@ openrouter/anthropic/claude-sonnet-4.5,
 custom/model
 ```
 
+OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode config. Code UX writes that generated config to a temporary `opencode.json`, sets `OPENCODE_CONFIG`, and maps the saved key to `OPENCODE_API_KEY`. For OpenAI-compatible local endpoints such as Ollama, use a provider/model selector like `ollama/<model>` and a base URL such as `http://127.0.0.1:11434/v1`.
+
 ### Default per provider
 
 | Provider | Default model |

@@ -1,11 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
+import { runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
 import { ProviderRunner } from "../../../../../src/infrastructure/providers/cli/provider-runner.js";
+
+vi.mock("../../../../../src/services/cli-process-runner.js", () => ({
+  runStreamingCommand: vi.fn(async () => ({
+    ok: true,
+    stdout: "provider stdout",
+    stderr: "",
+    code: 0,
+    signal: null,
+  })),
+}));
 
 describe("ProviderRunner", () => {
   let dockerRunner: any;
   let runner: ProviderRunner;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     dockerRunner = {
       ensureWorkspace: vi.fn(async ({ cwd }: { cwd: string }) => ({ cwd: cwd === "/repo" ? "docker-volume://workspace-1" : cwd, cleanup: vi.fn() })),
       runProviderInDocker: vi.fn(async () => ({
@@ -141,6 +156,69 @@ describe("ProviderRunner", () => {
         OPENCODE_CONFIG_CONTENT: expect.stringContaining("\"baseURL\":\"https://llm.example.com/v1\""),
       }),
     }));
+  });
+
+  it("materializes generated OpenCode config for host execution", async () => {
+    const repoPath = await fs.mkdtemp(path.join(os.tmpdir(), "provider-runner-"));
+    let configPath = "";
+    let configContent = "";
+    vi.mocked(runStreamingCommand).mockImplementationOnce(async (_command, _args, _cwd, env) => {
+      configPath = env.OPENCODE_CONFIG || "";
+      configContent = await fs.readFile(configPath, "utf8");
+      return {
+        ok: true,
+        stdout: "host stdout",
+        stderr: "",
+        code: 0,
+        signal: null,
+      };
+    });
+
+    await runner.runProvider({
+      provider: "opencode",
+      prompt: "hello",
+      cwd: repoPath,
+      model: "ollama/glm-4.7-flash",
+      apiKey: "mykey",
+      openCodeAuthMode: "CUSTOM_PROVIDER",
+      openCodeProviderId: "ollama",
+      openCodeModelId: "glm-4.7-flash",
+      openCodeBaseUrl: "http://127.0.0.1:11434/v1",
+      sessionId: "session/with/slash",
+      workflowSettings: { executionMode: "HOST" } as any,
+      repoPath,
+      onActivity: vi.fn(),
+    });
+
+    expect(runStreamingCommand).toHaveBeenCalledWith(
+      "opencode",
+      ["run", "--model", "ollama/glm-4.7-flash", "hello"],
+      repoPath,
+      expect.objectContaining({
+        OPENCODE_API_KEY: "mykey",
+        OPENCODE_CONFIG: expect.stringContaining("opencode-config-session-with-slash.json"),
+      }),
+      expect.any(Object),
+    );
+    expect(configPath).toContain("opencode-config-session-with-slash.json");
+    expect(JSON.parse(configContent)).toMatchObject({
+      model: "ollama/glm-4.7-flash",
+      provider: {
+        ollama: {
+          npm: "@ai-sdk/openai-compatible",
+          options: {
+            baseURL: "http://127.0.0.1:11434/v1",
+            apiKey: "{env:OPENCODE_API_KEY}",
+          },
+          models: {
+            "glm-4.7-flash": {
+              name: "glm-4.7-flash",
+            },
+          },
+        },
+      },
+    });
+    await expect(fs.access(configPath)).rejects.toThrow();
   });
 
   it("captures Codex text output from the isolated workspace", async () => {

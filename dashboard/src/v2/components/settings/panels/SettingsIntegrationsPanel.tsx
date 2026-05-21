@@ -750,7 +750,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                         </Row>
                       </>
                     ) : null}
-                    <Row label="Generated config preview" description="Masked OpenCode config injected through OPENCODE_CONFIG_CONTENT for host and Docker runs." last={index === providerEntries.length - 1}>
+                    <Row label="Generated config preview" description="Masked OpenCode config materialized from OPENCODE_CONFIG_CONTENT for host and Docker runs." last={index === providerEntries.length - 1}>
                       <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
                         {buildOpenCodeConfigPreview(provider, providerModel)}
                       </pre>

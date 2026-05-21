@@ -207,6 +207,14 @@ export class ProviderRunner implements IProviderRunner {
     const { command, args } = spec;
 
     const localMcpCleanup: Array<{ path: string; originalContent: string | null }> = [];
+    const localRuntimeCleanup: Array<string> = [];
+    if (provider === "opencode" && workflowSettings.executionMode !== "DOCKER") {
+      const configPath = await this.writeLocalOpenCodeConfig(providerEnv.OPENCODE_CONFIG_CONTENT, repoPath, sessionId);
+      if (configPath) {
+        providerEnv.OPENCODE_CONFIG = configPath;
+        localRuntimeCleanup.push(configPath);
+      }
+    }
     if (input.mcpConnection && workflowSettings.executionMode !== "DOCKER") {
       const entries = await this.writeLocalMcpConfig(input.mcpConnection, cwd, provider);
       localMcpCleanup.push(...entries);
@@ -275,7 +283,25 @@ export class ProviderRunner implements IProviderRunner {
           await fs.rm(entry.path, { force: true }).catch(() => undefined);
         }
       }
+      for (const cleanupPath of localRuntimeCleanup) {
+        await fs.rm(cleanupPath, { force: true }).catch(() => undefined);
+      }
     }
+  }
+
+  private async writeLocalOpenCodeConfig(
+    content: string | undefined,
+    repoPath: string,
+    sessionId: string,
+  ): Promise<string | null> {
+    if (!content) {
+      return null;
+    }
+    const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_.-]/g, "-");
+    const configPath = path.join(getRepoCodeUxPath(repoPath, "tmp"), `opencode-config-${safeSessionId}.json`);
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, `${content}\n`, "utf8");
+    return configPath;
   }
 
   private async readProviderOutputPath(
