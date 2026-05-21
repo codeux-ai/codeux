@@ -337,6 +337,10 @@ export class SprintOrchestrator {
     });
   }
 
+  setConsecutiveFailures(value: number): void {
+    this.deps.setConsecutiveFailures(value);
+  }
+
   isOrchestratingSprint(projectId: string, sprintId: string): boolean {
     return this.activeOrchestrations.has(`${projectId}:${sprintId}`);
   }

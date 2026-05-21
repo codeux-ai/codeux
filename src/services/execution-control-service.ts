@@ -50,6 +50,8 @@ export class ExecutionControlService {
       );
     }
 
+    this.deps.sprintOrchestrator.setConsecutiveFailures(0);
+
     void this.deps.sprintOrchestrator.execute({
       action: "orchestrate",
       project_id: projectId,

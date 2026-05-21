@@ -20,6 +20,7 @@ async function createFixture(): Promise<{
   service: ExecutionControlService;
   rerunTask: ReturnType<typeof vi.fn>;
   executeOrchestrator: ReturnType<typeof vi.fn>;
+  setConsecutiveFailures: ReturnType<typeof vi.fn>;
   requestStop: ReturnType<typeof vi.fn>;
   sendSessionMessage: ReturnType<typeof vi.fn>;
 }> {
@@ -32,6 +33,7 @@ async function createFixture(): Promise<{
   const projectAttentionRepository = new ProjectAttentionRepository(storage);
   const rerunTask = vi.fn().mockResolvedValue({ id: "task-1" });
   const executeOrchestrator = vi.fn().mockResolvedValue({ content: [] });
+  const setConsecutiveFailures = vi.fn();
   const requestStop = vi.fn().mockResolvedValue({ accepted: true });
   const sendSessionMessage = vi.fn().mockResolvedValue({ ok: true });
 
@@ -47,6 +49,7 @@ async function createFixture(): Promise<{
     } as any,
     sprintOrchestrator: {
       execute: executeOrchestrator,
+      setConsecutiveFailures,
     } as any,
     julesApi: {
       sendSessionMessage,
@@ -63,6 +66,7 @@ async function createFixture(): Promise<{
     service,
     rerunTask,
     executeOrchestrator,
+    setConsecutiveFailures,
     requestStop,
     sendSessionMessage,
   };
@@ -79,8 +83,8 @@ afterEach(async () => {
 });
 
 describe("ExecutionControlService", () => {
-  it("starts sprint orchestration through the sprint orchestrator", async () => {
-    const { projectRepository, service, executeOrchestrator } = await createFixture();
+  it("starts sprint orchestration through the sprint orchestrator and resets consecutive failures", async () => {
+    const { projectRepository, service, executeOrchestrator, setConsecutiveFailures } = await createFixture();
     const project = projectRepository.createProject({
       name: "Execution Control Project",
       sourceType: "local",
@@ -93,6 +97,7 @@ describe("ExecutionControlService", () => {
 
     await service.orchestrateSprint(project.id, sprint.id);
 
+    expect(setConsecutiveFailures).toHaveBeenCalledWith(0);
     expect(executeOrchestrator).toHaveBeenCalledWith(expect.objectContaining({
       action: "orchestrate",
       project_id: project.id,
