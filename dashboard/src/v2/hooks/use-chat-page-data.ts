@@ -12,7 +12,7 @@ import { type RefObject } from "preact";
 import { useChatThreadData, isWorkingMessage } from "./use-chat-thread-data.js";
 import { useInvocationPaneData } from "./use-invocation-pane-data.js";
 import { useChatPageResources } from "./use-chat-page-resources.js";
-import type { AgentPresetRecord } from "../../types.js";
+import type { AgentPresetRecord } from "../types.js";
 
 export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextAreaElement>; messagesRef?: RefObject<HTMLDivElement> }) => {
   const cache = useMessageCache();
