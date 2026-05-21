@@ -28,6 +28,7 @@ class DashboardRealtimeClient {
   private snapshotRequiredLastDispatchedAt: number = 0;
   private readonly SNAPSHOT_REQUIRED_COOLDOWN_MS = 3000;
   private transportState: TransportState = "disconnected";
+  private disconnectTimer: number | null = null;
 
   subscribe(scopes: string[], listener: RealtimeListener, transportListener?: TransportStateListener): () => void {
     const subscriptionId = this.nextSubscriptionId++;
@@ -46,12 +47,13 @@ class DashboardRealtimeClient {
       this.subscriptions.delete(subscriptionId);
       this.scheduleSubscriptionSync();
       if (this.subscriptions.size === 0) {
-        this.disconnect();
+        this.scheduleDisconnectCheck();
       }
     };
   }
 
   private ensureConnected(): void {
+    this.clearDisconnectTimer();
     if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -174,6 +176,7 @@ class DashboardRealtimeClient {
   }
 
   private disconnect(): void {
+    this.clearDisconnectTimer();
     this.clearReconnectTimer();
     if (this.subscriptionSyncTimer !== null) {
       globalThis.clearTimeout(this.subscriptionSyncTimer);
@@ -183,6 +186,27 @@ class DashboardRealtimeClient {
     if (this.socket) {
       this.socket.close();
       this.socket = null;
+    }
+  }
+
+  private scheduleDisconnectCheck(): void {
+    this.clearDisconnectTimer();
+    if (typeof window === "undefined") {
+      this.disconnect();
+      return;
+    }
+    this.disconnectTimer = window.setTimeout(() => {
+      this.disconnectTimer = null;
+      if (this.subscriptions.size === 0) {
+        this.disconnect();
+      }
+    }, 250);
+  }
+
+  private clearDisconnectTimer(): void {
+    if (this.disconnectTimer !== null) {
+      window.clearTimeout(this.disconnectTimer);
+      this.disconnectTimer = null;
     }
   }
 

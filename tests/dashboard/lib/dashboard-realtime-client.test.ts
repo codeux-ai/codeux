@@ -177,4 +177,37 @@ describe("dashboard-realtime-client", () => {
 
     unsubscribe();
   });
+
+  it("debounces disconnection when subscriptions drop to 0", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const listener = vi.fn();
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], listener);
+
+    expect(MockWebSocket.instances.length).toBe(1);
+    const firstSocket = MockWebSocket.instances[0]!;
+    firstSocket.emit("open");
+
+    // Unsubscribe so subscriptions count drops to 0
+    unsubscribe();
+
+    // The websocket should NOT close immediately
+    expect(firstSocket.readyState).toBe(MockWebSocket.OPEN);
+
+    // Subscribe again within the 250ms debounce time
+    vi.advanceTimersByTime(100);
+    const unsubscribe2 = subscribeToDashboardRealtime(["overview"], listener);
+
+    // No new socket instance should be created and the old socket should remain open
+    expect(MockWebSocket.instances.length).toBe(1);
+    expect(firstSocket.readyState).toBe(MockWebSocket.OPEN);
+
+    // Now unsubscribe again and let the full debounce time pass
+    unsubscribe2();
+    expect(firstSocket.readyState).toBe(MockWebSocket.OPEN);
+
+    vi.advanceTimersByTime(250);
+
+    // The websocket should now be closed
+    expect(firstSocket.readyState).toBe(MockWebSocket.CLOSED);
+  });
 });
