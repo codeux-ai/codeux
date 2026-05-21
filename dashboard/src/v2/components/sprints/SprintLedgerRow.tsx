@@ -98,8 +98,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const rowTone = isSelected
     ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_18px_44px_rgba(0,224,160,0.12)]"
     : isEven
-      ? "border-black/[0.06] bg-white/80 dark:border-white/[0.07] dark:bg-white/[0.045]"
-      : "border-black/[0.06] bg-slate-50/80 dark:border-white/[0.07] dark:bg-white/[0.03]";
+      ? "border-black/[0.06] bg-white/80 dark:border-white/[0.07] dark:bg-white/[0.045] hover:bg-signal-500/[0.025] dark:hover:bg-signal-500/[0.03]"
+      : "border-black/[0.06] bg-slate-50/80 dark:border-white/[0.07] dark:bg-white/[0.03] hover:bg-signal-500/[0.025] dark:hover:bg-signal-500/[0.03]";
   const desktopCellTone = isSelected
     ? "lg:border-signal-500/25 lg:bg-signal-500/[0.08]"
     : isEven
@@ -233,7 +233,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       </td>
       <td className={`block px-4 pb-4 pt-3 align-middle lg:table-cell lg:rounded-r-[1.5rem] lg:border-y lg:border-r lg:px-4 lg:py-4 lg:pr-6 ${desktopCellTone}`}>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:whitespace-nowrap">
-          <button
+          <div className="flex items-center justify-end gap-2 opacity-70 group-hover:opacity-100 transition-opacity duration-200">
+            <button
             type="button"
             onClick={() => onSprintToggle(sprint.id)}
             disabled={isTogglePending}
@@ -272,6 +273,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
               <MoreVertical className="h-3.5 w-3.5" />
             )}
           </button>
+          </div>
         </div>
       </td>
     </tr>
