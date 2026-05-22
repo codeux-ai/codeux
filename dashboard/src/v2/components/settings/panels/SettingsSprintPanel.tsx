@@ -3,6 +3,7 @@ import type { SettingsPageState } from "../../../hooks/use-settings-page-state.j
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import type { ProjectSettings } from "../../../../types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { Cog, Eye, GitBranch, GitMerge, PlayCircle, Sparkles, Wand2, Workflow } from "lucide-preact";
 import { SprintKeyEditor } from "../SprintKeyEditor.js";
 import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
 
@@ -23,7 +24,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Git Flow" watermark="GIT" badge={getBadge("git")}>
+      <SectionCard title="Git Flow" watermark="GIT" badge={getBadge("git")} icon={<GitBranch strokeWidth={2.4} />}>
         <Row label="Git mode" description="Remote enables PR and CI-aware automation. Local keeps orchestration repo-local only." badge={getFieldBadge("git.githubMode")}>
           <PillChoiceGroup
             value={editableSettings.git.githubMode}
@@ -127,7 +128,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
         </Row>
       </SectionCard>
 
-        <SectionCard title="Merge Gates" watermark="CI" badge={getBadge("ciIntelligence")}>
+        <SectionCard title="Merge Gates" watermark="CI" badge={getBadge("ciIntelligence")} icon={<GitMerge strokeWidth={2.4} />}>
           <Row label="CI intelligence enabled" description="Let orchestration react to CI state instead of treating CI as passive metadata." badge={getFieldBadge("ciIntelligence.enabled")}>
             <Toggle
               value={editableSettings.ciIntelligence.enabled}
@@ -190,7 +191,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           </Row>
         </SectionCard>
 
-        <SectionCard title="Autofix Policy" watermark="FIX" badge={getBadge("ciIntelligence")}>
+        <SectionCard title="Autofix Policy" watermark="FIX" badge={getBadge("ciIntelligence")} icon={<Wand2 strokeWidth={2.4} />}>
           <Row label="Resolve feature merge conflicts" description="Escalate feature-branch merge conflicts to the virtual worker with full branch and task context." badge={getFieldBadge("ciIntelligence.resolveMergeConflicts")}>
             <Toggle
               value={editableSettings.ciIntelligence.resolveMergeConflicts}
@@ -267,7 +268,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           </Row>
         </SectionCard>
 
-        <SectionCard title="Execution Pipeline" watermark="RUN" badge={getBadge("sprintLoopSteps")}>
+        <SectionCard title="Execution Pipeline" watermark="RUN" badge={getBadge("sprintLoopSteps")} icon={<Workflow strokeWidth={2.4} />}>
           <Row label="Branch preflight" description="Verify branch state before the orchestration loop starts." badge={getFieldBadge("sprintLoopSteps.branchPreflight")}>
             <Toggle value={editableSettings.sprintLoopSteps.branchPreflight} onChange={() => updateEditableSettings((current) => ({
               ...current,
@@ -351,7 +352,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           </Row>
         </SectionCard>
 
-        <SectionCard title="Watch Loop" watermark="LOOP" badge={getBadge("sprintLoopSteps")}>
+        <SectionCard title="Watch Loop" watermark="LOOP" badge={getBadge("sprintLoopSteps")} icon={<Eye strokeWidth={2.4} />}>
           <Row label="Watch loop" description="Keep the live watch loop running between orchestration ticks." badge={getFieldBadge("sprintLoopSteps.watchLoop")}>
             <Toggle value={editableSettings.sprintLoopSteps.watchLoop} onChange={() => updateEditableSettings((current) => ({
               ...current,
@@ -391,7 +392,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           </Row>
         </SectionCard>
 
-        <SectionCard title="Workspace Hygiene" watermark="CLI" badge={getBadge("cliWorkflow")}>
+        <SectionCard title="Workspace Hygiene" watermark="CLI" badge={getBadge("cliWorkflow")} icon={<Sparkles strokeWidth={2.4} />}>
           <Row label="Cleanup worktree on success" description="Remove temporary worktree state after successful CLI execution." badge={getFieldBadge("cliWorkflow.cleanupWorktreeOnSuccess")}>
             <Toggle value={editableSettings.cliWorkflow.cleanupWorktreeOnSuccess} onChange={() => updateEditableSettings((current) => ({
               ...current,
@@ -490,7 +491,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           </Row>
         </SectionCard>
 
-        <SectionCard title="Execution Runtime" watermark="RT" badge={getBadge("cliWorkflow")}>
+        <SectionCard title="Execution Runtime" watermark="RT" badge={getBadge("cliWorkflow")} icon={<Cog strokeWidth={2.4} />}>
           <Row label="Execution mode" description="Run worker CLI processes directly on the host or inside a container." badge={getFieldBadge("cliWorkflow.executionMode")}>
             <PillChoiceGroup
               value={editableSettings.cliWorkflow.executionMode}

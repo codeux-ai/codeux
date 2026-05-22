@@ -1,6 +1,6 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { useState } from "preact/hooks";
-import { CheckCircle2, ChevronDown, Cpu, GitBranch, Network, Route, RotateCcw, Settings2, SlidersHorizontal } from "lucide-preact";
+import { Anchor, CheckCircle2, ChevronDown, Cpu, GitBranch, Layers, Network, Route, RotateCcw, Settings2, SlidersHorizontal } from "lucide-preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, PillChoiceGroup, ProviderLogo, Row, SelectInput, Toggle } from "../SettingsFormFields.js";
@@ -374,7 +374,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         </div>
       </section>
 
-      <SectionCard title="Default Routing Anchors" watermark="DEF" badge={getBadge("aiProvider", "workers")}>
+      <SectionCard title="Default Routing Anchors" watermark="DEF" badge={getBadge("aiProvider", "workers")} icon={<Anchor strokeWidth={2.4} />}>
         {providerEntries.length === 0 ? (
           <NoticePanel title="No provider credentials">
             Add provider credentials in Integrations before configuring AI routes.
@@ -464,7 +464,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         </Row>
       </SectionCard>
 
-      <SectionCard title="Base Provider Configuration" watermark="BASE" badge={getBadge("aiProvider.providers")}>
+      <SectionCard title="Base Provider Configuration" watermark="BASE" badge={getBadge("aiProvider.providers")} icon={<Layers strokeWidth={2.4} />}>
         <div className="mb-4 rounded-[1.25rem] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
           These values are the inheritance baseline for every route. Route mapping owns manual, weighted, or agent-based selection; this section defines each provider instance’s default model, reasoning depth, weight, and capacity.
         </div>
@@ -571,7 +571,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
         </div>
       </SectionCard>
 
-      <SectionCard title="Route Mapping" watermark="MAP" badge={getBadge("aiProvider.invocationRouting")}>
+      <SectionCard title="Route Mapping" watermark="MAP" badge={getBadge("aiProvider.invocationRouting")} icon={<GitBranch strokeWidth={2.4} />}>
         <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
           <div className="rounded-[1.6rem] border border-black/[0.06] bg-[linear-gradient(180deg,rgba(15,23,42,0.028),rgba(15,23,42,0.012))] p-3 dark:border-white/[0.06] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.02))]">
             <div className="mb-3 px-2.5 pt-1">

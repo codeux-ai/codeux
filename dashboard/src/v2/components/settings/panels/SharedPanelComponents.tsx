@@ -8,7 +8,8 @@ export const SectionCard: FunctionComponent<{
   children: ComponentChildren;
   danger?: boolean;
   badge?: string;
-}> = ({ title, watermark, children, danger, badge }) => (
+  icon?: ComponentChildren;
+}> = ({ title, watermark, children, danger, badge, icon }) => (
   <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 backdrop-blur-2xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
     <div aria-hidden className={`absolute inset-x-0 top-0 h-20 bg-[linear-gradient(180deg,rgba(15,23,42,0.045),transparent)] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.045),transparent)] ${danger ? "opacity-60" : "opacity-100"}`} />
     <div
@@ -21,9 +22,10 @@ export const SectionCard: FunctionComponent<{
     </div>
 
     <div className={`relative z-10 flex items-center justify-between gap-3 border-b border-black/[0.05] px-6 py-4 dark:border-white/[0.04] ${danger ? "bg-status-red/[0.03]" : ""}`}>
-      <h3 className={`text-[11px] font-bold uppercase tracking-[0.2em] ${danger ? "text-status-red/70" : "text-slate-400 dark:text-slate-500"}`}>
-        {title}
-      </h3>
+      <div className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] ${danger ? "text-status-red/70" : "text-slate-500 dark:text-slate-300"}`}>
+        {icon ? <span className="inline-flex h-3.5 w-3.5 items-center justify-center [&_svg]:h-3.5 [&_svg]:w-3.5" aria-hidden>{icon}</span> : null}
+        <h3>{title}</h3>
+      </div>
       {badge ? (
         <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-300">
           {badge}

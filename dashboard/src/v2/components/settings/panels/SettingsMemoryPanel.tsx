@@ -3,6 +3,7 @@ import type { SettingsPageState } from "../../../hooks/use-settings-page-state.j
 import { NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, Row, Toggle, TextInput, TextAreaInput } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { BookOpen, Brain, Gauge } from "lucide-preact";
 
   export const SettingsMemoryPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
@@ -22,7 +23,7 @@ import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadge
 
     return (
       <div className="flex flex-col gap-5">
-        <SectionCard title="Memory System" watermark="MEM" badge={getBadge("memory")}>
+        <SectionCard title="Memory System" watermark="MEM" badge={getBadge("memory")} icon={<Brain strokeWidth={2.4} />}>
           <Row label="Enable memory" description="Turn on the memory system for automatic capture, storage, and semantic search of sprint knowledge." badge={getFieldBadge("memory.enabled")}>
             <Toggle
               value={editableSettings.memory.enabled}
@@ -64,7 +65,7 @@ import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadge
           </Row>
         </SectionCard>
 
-        <SectionCard title="Limits" watermark="CAP" badge={getBadge("memory")}>
+        <SectionCard title="Limits" watermark="CAP" badge={getBadge("memory")} icon={<Gauge strokeWidth={2.4} />}>
           <Row label="Promotion threshold" description="Minimum score (0.0–1.0) a sprint memory needs to be auto-promoted to project scope." badge={getFieldBadge("memory.promotionThreshold")}>
             <NumberInput
               value={editableSettings.memory.promotionThreshold}
@@ -119,7 +120,7 @@ import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadge
           </Row>
         </SectionCard>
 
-        <SectionCard title="Worker Learnings Instruction" watermark="LRN" badge={getBadge("memory")}>
+        <SectionCard title="Worker Learnings Instruction" watermark="LRN" badge={getBadge("memory")} icon={<BookOpen strokeWidth={2.4} />}>
           <div className="pt-2 pb-1">
             <div className="text-xs font-medium leading-relaxed text-slate-400 mb-3">
               This instruction is appended to every worker task prompt when auto-capture is enabled. It tells the AI provider what to observe and record in a temporary learnings file that gets processed into sprint memories.

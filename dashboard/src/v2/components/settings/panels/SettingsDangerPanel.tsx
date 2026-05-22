@@ -3,6 +3,7 @@ import type { SettingsPageState } from "../../../hooks/use-settings-page-state.j
 import { ActionButton } from "../SettingsSurface.js";
 import { Row } from "../SettingsFormFields.js";
 import { SectionCard } from "./SharedPanelComponents.js";
+import { AlertTriangle, Database } from "lucide-preact";
 
 export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
@@ -16,7 +17,7 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Danger Zone" watermark="DGR" danger>
+      <SectionCard title="Danger Zone" watermark="DGR" danger icon={<AlertTriangle strokeWidth={2.4} />}>
         <Row label="Reset project database" description="Permanently delete all tasks, sprints, and context history." last>
           <ActionButton
             label="Wipe Project"
@@ -28,7 +29,7 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
         </Row>
       </SectionCard>
       {activeScope === "system" ? (
-        <SectionCard title="System Database" watermark="SYS" danger>
+        <SectionCard title="System Database" watermark="SYS" danger icon={<Database strokeWidth={2.4} />}>
           <Row label="Hard reset database" description="Delete all projects, tasks, sprints, and system history. This will cleanly reconstruct the local DB on the next reload." last>
             <ActionButton
               label="Wipe Database"

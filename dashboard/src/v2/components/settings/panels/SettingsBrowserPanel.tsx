@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { NumberInput, Row, TextInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { Eye, Gauge } from "lucide-preact";
 
 export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
@@ -20,7 +21,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Workspace Visibility" watermark="WEB" badge={getBadge("sprintPreview")}>
+      <SectionCard title="Workspace Visibility" watermark="WEB" badge={getBadge("sprintPreview")} icon={<Eye strokeWidth={2.4} />}>
         <Row label="Preview runtime enabled" description="Allow Code UX to launch, rebuild, and reconcile preview containers for this scope." badge={getFieldBadge("sprintPreview.enabled")}>
           <Toggle value={editableSettings.sprintPreview.enabled} onChange={() => updateEditableSettings((current) => ({
             ...current,
@@ -77,7 +78,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
         </Row>
       </SectionCard>
 
-      <SectionCard title="Runtime Limits" watermark="PORT" badge={getBadge("sprintPreview")}>
+      <SectionCard title="Runtime Limits" watermark="PORT" badge={getBadge("sprintPreview")} icon={<Gauge strokeWidth={2.4} />}>
         <Row label="Maximum active preview containers" description="When this cap is exceeded, Code UX stops the oldest active previews before launching the next one." badge={getFieldBadge("sprintPreview.maxConcurrentContainers")}>
           <NumberInput
             value={editableSettings.sprintPreview.maxConcurrentContainers}

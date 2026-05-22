@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { ArrowLeft, Plus, Settings2, Trash2 } from "lucide-preact";
+import { ArrowLeft, Key, Plug, Plus, Settings2, Trash2 } from "lucide-preact";
 import type { SettingsPageState, IntegrationId } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel, ActionButton } from "../SettingsSurface.js";
 import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "../SettingsFormFields.js";
@@ -485,7 +485,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       return (
         <>
           {backButton}
-          <SectionCard title={`${hostLabel} Configuration`} watermark={isGitLab ? "GLB" : "GIT"}>
+          <SectionCard title={`${hostLabel} Configuration`} watermark={isGitLab ? "GLB" : "GIT"} icon={<Settings2 strokeWidth={2.4} />}>
             {activeScope === "system" ? (
               <Row label={`${hostLabel} token`} description={`System token used for ${hostLabel} repository, ${isGitLab ? "merge request" : "pull request"}, and CI integration.`}>
                 <TextInput
@@ -570,7 +570,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       return (
         <>
           {backButton}
-          <SectionCard title="Jira Configuration" watermark="JRA">
+          <SectionCard title="Jira Configuration" watermark="JRA" icon={<Settings2 strokeWidth={2.4} />}>
             {activeScope === "system" ? (
               <>
                 <Row label="Jira site URL" description="Base URL for Jira Cloud or Data Center, for example `https://company.atlassian.net`.">
@@ -612,7 +612,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
       return (
         <>
           {backButton}
-          <SectionCard title={`${getProviderTypeLabel(providerId)} Integration`} watermark={getProviderWatermark(providerId)}>
+          <SectionCard title={`${getProviderTypeLabel(providerId)} Integration`} watermark={getProviderWatermark(providerId)} icon={<Plug strokeWidth={2.4} />}>
             <NoticePanel title="System-owned credentials">
               Provider credentials and auth-copy mounts are managed per instance at system scope. This keeps multiple named providers independent across every route.
             </NoticePanel>
@@ -627,7 +627,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     return (
       <>
         {backButton}
-        <SectionCard title={`${getProviderTypeLabel(providerId)} Credentials`} watermark={getProviderWatermark(providerId)}>
+        <SectionCard title={`${getProviderTypeLabel(providerId)} Credentials`} watermark={getProviderWatermark(providerId)} icon={<Key strokeWidth={2.4} />}>
           <div className="relative overflow-hidden rounded-[1.45rem] border border-black/[0.06] bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(248,250,252,0.62))] px-5 py-4 shadow-[0_14px_34px_rgba(15,23,42,0.045)] dark:border-white/[0.06] dark:bg-[linear-gradient(135deg,rgba(255,255,255,0.065),rgba(255,255,255,0.025))]">
             <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/35 to-transparent" />
             <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
@@ -853,7 +853,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Integrations" watermark="INT" badge={getBadge("integrations", "cliWorkflow")}>
+      <SectionCard title="Integrations" watermark="INT" badge={getBadge("integrations", "cliWorkflow")} icon={<Plug strokeWidth={2.4} />}>
         <div ref={containerRef} className="relative w-full overflow-hidden">
           <div ref={listRef} className="w-full">
             <div className="space-y-4">

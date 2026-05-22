@@ -4,6 +4,7 @@ import { ActionButton, NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { Bot, Cog, FolderOpen, Layers, Sparkles } from "lucide-preact";
 import { openOnboarding } from "../../../lib/onboarding-control.js";
 
 
@@ -13,7 +14,7 @@ const ProjectContextCard: FunctionComponent<{
   baseDir: string;
   sourceType: string;
 }> = ({ projectName, projectId, baseDir, sourceType }) => (
-  <SectionCard title="Project Context" watermark="PRJ">
+  <SectionCard title="Project Context" watermark="PRJ" icon={<FolderOpen strokeWidth={2.4} />}>
     <Row label="Project" description="The selected project receives its own override document and inherits all other values from system defaults.">
       <div className="rounded-xl bg-black/[0.04] px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-white/[0.04] dark:text-slate-200">
         {projectName}
@@ -48,7 +49,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
     if (activeScope === "system") {
       return (
         <div className="flex flex-col gap-5">
-          <SectionCard title="System Runtime" watermark="SYS">
+          <SectionCard title="System Runtime" watermark="SYS" icon={<Cog strokeWidth={2.4} />}>
             <Row label="Dashboard port" description="System-wide HTTP port for the dashboard server.">
               <NumberInput
                 value={systemSettings?.runtime.dashboardPort ?? 4444}
@@ -93,7 +94,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             </Row>
           </SectionCard>
 
-          <SectionCard title="Onboarding" watermark="ONB">
+          <SectionCard title="Onboarding" watermark="ONB" icon={<Sparkles strokeWidth={2.4} />}>
             <NoticePanel title="First-run guide" tone="success">
               Reopen the guided setup flow for Docker checks, provider configuration, AI behaviour, appearance preferences, and dashboard controls. This does not reset saved settings.
             </NoticePanel>
@@ -102,7 +103,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             </Row>
           </SectionCard>
 
-          <SectionCard title="Inheritance Model" watermark="SCP">
+          <SectionCard title="Inheritance Model" watermark="SCP" icon={<Layers strokeWidth={2.4} />}>
             <NoticePanel title="Scope order" tone="success">
               System settings provide the live baseline. Project settings inherit from that baseline and only persist real overrides. Sprint overrides layer on top from the sprint page.
             </NoticePanel>
@@ -138,7 +139,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
           sourceType={selectedProject.sourceType}
         />
 
-        <SectionCard title="Automation" watermark="AUTO" badge={getBadge("automationLevel", "automationInterventions")}>
+        <SectionCard title="Automation" watermark="AUTO" badge={getBadge("automationLevel", "automationInterventions")} icon={<Bot strokeWidth={2.4} />}>
           <Row label="Automation level" description="Choose how much the project should proceed without a worker stepping in." badge={getFieldBadge("automationLevel")}>
             <PillChoiceGroup
               value={projectSettings.automationLevel}

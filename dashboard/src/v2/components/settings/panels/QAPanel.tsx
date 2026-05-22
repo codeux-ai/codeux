@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import type { ProjectSettings } from "../../../../types.js";
 import { SelectInput, Toggle, NumberInput } from "../SettingsFormFields.js";
 import { SectionCard, Row } from "./SharedPanelComponents.js";
+import { ShieldCheck } from "lucide-preact";
 
 // Taking the QA section from SettingsAgentsPanel.tsx
 export const QAPanel: FunctionComponent<{
@@ -15,7 +16,7 @@ export const QAPanel: FunctionComponent<{
   activeScope?: string;
 }> = ({ settings, update, getBadge, sectionBadge, presetOptions, selectorsDisabled, selectedProjectName, activeScope }) => {
   return (
-      <SectionCard title="Quality Assurance" watermark="QA" badge={sectionBadge}>
+      <SectionCard title="Quality Assurance" watermark="QA" badge={sectionBadge} icon={<ShieldCheck strokeWidth={2.4} />}>
         <Row
           label="Enable QA agent"
           description="Runs a senior QA pass after completion events, using full sprint context and continuing the current task session when fixes are required."

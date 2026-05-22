@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { Row, Toggle, SelectInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { FileText, Route } from "lucide-preact";
 import { QAPanel } from "./QAPanel.js";
 import type { ProjectSettings } from "../../../../types.js";
 import { AgentSelectAvatarIcon } from "../../agents/AgentSelectAvatarIcon.js";
@@ -137,7 +138,7 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Project Markdown Mirror" watermark="AGT" badge={getBadge("agents")}>
+      <SectionCard title="Project Markdown Mirror" watermark="AGT" badge={getBadge("agents")} icon={<FileText strokeWidth={2.4} />}>
         <Row
           label="Save agent markdown to project directory"
           description="When enabled, dashboard edits write a companion markdown file under `.code-ux/agents` for the selected project. Default and home agent files are never modified."
@@ -161,7 +162,7 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
         </Row>
       </SectionCard>
 
-      <SectionCard title="Agent Routing" watermark="RTE" badge={agentSectionBadge}>
+      <SectionCard title="Agent Routing" watermark="RTE" badge={agentSectionBadge} icon={<Route strokeWidth={2.4} />}>
         <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
           <div className="rounded-[1.35rem] border border-black/[0.06] bg-black/[0.02] p-4 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Coding tasks</div>

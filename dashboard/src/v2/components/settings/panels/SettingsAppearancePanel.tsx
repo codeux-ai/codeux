@@ -3,6 +3,7 @@ import { useState } from "preact/hooks";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
 import { PillChoiceGroup, SelectInput } from "../SettingsFormFields.js";
 import { SectionCard, Row, getFieldBadge } from "./SharedPanelComponents.js";
+import { Image, Monitor } from "lucide-preact";
 import { applyAppearanceSettings } from "../../../lib/apply-appearance.js";
 import type { BackgroundPattern } from "../../../../types.js";
 
@@ -20,7 +21,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
 
   return (
     <div className="flex flex-col gap-5">
-      <SectionCard title="Display Settings" watermark="UI">
+      <SectionCard title="Display Settings" watermark="UI" icon={<Monitor strokeWidth={2.4} />}>
         <Row
           label="Navigation Mode"
           description="Choose between a floating dock or a traditional sidebar."
@@ -98,7 +99,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
         </Row>
       </SectionCard>
 
-      <SectionCard title="Background" watermark="BG">
+      <SectionCard title="Background" watermark="BG" icon={<Image strokeWidth={2.4} />}>
         <Row
           label="Background Image"
           description="Upload a custom background image."
