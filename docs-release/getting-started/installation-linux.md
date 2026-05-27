@@ -1,95 +1,72 @@
 # Linux Installation Guide
 
-This guide provides step-by-step instructions for installing the application on Linux systems. You can install the application either by downloading the latest release via `git` or by using your system's package manager.
+This guide provides step-by-step instructions for installing Code UX (jules-agent-mcp) on Linux systems.
+
+For a high-level summary of the system architecture and goals, see the [Overview](../../README.md).
 
 ## Prerequisites
 
 Before proceeding, ensure your system meets the following requirements:
 
 - **Git:** Required to clone the repository or fetch recent releases.
-- **Curl:** Required for fetching installation scripts.
 - **Node.js:** Ensure Node.js (v18 or higher) is installed.
-- **Permissions:** You must have `sudo` privileges or appropriate write access to your chosen installation directory (e.g., `/usr/local/bin` or `/opt`).
+- **pnpm:** The project uses `pnpm` as its primary package manager. Install it via `npm install -g pnpm`.
+- **Permissions:** You must have appropriate read/write access to your chosen installation directory.
 
 ---
 
-## Option 1: Install via Git (Recommended)
+## Option 1: Install via NPM/PNPM (Recommended)
 
-This method ensures you are installing directly from the latest official release branch.
+Installing the package globally via your Node.js package manager is the recommended path to make the `jules-subagents` command available anywhere.
+
+```bash
+# Install globally via NPM
+npm install -g jules-subagents
+
+# Or using PNPM
+pnpm install -g jules-subagents
+```
+
+---
+
+## Option 2: Build from Source via Git
+
+This method ensures you are installing directly from the latest official source code, which is ideal if you want to contribute or run from source.
 
 ### 1. Clone the Release Repository
 
-Clone the latest release branch to your local machine:
+Clone the repository to your local machine:
 
 ```bash
-git clone --depth 1 --branch latest-release https://github.com/example/repo.git /opt/app-name
-cd /opt/app-name
+git clone https://github.com/numnx/jules-agent-mcp.git /opt/jules-agent-mcp
+cd /opt/jules-agent-mcp
 ```
 
-### 2. Set Execution Permissions
+### 2. Install Dependencies and Build
 
-Ensure the installation scripts and binaries have the correct execution permissions:
+Use `pnpm` to install dependencies and compile the source code:
 
 ```bash
-sudo chmod +x ./install.sh
-sudo chown -R $USER:$USER /opt/app-name
+pnpm install
+pnpm run build
 ```
 
-### 3. Run the Installation Script
+### 3. Global Link
 
-Execute the provided installation script to configure your environment:
-
-```bash
-./install.sh
-```
-
----
-
-## Option 2: Install via Package Manager
-
-You can also use your Linux distribution's package manager to install the application.
-
-### Debian / Ubuntu (APT)
+Link the package globally to use the CLI tool from any directory:
 
 ```bash
-# Add the official repository key
-curl -fsSL https://example.com/gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/app-name-keyring.gpg
-
-# Add the repository to your sources
-echo "deb [signed-by=/usr/share/keyrings/app-name-keyring.gpg] https://example.com/apt stable main" | sudo tee /etc/apt/sources.list.d/app-name.list > /dev/null
-
-# Update and install
-sudo apt update
-sudo apt install app-name
-```
-
-### Arch Linux (Pacman)
-
-```bash
-# Install via the Arch User Repository (AUR)
-git clone https://aur.archlinux.org/app-name.git
-cd app-name
-makepkg -si
-```
-
-### Fedora / RHEL (DNF)
-
-```bash
-# Add the official repository
-sudo dnf config-manager --add-repo https://example.com/rpm/app-name.repo
-
-# Install the package
-sudo dnf install app-name
+pnpm link --global
 ```
 
 ---
 
 ## Post-Installation Verification
 
-To verify that the installation was successful, check the application version:
+To verify that the installation was successful, check the application version or run a basic command to ensure the CLI is available:
 
 ```bash
-app-name --version
+jules-subagents --version
 ```
 
 If the command returns the expected version number, the installation is complete.
