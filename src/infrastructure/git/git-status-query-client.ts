@@ -37,8 +37,8 @@ export class GitStatusQueryClient {
     this.hostCli = createGitHostCli("github", this.runner, this.repoPath); // Default to github before setProvider is called
   }
 
-  setProvider(provider: GitProvider, hostDomain?: string | null, repoTarget?: string | null): void {
-    this.hostCli = createGitHostCli(provider, this.runner, this.repoPath, hostDomain, repoTarget);
+  setProvider(provider: GitProvider, hostDomain?: string | null, repoTarget?: string | null, preferApi = false): void {
+    this.hostCli = createGitHostCli(provider, this.runner, this.repoPath, hostDomain, repoTarget, preferApi);
   }
 
   private async run(command: string, args: string[], hostToken?: string): Promise<CommandResult> {

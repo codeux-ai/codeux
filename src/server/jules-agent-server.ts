@@ -29,6 +29,7 @@ import { ConnectionChatRepository } from "../repositories/connection-chat-reposi
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import { GitStatusService, type GitTrackingRequest } from "../services/git-status-service.js";
+import { defaultRunner } from "../infrastructure/git/git-status-query-client.js";
 import { loadExternalSettingsHints } from "../config/external-settings.js";
 import { InstructionService } from "../instructions/instruction-template-service.js";
 import { CoreToolHandler } from "../mcp/core-tool-handler.js";
@@ -707,7 +708,7 @@ export class JulesAgentServer {
   }
 
   private async fetchGitStatusForRepo(repoPath: string, cacheTtlMs?: number): Promise<GitTrackingStatus> {
-    const gitStatusService = new GitStatusService(repoPath);
+    const gitStatusService = new GitStatusService(repoPath, defaultRunner, true);
     const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     return await gitStatusService.getStatus(
       settings.git.githubMode,
@@ -769,7 +770,7 @@ export class JulesAgentServer {
     }
 
     try {
-      const gitStatusService = new GitStatusService(this.resolveGitStatusRepoPath());
+      const gitStatusService = new GitStatusService(this.resolveGitStatusRepoPath(), defaultRunner, true);
       return await gitStatusService.getStatus(
         "REMOTE",
         this.getEffectiveGithubToken(),
@@ -838,7 +839,7 @@ export class JulesAgentServer {
   }
 
   private async getCiStatusForScope(args: GetCiStatusForScopeArgs): Promise<GitTrackingStatus | null> {
-    const gitStatusService = new GitStatusService(args.repoPath);
+    const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true);
     try {
       const trackingRequest = {
         scope: args.scope,
@@ -864,7 +865,7 @@ export class JulesAgentServer {
   }
 
   private async autoMergeFeaturePr(args: AutoMergeFeaturePrArgs): Promise<AutoMergeFeaturePrResult> {
-    const gitStatusService = new GitStatusService(args.repoPath);
+    const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true);
     try {
       const result = await gitStatusService.mergePullRequest(args.prNumber, this.getEffectiveGithubToken());
       return result;
@@ -885,7 +886,7 @@ export class JulesAgentServer {
     title: string;
     body: string;
   }): Promise<{ created: boolean; prNumber: number | null; prUrl: string | null } | null> {
-    const gitStatusService = new GitStatusService(args.repoPath);
+    const gitStatusService = new GitStatusService(args.repoPath, defaultRunner, true);
     try {
       return await gitStatusService.resolveOrCreatePullRequest({
         baseBranch: args.defaultBranch,

@@ -2,6 +2,38 @@ import { CommandResult } from "../../shared/subprocess/command-runner.js";
 import { GitProvider } from "./repository-host-resolver.js";
 import { CommandRunner } from "./git-status-query-client.js";
 
+// ─── Shared helpers for API implementations ──────────────────────────────────
+
+const API_TIMEOUT_MS = 30_000;
+
+function apiOk(stdout: string): CommandResult {
+  return { ok: true, code: 0, stdout, stderr: "" };
+}
+
+function apiFail(stderr: string, code = 1): CommandResult {
+  return { ok: false, code, stdout: "", stderr };
+}
+
+async function apiFetch(url: string, init: RequestInit): Promise<{ ok: boolean; status: number; text: string }> {
+  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(API_TIMEOUT_MS) });
+  const text = await res.text();
+  return { ok: res.ok, status: res.status, text };
+}
+
+function githubMergeableState(state: string | null | undefined): string {
+  switch ((state ?? "").toLowerCase()) {
+    case "clean": return "CLEAN";
+    case "dirty": return "DIRTY";
+    case "blocked": return "BLOCKED";
+    case "unstable": return "UNSTABLE";
+    case "draft": return "DRAFT";
+    case "has_hooks": return "HAS_HOOKS";
+    default: return "UNKNOWN";
+  }
+}
+
+// ─── Interface ────────────────────────────────────────────────────────────────
+
 export interface GitHostCli {
   version(hostToken?: string): Promise<CommandResult>;
   authStatus(hostToken?: string): Promise<CommandResult>;
@@ -14,6 +46,8 @@ export interface GitHostCli {
   runViewLogFailed(runId: number, jobId: number, hostToken?: string): Promise<CommandResult>;
   prMerge(prNumber: number, hostToken?: string): Promise<CommandResult>;
 }
+
+// ─── GitHub CLI (gh binary) ───────────────────────────────────────────────────
 
 export class GithubHostCli implements GitHostCli {
   constructor(private readonly repoPath: string, private readonly runner: CommandRunner) {}
@@ -70,6 +104,322 @@ export class GithubHostCli implements GitHostCli {
     return this.run(["pr", "merge", String(prNumber), "--merge", "--delete-branch"], hostToken);
   }
 }
+
+// ─── GitHub REST API (no gh binary needed) ────────────────────────────────────
+
+export class GithubApiHostCli implements GitHostCli {
+  private readonly base = "https://api.github.com";
+
+  constructor(
+    private readonly owner: string,
+    private readonly repo: string,
+  ) {}
+
+  private ghHeaders(token: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+  }
+
+  private async get(path: string, token?: string): Promise<{ ok: boolean; status: number; text: string } | null> {
+    if (!token) return null;
+    try {
+      return await apiFetch(`${this.base}${path}`, { headers: this.ghHeaders(token) });
+    } catch {
+      return null;
+    }
+  }
+
+  private async post(path: string, body: unknown, token?: string): Promise<{ ok: boolean; status: number; text: string } | null> {
+    if (!token) return null;
+    try {
+      return await apiFetch(`${this.base}${path}`, {
+        method: "POST",
+        headers: { ...this.ghHeaders(token), "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  private async put(path: string, body: unknown, token?: string): Promise<{ ok: boolean; status: number; text: string } | null> {
+    if (!token) return null;
+    try {
+      return await apiFetch(`${this.base}${path}`, {
+        method: "PUT",
+        headers: { ...this.ghHeaders(token), "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  private async del(path: string, token?: string): Promise<void> {
+    if (!token) return;
+    try {
+      await apiFetch(`${this.base}${path}`, { method: "DELETE", headers: this.ghHeaders(token) });
+    } catch {
+      // best-effort
+    }
+  }
+
+  private noToken(): CommandResult {
+    return apiFail("GitHub API token required for API mode.");
+  }
+
+  private apiError(res: { ok: boolean; status: number; text: string } | null, fallback: string): CommandResult {
+    if (!res) return apiFail(fallback);
+    let message = `HTTP ${res.status}`;
+    try {
+      const err = JSON.parse(res.text) as Record<string, unknown>;
+      message = String(err.message ?? res.text);
+    } catch { /* use status */ }
+    return apiFail(message, res.status);
+  }
+
+  async version(hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get("/user", hostToken);
+    if (!res?.ok) return this.apiError(res, "GitHub API request failed.");
+    return apiOk("github-api-host-cli/1.0");
+  }
+
+  async authStatus(hostToken?: string): Promise<CommandResult> {
+    return this.version(hostToken);
+  }
+
+  async prListOpen(hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(`/repos/${this.owner}/${this.repo}/pulls?state=open&per_page=50`, hostToken);
+    if (!res?.ok) return this.apiError(res, "GitHub API request failed.");
+    let rawPrs: Record<string, unknown>[];
+    try { rawPrs = JSON.parse(res.text) as Record<string, unknown>[]; }
+    catch { return apiFail("Failed to parse GitHub PR list response."); }
+    const enriched = await this.enrichPrs(rawPrs, hostToken);
+    return apiOk(JSON.stringify(enriched));
+  }
+
+  private async enrichPrs(rawPrs: Record<string, unknown>[], token: string): Promise<unknown[]> {
+    const CONCURRENCY = 5;
+    const results: unknown[] = new Array(rawPrs.length);
+    let idx = 0;
+
+    const worker = async () => {
+      while (idx < rawPrs.length) {
+        const i = idx++;
+        const pr = rawPrs[i];
+        const prNum = pr.number as number;
+        const head = pr.head as Record<string, unknown> | undefined;
+        const base = pr.base as Record<string, unknown> | undefined;
+        const sha = typeof head?.sha === "string" ? head.sha : null;
+
+        const [checksRes, reviewsRes] = await Promise.all([
+          sha
+            ? this.get(`/repos/${this.owner}/${this.repo}/commits/${sha}/check-runs?per_page=100`, token)
+            : Promise.resolve(null),
+          this.get(`/repos/${this.owner}/${this.repo}/pulls/${prNum}/reviews`, token),
+        ]);
+
+        const statusCheckRollup: unknown[] = [];
+        if (checksRes?.ok) {
+          try {
+            const data = JSON.parse(checksRes.text) as Record<string, unknown>;
+            const runs = Array.isArray(data.check_runs) ? data.check_runs as Record<string, unknown>[] : [];
+            for (const run of runs) {
+              statusCheckRollup.push({ name: run.name ?? "check", status: run.status ?? "UNKNOWN", conclusion: run.conclusion ?? null });
+            }
+          } catch { /* leave empty */ }
+        }
+
+        let reviewDecision: string | null = null;
+        if (reviewsRes?.ok) {
+          try {
+            const reviews = JSON.parse(reviewsRes.text) as Array<Record<string, unknown>>;
+            const latestByUser = new Map<string, string>();
+            for (const r of reviews) {
+              const login = (r.user as Record<string, unknown> | undefined)?.login;
+              if (typeof login === "string" && typeof r.state === "string" && r.state !== "DISMISSED") {
+                latestByUser.set(login, r.state);
+              }
+            }
+            const states = Array.from(latestByUser.values());
+            if (states.some((s) => s === "CHANGES_REQUESTED")) reviewDecision = "CHANGES_REQUESTED";
+            else if (states.length > 0 && states.every((s) => s === "APPROVED")) reviewDecision = "APPROVED";
+          } catch { /* leave null */ }
+        }
+
+        results[i] = {
+          number: prNum,
+          title: pr.title ?? "Untitled PR",
+          url: pr.html_url ?? "",
+          state: typeof pr.state === "string" ? pr.state.toUpperCase() : "OPEN",
+          isDraft: pr.draft === true,
+          headRefName: typeof head?.ref === "string" ? head.ref : null,
+          baseRefName: typeof base?.ref === "string" ? base.ref : null,
+          mergeStateStatus: githubMergeableState(typeof pr.mergeable_state === "string" ? pr.mergeable_state : null),
+          reviewDecision,
+          updatedAt: pr.updated_at ?? null,
+          comments: ((pr.comments as number | undefined) ?? 0) + ((pr.review_comments as number | undefined) ?? 0),
+          statusCheckRollup,
+        };
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, rawPrs.length) }, () => worker()));
+    return results;
+  }
+
+  async prListOpenMatching(baseBranch: string, headBranch: string, hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const head = encodeURIComponent(`${this.owner}:${headBranch}`);
+    const base = encodeURIComponent(baseBranch);
+    const res = await this.get(
+      `/repos/${this.owner}/${this.repo}/pulls?state=open&base=${base}&head=${head}&per_page=1`,
+      hostToken,
+    );
+    if (!res?.ok) return this.apiError(res, "GitHub API request failed.");
+    try {
+      const prs = JSON.parse(res.text) as Record<string, unknown>[];
+      return apiOk(JSON.stringify(prs.map((pr) => ({ number: pr.number, url: pr.html_url }))));
+    } catch {
+      return apiFail("Failed to parse GitHub PR matching response.");
+    }
+  }
+
+  async prCreate(baseBranch: string, headBranch: string, title: string, body: string, hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.post(
+      `/repos/${this.owner}/${this.repo}/pulls`,
+      { title, body, head: headBranch, base: baseBranch },
+      hostToken,
+    );
+    if (!res?.ok) return this.apiError(res, "GitHub API request failed.");
+    try {
+      const pr = JSON.parse(res.text) as Record<string, unknown>;
+      return apiOk(String(pr.html_url ?? ""));
+    } catch {
+      return apiFail("Failed to parse GitHub PR create response.");
+    }
+  }
+
+  async runList(hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(`/repos/${this.owner}/${this.repo}/actions/runs?per_page=50`, hostToken);
+    if (!res?.ok) return this.apiError(res, "GitHub API request failed.");
+    try {
+      const data = JSON.parse(res.text) as Record<string, unknown>;
+      const runs = Array.isArray(data.workflow_runs) ? data.workflow_runs as Record<string, unknown>[] : [];
+      const mapped = runs.map((run) => ({
+        databaseId: run.id,
+        name: run.name ?? "workflow",
+        workflowName: run.name ?? null,
+        status: run.status ?? "UNKNOWN",
+        conclusion: run.conclusion ?? null,
+        event: run.event ?? null,
+        headBranch: run.head_branch ?? null,
+        url: run.html_url ?? "",
+        updatedAt: run.updated_at ?? null,
+      }));
+      return apiOk(JSON.stringify(mapped));
+    } catch {
+      return apiFail("Failed to parse GitHub Actions runs response.");
+    }
+  }
+
+  async prListMerged(hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(`/repos/${this.owner}/${this.repo}/pulls?state=closed&per_page=100`, hostToken);
+    if (!res?.ok) return this.apiError(res, "GitHub API request failed.");
+    try {
+      const prs = JSON.parse(res.text) as Record<string, unknown>[];
+      const mapped = prs
+        .filter((pr) => pr.merged_at != null)
+        .map((pr) => {
+          const head = pr.head as Record<string, unknown> | undefined;
+          const base = pr.base as Record<string, unknown> | undefined;
+          const mergedBy = pr.merged_by as Record<string, unknown> | undefined;
+          return {
+            number: pr.number,
+            title: pr.title ?? "Merged PR",
+            url: pr.html_url ?? "",
+            headRefName: typeof head?.ref === "string" ? head.ref : null,
+            baseRefName: typeof base?.ref === "string" ? base.ref : null,
+            mergedAt: pr.merged_at ?? null,
+            mergedBy: mergedBy ? { login: mergedBy.login ?? null } : null,
+          };
+        });
+      return apiOk(JSON.stringify(mapped));
+    } catch {
+      return apiFail("Failed to parse GitHub merged PRs response.");
+    }
+  }
+
+  async runViewJobs(runId: number, hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(`/repos/${this.owner}/${this.repo}/actions/runs/${runId}/jobs`, hostToken);
+    if (!res?.ok) return this.apiError(res, "GitHub API request failed.");
+    try {
+      const data = JSON.parse(res.text) as Record<string, unknown>;
+      const jobs = Array.isArray(data.jobs) ? data.jobs as Record<string, unknown>[] : [];
+      const mapped = jobs.map((job) => ({
+        id: job.id,
+        databaseId: job.id,
+        name: job.name ?? "job",
+        status: job.status ?? "UNKNOWN",
+        conclusion: job.conclusion ?? null,
+        steps: Array.isArray(job.steps) ? job.steps : [],
+      }));
+      return apiOk(JSON.stringify({ jobs: mapped }));
+    } catch {
+      return apiFail("Failed to parse GitHub Actions jobs response.");
+    }
+  }
+
+  async runViewLogFailed(_runId: number, jobId: number, hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(`/repos/${this.owner}/${this.repo}/actions/jobs/${jobId}/logs`, hostToken);
+    if (!res?.ok) return this.apiError(res, "GitHub API request failed.");
+    return apiOk(res.text);
+  }
+
+  async prMerge(prNumber: number, hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+
+    // Fetch head branch for deletion after merge
+    let headBranch: string | null = null;
+    const prRes = await this.get(`/repos/${this.owner}/${this.repo}/pulls/${prNumber}`, hostToken);
+    if (prRes?.ok) {
+      try {
+        const pr = JSON.parse(prRes.text) as Record<string, unknown>;
+        const head = pr.head as Record<string, unknown> | undefined;
+        if (typeof head?.ref === "string") headBranch = head.ref;
+      } catch { /* proceed without branch delete */ }
+    }
+
+    const mergeRes = await this.put(
+      `/repos/${this.owner}/${this.repo}/pulls/${prNumber}/merge`,
+      { merge_method: "merge" },
+      hostToken,
+    );
+    if (!mergeRes?.ok) return this.apiError(mergeRes, "GitHub API request failed.");
+
+    // Best-effort branch deletion
+    if (headBranch) {
+      await this.del(
+        `/repos/${this.owner}/${this.repo}/git/refs/heads/${encodeURIComponent(headBranch)}`,
+        hostToken,
+      );
+    }
+
+    return apiOk("Pull request successfully merged.");
+  }
+}
+
+// ─── GitLab CLI (glab binary) ─────────────────────────────────────────────────
 
 export class GitlabHostCli implements GitHostCli {
   constructor(
@@ -190,6 +540,7 @@ export class GitlabHostCli implements GitHostCli {
       const jobs = parsed.jobs || [];
       const mappedJobs = jobs.map((j: any) => ({
         id: j.id,
+        databaseId: j.id,
         name: j.name,
         status: ["running", "pending"].includes(j.status) ? "in_progress" : "completed",
         conclusion: j.status === "success" ? "success" : j.status === "failed" ? "failure" : "neutral"
@@ -209,6 +560,230 @@ export class GitlabHostCli implements GitHostCli {
   }
 }
 
+// ─── GitLab REST API (no glab binary needed) ──────────────────────────────────
+
+export class GitlabApiHostCli implements GitHostCli {
+  private readonly base: string;
+  private readonly encodedProject: string;
+
+  constructor(hostDomain: string | null, repoTarget: string) {
+    this.base = `https://${hostDomain ?? "gitlab.com"}/api/v4`;
+    this.encodedProject = encodeURIComponent(repoTarget);
+  }
+
+  private glHeaders(token: string): Record<string, string> {
+    return { "PRIVATE-TOKEN": token };
+  }
+
+  private async request(
+    method: string,
+    path: string,
+    token?: string,
+    body?: unknown,
+  ): Promise<{ ok: boolean; status: number; text: string } | null> {
+    if (!token) return null;
+    try {
+      const headers: Record<string, string> = {
+        ...this.glHeaders(token),
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      };
+      return await apiFetch(`${this.base}${path}`, {
+        method,
+        headers,
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  private get(path: string, token?: string) { return this.request("GET", path, token); }
+  private post(path: string, body: unknown, token?: string) { return this.request("POST", path, token, body); }
+  private put(path: string, body: unknown, token?: string) { return this.request("PUT", path, token, body); }
+
+  private noToken(): CommandResult {
+    return apiFail("GitLab API token required for API mode.");
+  }
+
+  private apiError(res: { ok: boolean; status: number; text: string } | null, fallback: string): CommandResult {
+    if (!res) return apiFail(fallback);
+    let message = `HTTP ${res.status}`;
+    try {
+      const err = JSON.parse(res.text) as Record<string, unknown>;
+      const raw = Array.isArray(err.message)
+        ? (err.message as string[]).join(", ")
+        : String(err.message ?? res.text);
+      message = raw;
+    } catch { /* use status */ }
+    return apiFail(message, res.status);
+  }
+
+  async version(hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get("/user", hostToken);
+    if (!res?.ok) return this.apiError(res, "GitLab API request failed.");
+    return apiOk("gitlab-api-host-cli/1.0");
+  }
+
+  async authStatus(hostToken?: string): Promise<CommandResult> {
+    return this.version(hostToken);
+  }
+
+  async prListOpen(hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(`/projects/${this.encodedProject}/merge_requests?state=opened&per_page=50`, hostToken);
+    if (!res?.ok) return this.apiError(res, "GitLab API request failed.");
+    try {
+      const mrs = JSON.parse(res.text) as Record<string, unknown>[];
+      const mapped = mrs.map((item) => ({
+        number: item.iid,
+        title: item.title ?? "Untitled MR",
+        url: item.web_url ?? "",
+        state: "OPEN",
+        isDraft: item.draft === true || item.work_in_progress === true,
+        headRefName: item.source_branch ?? null,
+        baseRefName: item.target_branch ?? null,
+        mergeStateStatus: item.has_conflicts === true
+          ? "DIRTY"
+          : item.detailed_merge_status === "mergeable"
+            ? "CLEAN"
+            : "UNKNOWN",
+        reviewDecision: null,
+        updatedAt: item.updated_at ?? null,
+        comments: typeof item.user_notes_count === "number" ? item.user_notes_count : 0,
+        statusCheckRollup: [],
+      }));
+      return apiOk(JSON.stringify(mapped));
+    } catch {
+      return apiFail("Failed to parse GitLab MR list response.");
+    }
+  }
+
+  async prListOpenMatching(baseBranch: string, headBranch: string, hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(
+      `/projects/${this.encodedProject}/merge_requests?state=opened&source_branch=${encodeURIComponent(headBranch)}&target_branch=${encodeURIComponent(baseBranch)}&per_page=1`,
+      hostToken,
+    );
+    if (!res?.ok) return this.apiError(res, "GitLab API request failed.");
+    try {
+      const mrs = JSON.parse(res.text) as Record<string, unknown>[];
+      return apiOk(JSON.stringify(mrs.map((item) => ({ number: item.iid, url: item.web_url }))));
+    } catch {
+      return apiFail("Failed to parse GitLab MR matching response.");
+    }
+  }
+
+  async prCreate(baseBranch: string, headBranch: string, title: string, body: string, hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.post(
+      `/projects/${this.encodedProject}/merge_requests`,
+      { source_branch: headBranch, target_branch: baseBranch, title, description: body },
+      hostToken,
+    );
+    if (!res?.ok) return this.apiError(res, "GitLab API request failed.");
+    try {
+      const mr = JSON.parse(res.text) as Record<string, unknown>;
+      return apiOk(String(mr.web_url ?? ""));
+    } catch {
+      return apiFail("Failed to parse GitLab MR create response.");
+    }
+  }
+
+  async runList(hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(`/projects/${this.encodedProject}/pipelines?per_page=50`, hostToken);
+    if (!res?.ok) return this.apiError(res, "GitLab API request failed.");
+    try {
+      const pipelines = JSON.parse(res.text) as Record<string, unknown>[];
+      const mapped = pipelines.map((item) => {
+        const status = typeof item.status === "string" ? item.status : "";
+        return {
+          databaseId: item.id,
+          name: typeof item.name === "string" ? item.name : "pipeline",
+          workflowName: null,
+          status: ["running", "pending"].includes(status) ? "in_progress" : "completed",
+          conclusion: status === "success" ? "success" : status === "failed" ? "failure" : "neutral",
+          event: item.source ?? null,
+          headBranch: item.ref ?? null,
+          url: item.web_url ?? "",
+          updatedAt: item.updated_at ?? null,
+        };
+      });
+      return apiOk(JSON.stringify(mapped));
+    } catch {
+      return apiFail("Failed to parse GitLab pipeline list response.");
+    }
+  }
+
+  async prListMerged(hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(`/projects/${this.encodedProject}/merge_requests?state=merged&per_page=100`, hostToken);
+    if (!res?.ok) return this.apiError(res, "GitLab API request failed.");
+    try {
+      const mrs = JSON.parse(res.text) as Record<string, unknown>[];
+      const mapped = mrs.map((item) => {
+        const mergedBy = item.merged_by as Record<string, unknown> | undefined;
+        return {
+          number: item.iid,
+          title: item.title ?? "Merged MR",
+          url: item.web_url ?? "",
+          headRefName: item.source_branch ?? null,
+          baseRefName: item.target_branch ?? null,
+          mergedAt: item.merged_at ?? null,
+          mergedBy: mergedBy ? { login: mergedBy.username ?? null } : null,
+        };
+      });
+      return apiOk(JSON.stringify(mapped));
+    } catch {
+      return apiFail("Failed to parse GitLab merged MRs response.");
+    }
+  }
+
+  async runViewJobs(runId: number, hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(`/projects/${this.encodedProject}/pipelines/${runId}/jobs`, hostToken);
+    if (!res?.ok) return this.apiError(res, "GitLab API request failed.");
+    try {
+      const jobs = JSON.parse(res.text) as Record<string, unknown>[];
+      const mapped = jobs.map((job) => {
+        const status = typeof job.status === "string" ? job.status : "";
+        return {
+          id: job.id,
+          databaseId: job.id,
+          name: job.name ?? "job",
+          status: ["running", "pending"].includes(status) ? "in_progress" : "completed",
+          conclusion: status === "success" ? "success" : status === "failed" ? "failure" : "neutral",
+          steps: [],
+        };
+      });
+      return apiOk(JSON.stringify({ jobs: mapped }));
+    } catch {
+      return apiFail("Failed to parse GitLab pipeline jobs response.");
+    }
+  }
+
+  async runViewLogFailed(_runId: number, jobId: number, hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.get(`/projects/${this.encodedProject}/jobs/${jobId}/trace`, hostToken);
+    if (!res?.ok) return this.apiError(res, "GitLab API request failed.");
+    return apiOk(res.text);
+  }
+
+  async prMerge(prNumber: number, hostToken?: string): Promise<CommandResult> {
+    if (!hostToken) return this.noToken();
+    const res = await this.put(
+      `/projects/${this.encodedProject}/merge_requests/${prNumber}/merge`,
+      { should_remove_source_branch: true, squash: true },
+      hostToken,
+    );
+    if (!res?.ok) return this.apiError(res, "GitLab API request failed.");
+    return apiOk("Merge request successfully merged.");
+  }
+}
+
+// ─── Local (no-op) ────────────────────────────────────────────────────────────
+
 export class LocalHostCli implements GitHostCli {
   private failed(): Promise<CommandResult> {
     return Promise.resolve({ stdout: "", stderr: "Host CLI unavailable for local provider", code: 1, ok: false });
@@ -225,12 +800,32 @@ export class LocalHostCli implements GitHostCli {
   prMerge() { return this.failed(); }
 }
 
-export function createGitHostCli(provider: GitProvider, runner: CommandRunner, repoPath: string, hostDomain: string | null = null, repoTarget: string | null = null): GitHostCli {
+// ─── Factory ──────────────────────────────────────────────────────────────────
+
+export function createGitHostCli(
+  provider: GitProvider,
+  runner: CommandRunner,
+  repoPath: string,
+  hostDomain: string | null = null,
+  repoTarget: string | null = null,
+  preferApi = false,
+): GitHostCli {
   switch (provider) {
-    case "github":
+    case "github": {
+      if (preferApi && repoTarget) {
+        const slashIdx = repoTarget.indexOf("/");
+        if (slashIdx > 0) {
+          return new GithubApiHostCli(repoTarget.slice(0, slashIdx), repoTarget.slice(slashIdx + 1));
+        }
+      }
       return new GithubHostCli(repoPath, runner);
-    case "gitlab":
+    }
+    case "gitlab": {
+      if (preferApi && repoTarget) {
+        return new GitlabApiHostCli(hostDomain, repoTarget);
+      }
       return new GitlabHostCli(repoPath, runner, hostDomain, repoTarget);
+    }
     default:
       return new LocalHostCli();
   }
