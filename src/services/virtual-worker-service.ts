@@ -553,7 +553,22 @@ export class VirtualWorkerService {
     const payload = item.payload || {};
     const repoPath = this.readRequiredString(payload.repoPath, "repoPath");
     const conflictingBranches = this.asRecord(payload.conflictingBranches);
-    const sourceBranch = this.readRequiredString(conflictingBranches?.source ?? payload.workerBranch, "sourceBranch");
+    const sourceBranchRaw = conflictingBranches?.source ?? payload.workerBranch;
+    if (typeof sourceBranchRaw !== "string" || !sourceBranchRaw.trim()) {
+      this.escalateAttentionToHuman(
+        workerEndpointId,
+        item,
+        [
+          "Virtual worker cannot resolve merge conflict: source branch is not recorded in the attention payload.",
+          "This can happen when the Jules session did not return a workerBranch and gitStatus was unavailable when the conflict was detected.",
+          "Please resolve the conflict manually or re-trigger the sprint cycle once the GitHub API is reachable.",
+          "",
+          item.summaryMarkdown.trim(),
+        ].join("\n"),
+      );
+      return;
+    }
+    const sourceBranch = sourceBranchRaw.trim();
     const targetBranch = this.readRequiredString(conflictingBranches?.target ?? payload.featureBranch, "targetBranch");
     const sessionId = `virtual-merge-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);

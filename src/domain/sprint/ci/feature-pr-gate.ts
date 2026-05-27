@@ -154,6 +154,20 @@ export class FeaturePrGateService {
       const pr = matchPrForTask(task, context.gitStatus as GitTrackingStatus);
       const mergedPr = matchMergedPrForTask(task, context.gitStatus as GitTrackingStatus);
 
+      // Jules sessions don't include workerBranch in their API output, so task_runs.worker_branch
+      // can be null even when the PR exists. Backfill it the first time gitStatus surfaces the PR's
+      // headRefName so subsequent cycles can find the branch without needing gitStatus.
+      if (!workerBranch && context.executionRepository && context.sprintRunId && task.record_id) {
+        const headRef = pr?.headRefName || mergedPr?.headRefName;
+        if (headRef) {
+          const taskRun = context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId);
+          if (taskRun && !taskRun.workerBranch) {
+            context.executionRepository.updateTaskRun(taskRun.id, { workerBranch: headRef });
+          }
+          task.worker_branch = headRef;
+        }
+      }
+
       if (mergedPr) {
         task.status = "COMPLETED";
         task.is_merged = true;
