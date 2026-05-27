@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, toErrorResponse, syncRoute, requireTrimmedString, parseTrimmedString } from "./route-utils.js";
-import type { CreateProjectInput, UpdateProjectInput } from "../contracts/project-management-types.js";
+import type { CreateProjectInput, ProjectSetupRequestInput, UpdateProjectInput } from "../contracts/project-management-types.js";
 import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.js";
 
 export function registerProjectRoutes(router: Express, deps: DashboardDependencies): void {
@@ -11,9 +11,37 @@ export function registerProjectRoutes(router: Express, deps: DashboardDependenci
 
   router.post("/api/projects", asyncRoute(async (req, res) => {
     try {
-      res.status(201).json(await deps.createProject(req.body as CreateProjectInput));
+      const input = req.body as CreateProjectInput;
+      const project = await deps.createProject(input);
+      if (input.setup?.enabled === true && deps.setupProject) {
+        const setup = await deps.setupProject(project.id, input.setup);
+        res.status(201).json({ ...project, setup });
+        return;
+      }
+      res.status(201).json(project);
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to create project"));
+    }
+  }));
+
+  router.post("/api/projects/:projectId/setup", asyncRoute(async (req, res) => {
+    try {
+      if (!deps.setupProject) {
+        res.status(501).json({ error: "Project setup service is not enabled." });
+        return;
+      }
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      if (req.body?.background === true) {
+        if (!deps.startProjectSetup) {
+          res.status(501).json({ error: "Background project setup is not enabled." });
+          return;
+        }
+        res.status(202).json(await deps.startProjectSetup(projectId, req.body as ProjectSetupRequestInput));
+        return;
+      }
+      res.json(await deps.setupProject(projectId, req.body as ProjectSetupRequestInput));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to setup project"));
     }
   }));
 

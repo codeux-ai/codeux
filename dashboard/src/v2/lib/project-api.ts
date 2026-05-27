@@ -9,6 +9,9 @@ import type {
   PlanSprintOptions,
   ProjectCollectionResponse,
   ProjectSummary,
+  ProjectSetupRequestInput,
+  ProjectSetupResult,
+  ProjectSetupStartResult,
   SprintCollectionResponse,
   SprintMarkdownExportBundle,
   SprintMarkdownImportInput,
@@ -60,6 +63,28 @@ export const createProject = async (input: CreateProjectInput): Promise<ProjectS
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+  });
+};
+
+export const setupProject = async (
+  projectId: string,
+  input: ProjectSetupRequestInput,
+): Promise<ProjectSetupResult> => {
+  return fetchJson<ProjectSetupResult>(`/api/projects/${encodeURIComponent(projectId)}/setup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+};
+
+export const startProjectSetup = async (
+  projectId: string,
+  input: ProjectSetupRequestInput,
+): Promise<ProjectSetupStartResult> => {
+  return fetchJson<ProjectSetupStartResult>(`/api/projects/${encodeURIComponent(projectId)}/setup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, background: true }),
   });
 };
 

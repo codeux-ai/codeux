@@ -27,6 +27,10 @@ Project management:
   - Lists projects plus selected project id, selected sprint id, and aggregate counts
 - `POST /api/projects`
   - Creates a project (`local` or `git`)
+  - May include `setup.enabled: true` with setup options to run the Project Setup Agent immediately after creation
+- `POST /api/projects/:projectId/setup`
+  - Runs the Project Setup Agent for an existing project and applies selected setup artifacts (`agents`, `quicksprints`, `previewScript`, `ci`)
+  - With `background: true`, returns `202` plus `invocationId` immediately so the dashboard can track the run in the invocation rail while setup continues server-side
 - `PATCH /api/projects/:projectId`
   - Updates project metadata
 - `DELETE /api/projects/:projectId`
@@ -187,6 +191,9 @@ Legacy runtime:
 - The `Add Project` dialog now keeps keyboard focus inside the active form field while typing, and its initial focus respects the form's `autofocus` input instead of jumping to the header close button
 - The Projects page `Add Project` placeholder card uses the same full-height card footprint and internal padding as project cards, and the add dialog fields use rounded field surfaces with amber focus states instead of bare underline inputs; the dialog also constrains itself to the viewport on shorter screens
 - The `Add Project` dialog now has a wider desktop layout, keeps a stable Git-form-height floor while switching source types, and exposes the inline directory browser on both local project paths and optional Git clone destination paths, with home, refresh, parent-directory navigation, child-directory traversal, and an explicit use-current-folder action
+- The `Add Project` dialog preselects Project Setup Agent initialization. When enabled, creation advances to a setup scope step where operators choose Agents, Quicksprint Templates, Preview Container Script, and CI before the backend creates repository-specific artifacts.
+- Existing project cards expose a Project Setup Agent action that opens the same setup scope for later initialization or regeneration. See [Project Initialization](./project-initialization.md).
+- Project setup runs display immediate toast feedback, an `Initializing` project-card state, and direct `Open invocation` actions while the background setup invocation is running and after it finishes.
 - Git URL projects are cloned into a local checkout before the project record is created. When the optional clone directory is left empty, Code UX uses `~/.code-ux/projects/<repo-name>` so Docker workspaces always seed from a real repository root instead of a relative placeholder path.
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown plus GitHub/GitLab/Jira issue import capabilities, plus markdown export controls. See [Sprint Imports](./sprint-imports.md).

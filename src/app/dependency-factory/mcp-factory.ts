@@ -99,6 +99,7 @@ export function createMcpDependencies(
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
     planningAgentService: dashboardDeps.planningAgentService,
+    projectSetupService: dashboardDeps.projectSetupService,
     sprintIssueService: coreDeps.sprintIssueService,
   });
 

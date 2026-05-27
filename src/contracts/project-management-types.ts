@@ -164,6 +164,7 @@ export interface CreateProjectInput {
   sourceType: ProjectSourceType;
   sourceRef: string;
   cloneDir?: string;
+  setup?: ProjectSetupRequestInput;
   defaultBranch?: string;
   featureBranchPrefix?: string;
   status?: ProjectStatus;
@@ -232,6 +233,71 @@ export interface PlanSprintOptions {
   planningAgentPresetId?: string;
   quicksprintTemplateId?: string;
   overrides?: PlanningOverrides;
+}
+
+export interface ProjectSetupOptions {
+  agents: boolean;
+  quicksprints: boolean;
+  previewScript: boolean;
+  ci: boolean;
+}
+
+export interface ProjectSetupRequestInput {
+  enabled?: boolean;
+  options?: Partial<ProjectSetupOptions>;
+  clientRequestId?: string;
+}
+
+export interface ProjectSetupAgentArtifact {
+  name: string;
+  description: string;
+  instructionMarkdown: string;
+  labels?: string[];
+}
+
+export interface ProjectSetupQuicksprintArtifact {
+  name: string;
+  description: string;
+  icon?: string;
+  category?: string;
+  categoryColor?: string;
+  agentInstructionMarkdown: string;
+  defaultTaskCount?: number;
+}
+
+export interface ProjectSetupCiArtifact {
+  provider: "github" | "gitlab";
+  path: string;
+  content: string;
+}
+
+export interface ProjectSetupArtifactPayload {
+  summary: string;
+  agents?: ProjectSetupAgentArtifact[];
+  quicksprints?: ProjectSetupQuicksprintArtifact[];
+  previewScript?: {
+    path?: string;
+    content: string;
+  } | null;
+  ci?: ProjectSetupCiArtifact[];
+}
+
+export interface ProjectSetupResult {
+  ok: true;
+  projectId: string;
+  invocationId: string;
+  agentId: string;
+  summary: string;
+  createdAgentIds: string[];
+  createdQuicksprintTemplateIds: string[];
+  writtenFiles: string[];
+}
+
+export interface ProjectSetupStartResult {
+  accepted: true;
+  projectId: string;
+  invocationId: string;
+  agentId: string;
 }
 
 export interface CreateTaskInput {

@@ -42,6 +42,7 @@ import type { DashboardRealtimeService } from "../../services/dashboard-realtime
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
 import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
+import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
@@ -77,6 +78,7 @@ export interface BootDashboardDeps {
   executionControlService: ExecutionControlService;
   planningAgentService: PlanningAgentService;
   quicksprintService: QuicksprintService;
+  projectSetupService: ProjectSetupService;
   schedulerService: SchedulerService;
   sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
@@ -541,6 +543,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       return result;
     },
     quicksprintService: deps.quicksprintService,
+    setupProject: (projectId, input, signal) => deps.projectSetupService.setupProject(projectId, input, signal),
+    startProjectSetup: (projectId, input) => deps.projectSetupService.startProjectSetup(projectId, input),
     schedulerService: deps.schedulerService,
     sprintIssueService: deps.sprintIssueService,
     realtimeService: deps.dashboardRealtimeService,

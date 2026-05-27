@@ -12,10 +12,11 @@ export interface ManagementRequestEnvelope {
 export interface ManageCodeUxArgs extends ManagementRequestEnvelope {}
 
 export interface ManageProjectsArgs {
-  action: "list" | "get" | "create" | "update" | "select" | "delete";
+  action: "list" | "get" | "create" | "update" | "select" | "setup" | "delete";
   projectId?: string;
   name?: string;
   description?: string;
+  setup?: Record<string, unknown>;
   approval?: ManagementApproval;
 }
 
