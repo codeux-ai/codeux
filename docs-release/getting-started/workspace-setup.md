@@ -1,33 +1,25 @@
 # Workspace Setup
 
 ## Purpose and scope
-Provide a step-by-step guide for workspace setup to ensure a successful onboarding experience. This guide covers the essential steps for configuring a local environment for development.
+Provide a step-by-step guide for workspace setup to ensure a successful onboarding experience. This guide covers the essential environment configuration steps needed before running the application locally.
 
 ## Prerequisites
-- Node.js 20+
+- Node.js 18+
 - pnpm
 - Git
 - Access to the target repository
-- A valid Jules API key (if working with MCP or sprint orchestration features)
+- A valid Jules API key (required for MCP and orchestration features)
 
-## Setup Steps
-1. Clone the repository to your local machine using `git clone`.
-2. Navigate into the cloned directory.
-3. Install dependencies by running `pnpm install`.
-4. Configure your local environment variables by copying `.env.example` to `.env` and adding your `JULES_API_KEY` and any other required secrets.
-5. Build the project using `pnpm run build`.
-6. Start the local development server with `pnpm run dev`.
+## Steps
+1. Clone the repository using `git clone` and navigate into the directory.
+2. Install dependencies by running `pnpm install`.
+3. Copy `.env.example` to `.env` in the root directory.
+4. Configure your API key. You can do this by setting `JULES_API_KEY` in the `.env` file, passing it via the `--api-key` CLI argument, or adding it to `.jules-subagents/settings.json`.
+5. (Optional) If port 4444 is already in use on your machine, configure a custom port by setting `DASHBOARD_PORT=4445` in your `.env` file.
+6. Verify your setup by running `pnpm run dev` and confirming the server starts without configuration errors.
 
 ## Expected Result
-The repository is successfully cloned, dependencies are installed without errors, the build passes, and the local development server starts successfully and is accessible in a web browser (usually at `http://localhost:4444`).
-
-## Source files involved
-- `.env.example`
-- `package.json`
-- `pnpm-lock.yaml`
-
-## Data flow or behavior summary
-The setup process prepares the local filesystem, pulls down required package dependencies, builds the application using the TypeScript compiler and Vite, and starts the development server instance to accept local requests.
+Dependencies install correctly, the `.env` file contains your Jules API key, any required port overrides are set, and running `pnpm run dev` successfully launches the local development server (typically available at `http://localhost:4444` unless overridden).
 
 ## Configuration and defaults
 - The default package manager is `pnpm`.
@@ -35,9 +27,18 @@ The setup process prepares the local filesystem, pulls down required package dep
 - Configuration values can be overridden via `.env` or system settings depending on the project setup.
 
 ## Failure cases and troubleshooting notes
-- If dependencies fail to install, ensure `pnpm` is installed and you are using Node 20+.
-- If the build fails with TypeScript errors, try running `pnpm run clean` (if available) or manually deleting `.cache` directories before rebuilding.
-- If the development server fails to start due to port conflicts, configure `DASHBOARD_PORT` in your `.env` file to an open port.
+- If dependencies fail to install, ensure `pnpm` is installed and you are using Node 18+.
+- If the development server fails to start due to port conflicts, configure `DASHBOARD_PORT` in your `.env` file to an open port (e.g., 4445).
+- If you encounter a `Jules API Key is missing` error on startup, verify that `JULES_API_KEY` is correctly set in your `.env` file or passed via CLI argument.
 
 ## Related links
-- [Quickstart](./quickstart.md)
+- [Overview](./overview.md)
+
+## Technical Reference
+### Source files involved
+- `.env.example`
+- `package.json`
+- `pnpm-lock.yaml`
+
+### Data flow or behavior summary
+The setup process prepares the local filesystem, pulls down required package dependencies, and establishes the runtime environment configuration needed for the Vite development server and Node backend to operate correctly.
