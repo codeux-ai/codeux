@@ -283,7 +283,7 @@ QA merge-gate notes:
 - Docker runtime config:
   - `containerImage`
   - `containerSetupScriptPath` (optional; when set to a relative path, runtime checks both sprint repo root and current server working directory)
-    - if empty, falls back to `.code-ux/container/setup.sh` in repo root, then home directory, then the bundled Code UX default script
+    - if empty, Code UX first seeds missing bundled defaults into `~/.code-ux`, then falls back to `.code-ux/container/setup.sh` in repo root, then home directory, then the bundled Code UX default script
   - `containerCacheSetupScriptImage` (default `false`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
     - cache misses fall back to the current per-run setup script path if the image build fails
@@ -326,6 +326,7 @@ Preview runtime notes:
   - mirrored filenames use lowercase underscore-safe slugs such as `planning_agent.md`
   - clarification auto-answer can read project-local `project_manager.md` as the editable instruction source for worker-routed Jules clarification replies
   - default/home markdown sources are never modified by dashboard edits; Code UX creates a project-level override file instead
+  - when bundled defaults are available but missing from `~/.code-ux`, Code UX installs the base agent files into the user directory without overwriting existing files
 
 `workers` contains:
 - `executionMode` (default `VIRTUAL`)
@@ -384,6 +385,7 @@ Container execution notes:
 
 Repository demo script:
 - `.code-ux/container/setup.sh` is included as a baseline bootstrap script.
+- Packaged desktop installs also ship this script as a default asset. On first use, Code UX copies it to `~/.code-ux/container/setup.sh` when that file does not already exist, so Docker can mount a normal user-directory script instead of relying on a repo checkout.
 - It verifies `npm`, ensures `git` + `gh`, installs `pnpm` when needed, and leaves provider CLI installation to the runtime's provider-specific fallback.
 - `npm` refresh is now opt-in via `CODE_UX_REFRESH_NPM=1` instead of happening on every container start.
 - Playwright bootstrap is now opt-in via `CODE_UX_INSTALL_PLAYWRIGHT=1` instead of downloading Chromium during every fresh container bootstrap.

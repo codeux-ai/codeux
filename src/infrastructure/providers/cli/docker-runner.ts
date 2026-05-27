@@ -20,6 +20,7 @@ import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.
 import { DockerSetupImageCache } from "./docker-setup-image-cache.js";
 import { WorkspaceManager } from "./workspace-manager.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
+import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
 import {
   CLAUDE_CODE_MCP_CONFIG_MOUNT,
   CODEX_MCP_CONFIG_MOUNT,
@@ -289,6 +290,7 @@ export class DockerRunner implements IDockerRunner {
       }
     }
 
+    await ensureDefaultCodeUxAssetsInstalled();
     const candidates = [
       getRepoCodeUxPath(repoPath, "container", "setup.sh"),
       getHomeCodeUxPath("container", "setup.sh"),

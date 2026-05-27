@@ -10,6 +10,8 @@ Code UX now treats dashboard agents as database-backed records that can be seede
 - `<project>/.code-ux/agents/*.md`
 - `~/.code-ux/agents/*.md`
 
+When the packaged default assets are present, Code UX also seeds missing base agent files into `~/.code-ux/agents` before scanning. Existing user files are preserved, so local customizations remain the higher-priority home defaults.
+
 The built-in roles are now:
 
 - `Planning agent`
@@ -93,12 +95,13 @@ The API record also exposes derived sync state:
 
 When Code UX syncs project agents:
 
-1. project-level `.code-ux/agents` is scanned first
-2. repo-default `.code-ux/agents` from the running Code UX checkout is scanned second
-3. home-level `.code-ux/agents` is scanned third
-4. filename without `.md` becomes the agent name
-5. project-scoped files win on name collisions
-6. previously unseen agents are imported into sqlite automatically
+1. missing packaged base agents are installed into `~/.code-ux/agents` without overwriting existing files
+2. project-level `.code-ux/agents` is scanned first
+3. repo-default `.code-ux/agents` from the running Code UX checkout is scanned second
+4. home-level `.code-ux/agents` is scanned third
+5. filename without `.md` becomes the agent name
+6. project-scoped files win on name collisions
+7. previously unseen agents are imported into sqlite automatically
 
 ## Planning Agent Flow
 
@@ -264,6 +267,4 @@ This repository now includes the default built-in agent file:
 
 These files are auto-imported when this repository is used as the selected project and no DB record exists yet.
 
-The repository also now includes:
-
-- `.code-ux/agents/worker.md`
+Packaged Electron builds include these same base files as default resources. If a local checkout is not present, Code UX copies any missing files into the user's `~/.code-ux/agents` directory and imports them from there.

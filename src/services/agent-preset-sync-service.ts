@@ -7,6 +7,7 @@ import { parseAgentMarkdown, formatAgentMarkdown } from "./agent-preset-markdown
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { ensureDefaultCodeUxAssetsInstalled } from "./code-ux-default-assets-service.js";
 
 interface AgentPresetSyncServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -383,6 +384,11 @@ export class AgentPresetSyncService {
   }
 
   private async readAgentSources(repoPath: string): Promise<AgentSourceFile[]> {
+    await ensureDefaultCodeUxAssetsInstalled({
+      projectRoot: this.deps.projectRoot,
+      logger: this.deps.logger,
+    });
+
     const collected = new Map<string, AgentSourceFile>();
     const roots: Array<{ directory: string; scope: AgentSourceScope }> = [
       { directory: getRepoCodeUxPath(repoPath, "agents"), scope: "project" },

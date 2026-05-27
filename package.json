@@ -72,6 +72,17 @@
         "from": "build",
         "to": "build",
         "filter": ["icon*.png"]
+      },
+      {
+        "from": ".code-ux",
+        "to": ".code-ux-defaults",
+        "filter": [
+          "agents/planning_agent.md",
+          "agents/project_manager.md",
+          "agents/quality_assurance_agent.md",
+          "agents/worker.md",
+          "container/setup.sh"
+        ]
       }
     ],
     "mac": {

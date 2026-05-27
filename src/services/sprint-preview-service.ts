@@ -35,6 +35,7 @@ import {
 } from "./sprint-preview-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
+import { ensureDefaultCodeUxAssetsInstalled } from "./code-ux-default-assets-service.js";
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 
@@ -1198,6 +1199,7 @@ export class SprintPreviewService {
         return undefined;
       }
     }
+    await ensureDefaultCodeUxAssetsInstalled({ logger: this.deps.logger });
     const candidates = [
       getRepoCodeUxPath(repoPath, "container", "setup.sh"),
       getHomeCodeUxPath("container", "setup.sh"),
