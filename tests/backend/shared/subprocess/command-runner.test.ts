@@ -126,6 +126,20 @@ describe("CommandRunner", () => {
     await expect(runner.runStrict("sh", ["-c", "exit 1"])).rejects.toThrow("sh -c exit 1 failed");
   });
 
+  it("runStrict truncates very long command arguments in failure messages", async () => {
+    const longArg = "x".repeat(5000);
+    let error: Error | null = null;
+
+    try {
+      await runner.runStrict("node", ["-e", "process.exit(1)", longArg]);
+    } catch (caught) {
+      error = caught as Error;
+    }
+
+    expect(error?.message).toContain("[truncated ");
+    expect(error?.message).not.toContain(longArg);
+  });
+
   it("runStrict should return result on success", async () => {
     const result = await runner.runStrict("echo", ["ok"]);
     expect(result.stdout).toBe("ok");

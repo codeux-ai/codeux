@@ -94,6 +94,17 @@ describe("DockerBootstrapBuilder", () => {
     expect(script).toContain("  materialize_opencode_config");
   });
 
+  it("can source provider argv from a mounted file before executing the provider command", () => {
+    const script = builder.build({
+      runtimeNpmPrefix: "/runtime/npm-global",
+      runtimeNpmCache: "/runtime/npm-cache",
+    });
+
+    expect(script).toContain("CODE_UX_PROVIDER_ARGS=()");
+    expect(script).toContain("source \"$CODE_UX_PROVIDER_ARGV_FILE\"");
+    expect(script).toContain("exec \"$1\" \"${CODE_UX_PROVIDER_ARGS[@]}\"");
+  });
+
   it("should not include fallback install if no providers specified", () => {
     const options = {
       runtimeNpmPrefix: "/runtime/npm-global",

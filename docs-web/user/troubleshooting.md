@@ -132,6 +132,8 @@ The Docker daemon is unreachable, or the worker image cannot be pulled.
 
 For packaged Windows builds, Docker errors that show `C:\...` as a container `--workdir`, `HOME`, or mount target indicate an outdated build. Current preview containers mount Windows/macOS/Linux host runtime storage at Linux container paths under `/code-ux-preview-runtime`.
 
+For packaged Windows builds, `spawn ENAMETOOLONG` during Docker provider launch indicates an outdated build or a launch path still passing a large prompt through the host command line. Current Docker provider runs mount provider arguments from a generated file so large prompts do not become `docker run` arguments.
+
 ## Memory & embeddings
 
 ### Search returns no results

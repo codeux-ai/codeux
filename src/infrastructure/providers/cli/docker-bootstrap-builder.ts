@@ -125,6 +125,14 @@ export class DockerBootstrapBuilder {
   }
 
   private execution(): string {
-    return "exec \"$@\"";
+    return [
+      "if [ -n \"${CODE_UX_PROVIDER_ARGV_FILE:-}\" ] && [ -f \"$CODE_UX_PROVIDER_ARGV_FILE\" ]; then",
+      "  CODE_UX_PROVIDER_ARGS=()",
+      "  # shellcheck source=/dev/null",
+      "  source \"$CODE_UX_PROVIDER_ARGV_FILE\"",
+      "  exec \"$1\" \"${CODE_UX_PROVIDER_ARGS[@]}\"",
+      "fi",
+      "exec \"$@\"",
+    ].join("\n");
   }
 }

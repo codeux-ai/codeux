@@ -118,6 +118,42 @@ describe("DockerRunner", () => {
     expect(dockerArgs).toContain("HOME=/workspace/.code-ux-home");
   });
 
+  it("mounts provider argv from a file so long prompts do not enter the host docker command line", async () => {
+    const longPrompt = `plan ${"x".repeat(64_000)} with 'quotes'`;
+
+    await runner.runProviderInDocker({
+      command: "codex",
+      args: ["exec", "--yolo", longPrompt],
+      cwd: "docker-volume://workspace-1",
+      providerEnv: {},
+      sessionId: "session-1",
+      providerLabel: "codex",
+      workflowSettings: {
+        executionMode: "DOCKER",
+        containerImage: "node:24",
+        containerSetupScriptPath: "",
+        containerCacheSetupScriptImage: false,
+      } as any,
+      repoPath: "/repo/project",
+      onActivity: vi.fn(),
+    });
+
+    const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
+    expect(dockerArgs).toContain("CODE_UX_PROVIDER_ARGV_FILE=/opt/code-ux/provider-argv.sh");
+    expect(dockerArgs).toEqual(expect.arrayContaining([
+      "--mount",
+      expect.stringContaining("target=/opt/code-ux/provider-argv.sh"),
+    ]));
+    expect(dockerArgs).not.toContain(longPrompt);
+    expect(dockerArgs.join(" ")).not.toContain("code-ux.args=exec --yolo");
+    expect(dockerArgs.slice(-2)).toEqual(["provider-runner", "codex"]);
+
+    const argvWrite = vi.mocked(fs.writeFile).mock.calls.find(([file]) => String(file).endsWith("provider-argv.sh"));
+    expect(argvWrite?.[1]).toContain(`plan ${"x".repeat(1024)}`);
+    expect(argvWrite?.[1]).toContain(" with ");
+    expect(argvWrite?.[1]).toContain("'\"'\"'quotes'\"'\"'");
+  });
+
   it("stages generated Gemini MCP config outside runtime home and copies it during bootstrap", async () => {
     await runner.runProviderInDocker({
       command: "gemini",

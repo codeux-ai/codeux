@@ -70,6 +70,7 @@ Runtime resolution:
 - CI autofix follow-up work reuses the existing task workspace for the same worker branch when available instead of always creating a fresh workspace.
 - if Docker is unavailable during a CI autofix follow-up, Code UX falls back to a host-backed git worktree for that repair run instead of escalating immediately or creating another doomed Docker attempt.
 - Merge-conflict resolution remains isolated in its own Docker workspace even when the underlying task already has a reusable task workspace.
+- Docker provider runs stage provider argv in a temporary host file mounted at `/opt/code-ux/provider-argv.sh`; only the provider command name remains in the host `docker run` argv. This avoids Windows command-line length failures when prompts include large task context.
 - On startup, Code UX prunes stale Code UX Docker workspace volumes and cached setup-script images so finished, failed, unrecoverable, and outdated Docker assets do not accumulate across restarts.
 - restart recovery also treats interrupted Docker sessions without a live backing container as failed, so abandoned workspaces are reclaimed instead of waiting forever for a callback that cannot arrive.
 - startup recovery now also requeues task-level CLI follow-up runs that were left in `in_progress` after QA/repair `Fix` work lost its backing container, so the orchestrator can start the container again instead of leaving the sprint stuck after a server restart.

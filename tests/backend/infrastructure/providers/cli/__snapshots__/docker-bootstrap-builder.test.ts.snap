@@ -46,6 +46,12 @@ if [ "$1" = "opencode" ]; then
   materialize_opencode_config
 fi
 append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"
+if [ -n "\${CODE_UX_PROVIDER_ARGV_FILE:-}" ] && [ -f "$CODE_UX_PROVIDER_ARGV_FILE" ]; then
+  CODE_UX_PROVIDER_ARGS=()
+  # shellcheck source=/dev/null
+  source "$CODE_UX_PROVIDER_ARGV_FILE"
+  exec "$1" "\${CODE_UX_PROVIDER_ARGS[@]}"
+fi
 exec "$@""
 `;
 
@@ -95,6 +101,12 @@ if [ "$1" = "opencode" ]; then
   materialize_opencode_config
 fi
 append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"
+if [ -n "\${CODE_UX_PROVIDER_ARGV_FILE:-}" ] && [ -f "$CODE_UX_PROVIDER_ARGV_FILE" ]; then
+  CODE_UX_PROVIDER_ARGS=()
+  # shellcheck source=/dev/null
+  source "$CODE_UX_PROVIDER_ARGV_FILE"
+  exec "$1" "\${CODE_UX_PROVIDER_ARGS[@]}"
+fi
 exec "$@""
 `;
 
@@ -144,6 +156,12 @@ if [ "$1" = "opencode" ]; then
   materialize_opencode_config
 fi
 append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"
+if [ -n "\${CODE_UX_PROVIDER_ARGV_FILE:-}" ] && [ -f "$CODE_UX_PROVIDER_ARGV_FILE" ]; then
+  CODE_UX_PROVIDER_ARGS=()
+  # shellcheck source=/dev/null
+  source "$CODE_UX_PROVIDER_ARGV_FILE"
+  exec "$1" "\${CODE_UX_PROVIDER_ARGS[@]}"
+fi
 exec "$@""
 `;
 
@@ -192,5 +210,11 @@ if [ "$1" = "opencode" ]; then
   materialize_opencode_config
 fi
 append_if_missing_literal "/opt/provider-config/codex-config.toml" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]" "codex mcp config"
+if [ -n "\${CODE_UX_PROVIDER_ARGV_FILE:-}" ] && [ -f "$CODE_UX_PROVIDER_ARGV_FILE" ]; then
+  CODE_UX_PROVIDER_ARGS=()
+  # shellcheck source=/dev/null
+  source "$CODE_UX_PROVIDER_ARGV_FILE"
+  exec "$1" "\${CODE_UX_PROVIDER_ARGS[@]}"
+fi
 exec "$@""
 `;

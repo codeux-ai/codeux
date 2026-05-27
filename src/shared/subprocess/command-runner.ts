@@ -22,6 +22,7 @@ export interface CommandOptions {
 
 export class CommandRunner {
   private static readonly DEFAULT_MAX_STDERR_CHARS = 4096;
+  private static readonly MAX_COMMAND_DISPLAY_CHARS = 2000;
 
   /**
    * Runs a command and returns a Promise that resolves with the execution result.
@@ -211,11 +212,19 @@ export class CommandRunner {
   ): Promise<CommandResult> {
     const result = await this.run(command, args, options);
     if (!result.ok) {
-      const commandString = `${command} ${args.join(" ")}`;
+      const commandString = this.formatCommandForError(command, args);
       const errorMessage = result.stderr || result.stdout || "Unknown error";
       throw new Error(`${commandString} failed: ${errorMessage}`);
     }
     return result;
+  }
+
+  private formatCommandForError(command: string, args: string[]): string {
+    const rendered = `${command} ${args.join(" ")}`;
+    if (rendered.length <= CommandRunner.MAX_COMMAND_DISPLAY_CHARS) {
+      return rendered;
+    }
+    return `${rendered.slice(0, CommandRunner.MAX_COMMAND_DISPLAY_CHARS)}... [truncated ${rendered.length - CommandRunner.MAX_COMMAND_DISPLAY_CHARS} chars]`;
   }
 }
 
