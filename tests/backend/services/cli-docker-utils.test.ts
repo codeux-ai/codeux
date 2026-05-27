@@ -21,16 +21,20 @@ describe("cli-docker-utils", () => {
         expect(resolveConfiguredPath("/repo", "relative")).toBe(path.resolve("/repo", "relative"));
     });
 
-    it("getDockerUserSpec handles missing uid/gid", () => {
+    it("getDockerUserSpec falls back to 1000:1000 when uid/gid unavailable or root", () => {
         const originalUid = process.getuid;
         const originalGid = process.getgid;
 
         (process as any).getuid = undefined;
-        expect(getDockerUserSpec()).toBeUndefined();
+        expect(getDockerUserSpec()).toBe("1000:1000");
 
         process.getuid = originalUid;
         (process as any).getgid = undefined;
-        expect(getDockerUserSpec()).toBeUndefined();
+        expect(getDockerUserSpec()).toBe("1000:1000");
+
+        process.getuid = () => 0;
+        process.getgid = () => 0;
+        expect(getDockerUserSpec()).toBe("1000:1000");
 
         process.getuid = originalUid;
         process.getgid = originalGid;

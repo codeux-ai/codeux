@@ -106,7 +106,7 @@ export class DockerSetupImageCache {
     return [
       `FROM ${baseImage}`,
       "COPY setup.sh /tmp/code-ux-setup.sh",
-      "RUN bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh",
+      "RUN sed -i 's/\\r//' /tmp/code-ux-setup.sh && bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh",
     ].join("\n");
   }
 }

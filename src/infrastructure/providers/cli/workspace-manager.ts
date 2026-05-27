@@ -53,13 +53,19 @@ const parseWorkspaceHandle = (value: string): { volumeName: string } => {
   return { volumeName };
 };
 
-const getWorkspaceOwnerSpec = (): string | undefined => {
+const FALLBACK_WORKER_UID = "1000:1000";
+
+const getWorkspaceOwnerSpec = (): string => {
   const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
   const getGid = (process as NodeJS.Process & { getgid?: () => number }).getgid;
   if (!getUid || !getGid) {
-    return undefined;
+    return FALLBACK_WORKER_UID;
   }
-  return `${getUid()}:${getGid()}`;
+  const uid = getUid();
+  if (uid === 0) {
+    return FALLBACK_WORKER_UID;
+  }
+  return `${uid}:${getGid()}`;
 };
 
 const isDockerCredentialHelperError = (error: unknown): boolean => {

@@ -80,7 +80,7 @@ export class DockerBootstrapBuilder {
     if (!enabled) {
       return "";
     }
-    return `if [ -f "${CONTAINER_SETUP_SCRIPT}" ]; then bash "${CONTAINER_SETUP_SCRIPT}" || echo "provider-runner: setup script failed" >&2; fi`;
+    return `if [ -f "${CONTAINER_SETUP_SCRIPT}" ]; then bash <(sed 's/\\r//' "${CONTAINER_SETUP_SCRIPT}") || echo "provider-runner: setup script failed" >&2; fi`;
   }
 
   private fallbackInstall(fallbackProviders: string[]): string {

@@ -19,7 +19,7 @@ export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
 export pnpm_config_store_dir="$PNPM_STORE_DIR"
 mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
-if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
+if [ -f "/opt/jules/setup.sh" ]; then bash <(sed 's/\\r//' "/opt/jules/setup.sh") || echo "provider-runner: setup script failed" >&2; fi
 if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install claude" >&2; fi ;;     qwen) npm install -g @qwen-code/qwen-code ;;     opencode) if command -v curl >/dev/null 2>&1; then curl -fsSL https://opencode.ai/install | bash && export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install opencode" >&2; fi ;; esac; fi
 merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
 if [ "$1" = "gemini" ]; then
@@ -74,7 +74,7 @@ export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
 export pnpm_config_store_dir="$PNPM_STORE_DIR"
 mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
-if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
+if [ -f "/opt/jules/setup.sh" ]; then bash <(sed 's/\\r//' "/opt/jules/setup.sh") || echo "provider-runner: setup script failed" >&2; fi
 if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install claude" >&2; fi ;;     qwen) npm install -g @qwen-code/qwen-code ;;     opencode) if command -v curl >/dev/null 2>&1; then curl -fsSL https://opencode.ai/install | bash && export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install opencode" >&2; fi ;; esac; fi
 merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
 if [ "$1" = "gemini" ]; then
@@ -129,7 +129,7 @@ export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
 export pnpm_config_store_dir="$PNPM_STORE_DIR"
 mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
-if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
+if [ -f "/opt/jules/setup.sh" ]; then bash <(sed 's/\\r//' "/opt/jules/setup.sh") || echo "provider-runner: setup script failed" >&2; fi
 if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;; esac; fi
 merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
 if [ "$1" = "gemini" ]; then
@@ -184,7 +184,7 @@ export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
 export pnpm_config_store_dir="$PNPM_STORE_DIR"
 mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
-if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
+if [ -f "/opt/jules/setup.sh" ]; then bash <(sed 's/\\r//' "/opt/jules/setup.sh") || echo "provider-runner: setup script failed" >&2; fi
 merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.mcp.json" "claude mcp config"
 if [ "$1" = "gemini" ]; then
   mkdir -p "$HOME/.gemini/tmp" "$HOME/.gemini/history" "$HOME/.gemini/memory"

@@ -288,10 +288,12 @@ export class DockerRunner implements IDockerRunner {
     return mapped;
   }
 
-  private async resolveDockerUserSpec(workspacePath: string): Promise<string | undefined> {
+  private async resolveDockerUserSpec(workspacePath: string): Promise<string> {
     try {
       const stats = await fs.stat(workspacePath);
-      if (typeof stats.uid === "number" && typeof stats.gid === "number") return `${stats.uid}:${stats.gid}`;
+      if (typeof stats.uid === "number" && typeof stats.gid === "number" && stats.uid !== 0) {
+        return `${stats.uid}:${stats.gid}`;
+      }
     } catch {
       // ignore and fall back to process uid/gid
     }

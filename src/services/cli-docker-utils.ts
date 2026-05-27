@@ -14,13 +14,19 @@ export const resolveConfiguredPath = (repoPath: string, rawValue: string): strin
   return resolveUserPath(repoPath, rawValue);
 };
 
-export const getDockerUserSpec = (): string | undefined => {
+const FALLBACK_WORKER_UID = "1000:1000";
+
+export const getDockerUserSpec = (): string => {
   const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
   const getGid = (process as NodeJS.Process & { getgid?: () => number }).getgid;
   if (!getUid || !getGid) {
-    return undefined;
+    return FALLBACK_WORKER_UID;
   }
-  return `${getUid()}:${getGid()}`;
+  const uid = getUid();
+  if (uid === 0) {
+    return FALLBACK_WORKER_UID;
+  }
+  return `${uid}:${getGid()}`;
 };
 
 export const toDockerMountArg = (mount: ContainerMount): string => {

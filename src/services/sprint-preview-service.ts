@@ -1211,14 +1211,14 @@ export class SprintPreviewService {
     return mapped;
   }
 
-  private async resolveDockerUserSpec(workspacePath: string): Promise<string | undefined> {
+  private async resolveDockerUserSpec(workspacePath: string): Promise<string> {
     try {
       const stats = await fs.stat(workspacePath);
-      if (typeof stats.uid === "number" && typeof stats.gid === "number") {
+      if (typeof stats.uid === "number" && typeof stats.gid === "number" && stats.uid !== 0) {
         return `${stats.uid}:${stats.gid}`;
       }
     } catch {
-      return getDockerUserSpec();
+      // fall through to getDockerUserSpec
     }
     return getDockerUserSpec();
   }
