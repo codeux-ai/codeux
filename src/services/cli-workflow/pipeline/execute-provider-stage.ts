@@ -22,6 +22,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     executionRepository: ctx.deps.executionRepository,
     sessionTracking: ctx.deps.sessionTracking,
     providerRunner: ctx.providerRunner,
+    providerConcurrencyService: ctx.deps.providerConcurrencyService,
     getGithubToken: ctx.deps.getGithubToken,
   });
 

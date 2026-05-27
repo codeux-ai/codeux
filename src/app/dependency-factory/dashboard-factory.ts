@@ -85,6 +85,7 @@ export function createDashboardDependencies(
   const providerExecutionService = new ProviderExecutionService({
     executionRepository,
     providerRunner,
+    providerConcurrencyService: coreDeps.providerConcurrencyService,
     logger: logger.child({ component: "provider-execution-service" }),
   });
 
@@ -332,6 +333,7 @@ export function createDashboardDependencies(
     settingsRepository,
     agentPresetSyncService,
     executionControlService,
+    providerExecutionService,
     memoryService: coreDeps.memoryService,
     logger: logger.child({ component: "planning-agent-service" }),
   });
@@ -358,6 +360,7 @@ export function createDashboardDependencies(
     agentPresetSyncService,
     quicksprintService,
     providerRunner,
+    providerConcurrencyService: coreDeps.providerConcurrencyService,
     getGithubToken: () => context.getEffectiveGithubToken(),
     logger: logger.child({ component: "project-setup-service" }),
   });

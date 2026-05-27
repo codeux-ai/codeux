@@ -42,12 +42,22 @@ describe("ChatPageShell", () => {
         pendingDashboardMessages={0}
         error={null}
         railSlot={<div data-testid="empty-rail" />}
-        detailSlot={<EmptyChat message="Choose a project" />}
+        detailSlot={
+          <EmptyChat
+            tone="project"
+            message="Choose or add a project from the top navigation to unlock stored chat threads, listener routing, and project-scoped conversation history."
+          />
+        }
       />
     );
 
-    expect(getByText("Choose a project")).toBeInTheDocument();
-    expect(getByText("Select a project to inspect its conversation threads and route dashboard messages to connected listeners.")).toBeInTheDocument();
+    expect(getByText("Project Required")).toBeInTheDocument();
+    expect(getByText("Ready When a Project Exists")).toBeInTheDocument();
+    expect(
+      getByText(
+        "Choose or add a project from the top navigation to unlock stored chat threads, listener routing, and project-scoped conversation history."
+      )
+    ).toBeInTheDocument();
   });
 
   it("renders thread mode with rail and detail slots", () => {

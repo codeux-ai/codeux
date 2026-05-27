@@ -22,6 +22,7 @@ import type { TaskService } from "./task-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
+import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 import type { ResolvedProviderRoute } from "./provider-routing.js";
 
@@ -48,6 +49,7 @@ interface WorkerInboxReplyServiceDependencies {
   getDashboardSettings: (scope?: { projectId?: string; sprintId?: string }) => DashboardSettings;
   getGithubToken: () => string | undefined;
   providerRunner: IProviderRunner;
+  providerConcurrencyService: ProviderConcurrencyService;
   logger?: Logger;
 }
 
@@ -116,6 +118,23 @@ export class WorkerInboxReplyService {
     const providerConfigId = route.providerConfigId || route.provider;
     const providerSettings = route.providers[providerConfigId];
     const prompt = buildProviderPrompt(rawPrompt, providerSettings.thinkingMode);
+    const startedAt = new Date().toISOString();
+    const sessionId = `dashboard-reply-${randomUUID().slice(0, 8)}`;
+
+    const usageRecord = await this.deps.providerConcurrencyService.waitForSlotAndClaim(
+      route.provider,
+      providerSettings.maxConcurrentTasks,
+      {
+        projectId: input.projectId,
+        sessionId,
+        provider: route.provider,
+        purpose: "dashboard_reply",
+        status: "running",
+        model: providerSettings.model,
+        startedAt,
+        promptChars: rawPrompt.length,
+      }
+    );
 
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId: input.projectId,
@@ -123,10 +142,10 @@ export class WorkerInboxReplyService {
       type: input.mode === "compact_thread" ? "chat_compaction" : "worker_reply",
       provider: route.provider,
       model: providerSettings.model,
-      startedAt: new Date().toISOString(),
+      startedAt,
       attentionItemId: null,
       dispatchId: null,
-      providerInvocationId: null,
+      providerInvocationId: usageRecord.id,
       sprintId: null,
       sprintRunId: null,
       taskId: null,
@@ -283,17 +302,21 @@ export class WorkerInboxReplyService {
     const providerInvocationId = randomUUID();
     const sessionId = "worker-reply-" + providerInvocationId;
 
-    const usageRecord = this.deps.executionRepository.createProviderInvocationUsage({
-      projectId: args.projectId,
-      taskId: invocationTaskId,
-      sessionId,
-      provider: route.provider,
-      purpose: "clarification_reply",
-      status: "running",
-      model: providerSettings.model,
-      startedAt,
-      promptChars: fullContextPrompt.length,
-    });
+    const usageRecord = await this.deps.providerConcurrencyService.waitForSlotAndClaim(
+      route.provider,
+      providerSettings.maxConcurrentTasks,
+      {
+        projectId: args.projectId,
+        taskId: invocationTaskId,
+        sessionId,
+        provider: route.provider,
+        purpose: "clarification_reply",
+        status: "running",
+        model: providerSettings.model,
+        startedAt,
+        promptChars: fullContextPrompt.length,
+      }
+    );
 
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId: args.projectId,

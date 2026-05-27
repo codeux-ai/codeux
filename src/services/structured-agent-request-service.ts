@@ -16,6 +16,7 @@ export interface StructuredRequestArgs<T> {
   provider: ProviderId;
   model: string;
   apiKey: string;
+  maxConcurrentTasks?: number;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
@@ -117,6 +118,7 @@ export class StructuredAgentRequestService {
       purpose: args.purpose,
       type: args.type,
       provider: args.provider as VirtualWorkerProvider,
+      maxConcurrentTasks: args.maxConcurrentTasks,
       prompt: args.providerPrompt,
       cwd: args.cwd,
       model: args.model,

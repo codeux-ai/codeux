@@ -35,6 +35,7 @@ import { MainMergeGateService, type MergeFeedbackResult } from "../domain/sprint
 import type { ResolvePullRequestResult } from "../services/git-status-service.js";
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
+import type { ProviderConcurrencyService } from "../services/provider-concurrency-service.js";
 import type { QualityAssuranceService } from "../services/quality-assurance-service.js";
 import type { TaskService } from "../services/task-service.js";
 import type { HeartbeatService } from "../services/heartbeat-service.js";
@@ -107,9 +108,11 @@ export interface SprintOrchestratorDependencies {
   renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
   sleep?: (ms: number) => Promise<void>;
   logger: Logger;
-  memoryService?: MemoryService;
-  memoryPromotionService?: MemoryPromotionService;
+  memoryService: MemoryService;
+  memoryPromotionService: MemoryPromotionService;
+  providerConcurrencyService: ProviderConcurrencyService;
   qualityAssuranceService?: QualityAssuranceService;
+
   taskService?: TaskService;
   sprintIssueService?: SprintIssueService;
   heartbeatService: HeartbeatService;

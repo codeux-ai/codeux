@@ -25,6 +25,7 @@ import { ProjectWorkerAssignmentService } from "../domain/workers/project-worker
 import { WorkerTaskDispatchService } from "./worker-task-dispatch-service.js";
 import { CliWorkflowService } from "./cli-workflow-service.js";
 import { resolveProviderForInvocation, resolveWorkerModelForProvider } from "./provider-routing.js";
+import { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { resolveEffectiveDashboardSettings } from "./settings-resolution-service.js";
 import type { WorkerInboxReplyService } from "./worker-inbox-reply-service.js";
 import type { InstructionService } from "../instructions/instruction-template-service.js";
@@ -88,6 +89,7 @@ export interface VirtualWorkerServiceDependencies {
   instructionService: InstructionService;
   approveSessionPlan: (sessionId: string) => Promise<unknown>;
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
+  providerConcurrencyService: ProviderConcurrencyService;
   memoryService?: MemoryService;
   agentPresetSyncService?: Pick<AgentPresetSyncService, "getOptionalWorkerAgentForRepoPath" | "resolveTargetedCodingAgent">;
   logger?: Logger;
@@ -116,6 +118,7 @@ export class VirtualWorkerService {
     this.providerExecutionService = new ProviderExecutionService({
       executionRepository: deps.executionRepository,
       providerRunner: this.providerRunner,
+      providerConcurrencyService: deps.providerConcurrencyService,
       logger: deps.logger,
       sessionTracking: deps.sessionTracking,
     });
@@ -647,6 +650,7 @@ export class VirtualWorkerService {
           purpose: "merge_conflict",
           model: providerSettings.model,
           apiKey: providerSettings.apiKey,
+          maxConcurrentTasks: providerSettings.maxConcurrentTasks,
           qwenAuthMode: providerSettings.qwenAuthMode,
           qwenRegion: providerSettings.qwenRegion,
           qwenBaseUrl: providerSettings.qwenBaseUrl,
@@ -898,7 +902,9 @@ export class VirtualWorkerService {
         purpose: "ci_fix",
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
+        maxConcurrentTasks: providerSettings.maxConcurrentTasks,
         qwenAuthMode: providerSettings.qwenAuthMode,
+
         qwenRegion: providerSettings.qwenRegion,
         qwenBaseUrl: providerSettings.qwenBaseUrl,
         qwenEnvKey: providerSettings.qwenEnvKey,
@@ -1128,6 +1134,7 @@ export class VirtualWorkerService {
     purpose: "ci_fix" | "merge_conflict";
     model: string;
     apiKey: string;
+    maxConcurrentTasks?: number;
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
     qwenRegion?: "china" | "international";
     qwenBaseUrl?: string;
@@ -1159,6 +1166,7 @@ export class VirtualWorkerService {
       cwd: args.worktreePath,
       model: args.model,
       apiKey: args.apiKey,
+      maxConcurrentTasks: args.maxConcurrentTasks,
       qwenAuthMode: args.qwenAuthMode,
       qwenRegion: args.qwenRegion,
       qwenBaseUrl: args.qwenBaseUrl,

@@ -16,6 +16,7 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { QuicksprintService } from "./quicksprint-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
+import { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { ProviderRunner, type IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
@@ -44,6 +45,7 @@ interface ProjectSetupServiceDeps {
   agentPresetSyncService: AgentPresetSyncService;
   quicksprintService?: QuicksprintService;
   providerRunner?: IProviderRunner;
+  providerConcurrencyService?: ProviderConcurrencyService;
   realtimeNotifier?: DashboardRealtimeMutationNotifier;
   logger?: Logger;
   getGithubToken?: () => string | undefined;
@@ -68,6 +70,7 @@ export class ProjectSetupService {
     this.providerExecutionService = new ProviderExecutionService({
       executionRepository: deps.executionRepository,
       providerRunner: deps.providerRunner || new ProviderRunner(new DockerRunner()),
+      providerConcurrencyService: deps.providerConcurrencyService,
       logger: deps.logger,
       getGithubToken: deps.getGithubToken,
     });
@@ -178,7 +181,9 @@ export class ProjectSetupService {
         repoPath: project.baseDir,
         model: providerConfig.model,
         apiKey: providerConfig.apiKey,
+        maxConcurrentTasks: providerConfig.maxConcurrentTasks,
         qwenAuthMode: providerConfig.qwenAuthMode,
+
         qwenRegion: providerConfig.qwenRegion,
         qwenBaseUrl: providerConfig.qwenBaseUrl,
         qwenEnvKey: providerConfig.qwenEnvKey,
@@ -278,6 +283,7 @@ export class ProjectSetupService {
     provider: Exclude<ProviderId, "jules">;
     model: string;
     apiKey: string;
+    maxConcurrentTasks: number;
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
     qwenRegion?: "china" | "international";
     qwenBaseUrl?: string;
@@ -318,6 +324,7 @@ export class ProjectSetupService {
       provider: providerSettings.provider as Exclude<ProviderId, "jules">,
       model: providerSettings.model,
       apiKey: providerSettings.apiKey,
+      maxConcurrentTasks: providerSettings.maxConcurrentTasks,
       qwenAuthMode: providerSettings.qwenAuthMode,
       qwenRegion: providerSettings.qwenRegion,
       qwenBaseUrl: providerSettings.qwenBaseUrl,

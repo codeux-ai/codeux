@@ -56,6 +56,10 @@ function buildDeps(): SprintOrchestratorDependencies {
     isJulesApiConfigured: () => true,
     approveSessionPlan: vi.fn().mockResolvedValue({}),
     sendSessionMessage: vi.fn().mockResolvedValue({}),
+    providerConcurrencyService: {
+      getGlobalRunningCounts: vi.fn().mockReturnValue({}),
+      waitForSlot: vi.fn().mockResolvedValue(undefined),
+    } as any,
     renderInstruction: vi.fn().mockImplementation(async (templateId: string, variables: Record<string, unknown>) => {
       if (templateId === "mergeHeader") return "MERGE HEADER";
       if (templateId === "mergeTask") return `Merge ${variables.task_id}`;

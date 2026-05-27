@@ -531,6 +531,7 @@ export class PlanningAgentService {
         provider,
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
+        maxConcurrentTasks: providerSettings.maxConcurrentTasks,
         qwenAuthMode: providerSettings.qwenAuthMode,
         qwenRegion: providerSettings.qwenRegion,
         qwenBaseUrl: providerSettings.qwenBaseUrl,

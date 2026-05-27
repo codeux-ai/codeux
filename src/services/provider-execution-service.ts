@@ -6,14 +6,18 @@ import type { ExecutionRepository } from "../repositories/execution-repository.j
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import type { CliProviderId, IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
+import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
 import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 import { resolveProviderRetryDecision, sleepWithSignal } from "../shared/providers/provider-retry-policy.js";
+import { DEFAULT_PROVIDER_SETTINGS } from "../repositories/settings-defaults.js";
+import type { ProviderId } from "../contracts/app-types.js";
 
 export interface ProviderExecutionServiceDeps {
   executionRepository?: ExecutionRepository;
   sessionTracking?: SessionTrackingRepository;
   providerRunner: IProviderRunner;
+  providerConcurrencyService?: ProviderConcurrencyService;
   logger?: Logger;
   getGithubToken?: () => string | undefined;
 }
@@ -32,6 +36,7 @@ export interface ExecutionProviderRunArgs {
   type: string;
 
   provider: CliProviderId;
+  maxConcurrentTasks?: number;
   prompt: string;
   cwd?: string;
   model: string;
@@ -114,22 +119,51 @@ export class ProviderExecutionService {
         });
       }
 
-      const invocation = this.deps.executionRepository?.createProviderInvocationUsage({
-        projectId: args.projectId,
-        sprintId: args.sprintId,
-        taskId: args.taskId,
-        sprintRunId: args.sprintRunId,
-        dispatchId: args.dispatchId,
-        taskRunId: args.taskRunId,
-        attentionItemId: args.attentionItemId,
-        sessionId: args.sessionId,
-        provider: args.provider,
-        purpose: args.purpose,
-        model: args.model,
-        executionMode: args.workflowSettings.executionMode,
-        startedAt,
-        promptChars: p.length,
-      });
+      let invocation;
+      if (this.deps.providerConcurrencyService) {
+        const limit = args.maxConcurrentTasks !== undefined
+          ? args.maxConcurrentTasks
+          : (DEFAULT_PROVIDER_SETTINGS[args.provider as ProviderId]?.maxConcurrentTasks ?? 0);
+
+        invocation = await this.deps.providerConcurrencyService.waitForSlotAndClaim(
+          args.provider as ProviderId,
+          limit,
+          {
+            projectId: args.projectId,
+            sprintId: args.sprintId,
+            taskId: args.taskId,
+            sprintRunId: args.sprintRunId,
+            dispatchId: args.dispatchId,
+            taskRunId: args.taskRunId,
+            attentionItemId: args.attentionItemId,
+            sessionId: args.sessionId,
+            provider: args.provider,
+            purpose: args.purpose,
+            model: args.model,
+            executionMode: args.workflowSettings.executionMode,
+            startedAt,
+            promptChars: p.length,
+          },
+          args.signal
+        );
+      } else {
+        invocation = this.deps.executionRepository?.createProviderInvocationUsage({
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          taskId: args.taskId,
+          sprintRunId: args.sprintRunId,
+          dispatchId: args.dispatchId,
+          taskRunId: args.taskRunId,
+          attentionItemId: args.attentionItemId,
+          sessionId: args.sessionId,
+          provider: args.provider,
+          purpose: args.purpose,
+          model: args.model,
+          executionMode: args.workflowSettings.executionMode,
+          startedAt,
+          promptChars: p.length,
+        });
+      }
 
       if (invocation && execInvocationId) {
         this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {

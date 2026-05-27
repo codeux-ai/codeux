@@ -975,6 +975,30 @@ export class ExecutionRepository {
     }
   }
 
+  /**
+   * Attempts to claim a provider invocation slot atomically.
+   * Returns the created record if a slot was available, or null if the limit was reached.
+   */
+  tryCreateProviderInvocationUsage(input: CreateProviderInvocationUsageInput, limit: number): ProviderInvocationUsageRecord | null {
+    if (limit <= 0) {
+      return this.createProviderInvocationUsage(input);
+    }
+
+    return this.db.transaction(() => {
+      const runningRow = this.db.prepare(`
+        SELECT COUNT(*) as count
+        FROM provider_invocations
+        WHERE status = 'running' AND provider = ?
+      `).get(input.provider) as { count: number };
+
+      if (runningRow.count >= limit) {
+        return null;
+      }
+
+      return this.createProviderInvocationUsage(input);
+    });
+  }
+
   updateProviderInvocationUsage(invocationId: string, input: UpdateProviderInvocationUsageInput): ProviderInvocationUsageRecord {
     try {
       const current = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
