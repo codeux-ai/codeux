@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { bootMcpTransport, type BootMcpTransportDeps } from "../../../../src/app/lifecycle/mcp-lifecycle-service.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { CODE_UX_VERSION } from "../../../../src/shared/config/code-ux-paths.js";
 
 vi.mock("@modelcontextprotocol/sdk/server/stdio.js", () => {
   return {
@@ -39,7 +40,7 @@ describe("mcp-lifecycle-service", () => {
 
       expect(mockDeps.logger.info).toHaveBeenCalledWith(
         "Code UX MCP server running on stdio",
-        { version: "1.2.0" }
+        { version: CODE_UX_VERSION }
       );
     });
 
