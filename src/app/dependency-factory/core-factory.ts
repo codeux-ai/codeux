@@ -35,6 +35,7 @@ import { EmbeddingService } from "../../services/embedding-service.js";
 import { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
 import { MemoryService } from "../../services/memory-service.js";
 import { MemoryPromotionService } from "../../services/memory-promotion-service.js";
+import { ProviderConcurrencyService } from "../../services/provider-concurrency-service.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
 import { createLogger, type Logger } from "../../shared/logging/logger.js";
@@ -89,6 +90,7 @@ export interface CoreDependencies {
   embeddingModelManager: EmbeddingModelManager;
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
+  providerConcurrencyService: ProviderConcurrencyService;
   sprintPreviewService: SprintPreviewService;
   sprintPreviewRepository: SprintPreviewRepository;
 }
@@ -175,6 +177,10 @@ export function createCoreDependencies(
     logger: logger.child({ component: "agent-preset-sync-service" }),
   });
   const executionRepository = new ExecutionRepository(appDbStorage, dashboardRealtimeService);
+  const providerConcurrencyService = new ProviderConcurrencyService({
+    executionRepository,
+    logger: logger.child({ component: "provider-concurrency-service" }),
+  });
   const sprintPreviewRepository = new SprintPreviewRepository(appDbStorage);
   const sprintPreviewService = new SprintPreviewService({
     sprintPreviewRepository,
@@ -277,6 +283,7 @@ export function createCoreDependencies(
     embeddingModelManager,
     memoryService,
     memoryPromotionService,
+    providerConcurrencyService,
     sprintPreviewService,
     sprintPreviewRepository,
   };

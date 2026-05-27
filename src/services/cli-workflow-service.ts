@@ -42,6 +42,7 @@ import { executeMemoryCaptureStage } from "./cli-workflow/pipeline/memory-captur
 import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { MemoryService } from "./memory-service.js";
+import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 
 interface CliWorkflowServiceDependencies {
@@ -50,6 +51,7 @@ interface CliWorkflowServiceDependencies {
   projectManagementRepository?: ProjectManagementRepository;
   activeDispatchRegistry?: ActiveDispatchRegistry;
   memoryService?: MemoryService;
+  providerConcurrencyService?: ProviderConcurrencyService;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   agentPresetSyncService: AgentPresetSyncService;
   getGithubToken: () => string | undefined;

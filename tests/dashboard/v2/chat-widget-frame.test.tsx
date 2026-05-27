@@ -14,7 +14,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
 describe('ChatWidgetFrame', () => {
-  it('renders queued state', () => {
+  it('renders queued state with dashed border', () => {
     const { getByRole, getByText } = render(
       <ChatWidgetFrame status="queued">
         Queued Content
@@ -23,11 +23,11 @@ describe('ChatWidgetFrame', () => {
     const region = getByRole('region');
     expect(region).toBeInTheDocument();
     expect(region.getAttribute('aria-label')).toBe('Widget: queued');
-    expect(region.className).toContain('widget-queued');
+    expect(region.className).toContain('border-dashed');
     expect(getByText('Queued Content')).toBeInTheDocument();
   });
 
-  it('renders running state', () => {
+  it('renders running state with signal accent', () => {
     const { getByRole } = render(
       <ChatWidgetFrame status="running">
         Running Content
@@ -36,10 +36,11 @@ describe('ChatWidgetFrame', () => {
     const region = getByRole('region');
     expect(region).toBeInTheDocument();
     expect(region.getAttribute('aria-label')).toBe('Widget: running');
-    expect(region.className).toContain('widget-running');
+    expect(region.className).toContain('before:bg-signal-500');
+    expect(region.className).toContain('backdrop-blur-xl');
   });
 
-  it('renders completed state', () => {
+  it('renders completed state with reduced opacity', () => {
     const { getByRole } = render(
       <ChatWidgetFrame status="completed">
         Completed Content
@@ -48,12 +49,11 @@ describe('ChatWidgetFrame', () => {
     const region = getByRole('region');
     expect(region).toBeInTheDocument();
     expect(region.getAttribute('aria-label')).toBe('Widget: completed');
-    expect(region.className).not.toContain('widget-queued');
-    expect(region.className).not.toContain('widget-running');
+    expect(region.className).toContain('opacity-80');
     expect(region.className).toContain('hover:opacity-100');
   });
 
-  it('renders failed state', () => {
+  it('renders failed state with red accent', () => {
     const { getByRole } = render(
       <ChatWidgetFrame status="failed">
         Failed Content
@@ -62,7 +62,7 @@ describe('ChatWidgetFrame', () => {
     const region = getByRole('region');
     expect(region).toBeInTheDocument();
     expect(region.getAttribute('aria-label')).toBe('Widget: failed');
-    expect(region.className).toContain('bg-red-50');
+    expect(region.className).toContain('before:bg-status-red/60');
   });
 
   it('renders header and footer when provided', () => {

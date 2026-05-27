@@ -1,6 +1,5 @@
-import { h, FunctionComponent } from "preact";
-import { ChatWidgetFrame } from "./ChatWidgetFrame";
-import { ProviderLogo } from "../../ui/ProviderLogo";
+import { type FunctionComponent } from "preact";
+import { ProviderLogo } from "../../ui/ProviderLogo.js";
 
 export interface InvocationRoutingWidgetProps {
   provider: string | null;
@@ -15,70 +14,46 @@ export const InvocationRoutingWidget: FunctionComponent<InvocationRoutingWidgetP
   cliName,
   routingStatus,
 }) => {
-  const frameStatus = routingStatus === "routing" ? "running" : routingStatus === "active" ? "running" : "completed";
-
-  const providerKey = (provider || "").toLowerCase();
-  let borderColor = "border-slate-300 dark:border-slate-700";
-  let pulseColor = "bg-slate-400";
-
-  if (providerKey.includes("claude")) {
-    borderColor = "border-[#FF6B2B]";
-    pulseColor = "bg-[#FF6B2B]";
-  } else if (providerKey.includes("gemini")) {
-    borderColor = "border-[#4285F4]";
-    pulseColor = "bg-[#4285F4]";
-  } else if (providerKey.includes("codex")) {
-    borderColor = "border-[#10B981]";
-    pulseColor = "bg-[#10B981]";
+  if (routingStatus === "routing") {
+    return (
+      <div
+        class="flex items-center gap-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
+        role="status"
+        aria-label="Routing to provider"
+      >
+        <span class="relative flex h-4 w-4 items-center justify-center">
+          <span class="absolute inline-flex h-full w-full rounded-full bg-signal-500/30 motion-safe:animate-ping" />
+          <span class="relative inline-flex h-2 w-2 rounded-full bg-signal-500" />
+        </span>
+        <span class="text-[11px] text-slate-400 dark:text-slate-500">
+          Routing to {provider || "provider"}
+          <span class="inline-flex ml-0.5 gap-[2px] align-middle">
+            <span class="inline-block h-[3px] w-[3px] rounded-full bg-slate-400/60 motion-safe:animate-bounce [animation-delay:0ms]" />
+            <span class="inline-block h-[3px] w-[3px] rounded-full bg-slate-400/60 motion-safe:animate-bounce [animation-delay:150ms]" />
+            <span class="inline-block h-[3px] w-[3px] rounded-full bg-slate-400/60 motion-safe:animate-bounce [animation-delay:300ms]" />
+          </span>
+        </span>
+      </div>
+    );
   }
 
   return (
-    <ChatWidgetFrame status={frameStatus}>
-      <div class={`-m-3 p-3 border-l-4 ${borderColor}`}>
-        {routingStatus === "routing" ? (
-          <div class="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-            <span class={`w-2 h-2 rounded-full animate-pulse ${pulseColor}`} />
-            <span>Routing to provider...</span>
-          </div>
-        ) : (
-          <div
-            class="flex items-center gap-3 motion-safe:animate-[slide-in-up_300ms_ease-out_forwards]"
-            style={{
-              animationName: "slide-in-up",
-              animationDuration: "300ms",
-              animationTimingFunction: "ease-out",
-              animationFillMode: "forwards"
-            }}
-          >
-            <style>
-              {`
-                @keyframes slide-in-up {
-                  0% { opacity: 0; transform: translateY(8px); }
-                  100% { opacity: 1; transform: translateY(0); }
-                }
-                @media (prefers-reduced-motion: reduce) {
-                  .motion-safe\\:animate-\\[slide-in-up_300ms_ease-out_forwards\\] {
-                    animation: none !important;
-                    opacity: 1 !important;
-                    transform: none !important;
-                  }
-                }
-              `}
-            </style>
-            <ProviderLogo provider={provider || ""} size={20} />
-            <div class="flex items-center gap-2">
-              <span class="font-medium text-slate-900 dark:text-slate-100">
-                {cliName || provider || "Unknown Provider"}
-              </span>
-              {model && (
-                <span class="px-2 py-0.5 text-xs font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-md">
-                  {model}
-                </span>
-              )}
-            </div>
-          </div>
+    <div
+      class="flex items-center gap-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
+      role="status"
+      aria-label={`Provider: ${cliName || provider || "Unknown"}`}
+    >
+      <ProviderLogo provider={provider || ""} size={18} />
+      <div class="flex items-center gap-2">
+        <span class="font-medium text-[12px] text-slate-700 dark:text-slate-200">
+          {cliName || provider || "Unknown Provider"}
+        </span>
+        {model && (
+          <span class="px-1.5 py-0.5 text-[10px] font-mono text-slate-400 dark:text-slate-500 bg-black/[0.04] dark:bg-white/[0.04] rounded-md">
+            {model}
+          </span>
         )}
       </div>
-    </ChatWidgetFrame>
+    </div>
   );
 };

@@ -129,6 +129,7 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     selectedThread: threadData.selectedThread,
     selectedInvocation: invocationData.selectedInvocation,
     selectedAgentPreset: invocationData.selectedAgentPreset,
+    agentPresets: deferredAgentPresets,
     activeConnection,
     pendingDashboardMessages,
     hasWorkingReply,

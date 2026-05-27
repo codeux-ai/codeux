@@ -363,20 +363,7 @@ export class CycleRunner {
         return {};
       },
       getRunningCounts: () => {
-        const counts: Record<string, number> = {};
-        for (const t of subtasks) {
-          if (t.status === "RUNNING") {
-            const p = t.provider || (t.record_id ? this.deps.taskService?.resolveTaskProvider(
-              t,
-              { projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id },
-              taskRecordMap.get(t.record_id)?.executorType
-            ) : null);
-            if (p) {
-              counts[p] = (counts[p] || 0) + 1;
-            }
-          }
-        }
-        return counts;
+        return this.deps.providerConcurrencyService.getGlobalRunningCounts();
       },
       startTask: (task) => {
         if (!args.sprintRunId) {

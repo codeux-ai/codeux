@@ -7,6 +7,7 @@ import type { ExecutionRepository } from "../../../repositories/execution-reposi
 import type { SessionTrackingRepository } from "../../../repositories/session-tracking-repository.js";
 import type { ProjectManagementRepository } from "../../../repositories/project-management-repository.js";
 import type { MemoryService } from "../../memory-service.js";
+import type { ProviderConcurrencyService } from "../../provider-concurrency-service.js";
 import type { Logger } from "../../../shared/logging/logger.js";
 import type { CommandResult } from "../../cli-process-runner.js";
 
@@ -15,6 +16,7 @@ export interface PipelineContextDeps {
   executionRepository?: ExecutionRepository;
   projectManagementRepository?: ProjectManagementRepository;
   memoryService?: MemoryService;
+  providerConcurrencyService?: ProviderConcurrencyService;
   getDashboardSettings: () => DashboardSettings;
   getWorkerInstruction: (repoPath: string) => Promise<string>;
   getGithubToken: () => string | undefined;

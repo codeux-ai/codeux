@@ -75,6 +75,9 @@ describe("WorkerInboxReplyService", () => {
       getDashboardSettings: () => settings,
       getGithubToken: () => "gh-token",
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
     });
 
     const result = await service.generateReply({
@@ -142,6 +145,9 @@ describe("WorkerInboxReplyService", () => {
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
     });
 
     const result = await service.generateReply({
@@ -193,6 +199,9 @@ describe("WorkerInboxReplyService", () => {
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
     });
 
     const result = await service.generateReply({
@@ -240,6 +249,9 @@ describe("WorkerInboxReplyService", () => {
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
     });
 
     const result = await service.generateReply({
@@ -312,6 +324,9 @@ describe("WorkerInboxReplyService", () => {
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
     });
 
     await service.generateReply({
@@ -377,6 +392,9 @@ describe("WorkerInboxReplyService", () => {
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
     });
 
     const result = await service.generateClarificationReply({
@@ -494,6 +512,9 @@ describe("WorkerInboxReplyService", () => {
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
     });
 
     await service.generateClarificationReply({
@@ -563,6 +584,9 @@ describe("WorkerInboxReplyService", () => {
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
     });
 
     await service.generateClarificationReply({
@@ -645,6 +669,9 @@ describe("WorkerInboxReplyService", () => {
       }),
       getGithubToken: () => undefined,
       providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
     });
 
     await service.generateClarificationReply({

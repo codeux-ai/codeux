@@ -8,6 +8,7 @@ import { WorkspaceArtifactService } from "../infrastructure/providers/cli/worksp
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
+import { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import type { DashboardSettings, DashboardSettingsScope, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { TaskRunRecord } from "../contracts/execution-types.js";
 import type { ExecutionInvocationRecord } from "../contracts/invocation-types.js";
@@ -102,6 +103,7 @@ interface QualityAssuranceServiceDependencies {
   taskService: TaskService;
   agentPresetSyncService: AgentPresetSyncService;
   providerRunner: IProviderRunner;
+  providerConcurrencyService: ProviderConcurrencyService;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   getGithubToken: () => string | undefined;
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
@@ -123,6 +125,7 @@ export class QualityAssuranceService {
     this.providerExecutionService = new ProviderExecutionService({
       executionRepository: deps.executionRepository,
       providerRunner: deps.providerRunner,
+      providerConcurrencyService: deps.providerConcurrencyService,
       logger: deps.logger,
       sessionTracking: deps.sessionTracking,
       getGithubToken: deps.getGithubToken,
@@ -762,7 +765,9 @@ export class QualityAssuranceService {
           provider,
           model: providerSettings.model,
           apiKey: providerSettings.apiKey,
-        qwenAuthMode: providerSettings.qwenAuthMode,
+          maxConcurrentTasks: providerSettings.maxConcurrentTasks,
+          qwenAuthMode: providerSettings.qwenAuthMode,
+
         qwenRegion: providerSettings.qwenRegion,
         qwenBaseUrl: providerSettings.qwenBaseUrl,
         qwenEnvKey: providerSettings.qwenEnvKey,

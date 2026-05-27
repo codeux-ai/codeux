@@ -256,6 +256,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
   });
 
+  deps.projectSetupService.setRealtimeNotifier(deps.dashboardRealtimeService);
+
   registerMemoryRoutes(deps.app, {
     memoryService: deps.memoryService,
     memoryPromotionService: deps.memoryPromotionService,

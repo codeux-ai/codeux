@@ -15,33 +15,51 @@ export const ChatWidgetFrame: FunctionComponent<ChatWidgetFrameProps> = ({
   header,
   footer
 }) => {
-  const getFrameStyles = () => {
+  const getAccentBar = (): string => {
     switch (status) {
-      case "queued":
-        return "border-dashed border-slate-300 bg-slate-50/50 dark:bg-slate-900 dark:border-slate-800 widget-queued";
       case "running":
-        return "border-solid border-blue-500 bg-blue-50/30 dark:bg-blue-900/30 dark:border-blue-800 widget-running";
+        return "before:absolute before:left-0 before:top-3 before:bottom-3 before:w-[2px] before:rounded-full before:bg-signal-500 before:motion-safe:animate-pulse";
       case "completed":
-        return "border-solid border-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/30 dark:border-emerald-800 opacity-80 transition-opacity hover:opacity-100";
+        return "before:absolute before:left-0 before:top-3 before:bottom-3 before:w-[2px] before:rounded-full before:bg-signal-500/40";
       case "failed":
-        return "border-solid border-red-500 bg-red-50/30 dark:bg-red-900/30 dark:border-red-800";
+        return "before:absolute before:left-0 before:top-3 before:bottom-3 before:w-[2px] before:rounded-full before:bg-status-red/60";
+      case "queued":
+        return "";
       default:
-        return "border-solid border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700";
+        return "";
     }
   };
 
+  const getContainerStyles = (): string => {
+    const base = "relative rounded-2xl bg-white/60 dark:bg-void-800/40 backdrop-blur-xl border transition-all duration-300";
+
+    if (status === "queued") {
+      return `${base} border-dashed border-black/[0.08] dark:border-white/[0.08]`;
+    }
+
+    return `${base} border-black/[0.05] dark:border-white/[0.05]`;
+  };
+
+  const opacityClass = status === "completed"
+    ? "opacity-80 hover:opacity-100 transition-opacity duration-300"
+    : "";
+
   return (
-    <div class={`rounded-lg border overflow-hidden transition-colors ${getFrameStyles()}`} role="region" aria-label={`Widget: ${status}`}>
+    <div
+      class={`${getContainerStyles()} ${getAccentBar()} ${opacityClass} overflow-hidden`}
+      role="region"
+      aria-label={`Widget: ${status}`}
+    >
       {header && (
-        <div class="px-3 py-2 border-b border-inherit bg-black/5 dark:bg-white/5 flex items-center justify-between text-sm font-medium">
+        <div class="px-4 py-2.5 border-b border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between text-[12px] font-medium text-slate-700 dark:text-slate-300">
           {header}
         </div>
       )}
-      <div class="p-3 text-sm text-slate-700 dark:text-slate-300">
+      <div class="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
         {children}
       </div>
       {footer && (
-        <div class="px-3 py-2 border-t border-inherit bg-black/5 dark:bg-white/5 text-xs text-slate-500">
+        <div class="px-4 py-2 border-t border-black/[0.04] dark:border-white/[0.04] text-[11px] text-slate-400 dark:text-slate-500">
           {footer}
         </div>
       )}
