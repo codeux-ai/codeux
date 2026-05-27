@@ -66,11 +66,6 @@ export const ChatPageShell: FunctionComponent<{
               Project <span className="text-signal-500">Conversations.</span>
             </h1>
           </div>
-          <p className="max-w-2xl text-lg leading-relaxed text-slate-500 dark:text-slate-400">
-            {selectedProject
-              ? `Messages sent here are stored in Code UX and routed toward listening MCP connections for ${selectedProject.name}.`
-              : "Select a project to inspect its conversation threads and route dashboard messages to connected listeners."}
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
