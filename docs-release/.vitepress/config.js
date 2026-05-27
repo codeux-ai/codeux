@@ -1,0 +1,1 @@
+export default { title: 'Docs Release', description: 'Documentation site for releases' }
