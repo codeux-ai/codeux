@@ -23,12 +23,35 @@ html.has-bg-image {
   Electron desktop window chrome
   ------------------------------
   When running inside the Electron shell the OS frame is removed and we
-  paint a fully custom title bar.  Rounded corners and the window shadow
-  are handled at the OS level (roundedCorners + hasShadow on BrowserWindow).
+  paint a fully custom title bar.  The window is transparent so the
+  border-radius on .app-shell cleanly reveals the desktop behind the
+  corners.  On macOS, hasShadow provides a native window shadow.
 */
 html.is-electron,
 html.is-electron body {
+  background: transparent !important;
   overflow: hidden;
+}
+
+html.is-electron body {
+  filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.45));
+}
+
+html.is-electron.is-maximized body,
+html.is-electron.is-fullscreen body {
+  filter: none;
+}
+
+html.is-electron .app-shell {
+  border-radius: 14px;
+  overflow: hidden;
+  clip-path: inset(0 round 14px);
+}
+
+html.is-electron.is-maximized .app-shell,
+html.is-electron.is-fullscreen .app-shell {
+  border-radius: 0;
+  clip-path: none;
 }
 
 .titlebar-drag {
