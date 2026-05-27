@@ -71,7 +71,9 @@
       {
         "from": "build",
         "to": "build",
-        "filter": ["icon*.png"]
+        "filter": [
+          "icon*.png"
+        ]
       },
       {
         "from": ".code-ux",
@@ -154,6 +156,8 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "vite": "^8.0.8",
-    "vitest": "^4.1.4"
+    "vitepress": "^1.6.4",
+    "vitest": "^4.1.4",
+    "vue": "^3.5.35"
   }
 }
