@@ -22,12 +22,12 @@ writeFileSync(
     packageManager: packageJson.packageManager,
     dependencies: packageJson.dependencies,
     devDependencies: packageJson.devDependencies,
-    pnpm: packageJson.pnpm,
   }, null, 2),
 );
 
 writeFileSync(path.join(runtimeDir, ".npmrc"), "shamefully-hoist=true\n");
 copyFileSync(path.join(projectRoot, "pnpm-lock.yaml"), path.join(runtimeDir, "pnpm-lock.yaml"));
+copyFileSync(path.join(projectRoot, "pnpm-workspace.yaml"), path.join(runtimeDir, "pnpm-workspace.yaml"));
 
 execFileSync(
   "pnpm",
@@ -36,5 +36,6 @@ execFileSync(
     cwd: runtimeDir,
     stdio: "inherit",
     env: process.env,
+    shell: process.platform === "win32",
   },
 );
