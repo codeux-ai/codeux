@@ -17,6 +17,7 @@ declare global {
   interface Window {
     codeUxDesktop?: {
       platform?: string;
+      renderProfile?: "standard" | "low-power";
       pickDirectory(defaultPath?: string): Promise<{
         canceled: boolean;
         filePath: string | null;

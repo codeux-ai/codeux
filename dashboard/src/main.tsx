@@ -178,7 +178,7 @@ const AppLayout = () => {
           <div
             aria-hidden="true"
             className="fixed inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: `url(${backgroundImage})`, zIndex: 0 }}
+            style={{ backgroundImage: `url(${backgroundImage})`, zIndex: 0, contain: "strict" }}
           />
         ) : (
           <Suspense fallback={null}>
@@ -198,6 +198,7 @@ const AppLayout = () => {
               backgroundImage: BACKGROUND_PATTERNS[backgroundPattern] || undefined,
               backgroundRepeat: "repeat",
               zIndex: 1,
+              contain: "strict",
             }}
           />
         )}

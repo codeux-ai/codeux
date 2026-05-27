@@ -19,14 +19,6 @@ html.has-bg-image {
   background-attachment: fixed;
 }
 
-/*
-  Electron desktop window chrome
-  ------------------------------
-  The window is fully transparent.  Body padding reserves space for the
-  CSS shadow to render outside the rounded .app-shell.  On Windows and
-  macOS this padding is invisible (shows the desktop); on Linux without
-  a compositor it may fall back to a dark fringe.
-*/
 html.is-electron,
 html.is-electron body {
   background: transparent !important;

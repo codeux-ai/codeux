@@ -37,7 +37,7 @@ export const BackgroundManager: FunctionComponent<BackgroundManagerProps> = ({ m
     return (
       <div
         className="fixed inset-0 overflow-hidden"
-        style={{ backgroundColor: staticColor, zIndex: 0 }}
+        style={{ backgroundColor: staticColor, zIndex: 0, contain: "strict" }}
         aria-hidden="true"
       />
     );

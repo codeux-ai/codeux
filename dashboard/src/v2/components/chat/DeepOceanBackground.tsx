@@ -264,15 +264,15 @@ export const DeepOceanBackground = ({ forceDark = false, className = "" }: { for
 
     /* ── animation loop ── */
     let animId = 0;
-    /* offset by 200s so the caustic noise is already in a dispersed state
-       (at t=0 all fbm warping terms collapse, producing a uniform bright flash) */
     const startTime = performance.now() - 200_000;
+    const darkClear = new THREE.Color(0x060a0d);
+    const lightClear = new THREE.Color(0xdbe8f8);
+    const lerpTarget = new THREE.Color();
 
     const animate = () => {
       animId = requestAnimationFrame(animate);
       const elapsed = (performance.now() - startTime) * 0.001;
 
-      /* smoothly lerp dark mode uniform */
       currentDark += (targetDark - currentDark) * 0.03;
       if (Math.abs(currentDark - targetDark) < 0.001) currentDark = targetDark;
 
@@ -281,10 +281,8 @@ export const DeepOceanBackground = ({ forceDark = false, className = "" }: { for
       pMat.uniforms.uTime.value = elapsed;
       pMat.uniforms.uDark.value = currentDark;
 
-      /* interpolate clear color */
-      const darkClear = new THREE.Color(0x060a0d);
-      const lightClear = new THREE.Color(0xdbe8f8);
-      renderer.setClearColor(darkClear.lerp(lightClear, 1.0 - currentDark));
+      lerpTarget.copy(darkClear).lerp(lightClear, 1.0 - currentDark);
+      renderer.setClearColor(lerpTarget);
 
       renderer.autoClear = true;
       renderer.render(scene, camera);
@@ -323,7 +321,7 @@ export const DeepOceanBackground = ({ forceDark = false, className = "" }: { for
       ref={containerRef}
       aria-hidden="true"
       className={`fixed inset-0 overflow-hidden ${forceDark ? "bg-[#060a0d]" : "bg-[#dbe8f8] dark:bg-[#060a0d]"} ${className}`}
-      style={{ zIndex: 0 }}
+      style={{ zIndex: 0, contain: "strict" }}
     />
   );
 };

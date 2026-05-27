@@ -113,7 +113,7 @@ export const EtherealMistBackground = ({ forceDark = false, className = "" }: { 
     let currentDark = isDarkMode(forceDark) ? 1.0 : 0.0;
     let targetDark = currentDark;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: "low-power" });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * RENDER_SCALE);
     renderer.setSize(el.clientWidth, el.clientHeight);
     el.appendChild(renderer.domElement);
@@ -191,5 +191,5 @@ export const EtherealMistBackground = ({ forceDark = false, className = "" }: { 
     };
   }, [forceDark]);
 
-  return <div ref={containerRef} aria-hidden="true" className={`fixed inset-0 overflow-hidden ${className}`} style={{ zIndex: 0 }} />;
+  return <div ref={containerRef} aria-hidden="true" className={`fixed inset-0 overflow-hidden ${className}`} style={{ zIndex: 0, contain: "strict" }} />;
 };

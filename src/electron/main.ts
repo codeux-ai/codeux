@@ -16,6 +16,13 @@ let server: { run(): Promise<void>; close(): Promise<void>; getDashboardRuntimeP
 let dashboardOrigin: string | null = null;
 let isQuitting = false;
 
+const isWindowsPackagedApp = process.platform === "win32" && app.isPackaged;
+
+if (isWindowsPackagedApp) {
+  app.commandLine.appendSwitch("max-active-webgl-contexts", "4");
+  app.commandLine.appendSwitch("force-gpu-mem-available-mb", "512");
+}
+
 if (process.env.WSL_DISTRO_NAME && process.env.CODE_UX_WSL_DISABLE_GPU === "1") {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch("disable-gpu");
@@ -116,8 +123,8 @@ function createMainWindow(url: string): BrowserWindow {
     titleBarStyle: isMac ? "hiddenInset" : "hidden",
     titleBarOverlay: false,
     trafficLightPosition: isMac ? { x: 16, y: 16 } : undefined,
-    transparent: true,
-    backgroundColor: "#00000000",
+    transparent: !isWindowsPackagedApp,
+    backgroundColor: isWindowsPackagedApp ? "#0D0F12" : "#00000000",
     backgroundMaterial: "none",
     roundedCorners: true,
     hasShadow: true,

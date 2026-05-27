@@ -13,6 +13,7 @@ export interface WindowState {
 
 contextBridge.exposeInMainWorld("codeUxDesktop", {
   platform: process.platform,
+  renderProfile: "standard",
   pickDirectory: (defaultPath?: string): Promise<PickDirectoryResult> => {
     return ipcRenderer.invoke("codeux:pick-directory", defaultPath);
   },

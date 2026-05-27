@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "preact/hooks";
 import * as THREE from "../../../lib/three-lite.js";
 
-const RENDER_SCALE = 1.0; // Higher scale for crisp particles
-const PARTICLE_COUNT = 800;
+const RENDER_SCALE = 0.5;
+const PARTICLE_COUNT = 400;
 
 function isDarkMode(forceDark = false): boolean {
   return forceDark || document.documentElement.classList.contains("dark");
@@ -20,8 +20,8 @@ export const CosmicDustBackground = ({ forceDark = false, className = "" }: { fo
     let currentDark = isDarkMode(forceDark) ? 1.0 : 0.0;
     let targetDark = currentDark;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * RENDER_SCALE);
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: "low-power" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * RENDER_SCALE);
     renderer.setSize(el.clientWidth, el.clientHeight);
     el.appendChild(renderer.domElement);
     Object.assign(renderer.domElement.style, { position: "absolute", inset: "0", width: "100%", height: "100%" });
@@ -125,31 +125,31 @@ export const CosmicDustBackground = ({ forceDark = false, className = "" }: { fo
 
     let animId = 0;
     const startTime = performance.now();
+    const darkClear = new THREE.Color(0x060a0d);
+    const lightClear = new THREE.Color(0xf0f4f8);
+    const lerpTarget = new THREE.Color();
 
     const animate = () => {
       animId = requestAnimationFrame(animate);
       const elapsed = (performance.now() - startTime) * 0.001;
 
       currentDark += (targetDark - currentDark) * 0.05;
-      
+
       material.uniforms.uTime.value = elapsed;
       material.uniforms.uDark.value = currentDark;
 
-      // Mouse interactivity: gentle camera sway
       targetX = mouseX * 0.0003;
       targetY = mouseY * 0.0003;
-      
+
       camera.position.x += (targetX - camera.position.x) * 0.005;
       camera.position.y += (-targetY - camera.position.y) * 0.005;
       camera.lookAt(scene.position);
-      
-      // Rotate scene slowly
+
       points.rotation.y = elapsed * 0.005;
       points.rotation.x = elapsed * 0.0025;
 
-      const darkClear = new THREE.Color(0x060a0d);
-      const lightClear = new THREE.Color(0xf0f4f8);
-      renderer.setClearColor(darkClear.lerp(lightClear, 1.0 - currentDark));
+      lerpTarget.copy(darkClear).lerp(lightClear, 1.0 - currentDark);
+      renderer.setClearColor(lerpTarget);
 
       renderer.render(scene, camera);
     };
@@ -176,5 +176,5 @@ export const CosmicDustBackground = ({ forceDark = false, className = "" }: { fo
     };
   }, [forceDark]);
 
-  return <div ref={containerRef} aria-hidden="true" className={`fixed inset-0 overflow-hidden ${className}`} style={{ zIndex: 0 }} />;
+  return <div ref={containerRef} aria-hidden="true" className={`fixed inset-0 overflow-hidden ${className}`} style={{ zIndex: 0, contain: "strict" }} />;
 };
