@@ -88,6 +88,11 @@ function respondBadRequest(res: ServerResponse, message: string): void {
 }
 
 export async function bootMcpTransport(deps: BootMcpTransportDeps): Promise<void> {
+  if (process.env.CODE_UX_DISABLE_MCP_STDIO === "1") {
+    deps.logger.info(`${CODE_UX_DISPLAY_NAME} MCP stdio transport disabled by environment`);
+    return;
+  }
+
   if (process.stdin.isTTY) {
     deps.logger.info(`${CODE_UX_DISPLAY_NAME} running in standalone mode (stdin is a TTY) — MCP stdio transport disabled`);
     return;

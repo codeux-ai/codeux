@@ -57,6 +57,7 @@
 - [Operations Runbook](./operations/runbook.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [Testing and Quality](./development/testing-and-quality.md)
+- [Electron Desktop App](./deployment/electron-desktop.md)
 - [Documentation Standards](./development/documentation-standards.md)
 - [Glossary](./reference/glossary.md)
 - [Atomic Refactor Notes](./yourdocs.md)

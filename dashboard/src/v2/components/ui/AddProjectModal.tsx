@@ -135,8 +135,28 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         }
     };
 
-    const handleOpenDirectoryPicker = (target: DirectoryPickerTarget) => {
+    const handleOpenDirectoryPicker = async (target: DirectoryPickerTarget) => {
         const initialPath = target === 'localPath' ? localPath.trim() : cloneDir.trim();
+        if (window.codeUxDesktop?.pickDirectory) {
+            try {
+                const result = await window.codeUxDesktop.pickDirectory(initialPath || undefined);
+                if (result.canceled || !result.filePath) {
+                    return;
+                }
+                if (target === 'localPath') {
+                    setLocalPath(result.filePath);
+                    setTouched(prev => ({ ...prev, path: false }));
+                } else {
+                    setCloneDir(result.filePath);
+                }
+                setSubmitError(null);
+                setActiveDirectoryPickerTarget(null);
+                return;
+            } catch (err) {
+                setDirectoryPickerError(err instanceof Error ? err.message : String(err));
+            }
+        }
+
         void loadDirectory(target, initialPath || undefined);
     };
 

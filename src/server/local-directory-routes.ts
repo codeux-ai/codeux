@@ -9,7 +9,7 @@ export function registerLocalDirectoryRoutes(router: Express): void {
   router.get("/api/local-directories", asyncRoute(async (req, res) => {
     try {
       const requestedPath = parseTrimmedString(req.query.path) || os.homedir();
-      const expandedPath = requestedPath === "~" || requestedPath.startsWith("~/")
+      const expandedPath = requestedPath === "~" || /^~[\\/]/.test(requestedPath)
         ? path.join(os.homedir(), requestedPath.slice(2))
         : requestedPath;
       const resolvedPath = path.resolve(expandedPath);

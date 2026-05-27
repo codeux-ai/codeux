@@ -60,6 +60,7 @@ import { DefaultRuntimeContext, RuntimeContext } from "../app/runtime-context.js
 import { bootSettings, syncGitSettingsFromDashboard } from "../app/lifecycle/settings-lifecycle-service.js";
 import { bootDashboard } from "../app/lifecycle/dashboard-lifecycle-service.js";
 import { bootMcpHttpTransport, bootMcpTransport, type McpHttpTransportHandle } from "../app/lifecycle/mcp-lifecycle-service.js";
+import type { DashboardServerHandle } from "./dashboard-server.js";
 import { McpApprovalTracker } from "../services/mcp-approval-tracker.js";
 import { getCodeUxSubtasksDir, CODE_UX_SERVICE_NAME } from "../shared/config/code-ux-paths.js";
 import { SprintMarkdownService } from "../services/sprint-markdown-service.js";
@@ -162,7 +163,9 @@ export class JulesAgentServer {
   private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
+  private dashboardHandle: DashboardServerHandle | null = null;
   private mcpServiceBound = false;
+  private isClosing = false;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
   private readonly sigintHandler: () => void;
 
@@ -251,6 +254,16 @@ export class JulesAgentServer {
   }
 
   private async handleSigint(): Promise<void> {
+    await this.close();
+    process.exit(0);
+  }
+
+  async close(): Promise<void> {
+    if (this.isClosing) {
+      return;
+    }
+    this.isClosing = true;
+
     if (this.runtimeCleanupInterval) {
       clearInterval(this.runtimeCleanupInterval);
       this.runtimeCleanupInterval = null;
@@ -269,8 +282,21 @@ export class JulesAgentServer {
     }
     this.virtualWorkerService.stop();
     this.schedulerService.stop();
+    if (this.dashboardHandle) {
+      await new Promise<void>((resolve, reject) => {
+        this.dashboardHandle?.server.close((error) => {
+          if (error && error.message !== "Server is not running.") {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }).catch(() => undefined);
+      this.dashboardHandle = null;
+      this.runtimeContext.dashboardRuntimePort = null;
+    }
     await this.server.close();
-    process.exit(0);
+    this.mcpServiceBound = false;
   }
 
   private configureMcpServer(server: Server, runtimeRole: "project_manager"): void {
@@ -485,6 +511,10 @@ export class JulesAgentServer {
     }
     const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     return settings.dashboardPort || (this.runtimeContext.settings.dashboardPort as number) || this.appConfig.dashboardPort;
+  }
+
+  getDashboardRuntimePort(): number {
+    return this.getDashboardPort();
   }
 
   private getMissingJulesApiKeyInstruction(): string {
@@ -905,7 +935,7 @@ export class JulesAgentServer {
     }
 
     if (this.isDashboardEnabled()) {
-      await bootDashboard({
+      this.dashboardHandle = await bootDashboard({
         app: this.app,
         projectRoot: this.projectRoot,
         getDashboardPort: () => this.getDashboardPort(),
@@ -978,10 +1008,15 @@ export class JulesAgentServer {
       server: this.server,
       logger: this.logger,
     });
+    const defaultMcpHttpPort = this.appConfig.dashboardPort + 1;
+    const mcpHttpPort = this.appConfig.mcpHttpPort === defaultMcpHttpPort
+      ? this.getDashboardPort() + 1
+      : this.appConfig.mcpHttpPort;
+
     this.mcpHttpHandle = await bootMcpHttpTransport({
       enabled: this.appConfig.mcpHttpEnabled,
       host: this.appConfig.mcpHttpHost,
-      port: this.appConfig.mcpHttpPort,
+      port: mcpHttpPort,
       path: this.appConfig.mcpHttpPath,
       authToken: this.appConfig.mcpHttpAuthToken,
       logger: this.logger.child({ component: "mcp-http-transport" }),

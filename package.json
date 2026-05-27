@@ -12,6 +12,13 @@
     "build": "tsc --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo && tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo && vite build",
     "start": "node dist/index.js",
     "dev": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' src/index.ts",
+    "electron:dev": "pnpm run build && electron dist/electron/main.js",
+    "electron:pack": "pnpm run build && electron-builder --dir",
+    "electron:dist": "pnpm run build && electron-builder",
+    "electron:dist:linux": "pnpm run build && electron-builder --linux",
+    "electron:dist:mac": "pnpm run build && electron-builder --mac",
+    "electron:dist:win": "pnpm run build && electron-builder --win",
+    "electron:install-deps": "electron-builder install-app-deps",
     "test": "vitest run",
     "test:backend": "vitest run tests/backend",
     "test:dashboard": "vitest run tests/dashboard",
@@ -27,6 +34,49 @@
     "build:dashboard": "tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo && vite build",
     "dev:dashboard": "vite",
     "typecheck:dashboard": "tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo"
+  },
+  "build": {
+    "appId": "com.codeux.desktop",
+    "productName": "Code UX",
+    "artifactName": "Code-UX-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release/electron"
+    },
+    "extraMetadata": {
+      "main": "dist/electron/main.js"
+    },
+    "files": [
+      "dist/**",
+      "dashboard/dist/**",
+      "package.json",
+      "!**/*.map",
+      "!**/*.tsbuildinfo"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/**/*.node",
+      "node_modules/onnxruntime-node/**"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "category": "Development",
+      "target": [
+        "AppImage",
+        "deb",
+        "tar.gz"
+      ]
+    }
   },
   "dependencies": {
     "@anthropic-ai/tokenizer": "^0.0.4",
@@ -70,6 +120,8 @@
     "@types/supertest": "^7.2.0",
     "@types/three": "^0.183.1",
     "@vitest/coverage-v8": "^4.1.4",
+    "electron": "42.3.0",
+    "electron-builder": "26.8.1",
     "happy-dom": "^20.8.9",
     "jsdom": "^29.0.1",
     "playwright": "^1.59.1",

@@ -1,7 +1,8 @@
-import { setupDashboardServer } from "../../server/dashboard-server.js";
+import { setupDashboardServer, type DashboardServerHandle } from "../../server/dashboard-server.js";
 import { registerMemoryRoutes } from "../../server/memory-routes.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { createLogger } from "../../shared/logging/logger.js";
+import * as path from "path";
 import type { Express } from "express";
 import type { Logger } from "../../shared/logging/logger.js";
 import type { RuntimeContext } from "../runtime-context.js";
@@ -227,8 +228,8 @@ function resolveAttentionClaimWorkerEndpointId(
   throw new Error(`No supervising worker is assigned to project ${projectId}.`);
 }
 
-export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
-  const dashboardDir = `${deps.projectRoot}/dashboard`;
+export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardServerHandle> {
+  const dashboardDir = path.join(deps.projectRoot, "dashboard");
   const port = deps.getDashboardPort();
 
   const cache = new DashboardSnapshotCache({
@@ -562,4 +563,5 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
   });
 
   deps.runtimeContext.dashboardRuntimePort = handle.port;
+  return handle;
 }

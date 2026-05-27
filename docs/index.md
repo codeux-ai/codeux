@@ -58,6 +58,7 @@ Use this page as the main entrypoint.
 38. [OpenCode Integration](./settings/opencode-integration.md)
 39. [Dashboard Resource Layer](./architecture/dashboard-resource-layer.md)
 40. [Dashboard Onboarding](./dashboard/onboarding.md)
+41. [Electron Desktop App](./deployment/electron-desktop.md)
 
 ### Path 3: MCP integrator (tool contracts and runtime expectations)
 1. [Quickstart](./getting-started/quickstart.md)
@@ -124,6 +125,7 @@ Use this page as the main entrypoint.
 - [Operations Runbook](./operations/runbook.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [Testing and Quality](./development/testing-and-quality.md)
+- [Electron Desktop App](./deployment/electron-desktop.md)
 - [Documentation Standards](./development/documentation-standards.md)
 - [Glossary](./reference/glossary.md)
 - [Atomic Refactor Notes](./yourdocs.md)

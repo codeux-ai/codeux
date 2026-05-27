@@ -28,6 +28,7 @@ export default defineConfig({
       exclude: [
         "src/services/embedding-service.ts",
         "src/services/embedding-tokenizer.ts",
+        "src/electron/**",
         "src/worker/code-ux-worker.ts",
         "src/server/dashboard-server.ts",
         "src/server/mcp-request-router.ts",
