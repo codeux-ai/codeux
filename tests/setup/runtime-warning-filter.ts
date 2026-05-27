@@ -52,6 +52,11 @@ const installAnimationFramePolyfill = (): void => {
     target.window.requestAnimationFrame ??= target.requestAnimationFrame;
     target.window.cancelAnimationFrame ??= target.cancelAnimationFrame;
   }
+
+  if (typeof window !== "undefined") {
+    window.requestAnimationFrame = target.requestAnimationFrame;
+    window.cancelAnimationFrame = target.cancelAnimationFrame;
+  }
 };
 
 installAnimationFramePolyfill();
