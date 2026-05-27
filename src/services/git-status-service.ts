@@ -59,7 +59,7 @@ export class GitStatusService {
     const remoteUrlRes = await this.queryClient.gitRemoteUrl("origin", effectiveToken);
     const remoteUrl = remoteUrlRes.ok ? remoteUrlRes.stdout.trim() : null;
     const { provider, hostDomain, repoTarget } = resolveRepositoryHost(remoteUrl);
-    this.queryClient.setProvider(provider, hostDomain, repoTarget);
+    this.queryClient.setProvider(provider, hostDomain, repoTarget, this.preferApi && !!effectiveToken);
   }
   private static statusCache = new Map<string, { timestamp: number; promise: Promise<GitTrackingStatus> }>();
 
@@ -79,7 +79,8 @@ export class GitStatusService {
 
   constructor(
     private readonly repoPath: string,
-    private readonly runner: CommandRunner = defaultRunner
+    private readonly runner: CommandRunner = defaultRunner,
+    private readonly preferApi = false,
   ) {
     this.queryClient = new GitStatusQueryClient(this.repoPath, this.runner);
   }
