@@ -12,11 +12,14 @@ Before beginning, ensure you have the following requirements met:
 - `pnpm` package manager installed globally
 - Access to the required database credentials and API keys
 
-## Steps
-Follow these steps to set up the release:
+## Documentation Structure
 
-1. **Clone the Repository:** Obtain the source code from the official repository.
-2. **Install Dependencies:** Run `pnpm install` in the project root to install all required packages.
-3. **Configure Environment Variables:** Copy `.env.example` to `.env` and fill in the necessary values.
-4. **Build the Application:** Execute `pnpm run build` to compile the project.
-5. **Run the Application:** Start the application using the appropriate command (e.g., `pnpm start`).
+The documentation is organized into 7 core categories:
+
+1. **Getting Started:** Your entry point. Covers prerequisites, high-level overview, and onboarding.
+2. **Guides:** Step-by-step tutorials for specific use cases (e.g., installation, deployment).
+3. **Features:** Detailed explanations of the core capabilities and how to leverage them.
+4. **Admin:** Operations, maintenance, configuration, and security management.
+5. **Troubleshooting:** Common issues, diagnostic steps, and resolutions.
+6. **Reference:** API documentation, technical specifications, and configuration schemas.
+7. **Release Notes:** Changelogs, breaking changes, and upgrade paths.
