@@ -45,6 +45,7 @@ export interface AgentPresetRecord {
 }
 
 export interface CreateAgentPresetInput {
+  id?: string;
   name: string;
   description?: string;
   instructionMarkdown?: string;

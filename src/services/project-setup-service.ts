@@ -258,6 +258,7 @@ export class ProjectSetupService {
       return existing;
     }
     return await this.deps.agentPresetSyncService.createAgentPreset(projectId, {
+      id: "5",
       name: PROJECT_SETUP_AGENT_NAME,
       description: "Initializes Code UX agents, routing, quicksprints, preview startup, and basic CI from repository evidence.",
       labels: ["planning", "setup"],
@@ -415,12 +416,16 @@ export class ProjectSetupService {
   private async configureAgentRouting(projectId: string): Promise<void> {
     const presets = await this.deps.agentPresetSyncService.listAgentPresets(projectId);
     const setupAgent = presets.find((preset) => preset.name === PROJECT_SETUP_AGENT_NAME);
+    const excludedNames = new Set([
+      PROJECT_SETUP_AGENT_NAME.toLowerCase(),
+      "planning agent",
+      "project manager",
+      "quality assurance agent",
+      "worker",
+    ]);
     const workerAgents = presets.filter((preset) =>
-      preset.id !== setupAgent?.id &&
-      (preset.labels.includes("worker") || !preset.labels.includes("planning")) &&
-      preset.name !== "Planning agent" &&
-      preset.name !== "Project manager" &&
-      preset.name !== "Quality assurance agent"
+      !excludedNames.has(preset.name.trim().toLowerCase()) &&
+      (preset.labels.includes("worker") || !preset.labels.includes("planning"))
     );
     const current = this.deps.settingsRepository.getProjectSettings(projectId);
     const effectiveAgents = this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings.agents;

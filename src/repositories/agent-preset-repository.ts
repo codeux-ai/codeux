@@ -1,4 +1,3 @@
-import { randomUUID } from "crypto";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { requireRecord } from "./repository-utils.js";
@@ -76,6 +75,21 @@ export class AgentPresetRepository {
     this.db = storage.getDatabase();
   }
 
+  private nextId(): string {
+    const row = this.db.prepare(
+      `SELECT COALESCE(MAX(CAST(id AS INTEGER)), 0) AS max_id FROM agent_presets WHERE id GLOB '[0-9]*' AND CAST(id AS INTEGER) > 0`,
+    ).get() as { max_id: number } | undefined;
+    return String((row?.max_id ?? 0) + 1);
+  }
+
+  private resolveId(requestedId: string | undefined): string {
+    if (requestedId) {
+      const taken = this.db.prepare(`SELECT id FROM agent_presets WHERE id = ?`).get(requestedId);
+      if (!taken) return requestedId;
+    }
+    return this.nextId();
+  }
+
   listAgentPresets(projectId: string): AgentPresetRecord[] {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const rows = this.db.prepare(`
@@ -101,7 +115,7 @@ export class AgentPresetRepository {
   createAgentPreset(projectId: string, input: CreateAgentPresetInput): AgentPresetRecord {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const now = new Date().toISOString();
-    const id = randomUUID();
+    const id = this.resolveId(input.id);
     this.db.prepare(`
       INSERT INTO agent_presets (
         id,
@@ -148,7 +162,7 @@ export class AgentPresetRepository {
   importAgentPresetFromSource(projectId: string, input: CreateAgentPresetInput & AgentPresetSourceMetadata): AgentPresetRecord {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const now = new Date().toISOString();
-    const id = randomUUID();
+    const id = this.resolveId(input.id);
     const importedAt = input.sourceImportedAt ?? input.sourceUpdatedAt;
 
     this.db.prepare(`

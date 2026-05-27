@@ -32,6 +32,14 @@ interface AgentSourceFile {
   memoryTemplateMarkdown?: string;
 }
 
+const BASE_AGENT_IDS: Record<string, string> = {
+  "worker": "1",
+  "planning agent": "2",
+  "project manager": "3",
+  "quality assurance agent": "4",
+  "project setup agent": "5",
+};
+
 export class AgentPresetSyncService {
   constructor(private readonly deps: AgentPresetSyncServiceDeps) {}
 
@@ -41,6 +49,7 @@ export class AgentPresetSyncService {
   }
 
   async createAgentPreset(projectId: string, input: {
+    id?: string;
     name: string;
     description?: string;
     instructionMarkdown?: string;
@@ -68,6 +77,7 @@ export class AgentPresetSyncService {
         memoryTemplateMarkdown: input.memoryTemplateMarkdown,
       });
       const created = this.deps.agentPresetRepository.importAgentPresetFromSource(projectId, {
+        id: input.id,
         name: nextName,
         description: source.description ?? input.description,
         instructionMarkdown: source.instructionMarkdown,
@@ -168,7 +178,9 @@ export class AgentPresetSyncService {
 
       if (!existing) {
         const labels = this.inferLabelsForSource(source.normalizedName);
+        const stableId = BASE_AGENT_IDS[source.normalizedName];
         const created = this.deps.agentPresetRepository.importAgentPresetFromSource(projectId, {
+          id: stableId,
           name: source.name,
           description: source.description,
           instructionMarkdown: source.instructionMarkdown,
@@ -450,6 +462,9 @@ export class AgentPresetSyncService {
     if (normalizedName === "quality assurance agent") {
       return ["qa", "review"];
     }
+    if (normalizedName === "project setup agent") {
+      return ["planning", "setup"];
+    }
     return [];
   }
 
@@ -556,6 +571,10 @@ export class AgentPresetSyncService {
 
     if (this.normalizeName(normalized) === "quality assurance agent") {
       return "Quality assurance agent";
+    }
+
+    if (this.normalizeName(normalized) === "project setup agent") {
+      return "Project Setup Agent";
     }
 
     return normalized.length > 0 ? normalized : "Unnamed agent";
