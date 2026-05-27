@@ -79,12 +79,12 @@ function resolveAppIcon(): Electron.NativeImage | undefined {
   const candidates: string[] = [];
   if (app.isPackaged) {
     candidates.push(
-      path.join(process.resourcesPath, "build", "icon-256.png"),
+      path.join(process.resourcesPath, "build", "icon-512.png"),
       path.join(process.resourcesPath, "build", "icon.png"),
     );
   }
   candidates.push(
-    path.join(projectRoot, "build", "icon-256.png"),
+    path.join(projectRoot, "build", "icon-512.png"),
     path.join(projectRoot, "build", "icon.png"),
   );
   for (const p of candidates) {
