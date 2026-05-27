@@ -3,7 +3,10 @@ export default {
   description: 'Documentation site for releases',
   themeConfig: {
     sidebar: [
-      { text: 'Get Started', collapsed: false, items: [{ text: 'Overview', link: '/getting-started/overview' }] },
+      { text: 'Get Started', collapsed: false, items: [
+        { text: 'Overview', link: '/getting-started/overview' },
+        { text: 'Create First Project', link: '/getting-started/first-project' }
+      ] },
       { text: 'Installation', collapsed: false, items: [{ text: 'Overview', link: '/installation/overview' }] },
       { text: 'Guides', collapsed: false, items: [{ text: 'Overview', link: '/guides/overview' }, { text: 'Notifications', link: '/guides/notifications' }] },
       { text: 'Integrations', collapsed: false, items: [{ text: 'Overview', link: '/integrations/overview' }] },
