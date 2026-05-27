@@ -189,7 +189,9 @@ export class SprintPreviewService {
         );
         await fs.mkdir(path.dirname(startupRuntimePath), { recursive: true });
         await fs.writeFile(startupRuntimePath, preparedScript.content, "utf8");
-        await fs.chmod(startupRuntimePath, 0o755);
+        if (process.platform !== "win32") {
+          await fs.chmod(startupRuntimePath, 0o755);
+        }
 
         const setupScriptPath = await this.resolveContainerSetupScriptPath(project.baseDir, effectiveSettings.cliWorkflow);
         const baseImage = effectiveSettings.cliWorkflow.containerImage.trim() || "node:24-bookworm";
@@ -418,7 +420,9 @@ export class SprintPreviewService {
     const scriptPath = resolveConfiguredPath(project.baseDir, settings.startupScriptPath);
     await fs.mkdir(path.dirname(scriptPath), { recursive: true });
     await fs.writeFile(scriptPath, content, "utf8");
-    await fs.chmod(scriptPath, 0o755);
+    if (process.platform !== "win32") {
+      await fs.chmod(scriptPath, 0o755);
+    }
     return await this.getScript(projectId, sprintId);
   }
 

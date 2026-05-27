@@ -1,6 +1,7 @@
 import os from "os";
 import * as path from "path";
 import type { CommandResult } from "./cli-process-runner.js";
+import { resolveUserPath } from "../shared/config/home-path.js";
 
 export interface ContainerMount {
   source: string;
@@ -10,20 +11,7 @@ export interface ContainerMount {
 }
 
 export const resolveConfiguredPath = (repoPath: string, rawValue: string): string => {
-  const value = rawValue.trim();
-  if (!value) {
-    return "";
-  }
-  if (value === "~") {
-    return os.homedir();
-  }
-  if (value.startsWith("~/")) {
-    return path.join(os.homedir(), value.slice(2));
-  }
-  if (path.isAbsolute(value)) {
-    return value;
-  }
-  return path.resolve(repoPath, value);
+  return resolveUserPath(repoPath, rawValue);
 };
 
 export const getDockerUserSpec = (): string | undefined => {

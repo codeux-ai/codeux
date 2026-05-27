@@ -1,5 +1,4 @@
 import * as fs from "fs/promises";
-import * as os from "os";
 import * as path from "path";
 import type {
   OnboardingDependencyCheck,
@@ -9,16 +8,7 @@ import type {
 } from "../contracts/app-types.js";
 import type { SystemSettings } from "../contracts/settings-scope-types.js";
 import { commandRunner } from "../shared/subprocess/command-runner.js";
-
-const expandHomePath = (input: string): string => {
-  if (input === "~") {
-    return os.homedir();
-  }
-  if (input.startsWith("~/")) {
-    return path.join(os.homedir(), input.slice(2));
-  }
-  return input;
-};
+import { expandHomePath } from "../shared/config/home-path.js";
 
 const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",

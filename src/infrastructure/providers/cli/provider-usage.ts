@@ -206,7 +206,10 @@ function extractClaudeTranscript(lines: Array<Record<string, unknown>>): string 
 }
 
 async function parseClaudeSessionTelemetry(cwd: string, nativeSessionId: string): Promise<ProviderUsageTelemetry | null> {
-  const slug = cwd.replaceAll(path.sep, "-");
+  // Claude Code slugifies cwd for its projects directory by replacing path
+  // separators and drive-letter colons. Handle both Unix ("/") and Windows
+  // ("\\", "C:") forms so the lookup works on every host.
+  const slug = cwd.replace(/[/\\:]/g, "-");
   const sessionPath = path.join(os.homedir(), ".claude", "projects", slug, `${nativeSessionId}.jsonl`);
   const raw = await fs.readFile(sessionPath, "utf8").catch(() => "");
   return parseClaudeSessionJsonl(raw, nativeSessionId, { sessionPath });

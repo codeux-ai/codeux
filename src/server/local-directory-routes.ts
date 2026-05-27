@@ -4,15 +4,13 @@ import * as os from "os";
 import * as path from "path";
 import type { LocalDirectoryBrowserResponse } from "../contracts/app-types.js";
 import { asyncRoute, parseTrimmedString, toErrorResponse } from "./route-utils.js";
+import { expandHomePath } from "../shared/config/home-path.js";
 
 export function registerLocalDirectoryRoutes(router: Express): void {
   router.get("/api/local-directories", asyncRoute(async (req, res) => {
     try {
       const requestedPath = parseTrimmedString(req.query.path) || os.homedir();
-      const expandedPath = requestedPath === "~" || /^~[\\/]/.test(requestedPath)
-        ? path.join(os.homedir(), requestedPath.slice(2))
-        : requestedPath;
-      const resolvedPath = path.resolve(expandedPath);
+      const resolvedPath = path.resolve(expandHomePath(requestedPath));
       const stat = await fs.stat(resolvedPath);
 
       if (!stat.isDirectory()) {

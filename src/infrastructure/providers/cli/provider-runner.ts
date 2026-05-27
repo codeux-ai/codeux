@@ -37,7 +37,7 @@ export const providerSpecs: Record<CliProviderId, ProviderCommandSpec> = {
     return { command: "claude", args };
   },
   "codex": (model: string, prompt: string) => {
-    const args = ["exec", "--yolo", "--json", "--output-last-message", "/tmp/codex-last-message.txt"];
+    const args = ["exec", "--yolo", "--json", "--output-last-message", path.join(os.tmpdir(), "codex-last-message.txt")];
     if (model && model !== "default") args.push("--model", model);
     args.push(prompt);
     return { command: "codex", args };

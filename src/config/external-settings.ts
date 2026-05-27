@@ -8,22 +8,25 @@ import { getRelativeCodeUxPath } from "../shared/config/code-ux-paths.js";
 
 /**
  * Local authentication file artifacts relative to homedir.
+ *
+ * Each entry is a tuple of path segments; they are joined with `path.join`
+ * at lookup time so the resulting paths use the host OS separator.
  */
-const PROVIDER_LOCAL_AUTH_MAP = {
+const PROVIDER_LOCAL_AUTH_MAP: Record<string, ReadonlyArray<ReadonlyArray<string>>> = {
   jules: [],
   gemini: [
-    ".gemini/settings.json",
-    ".gemini/oauth_creds.json",
-    ".gemini/google_accounts.json",
-    ".gemini/installation_id",
-    ".gemini/state.json",
-    ".gemini/trustedFolders.json",
+    [".gemini", "settings.json"],
+    [".gemini", "oauth_creds.json"],
+    [".gemini", "google_accounts.json"],
+    [".gemini", "installation_id"],
+    [".gemini", "state.json"],
+    [".gemini", "trustedFolders.json"],
   ],
-  codex: [".codex/auth.json", ".codex/config.toml"],
-  claudeCode: [".claude/.credentials.json", ".claude.json"],
-  qwenCode: [".qwen/settings.json", ".qwen/.env"],
-  openCode: [".local/share/opencode/auth.json", ".config/opencode/opencode.json"],
-} as const;
+  codex: [[".codex", "auth.json"], [".codex", "config.toml"]],
+  claudeCode: [[".claude", ".credentials.json"], [".claude.json"]],
+  qwenCode: [[".qwen", "settings.json"], [".qwen", ".env"]],
+  openCode: [[".local", "share", "opencode", "auth.json"], [".config", "opencode", "opencode.json"]],
+};
 
 /**
  * Normalization map for setting keys across different sources (Env, JSON).
@@ -117,8 +120,8 @@ export const loadExternalSettingsHints = (projectRoot: string): ExternalSettings
     providerAvailability[provider].hasApiKey = !!resolvedHints[key];
 
     const localAuthFiles = PROVIDER_LOCAL_AUTH_MAP[provider];
-    providerAvailability[provider].hasLocalAuth = localAuthFiles.some((file) =>
-      fs.existsSync(path.join(homedir, file))
+    providerAvailability[provider].hasLocalAuth = localAuthFiles.some((segments) =>
+      fs.existsSync(path.join(homedir, ...segments))
     );
   }
 
