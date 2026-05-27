@@ -6,6 +6,8 @@ import type {
   ProjectSetupArtifactPayload,
   ProjectSetupOptions,
   ProjectSetupResult,
+  ProjectSetupStartResult,
+  ProjectSummary,
 } from "../contracts/project-management-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
@@ -45,6 +47,18 @@ interface ProjectSetupServiceDeps {
   getGithubToken?: () => string | undefined;
 }
 
+type ProjectSetupProviderConfig = ReturnType<ProjectSetupService["resolveProvider"]>;
+
+interface PreparedProjectSetupRun {
+  project: ProjectSummary;
+  options: ProjectSetupOptions;
+  setupAgent: AgentPresetRecord;
+  settings: DashboardSettings;
+  providerConfig: ProjectSetupProviderConfig;
+  prompt: string;
+  invocationId: string;
+}
+
 export class ProjectSetupService {
   private readonly providerExecutionService: ProviderExecutionService;
 
@@ -65,6 +79,40 @@ export class ProjectSetupService {
     },
     signal?: AbortSignal,
   ): Promise<ProjectSetupResult> {
+    const prepared = await this.prepareSetupRun(projectId, input);
+    return await this.executePreparedSetupRun(prepared, signal);
+  }
+
+  async startProjectSetup(
+    projectId: string,
+    input?: {
+      options?: Partial<ProjectSetupOptions>;
+      clientRequestId?: string;
+    },
+  ): Promise<ProjectSetupStartResult> {
+    const prepared = await this.prepareSetupRun(projectId, input);
+    void this.executePreparedSetupRun(prepared).catch((error) => {
+      this.deps.logger?.warn("Background project setup failed", {
+        projectId,
+        invocationId: prepared.invocationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    return {
+      accepted: true,
+      projectId,
+      invocationId: prepared.invocationId,
+      agentId: prepared.setupAgent.id,
+    };
+  }
+
+  private async prepareSetupRun(
+    projectId: string,
+    input?: {
+      options?: Partial<ProjectSetupOptions>;
+      clientRequestId?: string;
+    },
+  ): Promise<PreparedProjectSetupRun> {
     const project = this.deps.projectManagementRepository.getProject(projectId);
     if (!project) {
       throw new Error(`Project not found: ${projectId}`);
@@ -94,6 +142,23 @@ export class ProjectSetupService {
       });
     }
 
+    return {
+      project,
+      options,
+      setupAgent,
+      settings,
+      providerConfig,
+      prompt,
+      invocationId: invocation?.id || "",
+    };
+  }
+
+  private async executePreparedSetupRun(
+    prepared: PreparedProjectSetupRun,
+    signal?: AbortSignal,
+  ): Promise<ProjectSetupResult> {
+    const { project, options, setupAgent, settings, providerConfig, prompt, invocationId } = prepared;
+    const projectId = project.id;
     try {
       signal?.throwIfAborted();
       const sessionId = `project-setup-${providerConfig.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
@@ -131,12 +196,12 @@ export class ProjectSetupService {
         githubToken: settings.git.githubToken,
         signal,
         expectTextOutput: true,
-        invocationId: invocation?.id,
+        invocationId,
         finalizeExecutionInvocation: false,
         onActivity: (description, originator) => {
           this.deps.logger?.debug("Project setup agent activity", {
             projectId,
-            invocationId: invocation?.id,
+            invocationId,
             originator: originator || "system",
             description,
           });
@@ -150,8 +215,8 @@ export class ProjectSetupService {
       const payload = this.parsePayload(result.text || result.stdout || result.usageTelemetry.transcriptText);
       const applied = await this.applyArtifacts(projectId, project.baseDir, options, payload);
 
-      if (invocation) {
-        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
+      if (invocationId) {
+        this.deps.executionRepository?.updateExecutionInvocation(invocationId, {
           status: "completed",
           finishedAt: new Date().toISOString(),
         });
@@ -160,14 +225,14 @@ export class ProjectSetupService {
       return {
         ok: true,
         projectId,
-        invocationId: invocation?.id || "",
+        invocationId,
         agentId: setupAgent.id,
         summary: payload.summary || "Project setup completed.",
         ...applied,
       };
     } catch (error) {
-      if (invocation) {
-        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
+      if (invocationId) {
+        this.deps.executionRepository?.updateExecutionInvocation(invocationId, {
           status: "failed",
           errorMessage: error instanceof Error ? error.message : String(error),
           finishedAt: new Date().toISOString(),

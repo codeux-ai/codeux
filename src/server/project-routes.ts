@@ -31,6 +31,14 @@ export function registerProjectRoutes(router: Express, deps: DashboardDependenci
         return;
       }
       const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      if (req.body?.background === true) {
+        if (!deps.startProjectSetup) {
+          res.status(501).json({ error: "Background project setup is not enabled." });
+          return;
+        }
+        res.status(202).json(await deps.startProjectSetup(projectId, req.body as ProjectSetupRequestInput));
+        return;
+      }
       res.json(await deps.setupProject(projectId, req.body as ProjectSetupRequestInput));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to setup project"));

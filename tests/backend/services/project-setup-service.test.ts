@@ -52,6 +52,38 @@ class FakeProviderRunner implements IProviderRunner {
   }
 }
 
+class DeferredProviderRunner implements IProviderRunner {
+  resolveRun!: (text: string) => void;
+  readonly runStarted: Promise<void>;
+  private markStarted!: () => void;
+
+  constructor() {
+    this.runStarted = new Promise<void>((resolve) => {
+      this.markStarted = resolve;
+    });
+  }
+
+  async runProvider(): Promise<ProviderRunResult> {
+    return await this.runProviderForText();
+  }
+
+  async runProviderForText(): Promise<ProviderRunResult & { text: string }> {
+    this.markStarted();
+    const text = await new Promise<string>((resolve) => {
+      this.resolveRun = resolve;
+    });
+    return {
+      ok: true,
+      stdout: text,
+      stderr: "",
+      code: 0,
+      usageTelemetry: { ...usageTelemetry, transcriptText: text },
+      nativeSessionId: null,
+      text,
+    };
+  }
+}
+
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
@@ -157,5 +189,62 @@ describe("ProjectSetupService", () => {
     expect(effective.agents.routing.planning.agentPresetId).toBeTruthy();
     expect(effective.agents.routing.taskCoding.mode).toBe("ORCHESTRATOR");
     expect(effective.agents.routing.taskCoding.orchestratorAgentPresetIds.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("starts background setup and exposes the invocation id before provider completion", async () => {
+    const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-setup-bg-"));
+    tempDirs.push(repoDir);
+    await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({ scripts: { test: "vitest run" } }, null, 2));
+
+    const storage = new AppDbStorage();
+    const projectManagementRepository = new ProjectManagementRepository(storage);
+    const settingsRepository = new SettingsRepository();
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const agentPresetSyncService = new AgentPresetSyncService({
+      projectManagementRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: repoDir,
+    });
+    const project = projectManagementRepository.createProject({
+      name: "Background App",
+      sourceType: "local",
+      sourceRef: repoDir,
+    });
+    const providerRunner = new DeferredProviderRunner();
+    const service = new ProjectSetupService({
+      projectManagementRepository,
+      settingsRepository,
+      executionRepository,
+      agentPresetSyncService,
+      providerRunner,
+    });
+
+    const started = await service.startProjectSetup(project.id, {
+      options: { agents: false, quicksprints: false, previewScript: false, ci: false },
+    });
+
+    expect(started.accepted).toBe(true);
+    expect(started.invocationId).toBeTruthy();
+    expect(executionRepository.getExecutionInvocation(started.invocationId)?.status).toBe("running");
+
+    await Promise.race([
+      providerRunner.runStarted,
+      new Promise((_, reject) => setTimeout(() => {
+        const invocation = executionRepository.getExecutionInvocation(started.invocationId);
+        reject(new Error(`Provider runner did not start; invocation status=${invocation?.status} error=${invocation?.errorMessage}`));
+      }, 1000)),
+    ]);
+    providerRunner.resolveRun(JSON.stringify({
+      summary: "No artifacts requested.",
+      agents: [],
+      quicksprints: [],
+      previewScript: null,
+      ci: [],
+    }));
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(executionRepository.getExecutionInvocation(started.invocationId)?.status).toBe("completed");
   });
 });

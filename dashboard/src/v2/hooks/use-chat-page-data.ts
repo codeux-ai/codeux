@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useMessageCache } from "./useMessageCache.js";
 import { useProjectData } from "../context/project-data.js";
 import {
@@ -22,6 +22,7 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
   const { data: effectiveSettings, loading: effectiveSettingsLoading } = useProjectEffectiveSettings(selectedProject?.id || null);
 
   const [chatMode, setChatMode] = useState<"threads" | "invocations">("threads");
+  const routedInvocationIdRef = useRef<string | null>(null);
 
   const threadData = useChatThreadData({
     selectedProject,
@@ -46,6 +47,23 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     threadData,
     invocationData,
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get("mode");
+    const invocationId = params.get("invocation");
+    if (mode === "invocations") {
+      setChatMode("invocations");
+    }
+    if (!invocationId || routedInvocationIdRef.current === invocationId) {
+      return;
+    }
+    routedInvocationIdRef.current = invocationId;
+    void refreshThreads({ mode: "invocations" }).then(() => {
+      void invocationData.activateInvocation(invocationId, { foreground: true });
+    });
+  }, [invocationData, refreshThreads]);
 
   const connectionIndex = useMemo(() => buildConnectionIndex(connections), [connections]);
 

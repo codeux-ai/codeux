@@ -20,6 +20,7 @@ Both flows let the operator choose which artifacts to create:
 The dashboard calls:
 
 - `POST /api/projects/:projectId/setup`
+- `POST /api/projects/:projectId/setup` with `background: true`
 
 Project creation can also include:
 
@@ -38,6 +39,8 @@ Project creation can also include:
 ```
 
 `ProjectSetupService` ensures a project-local `Project Setup Agent`, routes the request through the virtual provider planning path, asks for strict JSON, and applies the returned artifacts itself. This keeps the result stable when provider execution runs in Docker snapshots.
+
+The dashboard uses background mode for user-triggered setup. The endpoint returns `202` with the created `invocationId` immediately, then the setup run continues server-side. The project card shows an `Initializing` state with the invocation short id, and toast notifications link directly to `/chat?mode=invocations&invocation=<id>` for live tracking and completion review.
 
 ## Generated Artifacts
 

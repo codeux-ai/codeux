@@ -104,6 +104,8 @@ Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`
 
 The action runs the Project Setup Agent and returns the applied artifact summary, including created agent IDs, created quicksprint template IDs, and written project-relative files.
 
+Dashboard calls can add `background: true` to the HTTP setup request. In that mode Code UX returns the created `invocationId` immediately and the invocation rail becomes the live tracking surface while setup continues.
+
 ## Important Runtime Behaviors
 
 ### Listen-mode behavior

@@ -10,7 +10,9 @@ import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useProjectData } from "./context/project-data.js";
 import { SkeletonPanel, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
-import { setupProject as runProjectSetup } from "./lib/project-api.js";
+import { startProjectSetup } from "./lib/project-api.js";
+import { fetchProjectInvocations } from "./lib/invocation-api.js";
+import { useToast } from "./components/feedback/ToastProvider.js";
 
 const EMBER_HEX = '#FFB800';
 
@@ -44,10 +46,13 @@ const timeAgo = (iso: string) => {
 const ProjectCard: FunctionComponent<{
     source: Source;
     isSelected: boolean;
+    isSettingUp: boolean;
+    setupInvocationId?: string | null;
     onSelect: () => void;
     onDelete: () => void;
     onSetup: () => void;
-}> = ({ source, isSelected, onSelect, onDelete, onSetup }) => {
+    onOpenInvocation: () => void;
+}> = ({ source, isSelected, isSettingUp, setupInvocationId, onSelect, onDelete, onSetup, onOpenInvocation }) => {
     const cardRef  = useRef<HTMLDivElement>(null);
     const label    = statusLabel[source.status];
     const color    = statusColor[source.status];
@@ -153,6 +158,31 @@ const ProjectCard: FunctionComponent<{
                     {label}
                 </div>
             </div>
+
+            {isSettingUp && (
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        if (setupInvocationId) {
+                            onOpenInvocation();
+                        }
+                    }}
+                    className="relative z-10 mb-4 flex w-full items-center justify-between rounded-2xl border border-ember-500/25 bg-ember-500/[0.08] px-3 py-2 text-left text-ember-700 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-300"
+                    disabled={!setupInvocationId}
+                    title={setupInvocationId ? "Open setup invocation" : "Invocation starting"}
+                >
+                    <span className="flex min-w-0 items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                        <span className="truncate text-[10px] font-black uppercase tracking-[0.14em]">
+                            Initializing
+                        </span>
+                    </span>
+                    <span className="ml-2 shrink-0 font-mono text-[9px] font-bold opacity-80">
+                        {setupInvocationId ? setupInvocationId.slice(0, 8) : "starting"}
+                    </span>
+                </button>
+            )}
 
             {/* ── Stats ─────────────────────────────────────────────── */}
             <div className="grid grid-cols-3 gap-2 mb-6 relative z-10">
@@ -303,7 +333,8 @@ export const ProjectsPage: FunctionComponent = () => {
     const gridRef = useRef<HTMLDivElement>(null);
     const [showModal, setShowModal]   = useState(false);
     const [setupProjectId, setSetupProjectId] = useState<string | null>(null);
-    const [isSettingUpProject, setIsSettingUpProject] = useState(false);
+    const [runningSetupProjectIds, setRunningSetupProjectIds] = useState<Set<string>>(() => new Set());
+    const [setupInvocationByProjectId, setSetupInvocationByProjectId] = useState<Record<string, string>>({});
     const [setupError, setSetupError] = useState<string | null>(null);
     const [setupOptions, setSetupOptions] = useState({
         agents: true,
@@ -320,6 +351,7 @@ export const ProjectsPage: FunctionComponent = () => {
         deleteProject,
         selectProject,
     } = useProjectData();
+    const { addToast } = useToast();
 
     const [showSkeletons, setShowSkeletons] = useState(false);
 
@@ -364,6 +396,86 @@ export const ProjectsPage: FunctionComponent = () => {
         }
     }, [loading, showSkeletons, activeFilter]);
 
+    const openInvocation = (invocationId: string) => {
+        window.location.href = `/chat?mode=invocations&invocation=${encodeURIComponent(invocationId)}`;
+    };
+
+    const waitForSetupInvocation = async (projectId: string, invocationId: string) => {
+        for (;;) {
+            await new Promise(resolve => window.setTimeout(resolve, 3000));
+            const invocations = await fetchProjectInvocations(projectId);
+            const invocation = invocations.find(candidate => candidate.id === invocationId);
+            if (!invocation || invocation.status === "running") {
+                continue;
+            }
+            return invocation;
+        }
+    };
+
+    const launchProjectSetup = (
+        projectId: string,
+        projectName: string,
+        options: {
+            agents: boolean;
+            quicksprints: boolean;
+            previewScript: boolean;
+            ci: boolean;
+        },
+    ) => {
+        setRunningSetupProjectIds(prev => new Set(prev).add(projectId));
+        addToast({
+            type: "info",
+            message: `Starting project initialization for ${projectName}. The invocation rail will open as soon as tracking is ready.`,
+            autoDismissMs: 7000,
+        });
+
+        void startProjectSetup(projectId, {
+            enabled: true,
+            options,
+        }).then((started) => {
+            setSetupInvocationByProjectId(prev => ({ ...prev, [projectId]: started.invocationId }));
+            addToast({
+                type: "info",
+                message: `Project initialization is running for ${projectName}. Invocation ${started.invocationId.slice(0, 8)} is available now.`,
+                autoDismissMs: 0,
+                action: {
+                    label: "Open invocation",
+                    onClick: () => openInvocation(started.invocationId),
+                },
+            });
+            return waitForSetupInvocation(projectId, started.invocationId).then((invocation) => ({
+                started,
+                invocation,
+            }));
+        }).then(({ started, invocation }) => {
+            if (invocation.status === "failed") {
+                throw new Error(invocation.lastErrorMessage || "Project initialization invocation failed.");
+            }
+            addToast({
+                type: "success",
+                message: `Project initialization finished for ${projectName}. Review the invocation output for generated artifacts.`,
+                autoDismissMs: 9000,
+                action: {
+                    label: "Open invocation",
+                    onClick: () => openInvocation(started.invocationId),
+                },
+            });
+        }).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            addToast({
+                type: "error",
+                message: `Project initialization failed for ${projectName}: ${message}`,
+                autoDismissMs: 0,
+            });
+        }).finally(() => {
+            setRunningSetupProjectIds(prev => {
+                const next = new Set(prev);
+                next.delete(projectId);
+                return next;
+            });
+        });
+    };
+
     const handleAddProject = async (project: {
         name: string;
         type: 'local' | 'git';
@@ -379,33 +491,31 @@ export const ProjectsPage: FunctionComponent = () => {
             };
         };
     }) => {
-        await createProject({
+        const createdProject = await createProject({
             name: project.name,
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
-            setup: project.setup,
         });
+        if (project.setup?.enabled) {
+            launchProjectSetup(createdProject.id, createdProject.name, project.setup.options);
+        }
     };
 
     const activeSetupProject = sources.find(source => source.id === setupProjectId) || null;
 
     const handleRunSetup = async () => {
         if (!setupProjectId) return;
-        setIsSettingUpProject(true);
         setSetupError(null);
-        try {
-            await runProjectSetup(setupProjectId, {
-                enabled: true,
-                options: setupOptions,
-            });
-            setSetupProjectId(null);
-        } catch (error) {
-            setSetupError(error instanceof Error ? error.message : String(error));
-        } finally {
-            setIsSettingUpProject(false);
-        }
+        const project = activeSetupProject;
+        setSetupProjectId(null);
+        if (!project) return;
+        launchProjectSetup(project.id, project.name, setupOptions);
     };
+
+    const isActiveSetupRunning = activeSetupProject
+        ? runningSetupProjectIds.has(activeSetupProject.id)
+        : false;
 
     const filterMap: Record<Filter, SourceStatus | null> = {
         All:     null,
@@ -554,12 +664,20 @@ export const ProjectsPage: FunctionComponent = () => {
                                     <ProjectCard
                                         source={source}
                                         isSelected={selectedProjectId === source.id}
+                                        isSettingUp={runningSetupProjectIds.has(source.id)}
+                                        setupInvocationId={setupInvocationByProjectId[source.id] || null}
                                         onSelect={() => { void selectProject(source.id); }}
                                         onDelete={() => { void deleteProject(source.id); }}
                                         onSetup={() => {
                                             setSetupProjectId(source.id);
                                             setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true });
                                             setSetupError(null);
+                                        }}
+                                        onOpenInvocation={() => {
+                                            const invocationId = setupInvocationByProjectId[source.id];
+                                            if (invocationId) {
+                                                openInvocation(invocationId);
+                                            }
                                         }}
                                     />
                                 </div>
@@ -594,7 +712,7 @@ export const ProjectsPage: FunctionComponent = () => {
                             <button
                                 type="button"
                                 onClick={() => setSetupProjectId(null)}
-                                disabled={isSettingUpProject}
+                                disabled={isActiveSetupRunning}
                                 className="rounded-full bg-black/[0.05] px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
                             >
                                 Close
@@ -611,7 +729,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                     key={option.key}
                                     type="button"
                                     onClick={() => setSetupOptions(prev => ({ ...prev, [option.key]: !prev[option.key] }))}
-                                    disabled={isSettingUpProject}
+                                    disabled={isActiveSetupRunning}
                                     className={`rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
                                         setupOptions[option.key]
                                             ? "border-ember-500/35 bg-ember-500/[0.08] text-slate-900 dark:text-white"
@@ -633,7 +751,7 @@ export const ProjectsPage: FunctionComponent = () => {
                             <button
                                 type="button"
                                 onClick={() => setSetupProjectId(null)}
-                                disabled={isSettingUpProject}
+                                disabled={isActiveSetupRunning}
                                 className="rounded-2xl px-4 py-3 text-sm font-bold text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-white"
                             >
                                 Cancel
@@ -641,11 +759,11 @@ export const ProjectsPage: FunctionComponent = () => {
                             <button
                                 type="button"
                                 onClick={() => { void handleRunSetup(); }}
-                                disabled={isSettingUpProject}
+                                disabled={isActiveSetupRunning}
                                 className="flex items-center gap-2 rounded-2xl bg-ember-500 px-5 py-3 text-sm font-black text-void-900 shadow-[0_4px_20px_rgba(255,184,0,0.24)] transition-all hover:bg-ember-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
                             >
-                                {isSettingUpProject ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-                                {isSettingUpProject ? "Setting up..." : "Setup Project"}
+                                {isActiveSetupRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+                                {isActiveSetupRunning ? "Setting up..." : "Setup Project"}
                             </button>
                         </div>
                     </div>

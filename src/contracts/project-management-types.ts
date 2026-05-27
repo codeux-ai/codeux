@@ -293,6 +293,13 @@ export interface ProjectSetupResult {
   writtenFiles: string[];
 }
 
+export interface ProjectSetupStartResult {
+  accepted: true;
+  projectId: string;
+  invocationId: string;
+  agentId: string;
+}
+
 export interface CreateTaskInput {
   sprintId: string;
   taskKey?: string;

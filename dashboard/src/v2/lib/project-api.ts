@@ -11,6 +11,7 @@ import type {
   ProjectSummary,
   ProjectSetupRequestInput,
   ProjectSetupResult,
+  ProjectSetupStartResult,
   SprintCollectionResponse,
   SprintMarkdownExportBundle,
   SprintMarkdownImportInput,
@@ -73,6 +74,17 @@ export const setupProject = async (
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+  });
+};
+
+export const startProjectSetup = async (
+  projectId: string,
+  input: ProjectSetupRequestInput,
+): Promise<ProjectSetupStartResult> => {
+  return fetchJson<ProjectSetupStartResult>(`/api/projects/${encodeURIComponent(projectId)}/setup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, background: true }),
   });
 };
 

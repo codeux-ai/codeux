@@ -544,6 +544,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     },
     quicksprintService: deps.quicksprintService,
     setupProject: (projectId, input, signal) => deps.projectSetupService.setupProject(projectId, input, signal),
+    startProjectSetup: (projectId, input) => deps.projectSetupService.startProjectSetup(projectId, input),
     schedulerService: deps.schedulerService,
     sprintIssueService: deps.sprintIssueService,
     realtimeService: deps.dashboardRealtimeService,
