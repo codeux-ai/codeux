@@ -25,6 +25,7 @@ import {
 import { RerunTaskModal } from "./ui/RerunTaskModal.js";
 import { Button } from "./ui/Button.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import { AgentSelectAvatarIcon } from "./agents/AgentSelectAvatarIcon.js";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -138,6 +139,7 @@ export interface LiveTaskCardProps {
         finishedAt: string | null;
         status: string | null;
     } | null;
+    agentPreset?: { name: string; avatarConfig?: import("../types.js").AgentAvatarConfig } | null;
 }
 
 const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
@@ -148,6 +150,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     onRerun,
     isRerunning,
     dispatchInfo,
+    agentPreset,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const [showFeed, setShowFeed] = useState(false);
@@ -340,6 +343,14 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
                     {/* Right meta column */}
                     <div className="flex flex-col items-end gap-2 shrink-0">
+                        {agentPreset && (
+                            <div className="flex items-center gap-1.5">
+                                <AgentSelectAvatarIcon avatarConfig={agentPreset.avatarConfig} seed={agentPreset.name} />
+                                <span className="text-[9px] font-mono font-bold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500 max-w-[80px] truncate">
+                                    {agentPreset.name}
+                                </span>
+                            </div>
+                        )}
                         {task.provider && (
                             <span className="text-[9px] font-mono font-bold uppercase tracking-[0.1em] text-slate-300 dark:text-slate-600">
                                 {task.provider}

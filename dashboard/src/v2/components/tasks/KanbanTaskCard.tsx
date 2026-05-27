@@ -13,6 +13,8 @@ import { type TaskCardViewModel, formatTimeAgo } from "../../lib/tasks/task-card
 import { useState, useEffect } from "preact/hooks";
 import { DependencyStatusIndicators } from "./DependencyStatusIndicators.js";
 import { LiveDurationBadge } from "../ui/LiveDurationBadge.js";
+import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
+import type { AgentAvatarConfig } from "../../types.js";
 import './kanban-task-card.css';
 
 export const KanbanTaskCard: FunctionComponent<{
@@ -20,7 +22,9 @@ export const KanbanTaskCard: FunctionComponent<{
   index?: number;
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
-}> = memo(({ viewModel, index = 0, onEdit, onDelete }) => {
+  agentPresetName?: string | null;
+  agentPresetAvatarConfig?: AgentAvatarConfig;
+}> = memo(({ viewModel, index = 0, onEdit, onDelete, agentPresetName, agentPresetAvatarConfig }) => {
   const { task, humanizedCreatedAt, dependencyIndicators, sessionId, sessionState, prUrl, liveRunningTime, liveStartedAt } = viewModel;
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
@@ -119,6 +123,12 @@ export const KanbanTaskCard: FunctionComponent<{
         <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1">
           {viewModel.executorLabel}
         </span>
+        {agentPresetName && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5">
+            <AgentSelectAvatarIcon avatarConfig={agentPresetAvatarConfig} seed={agentPresetName} />
+            <span className="max-w-[60px] truncate">{agentPresetName}</span>
+          </span>
+        )}
         {sessionState && (
           <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 max-w-[72px] truncate">
             {sessionState}
@@ -215,6 +225,7 @@ export const KanbanTaskCard: FunctionComponent<{
          prev.viewModel.prUrl === next.viewModel.prUrl &&
          prev.viewModel.sessionId === next.viewModel.sessionId &&
          prev.viewModel.liveRunningTime === next.viewModel.liveRunningTime &&
+         prev.agentPresetName === next.agentPresetName &&
          prev.onEdit === next.onEdit &&
          prev.onDelete === next.onDelete;
 });

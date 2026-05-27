@@ -192,6 +192,11 @@ describe("dashboard-lifecycle-service", () => {
       refreshJulesApiKey: vi.fn(),
       setLogger: vi.fn(),
       LIVE_ACTIVITY_CACHE_MS: 500,
+      projectSetupService: {
+        setRealtimeNotifier: vi.fn(),
+        setupProject: vi.fn(),
+        startProjectSetup: vi.fn(),
+      } as any,
       memoryService: {} as any,
       memoryPromotionService: {} as any,
       embeddingModelManager: { restorePreviousModel: vi.fn().mockResolvedValue(undefined) } as any,

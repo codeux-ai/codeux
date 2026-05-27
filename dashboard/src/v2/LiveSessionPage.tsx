@@ -42,6 +42,8 @@ import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 import { deriveLiveDurationDisplay } from "./lib/live-duration-display.js";
 import { useProjectData } from "./context/project-data.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
+import { fetchAgentPresets } from "./lib/agent-preset-api.js";
+import type { AgentPreset } from "./types.js";
 import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
@@ -121,6 +123,16 @@ export const LiveSessionPage: FunctionComponent = () => {
         selectedSprintId: sprintScopeId
     });
     const sprintScopeReady = Boolean(selectedSprintId || sprintScopeId || initialLoadComplete);
+
+    const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
+    useEffect(() => {
+        if (!selectedProjectId) return;
+        let cancelled = false;
+        fetchAgentPresets(selectedProjectId).then(presets => {
+            if (!cancelled) setAgentPresetsMap(new Map(presets.map(p => [p.id, p])));
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [selectedProjectId]);
 
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
     const { feedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
@@ -495,6 +507,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 onRerun={handleRerun}
                                 isRerunning={isRerunning}
                                 dispatchInfo={dispatchInfo}
+                                agentPreset={task.agentPresetId ? agentPresetsMap.get(task.agentPresetId) ?? null : null}
                             />
                         ))
                     )}

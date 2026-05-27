@@ -41,6 +41,8 @@ import { formatSprintDisplay } from "./lib/format-sprint.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { KanbanTaskCard } from "./components/tasks/KanbanTaskCard.js";
 import { Button } from "./components/ui/Button.js";
+import { fetchAgentPresets } from "./lib/agent-preset-api.js";
+import type { AgentPreset } from "./types.js";
 import { STATUS_CFG } from "./lib/tasks-constants.js";
 import { buildTaskCardViewModel } from "./lib/tasks/task-card-view-model.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
@@ -324,6 +326,15 @@ export const TasksPage: FunctionComponent = () => {
   );
   const settings = useProjectEffectiveSettings(projectId);
   const sprintKeyPrefix = settings.data?.settings.git.sprintKeyPrefix || "SPR";
+  const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    fetchAgentPresets(projectId).then(presets => {
+      if (!cancelled) setAgentPresetsMap(new Map(presets.map(p => [p.id, p])));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId]);
   const {
     data: sprints,
     loading: sprintsLoading,
@@ -792,6 +803,8 @@ export const TasksPage: FunctionComponent = () => {
                             index={index}
                             onEdit={handleEditClick}
                             onDelete={handleDeleteTask}
+                            agentPresetName={task.agentPresetId ? agentPresetsMap.get(task.agentPresetId)?.name ?? null : null}
+                            agentPresetAvatarConfig={task.agentPresetId ? agentPresetsMap.get(task.agentPresetId)?.avatarConfig : undefined}
                           />
                         </div>
                       );
