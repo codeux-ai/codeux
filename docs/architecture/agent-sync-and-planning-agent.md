@@ -15,6 +15,7 @@ When the packaged default assets are present, Code UX also seeds missing base ag
 The built-in roles are now:
 
 - `Planning agent`
+- `Project Setup Agent`
 - `Project manager`
 - `Quality assurance agent`
 - `Worker`
@@ -25,6 +26,10 @@ These agents are used as follows:
   - improve a sprint prompt before creation
   - plan sprint subtasks after creation
   - optionally start the sprint immediately after planning
+- `Project Setup Agent`
+  - research a newly added or existing repository
+  - generate repository-specific specialist agents and coding-agent routing
+  - generate project quicksprint templates, preview startup script content, and basic GitHub/GitLab CI artifacts
 - `Worker`
   - provide the editable execution prompt for background CLI task runs
   - provide the editable reply prompt for connected worker/listener inbox responses
@@ -125,6 +130,20 @@ When memory is enabled, planning prompts also include:
 - the effective learnings-capture instruction, using the agent-specific memory template override when configured
 
 In Docker execution mode, planning runs against a snapshot workspace and captures `.task-learnings.md` back out of that snapshot volume so memory capture still works even though the provider never writes directly into the host repo path.
+
+## Project Setup Agent Flow
+
+Project setup uses the virtual provider execution path but applies artifacts through Code UX rather than relying on provider-side file writes.
+
+Behavior:
+
+1. Code UX ensures a project-local `Project Setup Agent` exists.
+2. The setup prompt requires repository discovery across assistant instruction markdown, documentation, dependency manifests, package scripts, source layout, preview/runtime configuration, and existing CI files.
+3. The provider returns strict JSON containing selected artifacts.
+4. Code UX writes agents through `AgentPresetSyncService`, quicksprints through `QuicksprintService`, preview startup to `.code-ux/browser/start-preview.sh`, and CI files to the returned GitHub/GitLab paths.
+5. Agent routing is updated so the setup agent is the planning default and generated worker specialists become the task-coding orchestrator roster.
+
+The dashboard exposes this flow from project creation and from existing project cards. The HTTP endpoint is `POST /api/projects/:projectId/setup`.
 
 ### Prompt Lineage
 

@@ -69,6 +69,8 @@ import type {
   ImprovePromptInput,
   PlanSprintOptions,
   ProjectCollectionResponse,
+  ProjectSetupRequestInput,
+  ProjectSetupResult,
   SprintCollectionResponse,
   ProjectSummary,
   SprintMarkdownExportBundle,
@@ -149,6 +151,7 @@ export interface DashboardServerOptions {
   getSprintEffectiveSettings: (projectId: string, sprintId: string) => EffectiveSettingsResponse;
   listProjects: () => ProjectCollectionResponse;
   createProject: (input: CreateProjectInput) => ProjectSummary | Promise<ProjectSummary>;
+  setupProject?: (projectId: string, input?: ProjectSetupRequestInput, signal?: AbortSignal) => Promise<ProjectSetupResult>;
   getProject: (projectId: string) => ProjectSummary | null;
   updateProject: (projectId: string, input: UpdateProjectInput) => ProjectSummary;
   deleteProject: (projectId: string) => void;

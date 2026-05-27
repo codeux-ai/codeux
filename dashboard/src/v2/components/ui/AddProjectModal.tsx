@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useMemo } from "preact/hooks";
 import gsap from "gsap";
-import { AlertCircle, Check, ChevronUp, FolderOpen, GitBranch, FolderInput, Home, Link2, Loader2, Plus, RefreshCw, X } from "lucide-preact";
+import { AlertCircle, Bot, Check, ChevronUp, FolderOpen, GitBranch, FolderInput, Home, Link2, Loader2, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
@@ -10,7 +10,21 @@ import type { LocalDirectoryBrowserResponse } from "../../types.js";
 
 interface AddProjectModalProps {
     onClose: () => void;
-    onAdd: (project: { name: string; type: 'local' | 'git'; path: string; cloneDir?: string }) => void;
+    onAdd: (project: {
+        name: string;
+        type: 'local' | 'git';
+        path: string;
+        cloneDir?: string;
+        setup?: {
+            enabled: boolean;
+            options: {
+                agents: boolean;
+                quicksprints: boolean;
+                previewScript: boolean;
+                ci: boolean;
+            };
+        };
+    }) => void | Promise<void>;
 }
 
 type SourceType = 'local' | 'git';
@@ -33,6 +47,14 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [localPath, setLocalPath] = useState('');
     const [gitUrl, setGitUrl]       = useState('');
     const [cloneDir, setCloneDir]   = useState('');
+    const [initializeProject, setInitializeProject] = useState(true);
+    const [showSetupOptions, setShowSetupOptions] = useState(false);
+    const [setupOptions, setSetupOptions] = useState({
+        agents: true,
+        quicksprints: true,
+        previewScript: true,
+        ci: true,
+    });
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [activeDirectoryPickerTarget, setActiveDirectoryPickerTarget] = useState<DirectoryPickerTarget | null>(null);
     const [directoryListing, setDirectoryListing] = useState<LocalDirectoryBrowserResponse | null>(null);
@@ -95,14 +117,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         if (e.target === backdropRef.current) handleClose();
     };
 
-    const handleSubmit = async (e: Event) => {
-        e.preventDefault();
-
-        if (Object.keys(validationErrors).length > 0) {
-            setTouched({ name: true, path: true });
-            return;
-        }
-
+    const submitProject = async () => {
         const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
 
         setIsSubmitting(true);
@@ -113,12 +128,32 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                 type: sourceType,
                 path,
                 ...(sourceType === 'git' && cloneDir.trim() ? { cloneDir: cloneDir.trim() } : {}),
+                setup: {
+                    enabled: initializeProject,
+                    options: setupOptions,
+                },
             }));
             handleClose();
         } catch (err) {
             setIsSubmitting(false);
             setSubmitError(err instanceof Error ? err.message : String(err));
         }
+    };
+
+    const handleSubmit = async (e: Event) => {
+        e.preventDefault();
+
+        if (Object.keys(validationErrors).length > 0) {
+            setTouched({ name: true, path: true });
+            return;
+        }
+
+        if (initializeProject && !showSetupOptions) {
+            setShowSetupOptions(true);
+            return;
+        }
+
+        await submitProject();
     };
 
     const loadDirectory = async (target: DirectoryPickerTarget, directoryPath?: string) => {
@@ -277,6 +312,13 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
             </div>
         );
     };
+
+    const setupOptionRows = [
+        { key: "agents", label: "Agents", description: "Specialist agents and orchestrator routing.", icon: Bot },
+        { key: "quicksprints", label: "Quicksprints", description: "Repository-specific sprint templates.", icon: Workflow },
+        { key: "previewScript", label: "Preview Script", description: "Container startup script for browser previews.", icon: PlaySquare },
+        { key: "ci", label: "CI", description: "Basic GitHub/GitLab error-checking pipelines.", icon: ShieldCheck },
+    ] as const;
 
     return (
         <div
@@ -489,6 +531,84 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 </>
                             )}
 
+                            <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                                <label className="flex cursor-pointer items-start gap-3">
+                                    <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border transition-all ${
+                                        initializeProject
+                                            ? "border-ember-500 bg-ember-500 text-void-900"
+                                            : "border-slate-300 bg-white text-transparent dark:border-white/[0.14] dark:bg-white/[0.04]"
+                                    }`}>
+                                        <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                                    </span>
+                                    <input
+                                        type="checkbox"
+                                        checked={initializeProject}
+                                        onChange={(event) => {
+                                            setInitializeProject((event.target as HTMLInputElement).checked);
+                                            setShowSetupOptions(false);
+                                        }}
+                                        className="sr-only"
+                                    />
+                                    <span className="min-w-0">
+                                        <span className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
+                                            <Sparkles className="h-4 w-4 text-ember-500" />
+                                            Initialize with Project Setup Agent
+                                        </span>
+                                        <span className="mt-1 block text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                                            Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, and basic CI.
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+
+                            {showSetupOptions && (
+                                <div className="rounded-[1.35rem] border border-ember-500/25 bg-ember-500/[0.045] p-4 shadow-[0_14px_38px_rgba(255,184,0,0.08)] dark:bg-ember-500/[0.06]">
+                                    <div className="mb-3 flex items-center justify-between gap-4">
+                                        <div>
+                                            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-ember-600 dark:text-ember-400">
+                                                Setup Scope
+                                            </div>
+                                            <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                                                Choose project assets
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true })}
+                                            className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm transition-colors hover:text-slate-900 dark:bg-white/[0.08] dark:text-slate-300 dark:hover:text-white"
+                                        >
+                                            All
+                                        </button>
+                                    </div>
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        {setupOptionRows.map(({ key, label, description, icon: Icon }) => {
+                                            const checked = setupOptions[key];
+                                            return (
+                                                <button
+                                                    key={key}
+                                                    type="button"
+                                                    onClick={() => setSetupOptions(prev => ({ ...prev, [key]: !prev[key] }))}
+                                                    className={`flex min-w-0 items-start gap-3 rounded-2xl border p-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                                                        checked
+                                                            ? "border-ember-500/30 bg-white text-slate-900 shadow-sm dark:bg-white/[0.08] dark:text-white"
+                                                            : "border-black/[0.06] bg-white/45 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
+                                                    }`}
+                                                    aria-pressed={checked}
+                                                >
+                                                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${checked ? "bg-ember-500 text-void-900" : "bg-black/[0.04] text-slate-400 dark:bg-white/[0.06]"}`}>
+                                                        <Icon className="h-4 w-4" />
+                                                    </span>
+                                                    <span className="min-w-0">
+                                                        <span className="block text-xs font-black uppercase tracking-[0.12em]">{label}</span>
+                                                        <span className="mt-1 block text-[11px] font-medium leading-snug opacity-75">{description}</span>
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Spacer */}
                             <div className="flex-1" />
 
@@ -511,7 +631,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     ) : (
                                         <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     )}
-                                    {isSubmitting ? "Adding..." : "Add Project"}
+                                    {isSubmitting
+                                        ? (initializeProject ? "Setting up..." : "Adding...")
+                                        : (initializeProject && !showSetupOptions ? "Continue" : "Add Project")}
                                 </button>
                             </div>
                         </div>

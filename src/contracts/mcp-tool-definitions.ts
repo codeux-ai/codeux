@@ -125,14 +125,15 @@ export const TOOL_DEFINITIONS = [
   {
     name: "manage_projects",
     runtimeRoles: ["project_manager"],
-    description: "Manage Code UX projects. Used to list, get, create, update, select, and delete projects. Destructive actions require approval confirmation.",
+    description: "Manage Code UX projects. Used to list, get, create, update, select, setup, and delete projects. Destructive actions require approval confirmation.",
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "get", "create", "update", "select", "delete"], description: "The project action to perform." },
-        projectId: { type: "string", description: "Required for get, update, select, delete." },
+        action: { type: "string", enum: ["list", "get", "create", "update", "select", "setup", "delete"], description: "The project action to perform." },
+        projectId: { type: "string", description: "Required for get, update, select, setup, delete." },
         name: { type: "string", description: "Required for create. Optional for update." },
         description: { type: "string", description: "Optional for create and update." },
+        setup: { type: "object", additionalProperties: true, description: "Optional setup request with enabled and options flags." },
         approval: {
           type: "object",
           properties: {

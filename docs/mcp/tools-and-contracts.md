@@ -28,6 +28,7 @@ These cover:
 
 ### Management
 - `manage_code_ux`
+- `manage_projects`
 
 ## Registered Tools
 
@@ -80,6 +81,28 @@ Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`
 2. The server short-circuits the action, returning an early envelope with `approvalRequired: true` and an explanatory `approvalMessage`.
 3. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
 4. The server executes the operation and returns the `result` block.
+
+### Project Setup Action
+
+`manage_projects` and `manage_code_ux` support project setup:
+
+```json
+{
+  "action": "setup",
+  "projectId": "project-id",
+  "setup": {
+    "enabled": true,
+    "options": {
+      "agents": true,
+      "quicksprints": true,
+      "previewScript": true,
+      "ci": true
+    }
+  }
+}
+```
+
+The action runs the Project Setup Agent and returns the applied artifact summary, including created agent IDs, created quicksprint template IDs, and written project-relative files.
 
 ## Important Runtime Behaviors
 

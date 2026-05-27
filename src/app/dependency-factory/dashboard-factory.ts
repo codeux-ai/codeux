@@ -6,6 +6,7 @@ import { TaskRerunService } from "../../services/task-rerun-service.js";
 import { ExecutionControlService } from "../../services/execution-control-service.js";
 import { PlanningAgentService } from "../../services/planning-agent-service.js";
 import { QuicksprintService } from "../../services/quicksprint-service.js";
+import { ProjectSetupService } from "../../services/project-setup-service.js";
 import { WorkspaceManager } from "../../infrastructure/providers/cli/workspace-manager.js";
 import { formatSprintBranch } from "../../git/sprint-branch-scheme.js";
 
@@ -23,6 +24,7 @@ export interface DashboardDependencies {
   executionControlService: ExecutionControlService;
   planningAgentService: PlanningAgentService;
   quicksprintService: QuicksprintService;
+  projectSetupService: ProjectSetupService;
   sprintIssueService: CoreDependencies["sprintIssueService"];
   schedulerService: SchedulerService;
   searchJiraIssues: CoreDependencies["sprintIssueService"]["searchJiraIssues"];
@@ -76,6 +78,7 @@ export function createDashboardDependencies(
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
     planningAgentService: {} as any, // Will link below
+    projectSetupService: undefined,
     sprintIssueService: coreDeps.sprintIssueService,
   });
 
@@ -348,6 +351,18 @@ export function createDashboardDependencies(
     (agentPresetId) => coreDeps.agentPresetRepository.getAgentPreset(agentPresetId),
   );
 
+  const projectSetupService = new ProjectSetupService({
+    projectManagementRepository,
+    settingsRepository,
+    executionRepository,
+    agentPresetSyncService,
+    quicksprintService,
+    providerRunner,
+    getGithubToken: () => context.getEffectiveGithubToken(),
+    logger: logger.child({ component: "project-setup-service" }),
+  });
+  (managementToolHandler as any).deps.projectSetupService = projectSetupService;
+
   const schedulerService = new SchedulerService({
     schedulerRepository: coreDeps.schedulerRepository,
     projectManagementRepository,
@@ -364,6 +379,7 @@ export function createDashboardDependencies(
     executionControlService,
     planningAgentService,
     quicksprintService,
+    projectSetupService,
     sprintIssueService: coreDeps.sprintIssueService,
     schedulerService,
     searchJiraIssues: coreDeps.sprintIssueService.searchJiraIssues.bind(coreDeps.sprintIssueService),

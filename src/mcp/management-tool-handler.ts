@@ -23,6 +23,7 @@ import type { MemoryPromotionService } from "../services/memory-promotion-servic
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
 
 import type { PlanningAgentService } from "../services/planning-agent-service.js";
+import type { ProjectSetupService } from "../services/project-setup-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
 
 import { PreviewActions } from "./management/preview-actions.js";
@@ -47,6 +48,7 @@ export interface ManagementToolHandlerDeps {
   memoryPromotionService: MemoryPromotionService;
   embeddingModelManager: EmbeddingModelManager;
   planningAgentService: PlanningAgentService;
+  projectSetupService?: ProjectSetupService;
   sprintIssueService: SprintIssueService;
 }
 
@@ -94,7 +96,8 @@ export class ManagementToolHandler {
           args.payload,
           this.deps.projectManagementRepository,
           args.domain,
-          args.approval
+          args.approval,
+          this.deps.projectSetupService
         );
       } else if (args.domain === "sprints") {
         envelope = await this.sprintActions.handleSprintAction(args);
@@ -144,7 +147,8 @@ export class ManagementToolHandler {
         args as unknown as Record<string, unknown>,
         this.deps.projectManagementRepository,
         "projects",
-        args.approval
+        args.approval,
+        this.deps.projectSetupService
       );
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {

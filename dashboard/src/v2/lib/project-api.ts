@@ -9,6 +9,8 @@ import type {
   PlanSprintOptions,
   ProjectCollectionResponse,
   ProjectSummary,
+  ProjectSetupRequestInput,
+  ProjectSetupResult,
   SprintCollectionResponse,
   SprintMarkdownExportBundle,
   SprintMarkdownImportInput,
@@ -57,6 +59,17 @@ export const fetchLocalDirectories = async (directoryPath?: string): Promise<Loc
 
 export const createProject = async (input: CreateProjectInput): Promise<ProjectSummary> => {
   return fetchJson<ProjectSummary>("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+};
+
+export const setupProject = async (
+  projectId: string,
+  input: ProjectSetupRequestInput,
+): Promise<ProjectSetupResult> => {
+  return fetchJson<ProjectSetupResult>(`/api/projects/${encodeURIComponent(projectId)}/setup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { FolderOpen, Plus, ExternalLink, Settings, Trash2 } from "lucide-preact";
+import { Bot, FolderOpen, Plus, ExternalLink, Loader2, Trash2 } from "lucide-preact";
 import type { Source, SourceStatus } from "./types.js";
 import { AddProjectModal } from "./components/ui/AddProjectModal.js";
 import { StatusDot } from "./components/ui/StatusDot.js";
@@ -10,6 +10,7 @@ import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useProjectData } from "./context/project-data.js";
 import { SkeletonPanel, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { setupProject as runProjectSetup } from "./lib/project-api.js";
 
 const EMBER_HEX = '#FFB800';
 
@@ -45,7 +46,8 @@ const ProjectCard: FunctionComponent<{
     isSelected: boolean;
     onSelect: () => void;
     onDelete: () => void;
-}> = ({ source, isSelected, onSelect, onDelete }) => {
+    onSetup: () => void;
+}> = ({ source, isSelected, onSelect, onDelete, onSetup }) => {
     const cardRef  = useRef<HTMLDivElement>(null);
     const label    = statusLabel[source.status];
     const color    = statusColor[source.status];
@@ -225,9 +227,9 @@ const ProjectCard: FunctionComponent<{
                                        transition-colors duration-200"
                             onClick={(event) => {
                                 event.stopPropagation();
-                                onSelect();
+                                onSetup();
                             }}>
-                        <Settings className="w-3 h-3" strokeWidth={2} />
+                        <Bot className="w-3 h-3" strokeWidth={2} />
                     </button>
                     <button className="w-7 h-7 flex items-center justify-center rounded-xl
                                        bg-black/[0.04] dark:bg-white/[0.04]
@@ -300,6 +302,15 @@ export const ProjectsPage: FunctionComponent = () => {
     const mainRef      = useRef<HTMLDivElement>(null);
     const gridRef = useRef<HTMLDivElement>(null);
     const [showModal, setShowModal]   = useState(false);
+    const [setupProjectId, setSetupProjectId] = useState<string | null>(null);
+    const [isSettingUpProject, setIsSettingUpProject] = useState(false);
+    const [setupError, setSetupError] = useState<string | null>(null);
+    const [setupOptions, setSetupOptions] = useState({
+        agents: true,
+        quicksprints: true,
+        previewScript: true,
+        ci: true,
+    });
     const [activeFilter, setActiveFilter] = useState<Filter>('All');
     const {
         projects: sources,
@@ -353,13 +364,47 @@ export const ProjectsPage: FunctionComponent = () => {
         }
     }, [loading, showSkeletons, activeFilter]);
 
-    const handleAddProject = async (project: { name: string; type: 'local' | 'git'; path: string; cloneDir?: string }) => {
+    const handleAddProject = async (project: {
+        name: string;
+        type: 'local' | 'git';
+        path: string;
+        cloneDir?: string;
+        setup?: {
+            enabled: boolean;
+            options: {
+                agents: boolean;
+                quicksprints: boolean;
+                previewScript: boolean;
+                ci: boolean;
+            };
+        };
+    }) => {
         await createProject({
             name: project.name,
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
+            setup: project.setup,
         });
+    };
+
+    const activeSetupProject = sources.find(source => source.id === setupProjectId) || null;
+
+    const handleRunSetup = async () => {
+        if (!setupProjectId) return;
+        setIsSettingUpProject(true);
+        setSetupError(null);
+        try {
+            await runProjectSetup(setupProjectId, {
+                enabled: true,
+                options: setupOptions,
+            });
+            setSetupProjectId(null);
+        } catch (error) {
+            setSetupError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setIsSettingUpProject(false);
+        }
     };
 
     const filterMap: Record<Filter, SourceStatus | null> = {
@@ -511,6 +556,11 @@ export const ProjectsPage: FunctionComponent = () => {
                                         isSelected={selectedProjectId === source.id}
                                         onSelect={() => { void selectProject(source.id); }}
                                         onDelete={() => { void deleteProject(source.id); }}
+                                        onSetup={() => {
+                                            setSetupProjectId(source.id);
+                                            setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true });
+                                            setSetupError(null);
+                                        }}
                                     />
                                 </div>
                             ))}
@@ -525,8 +575,81 @@ export const ProjectsPage: FunctionComponent = () => {
             {showModal && (
                 <AddProjectModal
                     onClose={() => setShowModal(false)}
-                    onAdd={(project) => { void handleAddProject(project); }}
+                    onAdd={handleAddProject}
                 />
+            )}
+            {activeSetupProject && (
+                <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 px-6 backdrop-blur-xl" role="dialog" aria-modal="true" aria-labelledby="setup-project-title">
+                    <div className="w-full max-w-xl rounded-[2rem] border border-black/[0.06] bg-white p-6 shadow-[0_40px_90px_rgba(0,0,0,0.28)] dark:border-white/[0.08] dark:bg-void-800">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-ember-500">
+                                    <Bot className="h-4 w-4" />
+                                    Project Setup Agent
+                                </div>
+                                <h2 id="setup-project-title" className="mt-3 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                                    Setup {activeSetupProject.name}
+                                </h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setSetupProjectId(null)}
+                                disabled={isSettingUpProject}
+                                className="rounded-full bg-black/[0.05] px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                            {([
+                                { key: "agents", label: "Agents", description: "Specialists and routing." },
+                                { key: "quicksprints", label: "Quicksprints", description: "Sprint templates." },
+                                { key: "previewScript", label: "Preview Script", description: "Container startup." },
+                                { key: "ci", label: "CI", description: "Basic checks." },
+                            ] as const).map((option) => (
+                                <button
+                                    key={option.key}
+                                    type="button"
+                                    onClick={() => setSetupOptions(prev => ({ ...prev, [option.key]: !prev[option.key] }))}
+                                    disabled={isSettingUpProject}
+                                    className={`rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                                        setupOptions[option.key]
+                                            ? "border-ember-500/35 bg-ember-500/[0.08] text-slate-900 dark:text-white"
+                                            : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
+                                    }`}
+                                    aria-pressed={setupOptions[option.key]}
+                                >
+                                    <span className="block text-xs font-black uppercase tracking-[0.14em]">{option.label}</span>
+                                    <span className="mt-1 block text-xs font-medium opacity-75">{option.description}</span>
+                                </button>
+                            ))}
+                        </div>
+                        {setupError && (
+                            <div className="mt-4 rounded-2xl bg-status-red/[0.08] p-3 text-sm font-semibold text-status-red" role="alert">
+                                {setupError}
+                            </div>
+                        )}
+                        <div className="mt-6 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setSetupProjectId(null)}
+                                disabled={isSettingUpProject}
+                                className="rounded-2xl px-4 py-3 text-sm font-bold text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-white"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { void handleRunSetup(); }}
+                                disabled={isSettingUpProject}
+                                className="flex items-center gap-2 rounded-2xl bg-ember-500 px-5 py-3 text-sm font-black text-void-900 shadow-[0_4px_20px_rgba(255,184,0,0.24)] transition-all hover:bg-ember-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                            >
+                                {isSettingUpProject ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+                                {isSettingUpProject ? "Setting up..." : "Setup Project"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     );
