@@ -170,7 +170,7 @@ const AppLayout = () => {
       <div className="flex flex-1 min-h-0 overflow-hidden">
       {showSidebar && <Sidebar isMobile={isMobile} isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />}
 
-      <div className="flex flex-col flex-1 h-screen overflow-hidden relative">
+      <div className="flex flex-col flex-1 h-full overflow-hidden relative">
         <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:px-4 focus:py-2 focus:bg-white focus:text-slate-900 focus:font-bold focus:rounded-br-lg ">
           Skip to main content
         </a>
