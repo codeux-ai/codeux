@@ -15,7 +15,7 @@ let server: { run(): Promise<void>; close(): Promise<void>; getDashboardRuntimeP
 let dashboardOrigin: string | null = null;
 let isQuitting = false;
 
-if (process.env.WSL_DISTRO_NAME) {
+if (process.env.WSL_DISTRO_NAME && process.env.CODE_UX_WSL_DISABLE_GPU === "1") {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch("disable-gpu");
   app.commandLine.appendSwitch("disable-software-rasterizer");
