@@ -1,9 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import dotenv from "dotenv";
+import * as fs from "fs";
+import Module from "module";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { loadAppConfig } from "../config/app-config.js";
-import { JulesAgentServer } from "../server/jules-agent-server.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,9 +11,15 @@ const projectRoot = path.resolve(__dirname, "../..");
 const preloadPath = path.join(__dirname, "preload.js");
 
 let mainWindow: BrowserWindow | null = null;
-let server: JulesAgentServer | null = null;
+let server: { run(): Promise<void>; close(): Promise<void>; getDashboardRuntimePort(): number } | null = null;
 let dashboardOrigin: string | null = null;
 let isQuitting = false;
+
+if (process.env.WSL_DISTRO_NAME) {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("disable-software-rasterizer");
+}
 
 function isSafeInternalUrl(rawUrl: string): boolean {
   if (!dashboardOrigin) {
@@ -41,6 +47,30 @@ function openExternalUrl(rawUrl: string): void {
     }
   } catch {
     // Ignore malformed navigation targets.
+  }
+}
+
+function registerPackagedNodeModules(): void {
+  if (!app.isPackaged) {
+    return;
+  }
+
+  const nodeModulesPath = path.join(process.resourcesPath, "node_modules");
+  if (!fs.existsSync(nodeModulesPath)) {
+    return;
+  }
+
+  const nodePathEntries = (process.env.NODE_PATH || "")
+    .split(path.delimiter)
+    .filter(Boolean);
+  if (!nodePathEntries.includes(nodeModulesPath)) {
+    process.env.NODE_PATH = [nodeModulesPath, ...nodePathEntries].join(path.delimiter);
+  }
+
+  const mutableModule = Module as unknown as { globalPaths: string[]; _initPaths?: () => void };
+  mutableModule._initPaths?.();
+  if (!mutableModule.globalPaths.includes(nodeModulesPath)) {
+    mutableModule.globalPaths.push(nodeModulesPath);
   }
 }
 
@@ -87,8 +117,13 @@ function createMainWindow(url: string): BrowserWindow {
 
 async function startServer(): Promise<string> {
   process.env.CODE_UX_DISABLE_MCP_STDIO = "1";
+  registerPackagedNodeModules();
   dotenv.config({ path: path.join(projectRoot, ".env"), quiet: true });
 
+  const [{ loadAppConfig }, { JulesAgentServer }] = await Promise.all([
+    import("../config/app-config.js"),
+    import("../server/jules-agent-server.js"),
+  ]);
   const appConfig = loadAppConfig(["electron", "code-ux-desktop"], projectRoot);
   server = new JulesAgentServer({ projectRoot, appConfig });
   await server.run();

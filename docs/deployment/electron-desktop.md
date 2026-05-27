@@ -34,6 +34,8 @@ Renderer Node access remains disabled. The preload exposes only this narrow IPC 
 
 The release output is written to `release/electron/`.
 
+Electron package builds run `pnpm run electron:prepare-deps` before Electron Builder. That script creates a production-only, hoisted runtime dependency tree in `.cache/electron-runtime/node_modules`, and Electron Builder copies it to `resources/node_modules` so ASAR-packaged builds can resolve pnpm transitive dependencies at runtime.
+
 ## GitHub Release Builds
 
 Desktop release artifacts are built by `.github/workflows/desktop-release.yml` when a GitHub Release is published. The workflow can also be started manually from GitHub Actions with an optional tag input.
@@ -56,6 +58,7 @@ Release builds set `CSC_IDENTITY_AUTO_DISCOVERY=false`, so the default workflow 
 - Sprint previews: preview iframes use same-port `preview-<session>.localhost` origins and the backend routes those hosts to loopback preview containers. Electron keeps those preview URLs internal.
 - External links: `target="_blank"` and navigation to non-dashboard HTTP(S) or mailto URLs open in the user's default browser/mail client instead of replacing the desktop shell.
 - Native modules: Electron Builder is configured to unpack `.node` files and `onnxruntime-node` assets from ASAR so native bindings remain loadable after packaging.
+- WSL validation: packaged launches under WSL disable Electron hardware acceleration and GPU rasterization to avoid WSL GPU process crashes during local release checks.
 
 ## Release Constraints
 

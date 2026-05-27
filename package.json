@@ -12,12 +12,13 @@
     "build": "tsc --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo && tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo && vite build",
     "start": "node dist/index.js",
     "dev": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' src/index.ts",
+    "electron:prepare-deps": "node scripts/prepare-electron-runtime-deps.mjs",
     "electron:dev": "pnpm run build && electron dist/electron/main.js",
-    "electron:pack": "pnpm run build && electron-builder --dir",
-    "electron:dist": "pnpm run build && electron-builder",
-    "electron:dist:linux": "pnpm run build && electron-builder --linux",
-    "electron:dist:mac": "pnpm run build && electron-builder --mac",
-    "electron:dist:win": "pnpm run build && electron-builder --win",
+    "electron:pack": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --dir",
+    "electron:dist": "pnpm run build && pnpm run electron:prepare-deps && electron-builder",
+    "electron:dist:linux": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --linux",
+    "electron:dist:mac": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --mac",
+    "electron:dist:win": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --win",
     "electron:install-deps": "electron-builder install-app-deps",
     "test": "vitest run",
     "test:backend": "vitest run tests/backend",
@@ -57,6 +58,12 @@
       "node_modules/**/*.node",
       "node_modules/onnxruntime-node/**"
     ],
+    "extraResources": [
+      {
+        "from": ".cache/electron-runtime/node_modules",
+        "to": "node_modules"
+      }
+    ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
@@ -71,6 +78,7 @@
     },
     "linux": {
       "category": "Development",
+      "maintainer": "Code UX Maintainers <noreply@github.com>",
       "target": [
         "AppImage",
         "deb",
