@@ -63,7 +63,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
 
             {/* Liquid cell body */}
             <div
-                className={`absolute inset-0 bg-white/55 dark:bg-void-800/65 backdrop-blur-3xl border border-white/70 dark:border-white/[0.06] overflow-hidden transition-all duration-700 transform-gpu ${anim}`}
+                className={`absolute inset-0 bg-white/55 dark:bg-void-800/65 backdrop-blur-md border border-white/70 dark:border-white/[0.06] overflow-hidden transition-all duration-700 transform-gpu ${anim}`}
                 style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)', backfaceVisibility: 'hidden' }}
             >
                 <div className={`absolute inset-0 pointer-events-none shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] ${anim}`} />

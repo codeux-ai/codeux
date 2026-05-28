@@ -290,13 +290,13 @@ const DagNode = memo(({ node, dispatch, onNodeClick }: { node: SprintDagNodeMode
         )}
 
         <div
-          className="pointer-events-none absolute left-[calc(100%+14px)] top-0 z-50 w-[22rem] max-w-[calc(100vw-2rem)] translate-x-2 scale-[0.98] overflow-hidden rounded-[1.45rem] border border-black/[0.08] bg-white/96 p-4 text-slate-700 opacity-0 drop-shadow-[0_18px_34px_rgba(15,23,42,0.18)] backdrop-blur-2xl transition-all duration-180 ease-out group-hover/dag-node:pointer-events-auto group-hover/dag-node:translate-x-0 group-hover/dag-node:scale-100 group-hover/dag-node:opacity-100 group-focus-within/dag-node:pointer-events-auto group-focus-within/dag-node:translate-x-0 group-focus-within/dag-node:scale-100 group-focus-within/dag-node:opacity-100 dark:border-white/[0.09] dark:bg-void-800/96 dark:text-slate-200 dark:drop-shadow-[0_22px_44px_rgba(0,0,0,0.42)]"
+          className="pointer-events-none absolute left-[calc(100%+14px)] top-0 z-50 w-[22rem] max-w-[calc(100vw-2rem)] translate-x-2 scale-[0.98] overflow-hidden rounded-[1.45rem] border border-black/[0.08] bg-white/98 p-4 text-slate-700 opacity-0 drop-shadow-[0_18px_34px_rgba(15,23,42,0.18)] backdrop-blur-sm transition-all duration-180 ease-out group-hover/dag-node:pointer-events-auto group-hover/dag-node:translate-x-0 group-hover/dag-node:scale-100 group-hover/dag-node:opacity-100 group-focus-within/dag-node:pointer-events-auto group-focus-within/dag-node:translate-x-0 group-focus-within/dag-node:scale-100 group-focus-within/dag-node:opacity-100 dark:border-white/[0.09] dark:bg-void-800/98 dark:text-slate-200 dark:drop-shadow-[0_22px_44px_rgba(0,0,0,0.42)]"
           role="tooltip"
         >
           {renderDagNodeTooltipContent(node)}
         </div>
 
-        <div className={`relative isolate flex h-full w-full flex-col overflow-hidden rounded-[1.4rem] border ${tone.card} p-4.5 backdrop-blur-2xl transition-all duration-500 group-hover/dag-node:scale-[1.02]`}>
+        <div className={`relative isolate flex h-full w-full flex-col overflow-hidden rounded-[1.4rem] border ${tone.card} p-4.5 backdrop-blur-sm transition-all duration-500 group-hover/dag-node:scale-[1.02]`}>
           <div
             className="pointer-events-none absolute inset-x-4 top-2 z-0 h-[2px] rounded-full opacity-90"
             style={{ background: `linear-gradient(90deg, transparent, ${tone.accent}, transparent)` }}
@@ -485,7 +485,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
 
   if (!hasSprintContext || safeTasks.length === 0) {
     return (
-      <div className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/70 p-8 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+      <div className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/80 p-8 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
         <WaveFluid accentHex="#00E0A0" />
         <BorderTrace accentHex="#00E0A0" />
         <div className="relative z-10 flex min-h-[22rem] flex-col items-center justify-center text-center">
@@ -505,13 +505,13 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
   }
 
   return (
-    <div className="group relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-6">
+    <div className="group relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/80 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-6">
       <WaveFluid accentHex="#00E0A0" />
       <BorderTrace accentHex="#00E0A0" />
 
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="dag-aurora absolute -left-20 top-8 h-56 w-56 rounded-full bg-signal-500/10 blur-[90px]" />
-        <div className="dag-aurora absolute right-[-4rem] top-1/3 h-64 w-64 rounded-full bg-ember-500/10 blur-[110px]" style={{ animationDelay: "-4s" }} />
+        <div className="dag-aurora absolute -left-20 top-8 h-56 w-56 rounded-full" style={{ background: 'radial-gradient(circle, rgba(0,224,160,0.08) 0%, transparent 70%)' }} />
+        <div className="dag-aurora absolute right-[-4rem] top-1/3 h-64 w-64 rounded-full" style={{ background: 'radial-gradient(circle, rgba(255,184,0,0.08) 0%, transparent 70%)', animationDelay: "-4s" }} />
         <div className="dag-grid-pan absolute inset-0 opacity-40 dark:opacity-50" style={{
           backgroundImage: "radial-gradient(circle at 1px 1px, rgba(100,116,139,0.18) 1px, transparent 0)",
           backgroundSize: "26px 26px",
@@ -544,7 +544,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
               ].map(({ label, value, icon: Icon, accent }) => (
                 <div
                   key={label}
-                  className="rounded-[1.1rem] border border-black/[0.05] bg-white/65 px-3 py-3 backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35"
+                  className="rounded-[1.1rem] border border-black/[0.05] bg-white/75 px-3 py-3 backdrop-blur-sm dark:border-white/[0.05] dark:bg-void-900/50"
                 >
                   <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
                     <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -628,7 +628,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
                     </feMerge>
                   </filter>
                   <filter id="dag-edge-bloom" x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur stdDeviation="10" result="blur" />
+                    <feGaussianBlur stdDeviation="4" result="blur" />
                   </filter>
                 </defs>
 

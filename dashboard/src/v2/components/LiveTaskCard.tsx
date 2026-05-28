@@ -277,8 +277,8 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
             ref={cardRef}
             tabIndex={0}
             className="group relative overflow-hidden focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-signal-500 focus-visible:ring-offset-4 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800
-                       bg-white/70 dark:bg-void-800/60
-                       backdrop-blur-2xl
+                       bg-white/80 dark:bg-void-800/75
+                       backdrop-blur-sm
                        border border-black/[0.06] dark:border-white/[0.06]
                        rounded-[1.75rem] p-7
                        shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]

@@ -46,7 +46,7 @@ export const EmptyChat: FunctionComponent<{
   const Icon = config.icon;
 
   return (
-    <div className="relative flex h-full min-h-[24rem] items-center justify-center overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/72 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+    <div className="relative flex h-full min-h-[24rem] items-center justify-center overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/82 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_50%_45%,rgba(0,224,160,0.08),transparent_62%)] dark:bg-[radial-gradient(ellipse_70%_55%_at_50%_45%,rgba(0,224,160,0.11),transparent_62%)]" />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <div className="h-44 w-44 rounded-full border border-signal-500/16 animate-[ping_4.8s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />

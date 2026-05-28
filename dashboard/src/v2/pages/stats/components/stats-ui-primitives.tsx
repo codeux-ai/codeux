@@ -57,12 +57,12 @@ export interface ChartZoomRange {
   end: number;
 }
 
-export const PANEL_CLASS = "relative overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/70 p-6 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]";
+export const PANEL_CLASS = "relative overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]";
 export const SUBPANEL_CLASS = "rounded-[1.45rem] border border-black/[0.05] bg-white/68 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]";
 export const CHIP_CLASS = "rounded-full border border-black/[0.06] bg-white/70 shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:shadow-[0_1px_3px_rgba(0,0,0,0.18)]";
 export const INPUT_CLASS = "h-11 rounded-2xl border border-black/[0.06] bg-white/72 px-4 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-200";
 export const LEDGER_ROW_CLASS = "group rounded-[1.5rem] border border-black/[0.05] bg-white/68 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-signal-500/18 hover:shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-white/[0.05] dark:bg-void-900/35 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)] dark:hover:bg-void-900/45";
-export const LEDGER_ROW_MODERN_CLASS = "group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-6 shadow-[0_8px_32px_rgba(15,23,42,0.05)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-signal-500/30 hover:shadow-[0_18px_48px_rgba(0,224,160,0.12)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_12px_32px_rgba(0,0,0,0.25)] dark:hover:border-signal-500/40 dark:hover:bg-void-800/80";
+export const LEDGER_ROW_MODERN_CLASS = "group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_8px_32px_rgba(15,23,42,0.05)] backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-signal-500/30 hover:shadow-[0_18px_48px_rgba(0,224,160,0.12)] dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_12px_32px_rgba(0,0,0,0.25)] dark:hover:border-signal-500/40 dark:hover:bg-void-800/80";
 
 export const CHART_SERIES: ChartSeriesDefinition[] = [
   {

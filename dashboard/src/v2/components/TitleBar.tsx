@@ -77,7 +77,7 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
   const trafficLightSpacer = isMac ? <div aria-hidden="true" className="w-[72px] shrink-0" /> : null;
 
   const bgClass = appearanceVariant === "translucent"
-    ? "bg-[#F9F8F4]/80 dark:bg-void-900/80 backdrop-blur-2xl"
+    ? "bg-[#F9F8F4]/88 dark:bg-void-900/88 backdrop-blur-md"
     : "bg-[#F9F8F4] dark:bg-void-900";
 
   const handleDoubleClick = () => {

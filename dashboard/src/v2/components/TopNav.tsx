@@ -1,7 +1,7 @@
 import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Cpu, Zap, Compass, Menu } from "lucide-preact";
+import { Bell, Moon, Sun, ChevronDown, FolderOpen, ArrowRight, Menu } from "lucide-preact";
 import { Link } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
 
@@ -11,23 +11,13 @@ import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
 import { AddProjectModal } from "./ui/AddProjectModal.js";
 import { useProjectData } from "../context/project-data.js";
-import { useExecutions } from "../../hooks/useExecutions.js";
 import { useSprints } from "../../hooks/useSprints.js";
-import type { Task } from "../types.js";
-import type { SprintPreviewSession } from "../../types.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
 import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
 import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
 import { Tooltip } from "./ui/Tooltip.js";
-import { dashboardSettingsToProjectSettings } from "../lib/settings-view-models.js";
-import {
-    getProjectWorkerOptions,
-    type WorkerOption,
-    type WorkerRoutingPreference,
-} from "../lib/project-worker-options.js";
-import { saveProjectSettings } from "../lib/settings-api.js";
 import { useNotifications } from "../hooks/use-notifications.js";
 
 export function useDropdownKeyboard(
@@ -105,8 +95,6 @@ export function useDropdownKeyboard(
     return { toggleRef, onToggleKeyDown, onContainerKeyDown };
 }
 
-const LIVE_WORKER_STATUSES = new Set(["connected", "listening", "idle"]);
-
 interface TopNavProps {
     isDark: boolean;
     toggleTheme: () => void;
@@ -119,12 +107,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     const navRef = useRef<HTMLElement>(null);
 
     const dropdownRef = useRef<HTMLDivElement>(null);
-    const workerDropdownRef = useRef<HTMLDivElement>(null);
 
     const [dropdownOpen, setDropdownOpen] = useState(false);
-    const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
-    const [workerSwitchBusy, setWorkerSwitchBusy] = useState(false);
     const notifications = useNotifications();
 
     const [projectSwitchBusy, setProjectSwitchBusy] = useState(false);
@@ -190,7 +175,6 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isNotificationMenuVisible]);
     const [sprintFilter, setSprintFilter] = useState('');
-    const [workerFilter, setWorkerFilter] = useState('');
     const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
     const sprintDropdownRef = useRef<HTMLDivElement>(null);
     const [sprintDropdownWidth, setSprintDropdownWidth] = useState<number>(0);
@@ -206,31 +190,19 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     const settings = useProjectEffectiveSettings(projectId);
     const sprintKeyPrefix = settings.data?.settings.git.sprintKeyPrefix || "SPR";
 
-    const { data: execution, loading: executionLoading, refetch: refreshExecution } = useExecutions(selectedProject?.id || null);
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
 
-
-
-    const { data: effectiveSettings, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+    const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
     const browserVisible = !selectedProject || (
         (effectiveSettings?.settings.sprintPreview.enabled ?? true)
         && (effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true)
     );
 
-    const workerRouting: WorkerRoutingPreference | null = effectiveSettings ? {
-        executionMode: effectiveSettings.settings.workers.executionMode,
-        virtualWorkerProvider: effectiveSettings.settings.workers.virtualWorkerProvider,
-    } : null;
-
-    const { options: workerOptions, selectedOption: selectedWorker } = getProjectWorkerOptions(execution, workerRouting, executionLoading);
-
     const projectKb = useDropdownKeyboard(dropdownOpen, setDropdownOpen, dropdownRef, setProjectFilter);
     const sprintKb = useDropdownKeyboard(sprintDropdownOpen, setSprintDropdownOpen, sprintDropdownRef, setSprintFilter);
-    const workerKb = useDropdownKeyboard(workerDropdownOpen, setWorkerDropdownOpen, workerDropdownRef, setWorkerFilter);
 
     const filteredProjects = useMemo(() => projects.filter(p => p.name.toLowerCase().includes(projectFilter.toLowerCase())), [projects, projectFilter]);
     const filteredSprints = useMemo(() => sprints.filter(s => s.name.toLowerCase().includes(sprintFilter.toLowerCase())), [sprints, sprintFilter]);
-    const filteredWorkers = useMemo(() => workerOptions.filter(w => w.label.toLowerCase().includes(workerFilter.toLowerCase()) || (w.subLabel && w.subLabel.toLowerCase().includes(workerFilter.toLowerCase()))), [workerOptions, workerFilter]);
 
     useLayoutEffect(() => {
         if (sprintDropdownOpen && sprintDropdownRef.current) {
@@ -244,14 +216,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
         }
     }, []);
 
-    // Close dropdowns on outside click
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
                 setDropdownOpen(false);
-            }
-            if (workerDropdownRef.current && !workerDropdownRef.current.contains(e.target as Node)) {
-                setWorkerDropdownOpen(false);
             }
             if (sprintDropdownRef.current && !sprintDropdownRef.current.contains(e.target as Node)) {
                 setSprintDropdownOpen(false);
@@ -270,46 +238,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
         });
     };
 
-    const handleWorkerSelect = async (option: WorkerOption) => {
-        if (!selectedProject || !option.isSelectable || workerSwitchBusy || !effectiveSettings) return;
-        setWorkerDropdownOpen(false);
-        setWorkerSwitchBusy(true);
-        try {
-            const nextSettings = dashboardSettingsToProjectSettings(effectiveSettings.settings);
-
-            if (option.type === "virtual" && option.providerId) {
-                const nextProvider = option.providerId;
-                const providerChanged = nextSettings.workers.virtualWorkerProvider !== nextProvider;
-                nextSettings.workers.executionMode = "VIRTUAL";
-                nextSettings.workers.virtualWorkerProvider = nextProvider;
-                if (providerChanged) {
-                    nextSettings.workers.model = "default";
-                }
-                await saveProjectSettings(selectedProject.id, nextSettings);
-            }
-            await Promise.all([refreshExecution(), refreshEffectiveSettings()]);
-        } catch (err) {
-            console.error("Failed to update preferred worker:", err);
-        } finally {
-            setWorkerSwitchBusy(false);
-        }
-    };
-
-    const workerStatusClass = (option: WorkerOption): string => {
-        if (option.type === "virtual") {
-            return "bg-signal-500";
-        }
-        if (option.status === "paused") {
-            return "bg-amber-500";
-        }
-        return LIVE_WORKER_STATUSES.has(option.status) ? "bg-emerald-500" : "bg-slate-300";
-    };
-
     return (
         <>
         <header
             ref={navRef}
-            className="sticky top-0 z-50 flex items-center justify-between w-full h-[60px] px-8 md:px-12 bg-[#F9F8F4]/70 dark:bg-void-900/70 backdrop-blur-3xl border-b border-black/[0.05] dark:border-white/[0.04]"
+            className="sticky top-0 z-50 flex items-center justify-between w-full h-[60px] px-8 md:px-12 bg-[#F9F8F4]/82 dark:bg-void-900/82 backdrop-blur-xl border-b border-black/[0.05] dark:border-white/[0.04]"
         >
             <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white dark:focus:bg-void-800 focus:text-signal-600 dark:focus:text-signal-400 focus:rounded-lg focus:shadow-lg focus:text-sm focus:font-semibold">
                 Skip to main content
@@ -342,7 +275,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
 
                     {/* Project Dropdown */}
                     {dropdownOpen && (
-                        <div role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+                        <div role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/97 dark:bg-void-800/97 backdrop-blur-md border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Projects</span>
                             </div>
@@ -443,7 +376,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
 
                         {/* Sprint Dropdown */}
                         {sprintDropdownOpen && sprints.length > 0 && (
-                            <div role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
+                            <div role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 bg-white/97 dark:bg-void-800/97 backdrop-blur-md border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
                                 <div className="px-3 pt-3 pb-1.5">
                                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Scope</span>
                                 </div>
@@ -512,108 +445,6 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
 
                 <TelemetryStats projectId={projectId} sprints={sprints} />
 
-                {/* Worker Selector */}
-                {selectedProject && (
-                    <div className="relative hidden lg:block" ref={workerDropdownRef} onKeyDown={workerKb.onContainerKeyDown}>
-                        <button
-                            ref={workerKb.toggleRef}
-                            onKeyDown={workerKb.onToggleKeyDown}
-                            onClick={() => setWorkerDropdownOpen(!workerDropdownOpen)}
-                            aria-haspopup="listbox"
-                            aria-expanded={workerDropdownOpen}
-                            className="flex h-9 items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group hover:border-black/[0.08] focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.08]"
-                        >
-                            <div className="flex items-center justify-center w-4 h-4 rounded-md bg-signal-500/10 text-signal-500">
-                                <Cpu aria-hidden="true" className="w-3 h-3" strokeWidth={2.5} />
-                            </div>
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
-                                {workerSwitchBusy ? "Switching..." : (selectedWorker?.label || (executionLoading ? "Loading..." : "Select Worker"))}
-                            </span>
-                            <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${workerDropdownOpen ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {/* Worker Dropdown */}
-                        {workerDropdownOpen && (
-                            <div role="listbox" aria-label="Worker list" className="absolute right-0 top-full mt-2 w-64 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
-                                <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Available Workers</span>
-                                </div>
-                                <div className="px-2 pb-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Filter workers..."
-                                        value={workerFilter}
-                                        onInput={(e) => setWorkerFilter(e.currentTarget.value)}
-                                        className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
-                                    />
-                                </div>
-                                <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
-                                    {filteredWorkers.map((option) => (
-                                        <button
-                                            key={option.id}
-                                            role="option"
-                                            aria-selected={selectedWorker?.id === option.id}
-                                            onClick={(e) => {
-                                                if (!option.isSelectable || workerSwitchBusy) {
-                                                    e.preventDefault();
-                                                    return;
-                                                }
-                                                handleWorkerSelect(option);
-                                            }}
-                                            aria-disabled={!option.isSelectable || workerSwitchBusy}
-                                            className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-3 px-3 py-3 min-h-[44px] text-left transition-colors group ${
-                                                option.isPrimary ? 'bg-signal-500/8' : ''
-                                            } ${
-                                                option.isSelectable && !workerSwitchBusy
-                                                    ? 'hover:bg-signal-500/5'
-                                                    : 'cursor-not-allowed opacity-55'
-                                            }`}
-                                        >
-                                            <div className="relative">
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${option.isPrimary ? 'bg-signal-500/20 text-signal-500' : 'bg-slate-100 dark:bg-white/5 text-slate-400'}`}>
-                                                    <Cpu aria-hidden="true" className="w-4 h-4" />
-                                                </div>
-                                                <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-void-800 ${workerStatusClass(option)}`} />
-                                            </div>
-                                            <div className="flex flex-col min-w-0">
-                                                <span className={`text-sm font-bold truncate transition-colors ${option.isPrimary ? 'text-signal-600 dark:text-signal-400' : 'text-slate-700 dark:text-slate-200'}`}>
-                                                    {option.label}
-                                                </span>
-                                                <span className="text-[10px] font-medium text-slate-400 truncate uppercase tracking-wider">
-                                                    {option.subLabel || (option.isSelectable ? "Available" : "Unavailable")}
-                                                </span>
-                                            </div>
-                                            {option.isPrimary && (
-                                                <Zap aria-hidden="true" className="ml-auto w-3 h-3 text-signal-500 fill-signal-500" />
-                                            )}
-                                        </button>
-                                    ))}
-                                </div>
-                                {!executionLoading && workerOptions.length === 0 && (
-                                    <div className="px-4 py-6 text-center">
-                                        <div className="w-10 h-10 rounded-full bg-slate-50 dark:bg-white/5 flex items-center justify-center mx-auto mb-2">
-                                            <Cpu aria-hidden="true" className="w-5 h-5 text-slate-300" />
-                                        </div>
-                                        <p className="text-xs text-slate-400 font-medium">
-                                            No workers available.
-                                        </p>
-                                    </div>
-                                )}
-                                <div className="p-2 border-t border-black/[0.04] dark:border-white/[0.04] mt-1">
-                                    <Link
-                                        to="/agents"
-                                        onClick={() => setWorkerDropdownOpen(false)}
-                                        className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[44px] text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
-                                    >
-                                        <span>Worker Management</span>
-                                        <ArrowRight aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
-                                    </Link>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10 hidden md:block" />
 
                 {/* Docker Status */}
@@ -670,23 +501,6 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                             ? <Sun aria-hidden="true" className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />
                             : <Moon aria-hidden="true" className="w-4 h-4 text-slate-500 hover:text-slate-900 transition-colors" strokeWidth={1.5} />
                         }
-                    </button>
-                </Tooltip>
-
-                <div className="w-px h-5 bg-black/10 dark:bg-white/10" />
-
-                {/* Avatar */}
-                <Tooltip content="User Profile">
-                    <button aria-label="User Profile" className="flex items-center gap-2.5 cursor-pointer group focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-full">
-                        <div className="w-8 h-8 rounded-full bg-signal-500/20 dark:bg-signal-500/15 p-[1.5px] shadow-[0_0_12px_rgba(0,224,160,0.15)] group-hover:shadow-[0_0_16px_rgba(0,224,160,0.25)] transition-shadow">
-                            <div className="w-full h-full rounded-full bg-white dark:bg-void-800 flex items-center justify-center overflow-hidden">
-                                <img
-                                    src="https://api.dicebear.com/7.x/notionists/svg?seed=Felix&backgroundColor=transparent"
-                                    alt="Avatar"
-                                    className="w-full h-full object-cover opacity-90 group-hover:scale-110 transition-transform duration-500"
-                                />
-                            </div>
-                        </div>
                     </button>
                 </Tooltip>
             </div>

@@ -75,12 +75,12 @@ export const DashboardV2: FunctionComponent = () => {
                 <div className="xl:col-span-8 flex flex-col gap-24">
                     <section aria-label="Sources" className="w-full relative">
                         {/* Subtle signal glow — very restrained */}
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-signal-500/3 dark:bg-signal-500/5 rounded-full blur-[100px] pointer-events-none -z-10" />
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] rounded-full pointer-events-none -z-10" style={{ background: 'radial-gradient(circle, rgba(0,224,160,0.03) 0%, rgba(0,224,160,0.01) 40%, transparent 70%)' }} />
                         <SourcesGrid />
                     </section>
 
                     <section aria-label="Tasks" className="w-full relative">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-[130%] bg-ember-500/3 dark:bg-ember-500/4 rounded-full blur-[80px] pointer-events-none -z-10" />
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-[130%] rounded-full pointer-events-none -z-10" style={{ background: 'radial-gradient(circle, rgba(255,184,0,0.03) 0%, rgba(255,184,0,0.01) 40%, transparent 70%)' }} />
                         <TasksList pageData={pageData} />
                     </section>
                 </div>

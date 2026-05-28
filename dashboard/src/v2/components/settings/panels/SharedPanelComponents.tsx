@@ -10,10 +10,10 @@ export const SectionCard: FunctionComponent<{
   badge?: string;
   icon?: ComponentChildren;
 }> = ({ title, children, danger, badge, icon }) => (
-  <section className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] ${
+  <section className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] ${
     danger
       ? "border-status-red/20 bg-status-red/[0.03] dark:border-status-red/20 dark:bg-status-red/[0.04]"
-      : "border-black/[0.06] bg-white/70 dark:border-white/[0.06] dark:bg-void-800/60"
+      : "border-black/[0.06] bg-white/80 dark:border-white/[0.06] dark:bg-void-800/75"
   }`}>
     <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
 
@@ -115,7 +115,7 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
   const isInherited = badge === "Inherited";
 
   return (
-    <section className={`rounded-[2rem] border transition-colors duration-300 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-2xl dark:shadow-[0_12px_36px_rgba(0,0,0,0.22)] ${
+    <section className={`rounded-[2rem] border transition-colors duration-300 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-sm dark:shadow-[0_12px_36px_rgba(0,0,0,0.22)] ${
       isOverridden
         ? "border-amber-500/20 bg-amber-500/[0.03] dark:border-amber-500/20 dark:bg-amber-500/[0.02]"
         : isMixed

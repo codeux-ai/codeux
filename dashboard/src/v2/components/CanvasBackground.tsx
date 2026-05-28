@@ -27,7 +27,7 @@ export const CanvasBackground: FunctionComponent = () => {
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,_rgba(255,184,0,0.03)_0%,_transparent_60%)] dark:bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,_rgba(255,184,0,0.04)_0%,_transparent_60%)]" />
 
             {/* Signal → Ember flowing SVG line */}
-            <svg className="absolute w-[200vw] h-[100vh] top-[5%] left-[-10%] opacity-[0.025] dark:opacity-[0.04]" viewBox="0 0 2000 800" preserveAspectRatio="none">
+            <svg className="absolute w-full h-[100vh] top-[5%] left-0 opacity-[0.025] dark:opacity-[0.04]" viewBox="0 0 2000 800" preserveAspectRatio="none">
                 <path
                     ref={splineRef}
                     d="M 0,300 C 300,100 600,700 1000,300 C 1400,-100 1800,600 2000,200"

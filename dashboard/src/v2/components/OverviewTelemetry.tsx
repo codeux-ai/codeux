@@ -21,7 +21,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
 
   if (error) {
     return (
-      <aside className="sticky top-24 flex flex-col h-[760px] overflow-hidden group rounded-[1.75rem] border border-status-red/20 bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl p-8">
+      <aside className="sticky top-24 flex flex-col h-[760px] overflow-hidden group rounded-[1.75rem] border border-status-red/20 bg-white/80 dark:bg-void-800/75 backdrop-blur-sm p-8">
         <div className="flex items-center gap-3">
           <Radio className="w-5 h-5 text-status-red" strokeWidth={1.5} />
           <div>
@@ -55,7 +55,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
         Telemetry.
       </h3>
 
-      <div className="relative flex-1 overflow-hidden rounded-[2rem] border border-black/[0.06] dark:border-white/[0.06] bg-white/65 dark:bg-void-800/60 backdrop-blur-2xl p-7">
+      <div className="relative flex-1 overflow-hidden rounded-[2rem] border border-black/[0.06] dark:border-white/[0.06] bg-white/78 dark:bg-void-800/75 backdrop-blur-sm p-7">
         {isLoading ? (
           <div className="flex flex-col gap-6">
             <SkeletonPanel />

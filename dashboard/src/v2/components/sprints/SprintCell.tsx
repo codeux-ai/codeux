@@ -164,7 +164,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       />
 
       <div
-        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-white/70 backdrop-blur-3xl transition-all duration-700 transform-gpu dark:border-white/[0.06] ${animationClass} ${isCompleted ? "opacity-80" : ""} ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
+        className={`absolute inset-0 rounded-[1.75rem] overflow-hidden border border-white/70 backdrop-blur-md transition-all duration-700 transform-gpu dark:border-white/[0.06] ${animationClass} ${isCompleted ? "opacity-80" : ""} ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/55 dark:bg-void-800/65"}`}
         style={{
 
           WebkitMaskImage: "-webkit-radial-gradient(white, black)",

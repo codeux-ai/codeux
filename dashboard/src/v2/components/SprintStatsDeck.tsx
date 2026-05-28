@@ -360,13 +360,13 @@ export const SprintStatsDeck: FunctionComponent<{
   }
 
   return (
-    <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+    <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/80 p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
       <WaveFluid accentHex="#00E0A0" />
       <BorderTrace accentHex="#00E0A0" />
 
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="dag-aurora absolute -left-20 top-8 h-56 w-56 rounded-full bg-signal-500/10 blur-[90px]" />
-        <div className="dag-aurora absolute right-[-4rem] top-1/3 h-64 w-64 rounded-full bg-ember-500/10 blur-[110px]" style={{ animationDelay: "-4s" }} />
+        <div className="dag-aurora absolute -left-20 top-8 h-56 w-56 rounded-full" style={{ background: 'radial-gradient(circle, rgba(0,224,160,0.08) 0%, transparent 70%)' }} />
+        <div className="dag-aurora absolute right-[-4rem] top-1/3 h-64 w-64 rounded-full" style={{ background: 'radial-gradient(circle, rgba(255,184,0,0.08) 0%, transparent 70%)', animationDelay: "-4s" }} />
         <div
           className="dag-grid-pan absolute inset-0 opacity-30 dark:opacity-35"
           style={{

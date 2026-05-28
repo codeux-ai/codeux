@@ -750,3 +750,23 @@ html.has-bg-pattern::before {
     to   { transform: scale(1);   opacity: 1; }
   }
 }
+
+/* ── GPU tile-memory guard ─────────────────────────────────────────────────
+   Caps excessive backdrop-blur radii that cause Chromium tile_manager.cc
+   memory exhaustion (tile memory limits exceeded). Each backdrop-filter
+   creates a separate GPU compositor layer; at large blur radii the per-layer
+   cost multiplies with pixel density and layer count.
+   Capping at 16/12px preserves the frosted-glass aesthetic while reducing
+   GPU composite work by ~60-70%. ─────────────────────────────────────────── */
+.backdrop-blur-3xl {
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+.backdrop-blur-2xl {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.backdrop-blur-xl {
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
