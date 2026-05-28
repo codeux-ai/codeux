@@ -2,9 +2,9 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { ArrowLeft, Boxes, BrainCircuit, Plus, Server, Settings2, SlidersHorizontal, Trash2, Wrench } from "lucide-preact";
 import type { SettingsPageState } from "../../../hooks/use-settings-page-state.js";
-import type { CustomMcpServer, McpToolToggle, ProviderId } from "../../../../types.js";
+import type { CustomMcpServer, CustomMcpTransport, McpToolToggle, ProviderId } from "../../../../types.js";
 import { NoticePanel } from "../SettingsSurface.js";
-import { Row, TextInput, TextAreaInput, Toggle } from "../SettingsFormFields.js";
+import { PillChoiceGroup, Row, TextInput, TextAreaInput, Toggle } from "../SettingsFormFields.js";
 import { SectionCard } from "./SharedPanelComponents.js";
 import { TOOL_DEFINITIONS, type McpToolCategory } from "../../../../../../src/contracts/mcp-tool-definitions.js";
 
@@ -76,6 +76,14 @@ const maskUrl = (url: string): string => {
   }
 };
 
+const serverSubtitle = (server: CustomMcpServer): string => {
+  if (server.description) return server.description;
+  if (server.transport === "stdio") {
+    return [server.command, ...(server.args ?? [])].filter(Boolean).join(" ") || "No command set";
+  }
+  return maskUrl(server.url ?? "");
+};
+
 export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const { activeScope, systemSettings, projectSettings, selectedProject, updateSystem, updateProject } = state;
 
@@ -128,7 +136,7 @@ export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> =
 
   const addServer = (): void => {
     const id = (globalThis.crypto?.randomUUID?.() ?? `mcp_${Date.now()}`);
-    const next: CustomMcpServer = { id, name: "", label: "", url: "", enabled: true };
+    const next: CustomMcpServer = { id, name: "", label: "", enabled: true, transport: "http", url: "" };
     writeServers([...customServers, next]);
     setView({ kind: "custom", id });
   };
@@ -286,13 +294,13 @@ export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> =
                         {active ? <Pill label="Active" tone="active" /> : <Pill label="Disabled" tone="muted" />}
                       </div>
                       <div className="mt-1 truncate text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                        {server.description || maskUrl(server.url)}
+                        {serverSubtitle(server)}
                       </div>
                     </div>
                   </div>
                   <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Pill label="HTTP" />
+                      <Pill label={server.transport === "stdio" ? "stdio" : "HTTP"} />
                       <Pill label={!server.providers || server.providers.length === 0 ? "All CLIs" : `${server.providers.length} CLIs`} />
                     </div>
                     <div className="flex items-center gap-2">
@@ -320,51 +328,71 @@ export const SettingsMcpPanel: FunctionComponent<{ state: SettingsPageState }> =
   );
 };
 
+const JsonMapEditor: FunctionComponent<{
+  resetKey: string;
+  value?: Record<string, string>;
+  placeholder: string;
+  onChange: (value: Record<string, string> | undefined) => void;
+}> = ({ resetKey, value, placeholder, onChange }) => {
+  const [text, setText] = useState<string>(() => JSON.stringify(value ?? {}, null, 2));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setText(JSON.stringify(value ?? {}, null, 2));
+    setError(null);
+  }, [resetKey]);
+
+  const handle = (next: string): void => {
+    setText(next);
+    const trimmed = next.trim();
+    if (trimmed.length === 0) {
+      setError(null);
+      onChange(undefined);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        setError("Expected a JSON object of string values.");
+        return;
+      }
+      const out: Record<string, string> = {};
+      for (const [key, raw] of Object.entries(parsed)) {
+        if (typeof raw !== "string") {
+          setError(`"${key}" must be a string value.`);
+          return;
+        }
+        out[key] = raw;
+      }
+      setError(null);
+      onChange(Object.keys(out).length > 0 ? out : undefined);
+    } catch {
+      setError("Invalid JSON.");
+    }
+  };
+
+  return (
+    <div className="flex w-full flex-col gap-1.5">
+      <TextAreaInput value={text} onChange={handle} rows={5} placeholder={placeholder} />
+      {error ? <span className="text-[11px] font-medium text-status-red">{error}</span> : null}
+    </div>
+  );
+};
+
+const TRANSPORT_OPTIONS: Array<{ value: CustomMcpTransport; label: string; hint: string }> = [
+  { value: "http", label: "HTTP / SSE", hint: "Remote server via URL" },
+  { value: "stdio", label: "Command (stdio)", hint: "Local process, e.g. npx" },
+];
+
 const CustomServerDetail: FunctionComponent<{
   server: CustomMcpServer;
   canRemove: boolean;
   onChange: (patch: Partial<CustomMcpServer>) => void;
   onRemove: () => void;
 }> = ({ server, canRemove, onChange, onRemove }) => {
-  const [headersText, setHeadersText] = useState<string>(() => JSON.stringify(server.headers ?? {}, null, 2));
-  const [headersError, setHeadersError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setHeadersText(JSON.stringify(server.headers ?? {}, null, 2));
-    setHeadersError(null);
-  }, [server.id]);
-
-  const onHeadersChange = (value: string): void => {
-    setHeadersText(value);
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-      setHeadersError(null);
-      onChange({ headers: undefined });
-      return;
-    }
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        setHeadersError("Headers must be a JSON object of string values.");
-        return;
-      }
-      const headers: Record<string, string> = {};
-      for (const [key, raw] of Object.entries(parsed)) {
-        if (typeof raw !== "string") {
-          setHeadersError(`Header "${key}" must be a string value.`);
-          return;
-        }
-        headers[key] = raw;
-      }
-      setHeadersError(null);
-      onChange({ headers: Object.keys(headers).length > 0 ? headers : undefined });
-    } catch {
-      setHeadersError("Invalid JSON.");
-    }
-  };
-
   const nameValid = NAME_PATTERN.test(server.name);
   const restricted = server.providers ?? [];
+  const isStdio = server.transport === "stdio";
 
   const toggleProvider = (id: ProviderId): void => {
     const set = new Set(restricted);
@@ -377,40 +405,73 @@ const CustomServerDetail: FunctionComponent<{
     onChange({ providers: next.length === 0 ? undefined : next });
   };
 
+  const onArgsChange = (value: string): void => {
+    const args = value.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
+    onChange({ args: args.length > 0 ? args : undefined });
+  };
+
   const previewConfig = {
     mcpServers: {
-      [server.name || "server_name"]: {
-        type: "http",
-        url: server.url || "https://...",
-        ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
-      },
+      [server.name || "server_name"]: isStdio
+        ? {
+            command: server.command || "npx",
+            ...(server.args && server.args.length > 0 ? { args: server.args } : {}),
+            ...(server.env && Object.keys(server.env).length > 0 ? { env: server.env } : {}),
+          }
+        : {
+            type: "http",
+            url: server.url || "https://...",
+            ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
+          },
     },
   };
 
   return (
     <SectionCard title={server.label || server.name || "MCP server"} watermark="MCP" icon={<Server strokeWidth={2.4} />}>
       <Row label="Display name" description="Shown on the MCP servers list.">
-        <TextInput value={server.label ?? ""} onChange={(value) => onChange({ label: value })} placeholder="Docs Server" />
+        <TextInput value={server.label ?? ""} onChange={(value) => onChange({ label: value })} placeholder="Playwright" />
       </Row>
       <Row label="Server key" description="Identifier used in each CLI's mcpServers config. Letters, numbers, dash, underscore.">
         <div className="flex flex-col gap-1.5">
-          <TextInput value={server.name} onChange={(value) => onChange({ name: value })} placeholder="docs_server" mono />
+          <TextInput value={server.name} onChange={(value) => onChange({ name: value })} placeholder="playwright" mono />
           {!nameValid && server.name.length > 0 ? (
             <span className="text-[11px] font-medium text-status-red">Only letters, numbers, dash, and underscore are allowed.</span>
           ) : null}
         </div>
       </Row>
-      <Row label="Server URL" description="HTTP/SSE endpoint for the MCP server.">
-        <TextInput value={server.url} onChange={(value) => onChange({ url: value })} placeholder="https://example.com/mcp" mono />
+      <Row label="Transport" description="HTTP/SSE for remote servers, or a local command (stdio) like npx.">
+        <PillChoiceGroup
+          value={server.transport}
+          onChange={(value) => onChange({ transport: value as CustomMcpTransport })}
+          options={TRANSPORT_OPTIONS}
+        />
       </Row>
+
+      {isStdio ? (
+        <>
+          <Row label="Command" description="Executable to launch the MCP server. Must be available inside the CLI container.">
+            <TextInput value={server.command ?? ""} onChange={(value) => onChange({ command: value })} placeholder="npx" mono />
+          </Row>
+          <Row label="Arguments" description="One argument per line.">
+            <TextAreaInput value={(server.args ?? []).join("\n")} onChange={onArgsChange} rows={4} placeholder={"@playwright/mcp@latest"} />
+          </Row>
+          <Row label="Environment (JSON)" description="Optional object of env var name to value passed to the command.">
+            <JsonMapEditor resetKey={server.id} value={server.env} placeholder={'{\n  "API_KEY": "..."\n}'} onChange={(env) => onChange({ env })} />
+          </Row>
+        </>
+      ) : (
+        <>
+          <Row label="Server URL" description="HTTP/SSE endpoint for the MCP server.">
+            <TextInput value={server.url ?? ""} onChange={(value) => onChange({ url: value })} placeholder="https://example.com/mcp" mono />
+          </Row>
+          <Row label="Auth headers (JSON)" description="Optional object of header name to value, e.g. Authorization tokens.">
+            <JsonMapEditor resetKey={server.id} value={server.headers} placeholder={'{\n  "Authorization": "Bearer ..."\n}'} onChange={(headers) => onChange({ headers })} />
+          </Row>
+        </>
+      )}
+
       <Row label="Description" description="Optional note shown on the card.">
-        <TextInput value={server.description ?? ""} onChange={(value) => onChange({ description: value })} placeholder="Internal documentation search" />
-      </Row>
-      <Row label="Auth headers (JSON)" description="Optional object of header name to value, e.g. Authorization tokens.">
-        <div className="flex w-full flex-col gap-1.5">
-          <TextAreaInput value={headersText} onChange={onHeadersChange} rows={5} placeholder={'{\n  "Authorization": "Bearer ..."\n}'} />
-          {headersError ? <span className="text-[11px] font-medium text-status-red">{headersError}</span> : null}
-        </div>
+        <TextInput value={server.description ?? ""} onChange={(value) => onChange({ description: value })} placeholder="Browser automation tools" />
       </Row>
       <Row label="Restrict to CLIs" description="Leave all unselected to inject into every MCP-capable CLI.">
         <div className="flex flex-wrap gap-2">

@@ -117,4 +117,27 @@ describe("sanitizeCustomMcpServers", () => {
     expect(sanitizeCustomMcpServers(null)).toEqual([]);
     expect(sanitizeCustomMcpServers({})).toEqual([]);
   });
+
+  it("accepts stdio servers and infers transport from command when unset", () => {
+    const result = sanitizeCustomMcpServers([
+      { id: "p", name: "playwright", command: "npx", args: ["@playwright/mcp@latest"], env: { DEBUG: "1" } },
+      { id: "h", name: "http_inferred", url: "https://x/mcp" },
+    ]);
+    const byId = Object.fromEntries(result.map((s) => [s.id, s]));
+    expect(byId.p.transport).toBe("stdio");
+    expect(byId.p.command).toBe("npx");
+    expect(byId.p.args).toEqual(["@playwright/mcp@latest"]);
+    expect(byId.p.env).toEqual({ DEBUG: "1" });
+    expect(byId.p.url).toBeUndefined();
+    expect(byId.h.transport).toBe("http");
+  });
+
+  it("drops stdio servers missing a command and http servers missing a url", () => {
+    const result = sanitizeCustomMcpServers([
+      { id: "a", name: "nostdio", transport: "stdio" },
+      { id: "b", name: "nohttp", transport: "http" },
+      { id: "c", name: "ok", transport: "stdio", command: "node" },
+    ]);
+    expect(result.map((s) => s.id)).toEqual(["c"]);
+  });
 });

@@ -808,14 +808,22 @@ export interface McpToolToggle {
   isInternal: boolean;
 }
 
+export type CustomMcpTransport = "http" | "stdio";
+
 export interface CustomMcpServer {
   id: string;
   name: string;
   label?: string;
   description?: string;
   enabled: boolean;
-  url: string;
+  transport: CustomMcpTransport;
+  // http transport
+  url?: string;
   headers?: Record<string, string>;
+  // stdio transport
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
   providers?: ProviderId[];
 }
 

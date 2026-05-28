@@ -236,10 +236,30 @@ describe("DockerRunner custom MCP server injection", () => {
 
   it("respects per-server provider restriction and enabled flag", async () => {
     const mounts = await build("claude-code", null, [
-      { id: "1", name: "geminionly", url: "https://a/mcp", enabled: true, providers: ["gemini"] },
-      { id: "2", name: "disabled", url: "https://b/mcp", enabled: false },
+      { id: "1", name: "geminionly", transport: "http", url: "https://a/mcp", enabled: true, providers: ["gemini"] },
+      { id: "2", name: "disabled", transport: "http", url: "https://b/mcp", enabled: false },
     ]);
     expect(mounts).toHaveLength(0);
     expect(writtenFor("claude-mcp.json")).toBeUndefined();
+  });
+
+  it("emits stdio command/args/env for claude-code", async () => {
+    await build("claude-code", null, [
+      { id: "p", name: "playwright", enabled: true, transport: "stdio", command: "npx", args: ["@playwright/mcp@latest"], env: { TOKEN: "x" } },
+    ]);
+    const json = JSON.parse(writtenFor("claude-mcp.json")!);
+    expect(json.mcpServers.playwright).toEqual({ command: "npx", args: ["@playwright/mcp@latest"], env: { TOKEN: "x" } });
+    expect(json.mcpServers.playwright.type).toBeUndefined();
+  });
+
+  it("emits stdio command/args/env as codex TOML", async () => {
+    await build("codex", null, [
+      { id: "p", name: "playwright", enabled: true, transport: "stdio", command: "npx", args: ["@playwright/mcp@latest"], env: { TOKEN: "x" } },
+    ]);
+    const toml = writtenFor("codex-config.toml")!;
+    expect(toml).toContain("[mcp_servers.playwright]");
+    expect(toml).toContain('command = "npx"');
+    expect(toml).toContain('args = ["@playwright/mcp@latest"]');
+    expect(toml).toContain('env = { "TOKEN" = "x" }');
   });
 });

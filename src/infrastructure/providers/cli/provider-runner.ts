@@ -1,5 +1,7 @@
 import { CliWorkflowSettings, ProviderId } from "../../../contracts/app-types.js";
 import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
+import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
+import { buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
@@ -15,13 +17,10 @@ import { collectProviderUsageTelemetry, type ProviderUsageTelemetry } from "./pr
 const CONTAINER_WORKSPACE_ROOT = "/workspace";
 const CONTAINER_RUNTIME_HOME = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".code-ux-home");
 
-const escapeTomlString = (value: string): string => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-
 const enabledCustomServersFor = (servers: CustomMcpServer[] | undefined, provider: ProviderId): CustomMcpServer[] =>
   (servers || []).filter((server) =>
     server.enabled
-    && typeof server.url === "string"
-    && server.url.trim().length > 0
+    && isUsableCustomMcpServer(server)
     && (!server.providers || server.providers.length === 0 || server.providers.includes(provider))
   );
 
@@ -816,11 +815,7 @@ export class ProviderRunner implements IProviderRunner {
         };
       }
       for (const server of customServers) {
-        mcpServers[server.name] = {
-          type: "http",
-          url: server.url,
-          ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
-        };
+        mcpServers[server.name] = buildClaudeMcpServerEntry(server);
       }
       if (Object.keys(mcpServers).length === 0) {
         return created;
@@ -854,10 +849,7 @@ export class ProviderRunner implements IProviderRunner {
         };
       }
       for (const server of customServers) {
-        mcpServers[server.name] = {
-          httpUrl: server.url,
-          ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
-        };
+        mcpServers[server.name] = buildGeminiMcpServerEntry(server);
       }
       if (Object.keys(mcpServers).length > 0) {
         existing.mcpServers = mcpServers;
@@ -876,13 +868,7 @@ export class ProviderRunner implements IProviderRunner {
         }
       }
       for (const server of customServers) {
-        lines.push(`[mcp_servers.${server.name}]`, `url = "${escapeTomlString(server.url)}"`);
-        if (server.headers && Object.keys(server.headers).length > 0) {
-          const inline = Object.entries(server.headers)
-            .map(([key, value]) => `"${escapeTomlString(key)}" = "${escapeTomlString(value)}"`)
-            .join(", ");
-          lines.push(`http_headers = { ${inline} }`);
-        }
+        lines.push(...buildCodexMcpServerTomlLines(server.name, server));
       }
       const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
       await fs.writeFile(configPath, lines.join("\n") + "\n");

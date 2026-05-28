@@ -1,4 +1,4 @@
-import type { CustomMcpServer, DashboardSettings, McpToolToggle, ProviderId } from "../contracts/app-types.js";
+import type { CustomMcpServer, CustomMcpTransport, DashboardSettings, McpToolToggle, ProviderId } from "../contracts/app-types.js";
 import { TOOL_DEFINITIONS, type McpRuntimeRole, type ToolName } from "../contracts/mcp-tool-definitions.js";
 
 const CUSTOM_MCP_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -6,7 +6,7 @@ const VALID_PROVIDER_IDS: ReadonlySet<ProviderId> = new Set<ProviderId>([
   "jules", "gemini", "codex", "claude-code", "qwen-code", "opencode",
 ]);
 
-const sanitizeHeaders = (value: unknown): Record<string, string> | undefined => {
+const sanitizeStringMap = (value: unknown): Record<string, string> | undefined => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const out: Record<string, string> = {};
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
@@ -17,11 +17,23 @@ const sanitizeHeaders = (value: unknown): Record<string, string> | undefined => 
   return Object.keys(out).length > 0 ? out : undefined;
 };
 
+const sanitizeArgs = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter((entry): entry is string => typeof entry === "string");
+  return out.length > 0 ? out : undefined;
+};
+
 const sanitizeProviders = (value: unknown): ProviderId[] | undefined => {
   if (!Array.isArray(value)) return undefined;
   const out = value.filter((entry): entry is ProviderId => typeof entry === "string" && VALID_PROVIDER_IDS.has(entry as ProviderId));
   return out.length > 0 ? Array.from(new Set(out)) : undefined;
 };
+
+export const isUsableCustomMcpServer = (server: CustomMcpServer): boolean => (
+  server.transport === "stdio"
+    ? typeof server.command === "string" && server.command.trim().length > 0
+    : typeof server.url === "string" && server.url.trim().length > 0
+);
 
 export const sanitizeCustomMcpServers = (value: unknown): CustomMcpServer[] => {
   if (!Array.isArray(value)) return [];
@@ -32,9 +44,17 @@ export const sanitizeCustomMcpServers = (value: unknown): CustomMcpServer[] => {
     const candidate = item as Partial<CustomMcpServer>;
     const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
     const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
-    const url = typeof candidate.url === "string" ? candidate.url.trim() : "";
-    if (id.length === 0 || name.length === 0 || url.length === 0) continue;
+    if (id.length === 0 || name.length === 0) continue;
     if (!CUSTOM_MCP_NAME_PATTERN.test(name)) continue;
+
+    const url = typeof candidate.url === "string" ? candidate.url.trim() : "";
+    const command = typeof candidate.command === "string" ? candidate.command.trim() : "";
+    const transport: CustomMcpTransport = candidate.transport === "stdio" || (candidate.transport !== "http" && command.length > 0 && url.length === 0)
+      ? "stdio"
+      : "http";
+
+    if (transport === "http" && url.length === 0) continue;
+    if (transport === "stdio" && command.length === 0) continue;
 
     byId.set(id, {
       id,
@@ -42,8 +62,10 @@ export const sanitizeCustomMcpServers = (value: unknown): CustomMcpServer[] => {
       label: typeof candidate.label === "string" && candidate.label.trim().length > 0 ? candidate.label.trim() : undefined,
       description: typeof candidate.description === "string" && candidate.description.trim().length > 0 ? candidate.description.trim() : undefined,
       enabled: candidate.enabled !== false,
-      url,
-      headers: sanitizeHeaders(candidate.headers),
+      transport,
+      ...(transport === "http"
+        ? { url, headers: sanitizeStringMap(candidate.headers) }
+        : { command, args: sanitizeArgs(candidate.args), env: sanitizeStringMap(candidate.env) }),
       providers: sanitizeProviders(candidate.providers),
     });
   }

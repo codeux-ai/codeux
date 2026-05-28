@@ -4,6 +4,8 @@ import * as path from "path";
 import * as pathPosix from "path/posix";
 import { fileURLToPath } from "url";
 import { CliWorkflowSettings, type CustomMcpServer } from "../../../contracts/app-types.js";
+import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
+import { buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import {
@@ -35,8 +37,6 @@ const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
 
 const CONTAINER_WORKSPACE_ROOT = "/workspace";
 const CONTAINER_PROVIDER_ARGV_FILE = "/opt/code-ux/provider-argv.sh";
-
-const escapeTomlString = (value: string): string => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
 export interface IDockerRunner {
   ensureWorkspace(args: {
@@ -384,8 +384,7 @@ export class DockerRunner implements IDockerRunner {
   ): CustomMcpServer[] {
     return servers.filter((server) =>
       server.enabled
-      && typeof server.url === "string"
-      && server.url.trim().length > 0
+      && isUsableCustomMcpServer(server)
       && (!server.providers || server.providers.length === 0 || server.providers.includes(provider))
     );
   }
@@ -413,11 +412,7 @@ export class DockerRunner implements IDockerRunner {
         };
       }
       for (const server of applicableCustomServers) {
-        mcpServers[server.name] = {
-          type: "http",
-          url: server.url,
-          ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
-        };
+        mcpServers[server.name] = buildClaudeMcpServerEntry(server);
       }
       if (Object.keys(mcpServers).length === 0) {
         return [];
@@ -436,10 +431,7 @@ export class DockerRunner implements IDockerRunner {
         };
       }
       for (const server of applicableCustomServers) {
-        mcpServers[server.name] = {
-          httpUrl: server.url,
-          ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
-        };
+        mcpServers[server.name] = buildGeminiMcpServerEntry(server);
       }
       if (Object.keys(mcpServers).length === 0) {
         return [];
@@ -469,10 +461,7 @@ export class DockerRunner implements IDockerRunner {
           };
         }
         for (const server of applicableCustomServers) {
-          mcpServers[server.name] = {
-            httpUrl: server.url,
-            ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
-          };
+          mcpServers[server.name] = buildGeminiMcpServerEntry(server);
         }
         settings.mcpServers = mcpServers;
       }
@@ -499,13 +488,7 @@ export class DockerRunner implements IDockerRunner {
       }
     }
     for (const server of applicableCustomServers) {
-      lines.push(`[mcp_servers.${server.name}]`, `url = "${escapeTomlString(server.url)}"`);
-      if (server.headers && Object.keys(server.headers).length > 0) {
-        const inline = Object.entries(server.headers)
-          .map(([key, value]) => `"${escapeTomlString(key)}" = "${escapeTomlString(value)}"`)
-          .join(", ");
-        lines.push(`http_headers = { ${inline} }`);
-      }
+      lines.push(...buildCodexMcpServerTomlLines(server.name, server));
     }
     await fs.writeFile(filePath, lines.join("\n") + "\n");
     return [{ source: filePath, destination: CODEX_MCP_CONFIG_MOUNT, readonly: true }];

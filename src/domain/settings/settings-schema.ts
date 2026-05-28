@@ -534,9 +534,19 @@ const validateCustomMcpServers = (
     }
     if (typeof server.id !== "string" || server.id.trim().length === 0) issues.push({ path: `${path}[${index}].id`, message: "Expected a non-empty string" });
     if (typeof server.name !== "string" || !CUSTOM_MCP_NAME_PATTERN.test(server.name.trim())) issues.push({ path: `${path}[${index}].name`, message: "Expected an identifier matching [a-zA-Z0-9_-]" });
-    if (typeof server.url !== "string" || server.url.trim().length === 0) issues.push({ path: `${path}[${index}].url`, message: "Expected a non-empty string" });
     if (typeof server.enabled !== "boolean") issues.push({ path: `${path}[${index}].enabled`, message: "Expected a boolean" });
-    if (server.headers !== undefined && (!isRecord(server.headers) || Array.isArray(server.headers))) issues.push({ path: `${path}[${index}].headers`, message: "Expected an object" });
+    if (server.transport !== undefined && server.transport !== "http" && server.transport !== "stdio") {
+      issues.push({ path: `${path}[${index}].transport`, message: "Expected 'http' or 'stdio'" });
+    }
+    const isStdio = server.transport === "stdio";
+    if (isStdio) {
+      if (typeof server.command !== "string" || server.command.trim().length === 0) issues.push({ path: `${path}[${index}].command`, message: "Expected a non-empty string for stdio transport" });
+      if (server.args !== undefined && !Array.isArray(server.args)) issues.push({ path: `${path}[${index}].args`, message: "Expected an array of strings" });
+      if (server.env !== undefined && (!isRecord(server.env) || Array.isArray(server.env))) issues.push({ path: `${path}[${index}].env`, message: "Expected an object" });
+    } else {
+      if (typeof server.url !== "string" || server.url.trim().length === 0) issues.push({ path: `${path}[${index}].url`, message: "Expected a non-empty string for http transport" });
+      if (server.headers !== undefined && (!isRecord(server.headers) || Array.isArray(server.headers))) issues.push({ path: `${path}[${index}].headers`, message: "Expected an object" });
+    }
     if (server.providers !== undefined && !Array.isArray(server.providers)) issues.push({ path: `${path}[${index}].providers`, message: "Expected an array" });
   });
 };
