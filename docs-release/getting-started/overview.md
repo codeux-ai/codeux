@@ -27,5 +27,5 @@ Use Sprint OS when you need dependency-aware execution for development tasks, au
 You should now have a foundational understanding of Sprint OS's purpose and its primary capabilities.
 
 ## Where should I go next?
-* [Installation Guide](./installation.md)
-* [Account Creation](./account-creation.md)
+* [Installation Guide](../installation/overview.md)
+* [Account Creation](./create-account.md)
