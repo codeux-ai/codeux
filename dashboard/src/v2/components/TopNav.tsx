@@ -242,7 +242,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
         <>
         <header
             ref={navRef}
-            className="sticky top-0 z-50 flex items-center justify-between w-full h-[60px] px-8 md:px-12 bg-[#F9F8F4]/82 dark:bg-void-900/82 backdrop-blur-xl border-b border-black/[0.05] dark:border-white/[0.04]"
+            data-glass
+            className="sticky top-0 z-50 flex items-center justify-between w-full h-[60px] px-8 md:px-12 bg-[#F9F8F4]/90 dark:bg-void-900/90 backdrop-blur-xl border-b border-black/[0.05] dark:border-white/[0.04]"
         >
             <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white dark:focus:bg-void-800 focus:text-signal-600 dark:focus:text-signal-400 focus:rounded-lg focus:shadow-lg focus:text-sm focus:font-semibold">
                 Skip to main content

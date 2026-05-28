@@ -226,8 +226,9 @@ export const KineticDock: FunctionComponent = () => {
                 ref={dockRef}
                 onPointerMove={handlePointerMove}
                 onPointerLeave={handlePointerLeave}
+                data-glass
                 className="relative pointer-events-auto flex items-center gap-1.5 p-2.5
-                           bg-white/82 dark:bg-void-800/85 backdrop-blur-xl
+                           bg-white/90 dark:bg-void-800/90 backdrop-blur-xl
                            border border-black/[0.06] dark:border-white/[0.08]
                            rounded-[2rem] max-w-full overflow-x-auto scrollbar-hide
                            shadow-[0_20px_50px_rgba(0,0,0,0.08)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)]

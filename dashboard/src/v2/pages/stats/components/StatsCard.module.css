@@ -3,8 +3,8 @@
 .card {
   @apply relative overflow-hidden flex flex-col justify-between transition-all duration-300;
   background: var(--stats-card-bg);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 1px solid var(--stats-card-border);
   border-radius: var(--stats-card-radius);
   padding: var(--stats-card-padding);

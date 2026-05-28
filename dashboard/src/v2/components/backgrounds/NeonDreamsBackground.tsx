@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "preact/hooks";
 import * as THREE from "../../../lib/three-lite.js";
 
-const RENDER_SCALE = 0.5;
+const RENDER_SCALE = 0.35;
 
 const causticVert = /* glsl */ `
   varying vec2 vUv;
@@ -101,7 +101,7 @@ export const NeonDreamsBackground = ({ forceDark = false, className = "" }: { fo
     let targetDark = currentDark;
 
     const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: "low-power" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * RENDER_SCALE);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1) * RENDER_SCALE);
     renderer.setSize(el.clientWidth, el.clientHeight);
     el.appendChild(renderer.domElement);
     Object.assign(renderer.domElement.style, { position: "absolute", inset: "0", width: "100%", height: "100%" });
@@ -127,10 +127,15 @@ export const NeonDreamsBackground = ({ forceDark = false, className = "" }: { fo
 
     let animId = 0;
     const startTime = performance.now();
+    const FRAME_INTERVAL = 1000 / 20;
+    let lastFrame = 0;
 
     const animate = () => {
       animId = requestAnimationFrame(animate);
-      const elapsed = (performance.now() - startTime) * 0.001;
+      const now = performance.now();
+      if (now - lastFrame < FRAME_INTERVAL) return;
+      lastFrame = now;
+      const elapsed = (now - startTime) * 0.001;
 
       currentDark += (targetDark - currentDark) * 0.05;
       mat.uniforms.uTime.value = elapsed;

@@ -752,21 +752,23 @@ html.has-bg-pattern::before {
 }
 
 /* ── GPU tile-memory guard ─────────────────────────────────────────────────
-   Caps excessive backdrop-blur radii that cause Chromium tile_manager.cc
-   memory exhaustion (tile memory limits exceeded). Each backdrop-filter
-   creates a separate GPU compositor layer; at large blur radii the per-layer
-   cost multiplies with pixel density and layer count.
-   Capping at 16/12px preserves the frosted-glass aesthetic while reducing
-   GPU composite work by ~60-70%. ─────────────────────────────────────────── */
-.backdrop-blur-3xl {
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
+   Each backdrop-filter creates a separate GPU compositor layer. With 170+
+   card/panel elements using backdrop-blur-*, Chromium's tile_manager.cc
+   exhausts its memory budget. The fix: disable backdrop-filter globally,
+   then selectively re-enable on the few always-unique chrome surfaces
+   (nav bar, dock) via [data-glass]. ────────────────────────────────────── */
+.backdrop-blur-3xl,
+.backdrop-blur-2xl,
+.backdrop-blur-xl,
+.backdrop-blur-lg,
+.backdrop-blur-md,
+.backdrop-blur-sm,
+.backdrop-blur {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
-.backdrop-blur-2xl {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-}
-.backdrop-blur-xl {
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+
+[data-glass] {
+  -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
 }
