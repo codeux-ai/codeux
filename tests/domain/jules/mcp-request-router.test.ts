@@ -5,6 +5,7 @@ import { registerMcpRequestHandlers } from "../../../src/server/mcp-request-rout
 import { ToolRegistry } from "../../../src/api/mcp/tool-registry.js";
 import { isToolEnabled } from "../../../src/mcp/mcp-tool-availability.js";
 import { validateToolArguments } from "../../../src/api/mcp/validators/tool-validators.js";
+import { runWithMcpAgentContext } from "../../../src/server/mcp-agent-context.js";
 
 vi.mock("../../../src/mcp/mcp-tool-availability.js", () => ({
   isToolEnabled: vi.fn().mockReturnValue(true),
@@ -94,5 +95,32 @@ describe("McpRequestRouter", () => {
         invocationSource: "internal",
       })
     );
+  });
+
+  it("resolves per-agent code_ux toggles from the request agent context", async () => {
+    const localHandlers: Record<string, any> = {};
+    const localServer = {
+      setRequestHandler: vi.fn((schema, handler) => {
+        localHandlers[schema.method] = handler;
+      }),
+    };
+    const agentToggles = [{ name: "manage_tasks", enabled: false, isInternal: true }];
+    registerMcpRequestHandlers({
+      server: localServer as any,
+      managementToolHandler: {} as any,
+      getDashboardSettings: () => ({ mcpTools: [] }) as any,
+      getRuntimeRole: () => "project_manager",
+      resolveAgentMcpToolToggles: (agentId: string) => (agentId === "agent-1" ? agentToggles : null),
+      formatError: () => ({ content: [], isError: true }),
+      executionRepository: executionRepository as any,
+    });
+    const handler = localHandlers[CallToolRequestSchema.method];
+
+    vi.mocked(isToolEnabled).mockClear();
+    await runWithMcpAgentContext("agent-1", () =>
+      handler({ params: { name: "manage_projects", arguments: {} } }, {} as any),
+    );
+
+    expect(isToolEnabled).toHaveBeenCalledWith(expect.anything(), "manage_projects", "project_manager", agentToggles);
   });
 });

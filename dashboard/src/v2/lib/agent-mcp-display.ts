@@ -16,6 +16,17 @@ export const defaultAgentMcpAccess = (): AgentMcpAccessConfig => ({
 });
 
 /**
+ * Minimize a config for storage/comparison: keep only code_ux tool overrides that
+ * actually disable a tool (absent = inherit/enabled) and dedupe linked ids. Lets dirty
+ * tracking ignore no-op toggling.
+ */
+export const normalizeAgentMcpAccess = (access: AgentMcpAccessConfig): AgentMcpAccessConfig => ({
+  codeUxEnabled: access.codeUxEnabled !== false,
+  codeUxToolToggles: access.codeUxToolToggles.filter((toggle) => toggle.enabled === false),
+  linkedServerIds: Array.from(new Set(access.linkedServerIds)),
+});
+
+/**
  * Resolve the MCP servers linked to an agent into display tags.
  * code_ux is shown first (on by default), followed by each linked custom server
  * that still exists in the available list.

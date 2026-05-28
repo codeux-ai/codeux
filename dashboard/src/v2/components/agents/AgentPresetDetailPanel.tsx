@@ -4,14 +4,15 @@ import gsap from "gsap";
 import {
   Edit2, FileUp, Trash2, RefreshCw, AlertTriangle,
   Smile, Frown, Angry, Meh, Zap, ChevronDown, ChevronUp,
-  Cpu, Route,
+  Cpu, Route, Plug, Server,
 } from "lucide-preact";
-import type { AgentPreset } from "../../types.js";
+import type { AgentPreset, CustomMcpServer } from "../../types.js";
 import type { AgentProviderOption } from "./AgentPresetEditorPanel.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { LazyAgentAvatarScene } from "./LazyAgentAvatarScene.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { SHOWCASE_EXPRESSIONS, getAccentHex } from "../../lib/agent-avatar.js";
+import { resolveAgentMcpTags } from "../../lib/agent-mcp-display.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
@@ -74,12 +75,13 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   preset: AgentPreset;
   routeTags: string[];
   providerOptions?: AgentProviderOption[];
+  availableMcpServers?: CustomMcpServer[];
   onEdit: () => void;
   onDelete: (id: string) => void;
   onImport: (id: string) => void;
   deleting: boolean;
   importing: boolean;
-}> = ({ preset, routeTags, providerOptions = [], onEdit, onDelete, onImport, deleting, importing }) => {
+}> = ({ preset, routeTags, providerOptions = [], availableMcpServers = [], onEdit, onDelete, onImport, deleting, importing }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const [activeExpression, setActiveExpression] = useState<AgentAvatarExpression>("happy");
   const [instructionExpanded, setInstructionExpanded] = useState(false);
@@ -87,6 +89,9 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   const accentHex = getAccentHex(preset.avatarConfig?.accent);
   const sync = syncStatusDisplay(preset);
   const selectedProvider = providerOptions.find((option) => option.value === preset.providerConfigId) || null;
+  const mcpTags = resolveAgentMcpTags(preset.mcpAccess, availableMcpServers);
+  const visibleMcpTags = mcpTags.slice(0, 5);
+  const hiddenMcpTagCount = mcpTags.length - visibleMcpTags.length;
 
   useLayoutEffect(() => {
     if (!panelRef.current) return;
@@ -233,6 +238,41 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                 {preset.model || "Inherits provider model"}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Connected MCPs */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Server className="h-3 w-3 text-signal-600 dark:text-signal-500" strokeWidth={2.4} />
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-500">
+              Connected MCPs
+            </h3>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {visibleMcpTags.map((tag) => (
+              <span
+                key={tag.id}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                  tag.kind === "code_ux"
+                    ? "border-signal-500/25 bg-signal-500/[0.1] text-signal-700 dark:text-signal-200"
+                    : "border-black/[0.08] bg-white/55 text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300"
+                }`}
+              >
+                {tag.kind === "code_ux"
+                  ? <Server className="h-3 w-3" strokeWidth={2.4} />
+                  : <Plug className="h-3 w-3" strokeWidth={2.4} />}
+                {tag.label}
+              </span>
+            ))}
+            {hiddenMcpTagCount > 0 && (
+              <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">+{hiddenMcpTagCount}</span>
+            )}
+            {mcpTags.length === 0 && (
+              <span className="inline-flex items-center rounded-full border border-black/[0.06] bg-white/50 px-2.5 py-1 text-[11px] font-bold text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-500">
+                No MCP servers
+              </span>
+            )}
           </div>
         </div>
 

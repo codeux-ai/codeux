@@ -49,6 +49,15 @@ describe("tool availability", () => {
     expect(isToolEnabled(settings, "manage_telemetry", "project_manager")).toBe(false);
   });
 
+  it("applies per-agent tool overrides over the system toggles", () => {
+    const agentToggles = [{ name: "manage_tasks", enabled: false, isInternal: true }];
+    const names = getEnabledToolDefinitions(DEFAULT_DASHBOARD_SETTINGS, "project_manager", agentToggles).map((tool) => tool.name);
+    expect(names).not.toContain("manage_tasks");
+    expect(names).toContain("manage_projects");
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_tasks", "project_manager", agentToggles)).toBe(false);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_projects", "project_manager", agentToggles)).toBe(true);
+  });
+
   it("sanitizes toggles and ignores unknown tool names", () => {
     const sanitized = sanitizeMcpToolToggles([
       { name: "manage_tasks", enabled: false },

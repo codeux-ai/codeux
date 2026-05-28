@@ -80,4 +80,43 @@ describe("AgentPresetRepository", () => {
     agentPresetRepository.deleteAgentPreset(created.id);
     expect(agentPresetRepository.listAgentPresets(project.id)).toEqual([]);
   });
+
+  it("persists and sanitizes per-agent MCP access config", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-preset-mcp-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "MCP Project",
+      sourceType: "local",
+      sourceRef: "/workspace/mcp-project",
+    });
+
+    const created = agentPresetRepository.createAgentPreset(project.id, { name: "Worker" });
+    expect(created.mcpAccess).toBeUndefined();
+
+    const updated = agentPresetRepository.updateAgentPreset(created.id, {
+      mcpAccess: {
+        codeUxEnabled: false,
+        codeUxToolToggles: [
+          { name: "manage_tasks", enabled: false, isInternal: true },
+          { name: "not_a_real_tool", enabled: false, isInternal: true },
+        ],
+        linkedServerIds: ["srv-1", "srv-1", "srv-2"],
+      },
+    });
+
+    expect(updated.mcpAccess?.codeUxEnabled).toBe(false);
+    expect(updated.mcpAccess?.linkedServerIds).toEqual(["srv-1", "srv-2"]);
+    expect(updated.mcpAccess?.codeUxToolToggles).toEqual([
+      { name: "manage_tasks", enabled: false, isInternal: true },
+    ]);
+
+    // Other field updates preserve mcpAccess.
+    const renamed = agentPresetRepository.updateAgentPreset(created.id, { name: "Renamed" });
+    expect(renamed.mcpAccess?.codeUxEnabled).toBe(false);
+    expect(renamed.mcpAccess?.linkedServerIds).toEqual(["srv-1", "srv-2"]);
+  });
 });

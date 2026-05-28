@@ -303,6 +303,8 @@ export const AgentsPage: FunctionComponent = () => {
     }))
   ), [effectiveSettings]);
 
+  const availableMcpServers = effectiveSettings?.settings.customMcpServers ?? [];
+
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
 
   const rosterStats = useMemo(() => {
@@ -405,6 +407,7 @@ export const AgentsPage: FunctionComponent = () => {
                   saving={savingId === selectedPreset.id}
                   defaultMemoryInstruction={effectiveSettings?.settings.memory.workerLearningsInstruction || ""}
                   providerOptions={providerOptions}
+                  availableMcpServers={availableMcpServers}
                   onSave={handleSave}
                   onCancel={() => setIsEditing(false)}
                 />
@@ -413,6 +416,7 @@ export const AgentsPage: FunctionComponent = () => {
                   preset={selectedPreset}
                   routeTags={routeTagsByPresetId.get(selectedPreset.id) ?? []}
                   providerOptions={providerOptions}
+                  availableMcpServers={availableMcpServers}
                   onEdit={() => setIsEditing(true)}
                   onDelete={handleDelete}
                   onImport={handleImport}

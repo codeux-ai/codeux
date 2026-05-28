@@ -14,13 +14,17 @@ import {
   Plus,
   Check,
   Route,
+  Plug,
+  Settings2,
 } from "lucide-preact";
-import type { AgentPreset } from "../../types.js";
+import type { AgentMcpAccessConfig, AgentPreset, CustomMcpServer } from "../../types.js";
 import { AgentAvatarCustomizer } from "./AgentAvatarCustomizer.js";
+import { AgentMcpManageModal } from "./AgentMcpManageModal.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { getAccentHex } from "../../lib/agent-avatar.js";
+import { defaultAgentMcpAccess, normalizeAgentMcpAccess } from "../../lib/agent-mcp-display.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
 
 /* ─────────────────────────────────────────────────────────
@@ -152,9 +156,10 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   saving: boolean;
   defaultMemoryInstruction?: string;
   providerOptions?: AgentProviderOption[];
+  availableMcpServers?: CustomMcpServer[];
   onSave: (id: string, updates: Partial<AgentPreset>) => void;
   onCancel: () => void;
-}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], onSave, onCancel }) => {
+}> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], onSave, onCancel }) => {
   const panelRef = useRef<HTMLFormElement>(null);
   const instructionRef = useRef<HTMLTextAreaElement>(null);
   const memoryRef = useRef<HTMLTextAreaElement>(null);
@@ -169,8 +174,14 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const [providerConfigId, setProviderConfigId] = useState(preset.providerConfigId || "");
   const [model, setModel] = useState(preset.model || "");
   const [avatarConfig, setAvatarConfig] = useState(preset.avatarConfig);
+  const [mcpAccess, setMcpAccess] = useState<AgentMcpAccessConfig>(
+    normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess())
+  );
+  const [mcpModalOpen, setMcpModalOpen] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [discardOpen, setDiscardOpen] = useState(false);
+
+  const setMcpAccessNormalized = (next: AgentMcpAccessConfig): void => setMcpAccess(normalizeAgentMcpAccess(next));
 
   const accentHex = getAccentHex(avatarConfig?.accent);
 
@@ -184,6 +195,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     setProviderConfigId(preset.providerConfigId || "");
     setModel(preset.model || "");
     setAvatarConfig(preset.avatarConfig);
+    setMcpAccess(normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess()));
     setTouched({});
   }, [preset.id]);
 
@@ -237,6 +249,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     if (providerConfigId !== (preset.providerConfigId || "")) return true;
     if (model !== (preset.model || "")) return true;
     if (JSON.stringify(avatarConfig ?? {}) !== JSON.stringify(preset.avatarConfig ?? {})) return true;
+    if (JSON.stringify(mcpAccess) !== JSON.stringify(normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess()))) return true;
     return false;
   }, [
     name,
@@ -247,6 +260,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     providerConfigId,
     model,
     avatarConfig,
+    mcpAccess,
     preset,
   ]);
 
@@ -266,6 +280,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       providerConfigId: providerConfigId || null,
       model: model.trim() || null,
       avatarConfig,
+      mcpAccess,
     });
   };
 
@@ -312,6 +327,32 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const instructionTokens = estimateTokens(instructionMarkdown);
   const memoryTokens = estimateTokens(memoryMarkdown);
   const selectedProvider = providerOptions.find((option) => option.value === providerConfigId) || null;
+
+  const mcpItems = useMemo(() => ([
+    { id: "code_ux", label: "Code UX", active: mcpAccess.codeUxEnabled, kind: "code_ux" as const },
+    ...availableMcpServers.map((server) => ({
+      id: server.id,
+      label: server.label || server.name,
+      active: mcpAccess.linkedServerIds.includes(server.id),
+      kind: "custom" as const,
+    })),
+  ]), [mcpAccess, availableMcpServers]);
+  const visibleMcpItems = mcpItems.slice(0, 5);
+  const hiddenMcpCount = mcpItems.length - visibleMcpItems.length;
+  const activeMcpCount = mcpItems.filter((item) => item.active).length;
+
+  const toggleMcpItem = (item: (typeof mcpItems)[number]): void => {
+    if (item.kind === "code_ux") {
+      setMcpAccessNormalized({ ...mcpAccess, codeUxEnabled: !item.active });
+    } else {
+      setMcpAccessNormalized({
+        ...mcpAccess,
+        linkedServerIds: item.active
+          ? mcpAccess.linkedServerIds.filter((id) => id !== item.id)
+          : [...mcpAccess.linkedServerIds, item.id],
+      });
+    }
+  };
 
   return (
     <>
@@ -669,7 +710,68 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 </div>
               </div>
             </SectionCard>
-            <SectionCard eyebrow="Step 4" title="Avatar">
+            <SectionCard eyebrow="Step 4" title="Connected MCPs">
+              <div className="rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
+                <div className="flex items-start gap-4">
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] text-slate-500 dark:bg-white/[0.04] dark:text-slate-300">
+                    <Plug className="h-4 w-4" strokeWidth={2.2} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                        MCP Servers
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMcpModalOpen(true)}
+                        disabled={saving}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-white hover:text-slate-900 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+                      >
+                        <Settings2 className="h-3 w-3" strokeWidth={2.4} />
+                        Manage
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                      Tap to link or unlink. {activeMcpCount} active. Use Manage to configure Code UX tools.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {visibleMcpItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => toggleMcpItem(item)}
+                      disabled={saving}
+                      aria-pressed={item.active}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:opacity-50 ${
+                        item.active
+                          ? "border-signal-500/30 bg-signal-500/[0.12] text-signal-700 dark:text-signal-200"
+                          : "border-black/[0.08] bg-white/50 text-slate-400 hover:text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500 dark:hover:text-slate-300"
+                      }`}
+                    >
+                      {item.active
+                        ? <Check className="h-3 w-3" strokeWidth={3} />
+                        : <Plug className="h-3 w-3" strokeWidth={2.4} />}
+                      {item.label}
+                    </button>
+                  ))}
+                  {hiddenMcpCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setMcpModalOpen(true)}
+                      disabled={saving}
+                      className="inline-flex items-center rounded-full border border-black/[0.08] bg-white/50 px-3 py-1.5 text-[11px] font-bold text-slate-400 transition-colors hover:text-slate-600 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500 dark:hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+                    >
+                      +{hiddenMcpCount} more
+                    </button>
+                  )}
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard eyebrow="Step 5" title="Avatar">
               <AgentAvatarCustomizer
                 config={avatarConfig || {}}
                 onChange={setAvatarConfig}
@@ -679,6 +781,14 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           </div>
         </div>
       </form>
+
+      <AgentMcpManageModal
+        isOpen={mcpModalOpen}
+        onClose={() => setMcpModalOpen(false)}
+        value={mcpAccess}
+        onChange={setMcpAccessNormalized}
+        availableServers={availableMcpServers}
+      />
 
       <ConfirmDialog
         isOpen={discardOpen}
