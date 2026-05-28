@@ -2,6 +2,28 @@ export default {
   title: 'Docs Release',
   description: 'Documentation site for releases',
   themeConfig: {
+    search: {
+      provider: 'local',
+      options: {
+        miniSearch: {
+          options: {
+            processTerm: (term) => {
+              const synonyms = {
+                'guide': 'task',
+                'task': 'guide',
+                'troubleshoot': 'debug',
+                'debug': 'troubleshoot'
+              };
+              const lower = term.toLowerCase();
+              return synonyms[lower] ? [lower, synonyms[lower]] : lower;
+            }
+          },
+          searchOptions: {
+            fuzzy: 0.2
+          }
+        }
+      }
+    },
     sidebar: [
       { text: 'Get Started', collapsed: false, items: [
         { text: 'Overview', link: '/getting-started/overview' },
