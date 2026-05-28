@@ -400,6 +400,9 @@ export class DockerRunner implements IDockerRunner {
     if (conn?.authToken) {
       headers.Authorization = `Bearer ${conn.authToken}`;
     }
+    if (conn?.agentId) {
+      headers["X-Code-Ux-Agent"] = conn.agentId;
+    }
     const applicableCustomServers = this.customServersForProvider(customServers, provider);
 
     if (provider === "claude-code") {
@@ -483,8 +486,15 @@ export class DockerRunner implements IDockerRunner {
     const lines: string[] = [];
     if (conn) {
       lines.push("[mcp_servers.code-ux]", `url = "${escapeTomlString(conn.url)}"`);
+      const codexHeaderParts: string[] = [];
       if (conn.authToken) {
-        lines.push(`http_headers = { "Authorization" = "Bearer ${escapeTomlString(conn.authToken)}" }`);
+        codexHeaderParts.push(`"Authorization" = "Bearer ${escapeTomlString(conn.authToken)}"`);
+      }
+      if (conn.agentId) {
+        codexHeaderParts.push(`"X-Code-Ux-Agent" = "${escapeTomlString(conn.agentId)}"`);
+      }
+      if (codexHeaderParts.length > 0) {
+        lines.push(`http_headers = { ${codexHeaderParts.join(", ")} }`);
       }
     }
     for (const server of applicableCustomServers) {

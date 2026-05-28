@@ -325,14 +325,15 @@ export class ChatThreadRuntimeService {
 
     const allMessages = this.deps.connectionChatRepository.listMessages(thread.id);
 
+    const respondingAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
+      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
+        projectId,
+        dashboardSettings.agents?.routing?.dashboardReply?.agentPresetId ?? null,
+      )
+      : await this.deps.agentPresetSyncService.getWorkerAgent(projectId);
+
     if (replayRequired) {
-      const workerAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
-        ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
-          projectId,
-          dashboardSettings.agents?.routing?.dashboardReply?.agentPresetId ?? null,
-        )
-        : await this.deps.agentPresetSyncService.getWorkerAgent(projectId);
-      const workerInstructions = workerAgent.instructionMarkdown.trim();
+      const workerInstructions = respondingAgent.instructionMarkdown.trim();
       promptContent = buildChatReplayPrompt({
         projectId,
         repoPath: project.baseDir,
@@ -375,6 +376,8 @@ export class ChatThreadRuntimeService {
       prompt: finalPrompt,
       repoPath: project.baseDir,
       mcpConnection,
+      agentMcpAccess: respondingAgent.mcpAccess ?? null,
+      mcpAgentId: respondingAgent.id,
     });
 
     this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {

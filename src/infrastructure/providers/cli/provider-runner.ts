@@ -630,6 +630,9 @@ export class ProviderRunner implements IProviderRunner {
     if (conn?.authToken) {
       headers.Authorization = `Bearer ${conn.authToken}`;
     }
+    if (conn?.agentId) {
+      headers["X-Code-Ux-Agent"] = conn.agentId;
+    }
 
     const runtimeConfig: Record<string, unknown> = {
       security: {
@@ -726,6 +729,9 @@ export class ProviderRunner implements IProviderRunner {
       if (conn.authToken) {
         headers.Authorization = `Bearer ${conn.authToken}`;
       }
+      if (conn.agentId) {
+        headers["X-Code-Ux-Agent"] = conn.agentId;
+      }
       runtimeConfig.mcp = {
         code_ux: {
           type: "remote",
@@ -803,6 +809,9 @@ export class ProviderRunner implements IProviderRunner {
     if (conn?.authToken) {
       headers["Authorization"] = `Bearer ${conn.authToken}`;
     }
+    if (conn?.agentId) {
+      headers["X-Code-Ux-Agent"] = conn.agentId;
+    }
     const created: Array<{ path: string; originalContent: string | null }> = [];
 
     if (provider === "claude-code") {
@@ -863,8 +872,15 @@ export class ProviderRunner implements IProviderRunner {
       const lines: string[] = [];
       if (conn) {
         lines.push("[mcp_servers.code-ux]", `url = "${escapeTomlString(conn.url)}"`);
+        const codexHeaderParts: string[] = [];
         if (conn.authToken) {
-          lines.push(`http_headers = { "Authorization" = "Bearer ${escapeTomlString(conn.authToken)}" }`);
+          codexHeaderParts.push(`"Authorization" = "Bearer ${escapeTomlString(conn.authToken)}"`);
+        }
+        if (conn.agentId) {
+          codexHeaderParts.push(`"X-Code-Ux-Agent" = "${escapeTomlString(conn.agentId)}"`);
+        }
+        if (codexHeaderParts.length > 0) {
+          lines.push(`http_headers = { ${codexHeaderParts.join(", ")} }`);
         }
       }
       for (const server of customServers) {

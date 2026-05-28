@@ -45,6 +45,7 @@ export const updateAgentPreset = async (
     model: input.model,
     memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
+    mcpAccess: input.mcpAccess,
   };
   return fetchJson<AgentPreset>(`/api/agent-presets/${encodeURIComponent(agentPresetId)}`, {
     method: "PATCH",

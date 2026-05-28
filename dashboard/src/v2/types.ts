@@ -1,5 +1,6 @@
 import type {
   AgentAvatarConfig,
+  AgentMcpAccessConfig,
   AgentPresetRecord,
   CreateAgentPresetInput,
   UpdateAgentPresetInput,
@@ -138,6 +139,7 @@ export type {
   LocalDirectoryBrowserEntry,
   LocalDirectoryBrowserResponse,
   AgentAvatarConfig,
+  AgentMcpAccessConfig,
   AgentPresetRecord,
   CreateProjectInput,
   CreateAgentPresetInput,

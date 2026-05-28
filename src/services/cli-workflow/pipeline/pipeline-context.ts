@@ -1,4 +1,5 @@
 import type { CliWorkflowSettings, DashboardSettings, ProviderId, QwenModelProviderSettings, Subtask, ThinkingMode } from "../../../contracts/app-types.js";
+import type { AgentMcpAccessConfig } from "../../../contracts/agent-preset-types.js";
 import type { IWorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
 import type { IPrService } from "../../../infrastructure/providers/cli/pr-service.js";
 import type { IProviderRunner } from "../../../infrastructure/providers/cli/provider-runner.js";
@@ -62,6 +63,11 @@ export interface PipelineContext {
   preserveSuccessfulWorktree?: boolean;
   /** Worker agent preset ID for per-agent memory tagging. */
   agentPresetId?: string;
+  /**
+   * Per-agent MCP access config for the resolved worker agent. `undefined` means the run is
+   * not agent-scoped (no MCP filtering); `null` means an agent exists but was never configured.
+   */
+  agentMcpAccess?: AgentMcpAccessConfig | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
 

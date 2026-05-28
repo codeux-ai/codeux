@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { AgentPresetRecord, AgentSourceScope, AgentAvatarConfig } from "../contracts/agent-preset-types.js";
+import type { AgentMcpAccessConfig, AgentPresetRecord, AgentSourceScope, AgentAvatarConfig } from "../contracts/agent-preset-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import { parseAgentMarkdown, formatAgentMarkdown } from "./agent-preset-markdown.js";
@@ -109,6 +109,7 @@ export class AgentPresetSyncService {
     model?: string | null;
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
+    mcpAccess?: AgentMcpAccessConfig;
   }): Promise<AgentPresetRecord> {
     const existing = this.deps.agentPresetRepository.getAgentPreset(agentPresetId);
     if (!existing) {

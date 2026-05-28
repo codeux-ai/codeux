@@ -361,6 +361,7 @@ CREATE TABLE IF NOT EXISTS agent_presets (
         model TEXT,
         memory_template_override_enabled INTEGER NOT NULL DEFAULT 0,
         memory_template_markdown TEXT,
+        mcp_access_json TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE

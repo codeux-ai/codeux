@@ -9,6 +9,7 @@ import type { Server as McpServer } from "@modelcontextprotocol/sdk/server/index
 import type { Logger } from "../../shared/logging/logger.js";
 import { CODE_UX_DISPLAY_NAME, CODE_UX_VERSION } from "../../shared/config/code-ux-paths.js";
 import type { RuntimeStartupRecoveryService } from "../../services/runtime-startup-recovery-service.js";
+import { runWithMcpAgentContext } from "../../server/mcp-agent-context.js";
 
 export interface BootMcpTransportDeps {
   server: McpServer;
@@ -41,6 +42,14 @@ interface McpHttpSessionEntry {
 
 function readSessionIdHeader(req: IncomingMessage): string | null {
   const header = req.headers["mcp-session-id"];
+  if (Array.isArray(header)) {
+    return header[0]?.trim() || null;
+  }
+  return typeof header === "string" ? header.trim() || null : null;
+}
+
+function readAgentIdHeader(req: IncomingMessage): string | null {
+  const header = req.headers["x-code-ux-agent"];
   if (Array.isArray(header)) {
     return header[0]?.trim() || null;
   }
@@ -167,7 +176,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         entry = { server, transport };
       }
 
-      await entry.transport.handleRequest(req, res, req.body);
+      await runWithMcpAgentContext(readAgentIdHeader(req), () => entry!.transport.handleRequest(req, res, req.body));
 
       if (req.method === "DELETE") {
         const activeSessionId = readSessionIdHeader(req);

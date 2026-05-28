@@ -1,7 +1,9 @@
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { requireRecord } from "./repository-utils.js";
+import { sanitizeAgentMcpAccess } from "../services/agent-mcp-access.js";
 import type {
+  AgentMcpAccessConfig,
   AgentSourceScope,
   AgentPresetRecord,
   CreateAgentPresetInput,
@@ -24,6 +26,7 @@ interface AgentPresetRow {
   model: string | null;
   memory_template_override_enabled: number;
   memory_template_markdown: string | null;
+  mcp_access_json: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -66,6 +69,17 @@ function parseAvatarConfig(value: string | null): AgentPresetRecord["avatarConfi
     // Ignore invalid JSON
   }
   return undefined;
+}
+
+function parseMcpAccess(value: string | null): AgentMcpAccessConfig | undefined {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    return sanitizeAgentMcpAccess(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
 }
 
 export class AgentPresetRepository {
@@ -133,9 +147,10 @@ export class AgentPresetRepository {
         model,
         memory_template_override_enabled,
         memory_template_markdown,
+        mcp_access_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -152,6 +167,7 @@ export class AgentPresetRepository {
       input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
+      this.serializeMcpAccess(input.mcpAccess),
       now,
       now,
     );
@@ -213,7 +229,7 @@ export class AgentPresetRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, mcp_access_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name?.trim() || current.name,
@@ -227,6 +243,7 @@ export class AgentPresetRepository {
       input.model === undefined ? current.model || null : input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled === undefined ? (current.memoryTemplateOverrideEnabled ? 1 : 0) : (input.memoryTemplateOverrideEnabled ? 1 : 0),
       input.memoryTemplateMarkdown === undefined ? (current.memoryTemplateMarkdown || null) : (input.memoryTemplateMarkdown || null),
+      input.mcpAccess === undefined ? this.serializeMcpAccess(current.mcpAccess) : this.serializeMcpAccess(input.mcpAccess),
       now,
       agentPresetId,
     );
@@ -338,9 +355,14 @@ export class AgentPresetRepository {
       model: row.model || null,
       memoryTemplateOverrideEnabled: Boolean(row.memory_template_override_enabled),
       memoryTemplateMarkdown: row.memory_template_markdown || undefined,
+      mcpAccess: parseMcpAccess(row.mcp_access_json),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+  }
+
+  private serializeMcpAccess(mcpAccess: AgentMcpAccessConfig | undefined): string | null {
+    return mcpAccess ? JSON.stringify(sanitizeAgentMcpAccess(mcpAccess)) : null;
   }
 
 

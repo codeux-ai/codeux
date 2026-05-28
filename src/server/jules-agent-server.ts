@@ -302,6 +302,8 @@ export class JulesAgentServer {
       managementToolHandler: this.managementToolHandler,
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,
+      resolveAgentMcpToolToggles: (agentId) =>
+        this.agentPresetRepository.getAgentPreset(agentId)?.mcpAccess?.codeUxToolToggles ?? null,
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),
       withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),

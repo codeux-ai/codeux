@@ -244,6 +244,7 @@ export class CliWorkflowService {
       workflowSucceeded: false,
       preserveSuccessfulWorktree,
       agentPresetId: workerAgent?.id,
+      agentMcpAccess: workerAgent ? (workerAgent.mcpAccess ?? null) : undefined,
       memoryTemplateOverrideEnabled: workerAgent?.memoryTemplateOverrideEnabled,
       memoryTemplateMarkdown: workerAgent?.memoryTemplateMarkdown,
       workspaceManager: this.workspaceManager,

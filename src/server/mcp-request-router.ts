@@ -2,10 +2,11 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, ListResourcesRequestSchema, ListPromptsRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
 import type { McpToolArgsByName, McpToolResponse } from "../api/mcp/tool-registry.js";
 import { ToolRegistry } from "../api/mcp/tool-registry.js";
-import type { DashboardSettings } from "../contracts/app-types.js";
+import type { DashboardSettings, McpToolToggle } from "../contracts/app-types.js";
 import { validateToolArguments } from "../api/mcp/validators/tool-validators.js";
 import type { ManagementToolHandler } from "../mcp/management-tool-handler.js";
 import { getEnabledToolDefinitions, isToolEnabled } from "../mcp/mcp-tool-availability.js";
+import { getCurrentMcpAgentId } from "./mcp-agent-context.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
@@ -16,6 +17,8 @@ export interface McpRequestRouterArgs {
   managementToolHandler: ManagementToolHandler;
   getDashboardSettings: () => DashboardSettings;
   getRuntimeRole: () => McpRuntimeRole;
+  /** Resolve per-agent code_ux tool toggles for the agent advertised on the current request, if any. */
+  resolveAgentMcpToolToggles?: (agentId: string) => McpToolToggle[] | null;
   formatError: (error: unknown) => { content: Array<{ type: string; text: string }>; isError: true };
   logger?: Logger;
   withCorrelationContext?: <T>(request: unknown, operation: () => Promise<T>) => Promise<T>;
@@ -36,10 +39,18 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("manage_preview", async (input) => (await args.managementToolHandler.handleManagePreview(input)) as McpToolResponse)
     .register("manage_telemetry", async (input) => (await args.managementToolHandler.handleManageTelemetry(input)) as McpToolResponse);
 
+  const resolveAgentToggles = (): McpToolToggle[] | null => {
+    const agentId = getCurrentMcpAgentId();
+    if (!agentId || !args.resolveAgentMcpToolToggles) {
+      return null;
+    }
+    return args.resolveAgentMcpToolToggles(agentId);
+  };
+
   args.server.setRequestHandler(ListToolsRequestSchema, async () => {
     logger?.debug("MCP list_tools request received");
     return {
-      tools: getEnabledToolDefinitions(args.getDashboardSettings(), args.getRuntimeRole()),
+      tools: getEnabledToolDefinitions(args.getDashboardSettings(), args.getRuntimeRole(), resolveAgentToggles()),
     };
   });
 
@@ -56,7 +67,7 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
       const { name, arguments: toolArgs } = request.params;
       logger?.debug("MCP tool request received", { toolName: name });
 
-      if (!isToolEnabled(args.getDashboardSettings(), name, args.getRuntimeRole())) {
+      if (!isToolEnabled(args.getDashboardSettings(), name, args.getRuntimeRole(), resolveAgentToggles())) {
         logger?.warn("MCP tool request rejected because tool is disabled", { toolName: name });
         throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
       }

@@ -99,11 +99,23 @@ export const sanitizeMcpToolToggles = (value: unknown): McpToolToggle[] => {
   }));
 };
 
-const getEnabledToolNameSet = (settings: DashboardSettings): Set<string> => {
+const getEnabledToolNameSet = (
+  settings: DashboardSettings,
+  agentToolToggles?: McpToolToggle[] | null,
+): Set<string> => {
+  const enabledByName = new Map<string, boolean>();
+  for (const tool of settings.mcpTools) {
+    enabledByName.set(tool.name, tool.enabled);
+  }
+  if (agentToolToggles) {
+    for (const tool of agentToolToggles) {
+      enabledByName.set(tool.name, tool.enabled);
+    }
+  }
   return new Set(
-    settings.mcpTools
-      .filter((tool) => tool.enabled)
-      .map((tool) => tool.name)
+    [...enabledByName.entries()]
+      .filter(([, enabled]) => enabled)
+      .map(([name]) => name),
   );
 };
 
@@ -117,8 +129,9 @@ const isToolVisibleForRuntimeRole = (
 export const getEnabledToolDefinitions = (
   settings: DashboardSettings,
   runtimeRole: McpRuntimeRole = "project_manager",
+  agentToolToggles?: McpToolToggle[] | null,
 ): Array<(typeof TOOL_DEFINITIONS)[number]> => {
-  const enabled = getEnabledToolNameSet(settings);
+  const enabled = getEnabledToolNameSet(settings, agentToolToggles);
   return TOOL_DEFINITIONS.filter((tool) => enabled.has(tool.name) && isToolVisibleForRuntimeRole(tool, runtimeRole)) as Array<(typeof TOOL_DEFINITIONS)[number]>;
 };
 
@@ -126,8 +139,9 @@ export const isToolEnabled = (
   settings: DashboardSettings,
   toolName: string,
   runtimeRole: McpRuntimeRole = "project_manager",
+  agentToolToggles?: McpToolToggle[] | null,
 ): toolName is ToolName => {
-  if (!getEnabledToolNameSet(settings).has(toolName)) {
+  if (!getEnabledToolNameSet(settings, agentToolToggles).has(toolName)) {
     return false;
   }
 
