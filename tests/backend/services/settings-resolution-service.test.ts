@@ -171,6 +171,38 @@ describe("Settings Resolution Service", () => {
       expect(resolved.settings.aiProvider.providers.jules?.apiKey).toBe("fake-jules-key");
       expect(resolved.settings.git.githubToken).toBe("fake-github-token");
     });
+
+    it("merges custom MCP servers and tool toggles across system and project scope", () => {
+      const baseProject = buildDefaultProjectSettings();
+      const systemSettings: SystemSettings = {
+        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
+        defaults: baseProject,
+        mcpTools: [],
+        customMcpServers: [
+          { id: "s1", name: "sys", url: "https://sys/mcp", enabled: true },
+        ],
+      } as unknown as SystemSettings;
+
+      const projectOverride = {
+        customMcpServers: [
+          { id: "s1", name: "sys", url: "https://sys/mcp", enabled: false },
+          { id: "p1", name: "proj", url: "https://proj/mcp", enabled: true },
+        ],
+        mcpTools: [
+          { name: "manage_tasks", enabled: false },
+        ],
+      } as unknown as ProjectSettingsOverride;
+
+      const resolved = resolveDashboardSettings({ systemSettings, projectOverride });
+
+      const servers = resolved.settings.customMcpServers;
+      expect(servers.find((s) => s.id === "s1")?.enabled).toBe(false);
+      expect(servers.find((s) => s.id === "p1")?.enabled).toBe(true);
+
+      expect(resolved.settings.mcpTools.find((t) => t.name === "manage_tasks")?.enabled).toBe(false);
+      expect(resolved.settings.mcpTools.find((t) => t.name === "manage_projects")?.enabled).toBe(true);
+    });
   });
 
   describe("resolveProjectSettings", () => {

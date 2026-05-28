@@ -5,6 +5,7 @@ import type {
   AutomationLevel,
   CiIntelligenceSettings,
   CliWorkflowSettings,
+  CustomMcpServer,
   ProviderConfigId,
   DashboardSettings,
   InvocationProviderOverrideSettings,
@@ -73,6 +74,8 @@ export interface ProjectSettings {
   workers: WorkerSettings;
   agents: AgentSettings;
   skills: SkillToggle[];
+  mcpTools?: McpToolToggle[];
+  customMcpServers?: CustomMcpServer[];
   memory: MemorySettings;
 }
 
@@ -125,6 +128,7 @@ export interface SystemSettings {
   integrations: SystemIntegrationSettings;
   defaults: ProjectSettings;
   mcpTools: McpToolToggle[];
+  customMcpServers: CustomMcpServer[];
 }
 
 export type SettingsOverride<T> = {

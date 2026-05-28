@@ -516,6 +516,31 @@ const validateMcpTools = (
   });
 };
 
+const CUSTOM_MCP_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+const validateCustomMcpServers = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[]
+) => {
+  if (!Array.isArray(value)) {
+    issues.push({ path, message: "Expected an array" });
+    return;
+  }
+  value.forEach((server, index) => {
+    if (!isRecord(server)) {
+      issues.push({ path: `${path}[${index}]`, message: "Expected an object" });
+      return;
+    }
+    if (typeof server.id !== "string" || server.id.trim().length === 0) issues.push({ path: `${path}[${index}].id`, message: "Expected a non-empty string" });
+    if (typeof server.name !== "string" || !CUSTOM_MCP_NAME_PATTERN.test(server.name.trim())) issues.push({ path: `${path}[${index}].name`, message: "Expected an identifier matching [a-zA-Z0-9_-]" });
+    if (typeof server.url !== "string" || server.url.trim().length === 0) issues.push({ path: `${path}[${index}].url`, message: "Expected a non-empty string" });
+    if (typeof server.enabled !== "boolean") issues.push({ path: `${path}[${index}].enabled`, message: "Expected a boolean" });
+    if (server.headers !== undefined && (!isRecord(server.headers) || Array.isArray(server.headers))) issues.push({ path: `${path}[${index}].headers`, message: "Expected an object" });
+    if (server.providers !== undefined && !Array.isArray(server.providers)) issues.push({ path: `${path}[${index}].providers`, message: "Expected an array" });
+  });
+};
+
 const validateAutomationInterventions = (
   value: unknown,
   path: string,
@@ -597,6 +622,9 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
   validateAgents(payload.agents, "agents", issues);
   validateSkills(payload.skills, "skills", issues);
   validateMcpTools(payload.mcpTools, "mcpTools", issues);
+  if (payload.customMcpServers !== undefined) {
+    validateCustomMcpServers(payload.customMcpServers, "customMcpServers", issues);
+  }
   validateMemory(payload.memory, "memory", issues);
 
   if (issues.length > 0) {

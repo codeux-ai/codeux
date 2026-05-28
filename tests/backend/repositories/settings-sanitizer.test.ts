@@ -105,7 +105,7 @@ describe("settings-sanitizer", () => {
         { name: "custom-skill", enabled: true },
       ],
       mcpTools: [
-        { name: "get_session", enabled: false },
+        { name: "manage_tasks", enabled: false },
       ],
     });
 
@@ -136,7 +136,7 @@ describe("settings-sanitizer", () => {
     expect(settings.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(true);
     expect(settings.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(false);
     expect(settings.skills.find((skill) => skill.name === "custom-skill")?.isInternal).toBe(false);
-    expect(settings.mcpTools.find((tool) => tool.name === "get_session")?.enabled).toBe(false);
+    expect(settings.mcpTools.find((tool) => tool.name === "manage_tasks")?.enabled).toBe(false);
   });
 
   it("preserves valid appearance background image and pattern settings", () => {

@@ -1,22 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-repository.js";
-import { getEnabledToolDefinitions, isToolEnabled, sanitizeMcpToolToggles } from "../../../src/mcp/mcp-tool-availability.js";
+import { getEnabledToolDefinitions, isToolEnabled, sanitizeCustomMcpServers, sanitizeMcpToolToggles } from "../../../src/mcp/mcp-tool-availability.js";
 
 describe("tool availability", () => {
   it("exposes the project-manager MCP tool surface", () => {
     const projectManagerTools = getEnabledToolDefinitions(DEFAULT_DASHBOARD_SETTINGS, "project_manager");
 
-    expect(projectManagerTools.some((tool) => tool.name === "listen")).toBe(true);
-    expect(projectManagerTools.some((tool) => tool.name === "start_listen")).toBe(true);
-    expect(projectManagerTools.some((tool) => tool.name === "pull_inbox")).toBe(true);
-    expect(projectManagerTools.some((tool) => tool.name === "post_listen_reply")).toBe(true);
-    expect(projectManagerTools.some((tool) => tool.name === "generate_dashboard_reply")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "manage_code_ux")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "manage_projects")).toBe(true);
     expect(projectManagerTools.some((tool) => tool.name === "manage_sprints")).toBe(true);
-    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "listen", "project_manager")).toBe(true);
-    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "start_listen", "project_manager")).toBe(true);
-    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "post_listen_reply", "project_manager")).toBe(true);
+    expect(projectManagerTools.some((tool) => tool.name === "manage_tasks")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_code_ux", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_projects", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_sprints", "project_manager")).toBe(true);
@@ -24,32 +17,104 @@ describe("tool availability", () => {
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "execute_worker_dispatch", "project_manager" as any)).toBe(false);
   });
 
+  it("no longer exposes the deprecated listening-loop tools", () => {
+    const names = getEnabledToolDefinitions(DEFAULT_DASHBOARD_SETTINGS, "project_manager").map((tool) => tool.name);
+    for (const removed of ["listen", "start_listen", "pull_inbox", "post_listen_reply", "get_session", "generate_dashboard_reply"]) {
+      expect(names).not.toContain(removed);
+      expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, removed, "project_manager")).toBe(false);
+    }
+  });
+
+  it("tags every tool with a category", () => {
+    const tools = getEnabledToolDefinitions(DEFAULT_DASHBOARD_SETTINGS, "project_manager");
+    const validCategories = new Set(["orchestration", "agents_memory", "platform", "advanced"]);
+    expect(tools.length).toBeGreaterThan(0);
+    expect(tools.every((tool) => validCategories.has((tool as { category: string }).category))).toBe(true);
+  });
+
   it("respects disabled tools for listing and dispatch checks", () => {
     const settings = {
       ...DEFAULT_DASHBOARD_SETTINGS,
       mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) =>
-        tool.name === "start_listen" || tool.name === "pull_inbox"
+        tool.name === "manage_preview" || tool.name === "manage_telemetry"
           ? { ...tool, enabled: false }
           : tool
       ),
     };
 
     const names = getEnabledToolDefinitions(settings, "project_manager").map((tool) => tool.name);
-    expect(names).not.toContain("start_listen");
-    expect(names).not.toContain("pull_inbox");
-    expect(isToolEnabled(settings, "start_listen", "project_manager")).toBe(false);
-    expect(isToolEnabled(settings, "pull_inbox", "project_manager")).toBe(false);
+    expect(names).not.toContain("manage_preview");
+    expect(names).not.toContain("manage_telemetry");
+    expect(isToolEnabled(settings, "manage_preview", "project_manager")).toBe(false);
+    expect(isToolEnabled(settings, "manage_telemetry", "project_manager")).toBe(false);
   });
 
   it("sanitizes toggles and ignores unknown tool names", () => {
     const sanitized = sanitizeMcpToolToggles([
-      { name: "listen", enabled: false },
+      { name: "manage_tasks", enabled: false },
       { name: "unknown_tool", enabled: false },
       { name: " ", enabled: true },
     ]);
 
-    expect(sanitized.find((tool) => tool.name === "listen")?.enabled).toBe(false);
-    expect(sanitized.find((tool) => tool.name === "pull_inbox")?.enabled).toBe(true);
+    expect(sanitized.find((tool) => tool.name === "manage_tasks")?.enabled).toBe(false);
+    expect(sanitized.find((tool) => tool.name === "manage_projects")?.enabled).toBe(true);
     expect(sanitized.some((tool) => tool.name === "unknown_tool")).toBe(false);
+  });
+});
+
+describe("sanitizeCustomMcpServers", () => {
+  it("keeps valid HTTP servers and normalizes optional fields", () => {
+    const result = sanitizeCustomMcpServers([
+      {
+        id: "srv-1",
+        name: "docs",
+        label: " Docs Server ",
+        url: " https://example.com/mcp ",
+        enabled: true,
+        headers: { Authorization: "Bearer x", "": "skip", bad: 5 },
+        providers: ["claude-code", "gemini", "not-a-provider"],
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "srv-1",
+      name: "docs",
+      label: "Docs Server",
+      url: "https://example.com/mcp",
+      enabled: true,
+      headers: { Authorization: "Bearer x" },
+      providers: ["claude-code", "gemini"],
+    });
+  });
+
+  it("drops entries missing id, name, or url, and rejects bad names", () => {
+    const result = sanitizeCustomMcpServers([
+      { id: "", name: "x", url: "https://a" },
+      { id: "a", name: "", url: "https://a" },
+      { id: "b", name: "ok", url: "" },
+      { id: "c", name: "has space", url: "https://a" },
+      { id: "d", name: "good-name", url: "https://a" },
+      "not-an-object",
+    ]);
+
+    expect(result.map((server) => server.id)).toEqual(["d"]);
+    expect(result[0].enabled).toBe(true);
+  });
+
+  it("dedupes by id, last entry wins", () => {
+    const result = sanitizeCustomMcpServers([
+      { id: "x", name: "first", url: "https://1", enabled: true },
+      { id: "x", name: "second", url: "https://2", enabled: false },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ name: "second", url: "https://2", enabled: false });
+  });
+
+  it("returns an empty array for non-array input", () => {
+    expect(sanitizeCustomMcpServers(undefined)).toEqual([]);
+    expect(sanitizeCustomMcpServers(null)).toEqual([]);
+    expect(sanitizeCustomMcpServers({})).toEqual([]);
   });
 });

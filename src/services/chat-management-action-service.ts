@@ -280,6 +280,7 @@ export class ChatManagementActionService {
         finalizeExecutionInvocation: false,
         expectTextOutput: true,
         mcpConnection: args.mcpConnection,
+        customMcpServers: args.settings.customMcpServers,
       });
 
       const replyText = (result.text?.trim() || result.stdout || "").trim();

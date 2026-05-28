@@ -1,4 +1,5 @@
 import type {
+  CustomMcpServer,
   DashboardSettings,
   EffectiveSettingsResponse,
   ExternalSettingsHints,
@@ -16,6 +17,11 @@ import type {
 
 const cloneSkills = (skills: SkillToggle[]): SkillToggle[] => skills.map((skill) => ({ ...skill }));
 const cloneMcpTools = (tools: McpToolToggle[]): McpToolToggle[] => tools.map((tool) => ({ ...tool }));
+const cloneCustomMcpServers = (servers: CustomMcpServer[] = []): CustomMcpServer[] => servers.map((server) => ({
+  ...server,
+  headers: server.headers ? { ...server.headers } : undefined,
+  providers: server.providers ? [...server.providers] : undefined,
+}));
 const cloneProjectProviders = (
   providers: ProjectSettings["aiProvider"]["providers"],
 ): ProjectSettings["aiProvider"]["providers"] => (
@@ -132,6 +138,8 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     },
   },
   skills: cloneSkills(settings.skills),
+  mcpTools: cloneMcpTools(settings.mcpTools),
+  customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
   memory: { ...settings.memory },
 });
 
@@ -178,6 +186,8 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     },
   },
   skills: cloneSkills(settings.skills),
+  mcpTools: settings.mcpTools ? cloneMcpTools(settings.mcpTools) : undefined,
+  customMcpServers: settings.customMcpServers ? cloneCustomMcpServers(settings.customMcpServers) : undefined,
   memory: { ...settings.memory },
 });
 
@@ -192,6 +202,7 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   },
   defaults: cloneProjectSettings(settings.defaults),
   mcpTools: cloneMcpTools(settings.mcpTools),
+  customMcpServers: cloneCustomMcpServers(settings.customMcpServers),
 });
 
 export const applyEffectiveProjectSettings = (effectiveProject: EffectiveSettingsResponse): { settings: ProjectSettings, sources: Record<string, SettingsValueSource> } => {

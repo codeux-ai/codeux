@@ -1,18 +1,13 @@
 import { ServerContext } from "../dependency-factory.js";
 import { CoreDependencies } from "./core-factory.js";
 import { SprintDependencies } from "./sprint-factory.js";
-import { CoreToolHandler } from "../../mcp/core-tool-handler.js";
-import { AgentToolHandler } from "../../mcp/agent-tool-handler.js";
 import { ManagementToolHandler } from "../../mcp/management-tool-handler.js";
 import { type DashboardSettings, type DashboardSettingsScope } from "../../contracts/app-types.js";
-import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
 
 import type { DashboardDependencies } from "./dashboard-factory.js";
 
 export interface McpDependencies {
-  coreToolHandler: CoreToolHandler;
-  agentToolHandler: AgentToolHandler;
   managementToolHandler: ManagementToolHandler;
 }
 
@@ -22,23 +17,6 @@ export function createMcpDependencies(
   sprintDeps: SprintDependencies,
   dashboardDeps: DashboardDependencies
 ): McpDependencies {
-  const {
-    logger,
-    julesApi,
-    activitySummary,
-    connectionChatRepository,
-    workerEndpointRepository,
-    projectWorkerAssignmentService,
-    projectAttentionService,
-    workerAttentionOutcomeService,
-    sessionTracking,
-    executionRepository,
-    projectManagementRepository,
-    activeDispatchRegistry,
-    agentPresetSyncService,
-  } = coreDeps;
-  const { taskService } = sprintDeps;
-
   const getDashboardSettings = (scope?: DashboardSettingsScope): DashboardSettings => {
     let effective: { settings: DashboardSettings; sources: Record<string, string> };
     if (scope?.projectId) {
@@ -64,28 +42,6 @@ export function createMcpDependencies(
     return settings;
   };
 
-  const coreToolHandler = new CoreToolHandler({
-    julesApi,
-    activitySummary,
-    normalizeName: (type, id) => context.normalizeName(type, id),
-    resolveSessionName: (session) => context.resolveSessionName(session),
-    fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
-    isJulesApiConfigured: () => context.isJulesApiConfigured(),
-    getMissingJulesApiKeyInstruction: () => context.getMissingJulesApiKeyInstruction(),
-    isTrackedCliSession: (sessionId) => {
-      const normalized = sessionId.startsWith("sessions/") ? sessionId : `sessions/${sessionId}`;
-      return context.isTrackedCliSession(normalized);
-    },
-    getTrackedSession: (sessionId) => sessionTracking.getSession(sessionId),
-    getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
-    connectionChatRepository,
-    logger: logger.child({ component: "core-tool-handler" }),
-  });
-
-  const agentToolHandler = new AgentToolHandler({
-    workerInboxReplyService: sprintDeps.workerInboxReplyService,
-  });
-
   const managementToolHandler = new ManagementToolHandler({
     sprintPreviewService: coreDeps.sprintPreviewService,
     executionRepository: coreDeps.executionRepository,
@@ -104,8 +60,6 @@ export function createMcpDependencies(
   });
 
   return {
-    coreToolHandler,
-    agentToolHandler,
     managementToolHandler,
   };
 }

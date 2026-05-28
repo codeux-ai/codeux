@@ -8,6 +8,7 @@ import { SettingsBrowserPanel } from "./panels/SettingsBrowserPanel.js";
 import { SettingsAgentsPanel } from "./panels/SettingsAgentsPanel.js";
 import { SettingsMemoryPanel } from "./panels/SettingsMemoryPanel.js";
 import { SettingsIntegrationsPanel } from "./panels/SettingsIntegrationsPanel.js";
+import { SettingsMcpPanel } from "./panels/SettingsMcpPanel.js";
 import { SettingsDangerPanel } from "./panels/SettingsDangerPanel.js";
 
 export const SettingsContentPanels: FunctionComponent<{
@@ -32,6 +33,8 @@ export const SettingsContentPanels: FunctionComponent<{
       return <SettingsMemoryPanel state={state} />;
     case "integrations":
       return <SettingsIntegrationsPanel state={state} />;
+    case "mcp":
+      return <SettingsMcpPanel state={state} />;
     case "danger":
       return <SettingsDangerPanel state={state} />;
     default:

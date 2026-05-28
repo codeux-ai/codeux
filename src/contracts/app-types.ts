@@ -808,6 +808,17 @@ export interface McpToolToggle {
   isInternal: boolean;
 }
 
+export interface CustomMcpServer {
+  id: string;
+  name: string;
+  label?: string;
+  description?: string;
+  enabled: boolean;
+  url: string;
+  headers?: Record<string, string>;
+  providers?: ProviderId[];
+}
+
 export type ConsoleLogLevel = "standard" | "full";
 
 export interface DashboardSettings {
@@ -828,6 +839,7 @@ export interface DashboardSettings {
   agents: AgentSettings;
   skills: SkillToggle[];
   mcpTools: McpToolToggle[];
+  customMcpServers: CustomMcpServer[];
   memory: MemorySettings;
 }
 

@@ -1,4 +1,4 @@
-import type { DashboardSettings } from "../contracts/app-types.js";
+import type { CustomMcpServer, DashboardSettings } from "../contracts/app-types.js";
 import type { QwenModelProviderSettings } from "../contracts/app-types.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
@@ -76,6 +76,8 @@ export interface ExecutionProviderRunArgs {
 
   /** MCP server connection info for injecting management tools into the CLI provider. */
   mcpConnection?: McpConnectionInfo | null;
+  /** User-defined custom MCP servers injected into the CLI provider alongside code_ux. */
+  customMcpServers?: CustomMcpServer[];
 }
 
 export class ProviderExecutionService {
@@ -214,6 +216,7 @@ export class ProviderExecutionService {
         signal: args.signal,
         continueSessionId,
         mcpConnection: args.mcpConnection,
+        customMcpServers: args.customMcpServers,
         onActivity: (desc: string, originator?: string) => {
           if (args.onActivity) {
             args.onActivity(desc, originator);

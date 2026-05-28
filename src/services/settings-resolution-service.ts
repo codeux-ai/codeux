@@ -1,5 +1,6 @@
 import type {
   BackgroundPattern,
+  CustomMcpServer,
   DashboardSettings,
   ExternalSettingsHints,
   McpToolToggle,
@@ -27,7 +28,7 @@ import {
   buildDefaultIntegrationProviders,
   normalizeSystemIntegrationProviders,
 } from "../domain/settings/provider-config-utils.js";
-import { sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
+import { sanitizeCustomMcpServers, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
 
@@ -70,6 +71,41 @@ const sanitizeBackgroundPattern = (value: unknown): BackgroundPattern => {
 
 function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
   return tools.map((tool) => ({ ...tool }));
+}
+
+function resolveEffectiveMcpTools(
+  systemTools: McpToolToggle[],
+  override?: McpToolToggle[],
+): McpToolToggle[] {
+  const base = sanitizeMcpToolToggles(systemTools);
+  if (!Array.isArray(override) || override.length === 0) {
+    return base;
+  }
+  const overrideByName = new Map<string, boolean>();
+  for (const tool of override) {
+    if (tool && typeof tool.name === "string" && typeof tool.enabled === "boolean") {
+      overrideByName.set(tool.name.trim(), tool.enabled);
+    }
+  }
+  return base.map((tool) => (
+    overrideByName.has(tool.name) ? { ...tool, enabled: overrideByName.get(tool.name)! } : { ...tool }
+  ));
+}
+
+function resolveEffectiveCustomMcpServers(
+  systemServers: CustomMcpServer[],
+  override?: CustomMcpServer[],
+): CustomMcpServer[] {
+  const byId = new Map<string, CustomMcpServer>();
+  for (const server of sanitizeCustomMcpServers(systemServers)) {
+    byId.set(server.id, server);
+  }
+  if (Array.isArray(override)) {
+    for (const server of sanitizeCustomMcpServers(override)) {
+      byId.set(server.id, server);
+    }
+  }
+  return Array.from(byId.values());
 }
 
 function cloneInstructionTemplates(
@@ -452,6 +488,7 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
     },
     defaults: buildDefaultProjectSettings(externalHints),
     mcpTools: cloneMcpTools(DEFAULT_DASHBOARD_SETTINGS.mcpTools),
+    customMcpServers: sanitizeCustomMcpServers(DEFAULT_DASHBOARD_SETTINGS.customMcpServers),
   };
 }
 
@@ -551,6 +588,8 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       qualityAssurance: sanitizeQualityAssuranceSettings(toRecord(input.agents).qualityAssurance),
     },
     skills: sanitizeSkills(input.skills, git.githubMode),
+    ...(Array.isArray(input.mcpTools) ? { mcpTools: sanitizeMcpToolToggles(input.mcpTools) } : {}),
+    ...(Array.isArray(input.customMcpServers) ? { customMcpServers: sanitizeCustomMcpServers(input.customMcpServers) } : {}),
     memory: sanitizeMemory(input as Partial<DashboardSettings>),
   };
 }
@@ -606,6 +645,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
     },
     defaults: defaultsInput,
     mcpTools: sanitizeMcpToolToggles(input.mcpTools ?? defaults.mcpTools).map((tool) => ({ ...tool })),
+    customMcpServers: sanitizeCustomMcpServers(input.customMcpServers ?? defaults.customMcpServers),
   };
 }
 
@@ -687,7 +727,8 @@ export function resolveDashboardSettings(args: {
       qualityAssurance: cloneQualityAssuranceSettings(sprintSettings.agents.qualityAssurance),
     },
     skills: cloneSkills(sprintSettings.skills),
-    mcpTools: cloneMcpTools(args.systemSettings.mcpTools),
+    mcpTools: resolveEffectiveMcpTools(args.systemSettings.mcpTools, sprintSettings.mcpTools),
+    customMcpServers: resolveEffectiveCustomMcpServers(args.systemSettings.customMcpServers, sprintSettings.customMcpServers),
     memory: { ...sprintSettings.memory },
   };
 

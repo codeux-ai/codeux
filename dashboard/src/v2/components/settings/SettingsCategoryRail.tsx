@@ -3,7 +3,7 @@ import { Layers3 } from "lucide-preact";
 import type { Category, CategoryId } from "../../hooks/use-settings-page-state.js";
 import { NoticePanel } from "./SettingsSurface.js";
 
-import { AlertTriangle, Bot, BrainCircuit, Compass, Cpu, Monitor, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
+import { AlertTriangle, Bot, BrainCircuit, Compass, Cpu, Monitor, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 export const CATEGORIES: Category[] = [
   { id: "general", num: "01", label: "General", icon: SlidersHorizontal, description: "Scope, runtime, and automation posture" },
@@ -14,7 +14,8 @@ export const CATEGORIES: Category[] = [
   { id: "agents", num: "06", label: "Agents", icon: Bot, description: "Project-local markdown mirrors and agent authoring behavior" },
   { id: "memory", num: "07", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
   { id: "integrations", num: "08", label: "Integrations", icon: Plug, description: "Provider keys, Git hosts, and external connection policy" },
-  { id: "danger", num: "09", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
+  { id: "mcp", num: "09", label: "MCP", icon: Server, description: "MCP servers injected into CLIs and built-in tool access" },
+  { id: "danger", num: "10", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
 ];
 
 export const CATEGORY_SEARCH_HINTS: Record<CategoryId, string[]> = {
@@ -26,6 +27,7 @@ export const CATEGORY_SEARCH_HINTS: Record<CategoryId, string[]> = {
   agents: ["agent", "prompt", "template", "markdown", "instruction"],
   memory: ["memory", "embedding", "capture", "promotion", "learning"],
   integrations: ["github", "gitlab", "jira", "atlassian", "token", "api key", "auth", "credential", "integration"],
+  mcp: ["mcp", "server", "tool", "tools", "custom mcp", "model context protocol", "code_ux", "toggle", "http", "sse"],
   danger: ["reset", "delete", "danger", "database", "wipe"],
 };
 

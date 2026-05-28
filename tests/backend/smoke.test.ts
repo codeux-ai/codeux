@@ -46,11 +46,13 @@ describe("Smoke Test", () => {
     
     // Check for some expected tools
     const toolNames = result.tools.map((t: any) => t.name);
-    expect(toolNames).toContain("listen");
-    expect(toolNames).toContain("generate_dashboard_reply");
     expect(toolNames).toContain("manage_code_ux");
     expect(toolNames).toContain("manage_projects");
     expect(toolNames).toContain("manage_sprints");
+    expect(toolNames).toContain("manage_tasks");
+    // Deprecated listening-loop tools are no longer exposed
+    expect(toolNames).not.toContain("listen");
+    expect(toolNames).not.toContain("generate_dashboard_reply");
 
     errorSpy.mockRestore();
     warnSpy.mockRestore();

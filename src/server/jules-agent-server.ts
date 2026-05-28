@@ -32,8 +32,6 @@ import { GitStatusService, type GitTrackingRequest } from "../services/git-statu
 import { defaultRunner } from "../infrastructure/git/git-status-query-client.js";
 import { loadExternalSettingsHints } from "../config/external-settings.js";
 import { InstructionService } from "../instructions/instruction-template-service.js";
-import { CoreToolHandler } from "../mcp/core-tool-handler.js";
-import { AgentToolHandler } from "../mcp/agent-tool-handler.js";
 import { buildMissingJulesApiKeyMessage } from "../mcp/api-key-guidance.js";
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import { DockerService } from "../services/docker-service.js";
@@ -143,8 +141,6 @@ export class JulesAgentServer {
   private instructionService: InstructionService;
   private sessionTracking: SessionTrackingRepository;
   private cliWorkflowService: CliWorkflowService;
-  private coreToolHandler: CoreToolHandler;
-  private agentToolHandler: AgentToolHandler;
   private activityCacheService: ActivityCacheService;
   private taskRerunService: TaskRerunService;
   private executionControlService: ExecutionControlService;
@@ -205,8 +201,6 @@ export class JulesAgentServer {
     this.instructionService = deps.instructionService;
     this.sessionTracking = deps.sessionTracking;
     this.cliWorkflowService = deps.cliWorkflowService;
-    this.coreToolHandler = deps.coreToolHandler;
-    this.agentToolHandler = deps.agentToolHandler;
     this.managementToolHandler = deps.managementToolHandler;
 
     this.activityCacheService = deps.activityCacheService;
@@ -305,8 +299,6 @@ export class JulesAgentServer {
   private configureMcpServer(server: Server, runtimeRole: "project_manager"): void {
     registerMcpRequestHandlers({
       server,
-      coreToolHandler: this.coreToolHandler,
-      agentToolHandler: this.agentToolHandler,
       managementToolHandler: this.managementToolHandler,
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,

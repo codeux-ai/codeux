@@ -1,5 +1,5 @@
 import { CliWorkflowSettings, ProviderId } from "../../../contracts/app-types.js";
-import type { QwenModelProviderSettings } from "../../../contracts/app-types.js";
+import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
@@ -14,6 +14,16 @@ import { collectProviderUsageTelemetry, type ProviderUsageTelemetry } from "./pr
 
 const CONTAINER_WORKSPACE_ROOT = "/workspace";
 const CONTAINER_RUNTIME_HOME = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".code-ux-home");
+
+const escapeTomlString = (value: string): string => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
+const enabledCustomServersFor = (servers: CustomMcpServer[] | undefined, provider: ProviderId): CustomMcpServer[] =>
+  (servers || []).filter((server) =>
+    server.enabled
+    && typeof server.url === "string"
+    && server.url.trim().length > 0
+    && (!server.providers || server.providers.length === 0 || server.providers.includes(provider))
+  );
 
 export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
 
@@ -108,6 +118,8 @@ export interface ProviderRunInput {
   continueSessionId?: string | null;
   /** MCP server connection info for injecting management tools into the CLI provider. */
   mcpConnection?: McpConnectionInfo | null;
+  /** User-defined custom MCP servers injected into the CLI provider alongside code_ux. */
+  customMcpServers?: CustomMcpServer[];
 }
 
 export interface IProviderRunner {
@@ -213,14 +225,17 @@ export class ProviderRunner implements IProviderRunner {
     codexOutputPath?: string | null;
     continueSessionId?: string | null;
     mcpConnection?: McpConnectionInfo | null;
+    customMcpServers?: CustomMcpServer[];
   }): Promise<ProviderRunResult> {
     const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
     const runModel = this.resolveRunModel(provider, model, input);
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input);
     const nativeSessionId = input.continueSessionId || (provider === "claude-code" ? randomUUID() : null);
 
+    const applicableCustomServers = enabledCustomServersFor(input.customMcpServers, provider);
+    const hasMcpConfig = !!input.mcpConnection || applicableCustomServers.length > 0;
     const continueSession = !!input.continueSessionId;
-    const spec = this.buildCommandSpec(provider, runModel, prompt, input.codexOutputPath, nativeSessionId, continueSession, !!input.mcpConnection, input.qwenAuthMode, input.qwenProtocol);
+    const spec = this.buildCommandSpec(provider, runModel, prompt, input.codexOutputPath, nativeSessionId, continueSession, hasMcpConfig, input.qwenAuthMode, input.qwenProtocol);
     const { command, args } = spec;
 
     const localMcpCleanup: Array<{ path: string; originalContent: string | null }> = [];
@@ -232,8 +247,8 @@ export class ProviderRunner implements IProviderRunner {
         localRuntimeCleanup.push(configPath);
       }
     }
-    if ((input.mcpConnection || (provider === "qwen-code" && providerEnv.QWEN_SETTINGS_CONTENT)) && workflowSettings.executionMode !== "DOCKER") {
-      const entries = await this.writeLocalMcpConfig(input.mcpConnection || null, cwd, provider, providerEnv.QWEN_SETTINGS_CONTENT);
+    if ((input.mcpConnection || applicableCustomServers.length > 0 || (provider === "qwen-code" && providerEnv.QWEN_SETTINGS_CONTENT)) && workflowSettings.executionMode !== "DOCKER") {
+      const entries = await this.writeLocalMcpConfig(input.mcpConnection || null, cwd, provider, providerEnv.QWEN_SETTINGS_CONTENT, applicableCustomServers);
       localMcpCleanup.push(...entries);
     }
 
@@ -244,7 +259,8 @@ export class ProviderRunner implements IProviderRunner {
           providerLabel: provider, workflowSettings, repoPath, signal, onActivity,
           providerMountAuth,
           providerAuthPath,
-          mcpConnection: input.mcpConnection
+          mcpConnection: input.mcpConnection,
+          customMcpServers: input.customMcpServers,
         });
         if (!result.ok && isDockerWorkspaceMountError(result)) {
           try { await fs.access(cwd); onActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`); } catch { /* ignore */ }
@@ -782,6 +798,7 @@ export class ProviderRunner implements IProviderRunner {
     cwd: string,
     provider: CliProviderId,
     qwenSettingsContent?: string,
+    customServers: CustomMcpServer[] = [],
   ): Promise<Array<{ path: string; originalContent: string | null }>> {
     const headers: Record<string, string> = {};
     if (conn?.authToken) {
@@ -789,21 +806,30 @@ export class ProviderRunner implements IProviderRunner {
     }
     const created: Array<{ path: string; originalContent: string | null }> = [];
 
-    if (provider === "claude-code" && conn) {
+    if (provider === "claude-code") {
+      const mcpServers: Record<string, unknown> = {};
+      if (conn) {
+        mcpServers.code_ux = {
+          type: "http",
+          url: conn.url,
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        };
+      }
+      for (const server of customServers) {
+        mcpServers[server.name] = {
+          type: "http",
+          url: server.url,
+          ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
+        };
+      }
+      if (Object.keys(mcpServers).length === 0) {
+        return created;
+      }
       const configPath = path.join(cwd, ".mcp.json");
-      const config = {
-        mcpServers: {
-          "code_ux": {
-            type: "http",
-            url: conn.url,
-            ...(Object.keys(headers).length > 0 ? { headers } : {}),
-          },
-        },
-      };
       const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
-      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+      await fs.writeFile(configPath, JSON.stringify({ mcpServers }, null, 2));
       created.push({ path: configPath, originalContent });
-    } else if ((provider === "gemini" && conn) || provider === "qwen-code") {
+    } else if (provider === "gemini" || provider === "qwen-code") {
       const dirPath = path.join(cwd, provider === "gemini" ? ".gemini" : ".qwen");
       await fs.mkdir(dirPath, { recursive: true });
       const configPath = path.join(dirPath, "settings.json");
@@ -820,24 +846,43 @@ export class ProviderRunner implements IProviderRunner {
           // ignore parse errors and preserve existing settings
         }
       }
+      const mcpServers: Record<string, unknown> = { ...(existing.mcpServers as Record<string, unknown> || {}) };
       if (conn) {
-        const mcpServers = {
-          "code_ux": {
-            httpUrl: conn.url,
-            ...(Object.keys(headers).length > 0 ? { headers } : {}),
-          },
+        mcpServers.code_ux = {
+          httpUrl: conn.url,
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
         };
-        existing.mcpServers = { ...(existing.mcpServers as Record<string, unknown> || {}), ...mcpServers };
+      }
+      for (const server of customServers) {
+        mcpServers[server.name] = {
+          httpUrl: server.url,
+          ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
+        };
+      }
+      if (Object.keys(mcpServers).length > 0) {
+        existing.mcpServers = mcpServers;
       }
       await fs.writeFile(configPath, JSON.stringify(existing, null, 2));
       created.push({ path: configPath, originalContent });
-    } else if (provider === "codex" && conn) {
+    } else if (provider === "codex" && (conn || customServers.length > 0)) {
       const dirPath = path.join(cwd, ".codex");
       await fs.mkdir(dirPath, { recursive: true });
       const configPath = path.join(dirPath, "config.toml");
-      const lines = ["[mcp_servers.code-ux]", `url = "${conn.url}"`];
-      if (conn.authToken) {
-        lines.push(`http_headers = { "Authorization" = "Bearer ${conn.authToken}" }`);
+      const lines: string[] = [];
+      if (conn) {
+        lines.push("[mcp_servers.code-ux]", `url = "${escapeTomlString(conn.url)}"`);
+        if (conn.authToken) {
+          lines.push(`http_headers = { "Authorization" = "Bearer ${escapeTomlString(conn.authToken)}" }`);
+        }
+      }
+      for (const server of customServers) {
+        lines.push(`[mcp_servers.${server.name}]`, `url = "${escapeTomlString(server.url)}"`);
+        if (server.headers && Object.keys(server.headers).length > 0) {
+          const inline = Object.entries(server.headers)
+            .map(([key, value]) => `"${escapeTomlString(key)}" = "${escapeTomlString(value)}"`)
+            .join(", ");
+          lines.push(`http_headers = { ${inline} }`);
+        }
       }
       const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
       await fs.writeFile(configPath, lines.join("\n") + "\n");

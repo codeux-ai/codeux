@@ -52,6 +52,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
+  customMcpServers: DEFAULT_DASHBOARD_SETTINGS.customMcpServers.map((server) => ({ ...server })),
   memory: { ...DEFAULT_DASHBOARD_SETTINGS.memory },
 });
 

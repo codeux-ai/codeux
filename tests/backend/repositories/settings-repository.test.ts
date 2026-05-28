@@ -172,7 +172,7 @@ describe("SettingsRepository", () => {
         ],
       },
       mcpTools: [
-        { name: "get_session", enabled: false, isInternal: true },
+        { name: "manage_tasks", enabled: false, isInternal: true },
       ],
     });
 
@@ -376,7 +376,7 @@ describe("SettingsRepository", () => {
         { name: "worker", enabled: false, isInternal: true },
       ],
       mcpTools: [
-        { name: "get_session", enabled: false, isInternal: true },
+        { name: "manage_tasks", enabled: false, isInternal: true },
       ],
     }), new Date().toISOString());
 

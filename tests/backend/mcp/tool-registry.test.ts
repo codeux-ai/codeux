@@ -4,30 +4,28 @@ import { ToolRegistry, type McpToolArgsByName } from "../../../src/api/mcp/tool-
 describe("ToolRegistry", () => {
   it("dispatches a registered tool handler", async () => {
     const registry = new ToolRegistry<McpToolArgsByName, string>();
-    const handler = vi.fn(async (args: McpToolArgsByName["post_listen_reply"]) => `reply:${args.thread_id}`);
+    const handler = vi.fn(async (args: McpToolArgsByName["manage_tasks"]) => `task:${args.action}`);
 
-    registry.register("post_listen_reply", handler);
+    registry.register("manage_tasks", handler);
 
-    const result = await registry.dispatch("post_listen_reply", {
-      connection_key: "conn-1",
-      thread_id: "thread-1",
-      body_markdown: "done",
+    const result = await registry.dispatch("manage_tasks", {
+      action: "list",
+      projectId: "proj-1",
     });
-    expect(result).toBe("reply:thread-1");
+    expect(result).toBe("task:list");
     expect(handler).toHaveBeenCalledWith({
-      connection_key: "conn-1",
-      thread_id: "thread-1",
-      body_markdown: "done",
+      action: "list",
+      projectId: "proj-1",
     });
   });
 
   it("supports runtime string dispatch for known tools", async () => {
     const registry = new ToolRegistry<McpToolArgsByName, string>();
-    registry.register("listen", async (args) => args.connection_key);
+    registry.register("manage_projects", async (args) => args.action);
 
-    const toolName: string = "listen";
-    const result = await registry.dispatch(toolName, { connection_key: "worker-1" });
-    expect(result).toBe("worker-1");
+    const toolName: string = "manage_projects";
+    const result = await registry.dispatch(toolName, { action: "list" });
+    expect(result).toBe("list");
   });
 
   it("throws when dispatching an unknown tool", async () => {
@@ -72,16 +70,16 @@ describe("ToolRegistry", () => {
 
 const compileTimeTypeChecks = (): void => {
   const registry = new ToolRegistry<McpToolArgsByName, unknown>();
-  registry.register("listen", async (_args) => ({ ok: true }));
+  registry.register("manage_projects", async (_args) => ({ ok: true }));
 
   // @ts-expect-error unknown tools cannot be registered
   registry.register("unknown_tool", async (_args) => ({ ok: true }));
 
-  // @ts-expect-error listen requires connection_key
-  registry.dispatch("listen", { timeout_seconds: 3 });
+  // @ts-expect-error manage_projects requires a valid action value
+  registry.dispatch("manage_projects", { action: "not_a_real_action" });
 
-  // @ts-expect-error post_listen_reply requires thread_id as string
-  registry.dispatch("post_listen_reply", { connection_key: "worker-1", thread_id: 123, body_markdown: "hi" });
+  // @ts-expect-error manage_tasks action must be a string enum, not a number
+  registry.dispatch("manage_tasks", { action: 123 });
 };
 
 void compileTimeTypeChecks;

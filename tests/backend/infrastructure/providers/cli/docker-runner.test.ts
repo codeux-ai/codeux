@@ -186,3 +186,60 @@ describe("DockerRunner", () => {
     ]));
   });
 });
+
+describe("DockerRunner custom MCP server injection", () => {
+  let runner: DockerRunner;
+
+  const writtenFor = (filename: string): string | undefined => {
+    const call = vi.mocked(fs.writeFile).mock.calls.find(([target]) => String(target).endsWith(filename));
+    return call ? String(call[1]) : undefined;
+  };
+
+  const build = (provider: any, conn: any, customServers: any[]) =>
+    (runner as any).buildProviderConfigMounts(conn, provider, "/tmp/cfg", {}, customServers);
+
+  beforeEach(() => {
+    runner = new DockerRunner();
+    vi.clearAllMocks();
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+  });
+
+  it("injects custom servers alongside code_ux for claude-code", async () => {
+    await build("claude-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret" }, [
+      { id: "1", name: "docs", url: "https://docs.example/mcp", enabled: true, headers: { Authorization: "Bearer t" } },
+    ]);
+    const json = JSON.parse(writtenFor("claude-mcp.json")!);
+    expect(json.mcpServers.code_ux).toMatchObject({ type: "http", url: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.docs).toEqual({ type: "http", url: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
+  });
+
+  it("writes gemini config from custom servers even without a code_ux connection", async () => {
+    const mounts = await build("gemini", null, [
+      { id: "1", name: "docs", url: "https://docs.example/mcp", enabled: true },
+    ]);
+    expect(mounts).toHaveLength(1);
+    const json = JSON.parse(writtenFor("gemini-settings.json")!);
+    expect(json.mcpServers.code_ux).toBeUndefined();
+    expect(json.mcpServers.docs).toEqual({ httpUrl: "https://docs.example/mcp" });
+  });
+
+  it("emits codex TOML tables for code_ux and custom servers with headers", async () => {
+    await build("codex", { url: "http://127.0.0.1:3000/mcp", authToken: "secret" }, [
+      { id: "1", name: "docs", url: "https://docs.example/mcp", enabled: true, headers: { "X-Key": "abc" } },
+    ]);
+    const toml = writtenFor("codex-config.toml")!;
+    expect(toml).toContain("[mcp_servers.code-ux]");
+    expect(toml).toContain("[mcp_servers.docs]");
+    expect(toml).toContain('url = "https://docs.example/mcp"');
+    expect(toml).toContain('http_headers = { "X-Key" = "abc" }');
+  });
+
+  it("respects per-server provider restriction and enabled flag", async () => {
+    const mounts = await build("claude-code", null, [
+      { id: "1", name: "geminionly", url: "https://a/mcp", enabled: true, providers: ["gemini"] },
+      { id: "2", name: "disabled", url: "https://b/mcp", enabled: false },
+    ]);
+    expect(mounts).toHaveLength(0);
+    expect(writtenFor("claude-mcp.json")).toBeUndefined();
+  });
+});

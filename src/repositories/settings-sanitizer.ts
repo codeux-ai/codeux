@@ -6,7 +6,7 @@ import type {
   SkillToggle,
 } from "../contracts/app-types.js";
 import { readBoolean, readPort, readString } from "../shared/config/value-readers.js";
-import { sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
+import { sanitizeCustomMcpServers, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { sanitizeAiProvider } from "../domain/settings/settings-sanitizers/ai-provider-sanitizer.js";
 import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitizer.js";
 import { sanitizeJira } from "../domain/settings/settings-sanitizers/jira-sanitizer.js";
@@ -214,6 +214,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
+  customMcpServers: DEFAULT_DASHBOARD_SETTINGS.customMcpServers.map((server) => ({ ...server })),
   memory: { ...DEFAULT_DASHBOARD_SETTINGS.memory },
 });
 
@@ -385,6 +386,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
   const mcpTools = sanitizeMcpTools(input.mcpTools);
+  const customMcpServers = sanitizeCustomMcpServers(input.customMcpServers);
   const memory = sanitizeMemory(input);
 
   return {
@@ -413,6 +415,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     agents,
     skills: normalizedSkills,
     mcpTools,
+    customMcpServers,
     memory,
   };
 };

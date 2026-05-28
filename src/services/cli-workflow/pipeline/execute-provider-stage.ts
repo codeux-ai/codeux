@@ -60,6 +60,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     repoPath: ctx.repoPath,
     githubToken: ctx.deps.getGithubToken(),
     signal: ctx.abortSignal,
+    customMcpServers: ctx.settings.customMcpServers,
   });
 
   if (!result.ok) {

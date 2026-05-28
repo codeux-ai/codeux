@@ -29,7 +29,7 @@ import type { AgentAvatarConfig } from "../types.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 type SettingsScope = "system" | "project";
-type CategoryId = "general" | "appearance" | "models" | "sprint" | "browser" | "agents" | "memory" | "integrations" | "danger";
+type CategoryId = "general" | "appearance" | "models" | "sprint" | "browser" | "agents" | "memory" | "integrations" | "mcp" | "danger";
 type AgentInstructionTemplateId = keyof ProjectSettings["agents"]["instructionTemplates"];
 
 interface Category {

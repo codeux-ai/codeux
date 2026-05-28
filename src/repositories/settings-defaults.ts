@@ -469,6 +469,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   skills: DEFAULT_SKILLS,
   mcpTools: DEFAULT_MCP_TOOL_TOGGLES.map((tool) => ({ ...tool })),
+  customMcpServers: [],
   memory: {
     enabled: false,
     embeddingModel: null,
