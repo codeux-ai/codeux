@@ -33,6 +33,7 @@ export default {
       { text: 'Installation', collapsed: false, items: [{ text: 'Overview', link: '/installation/overview' }] },
       { text: 'Guides', collapsed: false, items: [
         { text: 'Overview', link: '/guides/overview' },
+        { text: 'Search', link: '/guides/search' },
         { text: 'Managing Projects', link: '/guides/projects' },
         { text: 'Notifications', link: '/guides/notifications' }
       ] },
