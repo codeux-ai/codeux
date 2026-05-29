@@ -16,14 +16,18 @@ import {
   Route,
   Plug,
   Settings2,
+  UserRound,
+  Palette,
 } from "lucide-preact";
 import type { AgentMcpAccessConfig, AgentPreset, CustomMcpServer } from "../../types.js";
+import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { AgentAvatarCustomizer } from "./AgentAvatarCustomizer.js";
+import { AgentAvatarStage } from "./AgentAvatarStage.js";
 import { AgentMcpManageModal } from "./AgentMcpManageModal.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
-import { getAccentHex } from "../../lib/agent-avatar.js";
+import { getAccentHex, generateRandomAgentAvatar } from "../../lib/agent-avatar.js";
 import { defaultAgentMcpAccess, normalizeAgentMcpAccess } from "../../lib/agent-mcp-display.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
 
@@ -128,18 +132,29 @@ const FieldShell: FunctionComponent<{
 );
 
 const SectionCard: FunctionComponent<{
+  icon: typeof Tag;
   eyebrow: string;
   title: string;
+  action?: preact.ComponentChildren;
+  className?: string;
   children: preact.ComponentChildren;
-}> = ({ eyebrow, title, children }) => (
-  <section className="relative flex flex-col gap-5 rounded-[1.6rem] border border-black/[0.05] bg-white/40 p-6 backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.025]">
-    <header className="flex flex-col gap-1.5 border-b border-black/[0.04] pb-4 dark:border-white/[0.04]">
-      <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
-        {eyebrow}
-      </span>
-      <h3 className="font-display text-lg font-black tracking-tight text-slate-900 dark:text-white">
-        {title}
-      </h3>
+}> = ({ icon: Icon, eyebrow, title, action, className = "", children }) => (
+  <section className={`relative flex flex-col gap-5 rounded-[1.6rem] border border-black/[0.05] bg-white/40 p-6 backdrop-blur-xl dark:border-white/[0.05] dark:bg-white/[0.025] ${className}`}>
+    <header className="flex items-start justify-between gap-3 border-b border-black/[0.04] pb-4 dark:border-white/[0.04]">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 ring-1 ring-inset ring-signal-500/15 dark:bg-signal-500/15 dark:text-signal-400">
+          <Icon className="h-4 w-4" strokeWidth={2.2} />
+        </span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
+            {eyebrow}
+          </span>
+          <h3 className="font-display text-lg font-black tracking-tight text-slate-900 dark:text-white">
+            {title}
+          </h3>
+        </div>
+      </div>
+      {action}
     </header>
     {children}
   </section>
@@ -180,10 +195,16 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   const [mcpModalOpen, setMcpModalOpen] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [avatarExpression, setAvatarExpression] = useState<AgentAvatarExpression>("happy");
 
   const setMcpAccessNormalized = (next: AgentMcpAccessConfig): void => setMcpAccess(normalizeAgentMcpAccess(next));
 
   const accentHex = getAccentHex(avatarConfig?.accent);
+
+  const handleRandomizeAvatar = (): void => {
+    const seed = Date.now().toString(36) + Math.random().toString(36).substring(2);
+    setAvatarConfig(generateRandomAgentAvatar(seed));
+  };
 
   /* Reset when preset switches */
   useEffect(() => {
@@ -424,10 +445,20 @@ export const AgentPresetEditorPanel: FunctionComponent<{
         </div>
 
         {/* ── Body ── */}
-        <div className="grid grid-cols-1 gap-6 p-6 md:p-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          {/* Left column: form sections */}
-          <div className="flex min-w-0 flex-col gap-5">
-            <SectionCard eyebrow="Step 1" title="Identity">
+        <div className="flex flex-col gap-6 p-6 md:p-8">
+          {/* Row 1 — profile identity + live appearance customizer */}
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <SectionCard icon={UserRound} eyebrow="Profile" title="Identity">
+              <AgentAvatarStage
+                config={avatarConfig}
+                expression={avatarExpression}
+                accentHex={accentHex}
+                onExpressionChange={setAvatarExpression}
+                onRandomize={saving ? undefined : handleRandomizeAvatar}
+                heightClass="h-full"
+                className="min-h-[260px] flex-1"
+                disabled={saving}
+              />
               <FieldShell
                 icon={Tag}
                 label="Agent Name"
@@ -484,10 +515,19 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                   }`}
                 />
               </FieldShell>
-
             </SectionCard>
 
-            <SectionCard eyebrow="Step 2" title="Behavior">
+            <SectionCard icon={Palette} eyebrow="Appearance" title="Customize">
+              <AgentAvatarCustomizer
+                config={avatarConfig || {}}
+                onChange={setAvatarConfig}
+                disabled={saving}
+              />
+            </SectionCard>
+          </div>
+
+          {/* Row 2 — behavior (full width for long prompts) */}
+          <SectionCard icon={FileText} eyebrow="Behavior" title="System Prompt & Memory">
               <FieldShell
                 icon={FileText}
                 label="System Instructions"
@@ -633,22 +673,9 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               </div>
             </SectionCard>
 
-            {/* Agent metadata footer */}
-            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-black/[0.04] bg-white/20 px-4 py-3 text-[10px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.01] dark:text-slate-500">
-              <span className="inline-flex items-center gap-1.5">
-                <Plus className="h-3 w-3" strokeWidth={2.2} />
-                Created {new Date(preset.createdAt).toLocaleDateString()}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>Updated {new Date(preset.updatedAt).toLocaleDateString()}</span>
-              <span aria-hidden="true">·</span>
-              <span className="truncate">id {preset.id}</span>
-            </div>
-          </div>
-
-          {/* Right column: avatar */}
-          <div className="flex min-w-0 flex-col gap-5">
-            <SectionCard eyebrow="Step 3" title="Route Preference">
+          {/* Row 3 — routing + connected tools */}
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <SectionCard icon={Route} eyebrow="Routing" title="Provider & Model">
               <div className="rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="flex items-start gap-4">
                   <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] text-slate-500 dark:bg-white/[0.04] dark:text-slate-300">
@@ -710,7 +737,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 </div>
               </div>
             </SectionCard>
-            <SectionCard eyebrow="Step 4" title="Connected MCPs">
+            <SectionCard icon={Plug} eyebrow="Tools" title="Connected MCPs">
               <div className="rounded-2xl border border-black/[0.05] bg-white/30 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="flex items-start gap-4">
                   <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.04] text-slate-500 dark:bg-white/[0.04] dark:text-slate-300">
@@ -770,14 +797,18 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 </div>
               </div>
             </SectionCard>
+          </div>
 
-            <SectionCard eyebrow="Step 5" title="Avatar">
-              <AgentAvatarCustomizer
-                config={avatarConfig || {}}
-                onChange={setAvatarConfig}
-                disabled={saving}
-              />
-            </SectionCard>
+          {/* Agent metadata footer */}
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-black/[0.04] bg-white/20 px-4 py-3 text-[10px] font-mono text-slate-400 dark:border-white/[0.04] dark:bg-white/[0.01] dark:text-slate-500">
+            <span className="inline-flex items-center gap-1.5">
+              <Plus className="h-3 w-3" strokeWidth={2.2} />
+              Created {new Date(preset.createdAt).toLocaleDateString()}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>Updated {new Date(preset.updatedAt).toLocaleDateString()}</span>
+            <span aria-hidden="true">·</span>
+            <span className="truncate">id {preset.id}</span>
           </div>
         </div>
       </form>
