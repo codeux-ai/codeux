@@ -1,4 +1,4 @@
-import type { FunctionComponent, JSX } from "preact";
+import type { FunctionComponent } from "preact";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "preact/hooks";
 import gsap from "gsap";
 import {
@@ -27,6 +27,7 @@ import { AgentMcpManageModal } from "./AgentMcpManageModal.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { MarkdownEditorField } from "../ui/MarkdownEditorField.js";
 import { getAccentHex, generateRandomAgentAvatar } from "../../lib/agent-avatar.js";
 import { defaultAgentMcpAccess, normalizeAgentMcpAccess } from "../../lib/agent-mcp-display.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
@@ -176,8 +177,6 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   onCancel: () => void;
 }> = ({ preset, saving, defaultMemoryInstruction = "", providerOptions = [], availableMcpServers = [], onSave, onCancel }) => {
   const panelRef = useRef<HTMLFormElement>(null);
-  const instructionRef = useRef<HTMLTextAreaElement>(null);
-  const memoryRef = useRef<HTMLTextAreaElement>(null);
 
   const [name, setName] = useState(preset.name);
   const [description, setDescription] = useState(preset.description || "");
@@ -225,26 +224,6 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     if (!panelRef.current) return;
     gsap.fromTo(panelRef.current, { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" });
   }, [preset.id]);
-
-  /* Auto-grow textareas after preset change */
-  useEffect(() => {
-    const grow = (el: HTMLTextAreaElement | null) => {
-      if (!el) return;
-      el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 480)}px`;
-    };
-    grow(instructionRef.current);
-    grow(memoryRef.current);
-  }, [preset.id, memoryOverrideEnabled]);
-
-  const handleTextareaInput = (
-    setter: (value: string) => void
-  ) => (event: JSX.TargetedEvent<HTMLTextAreaElement>) => {
-    const el = event.currentTarget;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 480)}px`;
-    setter(el.value);
-  };
 
   /* Validation + dirty tracking */
   const errors = useMemo(
@@ -537,33 +516,24 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 error={touched.instruction ? errors.instruction : undefined}
                 errorId="agent-instructions-error"
               >
-                <div className="relative">
-                  <textarea
-                    ref={instructionRef}
-                    id="agent-instructions"
-                    value={instructionMarkdown}
-                    onInput={handleTextareaInput(setInstructionMarkdown)}
-                    onBlur={() => setTouched((t) => ({ ...t, instruction: true }))}
-                    placeholder={"You are a planning specialist. Decompose user goals into clear, testable subtasks…"}
-                    rows={8}
-                    aria-invalid={touched.instruction && !!errors.instruction}
-                    aria-errormessage={touched.instruction && errors.instruction ? "agent-instructions-error" : undefined}
-                    className={`block w-full resize-none rounded-2xl border bg-white/40 px-4 py-3 font-mono text-[13px] leading-relaxed text-slate-900 outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15 ${
-                      touched.instruction && errors.instruction
-                        ? "border-status-red/50"
-                        : "border-black/[0.05] dark:border-white/[0.07]"
-                    }`}
-                  />
-                  <span
-                    className={`absolute right-3 top-3 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
-                      instructionOver
-                        ? "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-400"
-                        : "border-black/[0.06] bg-white/60 text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-500"
-                    }`}
-                  >
-                    MD
-                  </span>
-                </div>
+                <MarkdownEditorField
+                  key={`instructions-${preset.id}`}
+                  id="agent-instructions"
+                  value={instructionMarkdown}
+                  onChange={setInstructionMarkdown}
+                  onBlur={() => setTouched((t) => ({ ...t, instruction: true }))}
+                  placeholder={"You are a planning specialist. Decompose user goals into clear, testable subtasks…"}
+                  minRows={8}
+                  minHeightClass="min-h-[14rem]"
+                  invalid={touched.instruction && !!errors.instruction}
+                  ariaErrorId={touched.instruction && errors.instruction ? "agent-instructions-error" : undefined}
+                  emptyPreviewHint="No instructions yet — switch to Write to compose the system prompt."
+                  toolbarNote={instructionOver ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-600 dark:text-amber-400">
+                      Long
+                    </span>
+                  ) : undefined}
+                />
                 {instructionOver && !errors.instruction && (
                   <p className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" strokeWidth={2.4} />
@@ -642,21 +612,18 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                         )}
                       </div>
                     </div>
-                    <textarea
-                      ref={memoryRef}
+                    <MarkdownEditorField
+                      key={`memory-${preset.id}`}
                       id="agent-memory"
                       value={memoryMarkdown}
-                      onInput={handleTextareaInput(setMemoryMarkdown)}
+                      onChange={setMemoryMarkdown}
                       onBlur={() => setTouched((t) => ({ ...t, memory: true }))}
                       placeholder="Override the default memory prompt template for this agent."
-                      rows={5}
-                      aria-invalid={touched.memory && !!errors.memory}
-                      aria-errormessage={touched.memory && errors.memory ? "agent-memory-error" : undefined}
-                      className={`block w-full resize-none rounded-2xl border bg-white/40 px-4 py-3 font-mono text-[13px] leading-relaxed text-slate-900 outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15 ${
-                        touched.memory && errors.memory
-                          ? "border-status-red/50"
-                          : "border-black/[0.05] dark:border-white/[0.07]"
-                      }`}
+                      minRows={5}
+                      minHeightClass="min-h-[10rem]"
+                      invalid={touched.memory && !!errors.memory}
+                      ariaErrorId={touched.memory && errors.memory ? "agent-memory-error" : undefined}
+                      emptyPreviewHint="No override yet — switch to Write to compose the memory template."
                     />
                     {touched.memory && errors.memory && (
                       <p

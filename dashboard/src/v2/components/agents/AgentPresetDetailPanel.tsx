@@ -15,7 +15,9 @@ import { getAccentHex } from "../../lib/agent-avatar.js";
 import { resolveAgentMcpTags } from "../../lib/agent-mcp-display.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
+import { MARKDOWN_PROSE_CLASS } from "../ui/MarkdownEditorField.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
+import { renderMarkdown } from "../../../lib/markdown.js";
 
 const INSTRUCTION_EXCERPT_CHARS = 320;
 const INSTRUCTION_EXCERPT_LINES = 6;
@@ -294,9 +296,10 @@ export const AgentPresetDetailPanel: FunctionComponent<{
           />
           {preset.instructionMarkdown ? (
             <div className="flex flex-col gap-2">
-              <div className="whitespace-pre-wrap rounded-2xl border border-black/[0.05] bg-white/40 p-5 text-sm leading-relaxed text-slate-700 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-300">
-                {instructionExpanded ? preset.instructionMarkdown : instructionView.excerpt}
-              </div>
+              <div
+                className={`rounded-2xl border border-black/[0.05] bg-white/40 p-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] ${MARKDOWN_PROSE_CLASS}`}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(instructionExpanded ? preset.instructionMarkdown : instructionView.excerpt) }}
+              />
               {instructionView.truncated && (
                 <button
                   type="button"
@@ -338,9 +341,10 @@ export const AgentPresetDetailPanel: FunctionComponent<{
                 </span>
               )}
             />
-            <div className="whitespace-pre-wrap rounded-2xl border border-violet-500/15 bg-violet-500/[0.04] p-5 text-sm leading-relaxed text-slate-700 backdrop-blur-md dark:border-violet-500/15 dark:bg-violet-500/[0.06] dark:text-slate-300">
-              {memoryExpanded ? preset.memoryTemplateMarkdown : memoryView.excerpt}
-            </div>
+            <div
+              className={`rounded-2xl border border-violet-500/15 bg-violet-500/[0.04] p-5 backdrop-blur-md dark:border-violet-500/15 dark:bg-violet-500/[0.06] ${MARKDOWN_PROSE_CLASS}`}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(memoryExpanded ? preset.memoryTemplateMarkdown : memoryView.excerpt) }}
+            />
             {memoryView.truncated && (
               <button
                 type="button"
