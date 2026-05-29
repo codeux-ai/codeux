@@ -294,6 +294,7 @@ QA merge-gate notes:
   - `containerGitUserName` (default `Code UX`)
   - `containerGitUserEmail` (default `agents@codeux.ai`)
     - the same identity is also passed to host-side `git commit-tree` during Docker workspace write-back, so final provider commits do not depend on the dashboard host's global git config
+    - Docker snapshot workspaces do not hardcode a repo-local Git identity; provider containers use the copied `.gitconfig` or configured Code UX identity, and Git helper commands forward Git-specific environment such as temporary indexes and HTTP auth headers into the workspace container
   - `containerMountGithubAuth` (default `false`)
   - `containerMountGeminiAuth` (default `false`)
   - `containerMountCodexAuth` (default `false`)

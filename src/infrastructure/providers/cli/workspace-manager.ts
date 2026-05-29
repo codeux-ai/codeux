@@ -73,6 +73,28 @@ const isDockerCredentialHelperError = (error: unknown): boolean => {
   return message.includes("error getting credentials") || message.includes("docker-credential");
 };
 
+const DOCKER_WORKSPACE_ENV_KEYS = new Set([
+  "GCM_INTERACTIVE",
+  "SSH_ASKPASS",
+]);
+
+const shouldForwardWorkspaceEnv = (key: string): boolean => (
+  key.startsWith("GIT_")
+  || key.startsWith("GIT_CONFIG_")
+  || DOCKER_WORKSPACE_ENV_KEYS.has(key)
+);
+
+const buildWorkspaceDockerEnvArgs = (env: NodeJS.ProcessEnv): string[] => {
+  const args: string[] = [];
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value !== "string" || !shouldForwardWorkspaceEnv(key)) {
+      continue;
+    }
+    args.push("-e", `${key}=${value}`);
+  }
+  return args;
+};
+
 export class WorkspaceManager implements IWorkspaceManager {
   private readonly repoLocks = new Map<string, Promise<void>>();
 
@@ -249,6 +271,7 @@ export class WorkspaceManager implements IWorkspaceManager {
       command,
       "-e",
       `HOME=${CONTAINER_WORKSPACE_ROOT}/.code-ux-home`,
+      ...buildWorkspaceDockerEnvArgs(options.env ?? process.env),
       WORKSPACE_HELPER_IMAGE,
       ...args,
     ];
@@ -349,8 +372,6 @@ export class WorkspaceManager implements IWorkspaceManager {
         originUrl
           ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`
           : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
-        "git -C /workspace config user.name \"Code UX\"",
-        "git -C /workspace config user.email \"agents@codeux.ai\"",
         "mkdir -p /workspace/.code-ux-home",
         ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
