@@ -690,6 +690,12 @@ export class VirtualWorkerService {
         commitMessage: `fix(merge): resolve ${targetBranch} into ${sourceBranch}`,
         parentRefs: [`origin/${targetBranch}`],
         gitAuth,
+        gitIdentity: effectiveWorkflowSettings.containerMountGitConfig
+          ? undefined
+          : {
+            name: effectiveWorkflowSettings.containerGitUserName,
+            email: effectiveWorkflowSettings.containerGitUserEmail,
+          },
       });
       let hasUnpushed = applyResult.hasChanges;
       let hasAhead = applyResult.hasChanges;
@@ -940,6 +946,12 @@ export class VirtualWorkerService {
         patchText,
         commitMessage: `fix(ci): resolve failing checks on ${branchName}`,
         gitAuth,
+        gitIdentity: effectiveWorkflowSettings.containerMountGitConfig
+          ? undefined
+          : {
+            name: effectiveWorkflowSettings.containerGitUserName,
+            email: effectiveWorkflowSettings.containerGitUserEmail,
+          },
       });
       let hasUnpushed = applyResult.hasChanges;
       let hasAhead = applyResult.hasChanges;

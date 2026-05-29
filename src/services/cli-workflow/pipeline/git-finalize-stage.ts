@@ -16,6 +16,14 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     githubToken: ctx.settings.git.githubToken,
     gitlabToken: ctx.settings.git.gitlabToken,
   };
+  const gitIdentity = ctx.workflowSettings.containerMountGitConfig
+    || !ctx.workflowSettings.containerGitUserName?.trim()
+    || !ctx.workflowSettings.containerGitUserEmail?.trim()
+    ? undefined
+    : {
+      name: ctx.workflowSettings.containerGitUserName,
+      email: ctx.workflowSettings.containerGitUserEmail,
+    };
   const patchText = await ctx.workspaceArtifactService.exportBinaryPatch(ctx.worktreePath, ctx.initialHead);
   const applied = await ctx.workspaceArtifactService.applyPatchToBranch({
     repoPath: ctx.repoPath,
@@ -24,6 +32,7 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     patchText,
     commitMessage: `feat(task ${ctx.task.id}): implement via ${ctx.provider}`,
     gitAuth,
+    gitIdentity,
   });
 
   if (applied.hasChanges) {

@@ -350,7 +350,7 @@ export class WorkspaceManager implements IWorkspaceManager {
           ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`
           : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
         "git -C /workspace config user.name \"Code UX\"",
-        "git -C /workspace config user.email \"code-ux@local\"",
+        "git -C /workspace config user.email \"agents@codeux.ai\"",
         "mkdir -p /workspace/.code-ux-home",
         ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");

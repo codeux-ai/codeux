@@ -293,6 +293,7 @@ QA merge-gate notes:
   - `containerMountGitConfig` (default `false`): copy the host `.gitconfig` into Docker. When disabled, Docker provider runs configure Git with `containerGitUserName` and `containerGitUserEmail` instead.
   - `containerGitUserName` (default `Code UX`)
   - `containerGitUserEmail` (default `agents@codeux.ai`)
+    - the same identity is also passed to host-side `git commit-tree` during Docker workspace write-back, so final provider commits do not depend on the dashboard host's global git config
   - `containerMountGithubAuth` (default `false`)
   - `containerMountGeminiAuth` (default `false`)
   - `containerMountCodexAuth` (default `false`)

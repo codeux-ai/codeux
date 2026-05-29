@@ -29,6 +29,26 @@ export interface AppliedWorkspacePatchResult {
   };
 }
 
+export interface GitCommitIdentity {
+  name: string;
+  email: string;
+}
+
+const buildCommitIdentityEnv = (
+  identity: GitCommitIdentity | undefined,
+): NodeJS.ProcessEnv => {
+  if (!identity?.name.trim() || !identity.email.trim()) {
+    return process.env;
+  }
+  return {
+    ...process.env,
+    GIT_AUTHOR_NAME: identity.name.trim(),
+    GIT_AUTHOR_EMAIL: identity.email.trim(),
+    GIT_COMMITTER_NAME: identity.name.trim(),
+    GIT_COMMITTER_EMAIL: identity.email.trim(),
+  };
+};
+
 export class WorkspaceArtifactService {
   constructor(private readonly workspaceManager: IWorkspaceManager) {}
 
@@ -112,6 +132,7 @@ export class WorkspaceArtifactService {
     commitMessage: string;
     parentRefs?: string[];
     gitAuth?: GitHttpAuthOptions;
+    gitIdentity?: GitCommitIdentity;
   }): Promise<AppliedWorkspacePatchResult> {
     if (!args.patchText.trim()) {
       return { hasChanges: false };
@@ -148,6 +169,7 @@ export class WorkspaceArtifactService {
         "git",
         ["commit-tree", treeSha, ...parentArgs, "-m", args.commitMessage],
         args.repoPath,
+        buildCommitIdentityEnv(args.gitIdentity),
       )).stdout.trim();
 
       await runCommandStrict("git", ["update-ref", `refs/heads/${args.workerBranch}`, commitSha], args.repoPath);

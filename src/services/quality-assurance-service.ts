@@ -1260,6 +1260,12 @@ export class QualityAssuranceService {
       patchText,
       commitMessage: `fix(task ${args.task.id}): address qa review via ${args.provider}`,
       gitAuth,
+      gitIdentity: workflowSettings.containerMountGitConfig
+        ? undefined
+        : {
+          name: workflowSettings.containerGitUserName,
+          email: workflowSettings.containerGitUserEmail,
+        },
     });
 
     let hasUnpushed = applyResult.hasChanges;
