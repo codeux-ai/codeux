@@ -12,6 +12,7 @@ import { registerExecutionControlRoutes } from "./execution-control-routes.js";
 import { registerSettingsRoutes } from "./settings-routes.js";
 import { registerConnectionRoutes } from "./connection-routes.js";
 import { registerAgentPresetRoutes } from "./agent-preset-routes.js";
+import { registerInstructionFileRoutes } from "./instruction-file-routes.js";
 import { registerExecutionInvocationRoutes } from "./execution-invocation-routes.js";
 import { registerQuicksprintRoutes } from "./quicksprint-routes.js";
 import { registerLocalDirectoryRoutes } from "./local-directory-routes.js";
@@ -34,6 +35,7 @@ export const registerDashboardRoutes = (
   registerSettingsRoutes(app, deps, liveActivityCacheMs);
   registerConnectionRoutes(app, deps);
   registerAgentPresetRoutes(app, deps);
+  registerInstructionFileRoutes(app, deps);
   registerExecutionInvocationRoutes(app, deps);
   registerQuicksprintRoutes(app, deps);
   registerSchedulerRoutes(app, deps);

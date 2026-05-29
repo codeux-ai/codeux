@@ -1,8 +1,10 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bot, Plus, Info, ShieldCheck, AlertTriangle, Database } from "lucide-preact";
+import { Bot, Plus, Info, ShieldCheck, AlertTriangle, Database, FileText } from "lucide-preact";
 import type { AgentPreset } from "./types.js";
+import type { InstructionFileSummary, InstructionFileContent } from "./lib/instruction-file-api.js";
+import { fetchInstructionFiles } from "./lib/instruction-file-api.js";
 import { useProjectData } from "./context/project-data.js";
 import {
   createAgentPreset,
@@ -20,6 +22,8 @@ import { AgentsHero } from "./components/agents/AgentsHero.js";
 import { AgentPresetShowcaseCard } from "./components/agents/AgentPresetShowcaseCard.js";
 import { AgentPresetDetailPanel } from "./components/agents/AgentPresetDetailPanel.js";
 import { AgentPresetEditorPanel } from "./components/agents/AgentPresetEditorPanel.js";
+import { InstructionFileCard } from "./components/agents/InstructionFileCard.js";
+import { InstructionFileEditorPanel } from "./components/agents/InstructionFileEditorPanel.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 
 /* ── Roster summary stat ── */
@@ -107,6 +111,8 @@ export const AgentsPage: FunctionComponent = () => {
   const [projectFileSavingEnabled, setProjectFileSavingEnabled] = useState(true);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [instructionFiles, setInstructionFiles] = useState<InstructionFileSummary[]>([]);
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const {
     data: effectiveSettings,
     error: effectiveSettingsError,
@@ -144,9 +150,38 @@ export const AgentsPage: FunctionComponent = () => {
     }
   };
 
+  const refreshInstructionFiles = async (): Promise<void> => {
+    if (!selectedProject) {
+      setInstructionFiles([]);
+      return;
+    }
+    try {
+      setInstructionFiles(await fetchInstructionFiles(selectedProject.id));
+    } catch {
+      setInstructionFiles([]);
+    }
+  };
+
   useEffect(() => {
+    setSelectedFileId(null);
     void refreshPresets();
+    void refreshInstructionFiles();
   }, [selectedProject?.id]);
+
+  const handleInstructionFileSaved = (updated: InstructionFileContent): void => {
+    setInstructionFiles((cur) => cur.map((f) => (f.id === updated.id ? { ...f, ...updated } : f)));
+  };
+
+  const selectAgent = (presetId: string): void => {
+    setSelectedPresetId(presetId);
+    setSelectedFileId(null);
+    setIsEditing(false);
+  };
+
+  const selectInstructionFile = (fileId: string): void => {
+    setSelectedFileId(fileId);
+    setIsEditing(false);
+  };
 
   useLayoutEffect(() => {
     if (!contentRef.current) return;
@@ -306,6 +341,7 @@ export const AgentsPage: FunctionComponent = () => {
   const availableMcpServers = effectiveSettings?.settings.customMcpServers ?? [];
 
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
+  const selectedFile = instructionFiles.find((f) => f.id === selectedFileId);
 
   const rosterStats = useMemo(() => {
     const synced = presets.filter((p) => p.syncStatus === "synced").length;
@@ -366,41 +402,84 @@ export const AgentsPage: FunctionComponent = () => {
       {/* Content */}
       {!selectedProject ? (
         <EmptyState hasProject={false} />
-      ) : presets.length === 0 && !loading ? (
+      ) : presets.length === 0 && instructionFiles.length === 0 && !loading ? (
         <EmptyState hasProject onCreate={() => void handleCreate()} />
-      ) : presets.length > 0 ? (
+      ) : presets.length > 0 || instructionFiles.length > 0 ? (
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-start">
           {/* Sidebar rail */}
-          <aside className="flex w-full flex-col gap-3 xl:w-[340px] xl:shrink-0">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                {presets.length} Agent{presets.length !== 1 ? "s" : ""}
-              </span>
-              {loading && (
-                <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-signal-500">
-                  Refreshing…
+          <aside className="flex w-full flex-col gap-6 xl:w-[340px] xl:shrink-0">
+            {/* Agents group */}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                  {presets.length} Agent{presets.length !== 1 ? "s" : ""}
                 </span>
+                {loading && (
+                  <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-signal-500">
+                    Refreshing…
+                  </span>
+                )}
+              </div>
+              {presets.length > 0 ? (
+                <div className="flex flex-col gap-2.5">
+                  {presets.map((preset) => (
+                    <AgentPresetShowcaseCard
+                      key={preset.id}
+                      preset={preset}
+                      routeTags={routeTagsByPresetId.get(preset.id) ?? []}
+                      isSelected={selectedPresetId === preset.id && !selectedFileId}
+                      onClick={() => selectAgent(preset.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleCreate()}
+                  className="group flex items-center gap-3 rounded-[1.4rem] border border-dashed border-signal-500/25 bg-white/40 px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:border-signal-500/40 hover:bg-signal-500/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-signal-500/25 dark:bg-void-800/30"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-signal-500/10 text-signal-600 dark:bg-signal-500/15 dark:text-signal-400">
+                    <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" strokeWidth={2.4} />
+                  </span>
+                  <span className="text-[13px] font-bold text-slate-600 dark:text-slate-300">Create your first agent</span>
+                </button>
               )}
             </div>
-            <div className="flex flex-col gap-2.5">
-              {presets.map((preset) => (
-                <AgentPresetShowcaseCard
-                  key={preset.id}
-                  preset={preset}
-                  routeTags={routeTagsByPresetId.get(preset.id) ?? []}
-                  isSelected={selectedPresetId === preset.id}
-                  onClick={() => {
-                    setSelectedPresetId(preset.id);
-                    setIsEditing(false);
-                  }}
-                />
-              ))}
-            </div>
+
+            {/* Separator + instruction files group */}
+            {instructionFiles.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3 px-1">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                    <FileText className="h-3 w-3" strokeWidth={2.4} />
+                    Instruction Files
+                  </span>
+                  <div className="h-px flex-1 bg-gradient-to-r from-black/[0.08] to-transparent dark:from-white/[0.08]" />
+                </div>
+                <div className="flex flex-col gap-2.5">
+                  {instructionFiles.map((file) => (
+                    <InstructionFileCard
+                      key={file.id}
+                      file={file}
+                      isSelected={selectedFileId === file.id}
+                      onClick={() => selectInstructionFile(file.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </aside>
 
-          {/* Detail / editor */}
+          {/* Detail / editor / file editor */}
           <div className="w-full flex-1">
-            {selectedPreset && (
+            {selectedFile ? (
+              <InstructionFileEditorPanel
+                key={selectedFile.id}
+                projectId={selectedProject.id}
+                file={selectedFile}
+                onSaved={handleInstructionFileSaved}
+              />
+            ) : selectedPreset ? (
               isEditing ? (
                 <AgentPresetEditorPanel
                   preset={selectedPreset}
@@ -424,6 +503,15 @@ export const AgentsPage: FunctionComponent = () => {
                   importing={importingId === selectedPreset.id}
                 />
               )
+            ) : (
+              <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/40 px-8 py-16 text-center backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/40">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 dark:bg-signal-500/15 dark:text-signal-400">
+                  <Bot className="h-7 w-7" strokeWidth={1.6} />
+                </div>
+                <p className="max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                  Select an agent or an instruction file from the left to view and edit it.
+                </p>
+              </div>
             )}
           </div>
         </div>

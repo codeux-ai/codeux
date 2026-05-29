@@ -44,6 +44,10 @@ import type { QuicksprintService } from "../services/quicksprint-service.js";
 import type { SchedulerService } from "../services/scheduler-service.js";
 import type { SprintIssueService } from "../services/sprint-issue-service.js";
 import type {
+  InstructionFileContent,
+  InstructionFileSummary,
+} from "../contracts/instruction-file-types.js";
+import type {
   AgentPresetRecord,
   CreateAgentPresetInput,
   UpdateAgentPresetInput,
@@ -180,6 +184,9 @@ export interface DashboardServerOptions {
   deleteAgentPreset: (agentPresetId: string) => Promise<void> | void;
   importAgentPresetFromMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
   syncAllAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
+  listInstructionFiles: (projectId: string) => Promise<InstructionFileSummary[]> | InstructionFileSummary[];
+  readInstructionFile: (projectId: string, fileId: string) => Promise<InstructionFileContent> | InstructionFileContent;
+  writeInstructionFile: (projectId: string, fileId: string, content: string) => Promise<InstructionFileContent> | InstructionFileContent;
   listConversationThreads: (projectId: string) => ConversationThreadRecord[];
   createConversationThread: (projectId: string, input: CreateConversationThreadInput) => ConversationThreadRecord;
   updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => ConversationThreadRecord;
