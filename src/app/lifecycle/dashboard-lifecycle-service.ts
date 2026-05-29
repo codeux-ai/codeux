@@ -1,5 +1,6 @@
 import { setupDashboardServer, type DashboardServerHandle } from "../../server/dashboard-server.js";
 import { registerMemoryRoutes } from "../../server/memory-routes.js";
+import { InstructionFileService } from "../../services/instruction-file-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { createLogger } from "../../shared/logging/logger.js";
 import * as path from "path";
@@ -273,6 +274,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
   });
   deps.schedulerService?.start();
 
+  const instructionFileService = new InstructionFileService({
+    projectManagementRepository: deps.projectManagementRepository,
+    logger: deps.logger.child({ component: "instruction-file-service" }),
+  });
+
   const handle = await setupDashboardServer({
     app: deps.app,
     dashboardDir,
@@ -500,6 +506,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     deleteAgentPreset: async (agentPresetId) => await deps.agentPresetSyncService.deleteAgentPreset(agentPresetId),
     importAgentPresetFromMarkdown: async (agentPresetId) => await deps.agentPresetSyncService.importAgentPresetFromMarkdown(agentPresetId),
     syncAllAgentPresetsFromMarkdown: async (projectId) => await deps.agentPresetSyncService.syncAllAgentPresetsFromMarkdown(projectId),
+    listInstructionFiles: (projectId) => instructionFileService.listInstructionFiles(projectId),
+    readInstructionFile: (projectId, fileId) => instructionFileService.readInstructionFile(projectId, fileId),
+    writeInstructionFile: (projectId, fileId, content) => instructionFileService.writeInstructionFile(projectId, fileId, content),
     listConversationThreads: (projectId) => deps.connectionChatRepository.listThreads(projectId),
     createConversationThread: (projectId, input) => deps.connectionChatRepository.createThread(projectId, input),
     updateConversationThread: (threadId, input) => deps.connectionChatRepository.updateThread(threadId, input),
