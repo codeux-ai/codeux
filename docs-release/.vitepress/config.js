@@ -31,7 +31,6 @@ export default {
         { text: 'Create First Project', link: '/getting-started/first-project' }
       ] },
       { text: 'Installation', collapsed: false, items: [{ text: 'Overview', link: '/installation/overview' }] },
-<<<<<<< HEAD
       { text: 'Guides', collapsed: false, items: [
         { text: 'Overview', link: '/guides/overview' },
         { text: 'Search', link: '/guides/search' },
