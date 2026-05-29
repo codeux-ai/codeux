@@ -10,9 +10,13 @@ export default {
             processTerm: (term) => {
               const synonyms = {
                 'guide': ['guide', 'manual', 'help'],
-                'troubleshooting': ['troubleshooting', 'fix', 'error']
+                'task': ['task', 'guide'],
+                'troubleshooting': ['troubleshooting', 'fix', 'error', 'debug'],
+                'troubleshoot': ['troubleshoot', 'debug'],
+                'debug': ['debug', 'troubleshoot']
               };
-              return synonyms[term.toLowerCase()] || term.toLowerCase();
+              const lower = term.toLowerCase();
+              return synonyms[lower] || lower;
             }
           },
           searchOptions: {
