@@ -7,6 +7,8 @@ vi.mock("../../../../../src/infrastructure/git/git-status-query-client.js");
 
 describe("PrService", () => {
     const defaultArgs = { taskId: "t", provider: "codex" as any, title: "title", featureBranch: "feat", workerBranch: "worker" };
+    const githubRemote = "https://github.com/owner/repo.git\n";
+    const gitlabRemote = "https://gitlab.com/group/project.git\n";
 
 
     describe("resolveOrCreateFeaturePr", () => {
@@ -16,7 +18,7 @@ describe("PrService", () => {
 
         it("returns existing PR url", async () => {
             const mockClient = {
-                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: "origin\thttps://github.com/owner/repo.git (fetch)\n" }),
+                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: githubRemote }),
                 setProvider: vi.fn(),
                 ghPrListOpenMatching: vi.fn().mockResolvedValue({ ok: true, stdout: JSON.stringify([{ url: "http://pr" }]) })
             };
@@ -29,7 +31,7 @@ describe("PrService", () => {
 
         it("creates new PR if existing not found", async () => {
             const mockClient = {
-                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: "origin\thttps://github.com/owner/repo.git (fetch)\n" }),
+                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: githubRemote }),
                 setProvider: vi.fn(),
                 ghPrListOpenMatching: vi.fn().mockRejectedValue(new Error("not found")),
                 ghPrCreate: vi.fn().mockResolvedValue({ ok: true, stdout: "http://newpr\n" })
@@ -39,11 +41,13 @@ describe("PrService", () => {
             const service = new PrService();
             const res = await service.resolveOrCreateFeaturePr(defaultArgs, "/path", "token");
             expect(res).toBe("http://newpr");
+            expect(mockClient.setProvider).toHaveBeenCalledWith("github", "github.com", "owner/repo", true);
+            expect(mockClient.ghPrCreate).toHaveBeenCalledWith("feat", "worker", expect.any(String), expect.any(String), "token");
         });
 
         it("creates new PR with task and sprint descriptions", async () => {
             const mockClient = {
-                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: "origin\thttps://github.com/owner/repo.git (fetch)\n" }),
+                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: githubRemote }),
                 setProvider: vi.fn(),
                 ghPrListOpenMatching: vi.fn().mockRejectedValue(new Error("not found")),
                 ghPrCreate: vi.fn().mockResolvedValue({ ok: true, stdout: "http://newpr2\n" })
@@ -73,9 +77,52 @@ describe("PrService", () => {
             );
         });
 
+        it("uses the configured GitHub token in API mode without requiring gh", async () => {
+            const mockClient = {
+                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: githubRemote }),
+                setProvider: vi.fn(),
+                ghPrListOpenMatching: vi.fn().mockResolvedValue({ ok: true, stdout: "[]" }),
+                ghPrCreate: vi.fn().mockResolvedValue({ ok: true, stdout: "https://github.com/owner/repo/pull/1\n" })
+            };
+            vi.mocked(GitStatusQueryClient).mockImplementation(function() { Object.assign(this, mockClient); } as any);
+
+            const service = new PrService();
+            const res = await service.resolveOrCreateFeaturePr(defaultArgs, "/path", {
+                githubToken: "gh-token",
+                gitlabToken: "gl-token",
+            });
+
+            expect(res).toBe("https://github.com/owner/repo/pull/1");
+            expect(mockClient.gitRemoteUrl).toHaveBeenCalledWith("origin", undefined);
+            expect(mockClient.setProvider).toHaveBeenCalledWith("github", "github.com", "owner/repo", true);
+            expect(mockClient.ghPrListOpenMatching).toHaveBeenCalledWith("feat", "worker", "gh-token");
+            expect(mockClient.ghPrCreate).toHaveBeenCalledWith("feat", "worker", expect.any(String), expect.any(String), "gh-token");
+        });
+
+        it("uses the configured GitLab token in API mode without requiring glab", async () => {
+            const mockClient = {
+                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: gitlabRemote }),
+                setProvider: vi.fn(),
+                ghPrListOpenMatching: vi.fn().mockResolvedValue({ ok: true, stdout: "[]" }),
+                ghPrCreate: vi.fn().mockResolvedValue({ ok: true, stdout: "https://gitlab.com/group/project/-/merge_requests/1\n" })
+            };
+            vi.mocked(GitStatusQueryClient).mockImplementation(function() { Object.assign(this, mockClient); } as any);
+
+            const service = new PrService();
+            const res = await service.resolveOrCreateFeaturePr(defaultArgs, "/path", {
+                githubToken: "gh-token",
+                gitlabToken: "gl-token",
+            });
+
+            expect(res).toBe("https://gitlab.com/group/project/-/merge_requests/1");
+            expect(mockClient.setProvider).toHaveBeenCalledWith("gitlab", "gitlab.com", "group/project", true);
+            expect(mockClient.ghPrListOpenMatching).toHaveBeenCalledWith("feat", "worker", "gl-token");
+            expect(mockClient.ghPrCreate).toHaveBeenCalledWith("feat", "worker", expect.any(String), expect.any(String), "gl-token");
+        });
+
         it("throws with context if create fails", async () => {
             const mockClient = {
-                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: "origin\thttps://github.com/owner/repo.git (fetch)\n" }),
+                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: githubRemote }),
                 setProvider: vi.fn(),
                 ghPrListOpenMatching: vi.fn().mockRejectedValue(new Error("not found")),
                 ghPrCreate: vi.fn().mockRejectedValue(new Error("fail"))
@@ -90,7 +137,7 @@ describe("PrService", () => {
 
         it("throws when create exits without a PR url", async () => {
             const mockClient = {
-                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: "origin\thttps://github.com/owner/repo.git (fetch)\n" }),
+                gitRemoteUrl: vi.fn().mockResolvedValue({ ok: true, stdout: githubRemote }),
                 setProvider: vi.fn(),
                 ghPrListOpenMatching: vi.fn().mockRejectedValue(new Error("not found")),
                 ghPrCreate: vi.fn().mockResolvedValue({ ok: true, stdout: "created\n" })

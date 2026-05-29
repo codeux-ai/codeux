@@ -61,7 +61,8 @@ Checks:
 - `gh --version`
 - `gh auth status`
 - Token availability in settings/env
-- If a CLI task pushed code but cannot create a PR, the run now fails instead of completing as "without PR" while auto-create PRs are enabled. On Windows packaged builds, confirm `gh` is on the server process `PATH`, the GitHub/GitLab token is available to the built process, and the running build includes the latest `dist/` output.
+- If a CLI task pushed code but cannot create a PR, the run now fails instead of completing as "without PR" while auto-create PRs are enabled. When a GitHub/GitLab token is configured, Code UX creates and finds PRs/MRs through the host API and does not require `gh` or `glab` on the machine.
+- If no GitHub/GitLab token is configured, PR creation falls back to the local host CLI (`gh`/`glab`), so Windows packaged builds need that CLI on the server process `PATH` and authenticated.
 - "Workflow completed without PR" is only expected when `git.autoCreatePr` is disabled for the resolved system/project/sprint settings.
 
 ### 3. API-backed tools return key setup instructions

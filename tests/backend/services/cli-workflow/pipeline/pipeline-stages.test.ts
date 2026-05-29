@@ -503,7 +503,10 @@ describe("executePrFinalizeStage", () => {
         sprintDescription: "Mock Sprint Goal",
       }),
       ctx.repoPath,
-      undefined
+      {
+        githubToken: "token",
+        gitlabToken: undefined,
+      }
     );
     expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED", prUrl: "https://github.com/pr/1" });
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({

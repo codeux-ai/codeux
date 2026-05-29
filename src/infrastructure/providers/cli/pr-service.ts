@@ -14,11 +14,35 @@ export interface IPrService {
     workerBranch: string;
     taskDescription?: string;
     sprintDescription?: string;
-  }, repoPath: string, githubToken?: string): Promise<string | undefined>;
+  }, repoPath: string, hostToken?: string | GitHostTokens): Promise<string | undefined>;
 
   hasUnpushedCommits(repoPath: string, workerBranch: string, featureBranch: string, runner?: Runner): Promise<boolean>;
   hasWorkerBranchCommitsAgainstFeature(repoPath: string, workerBranch: string, featureBranch: string, runner?: Runner): Promise<boolean>;
 }
+
+export interface GitHostTokens {
+  githubToken?: string;
+  gitlabToken?: string;
+}
+
+const tokenForProvider = (
+  provider: ReturnType<typeof resolveRepositoryHost>["provider"],
+  hostToken: string | GitHostTokens | undefined,
+): string | undefined => {
+  if (typeof hostToken === "string") {
+    return hostToken.trim() || undefined;
+  }
+  if (!hostToken) {
+    return undefined;
+  }
+  if (provider === "gitlab") {
+    return hostToken.gitlabToken?.trim() || undefined;
+  }
+  if (provider === "github") {
+    return hostToken.githubToken?.trim() || undefined;
+  }
+  return undefined;
+};
 
 export class PrService implements IPrService {
   async resolveOrCreateFeaturePr(
@@ -32,16 +56,18 @@ export class PrService implements IPrService {
       sprintDescription?: string;
     },
     repoPath: string,
-    githubToken?: string
+    hostToken?: string | GitHostTokens
   ): Promise<string | undefined> {
     const client = new GitStatusQueryClient(repoPath);
+    let effectiveToken: string | undefined;
     try {
-      const remoteRes = await client.gitRemoteUrl("origin", githubToken);
+      const remoteRes = await client.gitRemoteUrl("origin", typeof hostToken === "string" ? hostToken : undefined);
       const remoteUrl = remoteRes.ok ? remoteRes.stdout.trim() : null;
       const { provider, hostDomain, repoTarget } = resolveRepositoryHost(remoteUrl);
-      client.setProvider(provider, hostDomain, repoTarget);
+      effectiveToken = tokenForProvider(provider, hostToken);
+      client.setProvider(provider, hostDomain, repoTarget, Boolean(effectiveToken));
 
-      const existingResult = await client.ghPrListOpenMatching(args.featureBranch, args.workerBranch, githubToken);
+      const existingResult = await client.ghPrListOpenMatching(args.featureBranch, args.workerBranch, effectiveToken);
       if (existingResult.ok) {
         const parsed = JSON.parse(existingResult.stdout) as Array<{ url?: string }>;
         const existingUrl = parsed.find((entry) => typeof entry.url === "string" && entry.url.trim().length > 0)?.url?.trim();
@@ -62,7 +88,7 @@ export class PrService implements IPrService {
       bodyLines.push(`Base: \`${args.featureBranch}\``, `Head: \`${args.workerBranch}\``);
 
       const prTitle = `${args.title} (${args.provider})`;
-      const createResult = await client.ghPrCreate(args.featureBranch, args.workerBranch, prTitle, bodyLines.join("\n"), githubToken);
+      const createResult = await client.ghPrCreate(args.featureBranch, args.workerBranch, prTitle, bodyLines.join("\n"), effectiveToken);
 
       if (!createResult.ok) {
         throw new Error(createResult.stderr || createResult.stdout || "git host CLI returned a non-zero exit code");

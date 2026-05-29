@@ -16,7 +16,10 @@ export async function executePrFinalizeStage(ctx: PipelineContext): Promise<{ pr
         sprintDescription: sprint?.goal,
       },
       ctx.repoPath,
-      ctx.deps.getGithubToken()
+      {
+        githubToken: ctx.deps.getGithubToken() || ctx.settings.git.githubToken,
+        gitlabToken: ctx.settings.git.gitlabToken,
+      }
     );
     if (!prUrl) {
       throw new Error(`Feature PR creation completed without a PR URL for ${ctx.workerBranch}. Check Git host CLI availability and authentication.`);
