@@ -1,5 +1,5 @@
 import { h, ComponentChildren, RefObject } from "preact";
-import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
@@ -36,25 +36,45 @@ export const Popover = ({
   // Generate a unique ID for ARIA wiring if none exists
   const [popoverId] = useState(() => `popover-${Math.random().toString(36).substr(2, 9)}`);
 
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current || !popoverRef.current) return;
+
+    const { top, left } = calculatePosition({
+      triggerRect: triggerRef.current.getBoundingClientRect(),
+      contentRect: popoverRef.current.getBoundingClientRect(),
+      position,
+      align,
+      gap,
+      padding: 8,
+    });
+    setCoords({ top, left });
+  }, [align, gap, position, triggerRef]);
+
   useEffect(() => {
     if (isOpen) {
       setIsRendered(true);
     }
   }, [isOpen]);
 
+  // Position once the portal has actually mounted. `isRendered` flips in a
+  // separate effect after `isOpen`, so depending on it here guarantees the
+  // popover element exists (and is measurable) before we compute coordinates —
+  // otherwise it stays pinned at the top-left {0,0} default.
   useLayoutEffect(() => {
-    if (isOpen && triggerRef.current && popoverRef.current) {
-      const { top, left } = calculatePosition({
-        triggerRect: triggerRef.current.getBoundingClientRect(),
-        contentRect: popoverRef.current.getBoundingClientRect(),
-        position,
-        align,
-        gap,
-        padding: 8,
-      });
-      setCoords({ top, left });
-    }
-  }, [isOpen, position, align, gap]);
+    if (isOpen && isRendered) updatePosition();
+  }, [isOpen, isRendered, updatePosition]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, { capture: true, passive: true });
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, { capture: true });
+    };
+  }, [isOpen, updatePosition]);
 
   useLayoutEffect(() => {
     if (!popoverRef.current) return;
