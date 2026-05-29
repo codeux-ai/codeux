@@ -240,7 +240,18 @@ export class ProviderRunner implements IProviderRunner {
     const applicableCustomServers = enabledCustomServersFor(input.customMcpServers, provider);
     const hasMcpConfig = !!input.mcpConnection || applicableCustomServers.length > 0;
     const continueSession = !!input.continueSessionId;
-    const spec = this.buildCommandSpec(provider, runModel, prompt, input.codexOutputPath, nativeSessionId, continueSession, hasMcpConfig, input.qwenAuthMode, input.qwenProtocol);
+    const spec = this.buildCommandSpec(
+      provider,
+      runModel,
+      prompt,
+      workflowSettings.executionMode === "DOCKER" ? CONTAINER_WORKSPACE_ROOT : cwd,
+      input.codexOutputPath,
+      nativeSessionId,
+      continueSession,
+      hasMcpConfig,
+      input.qwenAuthMode,
+      input.qwenProtocol
+    );
     const { command, args } = spec;
 
     const localMcpCleanup: Array<{ path: string; originalContent: string | null }> = [];
@@ -440,6 +451,7 @@ export class ProviderRunner implements IProviderRunner {
     provider: CliProviderId,
     model: string,
     prompt: string,
+    providerCwd: string,
     codexOutputPath?: string | null,
     nativeSessionId?: string | null,
     continueSession?: boolean,
@@ -498,9 +510,9 @@ export class ProviderRunner implements IProviderRunner {
     if (provider === "opencode") {
       const args = continueSession
         ? nativeSessionId
-          ? ["run", "--session", nativeSessionId, "--format", "json"]
-          : ["run", "--continue", "--format", "json"]
-        : ["run", "--format", "json"];
+          ? ["run", "--session", nativeSessionId, "--format", "json", "--dir", providerCwd]
+          : ["run", "--continue", "--format", "json", "--dir", providerCwd]
+        : ["run", "--format", "json", "--dir", providerCwd];
       if (model && model !== "default") {
         args.push("--model", model);
       }
@@ -704,6 +716,7 @@ export class ProviderRunner implements IProviderRunner {
       $schema: "https://opencode.ai/config.json",
       model: selectedModel,
       autoupdate: false,
+      permission: "allow",
     };
 
     if (authMode === "ENV_KEY") {

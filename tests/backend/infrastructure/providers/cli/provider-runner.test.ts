@@ -210,7 +210,7 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "opencode",
-      args: ["run", "--format", "json", "--model", "custom/model", "review this"],
+      args: ["run", "--format", "json", "--dir", "/workspace", "--model", "custom/model", "review this"],
       providerEnv: expect.objectContaining({
         OPENCODE_API_KEY: "sk-open-test",
         OPENCODE_CONFIG_CONTENT: expect.stringContaining("\"baseURL\":\"https://llm.example.com/v1\""),
@@ -234,7 +234,7 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "opencode",
-      args: ["run", "--session", "ses_19151020bffeNmMNdnhmFM3fA5", "--format", "json", "--model", "anthropic/claude-sonnet-4-5", "retry json"],
+      args: ["run", "--session", "ses_19151020bffeNmMNdnhmFM3fA5", "--format", "json", "--dir", "/workspace", "--model", "anthropic/claude-sonnet-4-5", "retry json"],
     }));
   });
 
@@ -254,7 +254,7 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "opencode",
-      args: ["run", "--continue", "--format", "json", "--model", "anthropic/claude-sonnet-4-5", "retry json"],
+      args: ["run", "--continue", "--format", "json", "--dir", "/workspace", "--model", "anthropic/claude-sonnet-4-5", "retry json"],
     }));
     expect(result.nativeSessionId).toBeNull();
   });
@@ -289,13 +289,14 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "opencode",
-      args: ["run", "--format", "json", "--model", "ollama/glm-4.7-flash", "hello"],
+      args: ["run", "--format", "json", "--dir", "/workspace", "--model", "ollama/glm-4.7-flash", "hello"],
       providerEnv: expect.objectContaining({
         OPENCODE_CONFIG_CONTENT: expect.stringContaining("\"model\":\"ollama/glm-4.7-flash\""),
       }),
     }));
     const env = dockerRunner.runProviderInDocker.mock.calls[0][0].providerEnv;
     expect(JSON.parse(env.OPENCODE_CONFIG_CONTENT)).toMatchObject({
+      permission: "allow",
       provider: {
         ollama: {
           options: {
@@ -345,7 +346,7 @@ describe("ProviderRunner", () => {
 
     expect(runStreamingCommand).toHaveBeenCalledWith(
       "opencode",
-      ["run", "--format", "json", "--model", "ollama/glm-4.7-flash", "hello"],
+      ["run", "--format", "json", "--dir", repoPath, "--model", "ollama/glm-4.7-flash", "hello"],
       repoPath,
       expect.objectContaining({
         OPENCODE_API_KEY: "mykey",
@@ -356,6 +357,7 @@ describe("ProviderRunner", () => {
     expect(configPath).toContain("opencode-config-session-with-slash.json");
     expect(JSON.parse(configContent)).toMatchObject({
       model: "ollama/glm-4.7-flash",
+      permission: "allow",
       provider: {
         ollama: {
           npm: "@ai-sdk/openai-compatible",

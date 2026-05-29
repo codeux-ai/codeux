@@ -161,6 +161,7 @@ const buildOpenCodeConfigPreview = (
     $schema: "https://opencode.ai/config.json",
     model: selectedModel,
     autoupdate: false,
+    permission: "allow",
   };
   if (authMode === "ENV_KEY") {
     config.provider = {

@@ -9,7 +9,7 @@ Code UX supports OpenCode as a first-class virtual CLI provider alongside Gemini
 - Default local auth path: `~/.local/share/opencode`
 - Default model: `anthropic/claude-sonnet-4-5`
 - Docker fallback install: `curl -fsSL https://opencode.ai/install | bash`
-- Non-interactive command: `opencode run --model <provider/model> <prompt>`
+- Non-interactive command: `opencode run --format json --dir <workspace> --model <provider/model> <prompt>`
 
 OpenCode can be selected anywhere a virtual CLI provider is accepted: task coding, planning, dashboard replies, clarification replies, QA review, CI repair, and merge-conflict repair.
 
@@ -38,6 +38,7 @@ github-copilot/gpt-5
 ```
 
 Code UX builds an inline OpenCode config in `OPENCODE_CONFIG_CONTENT`, writes it to a per-run `opencode.json`, points OpenCode at it with `OPENCODE_CONFIG`, and maps the stored provider key to `OPENCODE_API_KEY`. The configured `openCodeEnvKey` is still used as an import hint when the saved key is empty.
+The generated config sets `permission` to `"allow"` for headless Code UX runs so OpenCode file edits and shell actions do not wait for an interactive approval prompt.
 
 ### Custom Provider
 
@@ -101,10 +102,11 @@ Docker execution prepares OpenCode in the shared CLI bootstrap path:
 - copies mounted local auth from `/opt/credentials/opencode`
 - passes `OPENCODE_API_KEY` and `OPENCODE_CONFIG_CONTENT` into the container
 - writes `OPENCODE_CONFIG_CONTENT` to `$HOME/.config/opencode/opencode.json` and exports `OPENCODE_CONFIG` before running `opencode`
+- invokes OpenCode with `--dir /workspace`; generated config permissions allow headless task runs to edit the isolated workspace instead of stopping on tool approval
 - rewrites loopback URLs in generated OpenCode config from `127.0.0.1` or `localhost` to `host.docker.internal` on Docker Desktop, WSL, macOS, and Windows so local endpoints such as Ollama remain reachable from the provider container
 - installs OpenCode if `opencode` is missing and fallback installs are enabled
 
-Host execution writes the generated config to `.code-ux/tmp/opencode-config-<session>.json` for the duration of the run and sets `OPENCODE_CONFIG` to that path. The generated config is never written into a permanent host OpenCode config file. This keeps one named Code UX provider instance from overwriting another instance's OpenCode settings.
+Host execution writes the generated config to `.code-ux/tmp/opencode-config-<session>.json` for the duration of the run and sets `OPENCODE_CONFIG` to that path. Host runs also pass `--dir <worktree>`. The generated config is never written into a permanent host OpenCode config file. This keeps one named Code UX provider instance from overwriting another instance's OpenCode settings.
 
 OpenCode JSON retry continuation uses native OpenCode session ids only when the CLI reports one in JSON events such as `session.created` or `session.status`. If a retry only has Code UX's logical session id, Code UX invokes `opencode run --continue` instead of `opencode run --session <logical-id>` so OpenCode resumes the latest session without raising `Session not found`.
 
