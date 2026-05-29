@@ -13,6 +13,8 @@ Code UX supports OpenCode as a first-class virtual CLI provider alongside Gemini
 
 OpenCode can be selected anywhere a virtual CLI provider is accepted: task coding, planning, dashboard replies, clarification replies, QA review, CI repair, and merge-conflict repair.
 
+Planning routes use the same named OpenCode provider instance settings as chat and task execution. When sprint planning or prompt improvement resolves to OpenCode, Code UX forwards the selected instance's auth mode, provider id, model id, base URL, environment key, npm package, auth mount settings, and selected model into the structured provider runner before invoking `opencode run`.
+
 ## Authentication Modes
 
 Each named OpenCode provider instance stores an `openCodeAuthMode`.

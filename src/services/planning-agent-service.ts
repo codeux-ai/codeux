@@ -78,6 +78,12 @@ interface PlanningResultContext {
     qwenModelId?: string;
     qwenProtocol?: "openai" | "anthropic" | "gemini";
     qwenAdditionalModelProviders?: QwenModelProviderSettings[];
+    openCodeAuthMode?: "LOCAL_AUTH" | "ENV_KEY" | "CUSTOM_PROVIDER";
+    openCodeProviderId?: string;
+    openCodeModelId?: string;
+    openCodeBaseUrl?: string;
+    openCodeEnvKey?: string;
+    openCodePackage?: string;
   };
   memoryCaptureWorkspacePath: string;
   cleanupWorkspace?: () => Promise<void>;
@@ -539,6 +545,12 @@ export class PlanningAgentService {
         qwenModelId: providerSettings.qwenModelId,
         qwenProtocol: providerSettings.qwenProtocol,
         qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
+        openCodeAuthMode: providerSettings.openCodeAuthMode,
+        openCodeProviderId: providerSettings.openCodeProviderId,
+        openCodeModelId: providerSettings.openCodeModelId,
+        openCodeBaseUrl: providerSettings.openCodeBaseUrl,
+        openCodeEnvKey: providerSettings.openCodeEnvKey,
+        openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
         providerPrompt: args.rawPrompt,
@@ -585,6 +597,12 @@ export class PlanningAgentService {
           qwenModelId: providerSettings.qwenModelId,
           qwenProtocol: providerSettings.qwenProtocol,
           qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
+          openCodeAuthMode: providerSettings.openCodeAuthMode,
+          openCodeProviderId: providerSettings.openCodeProviderId,
+          openCodeModelId: providerSettings.openCodeModelId,
+          openCodeBaseUrl: providerSettings.openCodeBaseUrl,
+          openCodeEnvKey: providerSettings.openCodeEnvKey,
+          openCodePackage: providerSettings.openCodePackage,
           thinkingMode: providerSettings.thinkingMode,
         },
       };

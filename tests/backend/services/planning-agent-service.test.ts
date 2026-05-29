@@ -847,6 +847,122 @@ describe("PlanningAgentService", () => {
     }));
   });
 
+  it("forwards OpenCode custom provider settings for virtual planning", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-opencode-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        text: '{"goal":"OpenCode planned sprint prompt."}',
+        usageTelemetry: {
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          reasoningOutputTokens: 0,
+          totalTokens: 0,
+          usageSource: "reported",
+          rawUsageJson: {},
+          transcriptText: "",
+          nativeSessionId: null,
+        },
+        nativeSessionId: null,
+      }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({
+      name: "OpenCode Planning Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    const systemSettings = settingsRepository.getSystemSettings();
+    settingsRepository.saveSystemSettings({
+      ...systemSettings,
+      integrations: {
+        ...systemSettings.integrations,
+        providers: {
+          ...systemSettings.integrations.providers,
+          opencode: {
+            ...systemSettings.integrations.providers.opencode,
+            apiKey: "opencode-custom-key",
+            openCodeAuthMode: "CUSTOM_PROVIDER",
+            openCodeProviderId: "ollama",
+            openCodeModelId: "glm-4.7-flash",
+            openCodeBaseUrl: "http://127.0.0.1:11434/v1",
+            openCodeEnvKey: "OLLAMA_API_KEY",
+            openCodePackage: "@ai-sdk/openai-compatible",
+          },
+        },
+      },
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "opencode",
+      },
+      aiProvider: {
+        providers: {
+          opencode: {
+            enabled: true,
+            model: "ollama/glm-4.7-flash",
+            thinkingMode: "HIGH",
+          },
+        },
+      },
+    });
+
+    await service.improveSprintPrompt(project.id, {
+      name: "OpenCode Sprint",
+      goal: "Use the custom OpenCode provider for planning.",
+    });
+
+    expect(providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "opencode",
+      model: "ollama/glm-4.7-flash",
+      apiKey: "opencode-custom-key",
+      openCodeAuthMode: "CUSTOM_PROVIDER",
+      openCodeProviderId: "ollama",
+      openCodeModelId: "glm-4.7-flash",
+      openCodeBaseUrl: "http://127.0.0.1:11434/v1",
+      openCodeEnvKey: "OLLAMA_API_KEY",
+      openCodePackage: "@ai-sdk/openai-compatible",
+    }));
+  });
+
   it("targets a specific planning agent preset via overrides", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-preset-override-"));
     tempDirs.push(dir);
