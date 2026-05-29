@@ -31,8 +31,11 @@ export default {
         { text: 'Create First Project', link: '/getting-started/first-project' }
       ] },
       { text: 'Installation', collapsed: false, items: [{ text: 'Overview', link: '/installation/overview' }] },
-<<<<<<< HEAD
-      { text: 'Guides', collapsed: false, items: [{ text: 'Overview', link: '/guides/overview' }, { text: 'Notifications', link: '/guides/notifications' }] },
+      { text: 'Guides', collapsed: false, items: [
+        { text: 'Overview', link: '/guides/overview' },
+        { text: 'Managing Projects', link: '/guides/projects' },
+        { text: 'Notifications', link: '/guides/notifications' }
+      ] },
       { text: 'Integrations', collapsed: false, items: [{ text: 'Overview', link: '/integrations/overview' }, { text: 'MCP Setup', link: '/integrations/mcp-setup' }] },
       { text: 'Admin', collapsed: false, items: [{ text: 'Overview', link: '/admin/overview' }, { text: 'Audit Logs', link: '/admin/audit-logs' }] },
       { text: 'Troubleshooting', collapsed: false, items: [{ text: 'Overview', link: '/troubleshooting/overview' }] },
