@@ -28,10 +28,17 @@ export const ProviderInstanceCard: FunctionComponent<{
   isLast?: boolean;
   enabled?: boolean;
   onToggleEnabled?: (value: boolean) => void;
-}> = ({ provider, providerModel, dockerExecutionEnabled, onUpdate, onRemove, isLast = true, enabled, onToggleEnabled }) => (
-  <div className="space-y-3 rounded-[1.45rem] border border-black/[0.06] bg-white/84 p-5 shadow-[0_16px_38px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+  index?: number;
+  total?: number;
+}> = ({ provider, providerModel, dockerExecutionEnabled, onUpdate, onRemove, isLast = true, enabled, onToggleEnabled, index, total }) => (
+  <div className="space-y-3 rounded-[1.45rem] border border-black/[0.06] bg-white/84 p-6 shadow-[0_16px_38px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
       <div className="flex items-start gap-3">
+        {index !== undefined && total !== undefined ? (
+          <div className="mt-0.5 flex h-6 shrink-0 items-center justify-center rounded-lg bg-black/[0.04] px-2 font-mono text-[11px] font-bold tracking-widest text-slate-500 dark:bg-white/[0.04] dark:text-slate-400">
+            {index + 1}<span className="text-slate-400 opacity-60 dark:text-slate-500">/{total}</span>
+          </div>
+        ) : null}
         <ProviderLogo providerId={provider.provider} />
         <div>
           <div className="text-sm font-semibold text-slate-900 dark:text-white">{provider.name}</div>

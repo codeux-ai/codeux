@@ -567,6 +567,8 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                   onUpdate={(updates) => updateProviderInstance(providerConfigId, updates)}
                   onRemove={providerEntries.length > 1 ? () => removeProviderInstance(providerConfigId) : undefined}
                   isLast={index === providerEntries.length - 1}
+                  index={index}
+                  total={providerEntries.length}
                 />
               );
             })

@@ -644,7 +644,7 @@ export const OnboardingExperience: FunctionComponent = () => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboarding-title"
-        className="relative z-10 grid h-[calc(100vh-2rem)] max-h-[900px] min-h-0 w-full max-w-[1280px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[2rem] border border-white/15 bg-[#F9F8F4]/96 shadow-[0_30px_90px_rgba(0,0,0,0.46)] backdrop-blur-2xl dark:bg-void-900/96 md:h-[calc(100vh-4rem)] md:grid-cols-[330px_1fr]"
+        className="relative z-10 grid h-[calc(100vh-2rem)] max-h-[940px] min-h-0 w-full max-w-[1360px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-[2rem] border border-white/15 bg-[#F9F8F4]/96 shadow-[0_30px_90px_rgba(0,0,0,0.46)] backdrop-blur-2xl dark:bg-void-900/96 md:h-[calc(100vh-4rem)] md:grid-cols-[330px_1fr]"
       >
         <div aria-hidden className="pointer-events-none absolute inset-0 z-20 rounded-[2rem] ring-1 ring-inset ring-white/10" />
         <aside ref={sideRef} className="relative hidden h-full min-h-0 overflow-hidden border-r border-white/10 bg-[#0B0F14] p-7 text-white md:block">
@@ -938,7 +938,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                           <div className="rounded-2xl border border-ember-500/20 bg-ember-500/10 p-4 text-sm text-ember-700 dark:text-ember-300">
                             Add an instance to configure {providerLabels[providerId]} credentials.
                           </div>
-                        ) : providerEntries.map(([providerConfigId, integrationProvider]) => {
+                        ) : providerEntries.map(([providerConfigId, integrationProvider], index) => {
                           const projectProvider = settings?.defaults.aiProvider.providers[providerConfigId];
                           const providerModel = projectProvider?.model
                             || (integrationProvider.provider === "opencode" ? "anthropic/claude-sonnet-4-5" : "qwen3-coder-plus");
@@ -952,6 +952,8 @@ export const OnboardingExperience: FunctionComponent = () => {
                               onRemove={providerEntries.length > 1 ? () => removeProviderInstance(providerConfigId) : undefined}
                               enabled={projectProvider?.enabled ?? true}
                               onToggleEnabled={(value) => configureProjectProvider(providerConfigId, { enabled: value })}
+                              index={index}
+                              total={providerEntries.length}
                             />
                           );
                         })}
