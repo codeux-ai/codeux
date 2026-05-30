@@ -55,6 +55,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
         openCodePackage: providerSettings.openCodePackage,
     providerMountAuth,
     providerAuthPath,
+    customBaseUrl: providerSettings.customBaseUrl,
     sessionId: ctx.sessionId,
     workflowSettings: ctx.workflowSettings,
     repoPath: ctx.repoPath,

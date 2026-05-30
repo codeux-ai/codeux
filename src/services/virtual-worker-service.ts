@@ -295,12 +295,14 @@ export class VirtualWorkerService {
       throw new Error(`Task run not found for dispatch ${claim.dispatch.id}`);
     }
 
+    const task = this.deps.projectManagementRepository.getTask(claim.dispatch.taskId);
+
     const session = await this.deps.cliWorkflowService.startTask({
       provider,
       providerSettingsOverride: {
         model: resolveWorkerModelForProvider(
           provider,
-          settings.workers.model,
+          task?.model || settings.workers.model,
           providerSettings.model,
         ),
         thinkingMode: providerSettings.thinkingMode,
@@ -320,6 +322,7 @@ export class VirtualWorkerService {
         openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
+        customBaseUrl: providerSettings.customBaseUrl,
       },
       task: {
         record_id: claim.task.id,
@@ -683,6 +686,7 @@ export class VirtualWorkerService {
         openCodePackage: providerSettings.openCodePackage,
           providerMountAuth: providerSettings.mountAuth,
           providerAuthPath: providerSettings.authPath,
+          customBaseUrl: providerSettings.customBaseUrl,
           githubToken: settings.git.githubToken,
         });
       }
@@ -949,6 +953,7 @@ export class VirtualWorkerService {
         openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
+        customBaseUrl: providerSettings.customBaseUrl,
         githubToken: settings.git.githubToken,
       });
 
@@ -1188,6 +1193,7 @@ export class VirtualWorkerService {
   openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    customBaseUrl?: string;
     githubToken: string;
   }): Promise<void> {
     const result = await this.providerExecutionService.executeProvider({
@@ -1220,6 +1226,7 @@ export class VirtualWorkerService {
         openCodePackage: args.openCodePackage,
       providerMountAuth: args.providerMountAuth,
       providerAuthPath: args.providerAuthPath,
+      customBaseUrl: args.customBaseUrl,
       sessionId: args.sessionId,
       workflowSettings: args.workflowSettings,
       repoPath: args.repoPath,

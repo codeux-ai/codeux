@@ -875,6 +875,38 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
                       </pre>
                     </Row>
                   </>
+                ) : provider.provider === "claude-code" || provider.provider === "codex" ? (
+                  <>
+                    <Row label="Mount local auth" description={`Use a copied host auth directory for ${getProviderTypeLabel(provider.provider)} instead of, or alongside, an API key.`}>
+                      <Toggle
+                        value={provider.mountAuth}
+                        onChange={() => updateProviderInstance(providerConfigId, { mountAuth: !provider.mountAuth })}
+                      />
+                    </Row>
+                    <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance.">
+                      <TextInput
+                        value={provider.authPath}
+                        onChange={(value) => updateProviderInstance(providerConfigId, { authPath: value })}
+                        disabled={!provider.mountAuth}
+                        mono
+                      />
+                    </Row>
+                    <Row
+                      label={provider.provider === "claude-code" ? "Anthropic base URL" : "OpenAI base URL"}
+                      description={
+                        provider.provider === "claude-code"
+                          ? "Override ANTHROPIC_BASE_URL. Use an OpenRouter or compatible endpoint (e.g. https://openrouter.ai/api/v1). Leave empty to use the default Anthropic API."
+                          : "Override OPENAI_BASE_URL. Route Codex through a custom OpenAI-compatible endpoint. Leave empty to use the default OpenAI API."
+                      }
+                      last={index === providerEntries.length - 1}
+                    >
+                      <TextInput
+                        value={provider.customBaseUrl || ""}
+                        onChange={(value) => updateProviderInstance(providerConfigId, { customBaseUrl: value || undefined })}
+                        mono
+                      />
+                    </Row>
+                  </>
                 ) : provider.provider !== "jules" ? (
                   <>
                     <Row label="Mount local auth" description={`Use a copied host auth directory for ${getProviderTypeLabel(provider.provider)} instead of, or alongside, an API key.`}>

@@ -109,6 +109,7 @@ export interface Subtask {
   session_name?: string;
   session_state?: string;
   provider?: ProviderId;
+  model?: string;
   agentPresetId?: string | null;
   worker_branch?: string;
   pr_url?: string;
@@ -601,6 +602,8 @@ export interface ProviderSettings {
   apiKey: string;
   mountAuth: boolean;
   authPath: string;
+  /** Custom API endpoint base URL for providers that support it (claude-code, codex). */
+  customBaseUrl?: string;
   maxConcurrentTasks: number;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
