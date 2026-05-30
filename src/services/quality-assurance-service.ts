@@ -1180,6 +1180,8 @@ export class QualityAssuranceService {
     const existed = await this.workspacePathExists(worktreePath);
     if (!existed) {
       await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch, undefined, gitAuth);
+    } else {
+      await this.syncExistingCliFollowUpWorkspace(args.repoPath, worktreePath, workerBranch, gitAuth);
     }
 
     const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath);
@@ -1366,11 +1368,45 @@ export class QualityAssuranceService {
     }
   }
 
-  private async runWorkspaceCommand(worktreePath: string, command: string, args: string[]) {
-    if (worktreePath.startsWith("docker-volume://")) {
-      return this.workspaceManager.runWorkspaceCommand(worktreePath, command, args);
+  private async syncExistingCliFollowUpWorkspace(
+    repoPath: string,
+    worktreePath: string,
+    workerBranch: string,
+    gitAuth: GitHttpAuthOptions,
+  ): Promise<void> {
+    const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth);
+    await this.runWorkspaceCommand(
+      worktreePath,
+      "git",
+      ["fetch", "origin", `+refs/heads/${workerBranch}:refs/remotes/origin/${workerBranch}`],
+      fetchEnv ?? process.env,
+    ).catch(() => undefined);
+
+    const hasRemoteWorkerBranch = await this.runWorkspaceCommand(
+      worktreePath,
+      "git",
+      ["show-ref", "--verify", "--quiet", `refs/remotes/origin/${workerBranch}`],
+    ).then(() => true, () => false);
+
+    if (hasRemoteWorkerBranch) {
+      await this.runWorkspaceCommand(
+        worktreePath,
+        "git",
+        ["clean", "-fd", "-e", ".code-ux-home/", "-e", ".task-learnings.md"],
+      ).catch(() => undefined);
+      await this.runWorkspaceCommand(worktreePath, "git", ["checkout", "-B", workerBranch, `origin/${workerBranch}`]);
+      await this.runWorkspaceCommand(worktreePath, "git", ["reset", "--hard", `origin/${workerBranch}`]);
+      return;
     }
-    return runCommandStrict(command, args, worktreePath);
+
+    await this.runWorkspaceCommand(worktreePath, "git", ["checkout", workerBranch]).catch(() => undefined);
+  }
+
+  private async runWorkspaceCommand(worktreePath: string, command: string, args: string[], env?: NodeJS.ProcessEnv) {
+    if (worktreePath.startsWith("docker-volume://")) {
+      return this.workspaceManager.runWorkspaceCommand(worktreePath, command, args, { env });
+    }
+    return runCommandStrict(command, args, worktreePath, env ?? process.env);
   }
 
   private async captureMemoriesFromWorkspace(

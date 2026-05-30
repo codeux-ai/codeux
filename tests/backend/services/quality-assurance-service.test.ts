@@ -1079,6 +1079,129 @@ describe("QualityAssuranceService", () => {
     });
   });
 
+  it("resets an existing CLI QA follow-up workspace to the latest worker branch before running the fix", async () => {
+    const runProvider = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: "",
+      stderr: "",
+      text: "done",
+      usageTelemetry: {
+        transcriptText: "",
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        usageSource: "reported",
+        rawUsageJson: null,
+      },
+    });
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {
+        updateTask: vi.fn(),
+        getSprint: vi.fn().mockReturnValue(null),
+      } as any,
+      executionRepository: {
+        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue(null),
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-followup" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-followup" }),
+        updateProviderInvocationUsage: vi.fn(),
+      } as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {
+        updateSession: vi.fn(),
+        appendActivity: vi.fn(),
+      } as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue(undefined),
+      } as any,
+      providerRunner: {
+        runProvider,
+        runProviderForText: vi.fn(),
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        git: {
+          ...DEFAULT_DASHBOARD_SETTINGS.git,
+          autoCreatePr: false,
+        },
+        memory: {
+          ...DEFAULT_DASHBOARD_SETTINGS.memory,
+          enabled: false,
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    vi.spyOn((service as any).workspaceManager, "resolveResumeWorktreePath").mockResolvedValue("/worktree");
+    vi.spyOn((service as any).workspaceManager, "buildWorktreePath").mockReturnValue("/worktree");
+    const prepareWorktree = vi.spyOn((service as any).workspaceManager, "prepareWorktree").mockResolvedValue(undefined);
+    vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
+    vi.spyOn(service as any, "workspacePathExists").mockResolvedValue(true);
+    const runWorkspaceCommand = vi.spyOn(service as any, "runWorkspaceCommand").mockImplementation(
+      async (_worktreePath: string, _command: string, commandArgs: string[]) => {
+        if (commandArgs[0] === "rev-parse") {
+          return { stdout: "remote-worker-head\n", stderr: "" };
+        }
+        return { stdout: "", stderr: "" };
+      },
+    );
+    vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
+    vi.spyOn((service as any).prService, "hasUnpushedCommits").mockResolvedValue(false);
+    vi.spyOn((service as any).prService, "hasWorkerBranchCommitsAgainstFeature").mockResolvedValue(false);
+
+    await (service as any).continueCliTaskSession({
+      provider: "gemini",
+      sessionId: "session-1",
+      task: {
+        id: "T1",
+        record_id: "task-record-1",
+        title: "Fix thing",
+        prompt: "Implement the fix",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        worker_branch: "feature/task-1",
+      },
+      taskRun: null,
+      repoPath: "/repo",
+      featureBranch: "feature/sprint-1",
+      scope: {
+        projectId: "project-1",
+        sprintId: "sprint-1",
+      },
+      followUpPrompt: "Address QA findings",
+    });
+
+    expect(prepareWorktree).not.toHaveBeenCalled();
+    expect(runWorkspaceCommand).toHaveBeenCalledWith(
+      "/worktree",
+      "git",
+      ["fetch", "origin", "+refs/heads/feature/task-1:refs/remotes/origin/feature/task-1"],
+      expect.anything(),
+    );
+    expect(runWorkspaceCommand).toHaveBeenCalledWith(
+      "/worktree",
+      "git",
+      ["checkout", "-B", "feature/task-1", "origin/feature/task-1"],
+    );
+    expect(runWorkspaceCommand).toHaveBeenCalledWith(
+      "/worktree",
+      "git",
+      ["reset", "--hard", "origin/feature/task-1"],
+    );
+    expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: "/worktree",
+    }));
+    expect((service as any).workspaceArtifactService.exportBinaryPatch).toHaveBeenCalledWith("/worktree", "remote-worker-head");
+  });
+
   it("passes provider auth mount settings into QA follow-up provider runs", async () => {
     const runProvider = vi.fn().mockResolvedValue({
       ok: true,
