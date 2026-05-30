@@ -19,6 +19,12 @@ vi.mock("../../src/config/app-config.js", () => {
   };
 });
 
+vi.mock("../../src/shared/docker-env-helper.js", () => {
+  return {
+    fixDockerHostEnvironment: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 describe("index.ts main function", () => {
   let consoleLogSpy: any;
   let consoleErrorSpy: any;

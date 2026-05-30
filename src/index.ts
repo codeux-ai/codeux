@@ -10,12 +10,14 @@ export async function main(args: string[] = process.argv): Promise<void> {
     { fileURLToPath },
     { loadAppConfig },
     { JulesAgentServer },
+    { fixDockerHostEnvironment },
   ] = await Promise.all([
     import("dotenv"),
     import("path"),
     import("url"),
     import("./config/app-config.js"),
     import("./server/jules-agent-server.js"),
+    import("./shared/docker-env-helper.js"),
   ]);
 
   const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +25,7 @@ export async function main(args: string[] = process.argv): Promise<void> {
   const projectRoot = path.resolve(__dirname, "..");
 
   dotenv.config({ path: path.join(projectRoot, ".env"), quiet: true });
+  await fixDockerHostEnvironment();
   const appConfig = loadAppConfig(args, projectRoot);
 
   if (args.includes("--help") || args.includes("-h")) {
