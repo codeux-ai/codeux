@@ -235,7 +235,7 @@ export class ProviderRunner implements IProviderRunner {
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input);
     const nativeSessionId = provider === "opencode"
       ? isOpenCodeNativeSessionId(input.continueSessionId) ? input.continueSessionId! : null
-      : input.continueSessionId || (provider === "claude-code" ? randomUUID() : null);
+      : input.continueSessionId || (provider === "claude-code" || provider === "qwen-code" ? randomUUID() : null);
 
     const applicableCustomServers = enabledCustomServersFor(input.customMcpServers, provider);
     const hasMcpConfig = !!input.mcpConnection || applicableCustomServers.length > 0;
@@ -500,6 +500,11 @@ export class ProviderRunner implements IProviderRunner {
     if (provider === "qwen-code") {
       const authType = qwenAuthMode === "LOCAL_AUTH" ? "qwen-oauth" : (qwenProtocol || "openai");
       const args = ["--auth-type", authType, "--yolo"];
+      if (continueSession && nativeSessionId) {
+        args.push("--resume", nativeSessionId);
+      } else if (nativeSessionId) {
+        args.push("--session-id", nativeSessionId);
+      }
       if (model && model !== "default") {
         args.push("--model", model);
       }
@@ -561,6 +566,8 @@ export class ProviderRunner implements IProviderRunner {
         ? "BAILIAN_CODING_PLAN_API_KEY"
         : providerConfig?.qwenEnvKey || "OLLAMA_API_KEY";
       qwenEnvKeys.add(primaryEnvKey);
+      qwenEnvKeys.add("QWEN_CODE_SUPPRESS_YOLO_WARNING");
+      env.QWEN_CODE_SUPPRESS_YOLO_WARNING = "1";
       if (apiKey && !useProviderMount) {
         env[primaryEnvKey] = apiKey;
         env.DASHSCOPE_API_KEY ||= apiKey;

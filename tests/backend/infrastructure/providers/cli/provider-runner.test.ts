@@ -121,10 +121,11 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "qwen",
-      args: ["--auth-type", "openai", "--yolo", "--model", "qwen3-coder-plus", "-p", "ship it"],
+      args: ["--auth-type", "openai", "--yolo", "--session-id", expect.any(String), "--model", "qwen3-coder-plus", "-p", "ship it"],
       providerEnv: expect.objectContaining({
         BAILIAN_CODING_PLAN_API_KEY: "sk-sp-test",
         OPENAI_BASE_URL: "https://coding-intl.dashscope.aliyuncs.com/v1",
+        QWEN_CODE_SUPPRESS_YOLO_WARNING: "1",
       }),
     }));
   });
@@ -160,11 +161,12 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "qwen",
-      args: ["--auth-type", "openai", "--yolo", "--model", "glm-4.7-flash", "-p", "hello"],
+      args: ["--auth-type", "openai", "--yolo", "--session-id", expect.any(String), "--model", "glm-4.7-flash", "-p", "hello"],
       providerEnv: expect.objectContaining({
         OLLAMA_API_KEY: "sk-qwen-test",
         OPENAI_BASE_URL: "http://host.docker.internal:11434/v1",
-        CODE_UX_PROVIDER_ENV_KEYS: "OLLAMA_API_KEY",
+        CODE_UX_PROVIDER_ENV_KEYS: "OLLAMA_API_KEY,QWEN_CODE_SUPPRESS_YOLO_WARNING",
+        QWEN_CODE_SUPPRESS_YOLO_WARNING: "1",
       }),
     }));
     const env = dockerRunner.runProviderInDocker.mock.calls[0][0].providerEnv;

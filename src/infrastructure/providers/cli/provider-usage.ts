@@ -458,6 +458,12 @@ export async function collectProviderUsageTelemetry(args: {
     return estimateTelemetry("opencode", args.model, args.prompt, fallbackOutput);
   }
 
+  if (args.provider === "qwen-code") {
+    const telemetry = estimateTelemetry("qwen-code", args.model, args.prompt, fallbackOutput);
+    telemetry.nativeSessionId = args.nativeSessionId || null;
+    return telemetry;
+  }
+
   if (args.nativeSessionId) {
     if (args.claudeSessionJsonl) {
       const usage = parseClaudeSessionJsonl(args.claudeSessionJsonl, args.nativeSessionId, { source: "container-session-jsonl" });
