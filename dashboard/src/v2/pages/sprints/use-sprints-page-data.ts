@@ -7,8 +7,11 @@ import type {
   SprintLinkedIssueInput,
   SprintStatus, 
   Task, 
-  VirtualWorkerProvider 
+  VirtualWorkerProvider
 } from "../../types.js";
+import type { SystemSettings } from "../../../types.js";
+import { fetchSystemSettings } from "../../lib/settings-api.js";
+import { getSystemIntegrationProviders } from "../../lib/settings-view-models.js";
 import { useProjectData } from "../../context/project-data.js";
 import { useSprints } from "../../../hooks/useSprints.js";
 import { useExecutions } from "../../../hooks/useExecutions.js";
@@ -64,6 +67,8 @@ const VIRTUAL_PROVIDER_LABELS: Record<string, string> = {
   gemini: "Virtual Gemini Worker",
   codex: "Virtual Codex Worker",
   "claude-code": "Virtual Claude Code Worker",
+  "qwen-code": "Virtual Qwen Code Worker",
+  opencode: "Virtual OpenCode Worker",
 };
 
 type AddProjectDraft = {
@@ -103,6 +108,11 @@ export function useSprintsPageData() {
     virtualWorkerProvider: string;
   }>(null);
   const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
+  const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
+
+  useEffect(() => {
+    fetchSystemSettings().then(setSystemSettings).catch(() => {});
+  }, []);
   const [showQuicksprint, setShowQuicksprint] = useState(false);
   const [quicksprintTemplates, setQuicksprintTemplates] = useState<QuicksprintTemplateRecord[]>([]);
   const [quicksprintLoading, setQuicksprintLoading] = useState(false);
@@ -698,12 +708,19 @@ export function useSprintsPageData() {
     });
   }, [createProject]);
 
-  const virtualProviders = useMemo(() => (
-    Object.entries(VIRTUAL_PROVIDER_LABELS).map(([id, label]) => ({
-      id: id as VirtualWorkerProvider,
-      label,
-    }))
-  ), []);
+  const virtualProviders = useMemo(() => {
+    const availableVirtualIds = systemSettings
+      ? Object.values(getSystemIntegrationProviders(systemSettings))
+          .filter((p) => p.provider !== "jules" && (p.apiKey.trim().length > 0 || p.mountAuth))
+          .map((p) => p.provider)
+      : ["gemini", "claude-code", "codex", "qwen-code", "opencode"]; // Fallback if settings are not loaded yet
+
+    return availableVirtualIds
+      .map((id) => ({
+        id: id as VirtualWorkerProvider,
+        label: VIRTUAL_PROVIDER_LABELS[id] || `Virtual ${id} Worker`,
+      }));
+  }, [systemSettings]);
 
   return {
     projects,

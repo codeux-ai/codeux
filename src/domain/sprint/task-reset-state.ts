@@ -15,6 +15,7 @@ export function createResetTaskRuntimeState(
     session_name: undefined,
     session_state: undefined,
     provider: options?.preserveProvider ? task.provider : undefined,
+    model: options?.preserveProvider ? task.model : undefined,
     worker_branch: undefined,
     pr_url: undefined,
     activities: [],

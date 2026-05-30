@@ -667,4 +667,36 @@ describe("ProjectManagementRepository", () => {
 
     expect(updated.updatedAt).toBe(task.updatedAt);
   });
+
+  it("supports creating and updating task with a specific model", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Model Project",
+      sourceType: "local",
+      sourceRef: "/workspace/model-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Sprint 1",
+    });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Model Task",
+      promptMarkdown: "Do the work.",
+      model: "gemini-2.5-pro",
+    });
+
+    expect(task.model).toBe("gemini-2.5-pro");
+
+    const updated = repository.updateTask(task.id, {
+      model: "claude-3-5-sonnet",
+    });
+
+    expect(updated.model).toBe("claude-3-5-sonnet");
+
+    const cleared = repository.updateTask(task.id, {
+      model: null,
+    });
+
+    expect(cleared.model).toBeNull();
+  });
 });

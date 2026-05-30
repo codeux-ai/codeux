@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS tasks (
         merge_indicator TEXT,
         source_type TEXT,
         source_path TEXT,
+        model TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,

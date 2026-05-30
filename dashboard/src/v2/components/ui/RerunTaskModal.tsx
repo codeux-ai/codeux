@@ -1,26 +1,21 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState, useEffect } from "preact/hooks";
 import gsap from "gsap";
 import { AlertTriangle, GitBranch, RotateCcw, Trash2, X } from "lucide-preact";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
-import type { Subtask } from "../../../types.js";
-
-const PROVIDER_OPTIONS = [
-    { value: "", label: "Auto (use current setting)" },
-    { value: "jules", label: "Jules" },
-    { value: "gemini", label: "Gemini" },
-    { value: "claude-code", label: "Claude Code" },
-    { value: "codex", label: "Codex" },
-] as const;
+import type { Subtask, SystemSettings } from "../../../types.js";
+import { AvantgardeSelect } from "./AvantgardeSelect.js";
+import { fetchSystemSettings } from "../../lib/settings-api.js";
+import { getSystemIntegrationProviders, getProviderModelOptions } from "../../lib/settings-view-models.js";
 
 interface RerunTaskModalProps {
     task: Subtask;
     allTasks: Subtask[];
     currentProvider?: string | null;
     onClose: () => void;
-    onConfirm: (options: { provider?: string; clearWorktree: boolean; resetDependents: boolean }) => void | Promise<void>;
+    onConfirm: (options: { provider?: string; model?: string; clearWorktree: boolean; resetDependents: boolean }) => void | Promise<void>;
 }
 
 const MERGED_TASK_INDICATORS = new Set(["MERGED", "AUTOMERGE"]);
@@ -41,6 +36,59 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
     const reducedMotion = useReducedMotion();
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
+
+    useEffect(() => {
+        fetchSystemSettings().then(setSystemSettings).catch(() => {});
+    }, []);
+
+    const providerOptions = useMemo(() => {
+        const base = [{ value: "", label: "Auto (use current setting)" }];
+        if (!systemSettings) {
+            return [
+                ...base,
+                { value: "jules", label: "Jules" },
+                { value: "gemini", label: "Gemini" },
+                { value: "claude-code", label: "Claude Code" },
+                { value: "codex", label: "Codex" },
+                { value: "qwen-code", label: "Qwen Code" },
+                { value: "opencode", label: "OpenCode" },
+            ];
+        }
+
+        const available = Object.values(getSystemIntegrationProviders(systemSettings))
+            .filter((p) => p.provider === "jules" || p.apiKey.trim().length > 0 || p.mountAuth)
+            .map((p) => {
+                const labelMap: Record<string, string> = {
+                    jules: "Jules",
+                    gemini: "Gemini",
+                    "claude-code": "Claude Code",
+                    codex: "Codex",
+                    "qwen-code": "Qwen Code",
+                    opencode: "OpenCode",
+                };
+                return {
+                    value: p.provider,
+                    label: labelMap[p.provider] || p.provider,
+                };
+            });
+
+        return [...base, ...available];
+    }, [systemSettings]);
+
+    const [model, setModel] = useState("");
+
+    useEffect(() => {
+        if (provider === "" || provider === "jules") {
+            setModel("");
+        }
+    }, [provider]);
+
+    const showModelOverride = provider !== "" && provider !== "jules";
+    const modelOptions = useMemo(() => {
+        return showModelOverride ? getProviderModelOptions(provider as any) : [];
+    }, [showModelOverride, provider]);
 
     const downstreamTasks = useMemo(() => {
         const byId = new Map(allTasks.map(candidate => [candidate.id, candidate]));
@@ -106,6 +154,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
         try {
             await onConfirm({
                 provider: provider || undefined,
+                model: model || undefined,
                 clearWorktree,
                 resetDependents,
             });
@@ -176,26 +225,42 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
                     {/* Provider selector */}
                     <div className="space-y-2">
-                        <label className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400" htmlFor="rerun-provider">
+                        <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
                             Provider
-                        </label>
-                        <select
-                            id="rerun-provider"
-                            value={provider}
-                            onChange={(e) => setProvider((e.target as HTMLSelectElement).value)}
+                        </span>
+                        <AvantgardeSelect
+                            aria-label="Provider"
                             disabled={isSubmitting}
-                            className="w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.03] px-4 py-2.5 text-[13px] font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus:border-transparent transition-shadow disabled:opacity-50"
-                        >
-                            {PROVIDER_OPTIONS.map(opt => (
-                                <option key={opt.value} value={opt.value}>{opt.label}</option>
-                            ))}
-                        </select>
+                            value={provider}
+                            onChange={setProvider}
+                            options={providerOptions}
+                            placeholder="Auto (use current setting)"
+                        />
                         {currentProvider && (
                             <p className="text-[10px] text-slate-400">
                                 Current provider: <span className="font-mono font-bold">{currentProvider}</span>
                             </p>
                         )}
                     </div>
+
+                    {showModelOverride && (
+                        <div className="space-y-2">
+                            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                Model Override
+                            </span>
+                            <AvantgardeSelect
+                                aria-label="Model Override"
+                                disabled={isSubmitting}
+                                value={model}
+                                onChange={setModel}
+                                options={[
+                                    { value: "", label: "Default Model" },
+                                    ...modelOptions.map((opt) => ({ value: opt.value, label: opt.label })),
+                                ]}
+                                placeholder="Default Model"
+                            />
+                        </div>
+                    )}
 
                     {downstreamTasks.length > 0 && (
                         <label className="flex items-start gap-3 cursor-pointer group">

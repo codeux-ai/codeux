@@ -15,6 +15,7 @@ export interface TaskRerunContext {
 
 export interface TaskRerunOptions {
   provider?: ProviderId;
+  model?: string;
   clearWorktree?: boolean;
   resetDependents?: boolean;
 }
@@ -94,6 +95,7 @@ export class TaskRerunService {
 
     return await this.resetTaskForFreshRun(context, {
       provider: options?.provider,
+      model: options?.model,
       clearWorktree: options?.clearWorktree,
       sprintRunId: sprintRun.sprintRunId,
       startTask: true,
@@ -150,6 +152,7 @@ export class TaskRerunService {
     context: TaskRerunContext,
     options: {
       provider?: ProviderId;
+      model?: string;
       clearWorktree?: boolean;
       sprintRunId: string;
       startTask: boolean;
@@ -187,6 +190,9 @@ export class TaskRerunService {
     const resetTask = createPendingTaskRuntimeReset(context.task);
     if (options.provider && options.startTask) {
       resetTask.provider = options.provider;
+    }
+    if (options.model && options.startTask) {
+      resetTask.model = options.model;
     }
     this.deps.updateTaskPlanningStatus(taskId, "pending");
 

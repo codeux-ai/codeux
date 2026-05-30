@@ -96,6 +96,7 @@ interface TaskRow {
   merge_indicator: string | null;
   source_type: string | null;
   source_path: string | null;
+  model: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -566,8 +567,8 @@ export class ProjectManagementRepository {
       const insertTask = this.db.prepare(`
         INSERT INTO tasks (
           id, project_id, sprint_id, task_key, title, prompt_markdown, description, status, priority, executor_type, agent_preset_id,
-          sort_order, is_independent, is_merged, merge_indicator, source_type, source_path, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          sort_order, is_independent, is_merged, merge_indicator, source_type, source_path, model, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const insertDependency = this.db.prepare(`
         INSERT INTO task_dependencies (task_id, depends_on_task_id)
@@ -599,6 +600,7 @@ export class ProjectManagementRepository {
           input.mergeIndicator || null,
           input.sourceType || null,
           input.sourcePath || null,
+          input.model || null,
           now,
           now
         );
@@ -630,6 +632,7 @@ export class ProjectManagementRepository {
       const nextPriority = input.priority || current.priority;
       const nextExecutorType = input.executorType || current.executorType;
       const nextAgentPresetId = input.agentPresetId === undefined ? current.agentPresetId : (input.agentPresetId?.trim() || null);
+      const nextModel = input.model === undefined ? (current.model || null) : (input.model?.trim() || null);
       const nextSortOrder = input.sortOrder === undefined ? current.sortOrder : input.sortOrder;
       const nextIsIndependent = input.isIndependent === undefined ? current.isIndependent : input.isIndependent;
       const nextIsMerged = input.isMerged === undefined ? current.isMerged : input.isMerged;
@@ -654,6 +657,7 @@ export class ProjectManagementRepository {
         || nextPriority !== current.priority
         || nextExecutorType !== current.executorType
         || nextAgentPresetId !== current.agentPresetId
+        || nextModel !== (current.model || null)
         || nextSortOrder !== current.sortOrder
         || nextIsIndependent !== current.isIndependent
         || nextIsMerged !== current.isMerged
@@ -667,7 +671,7 @@ export class ProjectManagementRepository {
       const now = new Date().toISOString();
       const updateTask = this.db.prepare(`
         UPDATE tasks
-        SET title = ?, prompt_markdown = ?, description = ?, status = ?, priority = ?, executor_type = ?, agent_preset_id = ?, sort_order = ?,
+        SET title = ?, prompt_markdown = ?, description = ?, status = ?, priority = ?, executor_type = ?, agent_preset_id = ?, model = ?, sort_order = ?,
             is_independent = ?, is_merged = ?, merge_indicator = ?, source_type = ?, source_path = ?, updated_at = ?
         WHERE id = ?
       `);
@@ -686,6 +690,7 @@ export class ProjectManagementRepository {
           nextPriority,
           nextExecutorType,
           nextAgentPresetId,
+          nextModel,
           nextSortOrder,
           Number(nextIsIndependent),
           Number(nextIsMerged),
@@ -954,6 +959,7 @@ export class ProjectManagementRepository {
       priority: row.priority,
       executorType: row.executor_type || "auto",
       agentPresetId: row.agent_preset_id || null,
+      model: row.model || null,
       sortOrder: toNumber(row.sort_order),
       dependsOnTaskIds: dependencyMap.get(row.id) || [],
       isIndependent: toBoolean(row.is_independent),

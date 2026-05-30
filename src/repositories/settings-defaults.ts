@@ -88,9 +88,17 @@ export const GEMINI_MODELS: string[] = [
   "flash-lite",
   "gemini-3-pro-preview",
   "gemini-3-flash-preview",
+  "gemini-3.1-pro-preview",
+  "gemini-3.1-pro-preview-customtools",
+  "gemini-3.1-flash-lite-preview",
   "gemini-2.5-pro",
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemma-4-31b-it",
+  "gemma-4-26b-a4b-it",
+  "gemini-2.5-flash-base",
+  "gemini-3-flash-base",
 ];
 
 export const CLAUDE_MODELS: string[] = [
@@ -107,6 +115,7 @@ export const CLAUDE_MODELS: string[] = [
 ];
 
 export const CODEX_MODELS: string[] = [
+  "gpt-5.5",
   "gpt-5.4",
   "gpt-5.4-mini",
   "gpt-5.3-codex",
