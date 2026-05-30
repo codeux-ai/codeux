@@ -113,6 +113,7 @@
   "dependencies": {
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@monaco-editor/react": "^4.7.0",
     "@preact/signals": "^2.9.0",
     "@tanstack/react-router": "1.166.2",
     "ajv": "^8.18.0",
@@ -125,9 +126,11 @@
     "lucide-preact": "^0.577.0",
     "lucide-react": "^1.7.0",
     "marked": "^17.0.3",
+    "monaco-editor": "^0.55.1",
     "onnxruntime-node": "^1.24.3",
     "p-limit": "^7.3.0",
     "preact": "^10.29.0",
+    "react-arborist": "^3.8.0",
     "three": "^0.183.2"
   },
   "devDependencies": {

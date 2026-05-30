@@ -25,6 +25,11 @@ import type {
   ReadinessProbeStatus,
   SprintPreviewScript,
   SprintPreviewSession,
+  FileBrowserSession,
+  FileBrowserTree,
+  FileBrowserFileContent,
+  FileBrowserChangeSet,
+  FileBrowserDiff,
 } from "../contracts/app-types.js";
 import type {
   EffectiveSettingsResponse,
@@ -236,6 +241,15 @@ export interface DashboardServerOptions {
     headers?: Record<string, string | undefined>;
     body?: Buffer;
   }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
+  listFileBrowserSessions?: (projectId: string) => Promise<FileBrowserSession[]> | FileBrowserSession[];
+  startFileBrowserSession?: (projectId: string, sprintId: string) => Promise<FileBrowserSession> | FileBrowserSession;
+  rebuildFileBrowserSession?: (sessionId: string) => Promise<FileBrowserSession> | FileBrowserSession;
+  stopFileBrowserSession?: (sessionId: string) => Promise<FileBrowserSession> | FileBrowserSession;
+  removeFileBrowserSession?: (sessionId: string) => Promise<void> | void;
+  getFileBrowserTree?: (sessionId: string) => Promise<FileBrowserTree> | FileBrowserTree;
+  readFileBrowserFile?: (sessionId: string, filePath: string) => Promise<FileBrowserFileContent> | FileBrowserFileContent;
+  getFileBrowserChanges?: (sessionId: string) => Promise<FileBrowserChangeSet> | FileBrowserChangeSet;
+  getFileBrowserDiff?: (sessionId: string, filePath: string) => Promise<FileBrowserDiff> | FileBrowserDiff;
 }
 
 export interface DashboardServerHandle {

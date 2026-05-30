@@ -51,6 +51,8 @@ import { resolveEffectiveDashboardSettings } from "../../services/settings-resol
 import * as jiraApiClient from "../../services/jira-api-client.js";
 import { SprintPreviewService } from "../../services/sprint-preview-service.js";
 import { SprintPreviewRepository } from "../../repositories/sprint-preview-repository.js";
+import { SprintFileBrowserService } from "../../services/sprint-file-browser-service.js";
+import { SprintFileBrowserRepository } from "../../repositories/sprint-file-browser-repository.js";
 
 export interface CoreDependencies {
   providerRunner: IProviderRunner;
@@ -97,6 +99,8 @@ export interface CoreDependencies {
   providerConcurrencyService: ProviderConcurrencyService;
   sprintPreviewService: SprintPreviewService;
   sprintPreviewRepository: SprintPreviewRepository;
+  sprintFileBrowserService: SprintFileBrowserService;
+  sprintFileBrowserRepository: SprintFileBrowserRepository;
 }
 
 export function createCoreDependencies(
@@ -199,6 +203,13 @@ export function createCoreDependencies(
     settingsRepository,
     logger: logger.child({ component: "sprint-preview-service" }),
   });
+  const sprintFileBrowserRepository = new SprintFileBrowserRepository(appDbStorage);
+  const sprintFileBrowserService = new SprintFileBrowserService({
+    sprintFileBrowserRepository,
+    projectManagementRepository,
+    settingsRepository,
+    logger: logger.child({ component: "sprint-file-browser-service" }),
+  });
   const sprintMarkdownService = new SprintMarkdownService(projectManagementRepository);
   const sprintIssueService = new SprintIssueService({
     projectManagementRepository,
@@ -298,5 +309,7 @@ export function createCoreDependencies(
     providerConcurrencyService,
     sprintPreviewService,
     sprintPreviewRepository,
+    sprintFileBrowserService,
+    sprintFileBrowserRepository,
   };
 }

@@ -21,6 +21,11 @@ import type {
   ReadinessProbeStatus,
   SprintPreviewScript,
   SprintPreviewSession,
+  FileBrowserSession,
+  FileBrowserTree,
+  FileBrowserFileContent,
+  FileBrowserChangeSet,
+  FileBrowserDiff,
 } from "../../contracts/app-types.js";
 import type { McpConnectionRecord } from "../../contracts/connection-chat-types.js";
 import type { AppDbStorage } from "../../repositories/app-db-storage.js";
@@ -107,6 +112,15 @@ export interface BootDashboardDeps {
     headers?: Record<string, string | undefined>;
     body?: Buffer;
   }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
+  listFileBrowserSessions: (projectId: string) => Promise<FileBrowserSession[]>;
+  startFileBrowserSession: (projectId: string, sprintId: string) => Promise<FileBrowserSession>;
+  rebuildFileBrowserSession: (sessionId: string) => Promise<FileBrowserSession>;
+  stopFileBrowserSession: (sessionId: string) => Promise<FileBrowserSession>;
+  removeFileBrowserSession: (sessionId: string) => Promise<void>;
+  getFileBrowserTree: (sessionId: string) => Promise<FileBrowserTree>;
+  readFileBrowserFile: (sessionId: string, filePath: string) => Promise<FileBrowserFileContent>;
+  getFileBrowserChanges: (sessionId: string) => Promise<FileBrowserChangeSet>;
+  getFileBrowserDiff: (sessionId: string, filePath: string) => Promise<FileBrowserDiff>;
   syncGitSettingsFromDashboard: () => void;
   refreshJulesApiKey: () => void;
   setLogger: (logger: Logger) => void;
@@ -575,6 +589,15 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     saveSprintPreviewScript: deps.saveSprintPreviewScript,
     getSprintPreviewLogs: deps.getSprintPreviewLogs,
     proxySprintPreviewRequest: deps.proxySprintPreviewRequest,
+    listFileBrowserSessions: deps.listFileBrowserSessions,
+    startFileBrowserSession: deps.startFileBrowserSession,
+    rebuildFileBrowserSession: deps.rebuildFileBrowserSession,
+    stopFileBrowserSession: deps.stopFileBrowserSession,
+    removeFileBrowserSession: deps.removeFileBrowserSession,
+    getFileBrowserTree: deps.getFileBrowserTree,
+    readFileBrowserFile: deps.readFileBrowserFile,
+    getFileBrowserChanges: deps.getFileBrowserChanges,
+    getFileBrowserDiff: deps.getFileBrowserDiff,
   });
 
   deps.runtimeContext.dashboardRuntimePort = handle.port;

@@ -240,6 +240,7 @@ const SchedulerPage = lazy(() => import("./v2/SchedulerPage.js").then(m => ({ de
 const SettingsPage  = lazy(() => import("./v2/SettingsPage.js").then(m => ({ default: m.SettingsPage })));
 const MemoryPage    = lazy(() => import("./v2/MemoryPage.js").then(m => ({ default: m.MemoryPage })));
 const BrowserPage   = lazy(() => import("./v2/BrowserPage.js").then(m => ({ default: m.BrowserPage })));
+const FileBrowserPage = lazy(() => import("./v2/FileBrowserPage.js").then(m => ({ default: m.FileBrowserPage })));
 const ErrorPage     = lazy(() => import("./v2/ErrorPage.js").then(m => ({ default: m.ErrorPage })));
 
 // 1. Root layout route
@@ -330,13 +331,19 @@ const browserRoute = createRoute({
   component: BrowserPage,
 });
 
+const fileBrowserRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/files",
+  component: FileBrowserPage,
+});
+
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "*",
   component: ErrorPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, browserRoute, liveRoute, notFoundRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, browserRoute, fileBrowserRoute, liveRoute, notFoundRoute]);
 const router = createRouter({ routeTree });
 
 // 4. Entry

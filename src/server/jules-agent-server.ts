@@ -68,6 +68,7 @@ import { VirtualWorkerService } from "../services/virtual-worker-service.js";
 import type { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
 import { SprintPreviewService } from "../services/sprint-preview-service.js";
+import { SprintFileBrowserService } from "../services/sprint-file-browser-service.js";
 import { resolveEffectiveDashboardSettings } from "../services/settings-resolution-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
@@ -132,6 +133,7 @@ export class JulesAgentServer {
   private managementToolHandler: import("../mcp/management-tool-handler.js").ManagementToolHandler;
   private sprintPreviewRepository: SprintPreviewRepository;
   private sprintPreviewService: SprintPreviewService;
+  private sprintFileBrowserService: SprintFileBrowserService;
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
   private sprintMarkdownService: SprintMarkdownService;
@@ -194,6 +196,7 @@ export class JulesAgentServer {
     this.executionRepository = deps.executionRepository;
     this.sprintPreviewRepository = deps.sprintPreviewRepository;
     this.sprintPreviewService = deps.sprintPreviewService;
+    this.sprintFileBrowserService = deps.sprintFileBrowserService;
     this.sprintMarkdownService = deps.sprintMarkdownService;
     this.sprintIssueService = deps.sprintIssueService;
     this.virtualWorkerService = deps.virtualWorkerService;
@@ -361,6 +364,9 @@ export class JulesAgentServer {
     const reconcile = (): void => {
       void this.sprintPreviewService.reconcileSessions().catch((error) => {
         this.logger.error("Sprint preview reconciliation failed", { error });
+      });
+      void this.sprintFileBrowserService.reconcileSessions().catch((error) => {
+        this.logger.error("File browser reconciliation failed", { error });
       });
     };
 
@@ -921,6 +927,11 @@ export class JulesAgentServer {
     } catch (error) {
       this.logger.error("Failed to clean up stale sprint preview containers on startup", { error });
     }
+    try {
+      await this.sprintFileBrowserService.cleanupStaleContainersOnStartup();
+    } catch (error) {
+      this.logger.error("Failed to clean up stale file browser containers on startup", { error });
+    }
     let recoveredSprintRunIds: string[] = [];
     try {
       await new DockerAssetPruneService(
@@ -976,6 +987,15 @@ export class JulesAgentServer {
         saveSprintPreviewScript: (projectId, sprintId, content) => this.sprintPreviewService.saveScript(projectId, sprintId, content),
         getSprintPreviewLogs: (sessionId, tail) => this.sprintPreviewService.getLogs(sessionId, tail),
         proxySprintPreviewRequest: (args) => this.sprintPreviewService.proxyRequest(args),
+        listFileBrowserSessions: (projectId) => this.sprintFileBrowserService.listSessions(projectId),
+        startFileBrowserSession: (projectId, sprintId) => this.sprintFileBrowserService.startSession(projectId, sprintId),
+        rebuildFileBrowserSession: (sessionId) => this.sprintFileBrowserService.rebuildSession(sessionId),
+        stopFileBrowserSession: (sessionId) => this.sprintFileBrowserService.stopSession(sessionId),
+        removeFileBrowserSession: (sessionId) => this.sprintFileBrowserService.removeSession(sessionId),
+        getFileBrowserTree: (sessionId) => this.sprintFileBrowserService.getTree(sessionId),
+        readFileBrowserFile: (sessionId, filePath) => this.sprintFileBrowserService.readFile(sessionId, filePath),
+        getFileBrowserChanges: (sessionId) => this.sprintFileBrowserService.getChangeSet(sessionId),
+        getFileBrowserDiff: (sessionId, filePath) => this.sprintFileBrowserService.getDiff(sessionId, filePath),
         syncGitSettingsFromDashboard: () => syncGitSettingsFromDashboard(this.runtimeContext),
         refreshJulesApiKey: () => this.refreshJulesApiKey(),
         setLogger: (logger) => { this.logger = logger; },

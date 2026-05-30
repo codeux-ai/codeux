@@ -554,6 +554,29 @@ CREATE TABLE IF NOT EXISTS sprint_preview_sessions (
         UNIQUE (project_id, sprint_id)
       );
 
+CREATE TABLE IF NOT EXISTS sprint_file_browser_sessions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        container_id TEXT,
+        container_name TEXT,
+        workspace_path TEXT,
+        feature_branch TEXT,
+        default_branch TEXT,
+        last_completed_task_count INTEGER NOT NULL DEFAULT 0,
+        last_seen_sprint_status TEXT,
+        last_error TEXT,
+        last_build_at TEXT,
+        last_started_at TEXT,
+        last_stopped_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        UNIQUE (project_id, sprint_id)
+      );
+
 CREATE TABLE IF NOT EXISTS scheduler_entries (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,

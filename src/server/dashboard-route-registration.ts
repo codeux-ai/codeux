@@ -7,6 +7,7 @@ import { registerTaskRoutes } from "./task-routes.js";
 import { registerConversationRoutes } from "./conversation-routes.js";
 import { registerPlanningRoutes } from "./planning-routes.js";
 import { registerPreviewRoutes } from "./preview-routes.js";
+import { registerFileBrowserRoutes } from "./file-browser-routes.js";
 import { registerRuntimeRoutes } from "./runtime-routes.js";
 import { registerExecutionControlRoutes } from "./execution-control-routes.js";
 import { registerSettingsRoutes } from "./settings-routes.js";
@@ -29,6 +30,7 @@ export const registerDashboardRoutes = (
   registerConversationRoutes(app, deps);
   registerPlanningRoutes(app, deps);
   registerPreviewRoutes(app, deps);
+  registerFileBrowserRoutes(app, deps);
   registerRuntimeRoutes(app, deps);
   registerLocalDirectoryRoutes(app);
   registerExecutionControlRoutes(app, deps);
