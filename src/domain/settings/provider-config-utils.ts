@@ -187,6 +187,9 @@ export const normalizeSystemIntegrationProviders = (
       apiKey: typeof rawValue.apiKey === "string" ? rawValue.apiKey : "",
       mountAuth: providerId === "jules" ? false : typeof rawValue.mountAuth === "boolean" ? rawValue.mountAuth : false,
       authPath: normalizeProviderAuthPath(providerId, rawValue.authPath),
+      ...(typeof rawValue.customBaseUrl === "string" && rawValue.customBaseUrl.trim().length > 0
+        ? { customBaseUrl: rawValue.customBaseUrl.trim() }
+        : {}),
       ...(providerId === "qwen-code" ? {
         qwenAuthMode: normalizeQwenAuthMode(rawValue.qwenAuthMode),
         qwenRegion: normalizeQwenRegion(rawValue.qwenRegion),
@@ -334,6 +337,9 @@ export const buildDashboardProviderSettings = (
             || false,
           authPath: integrationProviders[providerConfigId]?.authPath
             || DEFAULT_PROVIDER_AUTH_PATHS[providerId],
+          ...(integrationProviders[providerConfigId]?.customBaseUrl
+            ? { customBaseUrl: integrationProviders[providerConfigId].customBaseUrl }
+            : {}),
           ...(providerId === "qwen-code" ? {
             qwenAuthMode: integrationProviders[providerConfigId]?.qwenAuthMode,
             qwenRegion: integrationProviders[providerConfigId]?.qwenRegion,

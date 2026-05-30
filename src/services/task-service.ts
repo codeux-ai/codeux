@@ -230,6 +230,7 @@ export class TaskService {
         openCodePackage: selectedProviderSettings.openCodePackage,
           providerMountAuth: selectedProviderSettings.mountAuth,
           providerAuthPath: selectedProviderSettings.authPath,
+          customBaseUrl: selectedProviderSettings.customBaseUrl,
         },
         task: {
           ...pseudoTask,
@@ -329,6 +330,7 @@ export class TaskService {
         openCodePackage: selectedProviderSettings.openCodePackage,
           providerMountAuth: selectedProviderSettings.mountAuth,
           providerAuthPath: selectedProviderSettings.authPath,
+          customBaseUrl: selectedProviderSettings.customBaseUrl,
         },
         task,
         repoPath,

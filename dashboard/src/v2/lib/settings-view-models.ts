@@ -402,9 +402,17 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
     "flash-lite",
     "gemini-3-pro-preview",
     "gemini-3-flash-preview",
+    "gemini-3.1-pro-preview",
+    "gemini-3.1-pro-preview-customtools",
+    "gemini-3.1-flash-lite-preview",
     "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemma-4-31b-it",
+    "gemma-4-26b-a4b-it",
+    "gemini-2.5-flash-base",
+    "gemini-3-flash-base",
   ],
   "claude-code": [
     "default",
@@ -419,6 +427,7 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
     "claude-haiku-4-5-20251001",
   ],
   codex: [
+    "gpt-5.5",
     "gpt-5.4",
     "gpt-5.4-mini",
     "gpt-5.3-codex",
@@ -505,7 +514,7 @@ const getLegacyIntegrationApiKey = (
   return typeof integrations.openCodeApiKey === "string" ? integrations.openCodeApiKey : "";
 };
 
-const getSystemIntegrationProviders = (
+export const getSystemIntegrationProviders = (
   systemSettings: SystemSettings | null,
 ): Record<ProviderConfigId, SystemProviderCredentialSettings> => {
   const providers = systemSettings?.integrations?.providers;

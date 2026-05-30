@@ -58,6 +58,7 @@ export interface ExecutionProviderRunArgs {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  customBaseUrl?: string;
   sessionId: string;
   workspaceSessionId?: string;
   workflowSettings: DashboardSettings["cliWorkflow"];
@@ -225,6 +226,7 @@ export class ProviderExecutionService {
         openCodePackage: args.openCodePackage,
         providerMountAuth: args.providerMountAuth,
         providerAuthPath: args.providerAuthPath,
+        customBaseUrl: args.customBaseUrl,
         sessionId: args.sessionId,
         workspaceSessionId: args.workspaceSessionId,
         workflowSettings: args.workflowSettings,

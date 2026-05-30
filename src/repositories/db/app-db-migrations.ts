@@ -79,6 +79,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "task_runs", "sprint_run_id", "TEXT");
   ensureColumn(db, "task_runs", "dispatch_id", "TEXT");
   ensureColumn(db, "tasks", "agent_preset_id", "TEXT");
+  ensureColumn(db, "tasks", "model", "TEXT");
 
   ensureColumn(db, "task_run_events", "source_event_key", "TEXT");
 

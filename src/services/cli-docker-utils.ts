@@ -52,6 +52,7 @@ export const pickContainerEnv = (env: NodeJS.ProcessEnv): Array<{ key: string; v
     "OPENAI_ORG_ID",
     "OPENAI_PROJECT_ID",
     "ANTHROPIC_API_KEY",
+    "ANTHROPIC_BASE_URL",
     "DASHSCOPE_API_KEY",
     "BAILIAN_CODING_PLAN_API_KEY",
     "QWEN_API_KEY",

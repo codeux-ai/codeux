@@ -79,6 +79,7 @@ interface StartCliTaskInput {
   openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    customBaseUrl?: string;
   };
   task: Subtask;
   repoPath: string;

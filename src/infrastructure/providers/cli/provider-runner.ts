@@ -115,6 +115,9 @@ export interface ProviderRunInput {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  /** Override the default API endpoint for providers that support it.
+   *  Sets ANTHROPIC_BASE_URL (claude-code) or OPENAI_BASE_URL (codex). */
+  customBaseUrl?: string;
   sessionId: string;
   workspaceSessionId?: string;
   workflowSettings: CliWorkflowSettings;
@@ -225,6 +228,7 @@ export class ProviderRunner implements IProviderRunner {
     openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    customBaseUrl?: string;
     sessionId: string;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
@@ -561,7 +565,7 @@ export class ProviderRunner implements IProviderRunner {
     workflowSettings: CliWorkflowSettings,
     githubToken?: string,
     providerMountAuth?: boolean,
-    providerConfig?: Pick<ProviderRunInput, "qwenAuthMode" | "qwenRegion" | "qwenBaseUrl" | "qwenEnvKey" | "qwenModelId" | "qwenProtocol" | "qwenAdditionalModelProviders" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId" | "openCodeBaseUrl" | "openCodeEnvKey" | "openCodePackage" | "mcpConnection">,
+    providerConfig?: Pick<ProviderRunInput, "qwenAuthMode" | "qwenRegion" | "qwenBaseUrl" | "qwenEnvKey" | "qwenModelId" | "qwenProtocol" | "qwenAdditionalModelProviders" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId" | "openCodeBaseUrl" | "openCodeEnvKey" | "openCodePackage" | "mcpConnection" | "customBaseUrl">,
   ): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...process.env };
     const useContainerMounts = workflowSettings.executionMode === "DOCKER";
@@ -578,9 +582,21 @@ export class ProviderRunner implements IProviderRunner {
       env.GEMINI_CLI_TRUST_WORKSPACE = "true";
     } else if (provider === "claude-code") {
       if (apiKey && !useProviderMount) env.ANTHROPIC_API_KEY = apiKey;
+      if (providerConfig?.customBaseUrl) {
+        env.ANTHROPIC_BASE_URL = this.rewriteLoopbackUrlForDocker(
+          providerConfig.customBaseUrl,
+          this.shouldRewriteDockerLoopbackUrls(workflowSettings),
+        );
+      }
     } else if (provider === "codex") {
       if (model && model !== "default") env.CODEX_MODEL = model;
       if (apiKey && !useProviderMount) env.OPENAI_API_KEY = apiKey;
+      if (providerConfig?.customBaseUrl) {
+        env.OPENAI_BASE_URL = this.rewriteLoopbackUrlForDocker(
+          providerConfig.customBaseUrl,
+          this.shouldRewriteDockerLoopbackUrls(workflowSettings),
+        );
+      }
     } else if (provider === "qwen-code") {
       const qwenEnvKeys = new Set<string>();
       const primaryEnvKey = providerConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"

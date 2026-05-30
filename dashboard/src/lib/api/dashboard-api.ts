@@ -70,6 +70,7 @@ export const fetchExternalSettingsHints = async (): Promise<ExternalSettingsHint
 
 export interface RerunTaskOptions {
   provider?: string;
+  model?: string;
   clearWorktree?: boolean;
   resetDependents?: boolean;
 }

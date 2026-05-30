@@ -135,6 +135,7 @@ export interface TaskRecord {
   priority: TaskPriority;
   executorType: TaskExecutorType;
   agentPresetId: string | null;
+  model?: string | null;
   sortOrder: number;
   dependsOnTaskIds: string[];
   isIndependent: boolean;
@@ -321,6 +322,7 @@ export interface CreateTaskInput {
   mergeIndicator?: string | null;
   sourceType?: string | null;
   sourcePath?: string | null;
+  model?: string | null;
 }
 
 export interface UpdateTaskInput {
@@ -331,6 +333,7 @@ export interface UpdateTaskInput {
   priority?: TaskPriority;
   executorType?: TaskExecutorType;
   agentPresetId?: string | null;
+  model?: string | null;
   sortOrder?: number;
   dependsOnTaskIds?: string[];
   isIndependent?: boolean;

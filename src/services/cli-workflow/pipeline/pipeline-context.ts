@@ -50,6 +50,7 @@ export interface PipelineContext {
   openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    customBaseUrl?: string;
   };
   title: string;
   repoPath: string;
