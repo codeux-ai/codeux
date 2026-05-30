@@ -18,6 +18,7 @@ import type {
   UpdateProjectInput,
   UpdateSprintInput,
   UpdateTaskInput,
+  SprintReviewSummary,
 } from "../contracts/project-management-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { slugify } from "../shared/slug.js";
@@ -102,6 +103,11 @@ interface TaskRow {
 interface DependencyRow {
   task_id: string;
   depends_on_task_id: string;
+}
+
+interface TaskReviewSummaryRow {
+  task_id: string;
+  latest_task_review_json: string | null;
 }
 
 interface LinkedIssueRow {
@@ -934,6 +940,8 @@ export class ProjectManagementRepository {
       dependencyMap.set(row.task_id, current);
     }
 
+    const reviewMap = this.getLatestTaskReviewSummaryMap(rows.map((row) => row.id));
+
     return rows.map((row) => ({
       id: row.id,
       projectId: row.project_id,
@@ -950,12 +958,58 @@ export class ProjectManagementRepository {
       dependsOnTaskIds: dependencyMap.get(row.id) || [],
       isIndependent: toBoolean(row.is_independent),
       isMerged: toBoolean(row.is_merged),
+      latestReview: reviewMap.get(row.id),
       mergeIndicator: row.merge_indicator,
       sourceType: row.source_type,
       sourcePath: row.source_path,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
+  }
+
+  private getLatestTaskReviewSummaryMap(taskIds: string[]): Map<string, SprintReviewSummary> {
+    const rows = this.storage.executeChunkedInQuery<TaskReviewSummaryRow>({
+      sqlPrefix: `
+        SELECT
+          q.task_id,
+          json_object(
+            'status', q.status,
+            'outcome', q.outcome,
+            'summary', q.summary_markdown,
+            'findings', COALESCE(json_extract(q.payload_json, '$.findings'), json_array()),
+            'reviewer', q.agent_name,
+            'finishedAt', q.finished_at
+          ) AS latest_task_review_json
+        FROM qa_review_runs q
+        WHERE q.task_id`,
+      sqlSuffix: `
+          AND q.trigger_type IN ('task_completion', 'completed_task_without_pr')
+          AND q.rowid = (
+            SELECT q2.rowid
+            FROM qa_review_runs q2
+            WHERE q2.task_id = q.task_id
+              AND q2.trigger_type IN ('task_completion', 'completed_task_without_pr')
+            ORDER BY q2.started_at DESC, q2.rowid DESC
+            LIMIT 1
+          )
+      `,
+      items: taskIds,
+    });
+
+    const map = new Map<string, SprintReviewSummary>();
+    for (const row of rows) {
+      if (!row.latest_task_review_json) {
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(row.latest_task_review_json) as SprintReviewSummary;
+        parsed.findings = Array.isArray(parsed.findings) ? parsed.findings : [];
+        map.set(row.task_id, parsed);
+      } catch {
+        // Ignore malformed persisted QA payloads.
+      }
+    }
+    return map;
   }
 
   private hydrateProjects(rows: ProjectRow[]): ProjectSummary[] {

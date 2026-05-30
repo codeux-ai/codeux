@@ -38,6 +38,7 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
     prevTask.description === task.description &&
     prevTask.isIndependent === task.isIndependent &&
     prevTask.isMerged === task.isMerged &&
+    areReviewSummariesEqual(prevTask.latestReview, task.latestReview) &&
     prevTask.mergeIndicator === task.mergeIndicator &&
     prevTask.dependsOnTaskIds.length === task.dependsOnTaskIds.length &&
     prevTask.dependsOnTaskIds.every((id, idx) => id === task.dependsOnTaskIds[idx])
@@ -65,8 +66,25 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
     dependsOnTaskIds: task.dependsOnTaskIds,
     isIndependent: task.isIndependent,
     isMerged: task.isMerged,
+    latestReview: task.latestReview,
     mergeIndicator: task.mergeIndicator,
   };
+}
+
+function areReviewSummariesEqual(left: Task["latestReview"], right: TaskRecord["latestReview"]): boolean {
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return left.status === right.status
+    && left.outcome === right.outcome
+    && left.summary === right.summary
+    && left.reviewer === right.reviewer
+    && left.finishedAt === right.finishedAt
+    && left.findings.length === right.findings.length
+    && left.findings.every((finding, index) => finding === right.findings[index]);
 }
 
 export function formatSprintDateRange(startDate: string | null, endDate: string | null): string {

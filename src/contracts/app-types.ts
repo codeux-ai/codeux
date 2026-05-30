@@ -118,6 +118,14 @@ export interface Subtask {
     error_reason?: string;
     [key: string]: any;
   };
+  latestReview?: {
+    status: string;
+    outcome: string | null;
+    summary: string | null;
+    findings: string[];
+    reviewer: string | null;
+    finishedAt: string | null;
+  };
   is_merged?: boolean;
   merge_indicator?: SubtaskMergeIndicator;
   intervention_owner?: InterventionOwner;

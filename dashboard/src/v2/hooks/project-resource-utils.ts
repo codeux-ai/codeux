@@ -67,6 +67,7 @@ export function areTaskRecordListsEqual(current: TaskRecord[], next: TaskRecord[
       left.sortOrder !== right.sortOrder ||
       left.isIndependent !== right.isIndependent ||
       left.isMerged !== right.isMerged ||
+      !areReviewSummariesEqual(left.latestReview, right.latestReview) ||
       left.mergeIndicator !== right.mergeIndicator ||
       left.sourceType !== right.sourceType ||
       left.sourcePath !== right.sourcePath ||
@@ -88,4 +89,23 @@ export function areTaskRecordListsEqual(current: TaskRecord[], next: TaskRecord[
   }
 
   return true;
+}
+
+function areReviewSummariesEqual(
+  left: TaskRecord["latestReview"],
+  right: TaskRecord["latestReview"],
+): boolean {
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return left.status === right.status
+    && left.outcome === right.outcome
+    && left.summary === right.summary
+    && left.reviewer === right.reviewer
+    && left.finishedAt === right.finishedAt
+    && left.findings.length === right.findings.length
+    && left.findings.every((finding, index) => finding === right.findings[index]);
 }

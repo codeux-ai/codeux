@@ -72,6 +72,7 @@ export function buildLiveSessionTasks(
       pr_url: runtimeTask?.pr_url,
       activities: runtimeTask?.activities,
       is_independent: runtimeTask?.is_independent ?? task.isIndependent,
+      latestReview: runtimeTask?.latestReview ?? task.latestReview,
       is_merged: runtimeTask?.is_merged ?? task.isMerged,
       merge_indicator: runtimeTask?.merge_indicator ?? toMergeIndicator(task.mergeIndicator),
     };

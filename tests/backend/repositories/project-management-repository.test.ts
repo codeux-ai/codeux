@@ -243,6 +243,71 @@ describe("ProjectManagementRepository", () => {
     expect(mappedReviewed?.latestReview?.summary).toBe('Looks good!');
     expect(mappedReviewed?.latestReview?.reviewer).toBe('QA Bot');
   });
+
+  it("includes latest task QA review summaries in listTasks", async () => {
+    const { storage, repository } = await createRepository();
+
+    const project = repository.createProject({
+      name: "Task QA Review Project",
+      sourceType: "local",
+      sourceRef: "/tmp/task-qa",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Task QA Sprint",
+      goal: "Expose task QA state",
+    });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Reviewed task",
+      promptMarkdown: "Implement and review",
+    });
+
+    const db = storage.getDatabase();
+    db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, task_id, trigger_type, status, outcome, run_index,
+        summary_markdown, payload_json, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'task_completion', 'running', NULL, 1, NULL, ?, 'QA Bot', ?, NULL, ?, ?)
+    `).run(
+      "task-qa-running",
+      project.id,
+      sprint.id,
+      task.id,
+      JSON.stringify({ findings: [] }),
+      "2026-05-30T09:00:00.000Z",
+      "2026-05-30T09:00:00.000Z",
+      "2026-05-30T09:00:00.000Z",
+    );
+    db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, task_id, trigger_type, status, outcome, run_index,
+        summary_markdown, payload_json, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'task_completion', 'completed', 'changes_requested', 2, ?, ?, 'QA Bot', ?, ?, ?, ?)
+    `).run(
+      "task-qa-latest",
+      project.id,
+      sprint.id,
+      task.id,
+      "Needs one follow-up.",
+      JSON.stringify({ findings: ["Missing regression test"] }),
+      "2026-05-30T09:05:00.000Z",
+      "2026-05-30T09:06:00.000Z",
+      "2026-05-30T09:05:00.000Z",
+      "2026-05-30T09:06:00.000Z",
+    );
+
+    const [mappedTask] = repository.listTasks(project.id, sprint.id);
+    expect(mappedTask.latestReview).toEqual({
+      status: "completed",
+      outcome: "changes_requested",
+      summary: "Needs one follow-up.",
+      findings: ["Missing regression test"],
+      reviewer: "QA Bot",
+      finishedAt: "2026-05-30T09:06:00.000Z",
+    });
+  });
+
   it("handles originalPrompt in sprints and supports clearing tasks", async () => {
     const { repository } = await createRepository();
 

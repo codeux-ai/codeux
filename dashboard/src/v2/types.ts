@@ -132,6 +132,7 @@ export interface Task {
   dependsOnTaskIds: string[];
   isIndependent: boolean;
   isMerged: boolean;
+  latestReview?: SprintReviewSummary;
   mergeIndicator: string | null;
   isOptimistic?: boolean;
 }

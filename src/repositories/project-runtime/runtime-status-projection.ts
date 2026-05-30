@@ -1,6 +1,7 @@
 import { DatabaseAdapter } from "../db/database-adapter.js";
 import { AppDbStorage } from "../app-db-storage.js";
 import type { DashboardStatus, JulesActivity, Subtask, SubtaskStatus } from "../../contracts/app-types.js";
+import type { SprintReviewSummary } from "../../contracts/project-management-types.js";
 import { mapPlanningStatusToRuntimeStatus, toMergeIndicator } from "../../services/subtask-state-mapper.js";
 import { RuntimeContextPayload } from "./runtime-context-store.js";
 import { toNumber, toBoolean, parsePayloadJson } from "../repository-utils.js";
@@ -42,6 +43,11 @@ export interface DependencyRow {
   depends_on_task_id: string;
 }
 
+export interface TaskReviewSummaryRow {
+  task_id: string;
+  latest_task_review_json: string | null;
+}
+
 export interface TaskRunRow {
   id: string;
   task_id: string;
@@ -73,6 +79,7 @@ export interface TaskActivityRow {
 export interface MappedTask {
   row: TaskRow;
   dependsOnTaskIds: string[];
+  latestReview?: SprintReviewSummary;
 }
 
 export function asString(value: unknown): string | undefined {
@@ -120,6 +127,7 @@ export class RuntimeStatusProjection {
         pr_url: run?.pr_url || undefined,
         activities: recentActivitiesByTaskId.get(task.row.id),
         is_independent: toBoolean(task.row.is_independent),
+        latestReview: task.latestReview,
         is_merged: task.row.merge_indicator === "MERGED"
           || task.row.merge_indicator === "AUTOMERGE"
           || toBoolean(task.row.is_merged),
@@ -175,10 +183,62 @@ export class RuntimeStatusProjection {
       dependencyMap.set(row.task_id, current);
     }
 
+    const reviewMap = this.getLatestTaskReviewSummaryMap(taskRows.map((row) => row.id));
+
     return taskRows.map((row) => ({
       row,
       dependsOnTaskIds: dependencyMap.get(row.id) || [],
+      latestReview: reviewMap.get(row.id),
     }));
+  }
+
+  getLatestTaskReviewSummaryMap(taskIds: string[]): Map<string, SprintReviewSummary> {
+    if (taskIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = this.storage.executeChunkedInQuery<TaskReviewSummaryRow>({
+      sqlPrefix: `
+        SELECT
+          q.task_id,
+          json_object(
+            'status', q.status,
+            'outcome', q.outcome,
+            'summary', q.summary_markdown,
+            'findings', COALESCE(json_extract(q.payload_json, '$.findings'), json_array()),
+            'reviewer', q.agent_name,
+            'finishedAt', q.finished_at
+          ) AS latest_task_review_json
+        FROM qa_review_runs q
+        WHERE q.task_id`,
+      sqlSuffix: `
+          AND q.trigger_type IN ('task_completion', 'completed_task_without_pr')
+          AND q.rowid = (
+            SELECT q2.rowid
+            FROM qa_review_runs q2
+            WHERE q2.task_id = q.task_id
+              AND q2.trigger_type IN ('task_completion', 'completed_task_without_pr')
+            ORDER BY q2.started_at DESC, q2.rowid DESC
+            LIMIT 1
+          )
+      `,
+      items: taskIds,
+    });
+
+    const map = new Map<string, SprintReviewSummary>();
+    for (const row of rows) {
+      if (!row.latest_task_review_json) {
+        continue;
+      }
+      try {
+        const parsed = JSON.parse(row.latest_task_review_json) as SprintReviewSummary;
+        parsed.findings = Array.isArray(parsed.findings) ? parsed.findings : [];
+        map.set(row.task_id, parsed);
+      } catch {
+        // Ignore malformed persisted QA payloads.
+      }
+    }
+    return map;
   }
 
   getLatestRuns(taskIds: string[]): Map<string, TaskRunRow> {

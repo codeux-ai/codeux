@@ -202,6 +202,7 @@ Legacy runtime:
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
 - Sprint cells now surface a QA-reviewed indicator with an expandable overlay section inside the created column, and allow marking sprints completed directly from the cell menu
+- Task rows and Live task cards now surface task-level QA review badges from the latest task QA run, including a running indicator while QA review is in progress.
 - Sprint creation no longer asks for start/end dates
 - Sprint creation now uses an in-page composer that replaces the showcase while writing, instead of opening a detached modal
 - The sprint composer supports `Plan & Start`, `Plan Only`, and `Save Draft`.

@@ -171,7 +171,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         return;
       }
 
-      const startRef = await this.resolveWorktreeStartRef(repoPath, featureBranch);
+      const startRef = await this.resolveWorktreeStartRef(repoPath, workerBranch, featureBranch);
       await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
       if (isWorkspaceHandle(workspaceRef)) {
         await this.createVolume(workspaceRef);
@@ -466,14 +466,20 @@ export class WorkspaceManager implements IWorkspaceManager {
     }
   }
 
-  private async resolveWorktreeStartRef(repoPath: string, branch: string): Promise<string> {
-    if (await this.refExists(repoPath, `refs/remotes/origin/${branch}`)) {
-      return `origin/${branch}`;
+  private async resolveWorktreeStartRef(repoPath: string, workerBranch: string, featureBranch: string): Promise<string> {
+    if (await this.refExists(repoPath, `refs/remotes/origin/${workerBranch}`)) {
+      return `origin/${workerBranch}`;
     }
-    if (await this.refExists(repoPath, `refs/heads/${branch}`)) {
-      return branch;
+    if (await this.refExists(repoPath, `refs/heads/${workerBranch}`)) {
+      return workerBranch;
     }
-    throw new Error(`Cannot prepare isolated workspace: branch ${branch} does not exist locally or on origin.`);
+    if (await this.refExists(repoPath, `refs/remotes/origin/${featureBranch}`)) {
+      return `origin/${featureBranch}`;
+    }
+    if (await this.refExists(repoPath, `refs/heads/${featureBranch}`)) {
+      return featureBranch;
+    }
+    throw new Error(`Cannot prepare isolated workspace: neither worker branch ${workerBranch} nor feature branch ${featureBranch} exists locally or on origin.`);
   }
 
   private async refExists(repoPath: string, ref: string): Promise<boolean> {

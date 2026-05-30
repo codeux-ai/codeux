@@ -78,6 +78,49 @@ describe("RuntimeStatusProjection", () => {
     expect(status.subtasks[0]?.status).toBe("RUNNING");
   });
 
+  it("projects latest task QA review summaries for live status", async () => {
+    const { storage, projection, projectRepository } = await createProjection();
+    const db = storage.getDatabase();
+
+    const project = projectRepository.createProject({ name: "Proj", sourceType: "local", sourceRef: "/path" });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Task 1",
+      status: "coding_completed",
+    });
+
+    db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, task_id, trigger_type, status, outcome, run_index,
+        summary_markdown, payload_json, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'task_completion', 'running', NULL, 1, ?, ?, 'QA Bot', ?, NULL, ?, ?)
+    `).run(
+      "run-qa-1",
+      project.id,
+      sprint.id,
+      task.id,
+      "Review in progress",
+      JSON.stringify({ findings: [] }),
+      "2026-05-30T09:00:00.000Z",
+      "2026-05-30T09:00:00.000Z",
+      "2026-05-30T09:00:00.000Z",
+    );
+
+    const status = projection.buildProjectStatus(project.id, sprint.id, null);
+
+    expect(status.subtasks).toHaveLength(1);
+    expect(status.subtasks[0]?.latestReview).toEqual({
+      status: "running",
+      outcome: null,
+      summary: "Review in progress",
+      findings: [],
+      reviewer: "QA Bot",
+      finishedAt: null,
+    });
+  });
+
   it("projects recent activity correctly", async () => {
     const { storage, projection, projectRepository } = await createProjection();
     const db = storage.getDatabase();

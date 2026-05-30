@@ -108,6 +108,7 @@ Run budgeting:
 - `maxTaskReviewRuns = N` means the initial task review plus up to `N - 1` QA re-checks for later fix iterations
 - if QA still has not produced a green light after that cap, Code UX stops holding the merge on QA alone and treats the retry budget as exhausted
 - a passing task QA result is final for that completion state and is not retriggered just because orchestration loops again
+- task-level QA runs are now surfaced in task list records and live runtime snapshots. The Tasks page and Live page both show a compact QA badge, including a spinner state while the latest task QA run is still `running`.
 
 ### Sprint completion QA
 
@@ -144,6 +145,7 @@ For CLI follow-up runs, Code UX:
 
 - preserves the successful worktree after completion when QA is enabled for task completion
 - refreshes `origin` and starts follow-up work from the latest remote feature branch when remote GitHub mode is enabled
+- resets a reused task workspace to the latest remote worker branch when that branch already exists, so QA fixes build on the current task PR tip
 - creates a missing local feature branch from `origin/<feature>` instead of recreating it from the default branch when the remote feature branch already exists
 - resumes the worker branch
 - records the follow-up invocation in execution tracking

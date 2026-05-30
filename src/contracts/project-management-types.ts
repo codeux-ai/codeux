@@ -143,6 +143,7 @@ export interface TaskRecord {
     error_reason?: string;
     [key: string]: any;
   };
+  latestReview?: SprintReviewSummary;
   mergeIndicator: string | null;
   sourceType: string | null;
   sourcePath: string | null;

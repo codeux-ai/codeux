@@ -9,12 +9,14 @@ interface SprintReviewBadgeProps {
   summary: SprintReviewSummary;
   compact?: boolean;
   align?: "left" | "center" | "right";
+  showCompactLabel?: boolean;
 }
 
 export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
   summary,
   compact = false,
   align = "center",
+  showCompactLabel = false,
 }) => {
   const [overlayId] = useState(() => `sprint-review-overlay-${Math.random().toString(36).slice(2, 10)}`);
   const [isOpen, setIsOpen] = useState(false);
@@ -84,12 +86,13 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
     return (
       <div className="relative inline-flex animate-pulse">
         <div
+          aria-label="QA review running"
           className={`inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/8 text-signal-600 shadow-[0_10px_24px_rgba(0,224,160,0.12)] ${
             compact ? "px-2.5 py-1 text-[10px]" : "px-3 py-1.5 text-[10px]"
           } font-bold uppercase tracking-[0.14em] dark:text-signal-300`}
         >
           <Loader2 className={`animate-spin ${compact ? "h-3 w-3" : "h-3.5 w-3.5"}`} strokeWidth={2.5} />
-          {!compact && <span>Reviewing...</span>}
+          {(!compact || showCompactLabel) && <span>{compact ? "QA" : "Reviewing..."}</span>}
         </div>
       </div>
     );
@@ -113,7 +116,7 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
         } font-bold uppercase tracking-[0.16em] dark:text-signal-300 transition-colors duration-300 hover:border-signal-500/50`}
       >
         <CheckCircle2 className={`${compact ? "h-3 w-3" : "h-3.5 w-3.5"} transition-transform duration-300 group-hover/review:scale-110`} strokeWidth={2.5} />
-        {!compact && <span>QA Reviewed</span>}
+        {(!compact || showCompactLabel) && <span>{compact ? "QA" : "QA Reviewed"}</span>}
       </div>
 
       {isOpen && createPortal(

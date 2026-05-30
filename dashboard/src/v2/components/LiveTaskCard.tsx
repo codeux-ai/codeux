@@ -26,6 +26,7 @@ import { RerunTaskModal } from "./ui/RerunTaskModal.js";
 import { Button } from "./ui/Button.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { AgentSelectAvatarIcon } from "./agents/AgentSelectAvatarIcon.js";
+import { SprintReviewBadge } from "./sprints/SprintReviewBadge.js";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -333,6 +334,9 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                     <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${mergeCfg.bg} ${mergeCfg.text} border ${mergeCfg.border}`}>
                                         {mergeCfg.label}
                                     </span>
+                                )}
+                                {task.latestReview && (
+                                    <SprintReviewBadge summary={task.latestReview} compact showCompactLabel align="right" />
                                 )}
                             </div>
                             <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white leading-snug">
