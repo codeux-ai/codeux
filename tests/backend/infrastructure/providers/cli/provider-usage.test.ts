@@ -449,4 +449,68 @@ describe("collectProviderUsageTelemetry", () => {
       nativeSessionId: "container-native-1",
     });
   });
+
+  it("estimates telemetry for qwen-code when logs are not found", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "qwen-code",
+      model: "qwen3-coder-plus",
+      prompt: "Implement binary search.",
+      cwd: "/workspace",
+      stdout: "Here is the binary search implementation.",
+      stderr: "",
+      nativeSessionId: "qwen-session-123",
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: expect.any(Number),
+      outputTokens: expect.any(Number),
+      totalTokens: expect.any(Number),
+      usageSource: "estimated",
+      nativeSessionId: "qwen-session-123",
+    });
+  });
+
+  it("parses Qwen Code OpenAI log files for exact reported usage", async () => {
+    const cwd = path.join(os.tmpdir(), `code-ux-qwen-${Date.now().toString(36)}`);
+    tempDirs.push(cwd);
+    await fs.mkdir(cwd, { recursive: true });
+
+    const fakeHome = path.join(cwd, "fake-home");
+    await fs.mkdir(fakeHome, { recursive: true });
+    process.env.HOME = fakeHome;
+
+    const logDir = path.join(fakeHome, ".qwen", "logs", "openai");
+    await fs.mkdir(logDir, { recursive: true });
+    const logFile = path.join(logDir, "log-1234.json");
+    await fs.writeFile(
+      logFile,
+      JSON.stringify({
+        usage: {
+          prompt_tokens: 1500,
+          completion_tokens: 450,
+        },
+      }),
+      "utf8",
+    );
+
+    const result = await collectProviderUsageTelemetry({
+      provider: "qwen-code",
+      model: "qwen3-coder-plus",
+      prompt: "Implement binary search.",
+      cwd,
+      stdout: "Here is the binary search implementation.",
+      stderr: "",
+      nativeSessionId: "qwen-session-123",
+      startTimeMs: Date.now() - 500,
+      executionMode: "HOST",
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 1500,
+      outputTokens: 450,
+      totalTokens: 1950,
+      usageSource: "reported",
+      nativeSessionId: "qwen-session-123",
+    });
+  });
 });

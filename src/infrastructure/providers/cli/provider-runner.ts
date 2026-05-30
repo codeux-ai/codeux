@@ -231,6 +231,7 @@ export class ProviderRunner implements IProviderRunner {
     customMcpServers?: CustomMcpServer[];
   }): Promise<ProviderRunResult> {
     const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
+    const startedMs = Date.now();
     const runModel = this.resolveRunModel(provider, model, input);
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input);
     const nativeSessionId = provider === "opencode"
@@ -322,6 +323,8 @@ export class ProviderRunner implements IProviderRunner {
         nativeSessionId,
         claudeSessionJsonl,
         codexSessionJson,
+        startTimeMs: startedMs,
+        executionMode: workflowSettings.executionMode,
       });
       return {
         ...result,
@@ -670,6 +673,7 @@ export class ProviderRunner implements IProviderRunner {
       model: {
         name: selectedModel,
       },
+      enableOpenAILogging: true,
     };
 
     if (authMode !== "LOCAL_AUTH") {

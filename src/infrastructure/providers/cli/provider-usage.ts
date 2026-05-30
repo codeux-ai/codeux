@@ -390,6 +390,47 @@ function parseClaudeSessionJsonl(
   };
 }
 
+async function parseQwenOpenAiLogs(
+  logDir: string,
+  startTimeMs: number,
+): Promise<{ inputTokens: number; outputTokens: number } | null> {
+  try {
+    const files = await fs.readdir(logDir);
+    const jsonFiles = files.filter(f => f.endsWith(".json"));
+    if (jsonFiles.length === 0) return null;
+
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let found = false;
+
+    for (const file of jsonFiles) {
+      const filePath = path.join(logDir, file);
+      const stat = await fs.stat(filePath).catch(() => null);
+      if (stat && stat.mtimeMs >= startTimeMs - 2000) {
+        const content = await fs.readFile(filePath, "utf8").catch(() => "");
+        try {
+          const parsed = JSON.parse(content);
+          const usage = parsed?.usage;
+          if (usage && typeof usage === "object") {
+            inputTokens += toNumber(usage.prompt_tokens ?? usage.input_tokens ?? 0);
+            outputTokens += toNumber(usage.completion_tokens ?? usage.output_tokens ?? 0);
+            found = true;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    if (found) {
+      return { inputTokens, outputTokens };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function collectProviderUsageTelemetry(args: {
   provider: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode";
   model: string;
@@ -401,6 +442,8 @@ export async function collectProviderUsageTelemetry(args: {
   nativeSessionId?: string | null;
   claudeSessionJsonl?: string | null;
   codexSessionJson?: string | null;
+  startTimeMs?: number;
+  executionMode?: "HOST" | "DOCKER";
 }): Promise<ProviderUsageTelemetry> {
   const fallbackOutput = [args.capturedText || "", args.stdout || "", args.stderr || ""].filter(Boolean).join("\n").trim();
 
@@ -459,6 +502,27 @@ export async function collectProviderUsageTelemetry(args: {
   }
 
   if (args.provider === "qwen-code") {
+    let exactUsage: { inputTokens: number; outputTokens: number } | null = null;
+    if (args.startTimeMs) {
+      const logDir = args.executionMode === "DOCKER"
+        ? path.join(args.cwd, ".code-ux-home", ".qwen", "logs", "openai")
+        : path.join(os.homedir(), ".qwen", "logs", "openai");
+      exactUsage = await parseQwenOpenAiLogs(logDir, args.startTimeMs);
+    }
+
+    if (exactUsage) {
+      return {
+        ...emptyTelemetry(),
+        inputTokens: exactUsage.inputTokens,
+        outputTokens: exactUsage.outputTokens,
+        totalTokens: exactUsage.inputTokens + exactUsage.outputTokens,
+        usageSource: "reported",
+        rawUsageJson: null,
+        transcriptText: fallbackOutput,
+        nativeSessionId: args.nativeSessionId || null,
+      };
+    }
+
     const telemetry = estimateTelemetry("qwen-code", args.model, args.prompt, fallbackOutput);
     telemetry.nativeSessionId = args.nativeSessionId || null;
     return telemetry;

@@ -19,3 +19,4 @@ release/
 *.log
 .code-ux/data.db
 .claude/
+.antigravitycli*
