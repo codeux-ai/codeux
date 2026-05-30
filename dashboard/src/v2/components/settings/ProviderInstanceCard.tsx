@@ -1,0 +1,232 @@
+import type { FunctionComponent } from "preact";
+import { Trash2 } from "lucide-preact";
+import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
+import { getProviderTypeLabel } from "../../lib/settings-view-models.js";
+import {
+  buildOpenCodeConfigPreview,
+  buildQwenSettingsPreview,
+  getQwenEndpointForRegion,
+  openCodeAuthModeOptions,
+  qwenAuthModeOptions,
+  qwenProtocolOptions,
+  qwenRegionOptions,
+  splitOpenCodeModel,
+  type SystemProviderConfig,
+} from "../../lib/provider-runtime-preview.js";
+
+/**
+ * Renders the full credential/auth configuration for a single named provider instance.
+ * Shared verbatim between the Settings → Integrations detail view and the onboarding
+ * "Configure providers" step so the two surfaces never drift.
+ */
+export const ProviderInstanceCard: FunctionComponent<{
+  provider: SystemProviderConfig;
+  providerModel: string;
+  dockerExecutionEnabled: boolean;
+  onUpdate: (updates: Partial<SystemProviderConfig>) => void;
+  onRemove?: () => void;
+  isLast?: boolean;
+  enabled?: boolean;
+  onToggleEnabled?: (value: boolean) => void;
+}> = ({ provider, providerModel, dockerExecutionEnabled, onUpdate, onRemove, isLast = true, enabled, onToggleEnabled }) => (
+  <div className="space-y-3 rounded-[1.45rem] border border-black/[0.06] bg-white/84 p-5 shadow-[0_16px_38px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
+      <div className="flex items-start gap-3">
+        <ProviderLogo providerId={provider.provider} />
+        <div>
+          <div className="text-sm font-semibold text-slate-900 dark:text-white">{provider.name}</div>
+          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{getProviderTypeLabel(provider.provider)} instance</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {onToggleEnabled ? (
+          <label className="flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            Enabled
+            <Toggle value={enabled ?? true} onChange={() => onToggleEnabled(!(enabled ?? true))} />
+          </label>
+        ) : null}
+        {onRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/[0.06] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-status-red"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Remove
+          </button>
+        ) : null}
+      </div>
+    </div>
+    <Row label="Display name" description="Used throughout AI Models and runtime route summaries.">
+      <TextInput value={provider.name} onChange={(value) => onUpdate({ name: value })} />
+    </Row>
+    <Row label="API key" description="Stored for this named provider instance.">
+      <TextInput value={provider.apiKey} onChange={(value) => onUpdate({ apiKey: value })} mono />
+    </Row>
+    {provider.provider === "qwen-code" ? (
+      <>
+        <Row label="Authentication mode" description="Choose how this Qwen instance should authenticate and generate its runtime settings.">
+          <PillChoiceGroup
+            value={provider.qwenAuthMode || "LOCAL_AUTH"}
+            onChange={(value) => onUpdate({
+              qwenAuthMode: value as SystemProviderConfig["qwenAuthMode"],
+              ...(value === "MODEL_PROVIDER" ? {
+                apiKey: provider.apiKey || "your_api_key",
+                qwenBaseUrl: provider.qwenBaseUrl || "http://127.0.0.1:11434/v1",
+                qwenEnvKey: provider.qwenEnvKey || "OLLAMA_API_KEY",
+                qwenModelId: provider.qwenModelId || "glm-4.7-flash",
+                qwenProtocol: "openai" as const,
+              } : {}),
+            })}
+            options={qwenAuthModeOptions}
+          />
+        </Row>
+        {(provider.qwenAuthMode || "LOCAL_AUTH") === "LOCAL_AUTH" ? (
+          <>
+            <Row label="Mount Qwen auth" description="Copy local Qwen OAuth/cache files into Docker for browser-authenticated Qwen Code runs.">
+              <Toggle value={provider.mountAuth} onChange={() => onUpdate({ mountAuth: !provider.mountAuth })} />
+            </Row>
+            <Row label="Qwen auth path" description="Usually `~/.qwen`; contains settings.json, .env, and cached OAuth state.">
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} disabled={!provider.mountAuth} mono />
+            </Row>
+          </>
+        ) : null}
+        {(provider.qwenAuthMode || "LOCAL_AUTH") === "ALIBABA_CODING_PLAN" ? (
+          <>
+            <Row label="Coding Plan region" description="Controls the dedicated Alibaba Cloud Coding Plan endpoint.">
+              <SelectInput
+                value={provider.qwenRegion || "international"}
+                onChange={(value) => onUpdate({
+                  qwenRegion: value as "china" | "international",
+                  qwenBaseUrl: getQwenEndpointForRegion(value),
+                  qwenEnvKey: "BAILIAN_CODING_PLAN_API_KEY",
+                  qwenProtocol: "openai",
+                })}
+                options={qwenRegionOptions}
+              />
+            </Row>
+            <Row label="Coding Plan endpoint" description="Generated from the selected region and written into Qwen modelProviders.">
+              <TextInput value={getQwenEndpointForRegion(provider.qwenRegion)} onChange={() => undefined} disabled mono />
+            </Row>
+          </>
+        ) : null}
+        {(provider.qwenAuthMode || "LOCAL_AUTH") === "MODEL_PROVIDER" ? (
+          <>
+            <Row label="Provider protocol" description="Qwen Code groups modelProviders by API protocol.">
+              <SelectInput
+                value={provider.qwenProtocol || "openai"}
+                onChange={(value) => onUpdate({ qwenProtocol: value as "openai" | "anthropic" | "gemini" })}
+                options={qwenProtocolOptions}
+              />
+            </Row>
+            <Row label="Environment key" description="Variable name Qwen reads for this instance's API key.">
+              <TextInput value={provider.qwenEnvKey || "OLLAMA_API_KEY"} onChange={(value) => onUpdate({ qwenEnvKey: value })} mono />
+            </Row>
+            <Row label="Model id" description="The custom model registered in Qwen Code modelProviders and shown on the AI Models page.">
+              <TextInput value={provider.qwenModelId || providerModel || "glm-4.7-flash"} onChange={(value) => onUpdate({ qwenModelId: value })} mono />
+            </Row>
+            <Row label="Base URL" description="OpenAI-compatible, Anthropic, Gemini, or local endpoint used by this model entry.">
+              <TextInput value={provider.qwenBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => onUpdate({ qwenBaseUrl: value })} mono />
+            </Row>
+          </>
+        ) : null}
+        <Row label="Generated settings preview" description="Masked Qwen settings.json fragment produced for Docker runtime." last={isLast}>
+          <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            {buildQwenSettingsPreview(provider, providerModel, dockerExecutionEnabled)}
+          </pre>
+        </Row>
+      </>
+    ) : provider.provider === "opencode" ? (
+      <>
+        <Row label="Authentication mode" description="Choose how this OpenCode instance authenticates and how its runtime opencode.json is generated.">
+          <PillChoiceGroup
+            value={provider.openCodeAuthMode || "LOCAL_AUTH"}
+            onChange={(value) => onUpdate({
+              openCodeAuthMode: value as SystemProviderConfig["openCodeAuthMode"],
+              ...(value === "CUSTOM_PROVIDER" ? {
+                apiKey: provider.apiKey || "your_api_key",
+                openCodeProviderId: provider.openCodeProviderId || "ollama",
+                openCodeModelId: provider.openCodeModelId || "glm-4.7-flash",
+                openCodeBaseUrl: provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1",
+                openCodeEnvKey: provider.openCodeEnvKey || "OLLAMA_API_KEY",
+                openCodePackage: provider.openCodePackage || "@ai-sdk/openai-compatible",
+              } : {}),
+            })}
+            options={openCodeAuthModeOptions}
+          />
+        </Row>
+        {(provider.openCodeAuthMode || "LOCAL_AUTH") === "LOCAL_AUTH" ? (
+          <>
+            <Row label="Mount OpenCode auth" description="Copy OpenCode auth.json and related local auth state into Docker.">
+              <Toggle value={provider.mountAuth} onChange={() => onUpdate({ mountAuth: !provider.mountAuth })} />
+            </Row>
+            <Row label="OpenCode auth path" description="Usually `~/.local/share/opencode`; contains auth.json created by `/connect` or `opencode auth login`.">
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} disabled={!provider.mountAuth} mono />
+            </Row>
+          </>
+        ) : null}
+        {(provider.openCodeAuthMode || "LOCAL_AUTH") !== "LOCAL_AUTH" ? (
+          <>
+            <Row label="Provider id" description="The provider segment in OpenCode's `provider/model` selector.">
+              <TextInput value={provider.openCodeProviderId || splitOpenCodeModel(providerModel).providerId} onChange={(value) => onUpdate({ openCodeProviderId: value })} mono />
+            </Row>
+            <Row label="Environment key" description="Host environment variable to import when the stored API key is empty. Runtime config maps it to OPENCODE_API_KEY.">
+              <TextInput value={provider.openCodeEnvKey || "OLLAMA_API_KEY"} onChange={(value) => onUpdate({ openCodeEnvKey: value })} mono />
+            </Row>
+          </>
+        ) : null}
+        {(provider.openCodeAuthMode || "LOCAL_AUTH") === "CUSTOM_PROVIDER" ? (
+          <>
+            <Row label="Model id" description="The model segment registered under the custom provider.">
+              <TextInput value={provider.openCodeModelId || splitOpenCodeModel(providerModel).modelId} onChange={(value) => onUpdate({ openCodeModelId: value })} mono />
+            </Row>
+            <Row label="Provider package" description="OpenCode provider adapter package. OpenAI-compatible endpoints use the AI SDK compatible adapter.">
+              <TextInput value={provider.openCodePackage || "@ai-sdk/openai-compatible"} onChange={(value) => onUpdate({ openCodePackage: value })} mono />
+            </Row>
+            <Row label="Base URL" description="OpenAI-compatible endpoint for OpenRouter, Ollama, vLLM, LM Studio, LiteLLM, or a private gateway.">
+              <TextInput value={provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1"} onChange={(value) => onUpdate({ openCodeBaseUrl: value })} mono />
+            </Row>
+          </>
+        ) : null}
+        <Row label="Generated config preview" description="Masked OpenCode config materialized from OPENCODE_CONFIG_CONTENT for host and Docker runs." last={isLast}>
+          <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            {buildOpenCodeConfigPreview(provider, providerModel, dockerExecutionEnabled)}
+          </pre>
+        </Row>
+      </>
+    ) : provider.provider === "claude-code" || provider.provider === "codex" ? (
+      <>
+        <Row label="Mount local auth" description={`Use a copied host auth directory for ${getProviderTypeLabel(provider.provider)} instead of, or alongside, an API key.`}>
+          <Toggle value={provider.mountAuth} onChange={() => onUpdate({ mountAuth: !provider.mountAuth })} />
+        </Row>
+        <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance.">
+          <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} disabled={!provider.mountAuth} mono />
+        </Row>
+        <Row
+          label={provider.provider === "claude-code" ? "Anthropic base URL" : "OpenAI base URL"}
+          description={
+            provider.provider === "claude-code"
+              ? "Override ANTHROPIC_BASE_URL. Use an OpenRouter or compatible endpoint (e.g. https://openrouter.ai/api/v1). Leave empty to use the default Anthropic API."
+              : "Override OPENAI_BASE_URL. Route Codex through a custom OpenAI-compatible endpoint. Leave empty to use the default OpenAI API."
+          }
+          last={isLast}
+        >
+          <TextInput value={provider.customBaseUrl || ""} onChange={(value) => onUpdate({ customBaseUrl: value || undefined })} mono />
+        </Row>
+      </>
+    ) : provider.provider !== "jules" ? (
+      <>
+        <Row label="Mount local auth" description={`Use a copied host auth directory for ${getProviderTypeLabel(provider.provider)} instead of, or alongside, an API key.`}>
+          <Toggle value={provider.mountAuth} onChange={() => onUpdate({ mountAuth: !provider.mountAuth })} />
+        </Row>
+        <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance." last={isLast}>
+          <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} disabled={!provider.mountAuth} mono />
+        </Row>
+      </>
+    ) : (
+      <Row label="Jules auth mode" description="Jules uses API keys only and does not support a local auth mount." last={isLast}>
+        <div className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">API key only</div>
+      </Row>
+    )}
+  </div>
+);

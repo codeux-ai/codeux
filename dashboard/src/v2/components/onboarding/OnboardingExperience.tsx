@@ -9,13 +9,16 @@ import {
   Box,
   Check,
   ChevronRight,
+  ClipboardList,
   Compass,
   Cpu,
   BookOpen,
   FolderOpen,
+  GitBranch,
   Github,
   Info,
   KeyRound,
+  Layers,
   Monitor,
   Plus,
   RefreshCw,
@@ -23,7 +26,6 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
-  Trash2,
   X,
 } from "lucide-preact";
 import { fetchOnboardingReadiness } from "../../../lib/api/dashboard-api.js";
@@ -33,31 +35,72 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { OnboardingIntro } from "./OnboardingIntro.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
+import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
+import { Row, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
+import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
+import { JiraIcon } from "../icons/JiraIcon.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
 import type { OnboardingProviderCredentialStatus, OnboardingRuntimeReadiness, ProviderConfigId, ProviderId, ProjectSettings, SystemSettings } from "../../../types.js";
 import {
   createProjectProviderDraft,
   createSystemProviderDraft,
+  getProviderInstanceLabel,
   getProviderTypeLabel,
   sortProviderConfigEntries,
 } from "../../lib/settings-view-models.js";
+
+const CODEUX_REPO_URL = "https://github.com/codeux-ai/codeux";
+
+const LICENSE_TEXT = `MIT License
+
+Copyright (c) 2026 Pierre Voss
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.`;
 
 const DeepOceanBackground = lazy(async () => {
   const mod = await import("../chat/DeepOceanBackground.js");
   return { default: mod.DeepOceanBackground as FunctionComponent<{ forceDark?: boolean; className?: string }> };
 });
 
-type StepId = "installation" | "introduction" | "providers" | "provider-setup" | "automation" | "appearance";
+type StepId = "installation" | "introduction" | "providers" | "provider-setup" | "git" | "jira" | "automation" | "appearance" | "defaults";
 
 const steps: Array<{ id: StepId; label: string; icon: typeof Settings }> = [
   { id: "installation", label: "Installation", icon: Box },
   { id: "introduction", label: "Introduction", icon: ShieldCheck },
   { id: "providers", label: "Providers", icon: Cpu },
   { id: "provider-setup", label: "Configure", icon: Settings },
+  { id: "git", label: "Git", icon: GitBranch },
+  { id: "jira", label: "Jira", icon: ClipboardList },
   { id: "automation", label: "Automation", icon: Sparkles },
   { id: "appearance", label: "Appearance", icon: Monitor },
+  { id: "defaults", label: "Default providers", icon: Layers },
 ];
+
+const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
+  host: "",
+  email: "",
+  apiToken: "",
+  autoCloseLinkedIssues: false,
+  defaultProject: "",
+  closeTransitionName: "Done",
+};
 
 const providerMountFields: Partial<Record<ProviderId, keyof SystemSettings["defaults"]["cliWorkflow"]>> = {
   gemini: "containerMountGeminiAuth",
@@ -447,65 +490,30 @@ export const OnboardingExperience: FunctionComponent = () => {
     });
   };
 
-  const configureAuthMode = (
-    providerConfigId: ProviderConfigId,
-    mode: "LOCAL_AUTH" | "API_KEY" | "CUSTOM_PROVIDER" | "ALIBABA_CODING_PLAN",
-  ) => {
-    const provider = settings?.integrations.providers[providerConfigId];
-    if (!provider) {
-      return;
-    }
-    if (provider.provider === "qwen-code") {
-      configureProviderInstance(providerConfigId, {
-        qwenAuthMode: mode === "API_KEY" || mode === "CUSTOM_PROVIDER" ? "MODEL_PROVIDER" : mode,
-        mountAuth: mode === "LOCAL_AUTH",
-        ...(mode === "CUSTOM_PROVIDER" ? {
-          apiKey: provider.apiKey || "your_api_key",
-          qwenBaseUrl: provider.qwenBaseUrl || "http://127.0.0.1:11434/v1",
-          qwenEnvKey: provider.qwenEnvKey || "OLLAMA_API_KEY",
-          qwenModelId: provider.qwenModelId || "glm-4.7-flash",
-          qwenProtocol: "openai" as const,
-        } : {}),
-      });
-      return;
-    }
-    if (provider.provider === "opencode") {
-      configureProviderInstance(providerConfigId, {
-        openCodeAuthMode: mode === "API_KEY" ? "ENV_KEY" : mode === "CUSTOM_PROVIDER" ? "CUSTOM_PROVIDER" : "LOCAL_AUTH",
-        mountAuth: mode === "LOCAL_AUTH",
-        ...(mode === "CUSTOM_PROVIDER" ? {
-          apiKey: provider.apiKey || "your_api_key",
-          openCodeProviderId: provider.openCodeProviderId || "ollama",
-          openCodeModelId: provider.openCodeModelId || "glm-4.7-flash",
-          openCodeBaseUrl: provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1",
-          openCodeEnvKey: provider.openCodeEnvKey || "OLLAMA_API_KEY",
-          openCodePackage: provider.openCodePackage || "@ai-sdk/openai-compatible",
-        } : {}),
-      });
-      return;
-    }
-    configureProviderInstance(providerConfigId, { mountAuth: mode === "LOCAL_AUTH" });
+  const updateCliWorkflow = (updates: Partial<ProjectSettings["cliWorkflow"]>) => {
+    updateSettings((current) => ({
+      ...current,
+      defaults: {
+        ...current.defaults,
+        cliWorkflow: {
+          ...current.defaults.cliWorkflow,
+          ...updates,
+        },
+      },
+    }));
   };
 
-  const getAuthMode = (provider: SystemSettings["integrations"]["providers"][ProviderConfigId]): "LOCAL_AUTH" | "API_KEY" | "CUSTOM_PROVIDER" | "ALIBABA_CODING_PLAN" => {
-    if (provider.provider === "jules") {
-      return "API_KEY";
-    }
-    if (provider.provider === "qwen-code") {
-      return provider.qwenAuthMode === "ALIBABA_CODING_PLAN"
-        ? "ALIBABA_CODING_PLAN"
-        : provider.qwenAuthMode === "MODEL_PROVIDER"
-          ? "CUSTOM_PROVIDER"
-          : "LOCAL_AUTH";
-    }
-    if (provider.provider === "opencode") {
-      return provider.openCodeAuthMode === "CUSTOM_PROVIDER"
-        ? "CUSTOM_PROVIDER"
-        : provider.openCodeAuthMode === "ENV_KEY"
-          ? "API_KEY"
-          : "LOCAL_AUTH";
-    }
-    return provider.mountAuth ? "LOCAL_AUTH" : "API_KEY";
+  const updateJira = (updates: Partial<SystemSettings["integrations"]["jira"]>) => {
+    updateSettings((current) => ({
+      ...current,
+      integrations: {
+        ...current.integrations,
+        jira: {
+          ...(current.integrations.jira || DEFAULT_JIRA_SETTINGS),
+          ...updates,
+        },
+      },
+    }));
   };
 
   const applyAndClose = async () => {
@@ -565,9 +573,14 @@ export const OnboardingExperience: FunctionComponent = () => {
           enabled: selectedProviderTypes.includes(projectProvider.provider),
         };
       }
+      // Respect the explicit worker provider picked on the Default providers step; only
+      // fall back to the first enabled CLI provider when that choice is no longer valid.
       const firstSelectedCliProvider = Object.entries(nextSettings.defaults.aiProvider.providers)
         .find(([, provider]) => provider.enabled && provider.provider !== "jules")?.[0];
-      if (firstSelectedCliProvider) {
+      const chosenWorker = nextSettings.defaults.workers.virtualWorkerProvider;
+      const chosenWorkerProvider = nextSettings.defaults.aiProvider.providers[chosenWorker];
+      const chosenWorkerValid = Boolean(chosenWorkerProvider?.enabled && chosenWorkerProvider.provider !== "jules");
+      if (!chosenWorkerValid && firstSelectedCliProvider) {
         nextSettings.defaults.workers.virtualWorkerProvider = firstSelectedCliProvider;
       }
       nextSettings = await saveSystemSettings(nextSettings);
@@ -587,8 +600,27 @@ export const OnboardingExperience: FunctionComponent = () => {
     return null;
   }
 
-  const canGoNext = active.id !== "provider-setup" || selectedProviders.length === 0 || Boolean(settings);
+  const stepNeedsSettings: StepId[] = ["provider-setup", "git", "jira", "automation", "appearance", "defaults"];
+  const canGoNext = !stepNeedsSettings.includes(active.id) || Boolean(settings);
   const clusterReady = readiness.cluster.status === "ready";
+  const dockerExecutionEnabled = settings?.defaults.cliWorkflow.executionMode === "DOCKER";
+  const jiraSettings = settings?.integrations.jira || DEFAULT_JIRA_SETTINGS;
+  const enabledProviderInstances = settings
+    ? sortProviderConfigEntries(Object.entries(settings.defaults.aiProvider.providers))
+      .filter(([, provider]) => provider.enabled)
+    : [];
+  const providerInstanceOptions = enabledProviderInstances.map(([providerConfigId, provider]) => ({
+    value: providerConfigId,
+    label: getProviderInstanceLabel(provider),
+    icon: <ProviderBrandIcon id={provider.provider} />,
+  }));
+  const workerInstanceOptions = enabledProviderInstances
+    .filter(([, provider]) => provider.provider !== "jules")
+    .map(([providerConfigId, provider]) => ({
+      value: providerConfigId,
+      label: getProviderInstanceLabel(provider),
+      icon: <ProviderBrandIcon id={provider.provider} />,
+    }));
 
   return (
     <>
@@ -757,15 +789,17 @@ export const OnboardingExperience: FunctionComponent = () => {
                     </p>
                     <div className="mt-5 flex flex-wrap gap-2">
                       {[
-                        [Github, "GitHub", "#"],
-                        [Star, "Star on GitHub", "#"],
-                        [BookOpen, "Documentation", "#"],
+                        [Github, "GitHub", CODEUX_REPO_URL],
+                        [Star, "Star on GitHub", CODEUX_REPO_URL],
+                        [BookOpen, "Documentation", `${CODEUX_REPO_URL}#readme`],
                       ].map(([Icon, label, href]) => {
                         const BadgeIcon = Icon as typeof Github;
                         return (
                           <a
                             key={String(label)}
                             href={String(href)}
+                            target="_blank"
+                            rel="noreferrer noopener"
                             className="inline-flex items-center gap-2 rounded-2xl border border-black/[0.06] bg-white/80 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:border-signal-500/25 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-slate-300 dark:hover:text-white"
                           >
                             <BadgeIcon className="h-3.5 w-3.5 text-signal-600 dark:text-signal-300" strokeWidth={2.4} />
@@ -788,6 +822,31 @@ export const OnboardingExperience: FunctionComponent = () => {
                       <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
                     </div>
                   ))}
+                </div>
+                <div data-onboarding-card className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/80 p-6 shadow-[0_18px_48px_rgba(15,23,42,0.055)] dark:border-white/[0.06] dark:bg-white/[0.045]">
+                  <div aria-hidden className="absolute -right-8 -top-10 font-display text-[7rem] font-black leading-none tracking-tight text-black/[0.025] dark:text-white/[0.025]">MIT</div>
+                  <div className="relative z-10">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-signal-600 dark:text-signal-300" strokeWidth={2.4} />
+                        <div className="text-sm font-black uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">License</div>
+                      </div>
+                      <a
+                        href={`${CODEUX_REPO_URL}/blob/main/LICENSE`}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="text-[10px] font-black uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 dark:text-signal-300 dark:hover:text-signal-200"
+                      >
+                        View on GitHub
+                      </a>
+                    </div>
+                    <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                      Code UX is open source under the MIT License. By continuing you acknowledge the terms below.
+                    </p>
+                    <div className="dashboard-scrollbar mt-4 max-h-52 overflow-y-auto overscroll-contain rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] p-4 dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">{LICENSE_TEXT}</pre>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -881,114 +940,135 @@ export const OnboardingExperience: FunctionComponent = () => {
                           </div>
                         ) : providerEntries.map(([providerConfigId, integrationProvider]) => {
                           const projectProvider = settings?.defaults.aiProvider.providers[providerConfigId];
-                          const authMode = getAuthMode(integrationProvider);
-                          const showLocalAuth = providerId !== "jules" && authMode === "LOCAL_AUTH";
-                          const showApiKey = authMode !== "LOCAL_AUTH" || providerId === "jules";
+                          const providerModel = projectProvider?.model
+                            || (integrationProvider.provider === "opencode" ? "anthropic/claude-sonnet-4-5" : "qwen3-coder-plus");
                           return (
-                            <div key={providerConfigId} className="rounded-3xl border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="min-w-[220px] flex-1">
-                                  <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                                    Instance name
-                                    <input
-                                      type="text"
-                                      value={integrationProvider.name}
-                                      onInput={(event) => configureProviderInstance(providerConfigId, { name: event.currentTarget.value })}
-                                      className="mt-2 w-full rounded-2xl border border-black/[0.06] bg-white/85 px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.06] dark:text-slate-100"
-                                    />
-                                  </label>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <label className="flex min-h-[46px] items-center gap-2 rounded-2xl border border-black/[0.06] bg-white/70 px-4 text-xs font-bold uppercase tracking-[0.14em] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
-                                    <input
-                                      type="checkbox"
-                                      checked={projectProvider?.enabled ?? true}
-                                      onChange={(event) => configureProjectProvider(providerConfigId, { enabled: event.currentTarget.checked })}
-                                    />
-                                    Enabled
-                                  </label>
-                                  {providerEntries.length > 1 ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => removeProviderInstance(providerConfigId)}
-                                      className="flex h-[46px] w-[46px] items-center justify-center rounded-2xl border border-status-red/20 bg-status-red/10 text-status-red"
-                                      aria-label={`Remove ${integrationProvider.name}`}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
-                                  ) : null}
-                                </div>
-                              </div>
-
-                              <div className="mt-4">
-                                <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Authentication</div>
-                                <div className="flex flex-wrap gap-2">
-                                  {(providerId === "jules" ? [["API_KEY", "API key"]] : providerId === "qwen-code" ? [["LOCAL_AUTH", "Local auth"], ["API_KEY", "API key"], ["ALIBABA_CODING_PLAN", "Coding Plan"], ["CUSTOM_PROVIDER", "Custom endpoint"]] : providerId === "opencode" ? [["LOCAL_AUTH", "Local auth"], ["API_KEY", "Provider key"], ["CUSTOM_PROVIDER", "Custom endpoint"]] : [["LOCAL_AUTH", "Local auth"], ["API_KEY", "API key"]]).map(([mode, label]) => (
-                                    <button
-                                      key={mode}
-                                      type="button"
-                                      onClick={() => configureAuthMode(providerConfigId, mode as "LOCAL_AUTH" | "API_KEY" | "CUSTOM_PROVIDER" | "ALIBABA_CODING_PLAN")}
-                                      className={`rounded-2xl border px-3 py-2 text-xs font-bold transition-colors ${authMode === mode ? "border-signal-500/30 bg-signal-500/12 text-signal-700 dark:text-signal-200" : "border-black/[0.06] bg-white/70 text-slate-500 hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300"}`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                                {showApiKey ? (
-                                  <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                                    API key
-                                    <div className="mt-2 flex items-center gap-2 rounded-2xl border border-black/[0.06] bg-white/85 px-3 dark:border-white/[0.06] dark:bg-white/[0.06]">
-                                      <KeyRound className="h-4 w-4 shrink-0 text-slate-400" />
-                                      <input
-                                        type="password"
-                                        value={integrationProvider.apiKey}
-                                        placeholder={providerId === "jules" ? "JULES_API_KEY" : "Paste provider key or leave empty for env/local auth"}
-                                        onInput={(event) => configureProviderInstance(providerConfigId, { apiKey: event.currentTarget.value })}
-                                        className="min-h-[46px] w-full bg-transparent font-mono text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
-                                      />
-                                    </div>
-                                  </label>
-                                ) : null}
-                                {showLocalAuth ? (
-                                  <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                                    Auth path
-                                    <input
-                                      type="text"
-                                      value={integrationProvider.authPath || readinessStatus?.authPath || ""}
-                                      onInput={(event) => configureProviderInstance(providerConfigId, { authPath: event.currentTarget.value, mountAuth: true })}
-                                      className="mt-2 min-h-[46px] w-full rounded-2xl border border-black/[0.06] bg-white/85 px-4 font-mono text-sm text-slate-800 outline-none focus:border-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.06] dark:text-slate-100"
-                                    />
-                                  </label>
-                                ) : null}
-                                {providerId === "qwen-code" && authMode === "ALIBABA_CODING_PLAN" ? (
-                                  <ProviderTextField label="Coding Plan region" value={integrationProvider.qwenRegion || "international"} onInput={(value) => configureProviderInstance(providerConfigId, { qwenRegion: value === "china" ? "china" : "international" })} />
-                                ) : null}
-                                {providerId === "qwen-code" && authMode === "CUSTOM_PROVIDER" ? (
-                                  <>
-                                    <ProviderTextField label="Base URL" value={integrationProvider.qwenBaseUrl || "http://127.0.0.1:11434/v1"} onInput={(value) => configureProviderInstance(providerConfigId, { qwenBaseUrl: value })} />
-                                    <ProviderTextField label="Env key" value={integrationProvider.qwenEnvKey || "OLLAMA_API_KEY"} onInput={(value) => configureProviderInstance(providerConfigId, { qwenEnvKey: value })} />
-                                    <ProviderTextField label="Model id" value={integrationProvider.qwenModelId || "glm-4.7-flash"} onInput={(value) => configureProviderInstance(providerConfigId, { qwenModelId: value })} />
-                                  </>
-                                ) : null}
-                                {providerId === "opencode" && authMode === "CUSTOM_PROVIDER" ? (
-                                  <>
-                                    <ProviderTextField label="Provider id" value={integrationProvider.openCodeProviderId || "ollama"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeProviderId: value })} />
-                                    <ProviderTextField label="Model id" value={integrationProvider.openCodeModelId || "glm-4.7-flash"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeModelId: value })} />
-                                    <ProviderTextField label="Base URL" value={integrationProvider.openCodeBaseUrl || "http://127.0.0.1:11434/v1"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeBaseUrl: value })} />
-                                    <ProviderTextField label="Env key" value={integrationProvider.openCodeEnvKey || "OLLAMA_API_KEY"} onInput={(value) => configureProviderInstance(providerConfigId, { openCodeEnvKey: value })} />
-                                  </>
-                                ) : null}
-                              </div>
-                            </div>
+                            <ProviderInstanceCard
+                              key={providerConfigId}
+                              provider={integrationProvider}
+                              providerModel={providerModel}
+                              dockerExecutionEnabled={dockerExecutionEnabled}
+                              onUpdate={(updates) => configureProviderInstance(providerConfigId, updates)}
+                              onRemove={providerEntries.length > 1 ? () => removeProviderInstance(providerConfigId) : undefined}
+                              enabled={projectProvider?.enabled ?? true}
+                              onToggleEnabled={(value) => configureProjectProvider(providerConfigId, { enabled: value })}
+                            />
                           );
                         })}
                       </div>
                     </div>
                   );
                 })}
+              </div>
+            ) : null}
+
+            {active.id === "git" && settings ? (
+              <div className="space-y-4">
+                <div data-onboarding-card>
+                  <SectionCard title="GitHub" watermark="GIT" icon={<Github strokeWidth={2.4} />}>
+                    <Row label="GitHub token" description="System token used for GitHub repository, pull request, and CI integration.">
+                      <TextInput
+                        value={settings.integrations.githubToken || ""}
+                        onChange={(value) => updateSettings((current) => ({ ...current, integrations: { ...current.integrations, githubToken: value } }))}
+                        mono
+                      />
+                    </Row>
+                    <Row label="Mount GitHub auth" description="Copy the host `gh` credential directory into Docker.">
+                      <Toggle
+                        value={settings.defaults.cliWorkflow.containerMountGithubAuth}
+                        onChange={() => updateCliWorkflow({ containerMountGithubAuth: !settings.defaults.cliWorkflow.containerMountGithubAuth })}
+                      />
+                    </Row>
+                    <Row label="GitHub auth path" description="Host path copied into the Docker runtime for GitHub CLI auth." last>
+                      <TextInput
+                        value={settings.defaults.cliWorkflow.containerGithubAuthPath}
+                        onChange={(value) => updateCliWorkflow({ containerGithubAuthPath: value })}
+                        disabled={!settings.defaults.cliWorkflow.containerMountGithubAuth}
+                        mono
+                      />
+                    </Row>
+                  </SectionCard>
+                </div>
+                <div data-onboarding-card>
+                  <SectionCard title="GitLab" watermark="GLB" icon={<GitBranch strokeWidth={2.4} />}>
+                    <Row label="GitLab token" description="System token used for GitLab repository, merge request, and CI integration." last>
+                      <TextInput
+                        value={settings.integrations.gitlabToken || ""}
+                        onChange={(value) => updateSettings((current) => ({ ...current, integrations: { ...current.integrations, gitlabToken: value } }))}
+                        mono
+                      />
+                    </Row>
+                  </SectionCard>
+                </div>
+                <div data-onboarding-card>
+                  <SectionCard title="Git identity" watermark="ID" icon={<GitBranch strokeWidth={2.4} />}>
+                    <Row label="Copy local git config" description="Use the host `.gitconfig` in Docker instead of the configured Code UX git identity." last={settings.defaults.cliWorkflow.containerMountGitConfig}>
+                      <Toggle
+                        value={settings.defaults.cliWorkflow.containerMountGitConfig}
+                        onChange={() => updateCliWorkflow({ containerMountGitConfig: !settings.defaults.cliWorkflow.containerMountGitConfig })}
+                      />
+                    </Row>
+                    {!settings.defaults.cliWorkflow.containerMountGitConfig ? (
+                      <>
+                        <Row label="Git user name" description="Git author name configured inside provider containers.">
+                          <TextInput
+                            value={settings.defaults.cliWorkflow.containerGitUserName}
+                            onChange={(value) => updateCliWorkflow({ containerGitUserName: value })}
+                            placeholder="Code UX"
+                          />
+                        </Row>
+                        <Row label="Git email" description="Git author email configured inside provider containers." last>
+                          <TextInput
+                            value={settings.defaults.cliWorkflow.containerGitUserEmail}
+                            onChange={(value) => updateCliWorkflow({ containerGitUserEmail: value })}
+                            placeholder="agents@codeux.ai"
+                            mono
+                          />
+                        </Row>
+                      </>
+                    ) : null}
+                  </SectionCard>
+                </div>
+              </div>
+            ) : null}
+
+            {active.id === "jira" && settings ? (
+              <div className="space-y-4">
+                <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#0052CC]/18 bg-[#0052CC]/10 text-[#0052CC] dark:border-[#4C9AFF]/18 dark:bg-[#4C9AFF]/10 dark:text-[#4C9AFF]">
+                      <JiraIcon className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <div className="text-base font-black text-slate-900 dark:text-white">Connect Jira (optional)</div>
+                      <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                        Link an issue tracker to import work as tasks and auto-close issues after a sprint. You can skip this and configure it later in Settings.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div data-onboarding-card>
+                  <SectionCard title="Jira Configuration" watermark="JRA" icon={<ClipboardList strokeWidth={2.4} />}>
+                    <Row label="Jira site URL" description="Base URL for Jira Cloud or Data Center, for example `https://company.atlassian.net`.">
+                      <TextInput value={jiraSettings.host} onChange={(value) => updateJira({ host: value })} mono />
+                    </Row>
+                    <Row label="Account email" description="Email used with Jira Cloud API tokens. Leave empty for bearer-token Jira deployments.">
+                      <TextInput value={jiraSettings.email} onChange={(value) => updateJira({ email: value })} mono />
+                    </Row>
+                    <Row label="API token" description="Jira API token used for issue search, issue context loading, and transitions.">
+                      <TextInput value={jiraSettings.apiToken} onChange={(value) => updateJira({ apiToken: value })} mono />
+                    </Row>
+                    <Row label="Default project" description="Project key used to prefill the Jira import JQL.">
+                      <TextInput value={jiraSettings.defaultProject} onChange={(value) => updateJira({ defaultProject: value.toUpperCase() })} mono />
+                    </Row>
+                    <Row label="Close transition" description="Transition name used when auto-closing linked Jira issues after sprint completion.">
+                      <TextInput value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
+                    </Row>
+                    <Row label="Auto-close Jira issues" description="Move linked Jira issues through the configured transition after the sprint completes." last>
+                      <Toggle value={jiraSettings.autoCloseLinkedIssues} onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })} />
+                    </Row>
+                  </SectionCard>
+                </div>
               </div>
             ) : null}
 
@@ -1055,6 +1135,90 @@ export const OnboardingExperience: FunctionComponent = () => {
                     );
                   })}
                 </div>
+              </div>
+            ) : null}
+
+            {active.id === "defaults" && settings ? (
+              <div className="space-y-4">
+                <div data-onboarding-card className="rounded-3xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                  <div className="flex items-start gap-3">
+                    <Layers className="mt-0.5 h-5 w-5 shrink-0 text-signal-600 dark:text-signal-300" />
+                    <div>
+                      <div className="text-base font-black text-slate-900 dark:text-white">Pick your default providers</div>
+                      <div className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                        Choose which configured instance answers by default, and which one virtual workers run inside containers. You can fine-tune per-route routing later on the AI Models page.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {enabledProviderInstances.length === 0 ? (
+                  <div data-onboarding-card className="rounded-3xl border border-ember-500/20 bg-ember-500/10 p-6 text-sm text-ember-700 dark:text-ember-300">
+                    No enabled providers yet. Go back to the Providers and Configure steps to enable at least one instance.
+                  </div>
+                ) : (
+                  <>
+                    <div data-onboarding-card>
+                      <SectionCard title="Default routing" watermark="DEF" icon={<Layers strokeWidth={2.4} />}>
+                        <Row label="Default AI provider" description="The instance used when a route has no explicit override.">
+                          <SelectInput
+                            value={settings.defaults.aiProvider.provider || ""}
+                            onChange={(value) => updateSettings((current) => ({
+                              ...current,
+                              defaults: {
+                                ...current.defaults,
+                                aiProvider: { ...current.defaults.aiProvider, provider: value as ProviderConfigId },
+                              },
+                            }))}
+                            options={providerInstanceOptions}
+                            aria-label="Default AI provider"
+                          />
+                        </Row>
+                        <Row label="Virtual worker provider" description="The CLI instance dispatched inside Docker containers to execute tasks." last>
+                          <SelectInput
+                            value={settings.defaults.workers.virtualWorkerProvider || ""}
+                            onChange={(value) => updateSettings((current) => ({
+                              ...current,
+                              defaults: {
+                                ...current.defaults,
+                                workers: { ...current.defaults.workers, virtualWorkerProvider: value as ProviderConfigId },
+                              },
+                            }))}
+                            options={workerInstanceOptions.length > 0 ? workerInstanceOptions : providerInstanceOptions}
+                            aria-label="Virtual worker provider"
+                          />
+                        </Row>
+                      </SectionCard>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {enabledProviderInstances.map(([providerConfigId, provider]) => {
+                        const isDefault = settings.defaults.aiProvider.provider === providerConfigId;
+                        const isWorker = settings.defaults.workers.virtualWorkerProvider === providerConfigId;
+                        return (
+                          <div data-onboarding-card key={providerConfigId} className="flex items-center justify-between gap-3 rounded-3xl border border-black/[0.06] bg-white/75 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <ProviderBrandIcon id={provider.provider} />
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-black text-slate-900 dark:text-white">{provider.name}</div>
+                                <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{getProviderTypeLabel(provider.provider)}</div>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                              {isDefault ? (
+                                <span className="rounded-full border border-signal-500/25 bg-signal-500/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-200">Default</span>
+                              ) : null}
+                              {isWorker ? (
+                                <span className="rounded-full border border-sky-500/25 bg-sky-500/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-sky-700 dark:text-sky-300">Worker</span>
+                              ) : null}
+                              {!isDefault && !isWorker ? (
+                                <span className="rounded-full border border-black/[0.08] bg-black/[0.03] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.04]">Available</span>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             ) : null}
           </main>
@@ -1154,20 +1318,4 @@ const ToggleRow: FunctionComponent<{
       <span className={`absolute left-1 top-1 block h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`} />
     </button>
   </div>
-);
-
-const ProviderTextField: FunctionComponent<{
-  label: string;
-  value: string;
-  onInput: (value: string) => void;
-}> = ({ label, value, onInput }) => (
-  <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-    {label}
-    <input
-      type="text"
-      value={value}
-      onInput={(event) => onInput(event.currentTarget.value)}
-      className="mt-2 min-h-[46px] w-full rounded-2xl border border-black/[0.06] bg-white/85 px-4 font-mono text-sm text-slate-800 outline-none focus:border-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.06] dark:text-slate-100"
-    />
-  </label>
 );
