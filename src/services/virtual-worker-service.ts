@@ -13,6 +13,7 @@ import { buildTaskRunKey } from "./task-run-key.js";
 import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS, sanitizeToken } from "./cli-workflow-utils.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
+import { StandardError, TransientError, TerminalError } from "../shared/errors/index.js";
 import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
 import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
@@ -138,7 +139,11 @@ export class VirtualWorkerService {
     void this.reconcile();
     this.reconcileTimer = setInterval(() => {
       void this.reconcile().catch((error) => {
-        this.deps.logger?.error("Virtual worker reconcile failed", { error });
+        if (error instanceof TransientError || (error instanceof StandardError && error.retryable)) {
+           this.deps.logger?.warn("Virtual worker reconcile encountered transient error", { error });
+        } else {
+           this.deps.logger?.error("Virtual worker reconcile failed", { error });
+        }
       });
     }, VIRTUAL_WORKER_RECONCILE_MS);
     this.reconcileTimer.unref?.();
@@ -168,7 +173,11 @@ export class VirtualWorkerService {
 
       const cycle = this.runProjectCycle(projectId, reason)
         .catch((error) => {
-          this.deps.logger?.error("Virtual worker cycle failed", { projectId, reason, error });
+          if (error instanceof TransientError || (error instanceof StandardError && error.retryable)) {
+             this.deps.logger?.warn("Virtual worker cycle encountered transient error", { projectId, reason, error });
+          } else {
+             this.deps.logger?.error("Virtual worker cycle failed", { projectId, reason, error });
+          }
         })
         .finally(() => {
           this.activeCycles.delete(projectId);

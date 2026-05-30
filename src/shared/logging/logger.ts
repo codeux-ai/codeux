@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import { inspect } from "util";
 import { getCorrelationId } from "./correlation-id.js";
+import { StandardError } from "../errors/index.js";
 import type { ConsoleLogLevel } from "../../contracts/app-types.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -146,11 +147,33 @@ const inferPurpose = (metadata: LogMetadata | undefined, message: string): LogPu
 };
 
 const normalizeMetadataValue = (value: unknown): unknown => {
+  const sanitizeString = (str: string | undefined): string | undefined => {
+    if (!str) return str;
+    // Replace typical API key patterns or secrets
+    return str.replace(/(sk-[a-zA-Z0-9]{20,})/g, "***REDACTED***")
+              .replace(/(Bearer [a-zA-Z0-9_\-\.]+)/g, "***REDACTED***")
+              .replace(/(api[_-]?key=)[^&\s]+/ig, "$1***REDACTED***")
+              .replace(/(password=)[^&\s]+/ig, "$1***REDACTED***");
+  };
+
+  if (value instanceof StandardError) {
+    return {
+      name: value.name,
+      message: sanitizeString(value.message),
+      code: value.code,
+      retryable: value.retryable,
+      metadata: normalizeMetadataValue(value.metadata),
+      cause: normalizeMetadataValue(value.cause),
+      stack: sanitizeString(value.stack),
+    };
+  }
+
   if (value instanceof Error) {
     return {
       name: value.name,
-      message: value.message,
-      stack: value.stack,
+      message: sanitizeString(value.message),
+      stack: sanitizeString(value.stack),
+      cause: 'cause' in value ? normalizeMetadataValue(value.cause) : undefined,
     };
   }
 

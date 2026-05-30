@@ -10,6 +10,7 @@ import type { CliProviderId, IProviderRunner, ProviderRunResult } from "../infra
 import type { Logger } from "../shared/logging/logger.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
+import { TerminalError, TransientError, ResourceExhaustedError } from "../shared/errors/index.js";
 import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 import { resolveProviderRetryDecision, sleepWithSignal } from "../shared/providers/provider-retry-policy.js";
 import { DEFAULT_PROVIDER_SETTINGS } from "../repositories/settings-defaults.js";
@@ -254,6 +255,51 @@ export class ProviderExecutionService {
             ? await this.deps.providerRunner.runProviderForText(runnerOpts)
             : await this.deps.providerRunner.runProvider(runnerOpts);
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorClassified = classifyProviderError(args.provider, { ok: false, stdout: "", stderr: errorMessage, code: 1 });
+          const isRetryable = resolveProviderRetryDecision(errorClassified, args.workflowSettings);
+
+          let wrappedError: Error;
+          if (error instanceof ProviderQuotaError) {
+             wrappedError = new ResourceExhaustedError({
+               message: `Provider quota exhausted: ${errorMessage}`,
+               cause: error,
+               metadata: {
+                 projectId: args.projectId,
+                 taskId: args.taskId,
+                 provider: args.provider,
+                 invocationId: execInvocationId,
+                 providerInvocationId: invocation?.id,
+               }
+             });
+          } else if (isRetryable) {
+            wrappedError = new TransientError({
+              message: `Transient provider error: ${errorMessage}`,
+              code: "PROVIDER_ERROR",
+              cause: error,
+              metadata: {
+                projectId: args.projectId,
+                taskId: args.taskId,
+                provider: args.provider,
+                invocationId: execInvocationId,
+                providerInvocationId: invocation?.id,
+              }
+            });
+          } else {
+            wrappedError = new TerminalError({
+              message: `Terminal provider error: ${errorMessage}`,
+              code: "PROVIDER_ERROR",
+              cause: error,
+              metadata: {
+                  projectId: args.projectId,
+                  taskId: args.taskId,
+                  provider: args.provider,
+                  invocationId: execInvocationId,
+                  providerInvocationId: invocation?.id,
+              }
+            });
+          }
+
           this.deps.logger?.error("Provider invocation crashed", {
             logPurpose: "invocation",
             invocationId: execInvocationId,
@@ -265,9 +311,10 @@ export class ProviderExecutionService {
             model: args.model,
             purpose: args.purpose,
             durationMs: Date.now() - startedMs,
-            error,
+            error: wrappedError,
           });
-          throw error;
+
+          throw wrappedError;
         }
       })();
 

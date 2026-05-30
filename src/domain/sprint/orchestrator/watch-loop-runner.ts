@@ -28,6 +28,7 @@ import { decideFinalizationTransition } from "./watch-loop-finalization-policy.j
 import { buildConflictSummaryMarkdown, selectMergedTaskContexts } from "./conflict-summary-utils.js";
 import { WorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
 import { evaluateSprintRunState, isMainMergeAttentionItem } from "./sprint-state-evaluator.js";
+import { StandardError, TransientError, TerminalError } from "../../../shared/errors/index.js";
 import type { HeartbeatService } from "../../../services/heartbeat-service.js";
 import type { SprintIssueService } from "../../../services/sprint-issue-service.js";
 
@@ -164,7 +165,9 @@ export class WatchLoopRunner {
         return fullReport;
       }
 
-      const cycleResult = await this.handleCycleTransition({
+      let cycleResult;
+      try {
+        cycleResult = await this.handleCycleTransition({
         args,
         scopedExecutionContext,
         repoPath,
@@ -180,6 +183,17 @@ export class WatchLoopRunner {
         sprintRunId,
         planningAgentPresetId,
       });
+      } catch (error) {
+        if (error instanceof TransientError || (error instanceof StandardError && error.retryable)) {
+          this.deps.logger.warn("Transient error in cycle runner, retrying...", { error, sprintRunId });
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          continue;
+        } else if (error instanceof TerminalError || (error instanceof StandardError && !error.retryable)) {
+          this.deps.logger.error("Terminal error in cycle runner, aborting loop.", { error, sprintRunId });
+          throw error;
+        }
+        throw error;
+      }
 
       const {
         subtasks,
