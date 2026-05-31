@@ -8,7 +8,7 @@ import { PlanningAgentService } from "../../services/planning-agent-service.js";
 import { QuicksprintService } from "../../services/quicksprint-service.js";
 import { ProjectSetupService } from "../../services/project-setup-service.js";
 import { WorkspaceManager } from "../../infrastructure/providers/cli/workspace-manager.js";
-import { formatSprintBranch } from "../../git/sprint-branch-scheme.js";
+import { formatSprintBranch } from "../../domain/sprint/branch-name-generator.js";
 
 import { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import { ManagementToolHandler } from "../../mcp/management-tool-handler.js";
