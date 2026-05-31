@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { createHash } from "crypto";
 import type { IncomingMessage, Server as HttpServer } from "http";
+import * as net from "net";
 import type { Socket } from "net";
 import type { Express } from "express";
 import type { Logger } from "../shared/logging/logger.js";
@@ -312,6 +313,8 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       let loginCmd = binaryName;
       if (providerId === "codex") {
         loginCmd = "codex login"; // codex requires the explicit login command to prompt auth
+      } else if (providerId === "claude-code") {
+        loginCmd = "claude auth login";
       }
 
       const fallbackKey = getFallbackInstallKey(providerId);
@@ -320,8 +323,6 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       let proxyCmd = "";
       if (providerId === "codex") {
         proxyCmd = "node -e \"const net = require('net'), os = require('os'); let ip = '0.0.0.0'; const ifs = os.networkInterfaces(); for (const n of Object.keys(ifs)) { for (const netIf of ifs[n]) { if (netIf.family === 'IPv4' && !netIf.internal) { ip = netIf.address; break; } } } const s = net.createServer((c) => { const p = net.connect(1455, '127.0.0.1', () => { c.pipe(p).pipe(c); }); p.on('error', () => c.destroy()); c.on('error', () => p.destroy()); }); s.on('error', () => {}); s.listen(1455, ip);\" &";
-      } else if (providerId === "claude-code") {
-        proxyCmd = "node -e \"const net = require('net'), os = require('os'); let ip = '0.0.0.0'; const ifs = os.networkInterfaces(); for (const n of Object.keys(ifs)) { for (const netIf of ifs[n]) { if (netIf.family === 'IPv4' && !netIf.internal) { ip = netIf.address; break; } } } const s = net.createServer((c) => { const p = net.connect(36573, '127.0.0.1', () => { c.pipe(p).pipe(c); }); p.on('error', () => c.destroy()); c.on('error', () => p.destroy()); }); s.on('error', () => {}); s.listen(36573, ip);\" &";
       }
 
       const containerCmd = [
@@ -340,33 +341,57 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         "export BROWSER=xdg-open",
         "mkdir -p /tmp/.npm-global/bin",
         "cat << 'EOF' > /tmp/.npm-global/bin/xdg-open",
-        "#!/bin/sh",
-        "printf \"[DEBUG] xdg-open called with args: %s\\n\" \"$*\"",
-        "URL=\"\"",
-        "for arg in \"$@\"; do",
-        "  case \"$arg\" in",
-        "    http://*|https://*)",
-        "      URL=\"$arg\"",
-        "      break",
-        "      ;;",
-        "  esac",
-        "done",
-        "if [ -n \"$URL\" ]; then",
-        "  printf \"\\n\"",
-        "  printf \"\\033[32m============================================================\\033[0m\\n\"",
-        "  printf \"\\033[32m   🔗 CONTAINER BROWSER REDIRECT\\033[0m\\n\"",
-        "  printf \"\\033[32m============================================================\\033[0m\\n\"",
-        "  printf \"\\033[32m  Claude Code requested to open a browser window for login.\\033[0m\\n\"",
-        "  printf \"\\033[32m  Please open the following URL on your local machine:\\033[0m\\n\"",
-        "  printf \"\\n\"",
-        "  printf \"  \\033[36m%s\\033[0m\\n\" \"$URL\"",
-        "  printf \"\\n\"",
-        "  printf \"  [CONTAINER_OPEN_URL]: %s\\n\" \"$URL\"",
-        "  printf \"\\033[32m============================================================\\033[0m\\n\"",
-        "  printf \"\\n\"",
-        "  printf \"%s\" \"$URL\" > /tmp/.credentials/login_url.txt",
-        "fi",
-        "exit 0",
+        "#!/usr/bin/env node",
+        "const fs = require('fs');",
+        "const { spawn } = require('child_process');",
+        "const args = process.argv.slice(2);",
+        "console.log('[DEBUG] xdg-open called with args:', args);",
+        "let url = args.find(arg => arg.startsWith('http://') || arg.startsWith('https://'));",
+        "if (url) {",
+        "  const decodedUrl = decodeURIComponent(url);",
+        "  const match = decodedUrl.match(/redirect_uri=https?:\\/\\/(?:localhost|127\\.0\\.0\\.1):(\\d+)/);",
+        "  if (match && match[1]) {",
+        "    const randomPort = parseInt(match[1], 10);",
+        "    const providerId = process.env.PROVIDER_ID;",
+        "    let targetPort = randomPort;",
+        "    if (providerId === 'claude-code') {",
+        "      targetPort = 36573;",
+        "    } else if (providerId === 'codex') {",
+        "      targetPort = 1455;",
+        "    }",
+        "    console.log(`[DEBUG] Detected ${providerId} random callback port: ${randomPort}`);",
+        "    if (targetPort !== randomPort) {",
+        "      try {",
+        "        if (fs.existsSync('/tmp/proxy.pid')) {",
+        "          const pid = fs.readFileSync('/tmp/proxy.pid', 'utf8').trim();",
+        "          process.kill(parseInt(pid, 10), 'SIGTERM');",
+        "        }",
+        "      } catch (e) {}",
+        "      const proxyCode = 'const net = require(\"net\");\\n' +",
+        "        'const proxyServer = net.createServer((clientSocket) => {\\n' +",
+        "        '  const serverSocket = net.connect(' + randomPort + ', \"127.0.0.1\", () => {\\n' +",
+        "        '    clientSocket.pipe(serverSocket).pipe(clientSocket);\\n' +",
+        "        '  });\\n' +",
+        "        '  clientSocket.on(\"error\", () => serverSocket.destroy());\\n' +",
+        "        '  serverSocket.on(\"error\", () => clientSocket.destroy());\\n' +",
+        "        '});\\n' +",
+        "        'proxyServer.listen(' + targetPort + ', \"0.0.0.0\");';",
+        "      fs.writeFileSync('/tmp/proxy.js', proxyCode);",
+        "      const out = fs.openSync('/tmp/proxy.log', 'a');",
+        "      const err = fs.openSync('/tmp/proxy.log', 'a');",
+        "      const child = spawn('node', ['/tmp/proxy.js'], {",
+        "        detached: true,",
+        "        stdio: ['ignore', out, err]",
+        "      });",
+        "      fs.writeFileSync('/tmp/proxy.pid', String(child.pid));",
+        "      child.unref();",
+        "    }",
+        "    fs.writeFileSync('/tmp/.credentials/login_url.txt', url);",
+        "  } else {",
+        "    fs.writeFileSync('/tmp/.credentials/login_url.txt', url);",
+        "  }",
+        "}",
+        "process.exit(0);",
         "EOF",
         "chmod +x /tmp/.npm-global/bin/xdg-open",
         "ln -sf /tmp/.npm-global/bin/xdg-open /tmp/.npm-global/bin/sensible-browser",
@@ -379,7 +404,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         proxyCmd,
         `script -q -c "export NPM_CONFIG_PREFIX=/tmp/.npm-global && export PATH=/tmp/.npm-global/bin:/tmp/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && export BROWSER=xdg-open && stty cols 80 rows 24 && ${loginCmd}" /dev/null`,
       ].filter(Boolean).join("\n");
-
+ 
       const userSpec = getDockerUserSpec();
       let networkArgs = ["--network", "host"];
       if (providerId === "codex") {
@@ -405,6 +430,8 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         `code-ux.command=${loginCmd}`,
         "-e",
         "HOME=/tmp",
+        "-e",
+        `PROVIDER_ID=${providerId}`,
         "--user",
         userSpec,
         "-v",
@@ -435,15 +462,48 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
 
       // Watch for the login URL file written by our custom xdg-open wrapper
       const urlFilePath = path.join(tempCredsDir, "login_url.txt");
+      let hostProxyServer: net.Server | null = null;
       const watchInterval = setInterval(async () => {
         if (session.finalized) {
           clearInterval(watchInterval);
+          if (hostProxyServer) {
+            hostProxyServer.close();
+          }
           return;
         }
         try {
           const content = await fs.readFile(urlFilePath, "utf8");
           const url = content.trim();
           if (url && url.startsWith("http")) {
+            const decodedUrl = decodeURIComponent(url);
+            const match = decodedUrl.match(/redirect_uri=https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)/);
+            if (match && match[1]) {
+              const randomPort = parseInt(match[1], 10);
+              const targetPort = 36573;
+              if (targetPort !== randomPort) {
+                try {
+                  if (hostProxyServer) {
+                    try { hostProxyServer.close(); } catch (_) {}
+                  }
+                  hostProxyServer = net.createServer((clientSocket) => {
+                    const serverSocket = net.connect(targetPort, "127.0.0.1", () => {
+                      clientSocket.pipe(serverSocket).pipe(clientSocket);
+                    });
+                    clientSocket.on("error", () => serverSocket.destroy());
+                    serverSocket.on("error", () => clientSocket.destroy());
+                  });
+                  hostProxyServer.listen(randomPort, "127.0.0.1", () => {
+                    options.logger?.info(`[DEBUG] Host Proxy listening on 127.0.0.1:${randomPort} -> 127.0.0.1:${targetPort}`);
+                  });
+                  if (typeof hostProxyServer.unref === "function") {
+                    hostProxyServer.unref();
+                  }
+                } catch (err) {
+                  options.logger?.error(`[DEBUG] Failed to start host proxy on port ${randomPort}: ${String(err)}`);
+                }
+              }
+            }
+
             for (const client of session.clients) {
               sendJson(client, { type: "login_url", url });
             }
@@ -470,7 +530,14 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         if (!loginSucceeded) {
           if (
             (providerId === "gemini" && session.outputBuffer.includes("Signed in")) ||
-            (providerId === "codex" && session.outputBuffer.includes("Successfully logged in"))
+            (providerId === "codex" && session.outputBuffer.includes("Successfully logged in")) ||
+            (providerId === "claude-code" && (
+              session.outputBuffer.includes("Logged in") ||
+              session.outputBuffer.includes("Login successful") ||
+              session.outputBuffer.includes("Authentication successful") ||
+              session.outputBuffer.includes("Successfully authenticated") ||
+              session.outputBuffer.includes("Authenticated successfully")
+            ))
           ) {
             loginSucceeded = true;
             setTimeout(() => {

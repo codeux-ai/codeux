@@ -512,7 +512,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                   <div>
                     <h4 className="text-xs font-bold text-white">Browser Authentication Requested</h4>
                     <p className="mt-1 text-[11px] text-slate-400 leading-normal">
-                      Claude Code is waiting for authentication. Please log in using the button below.
+                      {providerName} is waiting for authentication. Please log in using the button below.
                     </p>
                   </div>
                 </div>
@@ -522,7 +522,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                   rel="noopener noreferrer"
                   className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-void-950 hover:bg-signal-400 transition-all duration-200 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_4px_30px_rgba(0,224,160,0.4)] cursor-pointer"
                 >
-                  Authorize Claude Code
+                  Authorize {providerName}
                 </a>
               </div>
             </div>
