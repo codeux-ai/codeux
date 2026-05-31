@@ -24,6 +24,23 @@ interface TerminalSession {
   lastDisconnectAt?: number;
   hostProxyServer?: net.Server | null;
   watchInterval?: NodeJS.Timeout;
+  targetPort?: number;
+}
+
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+      server.close(() => {
+        resolve(port);
+      });
+    });
+    server.on("error", (err) => {
+      reject(err);
+    });
+  });
 }
 
 const activeTerminalSessions = new Map<string, TerminalSession>();
@@ -349,9 +366,20 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       }
       const baseImage = systemSettings.defaults.cliWorkflow.containerImage.trim() || "node:24-bookworm";
 
+      let targetPort = 0;
+      if (providerId === "codex" || providerId === "claude-code") {
+        try {
+          targetPort = await getFreePort();
+        } catch (err) {
+          options.logger?.error(`Failed to find a free port: ${String(err)}`);
+          targetPort = providerId === "claude-code" ? 36573 : 1455;
+        }
+      }
+
+      const resolvedConfigId = providerConfigId || providerId;
       const sessionId = Math.random().toString(36).substring(2, 15);
-      const hostCredsDir = path.join(os.homedir(), ".code-ux", "credentials", providerId);
-      const tempCredsDir = path.join(os.homedir(), ".code-ux", "credentials", `${providerId}-temp-${sessionId}`);
+      const hostCredsDir = path.join(os.homedir(), ".code-ux", "credentials", resolvedConfigId);
+      const tempCredsDir = path.join(os.homedir(), ".code-ux", "credentials", `${resolvedConfigId}-temp-${sessionId}`);
 
       // Ensure the temp credentials folder starts completely empty
       try {
@@ -374,7 +402,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
 
       let proxyCmd = "";
       if (providerId === "codex") {
-        proxyCmd = "node -e \"const net = require('net'), os = require('os'); let ip = '0.0.0.0'; const ifs = os.networkInterfaces(); for (const n of Object.keys(ifs)) { for (const netIf of ifs[n]) { if (netIf.family === 'IPv4' && !netIf.internal) { ip = netIf.address; break; } } } const s = net.createServer((c) => { const p = net.connect(1455, '127.0.0.1', () => { c.pipe(p).pipe(c); }); p.on('error', () => c.destroy()); c.on('error', () => p.destroy()); }); s.on('error', () => {}); s.listen(1455, ip);\" &";
+        proxyCmd = `node -e "const net = require('net'), os = require('os'); let ip = '0.0.0.0'; const ifs = os.networkInterfaces(); for (const n of Object.keys(ifs)) { for (const netIf of ifs[n]) { if (netIf.family === 'IPv4' && !netIf.internal) { ip = netIf.address; break; } } } const s = net.createServer((c) => { const p = net.connect(${targetPort}, '127.0.0.1', () => { c.pipe(p).pipe(c); }); p.on('error', () => c.destroy()); c.on('error', () => p.destroy()); }); s.on('error', () => {}); s.listen(${targetPort}, ip);" &`;
       }
 
       const containerCmd = [
@@ -406,7 +434,9 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         "    const randomPort = parseInt(match[1], 10);",
         "    const providerId = process.env.PROVIDER_ID;",
         "    let targetPort = randomPort;",
-        "    if (providerId === 'claude-code') {",
+        "    if (process.env.TARGET_PORT) {",
+        "      targetPort = parseInt(process.env.TARGET_PORT, 10);",
+        "    } else if (providerId === 'claude-code') {",
         "      targetPort = 36573;",
         "    } else if (providerId === 'codex') {",
         "      targetPort = 1455;",
@@ -456,13 +486,13 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         proxyCmd,
         `script -q -c "export NPM_CONFIG_PREFIX=/tmp/.npm-global && export PATH=/tmp/.npm-global/bin:/tmp/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && export BROWSER=xdg-open && stty cols 80 rows 24 && ${loginCmd}" /dev/null`,
       ].filter(Boolean).join("\n");
- 
+
       const userSpec = getDockerUserSpec();
       let networkArgs = ["--network", "host"];
       if (providerId === "codex") {
-        networkArgs = ["-p", "1455:1455"];
+        networkArgs = ["-p", `${targetPort}:${targetPort}`];
       } else if (providerId === "claude-code") {
-        networkArgs = ["-p", "36573:36573"];
+        networkArgs = ["-p", `${targetPort}:${targetPort}`];
       }
 
       const dockerArgs = [
@@ -484,6 +514,8 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         "HOME=/tmp",
         "-e",
         `PROVIDER_ID=${providerId}`,
+        "-e",
+        `TARGET_PORT=${targetPort}`,
         "--user",
         userSpec,
         "-v",
@@ -508,6 +540,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         createdAt: Date.now(),
         lastHeartbeatAt: Date.now(),
         finalized: false,
+        targetPort,
       };
 
       activeTerminalSessions.set(sessionId, session);
@@ -531,7 +564,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
             const match = decodedUrl.match(/redirect_uri=https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)/);
             if (match && match[1]) {
               const randomPort = parseInt(match[1], 10);
-              const targetPort = 36573;
+              const targetPort = session.targetPort || (providerId === "claude-code" ? 36573 : 1455);
               if (targetPort !== randomPort) {
                 try {
                   if (session.hostProxyServer) {

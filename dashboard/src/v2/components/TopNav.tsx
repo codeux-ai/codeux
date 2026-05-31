@@ -190,7 +190,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     } = useProjectData();
     const projectId = selectedProject?.id || null;
     const settings = useProjectEffectiveSettings(projectId);
-    const sprintKeyPrefix = settings.data?.settings.git.sprintKeyPrefix || "SPR";
+    const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
 
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
 
