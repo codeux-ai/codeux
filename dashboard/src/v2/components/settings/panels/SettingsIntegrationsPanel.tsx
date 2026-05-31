@@ -52,13 +52,13 @@ const getFirstCliProviderConfigId = (providers: ProjectSettings["aiProvider"]["p
   Object.entries(providers).find(([, provider]) => provider.provider !== "jules")?.[0] || null
 );
 
-const syncProjectProvidersToIntegrationCatalog = (
-  settings: SystemSettings,
+const syncProjectSettingsToIntegrationCatalog = (
+  projectSettings: ProjectSettings,
   nextIntegrationProviders: SystemSettings["integrations"]["providers"],
 ): ProjectSettings => {
   const nextProjectProviders = Object.fromEntries(
     Object.entries(nextIntegrationProviders).map(([providerConfigId, provider]) => {
-      const existingProvider = settings.defaults.aiProvider.providers[providerConfigId];
+      const existingProvider = projectSettings.aiProvider.providers[providerConfigId];
       const configuredOpenCodeModel = provider.provider === "opencode"
         ? getOpenCodeConfiguredModel(provider, existingProvider?.model)
         : null;
@@ -85,7 +85,7 @@ const syncProjectProvidersToIntegrationCatalog = (
   );
 
   const nextInvocationRouting = Object.fromEntries(
-    Object.entries(settings.defaults.aiProvider.invocationRouting).map(([routeId, route]) => [
+    Object.entries(projectSettings.aiProvider.invocationRouting).map(([routeId, route]) => [
       routeId,
       {
         ...route,
@@ -98,28 +98,35 @@ const syncProjectProvidersToIntegrationCatalog = (
     ]),
   ) as ProjectSettings["aiProvider"]["invocationRouting"];
 
-  const fallbackGlobalProvider = settings.defaults.aiProvider.provider && nextProjectProviders[settings.defaults.aiProvider.provider]
-    ? settings.defaults.aiProvider.provider
+  const fallbackGlobalProvider = projectSettings.aiProvider.provider && nextProjectProviders[projectSettings.aiProvider.provider]
+    ? projectSettings.aiProvider.provider
     : Object.keys(nextProjectProviders)[0] || null;
-  const fallbackWorkerProvider = nextProjectProviders[settings.defaults.workers.virtualWorkerProvider]
-    ? settings.defaults.workers.virtualWorkerProvider
+  const fallbackWorkerProvider = nextProjectProviders[projectSettings.workers.virtualWorkerProvider]
+    ? projectSettings.workers.virtualWorkerProvider
     : getFirstCliProviderConfigId(nextProjectProviders)
       || fallbackGlobalProvider
-      || settings.defaults.workers.virtualWorkerProvider;
+      || projectSettings.workers.virtualWorkerProvider;
 
   return {
-    ...settings.defaults,
+    ...projectSettings,
     aiProvider: {
-      ...settings.defaults.aiProvider,
+      ...projectSettings.aiProvider,
       provider: fallbackGlobalProvider,
       providers: nextProjectProviders,
       invocationRouting: nextInvocationRouting,
     },
     workers: {
-      ...settings.defaults.workers,
+      ...projectSettings.workers,
       virtualWorkerProvider: fallbackWorkerProvider,
     },
   };
+};
+
+const syncProjectProvidersToIntegrationCatalog = (
+  settings: SystemSettings,
+  nextIntegrationProviders: SystemSettings["integrations"]["providers"],
+): ProjectSettings => {
+  return syncProjectSettingsToIntegrationCatalog(settings.defaults, nextIntegrationProviders);
 };
 
 const CatalogActionButton: FunctionComponent<{
@@ -175,6 +182,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     handleImportHints,
     updateEditableSettings,
     updateSystem,
+    updateProject,
   } = state;
 
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
@@ -285,7 +293,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
   ): void => {
     updateSystem((current) => {
       const nextProviders = transform({ ...current.integrations.providers });
-      return {
+      const nextSystem = {
         ...current,
         integrations: {
           ...current.integrations,
@@ -293,6 +301,12 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         },
         defaults: syncProjectProvidersToIntegrationCatalog(current, nextProviders),
       };
+
+      if (state.projectSettings) {
+        updateProject((proj) => syncProjectSettingsToIntegrationCatalog(proj, nextProviders));
+      }
+
+      return nextSystem;
     });
   };
 
@@ -323,7 +337,7 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
           ...updates,
         },
       };
-      return {
+      const nextSystem = {
         ...current,
         integrations: {
           ...current.integrations,
@@ -331,6 +345,12 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
         },
         defaults: syncProjectProvidersToIntegrationCatalog(current, nextProviders),
       };
+
+      if (state.projectSettings) {
+        updateProject((proj) => syncProjectSettingsToIntegrationCatalog(proj, nextProviders));
+      }
+
+      return nextSystem;
     });
   };
 

@@ -478,6 +478,7 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
       dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
       enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
       consoleLogLevel: DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel,
+      lastActiveScope: "system",
     },
     integrations: {
       providers: buildDefaultIntegrationProviders(externalHints),
@@ -619,6 +620,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   const consoleLogLevel = runtime.consoleLogLevel === "full"
     ? "full"
     : defaults.runtime.consoleLogLevel;
+  const lastActiveScope = runtime.lastActiveScope === "project" ? "project" : "system";
 
   const defaultsInput = sanitizeProjectSettings({
     ...toRecord(input.defaults),
@@ -639,6 +641,7 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       dashboardPort,
       enableDebugLogFile,
       consoleLogLevel,
+      lastActiveScope,
     },
     integrations: {
       providers: integrations,
@@ -676,7 +679,13 @@ export function resolveProjectSettings(
   systemSettings: SystemSettings,
   projectOverride?: ProjectSettingsOverride | null,
 ): ProjectSettings {
-  return sanitizeProjectSettings(deepMerge(systemSettings.defaults, projectOverride || {}), undefined);
+  return sanitizeProjectSettings(
+    {
+      ...deepMerge(systemSettings.defaults, projectOverride || {}),
+      integrations: systemSettings.integrations,
+    },
+    undefined
+  );
 }
 
 export function resolveSprintProjectSettings(
@@ -685,7 +694,13 @@ export function resolveSprintProjectSettings(
   sprintOverride?: SprintSettingsOverride | null,
 ): ProjectSettings {
   const projectSettings = resolveProjectSettings(systemSettings, projectOverride);
-  return sanitizeProjectSettings(deepMerge(projectSettings, sprintOverride || {}), undefined);
+  return sanitizeProjectSettings(
+    {
+      ...deepMerge(projectSettings, sprintOverride || {}),
+      integrations: systemSettings.integrations,
+    },
+    undefined
+  );
 }
 
 export function resolveEffectiveDashboardSettings(
@@ -773,17 +788,31 @@ export function resolveDashboardSettings(args: {
 export function toProjectSettingsOverride(
   base: ProjectSettings,
   patch: unknown,
+  integrations?: SystemSettings["integrations"],
   externalHints?: ExternalSettingsHints,
 ): ProjectSettingsOverride {
-  const merged = sanitizeProjectSettings(deepMerge(base, patch), externalHints);
+  const merged = sanitizeProjectSettings(
+    {
+      ...deepMerge(base, patch),
+      integrations,
+    },
+    externalHints
+  );
   return (deepDiff(base, merged) || {}) as ProjectSettingsOverride;
 }
 
 export function toSprintSettingsOverride(
   base: ProjectSettings,
   patch: unknown,
+  integrations?: SystemSettings["integrations"],
   externalHints?: ExternalSettingsHints,
 ): SprintSettingsOverride {
-  const merged = sanitizeProjectSettings(deepMerge(base, patch), externalHints);
+  const merged = sanitizeProjectSettings(
+    {
+      ...deepMerge(base, patch),
+      integrations,
+    },
+    externalHints
+  );
   return (deepDiff(base, merged) || {}) as SprintSettingsOverride;
 }

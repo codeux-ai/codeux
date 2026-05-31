@@ -85,6 +85,7 @@ export interface SystemRuntimeSettings {
   dashboardPort: number;
   enableDebugLogFile: boolean;
   consoleLogLevel: ConsoleLogLevel;
+  lastActiveScope?: "system" | "project";
 }
 
 export interface SystemProviderCredentialSettings {

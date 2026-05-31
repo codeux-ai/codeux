@@ -210,12 +210,60 @@ describe("Settings Resolution Service", () => {
       const baseProject = buildDefaultProjectSettings();
       const systemSettings: SystemSettings = {
         runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
-        integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
+        integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" } as any,
         defaults: baseProject,
         mcpTools: [],
       };
       const settings = resolveProjectSettings(systemSettings, { automationLevel: "FULL" });
       expect(settings.automationLevel).toBe("FULL");
+    });
+
+    it("should preserve custom integrations from systemSettings", () => {
+      const baseProject = buildDefaultProjectSettings();
+      const customProviderId = "codex-custom-2";
+      const systemSettings: SystemSettings = {
+        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        integrations: {
+          providers: {
+            [customProviderId]: {
+              provider: "codex",
+              name: "Custom Codex 2",
+              apiKey: "test-api-key",
+              mountAuth: false,
+              authPath: "",
+            },
+          },
+          githubToken: "",
+          jira: {
+            host: "",
+            email: "",
+            apiToken: "",
+            autoCloseLinkedIssues: false,
+            defaultProject: "",
+            closeTransitionName: "Done",
+          },
+        },
+        defaults: baseProject,
+        mcpTools: [],
+      };
+      const settings = resolveProjectSettings(systemSettings, {
+        aiProvider: {
+          providers: {
+            [customProviderId]: {
+              provider: "codex",
+              name: "Custom Codex 2",
+              enabled: true,
+              model: "gpt-5.3-codex",
+              weight: 50,
+              thinkingMode: "HIGH",
+              maxConcurrentTasks: 0,
+            },
+          },
+        },
+      });
+      expect(settings.aiProvider.providers[customProviderId]).toBeDefined();
+      expect(settings.aiProvider.providers[customProviderId]?.name).toBe("Custom Codex 2");
+      expect(settings.aiProvider.providers[customProviderId]?.weight).toBe(50);
     });
   });
 

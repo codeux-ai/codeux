@@ -157,17 +157,41 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
   );
 };
 
-export const OverrideBadge: FunctionComponent<{ label: string }> = ({ label }) => (
+export const OverrideBadge: FunctionComponent<{ label: string; onReset?: () => void }> = ({ label, onReset }) => (
   <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
     <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300" />
     {label}
+    {onReset && label === "Project override" ? (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onReset();
+        }}
+        title="Delete project override (revert to system default)"
+        className="ml-1 rounded-full p-0.5 text-amber-600 hover:bg-amber-500/20 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-300/25 dark:hover:text-amber-100 transition-colors duration-150 cursor-pointer"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" className="h-2.5 w-2.5">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+        </svg>
+      </button>
+    ) : null}
   </span>
 );
 
 import { Row as SharedRow } from "../SettingsFormFields.js";
 
-export const Row: FunctionComponent<{ label: string; description?: string; children: ComponentChildren; badge?: string; last?: boolean; info?: ComponentChildren }> = ({ label, description, children, badge, last, info }) => (
-  <SharedRow label={label} description={description} badge={badge ? <OverrideBadge label={badge} /> : undefined} last={last} info={info}>
+export const Row: FunctionComponent<{
+  label: string;
+  description?: string;
+  children: ComponentChildren;
+  badge?: string;
+  last?: boolean;
+  info?: ComponentChildren;
+  onReset?: () => void;
+}> = ({ label, description, children, badge, last, info, onReset }) => (
+  <SharedRow label={label} description={description} badge={badge ? <OverrideBadge label={badge} onReset={onReset} /> : undefined} last={last} info={info}>
     {children}
   </SharedRow>
 );

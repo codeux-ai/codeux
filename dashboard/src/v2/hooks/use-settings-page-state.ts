@@ -210,6 +210,12 @@ export const useSettingsPageState = (
         fetchExternalSettingsHints()
       ]);
 
+      // Restore last active scope on initial settings load
+      if (!systemSettings) {
+        const initialScope = nextSystem.runtime.lastActiveScope === "project" && selectedProjectId ? "project" : "system";
+        setActiveScope(initialScope);
+      }
+
       // Preserve local dirty edits during background reload
       if (!isDirtyRef.current || !systemSettings) {
         setSystemSettings(cloneSystemSettings(nextSystem));
@@ -476,12 +482,71 @@ export const useSettingsPageState = (
     }
   }, [loadSettings]);
 
+  const getValueByPath = useCallback((obj: any, path: string): any => {
+    return path.split(".").reduce((acc, part) => acc && acc[part], obj);
+  }, []);
+
+  const setValueByPath = useCallback((obj: any, path: string, value: any): any => {
+    const parts = path.split(".");
+    const next = { ...obj };
+    let current = next;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i]!;
+      current[part] = { ...current[part] };
+      current = current[part];
+    }
+    current[parts[parts.length - 1]!] = value;
+    return next;
+  }, []);
+
+  const resetFieldToDefault = useCallback((path: string): void => {
+    if (!systemSettings || !projectSettings) {
+      return;
+    }
+    const defaultValue = getValueByPath(systemSettings.defaults, path);
+    setProjectSettings((current) => {
+      if (!current) return current;
+      return setValueByPath(current, path, defaultValue);
+    });
+    setProjectSources((current) => ({
+      ...current,
+      [path]: "system",
+    }));
+  }, [systemSettings, projectSettings, getValueByPath, setValueByPath]);
+
+  const getFieldReset = useCallback((path: string) => {
+    if (activeScope === "project" && projectSources[path] === "project") {
+      return () => resetFieldToDefault(path);
+    }
+    return undefined;
+  }, [activeScope, projectSources, resetFieldToDefault]);
+
+  const setPersistedActiveScope = useCallback(async (scope: SettingsScope) => {
+    setActiveScope(scope);
+    if (systemSettings) {
+      const updatedSystem = {
+        ...systemSettings,
+        runtime: {
+          ...systemSettings.runtime,
+          lastActiveScope: scope,
+        },
+      };
+      setSystemSettings(updatedSystem);
+      setSavedSystemSettings(cloneSystemSettings(updatedSystem));
+      try {
+        await saveSystemSettings(updatedSystem);
+      } catch (e) {
+        // Ignore background persistence errors
+      }
+    }
+  }, [systemSettings]);
+
   const activeDirty = activeScope === "system" ? systemDirty : projectDirty;
   const activeSaving = activeScope === "system" ? savingSystem : savingProject;
 
   return {
     activeCategory, setActiveCategory,
-    activeScope, setActiveScope,
+    activeScope, setActiveScope: setPersistedActiveScope,
     selectedIntegration, setSelectedIntegration,
     selectedAgentTemplate, setSelectedAgentTemplate,
     activeInvocationRoute, setActiveInvocationRoute,
@@ -510,7 +575,9 @@ export const useSettingsPageState = (
     handleDeleteProject, handleResetDatabase,
     loadSettings,
     isDirtyRef,
-    searchInputRef
+    searchInputRef,
+    resetFieldToDefault,
+    getFieldReset
   };
 };
 

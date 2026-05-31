@@ -119,8 +119,9 @@ export class SettingsRepository {
   }
 
   saveProjectSettings(projectId: string, patch: ProjectSettingsOverride): ProjectSettingsOverride {
-    const base = this.getSystemSettings().defaults;
-    const normalized = toProjectSettingsOverride(base, patch, this.externalHints);
+    const systemSettings = this.getSystemSettings();
+    const base = systemSettings.defaults;
+    const normalized = toProjectSettingsOverride(base, patch, systemSettings.integrations, this.externalHints);
     this.storage.writeProjectPayload(projectId, JSON.stringify(normalized));
     return normalized;
   }
@@ -147,7 +148,8 @@ export class SettingsRepository {
   }
 
   saveSprintSettings(sprintId: string, baseProjectSettings: ProjectSettings, patch: SprintSettingsOverride): SprintSettingsOverride {
-    const normalized = toSprintSettingsOverride(baseProjectSettings, patch, this.externalHints);
+    const systemSettings = this.getSystemSettings();
+    const normalized = toSprintSettingsOverride(baseProjectSettings, patch, systemSettings.integrations, this.externalHints);
     this.storage.writeSprintPayload(sprintId, JSON.stringify(normalized));
     return normalized;
   }
