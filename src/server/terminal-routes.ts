@@ -261,6 +261,11 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       const fallbackKey = getFallbackInstallKey(providerId);
       const installCmd = getProviderFallbackInstallCommand(fallbackKey);
 
+      let proxyCmd = "";
+      if (providerId === "codex") {
+        proxyCmd = "node -e \"const net = require('net'), os = require('os'); let ip = '0.0.0.0'; const ifs = os.networkInterfaces(); for (const n of Object.keys(ifs)) { for (const netIf of ifs[n]) { if (netIf.family === 'IPv4' && !netIf.internal) { ip = netIf.address; break; } } } const s = net.createServer((c) => { const p = net.connect(1455, '127.0.0.1', () => { c.pipe(p).pipe(c); }); p.on('error', () => c.destroy()); c.on('error', () => p.destroy()); }); s.on('error', () => {}); s.listen(1455, ip);\" &";
+      }
+
       const containerCmd = [
         "set -e",
         "mkdir -p /tmp/.local/share /tmp/.config",
@@ -278,16 +283,20 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         `  echo 'Installing provider CLI fallback in container...'`,
         `  ${installCmd || "echo 'No installation command configured'"};`,
         "fi",
+        proxyCmd,
         `script -q -c "stty cols 80 rows 24 && ${loginCmd}" /dev/null`,
-      ].join("\n");
+      ].filter(Boolean).join("\n");
 
       const userSpec = getDockerUserSpec();
+      const networkArgs = providerId === "codex"
+        ? ["-p", "1455:1455"]
+        : ["--network", "host"];
+
       const dockerArgs = [
         "run",
         "--rm",
         "-i",
-        "--network",
-        "host",
+        ...networkArgs,
         "--name",
         `code-ux-login-${providerId}-${sessionId}`,
         "--label",
@@ -326,12 +335,32 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
 
       activeTerminalSessions.set(sessionId, session);
 
+      let loginSucceeded = false;
+
       const handleOutput = (chunk: Buffer): void => {
         const text = chunk.toString("utf8");
         session.outputBuffer += text;
         if (session.outputBuffer.length > 50000) {
           session.outputBuffer = session.outputBuffer.substring(session.outputBuffer.length - 50000);
         }
+
+        // Auto-detect successful login and terminate early
+        if (!loginSucceeded) {
+          if (
+            (providerId === "gemini" && session.outputBuffer.includes("Signed in")) ||
+            (providerId === "codex" && session.outputBuffer.includes("Successfully logged in"))
+          ) {
+            loginSucceeded = true;
+            setTimeout(() => {
+              try {
+                childProcess.kill("SIGKILL");
+              } catch (e) {
+                // Ignore error if already dead
+              }
+            }, 800); // 800ms grace period to let credentials finish writing
+          }
+        }
+
         for (const client of session.clients) {
           sendJson(client, { type: "output", data: text });
         }
@@ -343,7 +372,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       childProcess.on("exit", (code) => {
         // Asynchronously copy newly generated credentials to the active host path on success
         void (async () => {
-          if (code === 0) {
+          if (code === 0 || loginSucceeded) {
             try {
               await fs.rm(hostCredsDir, { recursive: true, force: true }).catch(() => {});
               await fs.mkdir(hostCredsDir, { recursive: true });

@@ -197,4 +197,30 @@ describe("Terminal Routes", () => {
 
     vi.useRealTimers();
   });
+
+  it("should auto-detect successful login output and terminate early", async () => {
+    vi.useFakeTimers();
+
+    // Start session
+    const startResponse = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerConfigId: "gemini" });
+
+    const sessionId = startResponse.body.sessionId;
+    expect(sessionId).toBeDefined();
+
+    // Simulate stdout output with "Signed in" success string
+    mockStdout.emit("data", Buffer.from("User logged in successfully. Signed in. Welcome!"));
+
+    // Before 800ms grace period, childProcess should NOT be killed
+    expect(mockChildProcess.kill).not.toHaveBeenCalled();
+
+    // Advance time by 800ms
+    vi.advanceTimersByTime(800);
+
+    // Now childProcess should be SIGKILL'ed
+    expect(mockChildProcess.kill).toHaveBeenCalledWith("SIGKILL");
+
+    vi.useRealTimers();
+  });
 });
