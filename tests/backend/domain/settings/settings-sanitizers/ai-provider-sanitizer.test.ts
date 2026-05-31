@@ -148,5 +148,23 @@ describe("sanitizeAiProvider", () => {
       const result = normalizeSystemIntegrationProviders(input);
       expect(result.codex.mountAuth).toBe(true);
     });
+
+    it("does not automatically readd default providers like gemini when they are omitted in a modern providers payload", () => {
+      const input = {
+        providers: {
+          codex: {
+            provider: "codex",
+            name: "Codex Primary",
+            apiKey: "some-key",
+            mountAuth: false,
+            authType: "localAuth",
+          },
+        },
+      };
+      const result = normalizeSystemIntegrationProviders(input);
+      expect(result.codex).toBeDefined();
+      expect(result.gemini).toBeUndefined();
+      expect(result.jules).toBeUndefined();
+    });
   });
 });
