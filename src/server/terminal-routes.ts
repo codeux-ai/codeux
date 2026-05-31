@@ -335,12 +335,32 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
 
       activeTerminalSessions.set(sessionId, session);
 
+      let loginSucceeded = false;
+
       const handleOutput = (chunk: Buffer): void => {
         const text = chunk.toString("utf8");
         session.outputBuffer += text;
         if (session.outputBuffer.length > 50000) {
           session.outputBuffer = session.outputBuffer.substring(session.outputBuffer.length - 50000);
         }
+
+        // Auto-detect successful login and terminate early
+        if (!loginSucceeded) {
+          if (
+            (providerId === "gemini" && session.outputBuffer.includes("Signed in")) ||
+            (providerId === "codex" && session.outputBuffer.includes("Successfully logged in"))
+          ) {
+            loginSucceeded = true;
+            setTimeout(() => {
+              try {
+                childProcess.kill("SIGKILL");
+              } catch (e) {
+                // Ignore error if already dead
+              }
+            }, 800); // 800ms grace period to let credentials finish writing
+          }
+        }
+
         for (const client of session.clients) {
           sendJson(client, { type: "output", data: text });
         }
@@ -352,7 +372,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       childProcess.on("exit", (code) => {
         // Asynchronously copy newly generated credentials to the active host path on success
         void (async () => {
-          if (code === 0) {
+          if (code === 0 || loginSucceeded) {
             try {
               await fs.rm(hostCredsDir, { recursive: true, force: true }).catch(() => {});
               await fs.mkdir(hostCredsDir, { recursive: true });
