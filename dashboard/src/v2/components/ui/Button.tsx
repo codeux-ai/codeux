@@ -19,16 +19,16 @@ export interface ButtonProps extends ComponentProps<"button"> {
 
 const VARIANTS = {
   primary: "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100",
-  secondary: "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white",
+  secondary: "border border-[color:var(--color-border-muted)] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white",
   danger: "border border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]",
   ghost: "bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-black/[0.03] dark:hover:bg-white/[0.03]",
   signal: "bg-signal-500 hover:bg-signal-400 text-void-900 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] aria-disabled:shadow-none",
 };
 
 const SIZES = {
-  sm: "px-3 py-1.5 text-xs rounded-xl",
-  md: "px-4 py-2 text-xs rounded-xl",
-  lg: "px-6 py-3 text-sm rounded-2xl",
+  sm: "px-3 py-1.5 text-xs rounded-[var(--radius-ui)]",
+  md: "px-4 py-2 text-xs rounded-[var(--radius-ui)]",
+  lg: "px-6 py-3 text-sm rounded-[var(--radius-ui)]",
 };
 
 export const Button: FunctionComponent<ButtonProps> = memo(({
