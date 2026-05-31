@@ -92,9 +92,29 @@ export class DockerCredentialMountBuilder {
       OPENCODE_CREDENTIALS_MOUNT,
       "OpenCode",
     );
+    let antigravityEnabled = providerAuthOverride?.provider === "antigravity"
+      ? providerAuthOverride.enabled
+      : workflowSettings.containerMountAntigravityAuth;
+    if (providerAuthOverride?.provider === "antigravity") {
+      antigravityEnabled = true;
+    }
+
+    let antigravityPath = providerAuthOverride?.provider === "antigravity"
+      ? providerAuthOverride.path
+      : workflowSettings.containerAntigravityAuthPath;
+
+    // Check if ~/.code-ux/credentials/antigravity exists on the host, and if so, use it as the source path
+    const resolvedCodeUxPath = resolveConfiguredPath(repoPath, "~/.code-ux/credentials/antigravity");
+    try {
+      await fs.access(resolvedCodeUxPath);
+      antigravityPath = "~/.code-ux/credentials/antigravity";
+    } catch {
+      // Keep existing path
+    }
+
     await addMount(
-      providerAuthOverride?.provider === "antigravity" ? providerAuthOverride.enabled : workflowSettings.containerMountAntigravityAuth,
-      providerAuthOverride?.provider === "antigravity" ? providerAuthOverride.path : workflowSettings.containerAntigravityAuthPath,
+      antigravityEnabled,
+      antigravityPath,
       ANTIGRAVITY_CREDENTIALS_MOUNT,
       "Antigravity",
     );

@@ -84,7 +84,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onMarkCompleted,
 }) => {
   const settings = useProjectEffectiveSettings(sprint.projectId);
-  const sprintKeyPrefix = settings.data?.settings.git.sprintKeyPrefix || "SPR";
+  const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);

@@ -196,7 +196,7 @@ describe("Terminal Routes", () => {
     expect(mockChildProcess.kill).not.toHaveBeenCalled();
 
     // Advance past heartbeat TTL and sweep interval.
-    vi.advanceTimersByTime(21000);
+    vi.advanceTimersByTime(31000);
 
     // Now the stale session should be SIGKILL'ed
     expect(mockChildProcess.kill).toHaveBeenCalledWith("SIGKILL");

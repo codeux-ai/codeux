@@ -325,7 +325,7 @@ export const TasksPage: FunctionComponent = () => {
     !!selectedProject,
   );
   const settings = useProjectEffectiveSettings(projectId);
-  const sprintKeyPrefix = settings.data?.settings.git.sprintKeyPrefix || "SPR";
+  const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
   const [agentPresetsMap, setAgentPresetsMap] = useState<Map<string, AgentPreset>>(new Map());
   useEffect(() => {
     if (!projectId) return;

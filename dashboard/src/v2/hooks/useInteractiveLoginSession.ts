@@ -4,6 +4,7 @@ export interface InteractiveLoginMessage {
   type: string;
   data?: string;
   code?: number;
+  url?: string;
 }
 
 interface UseInteractiveLoginSessionArgs {
@@ -156,21 +157,13 @@ export function useInteractiveLoginSession(args: UseInteractiveLoginSessionArgs)
       finalizeWithBeacon(activeSessionId);
     };
 
-    const handleVisibilityChange = (): void => {
-      if (document.visibilityState === "hidden") {
-        handlePageHide();
-      }
-    };
-
     window.addEventListener("beforeunload", handlePageHide);
     window.addEventListener("pagehide", handlePageHide);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.clearInterval(heartbeatInterval);
       window.removeEventListener("beforeunload", handlePageHide);
       window.removeEventListener("pagehide", handlePageHide);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
       closeSession();
     };
   }, [args.providerConfigId, args.providerId]);

@@ -94,6 +94,9 @@ const validateProviderSettings = (
   if (typeof value.authPath !== "string") {
     issues.push({ path: `${path}.authPath`, message: "Expected a string" });
   }
+  if (value.lastLoginAt !== undefined && typeof value.lastLoginAt !== "number") {
+    issues.push({ path: `${path}.lastLoginAt`, message: "Expected a number" });
+  }
   if (typeof value.maxConcurrentTasks !== "number") {
     issues.push({ path: `${path}.maxConcurrentTasks`, message: "Expected a number" });
   }

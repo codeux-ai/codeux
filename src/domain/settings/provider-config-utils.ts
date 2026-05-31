@@ -206,11 +206,14 @@ export const normalizeSystemIntegrationProviders = (
       provider: providerId,
       name: normalizeProviderName(providerId, rawValue.name),
       apiKey: typeof rawValue.apiKey === "string" ? rawValue.apiKey : "",
-      mountAuth: providerId === "jules" ? false : (authType === "apiKey" ? false : true),
+      mountAuth: providerId === "jules"
+        ? false
+        : (typeof rawValue.mountAuth === "boolean" ? rawValue.mountAuth : (authType === "apiKey" ? false : true)),
       authPath: authType === "dashboardAuth"
-        ? `~/.code-ux/credentials/${providerId}`
+        ? `~/.code-ux/credentials/${providerConfigId}`
         : normalizeProviderAuthPath(providerId, rawValue.authPath),
       authType,
+      ...(typeof rawValue.lastLoginAt === "number" ? { lastLoginAt: rawValue.lastLoginAt } : {}),
       ...(typeof rawValue.customBaseUrl === "string" && rawValue.customBaseUrl.trim().length > 0
         ? { customBaseUrl: rawValue.customBaseUrl.trim() }
         : {}),

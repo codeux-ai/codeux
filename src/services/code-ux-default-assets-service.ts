@@ -57,7 +57,7 @@ async function installDefaultCodeUxAssets(
     if (asset) installed.push(asset);
   }
 
-  const setupAsset = await copyIfMissing(
+  const setupAsset = await copyOrUpdateSetupScript(
     path.join(sourceDir, "container", DEFAULT_CONTAINER_SETUP_FILE),
     getHomeCodeUxPath("container", DEFAULT_CONTAINER_SETUP_FILE),
     0o755,
@@ -120,6 +120,33 @@ async function copyIfMissing(
     return null;
   } catch {
     // Missing target; copy below.
+  }
+
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.copyFile(sourcePath, targetPath);
+  if (mode && process.platform !== "win32") {
+    await fs.chmod(targetPath, mode);
+  }
+  return { sourcePath, targetPath };
+}
+
+async function copyOrUpdateSetupScript(
+  sourcePath: string,
+  targetPath: string,
+  mode?: number,
+): Promise<InstalledAsset | null> {
+  let needsUpdate = false;
+  try {
+    const targetContent = await fs.readFile(targetPath, "utf8");
+    if (!targetContent.includes("gnome-keyring-daemon")) {
+      needsUpdate = true;
+    }
+  } catch {
+    needsUpdate = true;
+  }
+
+  if (!needsUpdate) {
+    return null;
   }
 
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
