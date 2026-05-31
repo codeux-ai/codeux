@@ -70,6 +70,15 @@ Appearance choices update `defaults.appearance`, which is also used by the Setti
 
 Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action clears only the browser-local onboarding completion marker and does not reset saved system or project settings.
 
+## Interactive Login Session Cleanup
+
+Dashboard-guided provider login sessions now use an explicit lifecycle protocol to prevent orphaned Docker login containers after browser interruptions.
+
+- The client sends periodic terminal session heartbeats while the login modal is active.
+- The client emits a termination signal on `beforeunload`, `pagehide`, and hidden visibility transitions to handle refresh, tab close, and window close.
+- The server finalizes sessions idempotently when it receives explicit finalize requests.
+- The server also runs a heartbeat-based sweeper and only terminates sessions with no attached clients when the heartbeat is stale, preserving active sessions that are still healthy.
+
 ## Post-Onboarding Tour
 
 Finishing onboarding redirects the operator to `/` and starts the dashboard guide. The guide anchors to real UI elements through `data-tour-id` markers so it works with both dock navigation and sidebar navigation.

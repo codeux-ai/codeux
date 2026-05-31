@@ -142,7 +142,7 @@ describe("Terminal Routes", () => {
     expect(mockChildProcess.kill).toHaveBeenCalledWith("SIGKILL");
   });
 
-  it("should terminate the terminal session and container when all WebSocket clients disconnect", async () => {
+  it("should terminate the terminal session and container when all WebSocket clients disconnect and heartbeat goes stale", async () => {
     vi.useFakeTimers();
 
     // Start session
@@ -186,13 +186,19 @@ describe("Terminal Routes", () => {
     // Simulate socket disconnect (e.g. close)
     mockSocket.emit("close");
 
-    // Before 1s grace period, childProcess should NOT be killed
+    // Before grace period, childProcess should NOT be killed
     expect(mockChildProcess.kill).not.toHaveBeenCalled();
 
     // Advance time by 1000ms
     vi.advanceTimersByTime(1000);
 
-    // Now childProcess should be SIGKILL'ed
+    // Heartbeat is still fresh, so session should remain alive.
+    expect(mockChildProcess.kill).not.toHaveBeenCalled();
+
+    // Advance past heartbeat TTL and sweep interval.
+    vi.advanceTimersByTime(21000);
+
+    // Now the stale session should be SIGKILL'ed
     expect(mockChildProcess.kill).toHaveBeenCalledWith("SIGKILL");
 
     vi.useRealTimers();

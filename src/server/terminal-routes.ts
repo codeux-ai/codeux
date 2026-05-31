@@ -18,9 +18,16 @@ interface TerminalSession {
   outputBuffer: string;
   clients: Set<Socket>;
   createdAt: number;
+  lastHeartbeatAt: number;
+  finalized: boolean;
 }
 
 const activeTerminalSessions = new Map<string, TerminalSession>();
+const LOGIN_SESSION_MAX_AGE_MS = 30 * 60 * 1000;
+const LOGIN_SESSION_HEARTBEAT_TTL_MS = 20 * 1000;
+const LOGIN_SESSION_SWEEP_INTERVAL_MS = 5 * 1000;
+const LOGIN_SESSION_DISCONNECT_GRACE_MS = 1000;
+let loginSessionSweepStarted = false;
 
 const WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -188,7 +195,55 @@ function getFallbackInstallKey(providerId: string): string {
   }
 }
 
+function terminateSession(sessionId: string, reason: string): void {
+  const session = activeTerminalSessions.get(sessionId);
+  if (!session || session.finalized) {
+    return;
+  }
+  session.finalized = true;
+  try {
+    session.childProcess.kill("SIGKILL");
+  } catch {
+    // Ignore if process is already dead
+  }
+  const cleanupProcess = spawn("docker", ["rm", "-f", `code-ux-login-${session.providerId}-${session.sessionId}`], {
+    stdio: "ignore",
+  });
+  if (typeof cleanupProcess.unref === "function") {
+    cleanupProcess.unref();
+  }
+  activeTerminalSessions.delete(sessionId);
+}
+
+function maybeStartLoginSessionSweeper(): void {
+  if (loginSessionSweepStarted) {
+    return;
+  }
+  loginSessionSweepStarted = true;
+  const sweepTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [id, session] of activeTerminalSessions.entries()) {
+      if (session.finalized) {
+        activeTerminalSessions.delete(id);
+        continue;
+      }
+      const sessionAgeMs = now - session.createdAt;
+      const heartbeatAgeMs = now - session.lastHeartbeatAt;
+      const shouldExpireByAge = sessionAgeMs > LOGIN_SESSION_MAX_AGE_MS;
+      const hasNoClients = session.clients.size === 0;
+      const shouldExpireByHeartbeat = hasNoClients && heartbeatAgeMs > LOGIN_SESSION_HEARTBEAT_TTL_MS;
+      if (shouldExpireByAge || shouldExpireByHeartbeat) {
+        terminateSession(id, shouldExpireByAge ? "max-age" : "stale-heartbeat");
+      }
+    }
+  }, LOGIN_SESSION_SWEEP_INTERVAL_MS);
+  if (typeof sweepTimer.unref === "function") {
+    sweepTimer.unref();
+  }
+}
+
 export function registerTerminalRoutes(app: Express, options: DashboardDependencies): void {
+  maybeStartLoginSessionSweeper();
   app.post("/api/terminal/start", asyncRoute(async (req, res) => {
     try {
       const { providerConfigId, providerId: requestProviderId } = req.body as {
@@ -230,15 +285,6 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         return;
       }
       const baseImage = systemSettings.defaults.cliWorkflow.containerImage.trim() || "node:24-bookworm";
-
-      // Clean old sessions
-      const now = Date.now();
-      for (const [id, session] of activeTerminalSessions.entries()) {
-        if (now - session.createdAt > 30 * 60 * 1000) {
-          session.childProcess.kill("SIGKILL");
-          activeTerminalSessions.delete(id);
-        }
-      }
 
       const sessionId = Math.random().toString(36).substring(2, 15);
       const hostCredsDir = path.join(os.homedir(), ".code-ux", "credentials", providerId);
@@ -331,6 +377,8 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         outputBuffer: "",
         clients: new Set<Socket>(),
         createdAt: Date.now(),
+        lastHeartbeatAt: Date.now(),
+        finalized: false,
       };
 
       activeTerminalSessions.set(sessionId, session);
@@ -370,6 +418,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       childProcess.stderr?.on("data", handleOutput);
 
       childProcess.on("exit", (code) => {
+        session.finalized = true;
         // Asynchronously copy newly generated credentials to the active host path on success
         void (async () => {
           if (code === 0 || loginSucceeded) {
@@ -413,10 +462,46 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
 
       const session = activeTerminalSessions.get(sessionId);
       if (session) {
-        session.childProcess.kill("SIGKILL");
-        activeTerminalSessions.delete(sessionId);
+        terminateSession(sessionId, "explicit-stop");
       }
 
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json(toErrorResponse(e));
+    }
+  }));
+
+  app.post("/api/terminal/heartbeat", syncRoute((req, res) => {
+    try {
+      const { sessionId } = req.body as { sessionId?: string };
+      if (!sessionId) {
+        res.status(400).json({ error: "Missing sessionId parameter." });
+        return;
+      }
+      const session = activeTerminalSessions.get(sessionId);
+      if (!session || session.finalized) {
+        res.status(404).json({ error: "Session not found." });
+        return;
+      }
+      session.lastHeartbeatAt = Date.now();
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json(toErrorResponse(e));
+    }
+  }));
+
+  app.post("/api/terminal/finalize", syncRoute((req, res) => {
+    try {
+      const { sessionId } = req.body as { sessionId?: string };
+      if (!sessionId) {
+        res.status(400).json({ error: "Missing sessionId parameter." });
+        return;
+      }
+      const session = activeTerminalSessions.get(sessionId);
+      if (session) {
+        terminateSession(sessionId, "finalize");
+      }
+      // Idempotent response for duplicate unload/finalize attempts.
       res.json({ success: true });
     } catch (e) {
       res.status(500).json(toErrorResponse(e));
@@ -488,6 +573,8 @@ export function bootDashboardTerminalWebSocketServer(args: {
           const message = JSON.parse(messageText) as { type: string; data?: string };
           if (message.type === "input" && typeof message.data === "string") {
             session.childProcess.stdin?.write(message.data);
+          } else if (message.type === "heartbeat") {
+            session.lastHeartbeatAt = Date.now();
           }
         } catch {
           // Ignore invalid client message parsing
@@ -497,19 +584,19 @@ export function bootDashboardTerminalWebSocketServer(args: {
 
     const handleDisconnect = (): void => {
       session.clients.delete(socket);
-      setTimeout(() => {
-        if (session.clients.size === 0 && activeTerminalSessions.has(sessionId)) {
-          try {
-            session.childProcess.kill("SIGKILL");
-            spawn("docker", ["rm", "-f", `code-ux-login-${session.providerId}-${session.sessionId}`], {
-              stdio: "ignore",
-            }).unref();
-          } catch (e) {
-            // Ignore error if already dead
-          }
-          activeTerminalSessions.delete(sessionId);
+      const finalizeIfStale = (): void => {
+        if (session.clients.size > 0 || !activeTerminalSessions.has(sessionId)) {
+          return;
         }
-      }, 1000);
+        const heartbeatAgeMs = Date.now() - session.lastHeartbeatAt;
+        if (heartbeatAgeMs > LOGIN_SESSION_HEARTBEAT_TTL_MS) {
+          terminateSession(sessionId, "disconnect-stale-heartbeat");
+          return;
+        }
+        const nextDelayMs = Math.max(250, LOGIN_SESSION_HEARTBEAT_TTL_MS - heartbeatAgeMs + 250);
+        setTimeout(finalizeIfStale, nextDelayMs);
+      };
+      setTimeout(finalizeIfStale, LOGIN_SESSION_DISCONNECT_GRACE_MS);
     };
 
     socket.on("close", handleDisconnect);

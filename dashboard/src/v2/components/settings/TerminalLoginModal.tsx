@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { AlertCircle, Check, RefreshCw, Terminal, X } from "lucide-preact";
+import { useInteractiveLoginSession } from "../../hooks/useInteractiveLoginSession.js";
 
 interface TerminalLoginModalProps {
   providerConfigId: string;
@@ -56,7 +57,6 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const hiddenInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -318,89 +318,33 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
     hiddenInputRef.current?.focus();
   };
 
-  useEffect(() => {
-    // 1. Start the Docker login container session
-    const startSession = async () => {
-      try {
-        const response = await fetch("/api/terminal/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ providerConfigId, providerId }),
-        });
-
-        if (!response.ok) {
-          const errData = await response.json() as { error?: string };
-          throw new Error(errData.error || "Failed to start terminal session.");
+  const interactiveSession = useInteractiveLoginSession({
+    providerConfigId,
+    providerId,
+    onSessionMessage: (msg) => {
+      if (msg.type === "output" && typeof msg.data === "string") {
+        processChunk(msg.data);
+      } else if (msg.type === "exit" && typeof msg.code === "number") {
+        setStatus("exited");
+        setExitCode(msg.code);
+        if (msg.code === 0 && onSuccess) {
+          onSuccess();
         }
-
-        const data = await response.json() as { sessionId: string; providerId: string };
-        sessionIdRef.current = data.sessionId;
-
-        // 2. Open WebSocket connection to route stdin/stdout
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const wsUrl = `${protocol}//${window.location.host}/api/terminal/ws?sessionId=${data.sessionId}`;
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-          setStatus("active");
-          setTimeout(focusTerminal, 200);
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const msg = JSON.parse(event.data as string) as { type: string; data?: string; code?: number };
-            if (msg.type === "output" && typeof msg.data === "string") {
-              processChunk(msg.data);
-            } else if (msg.type === "exit" && typeof msg.code === "number") {
-              setStatus("exited");
-              setExitCode(msg.code);
-              if (msg.code === 0 && onSuccess) {
-                onSuccess();
-              }
-            }
-          } catch {
-            if (typeof event.data === "string") {
-              processChunk(event.data);
-            }
-          }
-        };
-
-        ws.onerror = () => {
-          setStatus("error");
-          setErrorMessage("WebSocket connection encountered an error.");
-        };
-
-        ws.onclose = () => {
-          setStatus((currentStatus) => {
-            if (currentStatus === "active") {
-              return "exited";
-            }
-            return currentStatus;
-          });
-        };
-      } catch (err) {
-        setStatus("error");
-        setErrorMessage(err instanceof Error ? err.message : String(err));
       }
-    };
+    },
+    onSessionError: (message) => {
+      setStatus("error");
+      setErrorMessage(message);
+    },
+  });
 
-    void startSession();
-
-    return () => {
-      // Cleanup: stop session and close websocket
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (sessionIdRef.current) {
-        void fetch("/api/terminal/stop", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: sessionIdRef.current }),
-        }).catch(() => undefined);
-      }
-    };
-  }, [providerConfigId, onSuccess]);
+  useEffect(() => {
+    wsRef.current = interactiveSession.websocket;
+    setStatus(interactiveSession.status);
+    if (interactiveSession.status === "active") {
+      setTimeout(focusTerminal, 200);
+    }
+  }, [interactiveSession.status, interactiveSession.websocket]);
 
   // Scroll to bottom on output update
   useEffect(() => {
