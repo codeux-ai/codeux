@@ -3,6 +3,20 @@ import type { StartSprintDispatchResult } from "./sprint-task-dispatch-service.j
 import type { Logger } from "../shared/logging/logger.js";
 import { createPendingTaskRuntimeReset } from "../domain/sprint/task-reset-state.js";
 
+const VALID_PROVIDER_IDS = new Set<ProviderId>([
+  "jules",
+  "gemini",
+  "codex",
+  "claude-code",
+  "qwen-code",
+  "opencode",
+  "antigravity",
+]);
+
+function normalizeProviderId(value: string | undefined): ProviderId | undefined {
+  return VALID_PROVIDER_IDS.has(value as ProviderId) ? value as ProviderId : undefined;
+}
+
 export interface TaskRerunContext {
   task: Subtask;
   projectId: string;
@@ -15,6 +29,7 @@ export interface TaskRerunContext {
 
 export interface TaskRerunOptions {
   provider?: ProviderId;
+  providerConfigId?: string;
   model?: string;
   clearWorktree?: boolean;
   resetDependents?: boolean;
@@ -44,6 +59,10 @@ export interface TaskRerunServiceDependencies {
     featureBranch: string;
     repoPath: string;
     sprintNumber: number;
+    providerConfigId?: string;
+    resumeWorkspaceSessionId?: string;
+    resumeWorkerBranch?: string;
+    forceFreshWorkspace?: boolean;
   }) => Promise<StartSprintDispatchResult>;
   resolveSessionName: (session: { id?: string; name?: string }) => string | undefined;
   extractSessionId: (session: { id?: string; name?: string }) => string | undefined;
@@ -95,6 +114,7 @@ export class TaskRerunService {
 
     return await this.resetTaskForFreshRun(context, {
       provider: options?.provider,
+      providerConfigId: options?.providerConfigId,
       model: options?.model,
       clearWorktree: options?.clearWorktree,
       sprintRunId: sprintRun.sprintRunId,
@@ -152,6 +172,7 @@ export class TaskRerunService {
     context: TaskRerunContext,
     options: {
       provider?: ProviderId;
+      providerConfigId?: string;
       model?: string;
       clearWorktree?: boolean;
       sprintRunId: string;
@@ -161,6 +182,8 @@ export class TaskRerunService {
     },
   ): Promise<Subtask> {
     const taskId = context.task.record_id || context.task.id;
+    const previousSessionId = context.task.session_id;
+    const previousWorkerBranch = context.task.worker_branch;
 
     if (this.deps.cancelActiveDispatch) {
       try {
@@ -248,16 +271,17 @@ export class TaskRerunService {
       featureBranch: context.featureBranch,
       repoPath: context.repoPath,
       sprintNumber: context.sprintNumber,
+      providerConfigId: options.providerConfigId,
+      resumeWorkspaceSessionId: options.clearWorktree ? undefined : previousSessionId,
+      resumeWorkerBranch: options.clearWorktree ? undefined : previousWorkerBranch,
+      forceFreshWorkspace: options.clearWorktree === true,
     });
     const restartedTask: Subtask = {
       ...resetTask,
       status: "RUNNING",
       session_name: this.deps.resolveSessionName(session),
       session_id: this.deps.extractSessionId(session),
-      provider:
-        session.provider === "jules" || session.provider === "gemini" || session.provider === "codex" || session.provider === "claude-code"
-          ? session.provider
-          : undefined,
+      provider: normalizeProviderId(session.provider),
     };
     if (options.resumeSprintRun && this.deps.resumeSprintRun) {
       try {

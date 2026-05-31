@@ -195,6 +195,10 @@ describe("Dashboard Factory", () => {
       featureBranch: "f1",
       repoPath: "r1",
       sprintNumber: 1,
+      providerConfigId: undefined,
+      resumeWorkspaceSessionId: undefined,
+      resumeWorkerBranch: undefined,
+      forceFreshWorkspace: undefined,
     });
 
     // Test resolveSessionName

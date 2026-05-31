@@ -293,6 +293,8 @@ describe("dashboard-lifecycle-service", () => {
 
       expect(mockDeps.taskRerunService.rerunTask).toHaveBeenCalledWith("task-1", {
         provider: undefined,
+        providerConfigId: undefined,
+        model: undefined,
         clearWorktree: undefined,
         resetDependents: undefined,
       });

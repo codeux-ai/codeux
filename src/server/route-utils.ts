@@ -99,13 +99,14 @@ export function parsePlanSprintOptions(body: unknown): PlanSprintOptions {
   };
 }
 
-export function parseRerunTaskOptions(body: unknown): { provider?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean } {
+export function parseRerunTaskOptions(body: unknown): { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean } {
   if (!body || typeof body !== "object") {
     throw new Error("Invalid input: body must be an object");
   }
   const typedBody = body as Record<string, unknown>;
   return {
     provider: typeof typedBody.provider === "string" ? typedBody.provider : undefined,
+    providerConfigId: typeof typedBody.providerConfigId === "string" ? typedBody.providerConfigId : undefined,
     model: typeof typedBody.model === "string" ? typedBody.model : undefined,
     clearWorktree: Boolean(typedBody.clearWorktree),
     resetDependents: Boolean(typedBody.resetDependents),

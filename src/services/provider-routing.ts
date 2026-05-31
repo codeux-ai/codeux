@@ -77,6 +77,9 @@ const inferProviderTypeFromConfigId = (providerConfigId: ProviderConfigId): Prov
   if (providerConfigId === "opencode" || providerConfigId.startsWith("opencode-")) {
     return "opencode";
   }
+  if (providerConfigId === "antigravity" || providerConfigId.startsWith("antigravity-")) {
+    return "antigravity";
+  }
   return null;
 };
 

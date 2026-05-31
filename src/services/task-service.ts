@@ -276,6 +276,12 @@ export class TaskService {
     settingsScope?: DashboardSettingsScope,
     dispatchId?: string,
     taskRunId?: string,
+    rerunOptions?: {
+      resumeWorkspaceSessionId?: string;
+      resumeWorkerBranch?: string;
+      forceFreshWorkspace?: boolean;
+      providerConfigId?: string;
+    },
   ): Promise<JulesSession> {
     // Respect task.provider if already set (e.g. from a rerun with provider override)
     const settings = this.deps.getDashboardSettings(settingsScope);
@@ -297,11 +303,20 @@ export class TaskService {
         }
         : null,
     });
-    const provider = task.provider || route.provider;
-    const selectedProviderConfigId = task.provider
+    const rerunProviderSettings = rerunOptions?.providerConfigId
+      ? route.providers[rerunOptions.providerConfigId]
+      : undefined;
+    if (rerunOptions?.providerConfigId && !rerunProviderSettings) {
+      throw new Error(`Task requested provider instance ${rerunOptions.providerConfigId}, but no matching provider settings were available.`);
+    }
+    const provider = rerunProviderSettings?.provider || task.provider || route.provider;
+    const selectedProviderConfigId = rerunOptions?.providerConfigId
+      ? rerunOptions.providerConfigId
+      : task.provider
       ? this.resolveProviderConfigIdForProvider(route, task.provider)
       : route.providerConfigId;
     const selectedProviderSettings = route.providers[selectedProviderConfigId];
+    const selectedModel = task.model || selectedProviderSettings.model;
 
     await this.syncRemoteBranchesIfNeeded(repoPath, baseBranch, settingsScope, {
       required: provider !== "jules",
@@ -312,7 +327,7 @@ export class TaskService {
       const session = await this.deps.cliWorkflowService.startTask({
         provider,
         providerSettingsOverride: {
-          model: selectedProviderSettings.model,
+          model: selectedModel,
           thinkingMode: selectedProviderSettings.thinkingMode,
           apiKey: selectedProviderSettings.apiKey,
           qwenAuthMode: selectedProviderSettings.qwenAuthMode,
@@ -340,6 +355,9 @@ export class TaskService {
         agentPresetId: task.agentPresetId || null,
         dispatchId,
         taskRunId,
+        resumeWorkspaceSessionId: rerunOptions?.resumeWorkspaceSessionId,
+        resumeWorkerBranch: rerunOptions?.resumeWorkerBranch,
+        forceFreshWorkspace: rerunOptions?.forceFreshWorkspace,
       });
       session.provider = provider;
       return session;
