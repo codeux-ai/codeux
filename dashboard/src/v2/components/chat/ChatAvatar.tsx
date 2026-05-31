@@ -5,6 +5,8 @@ import { RobotLogo } from "../brand/RobotLogo.js";
 import { AgentAvatarSvg } from "../agents/AgentAvatarSvg.js";
 import { normalizeAgentAvatarConfig } from "../../lib/agent-avatar.js";
 import type { AgentAvatarConfig } from "../../types.js";
+import { ProviderLogo } from "../ui/ProviderLogo.js";
+import { PROVIDER_CARD_TOKENS, providerLabels } from "../../lib/settings-view-models.js";
 
 export type AvatarRole = "user" | "jules" | "system" | "agent" | "container";
 
@@ -16,6 +18,8 @@ export interface ChatAvatarProps {
   avatarConfig?: AgentAvatarConfig;
   isDark?: boolean;
 }
+
+type ProviderId = keyof typeof PROVIDER_CARD_TOKENS;
 
 /* Map any string to a stable accent + variant pair so two agents with
    different names get visually distinct robots in the chat. */
@@ -34,18 +38,49 @@ function variantFromName(name: string): { accent: string; chassis: string } {
   };
 }
 
+/** Resolve a free-form provider string to a known ProviderId present in PROVIDER_CARD_TOKENS. */
+function matchProviderToken(provider: string): ProviderId | null {
+  const normalized = provider.toLowerCase();
+  const keys = Object.keys(PROVIDER_CARD_TOKENS) as ProviderId[];
+
+  // Exact match
+  if ((keys as string[]).includes(normalized)) return normalized as ProviderId;
+
+  // Prefix match — longest key first to prevent e.g. "codex" matching "opencode"
+  const byLength = [...keys].sort((a, b) => b.length - a.length);
+  const prefixMatch = byLength.find(
+    k => normalized.startsWith(k + "-") || normalized.startsWith(k + "_"),
+  );
+  if (prefixMatch) return prefixMatch;
+
+  // Substring fallback for truncated or aliased provider strings
+  if (normalized.includes("claude")) return "claude-code";
+  if (normalized.includes("gemini")) return "gemini";
+  if (normalized.includes("codex")) return "codex";
+  if (normalized.includes("qwen")) return "qwen-code";
+  if (normalized.includes("opencode")) return "opencode";
+  if (normalized.includes("antigravity")) return "antigravity";
+
+  return null;
+}
+
 export const ChatAvatar: FunctionComponent<ChatAvatarProps> = ({
   role,
-  provider: _provider,
+  provider,
   agentName,
   avatarConfig,
   isDark = true,
 }) => {
+  const matchedProviderId = role === "agent" && provider
+    ? matchProviderToken(provider)
+    : null;
+
   const getLabel = () => {
     if (role === "jules") return "Jules";
     if (role === "container") return "Container Worker";
     if (role === "system") return "System";
     if (role === "user") return "User";
+    if (matchedProviderId) return providerLabels[matchedProviderId];
     return agentName || "Agent";
   };
 
@@ -79,6 +114,17 @@ export const ChatAvatar: FunctionComponent<ChatAvatarProps> = ({
 
       case "agent":
       default: {
+        // Provider-branded icon takes priority when provider is recognized
+        if (matchedProviderId) {
+          return (
+            <ProviderLogo
+              provider={matchedProviderId}
+              size={20}
+              title={providerLabels[matchedProviderId]}
+            />
+          );
+        }
+
         // Logo-faithful mini robot. If we have a config use it, otherwise
         // pick a deterministic variant from the agent's name so different
         // agents are visually distinct in the chat.
