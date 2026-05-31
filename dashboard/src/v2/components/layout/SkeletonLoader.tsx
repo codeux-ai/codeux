@@ -3,8 +3,7 @@ import { useEffect, useState } from "preact/hooks";
 
 const Shimmer = () => (
   <div
-    className="absolute inset-0 -translate-x-full animate-[shimmer_1.2s_infinite_linear] pointer-events-none"
-    style={{ background: 'linear-gradient(90deg, #F3F4F6 0%, #E5E7EB 50%, #F3F4F6 100%)' }}
+    className="absolute inset-0 -translate-x-full animate-[shimmer_2.5s_infinite_linear] pointer-events-none bg-gradient-to-r from-transparent via-slate-300 to-transparent dark:from-transparent dark:via-white/[0.04] dark:to-transparent"
   />
 );
 

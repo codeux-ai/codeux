@@ -27,3 +27,9 @@
   :root:not(.dark) .shadow-md { box-shadow: var(--v2-shadow-md); }
   :root:not(.dark) .shadow-lg { box-shadow: var(--v2-shadow-lg); }
 }
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
