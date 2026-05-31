@@ -51,6 +51,31 @@ function parseJsonObject(value: string): Record<string, unknown> | null {
   }
 }
 
+interface NormalizedUsageCounts {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+function normalizeUsageCounts(
+  usage: Record<string, unknown>,
+  args?: {
+    promptKeys?: string[];
+    completionKeys?: string[];
+    totalKeys?: string[];
+  },
+): NormalizedUsageCounts {
+  const promptKeys = args?.promptKeys ?? ["input_tokens", "prompt_tokens", "inputTokens", "promptTokens", "input"];
+  const completionKeys = args?.completionKeys ?? ["output_tokens", "completion_tokens", "outputTokens", "completionTokens", "candidates"];
+  const totalKeys = args?.totalKeys ?? ["total_tokens", "totalTokens", "totalTokenCount", "total"];
+
+  const promptTokens = promptKeys.reduce((value, key) => value || toNumber(usage[key]), 0);
+  const completionTokens = completionKeys.reduce((value, key) => value || toNumber(usage[key]), 0);
+  const explicitTotal = totalKeys.reduce((value, key) => value || toNumber(usage[key]), 0);
+  const totalTokens = explicitTotal > 0 ? explicitTotal : promptTokens + completionTokens;
+  return { promptTokens, completionTokens, totalTokens };
+}
+
 function tokenizeWithCodexModel(model: string | null | undefined, text: string): number {
   const normalized = typeof model === "string" && model.trim().length > 0 ? model.trim() : "gpt-4o";
   try {
@@ -101,11 +126,16 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
 
   const directTokens = stats.tokens && typeof stats.tokens === "object" ? stats.tokens as Record<string, unknown> : null;
   if (directTokens) {
-    const inputTokens = toNumber(directTokens.input);
+    const normalized = normalizeUsageCounts(directTokens, {
+      promptKeys: ["input", "input_tokens", "inputTokens", "prompt_tokens", "promptTokens"],
+      completionKeys: ["candidates", "output", "output_tokens", "outputTokens", "completion_tokens", "completionTokens"],
+      totalKeys: ["total", "total_tokens", "totalTokens", "totalTokenCount"],
+    });
+    const inputTokens = normalized.promptTokens;
     const cachedInputTokens = toNumber(directTokens.cached);
-    const outputTokens = toNumber(directTokens.candidates);
+    const outputTokens = normalized.completionTokens;
     const reasoningOutputTokens = toNumber(directTokens.thoughts);
-    const totalTokens = inputTokens + outputTokens + reasoningOutputTokens;
+    const totalTokens = Math.max(normalized.totalTokens, inputTokens + outputTokens + reasoningOutputTokens);
     if (totalTokens > 0) {
       return {
         ...emptyTelemetry(),
@@ -131,9 +161,14 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
       if (!tokens || typeof tokens !== "object") {
         continue;
       }
-      inputTokens += toNumber((tokens as Record<string, unknown>).input);
+      const normalized = normalizeUsageCounts(tokens as Record<string, unknown>, {
+        promptKeys: ["input", "input_tokens", "inputTokens", "prompt_tokens", "promptTokens"],
+        completionKeys: ["candidates", "output", "output_tokens", "outputTokens", "completion_tokens", "completionTokens"],
+        totalKeys: ["total", "total_tokens", "totalTokens", "totalTokenCount"],
+      });
+      inputTokens += normalized.promptTokens;
       cachedInputTokens += toNumber((tokens as Record<string, unknown>).cached);
-      outputTokens += toNumber((tokens as Record<string, unknown>).candidates);
+      outputTokens += normalized.completionTokens;
       reasoningOutputTokens += toNumber((tokens as Record<string, unknown>).thoughts);
     }
     const totalTokens = inputTokens + outputTokens + reasoningOutputTokens;
@@ -155,8 +190,13 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
 }
 
 function parseUsageObject(usage: Record<string, unknown>): { inputTokens: number; cachedInputTokens: number; outputTokens: number; reasoningOutputTokens: number } {
-  const inputTokens = toNumber(usage.input_tokens ?? usage.prompt_tokens ?? 0);
-  const outputTokens = toNumber(usage.output_tokens ?? usage.completion_tokens ?? 0);
+  const normalized = normalizeUsageCounts(usage, {
+    promptKeys: ["input_tokens", "prompt_tokens", "inputTokens", "promptTokens", "input"],
+    completionKeys: ["output_tokens", "completion_tokens", "outputTokens", "completionTokens", "output", "completion"],
+    totalKeys: ["total_tokens", "totalTokens", "totalTokenCount", "total"],
+  });
+  const inputTokens = normalized.promptTokens;
+  let outputTokens = normalized.completionTokens;
 
   let cachedInputTokens = toNumber(usage.cached_input_tokens ?? 0);
   if (cachedInputTokens === 0) {
@@ -172,6 +212,11 @@ function parseUsageObject(usage: Record<string, unknown>): { inputTokens: number
     if (details && typeof details === "object") {
       reasoningOutputTokens = toNumber(details.reasoning_tokens ?? 0);
     }
+  }
+
+  // When providers report only total+prompt, infer completion safely.
+  if (outputTokens <= 0 && normalized.totalTokens > inputTokens) {
+    outputTokens = Math.max(0, normalized.totalTokens - inputTokens);
   }
 
   return { inputTokens, cachedInputTokens, outputTokens, reasoningOutputTokens };
@@ -252,14 +297,15 @@ function parseCodexJsonLines(stdout: string): ProviderUsageTelemetry | null {
   if (!latestUsage) {
     return null;
   }
+  const parsedUsage = parseUsageObject(latestUsage);
 
   return {
     ...emptyTelemetry(),
-    inputTokens: toNumber(latestUsage.input_tokens),
-    cachedInputTokens: toNumber(latestUsage.cached_input_tokens),
-    outputTokens: toNumber(latestUsage.output_tokens),
-    reasoningOutputTokens: toNumber(latestUsage.reasoning_output_tokens),
-    totalTokens: toNumber(latestUsage.input_tokens) + toNumber(latestUsage.output_tokens),
+    inputTokens: parsedUsage.inputTokens,
+    cachedInputTokens: parsedUsage.cachedInputTokens,
+    outputTokens: parsedUsage.outputTokens,
+    reasoningOutputTokens: parsedUsage.reasoningOutputTokens,
+    totalTokens: parsedUsage.inputTokens + parsedUsage.outputTokens,
     usageSource: "reported",
     rawUsageJson: latestUsage,
   };

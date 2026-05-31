@@ -54,6 +54,36 @@ describe("collectProviderUsageTelemetry", () => {
     });
   });
 
+  it("parses provider-reported Gemini token usage with explicit total field", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+      prompt: "Summarize the diff.",
+      cwd: "/workspace/repo",
+      stdout: JSON.stringify({
+        response: "Applied the edit.",
+        stats: {
+          tokens: {
+            input: 80,
+            candidates: 20,
+            thoughts: 10,
+            total: 140,
+          },
+        },
+      }),
+      stderr: "",
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 80,
+      outputTokens: 20,
+      reasoningOutputTokens: 10,
+      totalTokens: 140,
+      usageSource: "reported",
+      transcriptText: "Applied the edit.",
+    });
+  });
+
   it("parses provider-reported Gemini usage across model stats", async () => {
     const result = await collectProviderUsageTelemetry({
       provider: "gemini",
@@ -350,6 +380,68 @@ describe("collectProviderUsageTelemetry", () => {
       inputTokens: 210,
       cachedInputTokens: 35,
       outputTokens: 84,
+      usageSource: "reported",
+    });
+  });
+
+  it("parses Codex token_count usage with camelCase fields", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "codex",
+      model: "gpt-4o-codex",
+      prompt: "Fix the bug.",
+      cwd: "/workspace/repo",
+      stdout: JSON.stringify({
+        type: "token_count",
+        payload: {
+          type: "token_count",
+          info: {
+            total_token_usage: {
+              inputTokens: 144,
+              cached_input_tokens: 12,
+              outputTokens: 56,
+            },
+          },
+        },
+      }),
+      stderr: "",
+      capturedText: "Bug fixed.",
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 144,
+      cachedInputTokens: 12,
+      outputTokens: 56,
+      totalTokens: 200,
+      usageSource: "reported",
+    });
+  });
+
+  it("parses Codex usage when only total and prompt tokens are reported", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "codex",
+      model: "gpt-4o-codex",
+      prompt: "Generate tests.",
+      cwd: "/workspace/repo",
+      stdout: JSON.stringify({
+        type: "token_count",
+        payload: {
+          type: "token_count",
+          info: {
+            total_token_usage: {
+              prompt_tokens: 300,
+              total_tokens: 470,
+            },
+          },
+        },
+      }),
+      stderr: "",
+      capturedText: "Generated tests.",
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 300,
+      outputTokens: 170,
+      totalTokens: 470,
       usageSource: "reported",
     });
   });
