@@ -29,6 +29,7 @@ import {
   type SprintTableSortKey,
 } from "../../lib/sprint-ledger-state.js";
 
+import { Table, TableHeader, TableBody, TableCell } from "../ui/Table.js";
 import { SprintLedgerHeader } from "./SprintLedgerHeader.js";
 import { SprintLedgerBulkActions } from "./SprintLedgerBulkActions.js";
 import { SprintLedgerRow } from "./SprintLedgerRow.js";
@@ -290,108 +291,105 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       />
 
       <div className="min-h-[20rem] px-3 py-4 sm:px-4 lg:px-5">
-        <div className="overflow-x-hidden lg:overflow-visible">
-          <table className="block w-full border-separate border-spacing-y-3 text-left lg:table">
-            <thead className="hidden lg:table-header-group">
-            <tr className="text-[11px] font-bold text-slate-400">
-              <th className="w-12 rounded-l-2xl border-y border-l border-black/[0.06] bg-white/55 px-4 py-3 pl-6 dark:border-white/[0.06] dark:bg-white/[0.035]">
-                <button
-                  type="button"
-                  disabled={windowedSprints.length === 0 || isAnyBulkPending}
-                  onClick={handleToggleSelectAll}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-                  title={allFilteredSelected ? "Deselect all" : "Select all visible"}
-                >
-                  {allFilteredSelected
-                    ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
-                    : <Square className="h-4 w-4" strokeWidth={2.2} />}
-                </button>
-              </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
-                <button
-                  type="button"
-                  onClick={() => handleSort("showcasePinned")}
-                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                >
-                  Showcase
-                  {renderSortIndicator("showcasePinned")}
-                </button>
-              </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
-                <button
-                  type="button"
-                  onClick={() => handleSort("sprintKey")}
-                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                >
-                  Sprint ID
-                  {renderSortIndicator("sprintKey")}
-                </button>
-              </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
-                <button
-                  type="button"
-                  onClick={() => handleSort("name")}
-                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                >
-                  Sprint
-                  {renderSortIndicator("name")}
-                </button>
-              </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
-                <button
-                  type="button"
-                  onClick={() => handleSort("status")}
-                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                >
-                  Status
-                  {renderSortIndicator("status")}
-                </button>
-              </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
-                <button
-                  type="button"
-                  onClick={() => handleSort("tasksCount")}
-                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                >
-                  Tasks
-                  {renderSortIndicator("tasksCount")}
-                </button>
-              </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
-                <button
-                  type="button"
-                  onClick={() => handleSort("completion")}
-                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                >
-                  Completion
-                  {renderSortIndicator("completion")}
-                </button>
-              </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
-                <button
-                  type="button"
-                  onClick={() => handleSort("createdAt")}
-                  className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
-                >
-                  Created
-                  {renderSortIndicator("createdAt")}
-                </button>
-              </th>
-              <th className="rounded-r-2xl border-y border-r border-black/[0.06] bg-white/55 px-4 py-3 pr-6 text-right dark:border-white/[0.06] dark:bg-white/[0.035]">Controls</th>
-            </tr>
-          </thead>
-          <tbody className="block lg:table-row-group">
+        <Table>
+          <TableHeader>
+            <TableCell isHeader isFirst className="w-12">
+              <button
+                type="button"
+                disabled={windowedSprints.length === 0 || isAnyBulkPending}
+                onClick={handleToggleSelectAll}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                title={allFilteredSelected ? "Deselect all" : "Select all visible"}
+              >
+                {allFilteredSelected
+                  ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
+                  : <Square className="h-4 w-4" strokeWidth={2.2} />}
+              </button>
+            </TableCell>
+            <TableCell isHeader className="group">
+              <button
+                type="button"
+                onClick={() => handleSort("showcasePinned")}
+                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+              >
+                Showcase
+                {renderSortIndicator("showcasePinned")}
+              </button>
+            </TableCell>
+            <TableCell isHeader className="group">
+              <button
+                type="button"
+                onClick={() => handleSort("sprintKey")}
+                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+              >
+                Sprint ID
+                {renderSortIndicator("sprintKey")}
+              </button>
+            </TableCell>
+            <TableCell isHeader className="group">
+              <button
+                type="button"
+                onClick={() => handleSort("name")}
+                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+              >
+                Sprint
+                {renderSortIndicator("name")}
+              </button>
+            </TableCell>
+            <TableCell isHeader className="group">
+              <button
+                type="button"
+                onClick={() => handleSort("status")}
+                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+              >
+                Status
+                {renderSortIndicator("status")}
+              </button>
+            </TableCell>
+            <TableCell isHeader align="right" className="group">
+              <button
+                type="button"
+                onClick={() => handleSort("tasksCount")}
+                className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+              >
+                {renderSortIndicator("tasksCount")}
+                Tasks
+              </button>
+            </TableCell>
+            <TableCell isHeader align="right" className="group">
+              <button
+                type="button"
+                onClick={() => handleSort("completion")}
+                className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+              >
+                {renderSortIndicator("completion")}
+                Completion
+              </button>
+            </TableCell>
+            <TableCell isHeader className="group">
+              <button
+                type="button"
+                onClick={() => handleSort("createdAt")}
+                className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+              >
+                Created
+                {renderSortIndicator("createdAt")}
+              </button>
+            </TableCell>
+            <TableCell isHeader align="right" isLast>Controls</TableCell>
+          </TableHeader>
+          <TableBody>
             {isLoading && windowedSprints.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="block lg:table-row">
-                  <td colSpan={9} className="block p-2 lg:table-cell">
+                  <TableCell colSpan={9} className="p-2">
                     <SkeletonRow />
-                  </td>
+                  </TableCell>
                 </tr>
               ))
             ) : windowedSprints.length === 0 ? (
               <tr className="block lg:table-row">
-                <td colSpan={9} className="block lg:table-cell">
+                <TableCell colSpan={9}>
                   <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-black/[0.08] bg-white/50 px-6 py-10 text-center dark:border-white/[0.08] dark:bg-white/[0.03]">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/80 text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.05]">
                       <Inbox className="h-5 w-5" strokeWidth={2.1} />
@@ -407,7 +405,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                         : "Create a sprint above and it will appear in the showcase and ledger automatically."}
                     </p>
                   </div>
-                </td>
+                </TableCell>
               </tr>
             ) : (
               windowedSprints.map((sprint, index) => (
@@ -429,9 +427,8 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 />
               ))
             )}
-          </tbody>
-          </table>
-        </div>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
