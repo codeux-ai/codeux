@@ -6,7 +6,7 @@ import { Link } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
 
 import { BrandSection } from "./top-nav/BrandSection.js";
-import { GlobalSearch } from "./top-nav/GlobalSearch.js";
+import { GlobalSearch } from "./navigation/GlobalSearch.js";
 import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
 import { AddProjectModal } from "./ui/AddProjectModal.js";
@@ -19,6 +19,10 @@ import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
 import { Tooltip } from "./ui/Tooltip.js";
 import { useNotifications } from "../hooks/use-notifications.js";
+
+import { ProjectSwitcher } from "./navigation/ProjectSwitcher.js";
+import { NotificationIndicator } from "./navigation/NotificationIndicator.js";
+import { UserMenu } from "./navigation/UserMenu.js";
 
 export function useDropdownKeyboard(
     isOpen: boolean,
@@ -256,254 +260,16 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
             </div>
 
             <div className="flex items-center gap-1 sm:gap-3">
-                {/* Project Selector */}
-                <div className="relative hidden md:block" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
-                    <button
-                        ref={projectKb.toggleRef}
-                        onKeyDown={projectKb.onToggleKeyDown}
-                        onClick={() => setDropdownOpen(!dropdownOpen)}
-                        data-tour-id="project-selector"
-                        aria-haspopup="listbox"
-                        aria-expanded={dropdownOpen}
-                        className="flex h-9 items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group hover:border-black/[0.08] focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.08]"
-                    >
-                        <StatusDot status={selectedProject?.status || "idle"} />
-                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
-                            {projectSwitchBusy ? "Switching..." : (selectedProject?.name || (loading ? "Loading..." : "Select Project"))}
-                        </span>
-                        <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${dropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {/* Project Dropdown */}
-                    {dropdownOpen && (
-                        <div role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/97 dark:bg-void-800/97 backdrop-blur-md border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
-                            <div className="px-3 pt-3 pb-1.5">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Projects</span>
-                            </div>
-                            <div className="px-2 pb-2">
-                                <input
-                                    type="text"
-                                    placeholder="Filter projects..."
-                                    value={projectFilter}
-                                    onInput={(e) => setProjectFilter(e.currentTarget.value)}
-                                    className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
-                                />
-                            </div>
-                            <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
-                            {filteredProjects.map((source) => (
-                                <button
-                                    key={source.id}
-                                    role="option"
-                                    aria-selected={selectedProject?.id === source.id}
-                                    onClick={async () => {
-                                        setProjectSwitchBusy(true);
-                                        try {
-                                            await selectProject(source.id);
-                                            setDropdownOpen(false);
-                                        } finally {
-                                            setProjectSwitchBusy(false);
-                                        }
-                                    }}
-                                    className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedProject?.id === source.id ? 'bg-signal-500/8' : ''}`}
-                                >
-                                    <StatusDot status={source.status} />
-                                    <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedProject?.id === source.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
-                                        {source.name}
-                                    </span>
-                                    {selectedProject?.id === source.id && (
-                                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
-                                    )}
-                                </button>
-                            ))}
-                            </div>
-                            {!loading && projects.length === 0 && (
-                                <div className="px-3 py-4 text-xs text-slate-400 font-medium">
-                                    No projects connected yet.
-                                </div>
-                            )}
-                            <div className="p-2 border-t border-black/[0.04] dark:border-white/[0.04] mt-1 flex flex-col gap-1">
-                                <button
-                                    onClick={() => { setDropdownOpen(false); setShowAddProject(true); }}
-                                    className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-ember-600 dark:text-ember-400 hover:bg-ember-500/[0.06] rounded-xl transition-colors"
-                                >
-                                    <FolderOpen aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
-                                    Add Project
-                                </button>
-                                <Link
-                                    to="/projects"
-                                    onClick={() => setDropdownOpen(false)}
-                                    className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[44px] text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
-                                >
-                                    <span>Manage Projects</span>
-                                    <ArrowRight aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
-                                </Link>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Sprint Selector */}
-                {selectedProject && (
-                    <div className="relative hidden md:block" ref={sprintDropdownRef} onKeyDown={sprintKb.onContainerKeyDown}>
-                        <button
-                            ref={sprintKb.toggleRef}
-                            onKeyDown={sprintKb.onToggleKeyDown}
-                            aria-haspopup="listbox"
-                            aria-expanded={sprintDropdownOpen}
-                            onClick={(e) => {
-                                if (sprints.length === 0) {
-                                    e.preventDefault();
-                                    return;
-                                }
-                                setSprintDropdownOpen(!sprintDropdownOpen);
-                            }}
-                            aria-disabled={sprints.length === 0}
-                            className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 flex h-9 items-center gap-2.5 rounded-xl border border-transparent bg-black/[0.04] px-3.5 py-0 transition-all group dark:bg-white/[0.04] ${
-                                sprints.length > 0
-                                    ? 'hover:border-black/[0.08] dark:hover:border-white/[0.08] cursor-pointer'
-                                    : 'opacity-50 cursor-not-allowed'
-                            }`}
-                        >
-                            {selectedSprint && (
-                                <StatusDot status={selectedSprint.status} />
-                            )}
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[180px]">
-                                {sprintSwitchBusy ? "Switching..." : (sprintsLoading ? "Loading..." : formatSprintDisplay(selectedSprint, sprintKeyPrefix))}
-                            </span>
-                            {sprints.length > 0 && (
-                                <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${sprintDropdownOpen ? 'rotate-180' : ''}`} />
-                            )}
-                        </button>
-
-                        {/* Sprint Dropdown */}
-                        {sprintDropdownOpen && sprints.length > 0 && (
-                            <div role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 bg-white/97 dark:bg-void-800/97 backdrop-blur-md border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
-                                <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Scope</span>
-                                </div>
-                                <div className="px-2 pb-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Filter sprints..."
-                                        value={sprintFilter}
-                                        onInput={(e) => setSprintFilter(e.currentTarget.value)}
-                                        className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
-                                    />
-                                </div>
-                                <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
-                                <button
-                                    role="option"
-                                    aria-selected={selectedSprintId === null}
-                                    onClick={async () => {
-                                        setSprintSwitchBusy(true);
-                                        try {
-                                            await selectSprint(null);
-                                            setSprintDropdownOpen(false);
-                                        } finally {
-                                            setSprintSwitchBusy(false);
-                                        }
-                                    }}
-                                    className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === null ? 'bg-signal-500/8' : ''}`}
-                                >
-                                    <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === null ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
-                                        All Sprints
-                                    </span>
-                                    {selectedSprintId === null && (
-                                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
-                                    )}
-                                </button>
-                                {filteredSprints.map((sprint) => (
-                                    <button
-                                        key={sprint.id}
-                                        role="option"
-                                        aria-selected={selectedSprintId === sprint.id}
-                                        onClick={async () => {
-                                            setSprintSwitchBusy(true);
-                                            try {
-                                                await selectSprint(sprint.id);
-                                                setSprintDropdownOpen(false);
-                                            } finally {
-                                                setSprintSwitchBusy(false);
-                                            }
-                                        }}
-                                        className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === sprint.id ? 'bg-signal-500/8' : ''}`}
-                                    >
-                                        <StatusDot status={sprint.status} />
-                                        <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === sprint.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
-                                            {formatSprintDisplay(sprint, sprintKeyPrefix)}
-                                        </span>
-                                        {selectedSprintId === sprint.id && (
-                                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
-                                        )}
-                                    </button>
-                                ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
+                <ProjectSwitcher />
 
                 <TelemetryStats projectId={projectId} sprints={sprints} />
 
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10 hidden md:block" />
 
-                {/* Docker Status */}
                 <DockerStatusMenu />
-
                 <BrowserSessionsMenu enabled={browserVisible} />
-
-                {/* Notifications */}
-                <div
-                    className="relative hidden md:inline-block"
-                    ref={notificationContainerRef}
-                    onMouseEnter={handleNotificationMouseEnter}
-                    onMouseLeave={handleNotificationMouseLeave}
-                >
-                    <Tooltip content="Notifications">
-                        <button
-                            type="button"
-                            onClick={toggleNotificationMenu}
-                            onFocus={handleNotificationFocus}
-                            onBlur={handleNotificationBlur}
-                            aria-haspopup="menu"
-                            aria-expanded={isNotificationMenuVisible}
-                            aria-label="Notifications"
-                            className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:ring-2 focus-visible:ring-signal-500/30"
-                        >
-                            <Bell aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
-                            {notifications.unreadCount > 0 && (
-                                <span className="absolute top-2.5 right-2.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-status-red px-1 text-[9px] font-black leading-none text-white shadow-[0_0_10px_rgba(211,47,47,0.35)] ring-1 ring-[#F9F8F4] dark:ring-void-900">
-                                    {notifications.unreadCount > 9 ? "9+" : notifications.unreadCount}
-                                </span>
-                            )}
-                        </button>
-                    </Tooltip>
-                    {isNotificationMenuVisible && (
-                        <NotificationPanel
-                            notifications={notifications.notifications}
-                            unreadCount={notifications.unreadCount}
-                            onMarkAllRead={notifications.markAllRead}
-                            onMarkRead={notifications.markRead}
-                            onDismiss={notifications.dismiss}
-                            onRefresh={() => void notifications.refresh()}
-                        />
-                    )}
-                </div>
-
-                {/* Theme Toggle */}
-                <Tooltip content={isDark ? "Switch to light mode" : "Switch to dark mode"}>
-                    <button
-                        onClick={toggleTheme}
-                        aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-                        className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30"
-                    >
-                        {isDark
-                            ? <Sun aria-hidden="true" className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />
-                            : <Moon aria-hidden="true" className="w-4 h-4 text-slate-500 hover:text-slate-900 transition-colors" strokeWidth={1.5} />
-                        }
-                    </button>
-                </Tooltip>
+                <NotificationIndicator />
+                <UserMenu isDark={isDark} toggleTheme={toggleTheme} />
             </div>
             </nav>
         </header>
