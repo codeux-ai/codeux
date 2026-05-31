@@ -201,6 +201,7 @@ export const useSettingsPageState = (
   const [importingHints, setImportingHints] = useState(false);
   const [externalHints, setExternalHints] = useState<import("../../types.js").ExternalSettingsHints | null>(null);
   const [projectAgentPresetOptions, setProjectAgentPresetOptions] = useState<Array<{ value: string; label: string; avatarConfig?: AgentAvatarConfig }>>([]);
+  const previousCategoryRef = useRef<CategoryId>("general");
 
   const loadSettings = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -256,6 +257,34 @@ export const useSettingsPageState = (
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleSettingsUpdated = () => {
+      if (activeCategory !== "models" || isDirtyRef.current) {
+        return;
+      }
+      void loadSettings();
+    };
+
+    window.addEventListener("codeux:settings-updated", handleSettingsUpdated);
+    return () => window.removeEventListener("codeux:settings-updated", handleSettingsUpdated);
+  }, [activeCategory, loadSettings]);
+
+  useEffect(() => {
+    const wasModels = previousCategoryRef.current === "models";
+    const isModels = activeCategory === "models";
+    previousCategoryRef.current = activeCategory;
+
+    if (!isModels || wasModels || isDirtyRef.current) {
+      return;
+    }
+
+    void loadSettings();
+  }, [activeCategory, loadSettings]);
 
   useEffect(() => {
     if (!selectedProject && activeScope === "project") {

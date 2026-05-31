@@ -78,6 +78,7 @@ Runtime resolution:
 - When Code UX has to create a missing feature branch, it prefers `origin/<defaultBranch>` over the local `<defaultBranch>` ref when the remote-tracking base branch exists.
 - `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from settings and project metadata.
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
+- dashboard v2 settings queries clear both cached and in-flight effective-settings requests whenever system/project settings are saved or reset, which prevents stale AI model options immediately after integration updates.
 
 ## Persisted Scoped Settings Model
 

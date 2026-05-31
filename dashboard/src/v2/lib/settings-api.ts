@@ -10,6 +10,16 @@ let systemSettingsInflightRequest: Promise<SystemSettings> | null = null;
 const effectiveSettingsCache = new Map<string, EffectiveSettingsResponse>();
 const effectiveSettingsInflightRequests = new Map<string, Promise<EffectiveSettingsResponse>>();
 
+const clearEffectiveSettingsRequests = (projectId?: string): void => {
+  if (projectId) {
+    effectiveSettingsCache.delete(projectId);
+    effectiveSettingsInflightRequests.delete(projectId);
+    return;
+  }
+  effectiveSettingsCache.clear();
+  effectiveSettingsInflightRequests.clear();
+};
+
 export const fetchSystemSettings = async (): Promise<SystemSettings> => {
   if (systemSettingsCache) {
     return systemSettingsCache;
@@ -32,7 +42,7 @@ export const saveSystemSettings = async (settings: SystemSettings): Promise<Syst
     body: JSON.stringify(settings),
   });
   systemSettingsCache = saved;
-  effectiveSettingsCache.clear();
+  clearEffectiveSettingsRequests();
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("codeux:settings-updated", {
       detail: { scope: "system" },
@@ -73,7 +83,7 @@ export const saveProjectSettings = async (projectId: string, settings: ProjectSe
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
-  effectiveSettingsCache.delete(projectId);
+  clearEffectiveSettingsRequests(projectId);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("codeux:settings-updated", {
       detail: { scope: "project", projectId },
@@ -85,7 +95,7 @@ export const resetProjectSettings = async (projectId: string): Promise<void> => 
   await fetchJson(`/api/projects/${encodeURIComponent(projectId)}/settings`, {
     method: "DELETE",
   });
-  effectiveSettingsCache.delete(projectId);
+  clearEffectiveSettingsRequests(projectId);
 };
 
 export const fetchSprintEffectiveSettings = async (

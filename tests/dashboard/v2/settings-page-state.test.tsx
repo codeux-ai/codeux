@@ -318,6 +318,44 @@ describe("useSettingsPageState", () => {
     expect(mockResetDatabase).toHaveBeenCalled();
   });
 
+  it("refetches effective settings when revisiting the models category", async () => {
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const initialCalls = mockFetchProject.mock.calls.length;
+
+    act(() => {
+      result.current.setActiveCategory("integrations");
+      result.current.setActiveCategory("models");
+    });
+
+    await waitFor(() => {
+      expect(mockFetchProject.mock.calls.length).toBeGreaterThan(initialCalls);
+    });
+  });
+
+  it("refetches models data after settings-updated events while models category is active", async () => {
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.setActiveCategory("models");
+    });
+    await waitFor(() => expect(result.current.activeCategory).toBe("models"));
+
+    const callsBeforeEvent = mockFetchProject.mock.calls.length;
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent("codeux:settings-updated", {
+        detail: { scope: "system" },
+      }));
+    });
+
+    await waitFor(() => {
+      expect(mockFetchProject.mock.calls.length).toBeGreaterThan(callsBeforeEvent);
+    });
+  });
+
   it.skip("handles import hints", async () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
     await waitFor(() => expect(result.current.loading).toBe(false));
