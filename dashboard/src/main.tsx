@@ -9,7 +9,7 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import { KineticDock } from "./v2/components/KineticDock.js";
-import { Sidebar } from "./v2/components/Sidebar.js";
+import { Sidebar } from "./v2/components/layout/Sidebar.js";
 import { TopNav } from "./v2/components/TopNav.js";
 import { ProjectDataProvider, useProjectData } from "./v2/context/project-data.js";
 import { ToastProvider } from "./v2/components/feedback/ToastProvider.js";

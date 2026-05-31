@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { Link, useRouterState } from "@tanstack/react-router";
 import gsap from "gsap";
 import { Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, MessageCircle, ChevronLeft, ChevronRight, CalendarDays, FolderTree } from "lucide-preact";
-import { useProjectData } from "../context/project-data.js";
-import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
-import { useReducedMotion } from "../hooks/use-reduced-motion.js";
-import { RobotLogo } from "./brand/RobotLogo.js";
+import { useProjectData } from "../../context/project-data.js";
+import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { RobotLogo } from "../brand/RobotLogo.js";
 
 const ALL_NAV_ITEMS = [
     { icon: MessageCircle, label: "Chat",     path: "/chat" },

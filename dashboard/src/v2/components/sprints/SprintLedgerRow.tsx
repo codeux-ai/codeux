@@ -18,6 +18,7 @@ import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import { DropdownMenu } from "../ui/DropdownMenu.js";
+import { LinkedIssueTag } from "../sprint/LinkedIssueTag.js";
 import type { Sprint, SprintStatus } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js";
@@ -191,14 +192,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         {sprint.linkedIssues && sprint.linkedIssues.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {sprint.linkedIssues.map((issue) => (
-              <span
-                key={issue.id}
-                className="inline-flex items-center gap-1.5 rounded-md border border-black/[0.08] bg-black/[0.03] px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-slate-300"
-                title={issue.title}
-              >
-                <Link2 className="h-3 w-3" strokeWidth={2.2} />
-                {issue.issueKey}
-              </span>
+              <LinkedIssueTag key={issue.id} issue={issue} />
             ))}
           </div>
         )}

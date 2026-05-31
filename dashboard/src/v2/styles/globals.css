@@ -3,9 +3,11 @@
     --bg-primary: #ffffff;
     --bg-secondary: #f1f5f9;
     --text-secondary: #334155;
-    --border-muted: #64748b;
+    --color-border-muted: rgba(0, 0, 0, 0.06);
+    --border-muted: var(--color-border-muted);
     --accent-primary: #007352;
     --accent-hover: #006644;
+    --radius-ui: 8px;
 
     --v2-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
     --v2-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
@@ -16,7 +18,8 @@
     --bg-primary: #080605;
     --bg-secondary: #181411;
     --text-secondary: #a1a1aa;
-    --border-muted: #27272a;
+    --color-border-muted: #27272a;
+    --border-muted: var(--color-border-muted);
     --accent-primary: #00e0a0;
     --accent-hover: #33ffb8;
   }
@@ -26,4 +29,10 @@
   :root:not(.dark) .shadow-sm { box-shadow: var(--v2-shadow-sm); }
   :root:not(.dark) .shadow-md { box-shadow: var(--v2-shadow-md); }
   :root:not(.dark) .shadow-lg { box-shadow: var(--v2-shadow-lg); }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
