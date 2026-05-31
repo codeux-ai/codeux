@@ -3,7 +3,7 @@ import { lazy, Suspense } from "preact/compat";
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import {
-    Zap, Clock, CheckCircle2, XCircle, AlertTriangle,
+    Zap, Clock, CheckCircle2, XCircle,
     Activity, ChevronDown, Radio,
     Play, RotateCcw, Bot, Workflow, PauseCircle,
     Ship, BarChart3,
@@ -11,7 +11,6 @@ import {
 import { SprintStatsDeck, useLiveTaskTimingSummaries } from "./components/SprintStatsDeck.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
-import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
@@ -48,6 +47,7 @@ import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
+import { getSprintStatusPresentation } from "./lib/sprint-status-presentation.js";
 
 const SprintBoatRace = lazy(() => import("./components/SprintBoatRace.js").then(m => ({ default: m.SprintBoatRace })));
 const SprintDag = lazy(() => import("./components/SprintDag.js").then(m => ({ default: m.SprintDag })));
@@ -184,6 +184,15 @@ export const LiveSessionPage: FunctionComponent = () => {
     const pausedInterventionRun = runtimeState.pausedInterventionRun;
     const pausedIntervention = pausedInterventionRun?.humanIntervention || null;
     const hasLiveSprint = runtimeState.hasActiveSprint;
+    const sprintStatusPresentation = useMemo(() => getSprintStatusPresentation({
+        state: hasLiveSprint ? "running" : pausedInterventionRun?.status ?? "unknown",
+        pauseSource: pausedIntervention?.ownerType ?? null,
+        humanInterventionTitle: pausedIntervention?.title ?? null,
+        humanInterventionReason: pausedIntervention?.reason ?? null,
+        humanInterventionInstructions: pausedIntervention?.instructions ?? null,
+        humanInterventionOwnerType: pausedIntervention?.ownerType ?? null,
+    }), [hasLiveSprint, pausedIntervention?.instructions, pausedIntervention?.ownerType, pausedIntervention?.reason, pausedIntervention?.title, pausedInterventionRun?.status]);
+    const showStatusPanel = !hasLiveSprint && (sprintStatusPresentation.isManualPause || sprintStatusPresentation.isSystemStop);
 
     const rawHasSprintContext = runtimeState.hasSprintContext;
     const sprintDispatches = useMemo(() => {
@@ -381,34 +390,6 @@ export const LiveSessionPage: FunctionComponent = () => {
                 statusTimestamp={status.timestamp}
             />
 
-            {pausedIntervention && !hasLiveSprint && (
-                <div className="relative overflow-hidden rounded-[1.75rem] border border-status-amber/18 bg-status-amber/8 p-6 shadow-[0_12px_30px_rgba(245,158,11,0.08)]">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">
-                                <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.2} />
-                                Sprint Paused For Human Intervention
-                            </div>
-                            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white font-display">
-                                {pausedIntervention.title}
-                            </h3>
-                            <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                                {pausedIntervention.reason}
-                            </p>
-                            <div className="mt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                                What to do now
-                            </div>
-                            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                                {pausedIntervention.instructions}
-                            </p>
-                        </div>
-                        <div className="shrink-0">
-                            <HumanInterventionBadge summary={pausedIntervention} label="Details" align="right" />
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* ── Header View: Stats or Boat Race ─────────────────────── */}
             {headerView === "stats" ? (
                 <SprintStatsDeck
@@ -479,9 +460,9 @@ export const LiveSessionPage: FunctionComponent = () => {
                         null
                     ) : !hasSprintContext ? (
                         <IdleRuntimeState
-                            title={pausedIntervention ? "Human Intervention Needed" : "Waiting for Sprint Start"}
-                            subtitle={pausedIntervention
-                                ? pausedIntervention.instructions
+                            title={showStatusPanel ? sprintStatusPresentation.title : "Waiting for Sprint Start"}
+                            subtitle={showStatusPanel
+                                ? sprintStatusPresentation.detail
                                 : "Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project."}
                         />
                     ) : taskCardItems.length === 0 ? (

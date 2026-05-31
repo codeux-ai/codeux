@@ -104,4 +104,31 @@ describe("SprintCell", () => {
 
     expect(screen.queryByText("Mark Completed")).toBeNull();
   });
+
+  it("renders only the canonical Human Intervention badge and no redundant alerts", () => {
+    const mockIntervention = {
+      title: "Manual Approval Required",
+      reason: "Reviewing large diffs",
+      instructions: "Please check the diff and approve.",
+      ownerType: "human",
+    };
+
+    // Note: status must be 'paused' for the canonical badge to show via the mapper
+    const pausedSprint = { ...defaultSprint, status: "paused" as const };
+
+    render(
+      <SprintCell
+        sprint={pausedSprint}
+        isEven={true}
+        accentColor="text-blue-500"
+        humanIntervention={mockIntervention}
+      />
+    );
+
+    // Canonical badge should be present
+    expect(screen.getByText("Needs you")).toBeDefined();
+
+    // Redundant inline alert should be absent
+    expect(screen.queryByText("Human intervention required")).toBeNull();
+  });
 });

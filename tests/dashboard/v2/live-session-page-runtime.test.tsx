@@ -156,6 +156,109 @@ describe("LiveSessionPage Runtime Status", () => {
     expect(screen.getByText("Connection Error")).toBeInTheDocument();
     expect(screen.getByText("Some network failure")).toBeInTheDocument();
   });
+
+  it("renders manual pause messaging and shows intervention label only once", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      gitStatus: null,
+      gitStatusError: null,
+      initialLoadComplete: true,
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: new Date().toISOString(),
+      refreshGitStatus: vi.fn(),
+      refreshRuntimeStatus: vi.fn(),
+      selectedSprintId: "s1",
+      status: { subtasks: [], timestamp: "2024-01-01T00:00:00Z", project_id: "p1", sprint_id: "s1" },
+      execution: {
+        ...mockExecution,
+        sprintRuns: [{
+          id: "run-manual",
+          projectId: "p1",
+          sprintId: "s1",
+          sprintName: "Sprint 1",
+          sprintNumber: 1,
+          status: "paused",
+          triggerType: "manual",
+          triggeredBy: null,
+          executorMode: "mixed",
+          startedAt: "2024-01-01T10:00:00Z",
+          finishedAt: null,
+          lastHeartbeatAt: "2024-01-01T10:05:00Z",
+          createdAt: "2024-01-01T10:00:00Z",
+          activeLeaseOwnerKey: null,
+          activeLeaseExpiresAt: null,
+          humanIntervention: {
+            title: "Sprint Paused For Manual Attention",
+            reason: "A dependency must be approved.",
+            instructions: "Approve dependency and resume the sprint.",
+            attentionType: "manual_attention",
+            severity: "medium",
+            ownerType: "human",
+          },
+        }],
+      },
+      stats: { total: 0 } as any,
+      tasksWithLiveActivities: [],
+    });
+
+    render(<LiveSessionPage />);
+    expect(screen.getByText("Paused")).toBeInTheDocument();
+    expect(screen.getAllByText("Approve dependency and resume the sprint.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Needs you")).toHaveLength(1);
+  });
+
+  it("renders system stop messaging without manual intervention label", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      gitStatus: null,
+      gitStatusError: null,
+      initialLoadComplete: true,
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: new Date().toISOString(),
+      refreshGitStatus: vi.fn(),
+      refreshRuntimeStatus: vi.fn(),
+      selectedSprintId: "s1",
+      status: { subtasks: [], timestamp: "2024-01-01T00:00:00Z", project_id: "p1", sprint_id: "s1" },
+      execution: {
+        ...mockExecution,
+        sprintRuns: [{
+          id: "run-system",
+          projectId: "p1",
+          sprintId: "s1",
+          sprintName: "Sprint 1",
+          sprintNumber: 1,
+          status: "paused",
+          triggerType: "manual",
+          triggeredBy: null,
+          executorMode: "mixed",
+          startedAt: "2024-01-01T10:00:00Z",
+          finishedAt: null,
+          lastHeartbeatAt: "2024-01-01T10:05:00Z",
+          createdAt: "2024-01-01T10:00:00Z",
+          activeLeaseOwnerKey: null,
+          activeLeaseExpiresAt: null,
+          humanIntervention: {
+            title: "Worker pause",
+            reason: "No executable work was available.",
+            instructions: "Resolve the stop condition and restart when ready.",
+            attentionType: "manual_attention",
+            severity: "low",
+            ownerType: "worker",
+          },
+        }],
+      },
+      stats: { total: 0 } as any,
+      tasksWithLiveActivities: [],
+    });
+
+    render(<LiveSessionPage />);
+    expect(screen.getByText("Stopped")).toBeInTheDocument();
+    expect(screen.getByText("Sprint Stopped By System")).toBeInTheDocument();
+    expect(screen.getAllByText("Resolve the stop condition and restart when ready.").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
+  });
 });
 
 describe("LiveSessionPage Integration Isolation", () => {

@@ -20,6 +20,7 @@ import type { ExecutionHumanInterventionSummary } from "../../../../../src/contr
 import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { SprintControls } from "./SprintControls.js";
+import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
 
 // Polished badge tones: increased contrast for backgrounds and borders where appropriate
 const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
@@ -97,6 +98,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const pinActionId = `sprint-showcase:${sprint.id}`;
   const deleteActionId = `sprint-delete:${sprint.id}`;
   const isCompleted = sprint.status === "completed";
+  const statusPresentation = getSprintStatusPresentation({
+    state: sprint.status,
+    humanInterventionTitle: humanIntervention?.title ?? null,
+    humanInterventionReason: humanIntervention?.reason ?? null,
+    humanInterventionInstructions: humanIntervention?.instructions ?? null,
+    humanInterventionOwnerType: humanIntervention?.ownerType ?? null,
+  });
+  const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
 
   const isTogglePending = pendingActionIds.has(pendingToggleActionId);
   const isPauseResumePending = pendingPauseResumeActionId.length > 0 && pendingActionIds.has(pendingPauseResumeActionId);
@@ -176,7 +185,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             Created {formatTableDate(sprint.createdAt)}
           </span>
         </div>
-        {humanIntervention && isSprintActionable(sprint.status) && humanIntervention.ownerType !== "worker" && (
+        {showInterventionBadge && isSprintActionable(sprint.status) && humanIntervention && (
           <div className="mt-3">
             <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="left" />
           </div>
@@ -207,12 +216,6 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <span className={`inline-flex rounded-full border px-3 py-1.5 text-[11px] font-bold ${STATUS_BADGE_TONES[sprint.status]}`}>
             {STATUS_LABELS[sprint.status]}
           </span>
-          {humanIntervention && isSprintActionable(sprint.status) && humanIntervention.ownerType !== "worker" && (
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-status-amber">
-              <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.2} />
-              Intervention
-            </div>
-          )}
         </div>
       </td>
       <td className={`block px-4 py-3 align-middle lg:table-cell lg:w-[100px] lg:min-w-[100px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>

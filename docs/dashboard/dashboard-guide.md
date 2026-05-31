@@ -207,6 +207,7 @@ Legacy runtime:
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown plus GitHub/GitLab/Jira issue import capabilities, plus markdown export controls. See [Sprint Imports](./sprint-imports.md).
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
 - Sprint cells and ledger rows now surface a dedicated human-intervention badge when a paused sprint needs merge work, planning, or another operator action, and the hover card explains what to do before resuming
+- Sprint and Live status messaging now uses a shared presentation mapper (`dashboard/src/v2/lib/sprint-status-presentation.ts`) so manual pauses and system-stopped states render consistent title/reason/detail copy and consistent human-intervention badge visibility across cards, rows, and live detail panels
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
 - Sprint cells now surface a QA-reviewed indicator with an expandable overlay section inside the created column, and allow marking sprints completed directly from the cell menu
@@ -259,6 +260,7 @@ Legacy runtime:
 - Sprint cell settings now open an animated menu with showcase toggle, `Edit`, `Export`, `Delete`, and live `Overrides`
 - The showcase wrappers now leave enough vertical breathing room for hover expansion, so bubble motion is no longer clipped top or bottom
 - Sprint cells now use the created column for both created-date metadata and QA review badges, and move the visible sprint key into the card body instead of surfacing the UUID there
+- The sprint cell `Needs you` intervention indicator now sits slightly higher and farther right in the metadata corner, and its pulse animation runs slower while honoring reduced-motion settings by disabling the pulse.
 - QA review badge overlays on sprint cells and ledger rows render beside the badge icon through a viewport-level overlay, so review summaries and findings are not clipped by the ledger controls or table layout.
 - Sprint markdown export now includes direct download actions and per-section copy-to-clipboard buttons (with brief `Copied` confirmation) in the export modal
 - The in-page sprint composer collapses into a stacked single-column layout on smaller screens, and both create and edit now use that same inline flow. The Quicksprint panel and the Sprint Composer are mutually exclusive; opening one automatically dismisses the other to maintain focus.
@@ -378,7 +380,7 @@ Legacy runtime:
   - the task list now comes from the selected sprint inside the unified `/api/live` snapshot instead of being reconstructed from separate task, status, and activity endpoints in the browser
   - task ordering, dependency edges, visible phase, and task activities all come from that same selected-sprint snapshot
   - execution dispatches and runtime events still enrich cards with session, provider, branch, PR, attention, and timing metadata without becoming a second visual source of truth for task identity
-- Live Session now shows a clear paused-for-human-intervention banner, repeats the reason/instructions in the hero state, and surfaces the same guidance inside paused sprint run cards
+- Live Session status copy now comes from the shared sprint status presentation mapper, so manual pauses render manual-attention messaging while worker/system pauses render system-stop messaging; the human-intervention badge appears at most once in the status area and is suppressed for system stops
 - The Live page no longer shows the timer-based `Stale Data` transport infobox while connected; reconnecting, recovering, and explicit transport errors still surface through the live transport banner.
 - worker-owned merge conflicts are now excluded from that human-intervention projection; they remain visible in the attention queue and realtime runtime feed, but they no longer tell the operator to merge or resume while the worker is handling them
 - Worker mode is now explicit in settings:
