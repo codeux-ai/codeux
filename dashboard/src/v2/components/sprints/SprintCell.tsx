@@ -25,6 +25,7 @@ import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
+import { DropdownMenu } from "../ui/DropdownMenu.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -88,37 +89,6 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (menuOpen && menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && menuOpen) {
-        setMenuOpen(false);
-      }
-    };
-
-    if (menuOpen) {
-      document.addEventListener("mousedown", handleOutsideClick);
-      document.addEventListener("keydown", handleKeyDown);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [menuOpen]);
-
-  useEffect(() => {
-    if (menuRef.current) {
-        gsap.killTweensOf(menuRef.current);
-    }
-  }, [menuOpen]);
   const state = statusMap[sprint.status];
   const StatusIcon = state.icon;
   const isCompleted = sprint.status === "completed";
@@ -298,41 +268,40 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
             View Tasks
             <Maximize2 className="h-2.5 w-2.5" />
           </a>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setMenuOpen((current) => !current);
-            }}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            className="touch-target flex h-9 w-9 items-center justify-center rounded-full bg-black/[0.06] text-slate-800 transition-colors hover:bg-black/10 dark:bg-white/[0.07] dark:text-white dark:hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
-            title="Settings"
+          <DropdownMenu
+            isOpen={menuOpen}
+            onOpenChange={setMenuOpen}
+            position="top"
+            align="end"
+            className="min-w-[10rem]"
+            content={
+              <SprintActionMenu
+                sprint={sprint}
+                isCompleted={isCompleted}
+                showcaseBusy={showcaseBusy}
+                onEdit={onEdit}
+                onExport={onExport}
+                onToggleShowcase={onToggleShowcase}
+                onOverrides={onOverrides}
+                onMarkCompleted={onMarkCompleted}
+                onDelete={onDelete}
+                onClose={() => setMenuOpen(false)}
+                markCompletedIcon="circle"
+                role="menuitem"
+                buttonClassName="flex w-full items-center gap-2 rounded-[1rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+              />
+            }
           >
-            <MoreVertical className="h-3.5 w-3.5" />
-          </button>
-
-          <div
-            role="menu"
-            ref={menuRef}
-            className={`absolute bottom-12 right-6 z-30 min-w-[10rem] origin-bottom-right rounded-[1.75rem] border border-black/[0.08] bg-white/92 p-2 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-xl transition-all duration-300 dark:border-white/[0.08] dark:bg-void-800/92 ${menuOpen ? "pointer-events-auto translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-3 scale-95 opacity-0"}`}
-          >
-            <SprintActionMenu
-              sprint={sprint}
-              isCompleted={isCompleted}
-              showcaseBusy={showcaseBusy}
-              onEdit={onEdit}
-              onExport={onExport}
-              onToggleShowcase={onToggleShowcase}
-              onOverrides={onOverrides}
-              onMarkCompleted={onMarkCompleted}
-              onDelete={onDelete}
-              onClose={() => setMenuOpen(false)}
-              markCompletedIcon="circle"
-              role="menuitem"
-              buttonClassName="flex w-full items-center gap-2 rounded-[1rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
-            />
-          </div>
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              className="touch-target flex h-9 w-9 items-center justify-center rounded-full bg-black/[0.06] text-slate-800 transition-colors hover:bg-black/10 dark:bg-white/[0.07] dark:text-white dark:hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+              title="Settings"
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenu>
         </div>
       </div>
     </div>
