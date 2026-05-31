@@ -144,7 +144,14 @@ export class VirtualWorkerService {
 
     this.deps.projectManagementRepository.events.on("project_state_changed", this.handleProjectStateChanged);
 
-    this.cleanupOrphanedVirtualWorkers();
+    // Run cleanups but don't block startup loop entirely on docker
+    void this.cleanupZombieContainers().catch((err) => {
+      this.deps.logger?.warn("Virtual worker zombie container cleanup failed during startup", { error: err });
+    });
+    void this.cleanupOrphanedVirtualWorkers().catch((err) => {
+      this.deps.logger?.warn("Virtual worker orphaned endpoint cleanup failed during startup", { error: err });
+    });
+
     void this.reconcile();
     this.reconcileTimer = setInterval(() => {
       void this.reconcile().catch((error) => {
@@ -205,6 +212,37 @@ export class VirtualWorkerService {
       if (this.projectNeedsVirtualWorker(project.id, true)) {
         this.scheduleProject(project.id, "reconcile");
       }
+    }
+
+    try {
+      const containers = await this.dockerService.listContainers();
+      const nowMs = Date.now();
+      const MAX_EXECUTION_TIME_MS = 10 * 60 * 1000;
+
+      for (const container of containers) {
+        if (!container.createdAt) continue;
+
+        const createdAtMs = new Date(container.createdAt).getTime();
+        if (isNaN(createdAtMs)) continue;
+
+        const elapsedMs = nowMs - createdAtMs;
+
+        // Apply timeout policy to managed worker containers
+        if (container.labels["code-ux.session-id"] && elapsedMs > MAX_EXECUTION_TIME_MS) {
+          this.deps.logger?.warn(`Virtual worker container ${container.names} exceeded max execution time (${elapsedMs}ms). Terminating.`, {
+            containerId: container.id,
+            elapsedMs,
+          });
+
+          const stats = await this.dockerService.getContainerStats(container.id);
+          this.deps.logger?.info(`Terminated container stats`, { containerId: container.id, stats });
+
+          await this.dockerService.stopContainer(container.id, 30);
+          await this.dockerService.removeContainer(container.id);
+        }
+      }
+    } catch (err) {
+      this.deps.logger?.warn("Virtual worker container timeout check failed", { error: err });
     }
   }
 
@@ -1435,14 +1473,72 @@ export class VirtualWorkerService {
     });
   }
 
-  private cleanupOrphanedVirtualWorkers(): void {
+  private async cleanupZombieContainers(): Promise<void> {
+    const containers = await this.dockerService.listContainers();
+    if (containers.length === 0) {
+      return;
+    }
+
+    const activeEndpoints = new Set(
+      this.deps.workerEndpointRepository.listWorkerEndpoints()
+        .filter((ep) => ep.endpointType === "virtual_cli")
+        .map((ep) => ep.id)
+    );
+
+    for (const container of containers) {
+      const sessionId = container.labels["code-ux.session-id"];
+      if (!sessionId) continue; // Only clean up worker containers that have a session ID
+
+      // Look for code-ux.app or code-ux.worker status labels if we needed to be stricter,
+      // but session-id is a strong enough indicator of a managed worker container.
+
+      if (!activeEndpoints.has(sessionId)) {
+        this.deps.logger?.info(`Virtual worker startup found orphaned Docker container ${container.names} (ID: ${container.id}). Gathering stats and destroying.`, {
+          sessionId,
+          containerId: container.id,
+        });
+
+        const stats = await this.dockerService.getContainerStats(container.id);
+        const events = await this.dockerService.getContainerEvents(container.id, "1h");
+
+        this.deps.logger?.info(`Orphaned container ${container.names} final stats`, {
+          stats,
+          eventsLength: events.length,
+          exitCode: container.status, // capturing status field as proxy for exit code if stopped
+        });
+
+        await this.dockerService.stopContainer(container.id, 30);
+        await this.dockerService.removeContainer(container.id);
+      }
+    }
+  }
+
+  private async cleanupOrphanedVirtualWorkers(): Promise<void> {
     const orphaned = this.deps.workerEndpointRepository.listWorkerEndpoints()
       .filter((endpoint) => endpoint.endpointType === "virtual_cli");
+
+    let containers: Awaited<ReturnType<typeof this.dockerService.listContainers>> | null = null;
 
     for (const endpoint of orphaned) {
       for (const assignment of this.deps.projectWorkerAssignmentRepository.listActiveAssignmentsForWorker(endpoint.id)) {
         this.deps.projectWorkerAssignmentService.releaseWorkerAssignment(assignment.projectId, endpoint.id, "virtual_worker_startup_prune");
       }
+
+      if (!containers) {
+        containers = await this.dockerService.listContainers().catch(() => []);
+      }
+
+      const workerContainer = containers?.find(c => c.labels["code-ux.session-id"] === endpoint.id);
+      if (workerContainer) {
+        this.deps.logger?.info(`Virtual worker cleanup destroying orphaned container for endpoint ${endpoint.id}`, { containerId: workerContainer.id });
+        const stats = await this.dockerService.getContainerStats(workerContainer.id);
+        if (stats) {
+          this.deps.logger?.info(`Orphaned container stats`, { containerId: workerContainer.id, stats });
+        }
+        await this.dockerService.stopContainer(workerContainer.id, 30);
+        await this.dockerService.removeContainer(workerContainer.id);
+      }
+
       this.deps.workerEndpointRepository.deleteWorkerEndpoint(endpoint.id);
     }
   }

@@ -24,7 +24,7 @@ describe("DockerService", () => {
       } as any);
 
       await expect(dockerService.isAvailable()).resolves.toBe(true);
-      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["ps", "-q"], process.cwd());
+      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["ps", "-q"], process.cwd(), process.env, expect.any(Object));
     });
 
     it("should report docker as unavailable when docker ps fails", async () => {
@@ -39,7 +39,7 @@ describe("DockerService", () => {
       const containers = await dockerService.listContainers();
 
       expect(containers).toEqual([]);
-      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["ps", "--format", "{{json .}}"], process.cwd());
+      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["ps", "--format", "{{json .}}"], process.cwd(), process.env, expect.any(Object));
     });
 
     it("should return an empty array if there are no running containers", async () => {
@@ -106,6 +106,7 @@ describe("DockerService", () => {
         status: "Up 2 hours",
         state: "running",
         runningFor: "2 hours ago",
+        createdAt: "2023-10-27 10:00:00 +0000 UTC",
         labels: {
           env: "production",
           "code-ux.session-id": "123",
@@ -120,6 +121,7 @@ describe("DockerService", () => {
         status: "Up 1 hour",
         state: "running",
         runningFor: "1 hour ago",
+        createdAt: "2023-10-27 11:00:00 +0000 UTC",
         labels: {
           project: "dashboard",
           "code-ux.command": "test",
@@ -173,6 +175,7 @@ describe("DockerService", () => {
         status: "",
         state: "",
         runningFor: "",
+        createdAt: "",
         labels: {
           justakey: "",
           "code-ux.test": "",

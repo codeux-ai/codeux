@@ -127,7 +127,7 @@ describe("VirtualWorkerService Extra Coverage", () => {
     
     expect(deps.projectWorkerAssignmentRepository.listActiveAssignmentsForWorker(endpoint.id)).toHaveLength(1);
     
-    (service as any).cleanupOrphanedVirtualWorkers();
+    await (service as any).cleanupOrphanedVirtualWorkers();
     
     expect(deps.projectWorkerAssignmentRepository.listActiveAssignmentsForWorker(endpoint.id)).toHaveLength(0);
     expect(deps.workerEndpointRepository.getWorkerEndpoint(endpoint.id)).toBeFalsy();
