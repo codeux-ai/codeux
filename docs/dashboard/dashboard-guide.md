@@ -207,6 +207,7 @@ Legacy runtime:
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown plus GitHub/GitLab/Jira issue import capabilities, plus markdown export controls. See [Sprint Imports](./sprint-imports.md).
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
 - Sprint cells and ledger rows now surface a dedicated human-intervention badge when a paused sprint needs merge work, planning, or another operator action, and the hover card explains what to do before resuming
+- Sprint and Live status messaging now uses a shared presentation mapper (`dashboard/src/v2/lib/sprint-status-presentation.ts`) so manual pauses and system-stopped states render consistent title/reason/detail copy and consistent human-intervention badge visibility across cards, rows, and live detail panels
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
 - Sprint cells now surface a QA-reviewed indicator with an expandable overlay section inside the created column, and allow marking sprints completed directly from the cell menu

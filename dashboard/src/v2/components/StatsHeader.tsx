@@ -13,6 +13,7 @@ import type {
 import { formatTime } from "../../lib/time.js";
 import { LivePreviewLink } from "./ui/LivePreviewLink.js";
 import { HumanInterventionBadge } from "./ui/HumanInterventionBadge.js";
+import { getSprintStatusPresentation } from "../lib/sprint-status-presentation.js";
 
 type HeaderView = "stats" | "race" | "dag";
 
@@ -45,6 +46,14 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
 }) => {
     const headerRef = useRef<HTMLDivElement>(null);
     const pausedIntervention = pausedInterventionRun?.humanIntervention || null;
+    const sprintStatusPresentation = getSprintStatusPresentation({
+      state: hasLiveSprint ? "running" : pausedInterventionRun?.status ?? "unknown",
+      humanInterventionTitle: pausedIntervention?.title ?? null,
+      humanInterventionReason: pausedIntervention?.reason ?? null,
+      humanInterventionInstructions: pausedIntervention?.instructions ?? null,
+      humanInterventionOwnerType: pausedIntervention?.ownerType ?? null,
+    });
+    const showStatusPanel = !hasLiveSprint && (sprintStatusPresentation.isManualPause || sprintStatusPresentation.isSystemStop);
 
     useLayoutEffect(() => {
         if (headerRef.current) {
@@ -90,7 +99,7 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                                 ? <>Monitoring <span className="font-mono text-signal-600 dark:text-signal-400">{scopedFeatureBranch}</span> in real-time.</>
                                 : `Monitoring ${liveSprintRun?.sprintName || "the active sprint"} in real-time.`
                             : pausedIntervention
-                                ? pausedIntervention.instructions
+                                ? sprintStatusPresentation.detail
                                 : hasSprintContext
                                     ? "Viewing the latest sprint telemetry snapshot."
                                     : !initialLoadComplete
@@ -136,9 +145,9 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                             <span className={`w-2 h-2 rounded-full relative ${hasLiveSprint ? "bg-signal-500" : pausedIntervention ? "bg-status-amber" : "bg-slate-400"}`}>
                                 {hasLiveSprint && <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-60" />}
                             </span>
-                            {hasLiveSprint ? `${visibleStats.running} Running` : pausedIntervention ? "Paused for intervention" : hasSprintContext ? "Snapshot loaded" : !initialLoadComplete ? "Connecting" : "Waiting"}
+                            {hasLiveSprint ? `${visibleStats.running} Running` : showStatusPanel ? sprintStatusPresentation.statusLabel : hasSprintContext ? "Snapshot loaded" : !initialLoadComplete ? "Connecting" : "Waiting"}
                         </div>
-                        {pausedIntervention && !hasLiveSprint && (
+                        {pausedIntervention && !hasLiveSprint && sprintStatusPresentation.showHumanInterventionBadge && (
                             <HumanInterventionBadge summary={pausedIntervention} label="Needs you" align="right" />
                         )}
                         {visibleStats.failed > 0 && (
@@ -158,30 +167,26 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                 </div>
             </div>
 
-            {pausedIntervention && !hasLiveSprint && (
+            {showStatusPanel && (
                 <div className="relative overflow-hidden rounded-[1.75rem] border border-status-amber/18 bg-status-amber/8 p-6 shadow-[0_12px_30px_rgba(245,158,11,0.08)]">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
                             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">
                                 <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.2} />
-                                Sprint Paused For Human Intervention
+                                {sprintStatusPresentation.title}
                             </div>
                             <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white font-display">
-                                {pausedIntervention.title}
+                                {sprintStatusPresentation.reason}
                             </h3>
                             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                                {pausedIntervention.reason}
-                            </p>
-                            <div className="mt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                                What to do now
-                            </div>
-                            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-                                {pausedIntervention.instructions}
+                                {sprintStatusPresentation.detail}
                             </p>
                         </div>
-                        <div className="shrink-0">
+                        {pausedIntervention && sprintStatusPresentation.showHumanInterventionBadge && (
+                          <div className="shrink-0">
                             <HumanInterventionBadge summary={pausedIntervention} label="Details" align="right" />
-                        </div>
+                          </div>
+                        )}
                     </div>
                 </div>
             )}
