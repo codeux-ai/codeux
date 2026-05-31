@@ -70,8 +70,8 @@ export class ExecutionControlService {
 
   pauseSprintRun(sprintRunId: string): SprintRunRecord {
     const sprintRun = this.requireSprintRun(sprintRunId);
-    if (sprintRun.status === "completed" || sprintRun.status === "failed" || sprintRun.status === "cancelled" || sprintRun.status === "cancel_requested") {
-      throw new Error(`Sprint run ${sprintRunId} is already terminal.`);
+    if (sprintRun.status === "paused" || sprintRun.status === "cancelled" || sprintRun.status === "completed" || sprintRun.status === "failed" || sprintRun.status === "cancel_requested") {
+      return sprintRun;
     }
     const now = new Date().toISOString();
     const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
@@ -86,40 +86,59 @@ export class ExecutionControlService {
     return updated;
   }
 
-  cancelSprintRun(sprintRunId: string): SprintRunRecord {
+  async resumeSprintRun(sprintRunId: string): Promise<SprintRunRecord> {
     const sprintRun = this.requireSprintRun(sprintRunId);
-    if (sprintRun.status === "completed" || sprintRun.status === "failed" || sprintRun.status === "cancelled") {
-      throw new Error(`Sprint run ${sprintRunId} is already terminal.`);
-    }
-    if (sprintRun.status === "cancel_requested") {
+    if (sprintRun.status === "running" || sprintRun.status === "queued" || sprintRun.status === "cancel_requested" || sprintRun.status === "cancelled" || sprintRun.status === "completed" || sprintRun.status === "failed") {
       return sprintRun;
     }
 
-    const now = new Date().toISOString();
-    const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
-      status: "cancel_requested",
-      lastHeartbeatAt: now,
-    });
-    this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancel_requested", "user", {
+    this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_resume_requested", "user", {
       requestedBy: "dashboard",
     }, {
-      sourceEventKey: `dashboard-cancel:${sprintRunId}`,
+      sourceEventKey: `dashboard-resume:${sprintRunId}`,
     });
+
+    await this.orchestrateSprint(sprintRun.projectId, sprintRun.sprintId);
+    const activeRun = this.deps.executionRepository.findActiveSprintRun(sprintRun.projectId, sprintRun.sprintId);
+    return activeRun || this.requireSprintRun(sprintRunId);
+  }
+
+  async cancelSprintRun(sprintRunId: string): Promise<SprintRunRecord> {
+    const sprintRun = this.requireSprintRun(sprintRunId);
+    if (sprintRun.status === "completed" || sprintRun.status === "failed" || sprintRun.status === "cancelled") {
+      return sprintRun;
+    }
+    const now = new Date().toISOString();
 
     for (const dispatch of this.deps.executionRepository.listTaskDispatches({
       projectId: sprintRun.projectId,
       sprintRunId,
     })) {
-      if (dispatch.status === "queued" || dispatch.status === "claimed") {
+      if (dispatch.status === "completed" || dispatch.status === "failed" || dispatch.status === "cancelled" || dispatch.status === "blocked" || dispatch.status === "quota") {
+        continue;
+      }
+      if (dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "paused") {
         this.cancelDispatchInternal(dispatch, now, "Sprint run was cancelled from the dashboard.");
         continue;
       }
-      if (dispatch.status === "running") {
-        void this.requestRunningDispatchStop(dispatch, "Sprint run was cancelled from the dashboard.");
+      if (dispatch.status === "running" || dispatch.status === "cancel_requested") {
+        await this.forceCancelDispatchInternal(dispatch, now, "Sprint run was cancelled from the dashboard.");
       }
     }
 
-    return this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(sprintRunId) || updated;
+    this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);
+    const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+      status: "cancelled",
+      finishedAt: now,
+      lastHeartbeatAt: now,
+    });
+    this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "user", {
+      requestedBy: "dashboard",
+      reason: "cancelled",
+    }, {
+      sourceEventKey: `dashboard-cancel:${sprintRunId}`,
+    });
+    return updated;
   }
 
   async forceCancelSprintRun(sprintRunId: string): Promise<SprintRunRecord> {

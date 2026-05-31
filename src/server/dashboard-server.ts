@@ -215,6 +215,7 @@ export interface DashboardServerOptions {
   sprintIssueService?: SprintIssueService;
 
   pauseSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
+  resumeSprintRun?: (sprintRunId: string) => Promise<unknown> | unknown;
   cancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   forceCancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   cancelTaskDispatch: (dispatchId: string) => Promise<unknown> | unknown;

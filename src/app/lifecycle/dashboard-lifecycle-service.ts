@@ -558,6 +558,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       return result;
     },
     pauseSprintRun: async (sprintRunId) => deps.executionControlService.pauseSprintRun(sprintRunId),
+    resumeSprintRun: async (sprintRunId) => deps.executionControlService.resumeSprintRun(sprintRunId),
     cancelSprintRun: async (sprintRunId) => deps.executionControlService.cancelSprintRun(sprintRunId),
     forceCancelSprintRun: async (sprintRunId) => deps.executionControlService.forceCancelSprintRun(sprintRunId),
     cancelTaskDispatch: async (dispatchId) => deps.executionControlService.cancelTaskDispatch(dispatchId),

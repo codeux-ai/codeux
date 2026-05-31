@@ -181,6 +181,7 @@ describe("dashboard route handlers", () => {
       rerunTask: async () => ({ id: "task-1" }),
       orchestrateSprint: async () => ({ ok: true }),
       pauseSprintRun: async () => ({ ok: true }),
+      resumeSprintRun: async () => ({ ok: true }),
       cancelSprintRun: async () => ({ ok: true }),
       forceCancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
@@ -194,6 +195,7 @@ describe("dashboard route handlers", () => {
     expect((await request(app).post("/api/tasks/task-1/rerun").send(null)).status).toBe(400);
     expect((await request(app).post("/api/projects/project-1/sprints/sprint-1/orchestrate")).status).toBe(202);
     expect((await request(app).post("/api/sprint-runs/run-1/pause")).status).toBe(200);
+    expect((await request(app).post("/api/sprint-runs/run-1/resume")).status).toBe(200);
     expect((await request(app).post("/api/sprint-runs/run-1/cancel")).status).toBe(200);
     expect((await request(app).post("/api/sprint-runs/run-1/force-cancel")).status).toBe(200);
     expect((await request(app).post("/api/task-dispatches/dispatch-1/cancel")).status).toBe(200);

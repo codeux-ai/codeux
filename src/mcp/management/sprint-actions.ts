@@ -91,7 +91,7 @@ export class SprintActions {
         if (!sprintRunId) {
           throw new Error("Missing sprintRunId in payload");
         }
-        const result = this.deps.executionControlService.cancelSprintRun(sprintRunId);
+        const result = await this.deps.executionControlService.cancelSprintRun(sprintRunId);
         return { result };
       }
       case "force_cancel": {

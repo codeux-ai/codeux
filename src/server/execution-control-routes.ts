@@ -21,6 +21,14 @@ export function registerExecutionControlRoutes(app: Express, options: DashboardD
     res.json(await options.pauseSprintRun(requireTrimmedString(req.params.sprintRunId, "sprintRunId")));
   }));
 
+  app.post("/api/sprint-runs/:sprintRunId/resume", asyncRoute(async (req, res) => {
+    if (!options.resumeSprintRun) {
+      res.status(404).json({ error: "Sprint resume control is not available." });
+      return;
+    }
+    res.json(await options.resumeSprintRun(requireTrimmedString(req.params.sprintRunId, "sprintRunId")));
+  }));
+
   app.post("/api/sprint-runs/:sprintRunId/cancel", asyncRoute(async (req, res) => {
     res.json(await options.cancelSprintRun(requireTrimmedString(req.params.sprintRunId, "sprintRunId")));
   }));

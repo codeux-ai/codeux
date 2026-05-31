@@ -343,7 +343,7 @@ describe("ExecutionControlService", () => {
       startedAt: new Date().toISOString(),
     });
 
-    const cancelled = service.cancelSprintRun(sprintRun.id);
+    const cancelled = await service.cancelSprintRun(sprintRun.id);
 
     expect(cancelled.status).toBe("cancelled");
     expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({

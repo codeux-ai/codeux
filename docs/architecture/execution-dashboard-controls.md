@@ -22,6 +22,7 @@ The dashboard server now exposes:
 
 - `POST /api/projects/:projectId/sprints/:sprintId/orchestrate`
 - `POST /api/sprint-runs/:sprintRunId/pause`
+- `POST /api/sprint-runs/:sprintRunId/resume`
 - `POST /api/sprint-runs/:sprintRunId/cancel`
 - `POST /api/task-dispatches/:dispatchId/cancel`
 - `POST /api/task-dispatches/:dispatchId/retry`
@@ -51,29 +52,31 @@ Pausing updates the `sprint_run` status to `paused` and writes a `sprint_pause_r
 
 The watch loop now checks the stored sprint-run status on each iteration and exits when a dashboard pause is observed.
 
+Repeated pause requests are idempotent and return the existing run state without duplicating control events.
+
+### Resume Sprint Run
+
+Resuming a paused run records `sprint_resume_requested` on the paused run and schedules a fresh orchestration attempt for the same sprint through the standard orchestrator entrypoint.
+
+This preserves pause history while re-entering normal sprint lease and watch-loop semantics.
+
 ### Cancel Sprint Run
 
-Cancelling is now request-based for active work.
+Cancelling now performs immediate teardown for active task containers and marks the sprint terminal in the same control path.
 
 The dashboard:
 
-- updates the `sprint_run` to `cancel_requested`
-- writes a `sprint_cancel_requested` event
-- cancels queued and claimed dispatches immediately
-- requests stop for any active running dispatches
+- force-stops active running dispatches (including Docker-backed task containers) synchronously
+- cancels queued, claimed, and paused dispatches immediately
+- writes final dispatch/task-run terminal state without waiting for the next scheduler tick
+- updates the `sprint_run` to `cancelled`, writes `sprint_cancelled`, and releases the sprint lease
 
-The watch loop exits as soon as it observes `cancel_requested`, so Code UX stops scheduling new work while active executors wind down.
-
-Once no active dispatches remain, Code UX finalizes the run to `cancelled` and writes `sprint_cancelled`.
-That finalization path now also releases any stale sprint lease for the sprint so a fully cancelled run can be restarted immediately.
+Repeated cancel requests are idempotent for already-cancelled runs and do not recreate events or resurrect dispatch state.
 
 Unexpected orchestration exceptions no longer leave the sprint run stranded in `running`.
 If the background orchestrator throws after creating the sprint run, Code UX now marks that run `failed` and writes a `sprint_failed` event with reason `orchestrator_exception`.
 
-This means `cancel_requested` is a real stop-pending state, not a terminal state:
-
-- Code UX will not start a fresh orchestration attempt while the cancelled run still has active dispatch work
-- Code UX will finalize an already-idle `cancel_requested` run immediately and allow restart
+This keeps sprint stop behavior auditable and deterministic: once stop returns, no active container-backed dispatch remains on that run.
 
 ## Stale Run Recovery
 
