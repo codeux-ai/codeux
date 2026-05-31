@@ -1113,6 +1113,11 @@ export interface OnboardingRuntimeReadiness {
   providers: OnboardingProviderCredentialStatus[];
 }
 
+export interface UserOnboardingState {
+  completed: boolean;
+  onboardingCompletedAt: string | null;
+}
+
 export type SprintPreviewSessionStatus = "stopped" | "starting" | "running" | "error";
 export type SprintPreviewHealthStatus = "unknown" | "healthy" | "unreachable";
 export type SprintPreviewStartupMode = "auto" | "script";

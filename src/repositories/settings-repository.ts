@@ -1,4 +1,5 @@
 import type { DashboardSettings, ExternalSettingsHints, VirtualWorkerProvider } from "../contracts/app-types.js";
+import type { OnboardingStateRecord } from "../domain/user/onboarding-state.js";
 import type {
   EffectiveSettingsResponse,
   ProjectSettings,
@@ -189,6 +190,23 @@ export class SettingsRepository {
 
   getDefaultDashboardSettings(): DashboardSettings {
     return systemSettingsToDashboardSettings(this.getSystemSettings());
+  }
+
+  getOnboardingState(): OnboardingStateRecord {
+    return {
+      onboardingCompletedAt: this.storage.readOnboardingCompletedAt(),
+    };
+  }
+
+  markOnboardingCompleted(completedAt?: string): OnboardingStateRecord {
+    const nextCompletedAt = completedAt || new Date().toISOString();
+    this.storage.writeOnboardingCompletedAt(nextCompletedAt);
+    return { onboardingCompletedAt: nextCompletedAt };
+  }
+
+  resetOnboardingState(): OnboardingStateRecord {
+    this.storage.clearOnboardingCompletedAt();
+    return { onboardingCompletedAt: null };
   }
 
   private migrateLegacySettingsIfNeeded(): void {

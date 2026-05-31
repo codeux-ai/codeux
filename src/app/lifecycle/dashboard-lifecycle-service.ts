@@ -579,6 +579,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     listDockerContainers: deps.listDockerContainers,
     getOnboardingRuntimeReadiness: deps.getOnboardingRuntimeReadiness
       ?? (() => getOnboardingRuntimeReadiness(deps.settingsRepository.getSystemSettings())),
+    getOnboardingState: () => deps.settingsRepository.getOnboardingState(),
+    markOnboardingCompleted: () => deps.settingsRepository.markOnboardingCompleted(),
+    resetOnboardingState: () => deps.settingsRepository.resetOnboardingState(),
     listSprintPreviewSessions: deps.listSprintPreviewSessions,
     getSprintPreviewSession: deps.getSprintPreviewSession,
     startSprintPreviewSession: deps.startSprintPreviewSession,

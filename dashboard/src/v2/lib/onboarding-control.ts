@@ -7,6 +7,7 @@ export const openOnboarding = (): void => {
   if (typeof window === "undefined") {
     return;
   }
+  void fetch("/api/user/onboarding/reset", { method: "POST" }).catch(() => undefined);
   window.localStorage.removeItem(ONBOARDING_STORAGE_KEY);
   window.dispatchEvent(new CustomEvent(ONBOARDING_OPEN_EVENT));
 };

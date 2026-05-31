@@ -8,6 +8,10 @@ interface PayloadRow {
   payload: string;
 }
 
+interface UserPreferencesRow {
+  onboarding_completed_at: string | null;
+}
+
 const SETTINGS_DB_PATH = getHomeCodeUxPath("settings.db");
 
 const resolveSettingsDbPath = (dbPath?: string): string => {
@@ -48,6 +52,12 @@ export class SettingsDbStorage {
       CREATE TABLE IF NOT EXISTS sprint_settings (
         sprint_id TEXT PRIMARY KEY,
         payload TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS user_preferences (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        onboarding_completed_at TEXT NULL,
         updated_at TEXT NOT NULL
       );
     `);
@@ -125,6 +135,32 @@ export class SettingsDbStorage {
       DELETE FROM system_settings;
       DELETE FROM project_settings;
       DELETE FROM sprint_settings;
+      DELETE FROM user_preferences;
     `);
+  }
+
+  readOnboardingCompletedAt(): string | null {
+    const row = this.db.prepare("SELECT onboarding_completed_at FROM user_preferences WHERE id = 1").get() as UserPreferencesRow | undefined;
+    return row?.onboarding_completed_at ?? null;
+  }
+
+  writeOnboardingCompletedAt(completedAt: string): void {
+    this.db.prepare(`
+      INSERT INTO user_preferences (id, onboarding_completed_at, updated_at)
+      VALUES (1, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        onboarding_completed_at = excluded.onboarding_completed_at,
+        updated_at = excluded.updated_at
+    `).run(completedAt, new Date().toISOString());
+  }
+
+  clearOnboardingCompletedAt(): void {
+    this.db.prepare(`
+      INSERT INTO user_preferences (id, onboarding_completed_at, updated_at)
+      VALUES (1, NULL, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        onboarding_completed_at = NULL,
+        updated_at = excluded.updated_at
+    `).run(new Date().toISOString());
   }
 }

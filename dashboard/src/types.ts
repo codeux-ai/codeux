@@ -70,6 +70,7 @@ import type {
   OnboardingRuntimeReadiness,
   OnboardingDependencyCheck,
   OnboardingProviderCredentialStatus,
+  UserOnboardingState,
   LocalDirectoryBrowserEntry,
   LocalDirectoryBrowserResponse,
   BackgroundPattern
@@ -157,6 +158,7 @@ export type {
   OnboardingRuntimeReadiness,
   OnboardingDependencyCheck,
   OnboardingProviderCredentialStatus,
+  UserOnboardingState,
   LocalDirectoryBrowserEntry,
   LocalDirectoryBrowserResponse,
   BackgroundPattern,

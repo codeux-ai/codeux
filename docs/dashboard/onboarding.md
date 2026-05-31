@@ -1,6 +1,12 @@
 # Dashboard Onboarding
 
-The dashboard shows a first-run onboarding flow in the browser until the operator finishes or dismisses it. Completion is tracked with the browser-local key `codeux:onboarding-complete:v1`, so each browser profile can onboard independently.
+The dashboard shows a first-run onboarding flow in the browser until the operator finishes or dismisses it. Completion state is persisted server-side in the settings database under user preferences (`onboardingCompletedAt`) and exposed through:
+- `GET /api/user/onboarding`
+- `POST /api/user/onboarding/complete`
+- `POST /api/user/onboarding/cancel`
+- `POST /api/user/onboarding/reset`
+
+The browser-local key `codeux:onboarding-complete:v1` is still written for compatibility, but onboarding visibility is owned by the persisted user-preferences state so refreshes and sign-in sessions do not reopen onboarding after complete or cancel.
 
 The onboarding shell uses the same animated dashboard background and modal motion system as the Import and Add Project overlays. Onboarding forces the shared background into its dark palette and applies quieter color grading so the setup UI remains legible while still feeling integrated with the app. The shell is viewport-bounded, with the step body owning its own scrollbar for long provider configuration forms.
 
@@ -68,7 +74,7 @@ Provider choices update:
 
 Appearance choices update `defaults.appearance`, which is also used by the Settings page. The root dashboard shell listens for settings updates and Settings-page preview events, then reapplies theme, reduced-motion, navigation, background mode/style/color, uploaded image, and pattern preferences without a page reload.
 
-Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action clears only the browser-local onboarding completion marker and does not reset saved system or project settings.
+Operators can reopen onboarding from `Settings -> General -> Onboarding`. The action resets the persisted onboarding completion state and clears the browser-local marker; it does not reset saved system or project settings.
 
 ## Post-Onboarding Tour
 

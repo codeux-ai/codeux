@@ -2,10 +2,13 @@ import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, syncRoute } from "./route-utils.js";
 import type { SystemSettings } from "../contracts/settings-scope-types.js";
+import { registerUserOnboardingRoutes } from "./routes/user/onboarding.js";
 
 // Note: liveActivityCacheMs is needed but excluded from DashboardDependencies,
 // so we pass it explicitly.
 export function registerSettingsRoutes(router: Express, deps: DashboardDependencies, liveActivityCacheMs: number): void {
+  registerUserOnboardingRoutes(router, deps);
+
   router.get("/api/docker/containers", asyncRoute(async (req, res) => {
     try {
       const containers = await deps.listDockerContainers();

@@ -32,6 +32,7 @@ import { fetchOnboardingReadiness } from "../../../lib/api/dashboard-api.js";
 import { fetchSystemSettings, saveSystemSettings } from "../../lib/settings-api.js";
 import { ONBOARDING_OPEN_EVENT, ONBOARDING_STORAGE_KEY, startDashboardTour } from "../../lib/onboarding-control.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useOnboardingState } from "../../hooks/useOnboardingState.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { OnboardingIntro } from "./OnboardingIntro.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
@@ -253,18 +254,30 @@ export const OnboardingExperience: FunctionComponent = () => {
   const [error, setError] = useState<string | null>(null);
   const [introPhase, setIntroPhase] = useState<IntroPhase>("intro");
   const reducedMotion = useReducedMotion();
+  const {
+    state: onboardingUserState,
+    loading: onboardingStateLoading,
+    markCompleted: markOnboardingCompleted,
+    reset: resetOnboardingState,
+  } = useOnboardingState();
 
   useEffect(() => {
-    const completed = window.localStorage.getItem(ONBOARDING_STORAGE_KEY) === "true";
-    setOpen(!completed);
+    if (onboardingStateLoading) {
+      return;
+    }
+    setOpen(!onboardingUserState.completed);
+  }, [onboardingStateLoading, onboardingUserState.completed]);
+
+  useEffect(() => {
     const handleOpen = () => {
       setActiveStep(0);
+      void resetOnboardingState();
       setOpen(true);
       setIntroPhase("intro");
     };
     window.addEventListener(ONBOARDING_OPEN_EVENT, handleOpen);
     return () => window.removeEventListener(ONBOARDING_OPEN_EVENT, handleOpen);
-  }, []);
+  }, [resetOnboardingState]);
 
   const handleIntroExitStart = () => {
     setIntroPhase("transitioning");
@@ -518,6 +531,7 @@ export const OnboardingExperience: FunctionComponent = () => {
 
   const applyAndClose = async () => {
     if (!settings) {
+      await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
       setOpen(false);
       await navigate({ to: "/" });
@@ -585,6 +599,7 @@ export const OnboardingExperience: FunctionComponent = () => {
       }
       nextSettings = await saveSystemSettings(nextSettings);
       setSettings(nextSettings);
+      await markOnboardingCompleted("complete");
       window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
       setOpen(false);
       await navigate({ to: "/" });
@@ -717,7 +732,8 @@ export const OnboardingExperience: FunctionComponent = () => {
             </div>
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
+                await markOnboardingCompleted("cancel");
                 window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
                 setOpen(false);
               }}
