@@ -95,6 +95,7 @@ export interface SystemProviderCredentialSettings {
   mountAuth: boolean;
   authPath: string;
   authType?: "apiKey" | "localAuth" | "dashboardAuth";
+  lastLoginAt?: number;
   /** Custom API endpoint base URL for providers that support it (claude-code, codex). */
   customBaseUrl?: string;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";

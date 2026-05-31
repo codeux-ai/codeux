@@ -121,7 +121,7 @@ describe("Login container cleanup", () => {
     vi.advanceTimersByTime(10000);
     expect(mockChildProcess.kill).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(12000);
+    vi.advanceTimersByTime(22000);
     expect(mockChildProcess.kill).toHaveBeenCalledWith("SIGKILL");
   });
 });

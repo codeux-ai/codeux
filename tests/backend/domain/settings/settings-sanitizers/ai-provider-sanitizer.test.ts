@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeAiProvider } from "../../../../../src/domain/settings/settings-sanitizers/ai-provider-sanitizer.js";
-import { buildDefaultIntegrationProviders } from "../../../../../src/domain/settings/provider-config-utils.js";
+import { buildDefaultIntegrationProviders, normalizeSystemIntegrationProviders } from "../../../../../src/domain/settings/provider-config-utils.js";
 
 describe("sanitizeAiProvider", () => {
   it("uses external hints to build the default instance catalog", () => {
@@ -114,5 +114,57 @@ describe("sanitizeAiProvider", () => {
 
     expect(result.invocationRouting.dashboard_reply.profile).toBe("GLOBAL");
     expect(result.invocationRouting.dashboard_reply.provider).toBe("codex");
+  });
+
+  describe("normalizeSystemIntegrationProviders", () => {
+    it("should preserve explicitly defined mountAuth boolean values", () => {
+      const input = {
+        providers: {
+          codex: {
+            provider: "codex",
+            name: "Codex Primary",
+            apiKey: "some-key",
+            mountAuth: false,
+            authType: "localAuth",
+          },
+        },
+      };
+      const result = normalizeSystemIntegrationProviders(input);
+      expect(result.codex.mountAuth).toBe(false);
+      expect(result.codex.authType).toBe("localAuth");
+    });
+
+    it("should default mountAuth to true when authType is localAuth and mountAuth is not specified", () => {
+      const input = {
+        providers: {
+          codex: {
+            provider: "codex",
+            name: "Codex Primary",
+            apiKey: "some-key",
+            authType: "localAuth",
+          },
+        },
+      };
+      const result = normalizeSystemIntegrationProviders(input);
+      expect(result.codex.mountAuth).toBe(true);
+    });
+
+    it("does not automatically readd default providers like gemini when they are omitted in a modern providers payload", () => {
+      const input = {
+        providers: {
+          codex: {
+            provider: "codex",
+            name: "Codex Primary",
+            apiKey: "some-key",
+            mountAuth: false,
+            authType: "localAuth",
+          },
+        },
+      };
+      const result = normalizeSystemIntegrationProviders(input);
+      expect(result.codex).toBeDefined();
+      expect(result.gemini).toBeUndefined();
+      expect(result.jules).toBeUndefined();
+    });
   });
 });

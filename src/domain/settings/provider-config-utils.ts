@@ -176,8 +176,13 @@ export const normalizeSystemIntegrationProviders = (
   externalHints?: ExternalSettingsHints,
 ): Record<ProviderConfigId, SystemProviderCredentialSettings> => {
   const defaults = buildDefaultIntegrationProviders(externalHints);
-  const result: Record<ProviderConfigId, SystemProviderCredentialSettings> = { ...defaults };
   const input = isRecord(integrationsInput) ? integrationsInput : {};
+  const hasModernProviders = isRecord(input.providers);
+  const result: Record<ProviderConfigId, SystemProviderCredentialSettings> = {};
+
+  if (!hasModernProviders) {
+    Object.assign(result, defaults);
+  }
 
   const providersInput = isRecord(input.providers) ? input.providers : {};
   for (const [providerConfigId, rawValue] of Object.entries(providersInput)) {
@@ -206,11 +211,14 @@ export const normalizeSystemIntegrationProviders = (
       provider: providerId,
       name: normalizeProviderName(providerId, rawValue.name),
       apiKey: typeof rawValue.apiKey === "string" ? rawValue.apiKey : "",
-      mountAuth: providerId === "jules" ? false : (authType === "apiKey" ? false : true),
+      mountAuth: providerId === "jules"
+        ? false
+        : (typeof rawValue.mountAuth === "boolean" ? rawValue.mountAuth : (authType === "apiKey" ? false : true)),
       authPath: authType === "dashboardAuth"
-        ? `~/.code-ux/credentials/${providerId}`
+        ? `~/.code-ux/credentials/${providerConfigId}`
         : normalizeProviderAuthPath(providerId, rawValue.authPath),
       authType,
+      ...(typeof rawValue.lastLoginAt === "number" ? { lastLoginAt: rawValue.lastLoginAt } : {}),
       ...(typeof rawValue.customBaseUrl === "string" && rawValue.customBaseUrl.trim().length > 0
         ? { customBaseUrl: rawValue.customBaseUrl.trim() }
         : {}),
@@ -266,6 +274,9 @@ export const normalizeSystemIntegrationProviders = (
       continue;
     }
     const defaultId = DEFAULT_PROVIDER_CONFIG_IDS[providerId];
+    if (hasModernProviders && !result[defaultId]) {
+      continue;
+    }
     result[defaultId] = {
       ...result[defaultId],
       provider: providerId,

@@ -88,7 +88,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                 mountAuth: authType !== "apiKey",
               };
               if (authType === "dashboardAuth") {
-                updates.authPath = `~/.code-ux/credentials/${provider.provider}`;
+                updates.authPath = `~/.code-ux/credentials/${providerConfigId}`;
               } else if (authType === "localAuth") {
                 updates.authPath = (provider.authPath || "").includes(".code-ux") ? "" : provider.authPath;
                 if (provider.provider === "qwen-code") {
@@ -134,7 +134,7 @@ export const ProviderInstanceCard: FunctionComponent<{
               Connect & Login
             </button>
             <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 text-[11px] font-mono text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
-              Path: <span className="font-semibold text-slate-700 dark:text-slate-200">~/.code-ux/credentials/{provider.provider}</span>
+              Path: <span className="font-semibold text-slate-700 dark:text-slate-200">~/.code-ux/credentials/{providerConfigId}</span>
             </div>
           </div>
         </Row>
@@ -346,7 +346,8 @@ export const ProviderInstanceCard: FunctionComponent<{
           providerName={getProviderTypeLabel(provider.provider)}
           onClose={() => setShowLoginModal(false)}
           onSuccess={() => {
-            // Re-fetch configuration hints if needed
+            // Trigger an update with a new lastLoginAt timestamp to make the form dirty so the user can Save Changes
+            onUpdate({ lastLoginAt: Date.now() });
           }}
         />
       )}

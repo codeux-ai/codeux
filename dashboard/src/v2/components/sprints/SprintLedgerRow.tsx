@@ -97,7 +97,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 }) => {
   const settings = useProjectEffectiveSettings(sprint.projectId);
   const [menuOpen, setMenuOpen] = useState(false);
-  const sprintKeyPrefix = settings.data?.settings.git.sprintKeyPrefix || "SPR";
+  const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
 
   const pendingToggleActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
   const pendingPauseResumeActionId = sprint.status === "paused"

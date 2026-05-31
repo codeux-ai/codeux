@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { createHash } from "crypto";
 import type { IncomingMessage, Server as HttpServer } from "http";
+import * as net from "net";
 import type { Socket } from "net";
 import type { Express } from "express";
 import type { Logger } from "../shared/logging/logger.js";
@@ -20,6 +21,26 @@ interface TerminalSession {
   createdAt: number;
   lastHeartbeatAt: number;
   finalized: boolean;
+  lastDisconnectAt?: number;
+  hostProxyServer?: net.Server | null;
+  watchInterval?: NodeJS.Timeout;
+  targetPort?: number;
+}
+
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+      server.close(() => {
+        resolve(port);
+      });
+    });
+    server.on("error", (err) => {
+      reject(err);
+    });
+  });
 }
 
 const activeTerminalSessions = new Map<string, TerminalSession>();
@@ -27,6 +48,7 @@ const LOGIN_SESSION_MAX_AGE_MS = 30 * 60 * 1000;
 const LOGIN_SESSION_HEARTBEAT_TTL_MS = 20 * 1000;
 const LOGIN_SESSION_SWEEP_INTERVAL_MS = 5 * 1000;
 const LOGIN_SESSION_DISCONNECT_GRACE_MS = 1000;
+const DISCONNECT_GRACE_PERIOD_MS = 30 * 1000;
 let loginSessionSweepStarted = false;
 
 const WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -201,6 +223,16 @@ function terminateSession(sessionId: string, reason: string): void {
     return;
   }
   session.finalized = true;
+
+  if (session.watchInterval) {
+    clearInterval(session.watchInterval);
+  }
+  if (session.hostProxyServer) {
+    try {
+      session.hostProxyServer.close();
+    } catch (_) {}
+  }
+
   try {
     session.childProcess.kill("SIGKILL");
   } catch {
@@ -228,10 +260,18 @@ function maybeStartLoginSessionSweeper(): void {
         continue;
       }
       const sessionAgeMs = now - session.createdAt;
-      const heartbeatAgeMs = now - session.lastHeartbeatAt;
       const shouldExpireByAge = sessionAgeMs > LOGIN_SESSION_MAX_AGE_MS;
       const hasNoClients = session.clients.size === 0;
-      const shouldExpireByHeartbeat = hasNoClients && heartbeatAgeMs > LOGIN_SESSION_HEARTBEAT_TTL_MS;
+      let shouldExpireByHeartbeat = false;
+
+      if (hasNoClients) {
+        if (session.lastDisconnectAt) {
+          shouldExpireByHeartbeat = (now - session.lastDisconnectAt) > DISCONNECT_GRACE_PERIOD_MS;
+        } else {
+          session.lastDisconnectAt = now;
+        }
+      }
+
       if (shouldExpireByAge || shouldExpireByHeartbeat) {
         terminateSession(id, shouldExpireByAge ? "max-age" : "stale-heartbeat");
       }
@@ -242,10 +282,50 @@ function maybeStartLoginSessionSweeper(): void {
   }
 }
 
+async function cleanupAllRunningLoginSessions(logger?: Logger): Promise<void> {
+  for (const [id] of activeTerminalSessions.entries()) {
+    try {
+      terminateSession(id, "preemptive-cleanup");
+    } catch (_) {}
+  }
+
+  // 2. Clean up any leftover docker containers labeled code-ux.login=true
+  try {
+    const cp = await import("child_process");
+    if (!cp || typeof cp.exec !== "function") {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      cp.exec("docker ps -a -q --filter 'label=code-ux.login=true'", (err, stdout) => {
+        if (err) {
+          logger?.error(`[DEBUG] Failed to query leftover login containers: ${String(err)}`);
+          resolve();
+          return;
+        }
+        const containerIds = stdout.trim().split(/\s+/).filter(Boolean);
+        if (containerIds.length > 0) {
+          logger?.info(`[DEBUG] Preemptively removing active/stray login containers: ${containerIds.join(", ")}`);
+          cp.exec(`docker rm -f ${containerIds.join(" ")}`, (rmErr) => {
+            if (rmErr) {
+              logger?.error(`[DEBUG] Failed to force-remove leftover login containers: ${String(rmErr)}`);
+            }
+            resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
+    });
+  } catch (_) {
+    // Ignore in environments where child_process dynamic import or exec is unavailable
+  }
+}
+
 export function registerTerminalRoutes(app: Express, options: DashboardDependencies): void {
   maybeStartLoginSessionSweeper();
   app.post("/api/terminal/start", asyncRoute(async (req, res) => {
     try {
+      await cleanupAllRunningLoginSessions(options.logger);
       const { providerConfigId, providerId: requestProviderId } = req.body as {
         providerConfigId?: string;
         providerId?: string;
@@ -286,9 +366,20 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       }
       const baseImage = systemSettings.defaults.cliWorkflow.containerImage.trim() || "node:24-bookworm";
 
+      let targetPort = 0;
+      if (providerId === "codex" || providerId === "claude-code") {
+        try {
+          targetPort = await getFreePort();
+        } catch (err) {
+          options.logger?.error(`Failed to find a free port: ${String(err)}`);
+          targetPort = providerId === "claude-code" ? 36573 : 1455;
+        }
+      }
+
+      const resolvedConfigId = providerConfigId || providerId;
       const sessionId = Math.random().toString(36).substring(2, 15);
-      const hostCredsDir = path.join(os.homedir(), ".code-ux", "credentials", providerId);
-      const tempCredsDir = path.join(os.homedir(), ".code-ux", "credentials", `${providerId}-temp-${sessionId}`);
+      const hostCredsDir = path.join(os.homedir(), ".code-ux", "credentials", resolvedConfigId);
+      const tempCredsDir = path.join(os.homedir(), ".code-ux", "credentials", `${resolvedConfigId}-temp-${sessionId}`);
 
       // Ensure the temp credentials folder starts completely empty
       try {
@@ -302,15 +393,14 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       let loginCmd = binaryName;
       if (providerId === "codex") {
         loginCmd = "codex login"; // codex requires the explicit login command to prompt auth
+      } else if (providerId === "claude-code") {
+        loginCmd = "claude auth login";
       }
 
       const fallbackKey = getFallbackInstallKey(providerId);
       const installCmd = getProviderFallbackInstallCommand(fallbackKey);
 
-      let proxyCmd = "";
-      if (providerId === "codex") {
-        proxyCmd = "node -e \"const net = require('net'), os = require('os'); let ip = '0.0.0.0'; const ifs = os.networkInterfaces(); for (const n of Object.keys(ifs)) { for (const netIf of ifs[n]) { if (netIf.family === 'IPv4' && !netIf.internal) { ip = netIf.address; break; } } } const s = net.createServer((c) => { const p = net.connect(1455, '127.0.0.1', () => { c.pipe(p).pipe(c); }); p.on('error', () => c.destroy()); c.on('error', () => p.destroy()); }); s.on('error', () => {}); s.listen(1455, ip);\" &";
-      }
+      const proxyCmd = "";
 
       const containerCmd = [
         "set -e",
@@ -322,21 +412,102 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         "ln -sf /tmp/.credentials /tmp/.qwen",
         "ln -sf /tmp/.credentials /tmp/.local/share/opencode",
         "ln -sf /tmp/.credentials /tmp/.antigravity",
+        providerId === "antigravity" ? "ln -sf /tmp/.credentials /tmp/.local/share/keyrings" : "",
+        providerId === "antigravity" ? [
+          "if ! command -v dbus-daemon >/dev/null 2>&1 || ! command -v gnome-keyring-daemon >/dev/null 2>&1; then",
+          "  echo 'Installing keyring dependencies in container...'",
+          "  if command -v apt-get >/dev/null 2>&1; then",
+          "    (apt-get update -qy && apt-get install -qy dbus gnome-keyring libsecret-1-0 xdg-utils) || true",
+          "  fi",
+          "fi",
+          "if command -v dbus-daemon >/dev/null 2>&1 && command -v gnome-keyring-daemon >/dev/null 2>&1; then",
+          "  echo 'Starting D-Bus session and gnome-keyring-daemon...' >&2",
+          "  export DBUS_SESSION_BUS_ADDRESS=$(dbus-daemon --session --print-address --fork || echo '')",
+          "  if [ -n \"$DBUS_SESSION_BUS_ADDRESS\" ]; then",
+          "    export $(echo -n 'dummy' | gnome-keyring-daemon --unlock 2>/dev/null || echo '') >/dev/null 2>&1 || true",
+          "    export $(gnome-keyring-daemon --start --components=secrets 2>/dev/null || echo '') >/dev/null 2>&1 || true",
+          "  fi",
+          "fi",
+        ].join("\n") : "",
         "mkdir -p /tmp/.npm-global",
         "export NPM_CONFIG_PREFIX=/tmp/.npm-global",
         "export PATH=/tmp/.npm-global/bin:$PATH",
+        "export BROWSER=xdg-open",
+        "mkdir -p /tmp/.npm-global/bin",
+        "cat << 'EOF' > /tmp/.npm-global/bin/xdg-open",
+        "#!/usr/bin/env node",
+        "const fs = require('fs');",
+        "const { spawn } = require('child_process');",
+        "const args = process.argv.slice(2);",
+        "console.log('[DEBUG] xdg-open called with args:', args);",
+        "let url = args.find(arg => arg.startsWith('http://') || arg.startsWith('https://'));",
+        "if (url) {",
+        "  const decodedUrl = decodeURIComponent(url);",
+        "  const match = decodedUrl.match(/redirect_uri=https?:\\/\\/(?:localhost|127\\.0\\.0\\.1):(\\d+)/);",
+        "  if (match && match[1]) {",
+        "    const randomPort = parseInt(match[1], 10);",
+        "    const providerId = process.env.PROVIDER_ID;",
+        "    let targetPort = randomPort;",
+        "    if (process.env.TARGET_PORT) {",
+        "      targetPort = parseInt(process.env.TARGET_PORT, 10);",
+        "    } else if (providerId === 'claude-code') {",
+        "      targetPort = 36573;",
+        "    } else if (providerId === 'codex') {",
+        "      targetPort = 1455;",
+        "    }",
+        "    console.log(`[DEBUG] Detected ${providerId} random callback port: ${randomPort}`);",
+        "    if (targetPort !== randomPort) {",
+        "      try {",
+        "        if (fs.existsSync('/tmp/proxy.pid')) {",
+        "          const pid = fs.readFileSync('/tmp/proxy.pid', 'utf8').trim();",
+        "          process.kill(parseInt(pid, 10), 'SIGTERM');",
+        "        }",
+        "      } catch (e) {}",
+        "      const proxyCode = 'const net = require(\"net\");\\n' +",
+        "        'const proxyServer = net.createServer((clientSocket) => {\\n' +",
+        "        '  const serverSocket = net.connect(' + randomPort + ', \"127.0.0.1\", () => {\\n' +",
+        "        '    clientSocket.pipe(serverSocket).pipe(clientSocket);\\n' +",
+        "        '  });\\n' +",
+        "        '  clientSocket.on(\"error\", () => serverSocket.destroy());\\n' +",
+        "        '  serverSocket.on(\"error\", () => clientSocket.destroy());\\n' +",
+        "        '});\\n' +",
+        "        'proxyServer.listen(' + targetPort + ', \"0.0.0.0\");';",
+        "      fs.writeFileSync('/tmp/proxy.js', proxyCode);",
+        "      const out = fs.openSync('/tmp/proxy.log', 'a');",
+        "      const err = fs.openSync('/tmp/proxy.log', 'a');",
+        "      const child = spawn('node', ['/tmp/proxy.js'], {",
+        "        detached: true,",
+        "        stdio: ['ignore', out, err]",
+        "      });",
+        "      fs.writeFileSync('/tmp/proxy.pid', String(child.pid));",
+        "      child.unref();",
+        "    }",
+        "    fs.writeFileSync('/tmp/.credentials/login_url.txt', url);",
+        "  } else {",
+        "    fs.writeFileSync('/tmp/.credentials/login_url.txt', url);",
+        "  }",
+        "}",
+        "process.exit(0);",
+        "EOF",
+        "chmod +x /tmp/.npm-global/bin/xdg-open",
+        "ln -sf /tmp/.npm-global/bin/xdg-open /tmp/.npm-global/bin/sensible-browser",
+        "ln -sf /tmp/.npm-global/bin/xdg-open /tmp/.npm-global/bin/x-www-browser",
+        "ln -sf /tmp/.npm-global/bin/xdg-open /tmp/.npm-global/bin/open",
         `if ! command -v ${binaryName} >/dev/null 2>&1; then`,
         `  echo 'Installing provider CLI fallback in container...'`,
         `  ${installCmd || "echo 'No installation command configured'"};`,
         "fi",
         proxyCmd,
-        `script -q -c "stty cols 80 rows 24 && ${loginCmd}" /dev/null`,
+        `script -q -c "export NPM_CONFIG_PREFIX=/tmp/.npm-global && export PATH=/tmp/.npm-global/bin:/tmp/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && export BROWSER=xdg-open && stty cols 80 rows 100 && ${loginCmd}" /dev/null`,
       ].filter(Boolean).join("\n");
 
       const userSpec = getDockerUserSpec();
-      const networkArgs = providerId === "codex"
-        ? ["-p", "1455:1455"]
-        : ["--network", "host"];
+      let networkArgs = ["--network", "host"];
+      if (providerId === "codex") {
+        networkArgs = ["-p", `${targetPort}:${targetPort}`];
+      } else if (providerId === "claude-code") {
+        networkArgs = ["-p", `${targetPort}:${targetPort}`];
+      }
 
       const dockerArgs = [
         "run",
@@ -355,6 +526,10 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         `code-ux.command=${loginCmd}`,
         "-e",
         "HOME=/tmp",
+        "-e",
+        `PROVIDER_ID=${providerId}`,
+        "-e",
+        `TARGET_PORT=${targetPort}`,
         "--user",
         userSpec,
         "-v",
@@ -379,9 +554,68 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         createdAt: Date.now(),
         lastHeartbeatAt: Date.now(),
         finalized: false,
+        targetPort,
       };
 
       activeTerminalSessions.set(sessionId, session);
+
+      // Watch for the login URL file written by our custom xdg-open wrapper
+      const urlFilePath = path.join(tempCredsDir, "login_url.txt");
+      session.hostProxyServer = null;
+      const watchInterval = setInterval(async () => {
+        if (session.finalized) {
+          clearInterval(watchInterval);
+          if (session.hostProxyServer) {
+            session.hostProxyServer.close();
+          }
+          return;
+        }
+        try {
+          const content = await fs.readFile(urlFilePath, "utf8");
+          const url = content.trim();
+          if (url && url.startsWith("http")) {
+            const decodedUrl = decodeURIComponent(url);
+            const match = decodedUrl.match(/redirect_uri=https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)/);
+            if (match && match[1]) {
+              const randomPort = parseInt(match[1], 10);
+              const targetPort = session.targetPort || (providerId === "claude-code" ? 36573 : 1455);
+              if (targetPort !== randomPort) {
+                try {
+                  if (session.hostProxyServer) {
+                    try { session.hostProxyServer.close(); } catch (_) {}
+                  }
+                  session.hostProxyServer = net.createServer((clientSocket) => {
+                    const serverSocket = net.connect(targetPort, "127.0.0.1", () => {
+                      clientSocket.pipe(serverSocket).pipe(clientSocket);
+                    });
+                    clientSocket.on("error", () => serverSocket.destroy());
+                    serverSocket.on("error", () => clientSocket.destroy());
+                  });
+                  session.hostProxyServer.listen(randomPort, "127.0.0.1", () => {
+                    options.logger?.info(`[DEBUG] Host Proxy listening on 127.0.0.1:${randomPort} -> 127.0.0.1:${targetPort}`);
+                  });
+                  if (typeof session.hostProxyServer.unref === "function") {
+                    session.hostProxyServer.unref();
+                  }
+                } catch (err) {
+                  options.logger?.error(`[DEBUG] Failed to start host proxy on port ${randomPort}: ${String(err)}`);
+                }
+              }
+            }
+
+            for (const client of session.clients) {
+              sendJson(client, { type: "login_url", url });
+            }
+            await fs.rm(urlFilePath, { force: true }).catch(() => {});
+          }
+        } catch {
+          // File doesn't exist yet, ignore
+        }
+      }, 500);
+      session.watchInterval = watchInterval;
+      if (typeof watchInterval.unref === "function") {
+        watchInterval.unref();
+      }
 
       let loginSucceeded = false;
 
@@ -396,7 +630,15 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         if (!loginSucceeded) {
           if (
             (providerId === "gemini" && session.outputBuffer.includes("Signed in")) ||
-            (providerId === "codex" && session.outputBuffer.includes("Successfully logged in"))
+            (providerId === "codex" && session.outputBuffer.includes("Successfully logged in")) ||
+            (providerId === "antigravity" && session.outputBuffer.includes("Choose your color scheme")) ||
+            (providerId === "claude-code" && (
+              session.outputBuffer.includes("Logged in") ||
+              session.outputBuffer.includes("Login successful") ||
+              session.outputBuffer.includes("Authentication successful") ||
+              session.outputBuffer.includes("Successfully authenticated") ||
+              session.outputBuffer.includes("Authenticated successfully")
+            ))
           ) {
             loginSucceeded = true;
             setTimeout(() => {
@@ -550,6 +792,7 @@ export function bootDashboardTerminalWebSocketServer(args: {
     );
 
     session.clients.add(socket);
+    session.lastDisconnectAt = undefined;
 
     // Stream existing buffer history to client immediately on connection
     if (session.outputBuffer) {
@@ -584,19 +827,20 @@ export function bootDashboardTerminalWebSocketServer(args: {
 
     const handleDisconnect = (): void => {
       session.clients.delete(socket);
+      if (session.clients.size === 0 && !session.lastDisconnectAt) {
+        session.lastDisconnectAt = Date.now();
+      }
+
       const finalizeIfStale = (): void => {
         if (session.clients.size > 0 || !activeTerminalSessions.has(sessionId)) {
           return;
         }
-        const heartbeatAgeMs = Date.now() - session.lastHeartbeatAt;
-        if (heartbeatAgeMs > LOGIN_SESSION_HEARTBEAT_TTL_MS) {
+        const ageMs = session.lastDisconnectAt ? (Date.now() - session.lastDisconnectAt) : 0;
+        if (ageMs > DISCONNECT_GRACE_PERIOD_MS) {
           terminateSession(sessionId, "disconnect-stale-heartbeat");
-          return;
         }
-        const nextDelayMs = Math.max(250, LOGIN_SESSION_HEARTBEAT_TTL_MS - heartbeatAgeMs + 250);
-        setTimeout(finalizeIfStale, nextDelayMs);
       };
-      setTimeout(finalizeIfStale, LOGIN_SESSION_DISCONNECT_GRACE_MS);
+      setTimeout(finalizeIfStale, DISCONNECT_GRACE_PERIOD_MS + 250);
     };
 
     socket.on("close", handleDisconnect);
