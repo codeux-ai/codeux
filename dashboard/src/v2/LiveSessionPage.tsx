@@ -48,6 +48,7 @@ import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
+import { forceCompleteLiveTask } from "./lib/api/live-tasks-client.js";
 
 const SprintBoatRace = lazy(() => import("./components/SprintBoatRace.js").then(m => ({ default: m.SprintBoatRace })));
 const SprintDag = lazy(() => import("./components/SprintDag.js").then(m => ({ default: m.SprintDag })));
@@ -155,6 +156,9 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     const [activeFilter, setFilter] = useState<TaskFilter>("All");
     const [headerView, setHeaderView] = useState<HeaderView>("dag");
+    const [forceCompletePendingIds, setForceCompletePendingIds] = useState<Set<string>>(new Set());
+    const [forceCompleteErrorByTaskId, setForceCompleteErrorByTaskId] = useState<Map<string, string>>(new Map());
+    const [optimisticallyCompletedTaskIds, setOptimisticallyCompletedTaskIds] = useState<Set<string>>(new Set());
 
     /* GSAP entrance */
     useLayoutEffect(() => {
@@ -326,8 +330,11 @@ export const LiveSessionPage: FunctionComponent = () => {
     const taskCardItems = useMemo(() => (
         filteredTasks.map((task) => {
             const taskRuntimeId = task.record_id || task.id;
+            const optimisticTask: Subtask = optimisticallyCompletedTaskIds.has(taskRuntimeId)
+                ? { ...task, status: "COMPLETED" as const }
+                : task;
             const latestDispatch = pickLatestTaskDispatch(task, sprintDispatches);
-            const taskPhase = getTaskProgressPhase(task);
+            const taskPhase = getTaskProgressPhase(optimisticTask);
             const showDispatchError = latestDispatch
                 && ["FAILED", "BLOCKED", "QUOTA"].includes(taskPhase)
                 ? latestDispatch.errorMessage
@@ -335,12 +342,14 @@ export const LiveSessionPage: FunctionComponent = () => {
 
             return {
                 key: taskRuntimeId,
-                task,
+                task: optimisticTask,
                 taskTiming: taskTimingMap.get(taskRuntimeId) || taskTimingMap.get(task.id) || null,
                 events: (task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
                     || taskEventsByRecordId.byTaskKey.get(task.id)
                     || EMPTY_RUNTIME_EVENTS,
                 isRerunning: rerunningIds.has(taskRuntimeId),
+                isForceCompleting: forceCompletePendingIds.has(taskRuntimeId),
+                forceCompleteError: forceCompleteErrorByTaskId.get(taskRuntimeId) || null,
                 dispatchInfo: latestDispatch ? {
                     errorMessage: showDispatchError,
                     startedAt: latestDispatch.startedAt,
@@ -349,7 +358,54 @@ export const LiveSessionPage: FunctionComponent = () => {
                 } : null,
             };
         })
-    ), [filteredTasks, rerunningIds, sprintDispatches, taskEventsByRecordId, taskTimingMap]);
+    ), [filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, taskEventsByRecordId, taskTimingMap]);
+
+    const handleEditTask = (task: Subtask): void => {
+        const search = new URLSearchParams();
+        search.set("taskId", task.record_id || task.id);
+        if (task.sprint_id) {
+            search.set("sprintId", task.sprint_id);
+        }
+        window.location.href = `/tasks?${search.toString()}`;
+    };
+
+    const handleForceCompleteTask = async (task: Subtask): Promise<void> => {
+        const taskRuntimeId = task.record_id || task.id;
+        if (!realtimeProjectId || !taskRuntimeId) {
+            return;
+        }
+        setForceCompletePendingIds((prev) => new Set(prev).add(taskRuntimeId));
+        setForceCompleteErrorByTaskId((prev) => {
+            const next = new Map(prev);
+            next.delete(taskRuntimeId);
+            return next;
+        });
+        setOptimisticallyCompletedTaskIds((prev) => new Set(prev).add(taskRuntimeId));
+        try {
+            await forceCompleteLiveTask(realtimeProjectId, taskRuntimeId);
+            await refreshRuntimeStatus();
+            await refreshGitStatus();
+            setSuccess("Task marked as completed.");
+        } catch (error) {
+            setOptimisticallyCompletedTaskIds((prev) => {
+                const next = new Set(prev);
+                next.delete(taskRuntimeId);
+                return next;
+            });
+            setForceCompleteErrorByTaskId((prev) => {
+                const next = new Map(prev);
+                next.set(taskRuntimeId, error instanceof Error ? error.message : "Failed to force complete task.");
+                return next;
+            });
+            setError("Failed to force complete task.");
+        } finally {
+            setForceCompletePendingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(taskRuntimeId);
+                return next;
+            });
+        }
+    };
 
 
 
@@ -497,7 +553,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : (
-                        taskCardItems.map(({ key, task, taskTiming, events, isRerunning, dispatchInfo }) => (
+                        taskCardItems.map(({ key, task, taskTiming, events, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
                             <LiveTaskCard
                                 key={key}
                                 task={task}
@@ -505,7 +561,11 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 taskTiming={taskTiming}
                                 events={events}
                                 onRerun={handleRerun}
+                                onEdit={handleEditTask}
+                                onForceComplete={handleForceCompleteTask}
                                 isRerunning={isRerunning}
+                                isForceCompleting={isForceCompleting}
+                                forceCompleteError={forceCompleteError}
                                 dispatchInfo={dispatchInfo}
                                 agentPreset={task.agentPresetId ? agentPresetsMap.get(task.agentPresetId) ?? null : null}
                             />
