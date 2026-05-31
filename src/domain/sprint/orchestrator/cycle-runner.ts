@@ -1,7 +1,7 @@
 import { applyActionRequiredAutomation } from "../../../sprint/action-required-automation.js";
 import { runSessionSyncStep } from "../../../sprint/steps/session-sync-step.js";
-import { runStatusDerivationStep } from "../../../sprint/steps/status-derivation-step.js";
-import { runStartReadyTasksStep } from "../../../sprint/steps/start-ready-tasks-step.js";
+import { applyPendingTaskRuntimeReset } from "../task-reset-state.js";
+import { calculateNextCycleState } from "./cycle-logic-utils.js";
 import { runStatusTableStep } from "../../../sprint/steps/status-table-step.js";
 import { runProtocolStep } from "../../../sprint/steps/protocol-step.js";
 import type { SprintCycleResult } from "../../../sprint/sprint-types.js";
@@ -58,6 +58,115 @@ export interface CycleRunnerArgs {
 }
 
 export class CycleRunner {
+  private async runOrchestratorLogic(
+    subtasks: Subtask[],
+    args: CycleRunnerArgs,
+    dashboardSettings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
+    applyStatusDerivations: boolean,
+    applyStartTasks: boolean
+  ): Promise<{ subtasks: Subtask[]; reportText: string }> {
+    let reportText = "";
+
+    const taskIds = subtasks.map(t => t.record_id).filter((id): id is string => !!id);
+    const taskRecords = this.deps.projectManagementRepository.getTasksByIds(taskIds);
+    const taskRecordMap = new Map(taskRecords.map(t => [t.id, t]));
+
+    const actions = calculateNextCycleState({
+      subtasks,
+      retryFailed: args.retryFailed,
+      isActionRequiredState: this.deps.isActionRequiredState,
+      getGuardrailEvaluation: (taskId: string) => {
+        return this.deps.guardrailService.evaluate(
+          {
+            projectId: args.executionContext.project.id,
+            sprintId: args.executionContext.sprint.id,
+          },
+          taskId,
+          "task_coding",
+        );
+      },
+      getProviderForTask: (task: Subtask) => {
+        const taskRecord = task.record_id ? taskRecordMap.get(task.record_id) : undefined;
+        return this.deps.taskService?.resolveTaskProvider(
+          task,
+          { projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id },
+          taskRecord?.executorType
+        ) || null;
+      },
+      getProviderLimit: (provider: string) => {
+        if (typeof provider === "string" && (PROVIDER_IDS as readonly string[]).includes(provider)) {
+          const settings = dashboardSettings.aiProvider.providers[provider as ProviderId] || {};
+          return settings.maxConcurrentTasks ?? 0;
+        }
+        return 0;
+      },
+      getRunningCounts: () => this.deps.providerConcurrencyService.getGlobalRunningCounts(),
+      automationLevel: args.automationLevel,
+      maxFailures: this.deps.settings.maxFailures || 5,
+      consecutiveFailures: this.deps.getConsecutiveFailures(),
+      shouldSkipTask: (task: Subtask) => task.status === "QUOTA"
+    });
+
+    for (const action of actions) {
+      const task = subtasks.find(t => t.id === action.taskId);
+      if (!task) continue;
+
+      if (action.type === "UPDATE_STATUS" && applyStatusDerivations) {
+        task.status = action.status;
+      } else if (action.type === "RESET_TASK" && applyStatusDerivations) {
+        applyPendingTaskRuntimeReset(task, { preserveProvider: action.preserveProvider });
+      } else if (action.type === "BLOCK_TASK" && applyStartTasks && args.action === "orchestrate") {
+        task.status = "BLOCKED";
+        task.intervention_owner = action.owner as any;
+        task.intervention_hint = action.hint;
+        this.deps.logger.info("Task blocked", {
+          taskId: task.id,
+          owner: action.owner,
+          hint: action.hint,
+        });
+      } else if (action.type === "TRIGGER_WORKER" && applyStartTasks && args.action === "orchestrate") {
+        try {
+          if (!args.sprintRunId) {
+            throw new Error("Missing sprint run id for orchestrate action.");
+          }
+          const session = await this.deps.startTask(task, {
+            projectId: args.executionContext.project.id,
+            sprintId: args.executionContext.sprint.id,
+            sprintRunId: args.sprintRunId,
+            sourceId: args.executionContext.sourceId,
+            featureBranch: args.defaultFeatureBranch,
+            repoPath: args.repoPath,
+            sprintNumber: args.executionContext.sprintNumber,
+            taskRecord: task.record_id ? taskRecordMap.get(task.record_id) : undefined,
+          });
+          task.status = "RUNNING";
+          task.session_name = this.deps.resolveSessionName(session as any);
+          task.session_id = this.deps.extractSessionId(session as any);
+          if (session.provider === "jules" || session.provider === "gemini" || session.provider === "codex" || session.provider === "claude-code") {
+            task.provider = session.provider;
+          }
+          const providerLabel = session.runtimeLabel || (session.provider ? String(session.provider).toUpperCase() : "JULES");
+          reportText += `🚀 **Started ${providerLabel} Session** for task \`${task.id}\`: [${session.id}](${session.id})\n`;
+          this.deps.setConsecutiveFailures(0);
+        } catch (error: unknown) {
+          const currentFails = this.deps.getConsecutiveFailures() + 1;
+          this.deps.setConsecutiveFailures(currentFails);
+          const message = error instanceof Error ? error.message : String(error);
+          this.deps.logger.error("Error starting task", {
+            taskId: task.id,
+            error: message,
+            consecutiveFailures: currentFails,
+            maxFailures: this.deps.settings.maxFailures || 5,
+          });
+          if (currentFails >= (this.deps.settings.maxFailures || 5)) {
+            throw new Error(`CRITICAL: Emergency stop triggered after ${currentFails} consecutive task creation failures.`);
+          }
+        }
+      }
+    }
+
+    return { subtasks, reportText };
+  }
   private readonly featurePrGate = new FeaturePrGateService();
   private readonly lastAutomatedInterventionKeys = new Map<string, string>();
   private readonly stateCoordinator: CycleStateCoordinator;
@@ -135,18 +244,15 @@ export class CycleRunner {
       subtasks = syncResult.subtasks;
     }
 
+    let reportText = "";
     if (args.loopSteps.statusDerivation && subtasks.length > 0) {
-      subtasks = runStatusDerivationStep(subtasks, {
-        retryFailed: args.retryFailed,
-        isActionRequiredState: this.deps.isActionRequiredState,
-      });
+      await this.runOrchestratorLogic(subtasks, args, dashboardSettings, true, false);
       await this.captureTaskCompletionMemories(subtasks, cycleEntryStates, args, dashboardSettings);
       await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
     }
 
-    let reportText = "";
     if (args.loopSteps.startReadyTasks && subtasks.length > 0) {
-      const startResult = await this.runStartReadyTasks(subtasks, args, dashboardSettings);
+      const startResult = await this.runOrchestratorLogic(subtasks, args, dashboardSettings, false, true);
       subtasks = startResult.subtasks;
       reportText += startResult.reportText;
     }
@@ -286,14 +392,11 @@ export class CycleRunner {
 
       const ciGateRefreshNeeded = hasMergeStateChanges(taskStateBeforeCiGate, subtasks);
       if (ciGateRefreshNeeded && args.loopSteps.statusDerivation) {
-        subtasks = runStatusDerivationStep(subtasks, {
-          retryFailed: args.retryFailed,
-          isActionRequiredState: this.deps.isActionRequiredState,
-        });
+        await this.runOrchestratorLogic(subtasks, args, dashboardSettings, true, false);
       }
 
       if (ciGateRefreshNeeded && args.loopSteps.startReadyTasks) {
-        const startResult = await this.runStartReadyTasks(subtasks, args, dashboardSettings);
+        const startResult = await this.runOrchestratorLogic(subtasks, args, dashboardSettings, false, true);
         subtasks = startResult.subtasks;
         reportText += startResult.reportText;
       }
@@ -334,100 +437,14 @@ export class CycleRunner {
     };
   }
 
-  private runStartReadyTasks(
-    subtasks: Subtask[],
-    args: CycleRunnerArgs,
-    dashboardSettings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
-  ): Promise<{ subtasks: Subtask[]; reportText: string }> {
-    const taskIds = subtasks.map(t => t.record_id).filter((id): id is string => !!id);
-    const taskRecords = this.deps.projectManagementRepository.getTasksByIds(taskIds);
-    const taskRecordMap = new Map(taskRecords.map(t => [t.id, t]));
 
-    return runStartReadyTasksStep(subtasks, {
-      action: args.action,
-      maxFailures: this.deps.settings.maxFailures || 5,
-      getConsecutiveFailures: this.deps.getConsecutiveFailures,
-      setConsecutiveFailures: this.deps.setConsecutiveFailures,
-      getProviderForTask: (task) => {
-        const taskRecord = task.record_id ? taskRecordMap.get(task.record_id) : undefined;
-        return this.deps.taskService?.resolveTaskProvider(
-          task,
-          { projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id },
-          taskRecord?.executorType
-        ) || null;
-      },
-      getProviderSettings: (provider) => {
-        if (typeof provider === "string" && (PROVIDER_IDS as readonly string[]).includes(provider)) {
-          return dashboardSettings.aiProvider.providers[provider as ProviderId] || {};
-        }
-        return {};
-      },
-      getRunningCounts: () => {
-        return this.deps.providerConcurrencyService.getGlobalRunningCounts();
-      },
-      startTask: (task) => {
-        if (!args.sprintRunId) {
-          throw new Error("Missing sprint run id for orchestrate action.");
-        }
-        return this.deps.startTask(task, {
-          projectId: args.executionContext.project.id,
-          sprintId: args.executionContext.sprint.id,
-          sprintRunId: args.sprintRunId,
-          sourceId: args.executionContext.sourceId,
-          featureBranch: args.defaultFeatureBranch,
-          repoPath: args.repoPath,
-          sprintNumber: args.executionContext.sprintNumber,
-          taskRecord: task.record_id ? taskRecordMap.get(task.record_id) : undefined,
-        });
-      },
-      resolveSessionName: this.deps.resolveSessionName,
-      extractSessionId: this.deps.extractSessionId,
-      logger: this.deps.logger.child({ component: "start-ready-tasks-step", projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id, sprintRunId: args.sprintRunId }),
-      shouldSkipTask: (task) => task.status === "QUOTA",
-      applyTaskCodingGuardrail: (task) => this.applyTaskCodingGuardrail(task, args),
-    });
-  }
 
   /**
    * Evaluates the per-task coding guardrail before a task is (re)dispatched. Returns true
    * when the task is blocked and should be skipped this cycle. The invocation itself is
    * recorded by SprintTaskDispatchService after a successful dispatch (record-once).
    */
-  private applyTaskCodingGuardrail(task: Subtask, args: CycleRunnerArgs): boolean {
-    const taskId = task.record_id;
-    if (!taskId) {
-      return false;
-    }
-    const scope = {
-      projectId: args.executionContext.project.id,
-      sprintId: args.executionContext.sprint.id,
-    };
-    const evaluation = this.deps.guardrailService.evaluate(scope, taskId, "task_coding");
-    if (evaluation.allowed) {
-      return false;
-    }
-    if (evaluation.action === "WARN_ONLY") {
-      this.deps.logger.warn("Task coding guardrail reached (warn only)", {
-        taskId: task.id,
-        count: evaluation.count,
-        cap: evaluation.cap,
-      });
-      return false;
-    }
-    const owner = evaluation.action === "STOP_AND_WAIT" ? "HUMAN" : resolveCiEscalationOwner(args.automationLevel);
-    task.status = "BLOCKED";
-    task.intervention_owner = owner;
-    task.intervention_hint = evaluation.blockedByTotalCeiling
-      ? `Per-task invocation ceiling reached for task ${task.id} (${evaluation.reason ?? ""}).`
-      : `Coding guardrail reached for task ${task.id}: ${evaluation.count}/${evaluation.cap} coding attempts.`;
-    this.deps.logger.info("Task blocked: coding guardrail reached", {
-      taskId: task.id,
-      count: evaluation.count,
-      cap: evaluation.cap,
-      owner,
-    });
-    return true;
-  }
+
 
   private async captureTaskCompletionMemories(
     subtasks: Subtask[],
