@@ -26,6 +26,8 @@ import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -85,6 +87,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onMarkCompleted,
 }) => {
   const settings = useProjectEffectiveSettings(sprint.projectId);
+  const reducedMotion = useReducedMotion();
   const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
 
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -133,6 +136,12 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   });
   const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
   const animationClass = isCompleted ? "" : isEven ? "animate-organic" : "animate-organic-reverse";
+  const interventionPulseStyle = reducedMotion
+    ? undefined
+    : {
+      animationDuration: `calc(${MOTION_TOKENS.timing.slow} * 12)`,
+      animationTimingFunction: MOTION_TOKENS.easing.standard,
+    };
 
   const handleHoverEnter = () => {
     if (!bubbleRef.current || isCompleted) {
@@ -239,13 +248,15 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           {formatCardDate(sprint.createdAt)}
         </div>
 
-        {(showInterventionBadge || sprint.latestReview) && (
-          <div className="absolute right-7 top-7 flex items-center gap-2 z-[60]">
+{(showInterventionBadge || sprint.latestReview) && (
+          <div className="absolute right-4 top-4 z-[60] flex items-center gap-2 lg:right-5 lg:top-5">
             {sprint.latestReview && (
               <SprintReviewBadge summary={sprint.latestReview} compact align="right" />
             )}
             {showInterventionBadge && humanIntervention && (
-              <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="right" />
+              <div className={reducedMotion ? "" : "animate-pulse"} style={interventionPulseStyle}>
+                <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="right" />
+              </div>
             )}
           </div>
         )}
