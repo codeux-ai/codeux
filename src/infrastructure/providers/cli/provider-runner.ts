@@ -63,7 +63,7 @@ export const providerSpecs: Record<CliProviderId, ProviderCommandSpec> = {
     return { command: "claude", args };
   },
   "codex": (model: string, prompt: string) => {
-    const args = ["exec", "--yolo", "--json", "--output-last-message", path.join(os.tmpdir(), "codex-last-message.txt")];
+    const args = ["exec", "--yolo", "--json", "--output-last-message", "codex-last-message.txt"];
     if (model && model !== "default") args.push("--model", model);
     args.push(prompt);
     return { command: "codex", args };
@@ -164,13 +164,21 @@ export class ProviderRunner implements IProviderRunner {
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
+    const outputPath = this.resolveCodexOutputPath(input);
+
+    if (outputPath && !outputPath.startsWith("/workspace/")) {
+      await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    }
+
     try {
       return await this.runProviderInternal({
         ...input,
         cwd: prepared.cwd,
+        codexOutputPath: outputPath,
       });
     } finally {
       await prepared.cleanup();
+      await this.cleanupCodexOutputPath(outputPath, input.workflowSettings.executionMode, prepared.cwd);
     }
   }
 
@@ -183,11 +191,7 @@ export class ProviderRunner implements IProviderRunner {
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
-    const outputPath = input.provider === "codex"
-      ? input.workflowSettings.executionMode === "DOCKER"
-        ? pathPosix.join("/workspace", `provider-last-message-${input.sessionId}.txt`)
-        : path.join(getRepoCodeUxPath(input.repoPath, "tmp"), `provider-last-message-${input.sessionId}.txt`)
-      : null;
+    const outputPath = this.resolveCodexOutputPath(input);
 
     if (outputPath && !outputPath.startsWith("/workspace/")) {
       await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -212,11 +216,33 @@ export class ProviderRunner implements IProviderRunner {
       };
     } finally {
       await prepared.cleanup();
-      if (outputPath) {
-        if (!outputPath.startsWith("/workspace/")) {
-          await fs.rm(outputPath, { force: true }).catch(() => undefined);
-        }
+      await this.cleanupCodexOutputPath(outputPath, input.workflowSettings.executionMode, prepared.cwd);
+    }
+  }
+
+  private resolveCodexOutputPath(input: ProviderRunInput): string | null {
+    if (input.provider !== "codex") {
+      return null;
+    }
+    return input.workflowSettings.executionMode === "DOCKER"
+      ? pathPosix.join("/workspace", `provider-last-message-${input.sessionId}.txt`)
+      : path.join(os.tmpdir(), `provider-last-message-${input.sessionId}.txt`);
+  }
+
+  private async cleanupCodexOutputPath(
+    outputPath: string | null,
+    executionMode: CliWorkflowSettings["executionMode"],
+    preparedCwd: string,
+  ): Promise<void> {
+    if (!outputPath) {
+      return;
+    }
+    if (executionMode === "DOCKER") {
+      if (this.dockerRunner.removeWorkspaceDir) {
+        await this.dockerRunner.removeWorkspaceDir(preparedCwd, outputPath).catch(() => undefined);
       }
+    } else {
+      await fs.rm(outputPath, { force: true }).catch(() => undefined);
     }
   }
 
