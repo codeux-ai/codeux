@@ -290,11 +290,11 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       />
 
       <div className="min-h-[20rem] px-3 py-4 sm:px-4 lg:px-5">
-        <div className="overflow-x-hidden lg:overflow-visible">
-          <table className="block w-full border-separate border-spacing-y-3 text-left lg:table">
+        <div className="w-full overflow-x-auto">
+          <table className="block w-full min-w-[1100px] table-fixed border-separate border-spacing-y-3 text-left lg:table">
             <thead className="hidden lg:table-header-group">
             <tr className="text-[11px] font-bold text-slate-400">
-              <th className="w-12 rounded-l-2xl border-y border-l border-black/[0.06] bg-white/55 px-4 py-3 pl-6 dark:border-white/[0.06] dark:bg-white/[0.035]">
+              <th className="min-w-[80px] rounded-l-2xl border-y border-l border-black/[0.06] bg-white/55 px-4 py-3 pl-6 dark:border-white/[0.06] dark:bg-white/[0.035]">
                 <button
                   type="button"
                   disabled={windowedSprints.length === 0 || isAnyBulkPending}
@@ -307,7 +307,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                     : <Square className="h-4 w-4" strokeWidth={2.2} />}
                 </button>
               </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
+              <th className="min-w-[80px] border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("showcasePinned")}
@@ -317,7 +317,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   {renderSortIndicator("showcasePinned")}
                 </button>
               </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
+              <th className="min-w-[120px] border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("sprintKey")}
@@ -327,7 +327,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   {renderSortIndicator("sprintKey")}
                 </button>
               </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
+              <th className="min-w-[220px] border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("name")}
@@ -337,7 +337,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   {renderSortIndicator("name")}
                 </button>
               </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
+              <th className="min-w-[120px] border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("status")}
@@ -347,7 +347,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   {renderSortIndicator("status")}
                 </button>
               </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
+              <th className="min-w-[100px] border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("tasksCount")}
@@ -357,7 +357,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   {renderSortIndicator("tasksCount")}
                 </button>
               </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
+              <th className="min-w-[140px] border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("completion")}
@@ -367,7 +367,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   {renderSortIndicator("completion")}
                 </button>
               </th>
-              <th className="border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
+              <th className="min-w-[120px] border-y border-black/[0.06] bg-white/55 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.035] group">
                 <button
                   type="button"
                   onClick={() => handleSort("createdAt")}
@@ -377,7 +377,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   {renderSortIndicator("createdAt")}
                 </button>
               </th>
-              <th className="rounded-r-2xl border-y border-r border-black/[0.06] bg-white/55 px-4 py-3 pr-6 text-right dark:border-white/[0.06] dark:bg-white/[0.035]">Controls</th>
+              <th className="min-w-[140px] rounded-r-2xl border-y border-r border-black/[0.06] bg-white/55 px-4 py-3 pr-6 text-right dark:border-white/[0.06] dark:bg-white/[0.035]">Controls</th>
             </tr>
           </thead>
           <tbody className="block lg:table-row-group">
