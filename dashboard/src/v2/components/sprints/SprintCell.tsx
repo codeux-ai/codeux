@@ -284,13 +284,6 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           </div>
         </div>
 
-        {humanIntervention && (
-          <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber transition-transform duration-300 group-hover:-translate-y-3">
-            <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.2} />
-            Human intervention required
-          </div>
-        )}
-
         <div className="absolute bottom-5 flex w-full translate-y-2 items-center justify-center gap-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
           <button
             type="button"

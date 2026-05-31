@@ -216,12 +216,6 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <span className={`inline-flex rounded-full border px-3 py-1.5 text-[11px] font-bold ${STATUS_BADGE_TONES[sprint.status]}`}>
             {STATUS_LABELS[sprint.status]}
           </span>
-          {showInterventionBadge && isSprintActionable(sprint.status) && (
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-status-amber">
-              <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.2} />
-              Intervention
-            </div>
-          )}
         </div>
       </td>
       <td className={`block px-4 py-3 align-middle lg:table-cell lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>

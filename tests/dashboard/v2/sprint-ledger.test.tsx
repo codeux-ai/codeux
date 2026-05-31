@@ -271,4 +271,37 @@ describe("SprintLedger Component", () => {
       expect(unlockedCheckbox).not.toBeDisabled();
     });
   });
+
+  it("renders only the canonical Human Intervention badge in the ledger and no redundant text", async () => {
+    const mockIntervention = {
+      title: "Manual Approval Required",
+      reason: "Reviewing large diffs",
+      instructions: "Please check the diff and approve.",
+      ownerType: "human",
+    };
+
+    const pausedSprint: Sprint = {
+      ...mockSprints[0],
+      id: "sprint-paused",
+      status: "paused",
+    };
+
+    const interventionBySprintId = new Map([["sprint-paused", mockIntervention]]);
+
+    render(
+      <SprintLedger
+        {...defaultProps}
+        sprints={[pausedSprint]}
+        interventionBySprintId={interventionBySprintId}
+      />
+    );
+
+    await waitFor(() => {
+      // Canonical badge (mocked in this test file to return a div with testid)
+      expect(screen.getByTestId("human-intervention-badge")).toBeInTheDocument();
+
+      // Redundant inline text should be absent
+      expect(screen.queryByText("Intervention")).not.toBeInTheDocument();
+    });
+  });
 });
