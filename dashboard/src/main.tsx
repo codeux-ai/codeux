@@ -157,10 +157,6 @@ const AppLayout = () => {
     applyAppearanceSettings({ zoomLevel });
   }, [zoomLevel]);
 
-  const toggleTheme = () => {
-    setIsDark((prev) => !prev);
-  };
-
   const navMode = appearanceSettings?.navigationMode || "DOCK";
   const showSidebar = isMobile || navMode === "SIDEBAR";
 
@@ -213,8 +209,6 @@ const AppLayout = () => {
 
         <div className="flex-1 flex flex-col h-full relative z-10 overflow-hidden">
           <TopNav
-            isDark={isDark}
-            toggleTheme={toggleTheme}
             onMenuToggle={() => setIsMobileSidebarOpen(prev => !prev)}
             isMobile={isMobile}
             hideLogo={!isMobile && navMode === "SIDEBAR"}

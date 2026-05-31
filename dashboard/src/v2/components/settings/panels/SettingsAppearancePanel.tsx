@@ -6,6 +6,7 @@ import { SectionCard, Row, getFieldBadge } from "./SharedPanelComponents.js";
 import { Image, Monitor } from "lucide-preact";
 import { applyAppearanceSettings } from "../../../lib/apply-appearance.js";
 import type { BackgroundPattern } from "../../../../types.js";
+import { useThemeSetting } from "../../../hooks/useThemeSetting.js";
 
 export const SettingsAppearancePanel: FunctionComponent<{
   state: SettingsPageState;
@@ -17,6 +18,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
 
   const { activeScope, projectSources } = state;
   const appearance = settings.appearance;
+  const { theme: persistedTheme, setTheme } = useThemeSetting();
   const [showSizeWarning, setShowSizeWarning] = useState(false);
   const supportsNativeZoom = typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom);
 
@@ -52,7 +54,7 @@ export const SettingsAppearancePanel: FunctionComponent<{
           badge={getFieldBadge(activeScope, projectSources, "appearance.theme")}
         >
           <PillChoiceGroup
-            value={appearance.theme}
+            value={activeScope === "system" ? persistedTheme : appearance.theme}
             onChange={(val) => {
               const newTheme = val as "LIGHT" | "DARK" | "SYSTEM";
               state.updateEditableSettings((current) => ({
@@ -62,6 +64,9 @@ export const SettingsAppearancePanel: FunctionComponent<{
                   theme: newTheme,
                 },
               }));
+              if (activeScope === "system") {
+                setTheme(newTheme);
+              }
               applyAppearanceSettings({ theme: newTheme });
             }}
             options={[

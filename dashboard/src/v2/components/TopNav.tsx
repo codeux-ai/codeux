@@ -19,6 +19,8 @@ import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
 import { Tooltip } from "./ui/Tooltip.js";
 import { useNotifications } from "../hooks/use-notifications.js";
+import { useThemeSetting } from "../hooks/useThemeSetting.js";
+import { useIsDark } from "../hooks/use-is-dark.js";
 
 export function useDropdownKeyboard(
     isOpen: boolean,
@@ -96,14 +98,12 @@ export function useDropdownKeyboard(
 }
 
 interface TopNavProps {
-    isDark: boolean;
-    toggleTheme: () => void;
     onMenuToggle?: () => void;
     isMobile?: boolean;
     hideLogo?: boolean;
 }
 
-export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, onMenuToggle, isMobile, hideLogo }) => {
+export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile, hideLogo }) => {
     const navRef = useRef<HTMLElement>(null);
 
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -111,6 +111,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
     const notifications = useNotifications();
+    const isDark = useIsDark();
+    const { setTheme } = useThemeSetting();
 
     const [projectSwitchBusy, setProjectSwitchBusy] = useState(false);
     const [sprintSwitchBusy, setSprintSwitchBusy] = useState(false);
@@ -494,7 +496,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                 {/* Theme Toggle */}
                 <Tooltip content={isDark ? "Switch to light mode" : "Switch to dark mode"}>
                     <button
-                        onClick={toggleTheme}
+                        onClick={() => setTheme(isDark ? "LIGHT" : "DARK")}
                         aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
                         className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30"
                     >
