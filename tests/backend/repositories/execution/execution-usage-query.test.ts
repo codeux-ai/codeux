@@ -89,5 +89,19 @@ describe("execution-usage-query", () => {
         unavailableInvocationCount: 0
       });
     });
+
+    it("preserves backend-normalized total tokens instead of recomputing from parts", () => {
+      const row = {
+        input_tokens: 300,
+        output_tokens: 170,
+        reasoning_output_tokens: 40,
+        total_tokens: 470,
+      };
+      const result = mapUsageRowToTotals(row);
+      expect(result.inputTokens).toBe(300);
+      expect(result.outputTokens).toBe(170);
+      expect(result.reasoningOutputTokens).toBe(40);
+      expect(result.totalTokens).toBe(470);
+    });
   });
 });

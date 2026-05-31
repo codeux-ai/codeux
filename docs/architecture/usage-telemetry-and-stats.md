@@ -64,6 +64,7 @@ Rollups are exposed in:
 Gemini CLI runs with structured JSON output enabled.
 
 Code UX reads provider-reported token counts directly from the JSON response stats block and treats them as `reported`.
+Gemini usage now passes through a shared normalization adapter that maps provider payloads into a canonical `prompt/completion/total` model before persistence. This keeps token accounting stable across `stats.tokens` variants (including partial fields and explicit total fields) while preserving `cached` and `thoughts` as separate tracked dimensions.
 Gemini must keep `--output-format json` enabled even when native MCP settings are injected; current Gemini CLI versions still load MCP settings in JSON mode and include the authoritative `stats` block. The collector records model-level `input`, `cached`, `candidates`, and `thoughts` counts, mapping `thoughts` into `reasoningOutputTokens`.
 Docker-backed Gemini invocations also carry the selected provider instance's `mountAuth` and `authPath` through task, QA, dashboard-chat, and compaction paths before the runner builds credential mounts. That keeps JSON-mode telemetry compatible with copied local Gemini OAuth credentials and prevents fallback to an unrelated Google Cloud project.
 If a historical or failed run lacks the structured stats envelope, Code UX can still estimate from prompt and transcript text so Docker-backed runs do not remain `unavailable`.
@@ -72,7 +73,7 @@ If a historical or failed run lacks the structured stats envelope, Code UX can s
 
 Codex runs with `codex exec --json`.
 
-Code UX first looks for `token_count` JSONL events. If those are missing, it falls back to token estimation using `js-tiktoken` over the prompt plus captured transcript.
+Code UX first looks for `token_count` JSONL events, then normalizes the usage payload via the same shared `prompt/completion/total` adapter used by other providers. This includes safe fallback handling when Codex payloads omit completion counts but provide prompt and total tokens. If JSONL usage is missing, Code UX falls back to session JSON usage, then token estimation using `js-tiktoken` over the prompt plus captured transcript.
 
 ### Claude Code
 
