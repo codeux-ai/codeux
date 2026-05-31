@@ -379,7 +379,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
     };
 
     const session = await service.startTask(input);
-    expect(deps.sessionTracking.appendActivity).toHaveBeenCalledWith(session.id, { originator: "system", description: "Retry configured to resume failed workspace from old-session at /tmp/repo/.worktrees/old-session." });
+    expect(deps.sessionTracking.appendActivity).toHaveBeenCalledWith(session.id, { originator: "system", description: "Retry configured to resume workspace from old-session at /tmp/repo/.worktrees/old-session." });
   });
 
   it("starts a task and returns a session", async () => {

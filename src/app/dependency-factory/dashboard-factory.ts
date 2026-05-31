@@ -215,7 +215,7 @@ export function createDashboardDependencies(
       });
       return { sprintRunId: created.id, created: true };
     },
-    startTask: ({ task, projectId, sprintId, sprintRunId, sourceId, featureBranch, repoPath, sprintNumber }) =>
+    startTask: ({ task, projectId, sprintId, sprintRunId, sourceId, featureBranch, repoPath, sprintNumber, providerConfigId, resumeWorkspaceSessionId, resumeWorkerBranch, forceFreshWorkspace }) =>
       sprintTaskDispatchService.startTask({
         task,
         projectId,
@@ -225,6 +225,10 @@ export function createDashboardDependencies(
         featureBranch,
         repoPath,
         sprintNumber,
+        providerConfigId,
+        resumeWorkspaceSessionId,
+        resumeWorkerBranch,
+        forceFreshWorkspace,
       }),
     resolveSessionName: (session) => context.resolveSessionName(session),
     extractSessionId: (session) => context.extractSessionId(session),
@@ -265,8 +269,12 @@ export function createDashboardDependencies(
       const latestRun = executionRepository.getLatestTaskRun(taskId);
       const sessionId = latestRun?.sessionId;
       if (!sessionId) return;
+      const settings = latestRun.projectId
+        ? settingsRepository.resolveProjectDashboardSettings(latestRun.projectId).settings
+        : settingsRepository.getDefaultDashboardSettings();
+      const executionMode = settings.cliWorkflow?.executionMode || "DOCKER";
       const wsManager = new WorkspaceManager();
-      const worktreePath = wsManager.buildWorktreePath(repoPath, sessionId, "DOCKER");
+      const worktreePath = wsManager.buildWorktreePath(repoPath, sessionId, executionMode);
       await wsManager.removeWorktree(repoPath, worktreePath).catch(() => undefined);
     },
     resolveTaskAttention: async ({ taskId, projectId }) => {

@@ -40,6 +40,9 @@ function normalizeProvider(value: string | null | undefined): ProviderId | undef
     case "gemini":
     case "codex":
     case "claude-code":
+    case "qwen-code":
+    case "opencode":
+    case "antigravity":
       return normalizeString(value) as ProviderId;
     default:
       return undefined;

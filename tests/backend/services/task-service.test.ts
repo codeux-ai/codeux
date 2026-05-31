@@ -182,6 +182,64 @@ describe("TaskService", () => {
     }));
   });
 
+  it("uses the requested provider instance and model for rerun overrides", async () => {
+    const startCliTask = vi.fn().mockResolvedValue({
+      id: "cli-gemini-secondary",
+      name: "sessions/cli-gemini-secondary",
+      provider: "gemini",
+      state: "RUNNING",
+      prompt: "",
+    });
+    const instanceService = new TaskService({
+      julesApi: { createSession } as any,
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: getWorkerAgent } as any,
+      resolveJulesSourceId,
+      getDashboardSettings: () => ({
+        aiProvider: {
+          provider: "jules",
+          strategy: "MANUAL",
+          providers: {
+            jules: { provider: "jules", name: "Jules", enabled: true, model: "default", weight: 60, thinkingMode: "MEDIUM", apiKey: "", mountAuth: false, authPath: "" },
+            "gemini-primary": { provider: "gemini", name: "Gemini Primary", enabled: true, model: "gemini-2.5-pro", weight: 20, thinkingMode: "HIGH", apiKey: "", mountAuth: true, authPath: "~/.gemini" },
+            "gemini-secondary": { provider: "gemini", name: "Gemini Secondary", enabled: true, model: "gemini-2.5-flash", weight: 20, thinkingMode: "MEDIUM", apiKey: "secondary", mountAuth: false, authPath: "" },
+          },
+        },
+        git: { githubMode: "REMOTE", defaultBranch: "main" },
+      }) as any,
+      isJulesApiConfigured: () => true,
+      cliWorkflowService: { startTask: startCliTask } as any,
+    });
+
+    await instanceService.startSprintTask(
+      {
+        id: "01-task",
+        title: "Do Thing",
+        prompt: "Implement",
+        depends_on: [],
+        is_independent: true,
+        provider: "gemini",
+        model: "gemini-custom",
+      },
+      "999",
+      "feature/sprint1",
+      "/tmp/repo",
+      1,
+      undefined,
+      undefined,
+      undefined,
+      { providerConfigId: "gemini-secondary" },
+    );
+
+    expect(startCliTask).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "gemini",
+      providerSettingsOverride: expect.objectContaining({
+        model: "gemini-custom",
+        apiKey: "secondary",
+        thinkingMode: "MEDIUM",
+      }),
+    }));
+  });
+
   it("falls back to cli provider when jules is unavailable", async () => {
     const fallbackService = new TaskService({
       julesApi: { createSession } as any,

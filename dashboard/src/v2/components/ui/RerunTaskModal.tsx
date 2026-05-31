@@ -8,14 +8,20 @@ import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import type { Subtask, SystemSettings } from "../../../types.js";
 import { AvantgardeSelect } from "./AvantgardeSelect.js";
 import { fetchSystemSettings } from "../../lib/settings-api.js";
-import { getSystemIntegrationProviders, getProviderModelOptions } from "../../lib/settings-view-models.js";
+import {
+    getProviderInstanceLabel,
+    getProviderInstanceModelOptions,
+    getSystemIntegrationProviders,
+    providerSupportsModelSelection,
+} from "../../lib/settings-view-models.js";
+import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 
 interface RerunTaskModalProps {
     task: Subtask;
     allTasks: Subtask[];
     currentProvider?: string | null;
     onClose: () => void;
-    onConfirm: (options: { provider?: string; model?: string; clearWorktree: boolean; resetDependents: boolean }) => void | Promise<void>;
+    onConfirm: (options: { provider?: string; providerConfigId?: string; model?: string; clearWorktree: boolean; resetDependents: boolean }) => void | Promise<void>;
 }
 
 const MERGED_TASK_INDICATORS = new Set(["MERGED", "AUTOMERGE"]);
@@ -30,7 +36,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 }) => {
     const cardRef = useRef<HTMLDivElement>(null);
 
-    const [provider, setProvider] = useState("");
+    const [providerConfigId, setProviderConfigId] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
     const [resetDependents, setResetDependents] = useState(false);
 
@@ -46,49 +52,44 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     const providerOptions = useMemo(() => {
         const base = [{ value: "", label: "Auto (use current setting)" }];
         if (!systemSettings) {
-            return [
-                ...base,
-                { value: "jules", label: "Jules" },
-                { value: "gemini", label: "Gemini" },
-                { value: "claude-code", label: "Claude Code" },
-                { value: "codex", label: "Codex" },
-                { value: "qwen-code", label: "Qwen Code" },
-                { value: "opencode", label: "OpenCode" },
-            ];
+            return base;
         }
 
-        const available = Object.values(getSystemIntegrationProviders(systemSettings))
-            .filter((p) => p.provider === "jules" || p.apiKey.trim().length > 0 || p.mountAuth)
-            .map((p) => {
-                const labelMap: Record<string, string> = {
-                    jules: "Jules",
-                    gemini: "Gemini",
-                    "claude-code": "Claude Code",
-                    codex: "Codex",
-                    "qwen-code": "Qwen Code",
-                    opencode: "OpenCode",
-                };
-                return {
-                    value: p.provider,
-                    label: labelMap[p.provider] || p.provider,
-                };
-            });
+        const available = Object.entries(getSystemIntegrationProviders(systemSettings))
+            .filter(([, p]) => p.provider === "jules" || p.apiKey.trim().length > 0 || p.mountAuth || p.authType === "dashboardAuth")
+            .map(([id, p]) => ({
+                value: id,
+                label: getProviderInstanceLabel(p),
+                icon: () => <ProviderBrandIcon id={p.provider} className="h-7 w-7 rounded-[0.7rem]" imageClassName="h-4 w-4" />,
+            }));
 
         return [...base, ...available];
     }, [systemSettings]);
 
     const [model, setModel] = useState("");
+    const selectedProvider = useMemo(() => (
+        providerConfigId && systemSettings
+            ? getSystemIntegrationProviders(systemSettings)[providerConfigId]
+            : undefined
+    ), [providerConfigId, systemSettings]);
 
     useEffect(() => {
-        if (provider === "" || provider === "jules") {
+        if (!selectedProvider || selectedProvider.provider === "jules") {
             setModel("");
         }
-    }, [provider]);
+    }, [selectedProvider]);
 
-    const showModelOverride = provider !== "" && provider !== "jules";
+    const showModelOverride = Boolean(selectedProvider && providerSupportsModelSelection(selectedProvider.provider));
     const modelOptions = useMemo(() => {
-        return showModelOverride ? getProviderModelOptions(provider as any) : [];
-    }, [showModelOverride, provider]);
+        if (!showModelOverride || !systemSettings || !selectedProvider) {
+            return [];
+        }
+        const projectProvider = systemSettings.defaults.aiProvider.providers[providerConfigId] || {
+            provider: selectedProvider.provider,
+            model: "default",
+        };
+        return getProviderInstanceModelOptions(providerConfigId, projectProvider, systemSettings);
+    }, [providerConfigId, selectedProvider, showModelOverride, systemSettings]);
 
     const downstreamTasks = useMemo(() => {
         const byId = new Map(allTasks.map(candidate => [candidate.id, candidate]));
@@ -153,7 +154,8 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
         setIsSubmitting(true);
         try {
             await onConfirm({
-                provider: provider || undefined,
+                provider: selectedProvider?.provider,
+                providerConfigId: providerConfigId || undefined,
                 model: model || undefined,
                 clearWorktree,
                 resetDependents,
@@ -231,10 +233,11 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                         <AvantgardeSelect
                             aria-label="Provider"
                             disabled={isSubmitting}
-                            value={provider}
-                            onChange={setProvider}
+                            value={providerConfigId}
+                            onChange={setProviderConfigId}
                             options={providerOptions}
                             placeholder="Auto (use current setting)"
+                            searchable
                         />
                         {currentProvider && (
                             <p className="text-[10px] text-slate-400">
