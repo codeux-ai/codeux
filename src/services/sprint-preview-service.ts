@@ -967,6 +967,39 @@ export class SprintPreviewService {
     };
   }
 
+  private async safeRmWorkspace(workspacePath: string, repoPath: string): Promise<void> {
+    try {
+      await fs.rm(workspacePath, { recursive: true, force: true });
+    } catch (error: any) {
+      if (process.platform === "win32" && (error.code === "EPERM" || error.code === "EACCES" || error.code === "ENOTEMPTY")) {
+        // Fallback: Delete using Docker container to bypass Windows host permission/EPERM issues on mounted volumes
+        try {
+          const parentDir = path.dirname(workspacePath);
+          const workspaceName = path.basename(workspacePath);
+          const source = this.mapDockerSourcePathForDaemon(parentDir, repoPath);
+
+          await runCommandStrict("docker", [
+            "run",
+            "--rm",
+            "--mount",
+            toDockerMountArg({ source, destination: "/clean-target", readonly: false }),
+            "alpine:3.20",
+            "rm",
+            "-rf",
+            `/clean-target/${workspaceName}`,
+          ], repoPath);
+
+          await fs.mkdir(workspacePath, { recursive: true }).catch(() => undefined);
+          await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
+          return;
+        } catch (dockerError) {
+          throw error;
+        }
+      }
+      throw error;
+    }
+  }
+
   private async materializePreviewWorkspace(
     repoPath: string,
     workspacePath: string,
@@ -982,7 +1015,7 @@ export class SprintPreviewService {
     const exportRef = await this.resolvePreviewExportRef(repoPath, featureBranch);
     const archivePath = `${workspacePath}.tar`;
 
-    await fs.rm(workspacePath, { recursive: true, force: true });
+    await this.safeRmWorkspace(workspacePath, repoPath);
     await fs.mkdir(workspacePath, { recursive: true });
     await fs.rm(archivePath, { force: true }).catch(() => undefined);
 

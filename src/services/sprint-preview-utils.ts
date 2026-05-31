@@ -14,7 +14,7 @@ interface PackageJsonLike {
   scripts?: Record<string, string>;
 }
 
-const PREVIEW_SCRIPT_NAMES = ["preview", "start", "serve"] as const;
+const PREVIEW_SCRIPT_NAMES = ["dev", "preview", "start", "serve"] as const;
 const STATIC_DIR_CANDIDATES = ["dist", "build", "out", "public"] as const;
 
 const commandExistsSnippet = (command: string): string => `if ! command -v ${command} >/dev/null 2>&1; then npm install -g ${command}; fi`;
@@ -73,7 +73,21 @@ export async function detectSprintPreviewCommands(repoPath: string): Promise<Spr
   const buildCommand = typeof scripts.build === "string" && scripts.build.trim().length > 0
     ? runner("build")
     : null;
-  const runCommand = buildRunCommand(packageManager, scripts);
+  let runCommand = buildRunCommand(packageManager, scripts);
+
+  if (!runCommand) {
+    // Fallback: Check for common entry files if no script is found in package.json
+    const entries = ["server.js", "app.js", "index.js", "src/server.js", "src/index.js"];
+    for (const entry of entries) {
+      try {
+        await fs.access(path.join(repoPath, entry));
+        runCommand = `node ${entry}`;
+        break;
+      } catch {
+        continue;
+      }
+    }
+  }
 
   return {
     packageManager,
@@ -146,6 +160,10 @@ export function buildGeneratedSprintPreviewScript(): string {
     "const resolveUpstreamPort = () => {",
     "  const ports = listListeningPorts();",
     "  if (ports.includes(preferredUpstreamPort)) return preferredUpstreamPort;",
+    "  const commonPorts = [3000, 5173, 8080, 8000, 3001, 5000, 8081, 4200];",
+    "  for (const port of commonPorts) {",
+    "    if (ports.includes(port) && port !== listenPort) return port;",
+    "  }",
     "  for (const port of ports) {",
     "    if (port === listenPort) continue;",
     "    return port;",
@@ -153,13 +171,38 @@ export function buildGeneratedSprintPreviewScript(): string {
     "  return preferredUpstreamPort;",
     "};",
     "const server = net.createServer((downstream) => {",
+    "  if (!downstream.writable) return;",
     "  const upstreamPort = resolveUpstreamPort();",
-    "  const upstream = net.connect({ host: '127.0.0.1', port: upstreamPort });",
-    "  downstream.pipe(upstream);",
-    "  upstream.pipe(downstream);",
-    "  const destroyBoth = () => { downstream.destroy(); upstream.destroy(); };",
-    "  downstream.on('error', destroyBoth);",
-    "  upstream.on('error', destroyBoth);",
+    "  const tryConnect = (host, fallback) => {",
+    "    const socket = net.connect({ host, port: upstreamPort });",
+    "    let handled = false;",
+    "    socket.on('connect', () => {",
+    "      handled = true;",
+    "      if (!downstream.writable) {",
+    "        socket.destroy();",
+    "        return;",
+    "      }",
+    "      downstream.pipe(socket);",
+    "      socket.pipe(downstream);",
+    "      const destroyBoth = () => { downstream.destroy(); socket.destroy(); };",
+    "      downstream.on('error', destroyBoth);",
+    "      socket.on('error', destroyBoth);",
+    "      downstream.on('close', destroyBoth);",
+    "      socket.on('close', destroyBoth);",
+    "    });",
+    "    socket.on('error', () => {",
+    "      if (!handled) {",
+    "        handled = true;",
+    "        socket.destroy();",
+    "        fallback();",
+    "      }",
+    "    });",
+    "  };",
+    "  tryConnect('127.0.0.1', () => {",
+    "    tryConnect('::1', () => {",
+    "      downstream.destroy();",
+    "    });",
+    "  });",
     "});",
     "server.on('error', (error) => {",
     "  console.error(`Sprint preview proxy failed: ${error.message}`);",
@@ -234,6 +277,11 @@ function buildRunCommand(
 ): string | null {
   const runner = getRunCommandFactory(packageManager);
   const availableScript = PREVIEW_SCRIPT_NAMES.find((name) => typeof scripts[name] === "string" && scripts[name].trim().length > 0);
+
+  if (availableScript === "dev") {
+    const devArgs = ["--host", "0.0.0.0", "--port", "\"$SPRINT_PREVIEW_PORT\""];
+    return `HOST=0.0.0.0 PORT="$SPRINT_PREVIEW_PORT" DASHBOARD_HOST=0.0.0.0 DASHBOARD_PORT="$SPRINT_PREVIEW_PORT" ${runner("dev", devArgs)}`;
+  }
 
   if (availableScript === "preview") {
     const previewArgs = ["--host", "0.0.0.0", "--port", "\"$SPRINT_PREVIEW_PORT\""];
