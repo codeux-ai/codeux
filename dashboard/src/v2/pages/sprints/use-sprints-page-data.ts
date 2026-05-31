@@ -85,12 +85,6 @@ const compareString = (left: string, right: string): number => (
 export function useSprintsPageData() {
   const [showCreateComposer, setShowCreateComposer] = useState(false);
   const [editingSprint, setEditingSprint] = useState<Sprint | null>(null);
-  const [rowMenu, setRowMenu] = useState<{
-    sprintId: string;
-    top: number;
-    left: number;
-    openUp: boolean;
-  } | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(new Set());
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, SprintStatus>>({});
@@ -777,7 +771,6 @@ export function useSprintsPageData() {
     activeRunsBySprintId,
     pauseResumeRunsBySprintId,
     interventionBySprintId,
-    rowMenu, setRowMenu,
     showCreateComposer, setShowCreateComposer,
     editingSprint, setEditingSprint,
     showImportModal, setShowImportModal,

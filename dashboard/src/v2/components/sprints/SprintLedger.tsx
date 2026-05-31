@@ -46,9 +46,13 @@ export interface SprintLedgerProps {
   onToggleShowcase: (sprint: Sprint) => void;
   onSprintToggle: (sprintId: string) => void;
   onSprintPauseResume: (sprintId: string) => void;
-  onOpenRowMenu: (event: MouseEvent, sprintId: string) => void;
   onBulkStart: (sprintIds: string[]) => void;
   onBulkDelete: (sprintIds: string[]) => void;
+  onEditSprint: (sprint: Sprint) => void;
+  onExportSprint: (sprint: Sprint) => void;
+  onOverridesSprint: (sprint: Sprint) => void;
+  onMarkCompletedSprint: (sprintId: string) => void;
+  onDeleteSprint: (sprintId: string) => void;
   onBulkShowcaseEnable: (sprintIds: string[]) => void;
   onBulkShowcaseDisable: (sprintIds: string[]) => void;
 }
@@ -66,7 +70,11 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   onToggleShowcase,
   onSprintToggle,
   onSprintPauseResume,
-  onOpenRowMenu,
+  onEditSprint,
+  onExportSprint,
+  onOverridesSprint,
+  onMarkCompletedSprint,
+  onDeleteSprint,
   onBulkStart,
   onBulkDelete,
   onBulkShowcaseEnable,
@@ -239,10 +247,6 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   const stableOnSprintPauseResume = useCallback(
     (sprintId: string) => onSprintPauseResume(sprintId),
     [onSprintPauseResume]
-  );
-  const stableOnOpenRowMenu = useCallback(
-    (event: MouseEvent, sprintId: string) => onOpenRowMenu(event, sprintId),
-    [onOpenRowMenu]
   );
 
   const renderSortIndicator = (key: SprintTableSortKey) => {
@@ -425,7 +429,11 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   onToggleShowcase={stableOnToggleShowcase}
                   onSprintToggle={stableOnSprintToggle}
                   onSprintPauseResume={stableOnSprintPauseResume}
-                  onOpenRowMenu={stableOnOpenRowMenu}
+                  onEdit={() => onEditSprint(sprint)}
+                  onExport={() => onExportSprint(sprint)}
+                  onOverrides={() => onOverridesSprint(sprint)}
+                  onMarkCompleted={() => onMarkCompletedSprint(sprint.id)}
+                  onDelete={() => onDeleteSprint(sprint.id)}
                 />
               ))
             )}

@@ -1,0 +1,2 @@
+1. Write dashboard/src/v2/components/ui/DropdownMenu.tsx with a component that accepts `trigger`, `content`, `isOpen`, `onOpenChange`, etc., matching the exact prompt constraints (GSAP, `useReducedMotion`, Light Mode shadow-md).
+2. Read the file to verify it's correct.
