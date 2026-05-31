@@ -120,7 +120,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     <tr
       className={`group mb-3 block overflow-hidden rounded-[1.5rem] border shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_48px_rgba(15,23,42,0.08)] focus-within:ring-2 focus-within:ring-signal-500/20 dark:shadow-[0_16px_40px_rgba(0,0,0,0.18)] lg:table-row lg:overflow-visible lg:rounded-none lg:border-0 lg:shadow-none lg:hover:translate-y-0 lg:hover:shadow-none ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${isDeletePending ? "grayscale opacity-50" : ""} hover:bg-gradient-to-r hover:from-white/50 hover:to-transparent dark:hover:from-white/5`}
     >
-      <td className={`block px-4 pb-0 pt-4 align-middle lg:table-cell lg:min-w-[80px] lg:rounded-l-[1.5rem] lg:border-y lg:border-l lg:px-4 lg:py-4 lg:pl-6 ${desktopCellTone}`}>
+      <td className={`block px-4 pb-0 pt-4 align-middle lg:table-cell lg:w-[80px] lg:min-w-[80px] lg:rounded-l-[1.5rem] lg:border-y lg:border-l lg:px-4 lg:py-4 lg:pl-6 ${desktopCellTone}`}>
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
@@ -133,7 +133,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             : <Square className="h-4 w-4" strokeWidth={2.2} />}
         </button>
       </td>
-      <td className={`block px-4 py-3 align-middle lg:table-cell lg:min-w-[80px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
+      <td className={`block px-4 py-3 align-middle lg:table-cell lg:w-[80px] lg:min-w-[80px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
         <button
           type="button"
           onClick={() => onToggleShowcase(sprint)}
@@ -152,14 +152,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           )}
         </button>
       </td>
-      <td className={`block px-4 py-3 align-middle lg:table-cell lg:min-w-[120px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
+      <td className={`block px-4 py-3 align-middle lg:table-cell lg:w-[120px] lg:min-w-[120px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Sprint ID</span>
         <div className="font-mono text-sm font-bold text-slate-800 dark:text-white truncate">{formatSprintKey(sprint, sprintKeyPrefix)}</div>
         <div className="mt-1 text-[10px] font-bold text-slate-400 truncate">
           {shortenId(sprint.id)}
         </div>
       </td>
-      <td className={`block min-w-0 max-w-full px-4 py-3 align-middle lg:table-cell lg:min-w-[220px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
+      <td className={`block min-w-0 max-w-full px-4 py-3 align-middle lg:table-cell lg:w-[220px] lg:min-w-[220px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Sprint</span>
         <div className="flex flex-wrap items-center gap-2">
           <div className={`font-display text-lg font-black leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"}`}>{sprint.name}</div>
@@ -201,7 +201,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           </p>
         ) : null}
       </td>
-      <td className={`block px-4 py-3 align-middle lg:table-cell lg:min-w-[120px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
+      <td className={`block px-4 py-3 align-middle lg:table-cell lg:w-[120px] lg:min-w-[120px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
         <div className="flex flex-wrap items-center gap-2 lg:flex-col lg:items-start">
           <span className="text-[10px] font-bold text-slate-400 lg:hidden">Status</span>
           <span className={`inline-flex rounded-full border px-3 py-1.5 text-[11px] font-bold ${STATUS_BADGE_TONES[sprint.status]}`}>
@@ -215,7 +215,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           )}
         </div>
       </td>
-      <td className={`block px-4 py-3 align-middle lg:table-cell lg:min-w-[100px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
+      <td className={`block px-4 py-3 align-middle lg:table-cell lg:w-[100px] lg:min-w-[100px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Tasks</span>
         <div className="flex items-center gap-3 lg:block">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/70 text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04] lg:hidden">
@@ -227,7 +227,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           </div>
         </div>
       </td>
-      <td className={`block px-4 py-3 align-middle lg:table-cell lg:min-w-[140px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
+      <td className={`block px-4 py-3 align-middle lg:table-cell lg:w-[140px] lg:min-w-[140px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Completion</span>
         <div className="flex items-center gap-3">
           <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10 ring-1 ring-black/[0.03] dark:bg-white/[0.08] dark:ring-white/[0.04]">
@@ -239,7 +239,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <span className="font-mono text-sm font-bold text-slate-800 dark:text-white">{sprint.completion}%</span>
         </div>
       </td>
-      <td className={`block px-4 py-3 align-middle lg:table-cell lg:min-w-[120px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
+      <td className={`block px-4 py-3 align-middle lg:table-cell lg:w-[120px] lg:min-w-[120px] lg:border-y lg:px-4 lg:py-4 ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Created</span>
         <div className="font-medium text-slate-700 dark:text-slate-200">{formatTableDate(sprint.createdAt)}</div>
         <div className="mt-1 text-[11px] text-slate-400">created</div>
@@ -259,7 +259,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           )}
         </div>
       </td>
-      <td className={`block px-4 pb-4 pt-3 align-middle lg:table-cell lg:min-w-[140px] lg:rounded-r-[1.5rem] lg:border-y lg:border-r lg:px-4 lg:py-4 lg:pr-6 ${desktopCellTone}`}>
+      <td className={`block px-4 pb-4 pt-3 align-middle lg:table-cell lg:w-[140px] lg:min-w-[140px] lg:rounded-r-[1.5rem] lg:border-y lg:border-r lg:px-4 lg:py-4 lg:pr-6 ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Controls</span>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:whitespace-nowrap">
           <SprintControls
