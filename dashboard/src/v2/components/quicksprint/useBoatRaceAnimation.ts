@@ -1,17 +1,17 @@
 import { useRef, useEffect, useCallback, useMemo } from "preact/hooks";
-import { useSignal, type Signal } from "@preact/signals";
+import { useSignal, signal, type Signal } from "@preact/signals";
 import gsap from "gsap";
-import type { Subtask, ExecutionTaskDispatchSummary } from "../../types.js";
-import { getTaskProgressPhase } from "../../lib/task-progress.js";
+import type { Subtask, ExecutionTaskDispatchSummary } from "../../../types.js";
+import { getTaskProgressPhase } from "../../../lib/task-progress.js";
 import {
     getBoatRaceTaskKey,
     buildBoatRaceDispatchIndex,
     getShipType,
     isBoatRaceActiveTask,
     isBoatRaceHarbourTask,
-} from "../lib/boat-race.js";
-import { SPAWN_Y, HARBOUR_X, RACE_LEN, LANE_TOP, LANE_BOT } from "../components/boat-race/constants.js";
-import { stableRand, getStyle, type StatusStyle } from "../components/boat-race/utils.js";
+} from "../../lib/boat-race.js";
+import { SPAWN_Y, HARBOUR_X, RACE_LEN, LANE_TOP, LANE_BOT } from "../../lib/boat-race-config.js";
+import { stableRand, getStyle, type StatusStyle } from "../boat-race/utils.js";
 
 export const CP = {
     HARBOUR:    0.00,
@@ -129,12 +129,22 @@ export const useBoatRaceAnimation = (
 
     const animStateRef = useRef<Map<string, ReturnType<typeof createInitialShipAnimationState>>>(new Map());
     const tickerRef = useRef<(() => void) | null>(null);
-    const animatedPositionsSignal = useSignal<Record<string, AnimatedShipPosition>>({});
+    const animatedPositionsSignals = useRef<Record<string, Signal<AnimatedShipPosition>>>({});
+
+    if (hasSprintContext && activeShips.length > 0) {
+        activeShips.forEach(ship => {
+            if (!animatedPositionsSignals.current[ship.key]) {
+                animatedPositionsSignals.current[ship.key] = signal({
+                    x: -100, y: ship.laneY, scale: 0.6, opacity: 0, pingedCheckpoints: new Set()
+                });
+            }
+        });
+    }
 
     useEffect(() => {
         if (!hasSprintContext || activeShips.length === 0) {
             animStateRef.current.clear();
-            animatedPositionsSignal.value = {};
+            animatedPositionsSignals.current = {};
         }
     }, [activeShips.length, hasSprintContext]);
 
@@ -142,8 +152,7 @@ export const useBoatRaceAnimation = (
         if (activeShips.length === 0) return;
 
         const now = performance.now();
-        const nextPositions: Record<string, AnimatedShipPosition> = {};
-        let needsUpdate = false;
+
 
         activeShips.forEach((ship, i) => {
             let state = animStateRef.current.get(ship.key);
@@ -217,19 +226,16 @@ export const useBoatRaceAnimation = (
             checkPing(CP.COMPLETED);
 
             const x = HARBOUR_X + 20 + state.currentProgress * RACE_LEN;
-            nextPositions[ship.key] = {
-                x,
-                y: state.currentY,
-                scale: state.scale,
-                opacity: state.opacity,
-                pingedCheckpoints: state.pingedCheckpoints
-            };
-            needsUpdate = true;
+            if (animatedPositionsSignals.current[ship.key]) {
+                animatedPositionsSignals.current[ship.key].value = {
+                    x,
+                    y: state.currentY,
+                    scale: state.scale,
+                    opacity: state.opacity,
+                    pingedCheckpoints: state.pingedCheckpoints
+                };
+            }
         });
-
-        if (needsUpdate) {
-            animatedPositionsSignal.value = nextPositions;
-        }
     }, [activeShips]);
 
     useEffect(() => {
@@ -255,6 +261,74 @@ export const useBoatRaceAnimation = (
     return {
         activeShips,
         harbourCount,
-        animatedPositionsSignal
+        animatedPositionsSignals: animatedPositionsSignals.current
     };
 };
+
+
+export function useShipAnimation(s: ShipDatum, pingsCount: import('@preact/signals').ReadonlySignal<number>) {
+    const isMoving = !s.progress.stopped;
+    const currentStatus = s.task.status;
+    const prevStatusRef = useRef(currentStatus);
+    const pingRef = useRef<SVGCircleElement>(null);
+    const bobRef = useRef<SVGGElement>(null);
+    const wrapperRef = useRef<SVGGElement>(null);
+
+    useEffect(() => {
+        const el = bobRef.current;
+        const bobAmp = isMoving ? 2.5 + stableRand(s.key, 2) * 2 : 1 + stableRand(s.key, 2) * 0.8;
+        const bobDur = 3 + stableRand(s.key, 3) * 2;
+
+        const tweens = [
+            gsap.to(el, {
+                y: bobAmp,
+                rotation: (stableRand(s.key, 4) - 0.5) * (isMoving ? 3 : 1),
+                duration: bobDur,
+                ease: "sine.inOut",
+                repeat: -1,
+                yoyo: true,
+                delay: stableRand(s.key, 1) * 4,
+            }),
+            gsap.to(el, {
+                x: isMoving ? 3 + stableRand(s.key, 5) * 4 : 1,
+                duration: 5 + stableRand(s.key, 6) * 3,
+                ease: "sine.inOut",
+                repeat: -1,
+                yoyo: true,
+            })
+        ];
+
+        return () => {
+            tweens.forEach(t => t.kill());
+        };
+    }, [isMoving, s.key]);
+
+    useEffect(() => {
+        const prevStatus = prevStatusRef.current;
+        if (prevStatus !== currentStatus && (currentStatus === "FAILED" || currentStatus === "BLOCKED") && wrapperRef.current) {
+            gsap.timeline()
+                .to(wrapperRef.current, { rotation: -15, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
+                .to(wrapperRef.current, { rotation: 10, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
+                .to(wrapperRef.current, { rotation: -5, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
+                .to(wrapperRef.current, { rotation: 0, duration: 0.3, ease: "power2.out", transformOrigin: "center center" });
+        }
+        prevStatusRef.current = currentStatus;
+    }, [currentStatus]);
+
+    const lastPingsCountRef = useRef(pingsCount.value);
+
+    useEffect(() => {
+        const unsubscribe = pingsCount.subscribe(count => {
+            if (count > lastPingsCountRef.current && pingRef.current) {
+                gsap.fromTo(pingRef.current,
+                    { opacity: 0.8, r: 0 },
+                    { opacity: 0, r: 60, duration: 1.5, ease: "power2.out" }
+                );
+            }
+            lastPingsCountRef.current = count;
+        });
+        return unsubscribe;
+    }, [pingsCount]);
+
+    return { pingRef, bobRef, wrapperRef };
+}

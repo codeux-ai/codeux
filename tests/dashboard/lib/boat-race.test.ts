@@ -8,7 +8,7 @@ import {
   isBoatRaceActiveTask,
   isBoatRaceHarbourTask,
 } from "../../../dashboard/src/v2/lib/boat-race.js";
-import { CP, getProgressTarget } from "../../../dashboard/src/v2/hooks/useBoatRaceAnimation.js";
+import { CP, getProgressTarget } from "../../../dashboard/src/v2/components/quicksprint/useBoatRaceAnimation.js";
 import { getStyle } from "../../../dashboard/src/v2/components/boat-race/utils.js";
 import type { ExecutionTaskDispatchSummary, Subtask } from "../../../dashboard/src/types.js";
 

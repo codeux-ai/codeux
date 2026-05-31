@@ -1,12 +1,11 @@
 import type { FunctionComponent } from "preact";
-import { useRef, useEffect } from "preact/hooks";
 import { memo } from "preact/compat";
-import gsap from "gsap";
-import { stableRand } from "./utils.js";
-import type { StatusStyle } from "./utils.js";
-import type { ShipDatum, AnimatedShipPosition } from "../../hooks/useBoatRaceAnimation.js";
 import { useComputed } from "@preact/signals";
+import type { StatusStyle } from "../boat-race/utils.js";
 import { getTaskProgressPhase } from "../../../lib/task-progress.js";
+import { type ShipDatum, type AnimatedShipPosition, useShipAnimation } from "./useBoatRaceAnimation.js";
+import { TOW_LINE_LENGTH, BADGE_OFFSET } from "../../lib/boat-race-config.js";
+
 
 export const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean; isFailed?: boolean }> = memo(({ accentColor, dim, isMoving, isDark, isFailed }) => {
     const o = dim ? 0.35 : 1;
@@ -86,8 +85,6 @@ export const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolea
         </g>
     );
 });
-
-/* ─── SVG: Wooden Ship ───────────────────────────────────────────────────── */
 
 export const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean; isFailed?: boolean }> = memo(({ accentColor, dim, isMoving, isDark, isFailed }) => {
     const o = dim ? 0.35 : 1;
@@ -186,8 +183,6 @@ export const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; 
     );
 });
 
-/* ─── Tow line: animated dots connecting ship to trailing badge ──────────── */
-
 export const TowLine: FunctionComponent<{ color: string; length: number }> = memo(({ color, length }) => {
     const dotCount = 5;
     const spacing = length / (dotCount + 1);
@@ -212,8 +207,6 @@ export const TowLine: FunctionComponent<{ color: string; length: number }> = mem
         </g>
     );
 });
-
-/* ─── Status badge (trailing behind ship) ────────────────────────────────── */
 
 export const ShipBadge: FunctionComponent<{
     taskId: string;
@@ -284,157 +277,98 @@ export const ShipBadge: FunctionComponent<{
 
 
 
+// Custom equality function for Ship
+const shipPropsAreEqual = (prev: any, next: any) => {
+    return prev.s.key === next.s.key &&
+           prev.isDark === next.isDark &&
+           prev.s.task.status === next.s.task.status &&
+           prev.s.progress.stopped === next.s.progress.stopped &&
+           prev.s.task.merge_indicator === next.s.task.merge_indicator;
+};
 
 export const BoatRaceShipItem = memo(({
     s,
     isDark,
-    animatedPositions,
-    TOW_LINE_LENGTH,
-    BADGE_OFFSET
+    posSignal
 }: {
     s: ShipDatum,
     isDark: boolean,
-    animatedPositions: Record<string, AnimatedShipPosition>,
-    TOW_LINE_LENGTH: number,
-    BADGE_OFFSET: number
+    posSignal: import("@preact/signals").Signal<AnimatedShipPosition>
 }) => {
     const isRunning = getTaskProgressPhase(s.task) === "RUNNING";
-    const isMoving = !s.progress.stopped;
     const isFailed = getTaskProgressPhase(s.task) === "FAILED";
 
-    // Read the individual ship's animated state directly
-    const pos = animatedPositions[s.key] || { x: -100, y: 0, scale: 0.6, opacity: 0, pingedCheckpoints: new Set<number>() };
+    const pos = useComputed(() => posSignal.value || { x: -100, y: 0, scale: 0.6, opacity: 0, pingedCheckpoints: new Set<number>() });
+    const x = useComputed(() => pos.value.x);
+    const y = useComputed(() => pos.value.y);
+    const scale = useComputed(() => pos.value.scale);
+    const opacity = useComputed(() => pos.value.opacity);
 
-    // We animate checkpoint pings by looking at the size of the set
-    const pingsCount = pos.pingedCheckpoints.size;
-    const pingRef = useRef<SVGCircleElement>(null);
-    const wrapperRef = useRef<SVGGElement>(null);
-    const prevStatusRef = useRef(s.task.status);
+    // transform directly via signal
+    const transform = useComputed(() => `translate(${x.value}, ${y.value}) scale(${scale.value})`);
 
-
-    const bobRef = useRef<SVGGElement>(null);
-    useEffect(() => {
-        if (!bobRef.current) return;
-        const el = bobRef.current;
-        const bobAmp = isMoving ? 2.5 + stableRand(s.key, 2) * 2 : 1 + stableRand(s.key, 2) * 0.8;
-        const bobDur = 3 + stableRand(s.key, 3) * 2;
-
-        const tweens = [
-            gsap.to(el, {
-                y: bobAmp,
-                rotation: (stableRand(s.key, 4) - 0.5) * (isMoving ? 3 : 1),
-                duration: bobDur,
-                ease: "sine.inOut",
-                repeat: -1,
-                yoyo: true,
-                delay: stableRand(s.key, 1) * 4,
-            }),
-            gsap.to(el, {
-                x: isMoving ? 3 + stableRand(s.key, 5) * 4 : 1,
-                duration: 5 + stableRand(s.key, 6) * 3,
-                ease: "sine.inOut",
-                repeat: -1,
-                yoyo: true,
-            })
-        ];
-
-        return () => {
-            tweens.forEach(t => t.kill());
-        };
-    }, [isMoving, s.key]);
-
-    // Shake/tilt on failure/blocked
-    useEffect(() => {
-        const currentStatus = s.task.status;
-        const prevStatus = prevStatusRef.current;
-        if (prevStatus !== currentStatus && (currentStatus === "FAILED" || currentStatus === "BLOCKED") && wrapperRef.current) {
-            gsap.timeline()
-                .to(wrapperRef.current, { rotation: -15, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
-                .to(wrapperRef.current, { rotation: 10, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
-                .to(wrapperRef.current, { rotation: -5, duration: 0.15, ease: "power1.inOut", transformOrigin: "center center" })
-                .to(wrapperRef.current, { rotation: 0, duration: 0.3, ease: "power2.out", transformOrigin: "center center" });
-        }
-        prevStatusRef.current = currentStatus;
-    }, [s.task.status]);
-    const lastPingsCountRef = useRef(pingsCount);
-
-    useEffect(() => {
-        if (pingsCount > lastPingsCountRef.current && pingRef.current) {
-            gsap.fromTo(pingRef.current,
-                { opacity: 0.8, r: 0 },
-                { opacity: 0, r: 60, duration: 1.5, ease: "power2.out" }
-            );
-        }
-        lastPingsCountRef.current = pingsCount;
-    }, [pingsCount]);
+    const pingsCount = useComputed(() => pos.value.pingedCheckpoints?.size || 0);
+    const { pingRef, bobRef, wrapperRef } = useShipAnimation(s, pingsCount);
 
     return (
-        <g className="race-ship" transform={`translate(${pos.x}, ${pos.y}) scale(${pos.scale})`} opacity={pos.opacity}>
-            <g ref={bobRef}>
-            <circle ref={pingRef} className="checkpoint-ping" cx={0} cy={24} r={0} fill="none" stroke={s.style.color} strokeWidth={1.5} opacity={0} />
+        <g className="race-ship" transform={transform} opacity={opacity}>
+            <g id={`ship-wrapper-${s.key}`} ref={wrapperRef}>
+                <g id={`ship-bob-${s.key}`} ref={bobRef}>
+                    <circle id={`ship-ping-${s.key}`} ref={pingRef} className="checkpoint-ping" cx={0} cy={24} r={0} fill="none" stroke={s.style.color} strokeWidth={1.5} opacity={0} />
 
-            <ellipse cx={-45} cy={14} rx={isMoving ? 60 : 25} ry={isMoving ? 4.5 : 2}
-                fill="url(#br-wake)" opacity={isMoving ? 0.3 : 0.06}>
-                {isMoving && (
-                    <animate attributeName="rx" values="55;70;55" dur="3s" repeatCount="indefinite" />
-                )}
-            </ellipse>
-            {isRunning && (
-                <>
-                    <ellipse cx={-65} cy={16} rx={30} ry={2.5} fill={isDark ? "white" : "#334155"} opacity={0.04}>
-                        <animate attributeName="rx" values="24;36;24" dur="4s" repeatCount="indefinite" />
+                    <ellipse cx={-45} cy={14} rx={!s.progress.stopped ? 60 : 25} ry={!s.progress.stopped ? 4.5 : 2}
+                        fill="url(#br-wake)" opacity={!s.progress.stopped ? 0.3 : 0.06}>
+                        {!s.progress.stopped && (
+                            <animate attributeName="rx" values="55;70;55" dur="3s" repeatCount="indefinite" />
+                        )}
                     </ellipse>
-                    {[0, 1, 2, 3, 4].map(j => (
-                        <circle key={j} cx={38 + j * 2} cy={j * 2.5} r={0.7 + j * 0.15} fill={isDark ? "white" : "#475569"} opacity={0}>
-                            <animate attributeName="cy" values={`${j * 2.5};${-6 - j * 3};${j * 2.5}`} dur={`${0.5 + j * 0.12}s`} repeatCount="indefinite" begin={`${j * 0.1}s`} />
-                            <animate attributeName="opacity" values="0.25;0;0.25" dur={`${0.5 + j * 0.12}s`} repeatCount="indefinite" begin={`${j * 0.1}s`} />
-                        </circle>
-                    ))}
-                </>
-            )}
 
-            <ellipse cx={0} cy={24} rx={isMoving ? 48 : 34} ry={isMoving ? 10 : 6}
-                fill={s.style.color} opacity={isMoving ? 0.08 : 0.03} filter="url(#br-glow2)" />
+                    <ellipse cx={0} cy={20} rx={45} ry={12} fill={s.style.color} opacity={0.12} filter="url(#br-glow2)" />
+                    {isRunning && (
+                        <ellipse cx={0} cy={20} rx={40} ry={10} fill={s.style.color} opacity={0.1} filter="url(#br-glow)">
+                            <animate attributeName="opacity" values="0.1;0.25;0.1" dur="2s" repeatCount="indefinite" />
+                            <animate attributeName="rx" values="40;46;40" dur="2s" repeatCount="indefinite" />
+                        </ellipse>
+                    )}
 
-            <g className="ship-model-wrapper" ref={wrapperRef}>
-                {s.shipType === "container"
-                    ? <ContainerShip accentColor={s.style.color} dim={s.style.dim} isMoving={isMoving} isDark={isDark} isFailed={isFailed} />
-                    : <WoodenShip accentColor={s.style.color} dim={s.style.dim} isMoving={isMoving} isDark={isDark} isFailed={isFailed} />
-                }
-            </g>
+                    {s.shipType === "wooden" ? (
+                        <WoodenShip accentColor={s.style.color} dim={s.style.dim} isMoving={!s.progress.stopped} isDark={isDark} isFailed={isFailed} />
+                    ) : (
+                        <ContainerShip accentColor={s.style.color} dim={s.style.dim} isMoving={!s.progress.stopped} isDark={isDark} isFailed={isFailed} />
+                    )}
 
-            <g transform="translate(-44, 4)">
-                <TowLine color={s.style.color} length={TOW_LINE_LENGTH} />
-                <g transform={`translate(${-BADGE_OFFSET + 44}, 0)`}>
-                    <ShipBadge
-                        taskId={s.task.id}
-                        title={s.task.title}
-                        style={s.style}
-                        mergeIndicator={s.task.merge_indicator}
-                        isRunning={isRunning}
-                        isDark={isDark}
-                    />
+                    <g transform="translate(-44, 4)">
+                        <TowLine color={s.style.color} length={TOW_LINE_LENGTH} />
+                        <g transform={`translate(${-BADGE_OFFSET + 44}, 0)`}>
+                            <ShipBadge
+                                taskId={s.task.id}
+                                title={s.task.title}
+                                style={s.style}
+                                isDark={isDark}
+                                mergeIndicator={s.task.merge_indicator}
+                                isRunning={isRunning}
+                            />
+                        </g>
+                    </g>
                 </g>
-            </g>
             </g>
         </g>
     );
-});
+}, shipPropsAreEqual);
+
+
+
 
 export const BoatRaceShipsLayer = memo(({
     activeShips,
-    animatedPositions,
+    animatedPositionsSignals,
     isDark,
-    shipsGroupRef,
-    TOW_LINE_LENGTH,
-    BADGE_OFFSET
+    shipsGroupRef
 }: {
     activeShips: ShipDatum[];
-    animatedPositions: Record<string, AnimatedShipPosition>;
+    animatedPositionsSignals: Record<string, import("@preact/signals").Signal<AnimatedShipPosition>>;
     isDark: boolean;
     shipsGroupRef: import("preact").Ref<SVGGElement>;
-    TOW_LINE_LENGTH: number;
-    BADGE_OFFSET: number;
 }) => {
     return (
         <g ref={shipsGroupRef}>
@@ -443,9 +377,7 @@ export const BoatRaceShipsLayer = memo(({
                     key={s.key}
                     s={s}
                     isDark={isDark}
-                    animatedPositions={animatedPositions}
-                    TOW_LINE_LENGTH={TOW_LINE_LENGTH}
-                    BADGE_OFFSET={BADGE_OFFSET}
+                    posSignal={animatedPositionsSignals[s.key]!}
                 />
             ))}
         </g>

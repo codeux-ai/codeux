@@ -5,12 +5,13 @@ import { Anchor } from "lucide-preact";
 import type { Subtask, ExecutionTaskDispatchSummary } from "../../types.js";
 import { getBoatRaceHeightPx } from "../lib/boat-race.js";
 
-import { BoatRaceBackground, BoatRaceCourseLayer } from "./boat-race/BoatRaceCourse.js";
+import { BoatRaceBackground } from "./quicksprint/Water.js";
+import { BoatRaceCourseLayer } from "./quicksprint/RaceCourse.js";
 import { BoatRaceHarbourLayer } from "./boat-race/BoatRaceHarbour.js";
-import { BoatRaceShipsLayer } from "./boat-race/BoatRaceShip.js";
-import { SVG_W, SVG_H, TOW_LINE_LENGTH, BADGE_OFFSET } from "./boat-race/constants.js";
+import { BoatRaceShipsLayer } from "./quicksprint/Ship.js";
+import { SVG_W, SVG_H } from "../lib/boat-race-config.js";
 import { useIsDark } from "./boat-race/utils.js";
-import { useBoatRaceAnimation } from "../hooks/useBoatRaceAnimation.js";
+import { useBoatRaceAnimation } from "./quicksprint/useBoatRaceAnimation.js";
 
 /* ─── Props ──────────────────────────────────────────────────────────────── */
 
@@ -31,8 +32,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
 
 
 
-    const { activeShips, harbourCount, animatedPositionsSignal } = useBoatRaceAnimation(tasks, dispatches, hasSprintContext);
-    const animatedPositions = animatedPositionsSignal.value;
+    const { activeShips, harbourCount, animatedPositionsSignals } = useBoatRaceAnimation(tasks, dispatches, hasSprintContext);
 
     const raceHeightPx = useMemo(() => getBoatRaceHeightPx(activeShips.length), [activeShips.length]);
 
@@ -134,11 +134,9 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                     <BoatRaceCourseLayer isDark={isDark} activeShips={activeShips} />
                     <BoatRaceShipsLayer
                         activeShips={activeShips}
-                        animatedPositions={animatedPositions}
+                        animatedPositionsSignals={animatedPositionsSignals}
                         isDark={isDark}
                         shipsGroupRef={shipsGroupRef}
-                        TOW_LINE_LENGTH={TOW_LINE_LENGTH}
-                        BADGE_OFFSET={BADGE_OFFSET}
                     />
                 </svg>
             </div>

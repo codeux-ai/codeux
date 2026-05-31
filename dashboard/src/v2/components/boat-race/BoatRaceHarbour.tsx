@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { SVG_H, HARBOUR_X } from "./constants.js";
+import { SVG_H, HARBOUR_X } from "../../lib/boat-race-config.js";
 import { hashStr } from "./utils.js";
 
 export const HarbourBuilding: FunctionComponent<{ x: number; waitingCount: number; isDark: boolean }> = memo(({ x, waitingCount, isDark }) => {

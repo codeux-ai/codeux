@@ -1,9 +1,10 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { SVG_W, SVG_H, LANE_TOP, LANE_BOT, HARBOUR_X, FINISH_X, RACE_LEN } from "./constants.js";
-import { hashStr } from "./utils.js";
-import type { ShipDatum } from "../../hooks/useBoatRaceAnimation.js";
+import { SVG_W, SVG_H, LANE_TOP, LANE_BOT, HARBOUR_X, FINISH_X, RACE_LEN } from "../../lib/boat-race-config.js";
+import { hashStr } from "../boat-race/utils.js";
+import type { ShipDatum } from "./useBoatRaceAnimation.js";
 import { getBoatRaceCheckpoints } from "../../lib/boat-race.js";
+import { Lane } from "./Lane.js";
 
 export const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color: string; isDark: boolean }> = memo(({ x, color, label, isDark }) => (
     <g>
@@ -26,8 +27,6 @@ export const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color
         </g>
     </g>
 ));
-
-/* ─── Finish Line ────────────────────────────────────────────────────────── */
 
 export const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = memo(({ x, isDark }) => (
     <g>
@@ -75,14 +74,12 @@ export const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = mem
     </g>
 ));
 
-/* ─── Celestial body (moon in dark mode, sun in light mode) ──────────────── */
-
 const STAR_DATA = Array.from({ length: 30 }, (_, i) => ({
-    cx: 40 + hashStr(`sx${i}`) % (SVG_W - 80),
-    cy: 4 + hashStr(`sy${i}`) % 55,
-    r: 0.3 + (hashStr(`sr${i}`) % 8) / 10,
-    dur: 2 + (hashStr(`sd${i}`) % 40) / 10,
-    op: 0.04 + (hashStr(`so${i}`) % 10) / 100,
+    cx: SVG_W * 0.4 + (hashStr(`sx${i}`) % (SVG_W * 0.6)),
+    cy: (hashStr(`sy${i}`) % 100),
+    r: 0.5 + (hashStr(`sr${i}`) % 1.5),
+    op: 0.1 + (hashStr(`so${i}`) % 0.8),
+    dur: 2 + (hashStr(`sd${i}`) % 4),
 }));
 
 export const CelestialBody: FunctionComponent<{ isDark: boolean }> = memo(({ isDark }) => {
@@ -139,97 +136,23 @@ export const CelestialBody: FunctionComponent<{ isDark: boolean }> = memo(({ isD
     );
 });
 
-/* ─── Subtle wave lines (transparent-friendly, works on any background) ──── */
-
-export const SubtleWaves: FunctionComponent<{ isDark: boolean }> = memo(({ isDark }) => {
-    const waveColor = isDark ? "white" : "#334155";
-    return (
-        <g>
-            {[80, 140, 200, 260, 320, 380].map((y, i) => {
-                const amp = 3 + i * 0.6;
-                const freq = 160 + i * 15;
-                const dur = 7 + i * 1.5;
-                const op = isDark ? 0.02 + i * 0.004 : 0.03 + i * 0.005;
-                const curves = Array.from({ length: 10 }, (_, j) => {
-                    const x0 = -100 + j * freq;
-                    const x1 = x0 + freq / 2;
-                    const x2 = x0 + freq;
-                    return `Q${x1} ${y - amp} ${x2} ${y}`;
-                }).join(" ");
-                return (
-                    <path key={i} d={`M-100 ${y} ${curves}`} fill="none" stroke={waveColor} strokeWidth={0.4} opacity={op}>
-                        <animateTransform attributeName="transform" type="translate"
-                            values={`0 0; ${freq / 3} ${amp * 0.4}; 0 0`}
-                            dur={`${dur}s`} repeatCount="indefinite" />
-                    </path>
-                );
-            })}
-        </g>
-    );
-});
-
-
-
-export const BoatRaceBackground = memo(({ isDark, ripples }: { isDark: boolean; ripples: {x: number, y: number, id: number}[] }) => {
-    return (
-        <g>
-            <defs>
-                <linearGradient id="br-wake" x1="1" y1="0.5" x2="0" y2="0.5">
-                    <stop offset="0%" stopColor={isDark ? "white" : "#334155"} stopOpacity={0.14} />
-                    <stop offset="50%" stopColor={isDark ? "white" : "#334155"} stopOpacity={0.04} />
-                    <stop offset="100%" stopColor={isDark ? "white" : "#334155"} stopOpacity={0} />
-                </linearGradient>
-                <radialGradient id="br-harbour-glow" cx="0.5" cy="0.5" r="0.5">
-                    <stop offset="0%" stopColor="#FFB800" stopOpacity={isDark ? 0.06 : 0.04} />
-                    <stop offset="100%" stopColor="transparent" />
-                </radialGradient>
-                <radialGradient id="br-finish-glow" cx="0.5" cy="0.5" r="0.5">
-                    <stop offset="0%" stopColor="#00AB84" stopOpacity={isDark ? 0.08 : 0.05} />
-                    <stop offset="100%" stopColor="transparent" />
-                </radialGradient>
-                <filter id="br-glow"><feGaussianBlur stdDeviation="2.5" /><feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-                <filter id="br-glow2"><feGaussianBlur stdDeviation="6" /><feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-                <filter id="br-ripple"><feGaussianBlur stdDeviation="1.5" /></filter>
-            </defs>
-            <CelestialBody isDark={isDark} />
-            <SubtleWaves isDark={isDark} />
-            {ripples.map(r => (
-                <g key={r.id}>
-                    <circle cx={r.x} cy={r.y} r={2} fill="none"
-                        stroke={isDark ? "white" : "#334155"} strokeWidth={0.5} opacity={0}>
-                        <animate attributeName="r" values="2;40" dur="2s" fill="freeze" />
-                        <animate attributeName="opacity" values="0.12;0" dur="2s" fill="freeze" />
-                    </circle>
-                    <circle cx={r.x} cy={r.y} r={2} fill="none"
-                        stroke={isDark ? "white" : "#334155"} strokeWidth={0.3} opacity={0}>
-                        <animate attributeName="r" values="2;25" dur="1.5s" fill="freeze" />
-                        <animate attributeName="opacity" values="0.08;0" dur="1.5s" fill="freeze" />
-                    </circle>
-                </g>
-            ))}
-        </g>
-    );
-});
 
 const buoys = getBoatRaceCheckpoints();
 
 export const BoatRaceCourseLayer = memo(({ isDark, activeShips }: { isDark: boolean; activeShips: ShipDatum[] }) => {
     return (
         <g>
-            {buoys.map(b => (
-                <CheckpointBuoy key={b.label}
-                    x={HARBOUR_X + 20 + b.progress * RACE_LEN}
-                    label={b.label}
-                    color={b.color}
+            <FinishLine x={FINISH_X} isDark={isDark} />
+            {buoys.map((cp, i) => (
+                <CheckpointBuoy
+                    key={`cp-${i}`}
+                    x={HARBOUR_X + RACE_LEN * cp.progress}
+                    label={cp.label}
+                    color={cp.color}
                     isDark={isDark}
                 />
             ))}
-            <FinishLine x={FINISH_X} isDark={isDark} />
-            {activeShips.map(s => (
-                <line key={`ln-${s.key}`}
-                    x1={HARBOUR_X + 40} y1={s.laneY + 16} x2={FINISH_X - 20} y2={s.laneY + 16}
-                    stroke={isDark ? "white" : "black"} strokeWidth={0.2} strokeDasharray="2,24" opacity={0.025} />
-            ))}
+            <Lane isDark={isDark} activeShips={activeShips} />
         </g>
     );
 });
