@@ -263,7 +263,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
 
       let proxyCmd = "";
       if (providerId === "codex") {
-        proxyCmd = "node -e \"const net = require('net'); const s = net.createServer((c) => { const p = net.connect(1455, '127.0.0.1', () => { c.pipe(p).pipe(c); }); p.on('error', () => c.destroy()); c.on('error', () => p.destroy()); }); s.on('error', () => {}); s.listen(1455, '::1');\" &";
+        proxyCmd = "node -e \"const net = require('net'), os = require('os'); let ip = '0.0.0.0'; const ifs = os.networkInterfaces(); for (const n of Object.keys(ifs)) { for (const netIf of ifs[n]) { if (netIf.family === 'IPv4' && !netIf.internal) { ip = netIf.address; break; } } } const s = net.createServer((c) => { const p = net.connect(1455, '127.0.0.1', () => { c.pipe(p).pipe(c); }); p.on('error', () => c.destroy()); c.on('error', () => p.destroy()); }); s.on('error', () => {}); s.listen(1455, ip);\" &";
       }
 
       const containerCmd = [
@@ -288,12 +288,15 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       ].filter(Boolean).join("\n");
 
       const userSpec = getDockerUserSpec();
+      const networkArgs = providerId === "codex"
+        ? ["-p", "1455:1455"]
+        : ["--network", "host"];
+
       const dockerArgs = [
         "run",
         "--rm",
         "-i",
-        "--network",
-        "host",
+        ...networkArgs,
         "--name",
         `code-ux-login-${providerId}-${sessionId}`,
         "--label",
