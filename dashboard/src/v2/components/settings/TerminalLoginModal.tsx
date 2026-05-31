@@ -10,6 +10,38 @@ interface TerminalLoginModalProps {
   onSuccess?: () => void;
 }
 
+const renderTerminalContentWithLinks = (text: string) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      let cleanUrl = part;
+      let trailing = "";
+      const match = part.match(/([),."';]+)$/);
+      if (match) {
+        cleanUrl = part.slice(0, -match[0].length);
+        trailing = match[0];
+      }
+      return (
+        <span key={index}>
+          <a 
+            href={cleanUrl} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="underline text-signal-300 hover:text-signal-200 cursor-pointer select-text font-bold"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {cleanUrl}
+          </a>
+          {trailing}
+        </span>
+      );
+    }
+    return part;
+  });
+};
+
 export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
   providerConfigId,
   providerId,
@@ -413,7 +445,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
 
             {terminalOutput ? (
               <pre className="whitespace-pre-wrap break-all text-xs text-emerald-400 font-mono select-text">
-                {terminalOutput}
+                {renderTerminalContentWithLinks(terminalOutput)}
               </pre>
             ) : (
               <div className="flex h-full items-center justify-center text-xs text-slate-600 italic select-none">

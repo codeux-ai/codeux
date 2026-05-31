@@ -170,6 +170,8 @@ function getBinaryName(providerId: string): string {
       return "qwen";
     case "opencode":
       return "opencode";
+    case "antigravity":
+      return "agy";
     default:
       return providerId;
   }
@@ -220,9 +222,9 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       await fs.mkdir(hostCredsDir, { recursive: true });
 
       const binaryName = getBinaryName(providerId);
-      let loginCmd = `${binaryName} login`;
-      if (providerId === "claude-code") {
-        loginCmd = "claude"; // claude has no explicit login command; running it prompts auth
+      let loginCmd = binaryName;
+      if (providerId === "codex") {
+        loginCmd = "codex login"; // codex requires the explicit login command to prompt auth
       }
 
       const fallbackKey = getFallbackInstallKey(providerId);
