@@ -15,6 +15,7 @@ import type {
   ThinkingMode,
 } from "../../types.js";
 import { cloneGuardrails } from "../../lib/settings.js";
+import { DEFAULT_PROVIDER_WEIGHT } from "../../../../src/repositories/settings-defaults.js";
 
 const cloneSkills = (skills: SkillToggle[]): SkillToggle[] => skills.map((skill) => ({ ...skill }));
 const cloneMcpTools = (tools: McpToolToggle[]): McpToolToggle[] => tools.map((tool) => ({ ...tool }));
@@ -298,8 +299,6 @@ export const providerLabels: Record<ProviderId, string> = {
 };
 
 export const getProviderTypeLabel = (providerId: ProviderId): string => providerLabels[providerId];
-
-export const DEFAULT_PROVIDER_WEIGHT = 50;
 
 export const createProjectProviderDraft = (
   providerId: ProviderId,

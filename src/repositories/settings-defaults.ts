@@ -198,6 +198,8 @@ export const GUARDRAIL_ON_LIMIT_ACTIONS: GuardrailOnLimitAction[] = [
 /** Fallback cap used when migrating the legacy hardcoded clarification auto-answer limit. */
 export const LEGACY_CLARIFICATION_RETRY_CAP = 3;
 
+export const DEFAULT_PROVIDER_WEIGHT = 50;
+
 export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
   jules: {
     provider: "jules",
