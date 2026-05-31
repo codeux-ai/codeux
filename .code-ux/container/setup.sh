@@ -30,9 +30,14 @@ if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
   command -v xdg-open >/dev/null 2>&1 || pkgs_needed+=(xdg-utils)
   if [ "${#pkgs_needed[@]}" -gt 0 ]; then
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y --no-install-recommends "${pkgs_needed[@]}"
-    rm -rf /var/lib/apt/lists/*
+    apt-get update || true
+    apt-get install -y --no-install-recommends "${pkgs_needed[@]}" || {
+      echo "[setup] WARNING: collective apt-get install failed, attempting individual installs..."
+      for pkg in "${pkgs_needed[@]}"; do
+        apt-get install -y --no-install-recommends "$pkg" || echo "[setup] WARNING: failed to install package: $pkg"
+      done
+    }
+    rm -rf /var/lib/apt/lists/* || true
   fi
 else
   if ! command -v git >/dev/null 2>&1 || ! command -v gh >/dev/null 2>&1; then
@@ -84,6 +89,9 @@ if ! command -v claude >/dev/null 2>&1; then
   if command -v curl >/dev/null 2>&1; then
     echo "[setup] Installing Claude Code CLI..."
     curl -fsSL https://claude.ai/install.sh | bash || echo "[setup] WARNING: failed to install Claude Code CLI"
+    if [ -f "$HOME/.local/bin/claude" ]; then
+      cp -f "$HOME/.local/bin/claude" /usr/local/bin/claude || true
+    fi
     export PATH="$HOME/.local/bin:$PATH"
   else
     echo "[setup] NOTE: curl not found; skipping Claude Code CLI install."
@@ -95,6 +103,11 @@ if ! command -v opencode >/dev/null 2>&1; then
   if command -v curl >/dev/null 2>&1; then
     echo "[setup] Installing OpenCode CLI..."
     curl -fsSL https://opencode.ai/install | bash || echo "[setup] WARNING: failed to install OpenCode CLI"
+    if [ -f "$HOME/.opencode/bin/opencode" ]; then
+      cp -f "$HOME/.opencode/bin/opencode" /usr/local/bin/opencode || true
+    elif [ -f "$HOME/.local/bin/opencode" ]; then
+      cp -f "$HOME/.local/bin/opencode" /usr/local/bin/opencode || true
+    fi
     export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
   else
     echo "[setup] NOTE: curl not found; skipping OpenCode CLI install."
@@ -106,6 +119,9 @@ if ! command -v agy >/dev/null 2>&1; then
   if command -v curl >/dev/null 2>&1; then
     echo "[setup] Installing Antigravity CLI..."
     curl -fsSL https://antigravity.google/cli/install.sh | bash || echo "[setup] WARNING: failed to install Antigravity CLI"
+    if [ -f "$HOME/.local/bin/agy" ]; then
+      cp -f "$HOME/.local/bin/agy" /usr/local/bin/agy || true
+    fi
     export PATH="$HOME/.local/bin:$PATH"
   else
     echo "[setup] NOTE: curl not found; skipping Antigravity CLI install."
