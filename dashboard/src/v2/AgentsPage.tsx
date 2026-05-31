@@ -26,6 +26,7 @@ import { InstructionFileCard } from "./components/agents/InstructionFileCard.js"
 import { InstructionFileEditorPanel } from "./components/agents/InstructionFileEditorPanel.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { EmptyState } from "./components/ui/EmptyState.js";
+import { SectionDivider } from "./components/ui/SectionDivider.js";
 
 /* ── Roster summary stat ── */
 type RosterStatProps = {
@@ -361,12 +362,7 @@ export const AgentsPage: FunctionComponent = () => {
 
       {/* Section divider — pure overview-style */}
       {selectedProject && presets.length > 0 && (
-        <div className="relative flex w-full items-center justify-center py-1 md:py-2">
-          <div className="absolute inset-y-1/2 inset-x-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] to-transparent dark:via-white/[0.06]" />
-          <div className="relative z-10 rounded-full border border-black/[0.06] bg-[#F9F8F4] px-5 py-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 shadow-sm dark:border-white/[0.06] dark:bg-void-900 dark:text-slate-500">
-            Roster
-          </div>
-        </div>
+        <SectionDivider label="Roster" className="py-1 md:py-2" />
       )}
 
       {/* Content */}
