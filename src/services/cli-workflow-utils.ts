@@ -23,7 +23,7 @@ export const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
   containerMountClaudeCodeAuth: false,
   containerMountQwenCodeAuth: false,
   containerMountOpenCodeAuth: false,
-  containerMountAntigravityAuth: false,
+  containerMountAntigravityAuth: true,
   containerGithubAuthPath: "~/.config/gh",
   containerGeminiAuthPath: "~/.gemini",
   containerCodexAuthPath: "~/.codex",

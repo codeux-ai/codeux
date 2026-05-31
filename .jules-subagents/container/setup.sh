@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Force rebuild version: 2026-05-31-002
 set -euo pipefail
 
 echo "[setup] Starting container bootstrap..."

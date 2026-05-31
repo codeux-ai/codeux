@@ -48,9 +48,10 @@ if [ "$1" = "opencode" ]; then
 fi
 if [ "$1" = "antigravity" ] || [ "$1" = "agy" ]; then
   if [ -d "/opt/credentials/antigravity" ]; then
-    mkdir -p "$HOME/.local/share/keyrings"
+    mkdir -p "$HOME/.local/share/keyrings" "$HOME/.gemini"
     sync_dir_contents "/opt/credentials/antigravity" "$HOME/.local/share/keyrings" "antigravity-keyrings"
     sync_dir_contents "/opt/credentials/antigravity" "$HOME/.antigravity" "antigravity"
+    sync_dir_contents "/opt/credentials/antigravity" "$HOME/.gemini" "antigravity-gemini"
   fi
   if ! command -v dbus-daemon >/dev/null 2>&1 || ! command -v gnome-keyring-daemon >/dev/null 2>&1; then
     echo "provider-runner: installing keyring dependencies in container..."
@@ -125,9 +126,10 @@ if [ "$1" = "opencode" ]; then
 fi
 if [ "$1" = "antigravity" ] || [ "$1" = "agy" ]; then
   if [ -d "/opt/credentials/antigravity" ]; then
-    mkdir -p "$HOME/.local/share/keyrings"
+    mkdir -p "$HOME/.local/share/keyrings" "$HOME/.gemini"
     sync_dir_contents "/opt/credentials/antigravity" "$HOME/.local/share/keyrings" "antigravity-keyrings"
     sync_dir_contents "/opt/credentials/antigravity" "$HOME/.antigravity" "antigravity"
+    sync_dir_contents "/opt/credentials/antigravity" "$HOME/.gemini" "antigravity-gemini"
   fi
   if ! command -v dbus-daemon >/dev/null 2>&1 || ! command -v gnome-keyring-daemon >/dev/null 2>&1; then
     echo "provider-runner: installing keyring dependencies in container..."
@@ -202,9 +204,10 @@ if [ "$1" = "opencode" ]; then
 fi
 if [ "$1" = "antigravity" ] || [ "$1" = "agy" ]; then
   if [ -d "/opt/credentials/antigravity" ]; then
-    mkdir -p "$HOME/.local/share/keyrings"
+    mkdir -p "$HOME/.local/share/keyrings" "$HOME/.gemini"
     sync_dir_contents "/opt/credentials/antigravity" "$HOME/.local/share/keyrings" "antigravity-keyrings"
     sync_dir_contents "/opt/credentials/antigravity" "$HOME/.antigravity" "antigravity"
+    sync_dir_contents "/opt/credentials/antigravity" "$HOME/.gemini" "antigravity-gemini"
   fi
   if ! command -v dbus-daemon >/dev/null 2>&1 || ! command -v gnome-keyring-daemon >/dev/null 2>&1; then
     echo "provider-runner: installing keyring dependencies in container..."
@@ -278,9 +281,10 @@ if [ "$1" = "opencode" ]; then
 fi
 if [ "$1" = "antigravity" ] || [ "$1" = "agy" ]; then
   if [ -d "/opt/credentials/antigravity" ]; then
-    mkdir -p "$HOME/.local/share/keyrings"
+    mkdir -p "$HOME/.local/share/keyrings" "$HOME/.gemini"
     sync_dir_contents "/opt/credentials/antigravity" "$HOME/.local/share/keyrings" "antigravity-keyrings"
     sync_dir_contents "/opt/credentials/antigravity" "$HOME/.antigravity" "antigravity"
+    sync_dir_contents "/opt/credentials/antigravity" "$HOME/.gemini" "antigravity-gemini"
   fi
   if ! command -v dbus-daemon >/dev/null 2>&1 || ! command -v gnome-keyring-daemon >/dev/null 2>&1; then
     echo "provider-runner: installing keyring dependencies in container..."

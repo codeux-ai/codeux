@@ -473,7 +473,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerMountClaudeCodeAuth: false,
     containerMountQwenCodeAuth: false,
     containerMountOpenCodeAuth: false,
-    containerMountAntigravityAuth: false,
+    containerMountAntigravityAuth: true,
     containerGithubAuthPath: "~/.config/gh",
     containerGeminiAuthPath: "~/.gemini",
     containerCodexAuthPath: "~/.codex",

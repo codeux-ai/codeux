@@ -54,10 +54,13 @@ export class DockerSetupImageCache {
       return { image: baseImage, runSetupScriptAtRuntime: true };
     }
 
+    const dockerfileContent = this.buildDockerfile(baseImage);
     const cacheKey = createHash("sha1")
       .update(baseImage)
       .update("\n")
       .update(scriptContent)
+      .update("\n")
+      .update(dockerfileContent)
       .digest("hex")
       .slice(0, 24);
     const imageTag = `code-ux-setup-cache:${cacheKey}`;
@@ -105,6 +108,7 @@ export class DockerSetupImageCache {
   private buildDockerfile(baseImage: string): string {
     return [
       `FROM ${baseImage}`,
+      "USER root",
       "COPY setup.sh /tmp/code-ux-setup.sh",
       "RUN sed -i 's/\\r//' /tmp/code-ux-setup.sh && bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh",
     ].join("\n");
