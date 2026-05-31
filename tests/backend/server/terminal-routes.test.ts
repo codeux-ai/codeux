@@ -49,10 +49,13 @@ describe("Terminal Routes", () => {
       },
       integrations: {
         providers: {
-          gemini: {
-            provider: "gemini",
-            authType: "dashboardAuth",
-          },
+          gemini: { provider: "gemini", authType: "dashboardAuth" },
+          claude: { provider: "claude-code", authType: "dashboardAuth" },
+          codex: { provider: "codex", authType: "dashboardAuth" },
+          qwen: { provider: "qwen-code", authType: "dashboardAuth" },
+          antigravity: { provider: "antigravity", authType: "dashboardAuth" },
+          opencode: { provider: "opencode", authType: "dashboardAuth" },
+          legacy: { provider: "generic-cli", authType: "dashboardAuth" },
         },
       },
     };
@@ -79,6 +82,17 @@ describe("Terminal Routes", () => {
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty("sessionId");
     expect(response.body.providerId).toBe("gemini");
+  });
+
+  it("should support special login setup configurations for all CLI providers", async () => {
+    const providers = ["gemini", "claude", "codex", "qwen", "antigravity", "opencode", "legacy"];
+    for (const providerConfigId of providers) {
+      const response = await request(app)
+        .post("/api/terminal/start")
+        .send({ providerConfigId });
+      expect(response.status).toBe(200);
+      expect(response.body.sessionId).toBeDefined();
+    }
   });
 
   it("should return 400 if providerConfigId is missing", async () => {

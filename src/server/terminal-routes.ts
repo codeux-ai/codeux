@@ -220,9 +220,67 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       await fs.mkdir(hostCredsDir, { recursive: true });
 
       const binaryName = getBinaryName(providerId);
-      let loginCmd = `${binaryName} login`;
+      let loginCmd = "";
       if (providerId === "claude-code") {
-        loginCmd = "claude"; // claude has no explicit login command; running it prompts auth
+        loginCmd = "claude";
+      } else if (providerId === "opencode") {
+        loginCmd = "opencode login";
+      } else if (providerId === "gemini") {
+        loginCmd = [
+          'echo "=== Gemini CLI API Key Setup ==="',
+          'echo "Please get a Gemini API Key from Google AI Studio: https://aistudio.google.com/"',
+          'echo ""',
+          'read -r -p "Please paste your Gemini API Key: " api_key',
+          'if [ -n "$api_key" ]; then',
+          '  mkdir -p /tmp/.credentials',
+          '  printf \'{\\n  "authType": "apiKey",\\n  "apiKey": "%s"\\n}\\n\' "$api_key" > /tmp/.credentials/settings.json',
+          '  echo "Success! API Key saved successfully."',
+          'else',
+          '  echo "Error: No API Key provided."',
+          '  exit 1',
+          'fi',
+        ].join("\n");
+      } else if (providerId === "codex") {
+        loginCmd = [
+          'echo "=== OpenAI / Codex CLI API Key Setup ==="',
+          'read -r -p "Please paste your OpenAI API Key: " api_key',
+          'if [ -n "$api_key" ]; then',
+          '  mkdir -p /tmp/.credentials',
+          '  printf \'{\\n  "apiKey": "%s"\\n}\\n\' "$api_key" > /tmp/.credentials/auth.json',
+          '  echo "Success! API Key saved successfully."',
+          'else',
+          '  echo "Error: No API Key provided."',
+          '  exit 1',
+          'fi',
+        ].join("\n");
+      } else if (providerId === "qwen-code") {
+        loginCmd = [
+          'echo "=== Qwen / DashScope CLI API Key Setup ==="',
+          'read -r -p "Please paste your DashScope API Key: " api_key',
+          'if [ -n "$api_key" ]; then',
+          '  mkdir -p /tmp/.credentials',
+          '  printf \'{\\n  "apiKey": "%s"\\n}\\n\' "$api_key" > /tmp/.credentials/settings.json',
+          '  echo "Success! API Key saved successfully."',
+          'else',
+          '  echo "Error: No API Key provided."',
+          '  exit 1',
+          'fi',
+        ].join("\n");
+      } else if (providerId === "antigravity") {
+        loginCmd = [
+          'echo "=== Antigravity CLI API Key Setup ==="',
+          'read -r -p "Please paste your Antigravity API Key: " api_key',
+          'if [ -n "$api_key" ]; then',
+          '  mkdir -p /tmp/.credentials',
+          '  printf \'{\\n  "apiKey": "%s"\\n}\\n\' "$api_key" > /tmp/.credentials/settings.json',
+          '  echo "Success! API Key saved successfully."',
+          'else',
+          '  echo "Error: No API Key provided."',
+          '  exit 1',
+          'fi',
+        ].join("\n");
+      } else {
+        loginCmd = `${binaryName} login`;
       }
 
       const fallbackKey = getFallbackInstallKey(providerId);
@@ -245,7 +303,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         `  echo 'Installing provider CLI fallback in container...'`,
         `  ${installCmd || "echo 'No installation command configured'"};`,
         "fi",
-        `script -q -c "${loginCmd}" /dev/null`,
+        loginCmd,
       ].join("\n");
 
       const userSpec = getDockerUserSpec();
