@@ -299,6 +299,8 @@ export const providerLabels: Record<ProviderId, string> = {
 
 export const getProviderTypeLabel = (providerId: ProviderId): string => providerLabels[providerId];
 
+export const DEFAULT_PROVIDER_WEIGHT = 50;
+
 export const createProjectProviderDraft = (
   providerId: ProviderId,
   name: string,
@@ -313,7 +315,7 @@ export const createProjectProviderDraft = (
       : providerId === "opencode"
         ? "anthropic/claude-sonnet-4-5"
         : "default",
-  weight: providerId === "jules" ? 60 : providerId === "claude-code" || providerId === "qwen-code" || providerId === "opencode" ? 0 : 20,
+  weight: DEFAULT_PROVIDER_WEIGHT,
   thinkingMode: providerId === "codex" || providerId === "claude-code" || providerId === "qwen-code" || providerId === "opencode" ? "HIGH" : "MEDIUM",
   maxConcurrentTasks: providerId === "jules" ? 15 : 0,
 });

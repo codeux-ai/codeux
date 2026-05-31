@@ -178,6 +178,7 @@ export const MIN_WATCH_LOOP_OUTPUT_INTERVAL_SECONDS = 60;
 export const MAX_WATCH_LOOP_OUTPUT_INTERVAL_SECONDS = 3600;
 export const MIN_JULES_CI_AUTOFIX_RETRIES = 0;
 export const MAX_JULES_CI_AUTOFIX_RETRIES = 20;
+export const DEFAULT_PROVIDER_WEIGHT = 50;
 
 export const MIN_GUARDRAIL_CAP = 0;
 export const MAX_GUARDRAIL_CAP = 100;
@@ -204,7 +205,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES.jules,
     enabled: true,
     model: "default",
-    weight: 60,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "MEDIUM",
     apiKey: "",
     mountAuth: false,
@@ -216,7 +217,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES.gemini,
     enabled: true,
     model: "default",
-    weight: 20,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "MEDIUM",
     apiKey: "",
     mountAuth: false,
@@ -228,7 +229,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES.codex,
     enabled: true,
     model: "gpt-5.3-codex",
-    weight: 20,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
     mountAuth: false,
@@ -240,7 +241,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES["claude-code"],
     enabled: false,
     model: "default",
-    weight: 0,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
     mountAuth: false,
@@ -252,7 +253,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES["qwen-code"],
     enabled: false,
     model: "qwen3-coder-plus",
-    weight: 0,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
     mountAuth: false,
@@ -264,7 +265,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES.opencode,
     enabled: false,
     model: "anthropic/claude-sonnet-4-5",
-    weight: 0,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
     mountAuth: false,
@@ -276,7 +277,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES.antigravity,
     enabled: false,
     model: "default",
-    weight: 0,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
     mountAuth: false,

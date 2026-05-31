@@ -451,6 +451,10 @@ Defined in:
 - `src/repositories/settings-db-storage.ts` (sqlite persistence and migration path resolution)
 - `dashboard/src/lib/settings.ts` (frontend default clone)
 
+Provider model defaults:
+- New provider entries created from the settings UI integration catalog use a shared base weight default of `50`.
+- System and project reset/default paths also initialize provider `weight` to `50` unless a user-saved value already exists.
+
 ## External Settings Hints
 
 `src/config/external-settings.ts` loads hints from:
