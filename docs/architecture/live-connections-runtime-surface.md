@@ -65,7 +65,9 @@ This keeps live connection observability in the same payload as:
 
 ## Dashboard Behavior
 
-The v2 live page now renders a dedicated live-connections panel inside the execution runtime section.
+The v2 live experience now supports a dedicated sidebar-ready live-connections card that can replace the "Latest Activity" slot at the top of the sidebar without changing the runtime data contract.
+
+The runtime panel still renders the embedded connection section for the full execution view, while the new card is self-contained for sidebar placement.
 
 It shows:
 
@@ -77,6 +79,8 @@ It shows:
 - active dispatch count
 - thread history and task-run history
 - lightweight instruction and label context when present
+- readable empty-state messaging when no listeners or workers are connected
+- compact count tiles and status badges tuned for narrow sidebar widths
 
 This means operators can now see:
 
@@ -98,6 +102,8 @@ Frontend:
 
 - `dashboard/src/hooks/use-dashboard-runtime-data.ts`
 - `dashboard/src/v2/LiveSessionPage.tsx`
+- `dashboard/src/v2/components/live-session/ExecutionRuntimePanel.tsx`
+- `dashboard/src/v2/components/live-session/LiveConnectionsCard.tsx`
 
 Tests:
 
