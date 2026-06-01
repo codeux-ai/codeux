@@ -212,12 +212,15 @@ Legacy runtime:
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
 - Sprint cells now surface a QA-reviewed indicator with an expandable overlay section inside the created column, and allow marking sprints completed directly from the cell menu
 - Task rows and Live task cards now surface task-level QA review badges from the latest task QA run, including a running indicator while QA review is in progress.
+- Live task cards now include `Edit` and `Force complete` actions:
+  - `Edit` deep-links to `/tasks?taskId=<taskId>&sprintId=<sprintId>` so operators can open the task editor directly from the live surface.
+  - `Force complete` calls `POST /api/projects/:projectId/tasks/:taskId/force-complete`, disables itself for already completed tasks, and surfaces inline failures on the card.
 - Sprint creation no longer asks for start/end dates
 - Sprint creation now uses an in-page composer that replaces the showcase while writing, instead of opening a detached modal
 - The sprint composer supports `Plan & Start`, `Plan Only`, and `Save Draft`.
 - The sprint composer prompt area renders a full-width editor until an original prompt exists, at which point it uses a split layout.
 - When planning a sprint (`Plan Only` or `Plan & Start`), the pre-improvement raw prompt is saved to `originalPrompt` if it isn't already set, keeping the worker-improved text as the goal.
-- The planning feedback overlay surfaces both an ETA countdown and an elapsed runtime timer. The ETA is derived from project planning telemetry (averaging active time per planning invocation) with a 3:00 fallback.
+- The planning feedback overlay surfaces both an ETA countdown and an elapsed runtime timer. ETA comes from `GET /api/projects/:projectId/sprints/composer/eta`, computed server-side from the latest 10 planning invocations for the selected project, with a 3:00 fallback when no usable sample exists.
 - When editing a sprint that already has planned tasks, the composer offers `Replan` (discard and regenerate subtasks), `Append Tasks` (open a task-creation modal pre-scoped to the sprint with dependency selection from existing tasks), and `Save Draft` (update name/goal only)
 - The sprint composer includes a planning-agent selector that allows operators to choose an alternate planning preset (filtered for presets with a `planning` label) for the current sprint. Leaving this on the default `Planning agent` preserves existing behavior, and any selection is honored by `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan`.
 - Imported GitHub/GitLab/Jira issues render as linked issue cards directly under the Sprint Prompt field and are persisted with the sprint. The prompt receives a linked-issues markdown section so planning sees the imported issue scope.

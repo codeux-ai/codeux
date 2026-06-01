@@ -19,6 +19,8 @@ import { AutomationPanel } from "./panels/AutomationPanel.js";
 import { ProviderPanel } from "./panels/ProviderPanel.js";
 import { WorkerPanel } from "./panels/WorkerPanel.js";
 import { InfoIconPopover } from "../ui/InfoIconPopover.js";
+import { BranchNameSchemeEditor } from "./BranchNameSchemeEditor.js";
+
 
 export interface ProjectSettingsEditorProps {
   settings: ProjectSettings;
@@ -124,13 +126,15 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             />
           </Row>
           <Row label="Sprint branch scheme" description="Template used when naming sprint branches." badge={getBadge("git.sprintBranchScheme")} info={<InfoIconPopover items={[
-            { key: "{sprint}", desc: "Sprint identifier" },
-            { key: "{sprintNumber}", desc: "Sprint sequence number" },
-            { key: "{sprintName}", desc: "Name of the sprint" },
-            { key: "{date}", desc: "Current date" },
-            { key: "{taskCount}", desc: "Number of tasks" },
+            { key: "{sprint_key_prefix}", desc: "Sprint Key Prefix" },
+            { key: "{sprint_number}", desc: "Sprint Number" },
+            { key: "{sprint_name}", desc: "Sprint Name" },
+            { key: "{sprint_id}", desc: "Sprint ID" },
+            { key: "{planning_agent}", desc: "Planning Agent" },
+            { key: "{agent_routing}", desc: "Agent Routing" },
+            { key: "{worker_agent}", desc: "Worker Agent" },
           ]} />}>
-            <TextInput
+            <BranchNameSchemeEditor
               value={settings.git.sprintBranchScheme}
               onChange={(value) => update({
                 git: {
@@ -138,9 +142,9 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                   sprintBranchScheme: value,
                 },
               })}
-              mono
             />
           </Row>
+
         </div>
         <Row label="Auto-create PRs" description="Open pull requests automatically for remote git workflows." badge={getBadge("git.autoCreatePr")}>
           <Toggle

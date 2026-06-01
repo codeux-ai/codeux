@@ -32,6 +32,7 @@ import {
   GUARDRAIL_ON_LIMIT_ACTIONS,
 } from "../../repositories/settings-defaults.js";
 import { INSTRUCTION_TEMPLATE_IDS } from "../../instructions/instruction-template-catalog.js";
+import { BRANCH_NAME_TOKENS, BRANCH_NAME_TOKEN_ALIASES, LEGACY_BRANCH_NAME_TOKENS } from "./branch-name-tokens.js";
 
 export interface ValidationIssue {
   path: string;
@@ -225,6 +226,21 @@ const validateGitSettings = (
   }
   if (typeof value.sprintBranchScheme !== "string") {
     issues.push({ path: `${path}.sprintBranchScheme`, message: "Expected a string" });
+  } else {
+    const tokens = value.sprintBranchScheme.match(/\{[^}]+\}/g) || [];
+    const usedCanonical = new Set<string>();
+    for (const token of tokens) {
+      const inner = token.slice(1, -1);
+      const canonical = BRANCH_NAME_TOKEN_ALIASES[inner] || (BRANCH_NAME_TOKENS.includes(inner as any) ? inner : null);
+      const isLegacy = LEGACY_BRANCH_NAME_TOKENS.includes(inner as any);
+      if (!canonical && !isLegacy) {
+        issues.push({ path: `${path}.sprintBranchScheme`, message: `Invalid token: ${token}` });
+      } else if (canonical && usedCanonical.has(canonical)) {
+        issues.push({ path: `${path}.sprintBranchScheme`, message: `Duplicate token usage (canonical): ${canonical}` });
+      } else if (canonical) {
+        usedCanonical.add(canonical);
+      }
+    }
   }
   if (typeof value.sprintKeyPrefix !== "string") {
     issues.push({ path: `${path}.sprintKeyPrefix`, message: "Expected a string" });

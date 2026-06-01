@@ -16,7 +16,7 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import { SprintFileBrowserRepository } from "../repositories/sprint-file-browser-repository.js";
 import { resolveDockerRuntimeRoot } from "../infrastructure/providers/cli/docker-runtime-paths.js";
-import { formatSprintBranch } from "../git/sprint-branch-scheme.js";
+import { formatSprintBranch } from "../domain/sprint/branch-name-generator.js";
 import { commandRunner, runCommandStrict } from "./cli-process-runner.js";
 import { getDockerUserSpec, mapPathPrefix, toDockerMountArg } from "./cli-docker-utils.js";
 import type { Logger } from "../shared/logging/logger.js";

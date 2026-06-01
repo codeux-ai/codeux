@@ -2,7 +2,7 @@
 name: git-merge-conflict-resolution
 description: Procedure for resolving Git merge conflicts between feature branches in a TypeScript/React project with strict quality gates
 source: auto-skill
-extracted_at: '2026-05-31T22:44:33.362Z'
+extracted_at: '2026-06-01T00:45:29.937Z'
 ---
 
 # Git Merge Conflict Resolution for TypeScript/React Projects
@@ -34,7 +34,7 @@ Group changes into orthogonal concerns:
 
 ### 3. Merge each conflict zone deliberately
 
-For **imports**: Concatenate both sets of import lines, deduplicating if needed.
+For **imports**: Before retaining imports from both sides, verify each import is actually referenced in the file body by running `grep -n '<imported-name>' <file>` for each imported symbol. Only keep imports that are used — unused imports can remain from stale code that was already removed. Concatenate both sets of truly-used import lines, preserving whitespace conventions (blank line between groups is allowed).
 
 For **JSX blocks**: Decide on a merge strategy:
 - **Condition gate**: Choose the semantically correct gate (e.g., `showInterventionBadge` from a presentation mapper rather than raw `humanIntervention`), then layer T04's wrapper/presentation changes (e.g., pulse div, repositioning classes) on top.

@@ -22,7 +22,6 @@ import {
   deleteSprint,
   exportSprintMarkdown,
   fetchProjectExecution,
-  fetchProjectStats,
   fetchTasks,
   importSprintMarkdown,
   improveSprintPrompt,
@@ -33,7 +32,7 @@ import {
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
 import { buildTaskBundle, mergePromptWithLinkedIssues, parseTaskBundle } from "../../lib/markdown-transfer.js";
 import { toTaskViewModel } from "../../lib/view-models.js";
-import { derivePlanningETA } from "../../lib/planning-telemetry.js";
+import { fetchSprintComposerEta } from "../../lib/api/sprint-composer-client.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { cancelSprintRun, orchestrateSprint, pauseSprintRun, resumeSprintRun } from "../../../lib/api/dashboard-api.js";
 import { getSprintHumanInterventionBySprintId } from "../../../lib/execution-intervention.js";
@@ -70,6 +69,7 @@ const VIRTUAL_PROVIDER_LABELS: Record<string, string> = {
   "qwen-code": "Virtual Qwen Code Worker",
   opencode: "Virtual OpenCode Worker",
 };
+const DEFAULT_PLANNING_ETA_MS = 180000;
 
 type AddProjectDraft = {
   name: string;
@@ -116,7 +116,7 @@ export function useSprintsPageData() {
   const [showQuicksprint, setShowQuicksprint] = useState(false);
   const [quicksprintTemplates, setQuicksprintTemplates] = useState<QuicksprintTemplateRecord[]>([]);
   const [quicksprintLoading, setQuicksprintLoading] = useState(false);
-  const [planningEta, setPlanningEta] = useState(180000);
+  const [planningEta, setPlanningEta] = useState(DEFAULT_PLANNING_ETA_MS);
 
   const { feedback, setError, clearFeedback } = useActionFeedback();
 
@@ -139,23 +139,26 @@ export function useSprintsPageData() {
 
   const planningPresets = useMemo(() => agentPresets, [agentPresets]);
 
+  const refreshPlanningEta = useCallback(async (projectId: string): Promise<void> => {
+    try {
+      const eta = await fetchSprintComposerEta(projectId);
+      const estimatedMs = Number.isFinite(eta.estimatedMs) && eta.estimatedMs > 0
+        ? eta.estimatedMs
+        : DEFAULT_PLANNING_ETA_MS;
+      setPlanningEta(estimatedMs);
+    } catch (error) {
+      console.error("Failed to fetch sprint composer ETA", error);
+      setPlanningEta(DEFAULT_PLANNING_ETA_MS);
+    }
+  }, []);
+
   useEffect(() => {
     if (!selectedProject) {
-      setPlanningEta(180000);
+      setPlanningEta(DEFAULT_PLANNING_ETA_MS);
       return;
     }
-    let cancelled = false;
-    void fetchProjectStats(selectedProject.id, "all")
-      .then((stats) => {
-        if (!cancelled) setPlanningEta(derivePlanningETA(stats));
-      })
-      .catch((error) => {
-        console.error("Failed to fetch project stats for ETA", error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedProject?.id]);
+    void refreshPlanningEta(selectedProject.id);
+  }, [refreshPlanningEta, selectedProject?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -542,6 +545,7 @@ export function useSprintsPageData() {
           planningAgentPresetId: payload.planningAgentPresetId || undefined,
           overrides,
         }, payload.signal);
+        await refreshPlanningEta(selectedProject.id);
       } else if (payload.submitMode === "plan_and_start") {
         await planSprint(selectedProject.id, editingSprint.id, {
           autoStart: true,
@@ -550,6 +554,7 @@ export function useSprintsPageData() {
           planningAgentPresetId: payload.planningAgentPresetId || undefined,
           overrides,
         }, payload.signal);
+        await refreshPlanningEta(selectedProject.id);
       }
 
       await refresh();
@@ -577,6 +582,7 @@ export function useSprintsPageData() {
         planningAgentPresetId: payload.planningAgentPresetId || undefined,
         overrides,
       }, payload.signal);
+      await refreshPlanningEta(selectedProject.id);
     } else if (payload.submitMode === "plan_and_start") {
       await planSprint(selectedProject.id, created.id, {
         autoStart: true,
@@ -584,18 +590,20 @@ export function useSprintsPageData() {
         planningAgentPresetId: payload.planningAgentPresetId || undefined,
         overrides,
       }, payload.signal);
+      await refreshPlanningEta(selectedProject.id);
     }
 
     await Promise.all([refresh(), refreshExecution()]);
-  }, [editingSprint, nextSprintNumber, refresh, refreshExecution, selectedProject]);
+  }, [editingSprint, nextSprintNumber, refresh, refreshExecution, refreshPlanningEta, selectedProject, sprintKeyPrefix]);
 
   const handleImprovePrompt = useCallback(async (draft: ImprovePromptInput, signal?: AbortSignal): Promise<string> => {
     if (!selectedProject) {
       throw new Error("Select a project before using Plan ahead with AI.");
     }
     const response = await improveSprintPrompt(selectedProject.id, draft, signal);
+    await refreshPlanningEta(selectedProject.id);
     return response.goal;
-  }, [selectedProject]);
+  }, [refreshPlanningEta, selectedProject]);
 
   const handleCancelPlanningRequest = useCallback(async (clientRequestId: string): Promise<void> => {
     await cancelPlanningRequest(clientRequestId);
@@ -696,13 +704,14 @@ export function useSprintsPageData() {
         additionalPrompt,
         planningOverrides: toPlanningOverrides(routeOverride ?? null, modelOverride ?? null),
       });
+      await refreshPlanningEta(selectedProject.id);
       setShowQuicksprint(false);
       await refresh();
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
       throw error;
     }
-  }, [selectedProject, refresh, setError]);
+  }, [refresh, refreshPlanningEta, selectedProject, setError]);
 
   const reloadQuicksprintTemplates = useCallback(async () => {
     if (!selectedProject) return;
