@@ -37,6 +37,9 @@ export interface QaReviewRunnerArgs {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  customBaseUrl?: string;
+  customModel?: string;
+  codexWireApi?: "chat" | "responses";
   providerPrompt: string;
   repoPath: string | null;
   cwd?: string | null;
@@ -79,6 +82,9 @@ export class QaReviewRunner {
         openCodePackage: args.openCodePackage,
         providerMountAuth: args.providerMountAuth as any,
         providerAuthPath: args.providerAuthPath,
+        customBaseUrl: args.customBaseUrl,
+        customModel: args.customModel,
+        codexWireApi: args.codexWireApi,
         providerPrompt: args.providerPrompt,
         repoPath: args.repoPath ?? "",
         cwd: args.cwd ?? undefined,
