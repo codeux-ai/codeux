@@ -8,6 +8,7 @@ import {
 } from "lucide-preact";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
+import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { TaskStagePills } from "./SprintStatsDeck.js";
 import { RuntimeEventFeed } from "./RuntimeEventFeed.js";
 import { renderMarkdown } from "../../lib/markdown.js";
@@ -407,13 +408,10 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Task Prompt</span>
                         </div>
                         <div
-                            className="prose prose-sm max-w-none text-slate-600 dark:text-slate-400
-                                       prose-headings:text-slate-800 dark:prose-headings:text-slate-200
-                                       prose-code:text-signal-600 dark:prose-code:text-signal-400
-                                       prose-code:bg-signal-500/[0.06] prose-code:px-1.5 prose-code:rounded-md
-                                       prose-strong:text-slate-800 dark:prose-strong:text-slate-200
-                                       prose-a:text-signal-600 dark:prose-a:text-signal-400 prose-a:focus-visible:outline-none prose-a:focus-visible:ring-2 prose-a:focus-visible:ring-signal-500 prose-a:focus-visible:rounded prose-a:focus-visible:ring-offset-1 dark:prose-a:focus-visible:ring-offset-void-800
-                                       font-mono text-[12px] leading-relaxed"
+                            className={`${MARKDOWN_PROSE_CLASS}
+                                       prose-code:px-1.5
+                                       prose-a:focus-visible:outline-none prose-a:focus-visible:ring-2 prose-a:focus-visible:ring-signal-500 prose-a:focus-visible:rounded prose-a:focus-visible:ring-offset-1 dark:prose-a:focus-visible:ring-offset-void-800
+                                       font-mono text-[12px] leading-relaxed`}
                             dangerouslySetInnerHTML={{ __html: renderedPrompt }}
                         />
                     </div>
