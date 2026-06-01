@@ -2,7 +2,6 @@ import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useState, useMemo } from "preact/hooks";
 import { Radio, Bot, CheckCircle2, XCircle, Workflow, ChevronDown, Play, PauseCircle, Clock, RotateCcw } from "lucide-preact";
-import { AttentionLedger } from "../AttentionLedger.js";
 import { formatTime } from "../../../lib/time.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
@@ -231,9 +230,6 @@ export const ExecutionRuntimePanel: FunctionComponent<{
         onCancelTaskDispatch,
         onForceCancelTaskDispatch,
         onRetryTaskDispatch,
-        onClaimAttentionItem,
-        onResolveAttentionItem,
-        onDismissAttentionItem,
         pendingActionIds,
     } = useExecutionTimeline();
 
@@ -528,8 +524,6 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                         </div>
                     )}
                 </div>
-
-                <AttentionLedger />
 
                 <ConnectionRuntimePanel snapshot={snapshot} />
 

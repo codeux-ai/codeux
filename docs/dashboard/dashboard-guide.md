@@ -376,7 +376,7 @@ Legacy runtime:
 - `recentEvents` is now a unified runtime timeline spanning both `task_run_events` and `sprint_run_events`
 - The selected-project execution snapshot now keeps the full task-dispatch and task-run event history for the active or most recent sprint run, so completed tasks in Live view keep their runtime feed and stage timings visible even after later tasks start
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
-- The execution runtime panel now also exposes the active attention queue, including worker claim, resolve, and dismiss controls for open project blockers
+- The Live sidebar now renders `Attention Queue` as its own card under the shared execution timeline context, preserving claim/resolve/dismiss controls while keeping the execution runtime card focused on runs, dispatch, connections, and timeline data
 - The Live page now keeps the Git/CI/PR card in a dedicated `GitCIStatusPanel` component so the page shell stays focused on wiring runtime state, controls, and layout
 - Live task stats, filter counts, the active filtered task list, and per-card runtime payloads are memoized from the selected project's runtime snapshot so high-frequency realtime updates do not repeatedly recompute unchanged projections
 - Live task cards, the DAG, and timing summaries now render from the same projected task model:

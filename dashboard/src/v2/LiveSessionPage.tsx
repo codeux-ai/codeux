@@ -26,6 +26,7 @@ import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
 import { ExecutionTimelineProvider, useExecutionTimeline } from "../hooks/ExecutionTimelineContext.js";
 import { ExecutionTimeline } from "./components/ExecutionTimeline.js";
 import { ExecutionRuntimePanel } from "./components/live-session/ExecutionRuntimePanel.js";
+import { AttentionQueuePanel } from "./components/live-session/AttentionQueuePanel.js";
 import { StatsHeader } from "./components/StatsHeader.js";
 import { SprintProtocol } from "./components/SprintProtocol.js";
 import { IdleRuntimeState } from "./components/ui/IdleRuntimeState.js";
@@ -583,6 +584,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             collapsible
                             defaultOpen={hasSprintContext}
                         />
+                        <AttentionQueuePanel />
                     </ExecutionTimelineProvider>
 
                     {/* 4. Protocol — collapsible */}
