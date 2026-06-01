@@ -45,6 +45,16 @@ describe("Settings Resolution Service", () => {
       expect(settings.skills).toEqual(DEFAULT_SKILLS);
       expect(settings.agents.instructionTemplates).toEqual(DEFAULT_INSTRUCTION_TEMPLATES);
     });
+
+    it("uses the updated CI, memory, and QA defaults", () => {
+      const settings = buildDefaultProjectSettings();
+      expect(settings.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
+      expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+      expect(settings.ciIntelligence.resolveMergeConflicts).toBe(true);
+      expect(settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
+      expect(settings.memory.enabled).toBe(true);
+      expect(settings.agents.qualityAssurance.enabled).toBe(true);
+    });
   });
 
   describe("sanitizeProjectSettings", () => {
@@ -170,6 +180,43 @@ describe("Settings Resolution Service", () => {
       });
       expect(resolved.settings.aiProvider.providers.jules?.apiKey).toBe("fake-jules-key");
       expect(resolved.settings.git.githubToken).toBe("fake-github-token");
+    });
+
+    it("preserves explicit project overrides for CI, memory, and QA settings", () => {
+      const baseProject = buildDefaultProjectSettings();
+      const systemSettings: SystemSettings = {
+        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
+        defaults: baseProject,
+        mcpTools: [],
+      };
+
+      const resolved = resolveDashboardSettings({
+        systemSettings,
+        projectOverride: {
+          ciIntelligence: {
+            featurePrAutoMergeMode: "OFF",
+            mainBranchAutoMergeMode: "OFF",
+            resolveMergeConflicts: false,
+            resolveMainMergeConflicts: false,
+          },
+          memory: {
+            enabled: false,
+          },
+          agents: {
+            qualityAssurance: {
+              enabled: false,
+            },
+          },
+        },
+      });
+
+      expect(resolved.settings.ciIntelligence.featurePrAutoMergeMode).toBe("OFF");
+      expect(resolved.settings.ciIntelligence.mainBranchAutoMergeMode).toBe("OFF");
+      expect(resolved.settings.ciIntelligence.resolveMergeConflicts).toBe(false);
+      expect(resolved.settings.ciIntelligence.resolveMainMergeConflicts).toBe(false);
+      expect(resolved.settings.memory.enabled).toBe(false);
+      expect(resolved.settings.agents.qualityAssurance.enabled).toBe(false);
     });
 
     it("merges custom MCP servers and tool toggles across system and project scope", () => {

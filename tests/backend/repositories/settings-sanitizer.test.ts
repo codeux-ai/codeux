@@ -117,6 +117,10 @@ describe("settings-sanitizer", () => {
     expect(settings.aiProvider.provider).toBe("jules");
     expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.ciIntelligence.waitForJulesCiAutofix).toBe(false);
+    expect(settings.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
+    expect(settings.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(settings.ciIntelligence.resolveMergeConflicts).toBe(true);
+    expect(settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
     expect(settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(10);
     expect(settings.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
     expect(settings.cliWorkflow.executionMode).toBe("DOCKER");
@@ -125,7 +129,7 @@ describe("settings-sanitizer", () => {
     expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(false);
     expect(settings.agents.saveToProjectDirectory).toBe(true);
     expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
-    expect(settings.agents.qualityAssurance.enabled).toBe(false);
+    expect(settings.agents.qualityAssurance.enabled).toBe(true);
     expect(settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(1);
     expect(settings.agents.qualityAssurance.taskCompletion.enabled).toBe(true);
     expect(settings.agents.qualityAssurance.taskCompletion.agentPresetId).toBe(null);
@@ -137,6 +141,7 @@ describe("settings-sanitizer", () => {
     expect(settings.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(false);
     expect(settings.skills.find((skill) => skill.name === "custom-skill")?.isInternal).toBe(false);
     expect(settings.mcpTools.find((tool) => tool.name === "manage_tasks")?.enabled).toBe(false);
+    expect(settings.memory.enabled).toBe(true);
   });
 
   it("preserves valid appearance background image and pattern settings", () => {

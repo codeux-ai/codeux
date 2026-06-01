@@ -86,8 +86,8 @@ Default `virtualWorkerProvider`: `codex`. Default `executionMode`: `DOCKER`.
   "enableLivePrMonitoring": true,
   "resolveAllCommentsBeforeMainMerge": true,
   "resolveAllCommentsBeforeFeatureMerge": true,
-  "resolveMergeConflicts": false,
-  "resolveMainMergeConflicts": false,
+  "resolveMergeConflicts": true,
+  "resolveMainMergeConflicts": true,
   "waitForJulesCiAutofix": false,
   "julesCiAutofixMaxRetries": 3,           // min 0, max 20
   "featurePrAutoMergeMode": "OFF" | "CREATE_PR" | "WHEN_GREEN" | "ALWAYS",
@@ -95,7 +95,7 @@ Default `virtualWorkerProvider`: `codex`. Default `executionMode`: `DOCKER`.
 }
 ```
 
-Defaults: both auto-merge modes `OFF`.
+Defaults: `featurePrAutoMergeMode = ALWAYS`, `mainBranchAutoMergeMode = CREATE_PR`.
 
 ## `automationLevel`
 

@@ -73,6 +73,18 @@ beforeEach(() => {
 });
 
 describe("useSettingsPageState", () => {
+  it("loads updated default CI, memory, and QA settings", async () => {
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.systemSettings?.defaults.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
+    expect(result.current.systemSettings?.defaults.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(result.current.systemSettings?.defaults.ciIntelligence.resolveMergeConflicts).toBe(true);
+    expect(result.current.systemSettings?.defaults.ciIntelligence.resolveMainMergeConflicts).toBe(true);
+    expect(result.current.systemSettings?.defaults.memory.enabled).toBe(true);
+    expect(result.current.systemSettings?.defaults.agents.qualityAssurance.enabled).toBe(true);
+  });
+
   it("updates editable settings for project scope", async () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
     await waitFor(() => expect(result.current.loading).toBe(false));
