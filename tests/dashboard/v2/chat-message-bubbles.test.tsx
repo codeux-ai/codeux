@@ -7,8 +7,9 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { ChatMessageBubble } from "../../../dashboard/src/v2/components/chat/ChatMessageBubble.js";
 import { InvocationMessageBubble } from "../../../dashboard/src/v2/components/chat/InvocationMessageBubble.js";
 import { InvocationListCard } from "../../../dashboard/src/v2/components/chat/InvocationListCard.js";
+import { ThreadListCard } from "../../../dashboard/src/v2/components/chat/ThreadListCard.js";
 import { WorkingBubble } from "../../../dashboard/src/v2/components/chat/WorkingBubble.js";
-import type { ChatMessageRecord, ExecutionInvocationMessageRecord, ConversationRuntimeState, ExecutionInvocationRecord } from "../../../dashboard/src/v2/types.js";
+import type { ChatMessageRecord, ExecutionInvocationMessageRecord, ConversationRuntimeState, ExecutionInvocationRecord, ChatThread } from "../../../dashboard/src/v2/types.js";
 
 expect.extend(matchers);
 
@@ -205,6 +206,34 @@ describe("Chat Message Bubbles", () => {
       expect(container.textContent).toContain("Delivered");
       expect(container.textContent).not.toContain("Processed");
     });
+
+    it("renders AgentAvatarSvg when an agent preset avatar config is supplied", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_preset_avatar",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "Hello preset agent",
+        deliveryStatus: "delivered",
+        createdAt: new Date().toISOString(),
+        metadata: null,
+      };
+
+      const avatarConfig = { chassis: 'classic', accent: 'jade', eyes: 'happy' } as any;
+      const { container } = render(
+        <ChatMessageBubble
+          message={message}
+          agentAvatarConfig={avatarConfig}
+          agentName="MyAgent"
+        />
+      );
+
+      const svg = container.querySelector('svg[data-testid="agent-avatar-svg"]');
+      expect(svg).toBeInTheDocument();
+      expect(container.innerHTML).toContain('data-cux-agent-name="MyAgent"');
+      expect(container.textContent).toContain("MyAgent");
+    });
   });
 
   describe("InvocationMessageBubble", () => {
@@ -275,6 +304,33 @@ describe("Chat Message Bubbles", () => {
       expect(getByText("Rate limit")).toBeInTheDocument();
       expect(getByText("default")).toBeInTheDocument();
     });
+
+    it("renders AgentAvatarSvg when a linked preset avatar config is supplied for assistant", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_inv_preset",
+        invocationId: "inv_1",
+        role: "assistant",
+        contentMarkdown: "Assistant with preset avatar",
+        toolCallsJson: null,
+        createdAt: new Date().toISOString(),
+      };
+
+      const avatarConfig = { chassis: 'square', accent: 'amber', eyes: 'smile' } as any;
+      const { container } = render(
+        <InvocationMessageBubble
+          message={message}
+          agentAvatarConfig={avatarConfig}
+          agentName="PresetAssistant"
+        />
+      );
+
+      const svg = container.querySelector('svg[data-testid="agent-avatar-svg"]');
+      expect(svg).toBeInTheDocument();
+
+      const nameElement = container.querySelector('.font-semibold.text-slate-300');
+      expect(nameElement).toBeInTheDocument();
+      expect(nameElement?.textContent).toBe("PresetAssistant");
+    });
   });
 
   describe("InvocationListCard", () => {
@@ -318,6 +374,64 @@ describe("Chat Message Bubbles", () => {
       expect(container.textContent).toContain("gemini");
       expect(container.textContent).toContain("default");
     });
+
+    it("reserves border width in both selected and unselected states to prevent layout shift", () => {
+      const invocation: ExecutionInvocationRecord = {
+        id: "inv-1",
+        projectId: "project-1",
+        sprintId: null,
+        taskId: null,
+        sprintRunId: null,
+        dispatchId: null,
+        taskRunId: null,
+        attentionItemId: null,
+        providerInvocationId: null,
+        type: "planning",
+        status: "completed",
+        provider: "gemini",
+        model: "default",
+        systemPrompt: null,
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        errorMessage: null,
+        lastErrorCategory: null,
+        lastErrorMessage: null,
+        lastRetryAfterIso: null,
+        messageCount: 0,
+        lastMessageAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Unselected
+      const { container: containerUnselected, unmount: unmountUnselected } = render(
+        <InvocationListCard
+          invocations={[invocation]}
+          selectedInvocationId={null}
+          onSelect={vi.fn()}
+        />
+      );
+      const buttonUnselected = containerUnselected.querySelector("button");
+      expect(buttonUnselected).not.toBeNull();
+      const classesUnselected = buttonUnselected!.className.split(/\s+/);
+      expect(classesUnselected).toContain("border-2");
+      expect(classesUnselected).not.toContain("border");
+      unmountUnselected();
+
+      // Selected
+      const { container: containerSelected } = render(
+        <InvocationListCard
+          invocations={[invocation]}
+          selectedInvocationId="inv-1"
+          onSelect={vi.fn()}
+        />
+      );
+      const buttonSelected = containerSelected.querySelector("button");
+      expect(buttonSelected).not.toBeNull();
+      const classesSelected = buttonSelected!.className.split(/\s+/);
+      expect(classesSelected).toContain("border-2");
+      expect(classesSelected).not.toContain("border");
+    });
   });
 
   describe("WorkingBubble", () => {
@@ -334,6 +448,56 @@ describe("Chat Message Bubbles", () => {
       const { getAllByText } = render(<WorkingBubble displayName="TestWorker" runtimeState={runtimeState} />);
       expect(getAllByText("Execution Plan").length).toBeGreaterThan(0);
       expect(getAllByText("Working").length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("ThreadListCard", () => {
+    it("reserves border width in both selected and unselected states to prevent layout shift", () => {
+      const thread: ChatThread = {
+        id: "thread-1",
+        projectId: "project-1",
+        title: "Test Thread",
+        lastMessagePreview: "Hello",
+        pendingMessageCount: 0,
+        messageCount: 1,
+        lastMessageAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        runtimeState: null,
+      };
+
+      // Unselected
+      const { container: containerUnselected, unmount: unmountUnselected } = render(
+        <ThreadListCard
+          threads={[thread]}
+          selectedThreadId={null}
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          deletingThreadId={null}
+        />
+      );
+      const buttonUnselected = containerUnselected.querySelector("button");
+      expect(buttonUnselected).not.toBeNull();
+      const classesUnselected = buttonUnselected!.className.split(/\s+/);
+      expect(classesUnselected).toContain("border-2");
+      expect(classesUnselected).not.toContain("border");
+      unmountUnselected();
+
+      // Selected
+      const { container: containerSelected } = render(
+        <ThreadListCard
+          threads={[thread]}
+          selectedThreadId="thread-1"
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          deletingThreadId={null}
+        />
+      );
+      const buttonSelected = containerSelected.querySelector("button");
+      expect(buttonSelected).not.toBeNull();
+      const classesSelected = buttonSelected!.className.split(/\s+/);
+      expect(classesSelected).toContain("border-2");
+      expect(classesSelected).not.toContain("border");
     });
   });
 });

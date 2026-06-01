@@ -75,7 +75,7 @@ export const InvocationListCard: FunctionComponent<{
               ${isOptimistic ? "opacity-70" : ""}
               ${isSelected
                 ? "border-2 border-signal-500/30 shadow-[0_0_24px_rgba(0,224,160,0.08)]"
-                : "border border-black/[0.06] dark:border-white/[0.06] hover:border-slate-300 dark:hover:border-white/[0.12]"
+                : "border-2 border-black/[0.06] dark:border-white/[0.06] hover:border-slate-300 dark:hover:border-white/[0.12]"
               }`}
           >
             <WaveFluid accentHex={accentHex} isActive={isRunning} />

@@ -1,9 +1,10 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState, useMemo } from "preact/hooks";
 import {
   ArrowUp,
   RefreshCw,
 } from "lucide-preact";
+import { buildPresetIndex } from "./lib/chat-entity-index.js";
 import { ChatThreadHeader } from "./components/chat/ChatThreadHeader.js";
 import { ChatPageShell } from "./components/chat/ChatPageShell.js";
 import { ChatRail } from "./components/chat/ChatRail.js";
@@ -93,6 +94,64 @@ export const ChatPage: FunctionComponent = () => {
     handleConfirm,
     handleCancel,
   } = useChatPageData({ composerRef, messagesRef });
+
+  // Build lookups from agentPresets
+  const presetIdMap = useMemo(() => {
+    return buildPresetIndex(agentPresets);
+  }, [agentPresets]);
+
+  const presetNameMap = useMemo(() => {
+    const map = new Map<string, typeof agentPresets[0]>();
+    for (const preset of agentPresets) {
+      map.set(preset.name.toLowerCase(), preset);
+    }
+    return map;
+  }, [agentPresets]);
+
+  // Resolve agent preset for a message
+  const getLinkedAgentPreset = (message: typeof messages[0]) => {
+    // a. message.metadata.agentPresetId
+    let presetId = message.metadata?.agentPresetId as string | undefined;
+
+    // b. message.metadata.agentId
+    if (!presetId) {
+      presetId = message.metadata?.agentId as string | undefined;
+    }
+
+    // c. selected thread runtime metadata
+    if (!presetId && selectedThread?.runtimeState) {
+      presetId = (selectedThread.runtimeState as any).agentPresetId || (selectedThread.runtimeState as any).agentId;
+    }
+
+    // d. active connection data where available
+    if (!presetId && activeConnection) {
+      presetId = (activeConnection as any).agentPresetId || (activeConnection as any).agentId || activeConnection.id;
+    }
+
+    if (presetId && presetIdMap.has(presetId)) {
+      return presetIdMap.get(presetId);
+    }
+
+    // e. message.metadata.agentName
+    let presetName = message.metadata?.agentName as string | undefined;
+
+    // f. selected thread runtime metadata
+    if (!presetName && selectedThread?.runtimeState) {
+      presetName = (selectedThread.runtimeState as any).agentName;
+    }
+
+    // g. active connection data
+    if (!presetName && activeConnection) {
+      presetName = activeConnection.displayName;
+    }
+
+    if (presetName) {
+      const matched = presetNameMap.get(presetName.toLowerCase());
+      if (matched) return matched;
+    }
+
+    return undefined;
+  };
 
   useEffect(() => {
     if (!messagesRef.current) return;
@@ -203,7 +262,18 @@ export const ChatPage: FunctionComponent = () => {
               />
             ) : (
               <>
-                {messages.map((message) => <ChatMessageBubble key={message.id} message={message} allMessages={messages} />)}
+                {messages.map((message) => {
+                  const preset = getLinkedAgentPreset(message);
+                  return (
+                    <ChatMessageBubble
+                      key={message.id}
+                      message={message}
+                      allMessages={messages}
+                      agentAvatarConfig={preset?.avatarConfig}
+                      agentName={preset?.name}
+                    />
+                  );
+                })}
                 {hasWorkingReply && workingTimerPhase === "starting" ? (
                   <InvocationContainerWidget
                     containerPhase="starting"
@@ -395,6 +465,7 @@ export const ChatPage: FunctionComponent = () => {
                       key={message.id}
                       message={message}
                       agentAvatarConfig={message.role === "assistant" ? (selectedAgentPreset?.avatarConfig ?? null) : null}
+                      agentName={message.role === "assistant" ? (selectedAgentPreset?.name ?? null) : null}
                     />
                   );
                 })
