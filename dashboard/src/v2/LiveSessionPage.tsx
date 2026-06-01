@@ -18,7 +18,7 @@ import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import type { Subtask, ExecutionRuntimeEventSummary } from "../types.js";
 import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
-import { getTaskProgressPhase } from "../lib/task-progress.js";
+import { getTaskProgressPhase, getLiveTaskProgressPhase } from "../lib/task-progress.js";
 import { pickLatestTaskDispatch, projectLiveTask } from "./lib/live-task-runtime.js";
 
 import { IntelPanel } from "./components/ui/IntelPanel.js";
@@ -344,7 +344,13 @@ export const LiveSessionPage: FunctionComponent = () => {
                 ? { ...task, status: "COMPLETED" as const }
                 : task;
             const latestDispatch = pickLatestTaskDispatch(task, sprintDispatches);
-            const taskPhase = getTaskProgressPhase(optimisticTask);
+            // Resolve the live phase from the latest dispatch so states the task record
+            // hasn't caught up to yet — notably QUOTA while waiting on a provider reset —
+            // surface on the card instead of lingering as "Running". Preserve the optimistic
+            // force-complete state when one is pending.
+            const taskPhase = optimisticallyCompletedTaskIds.has(taskRuntimeId)
+                ? "COMPLETED" as const
+                : getLiveTaskProgressPhase({ task: optimisticTask, dispatch: latestDispatch });
             const showDispatchError = latestDispatch
                 && ["FAILED", "BLOCKED", "QUOTA"].includes(taskPhase)
                 ? latestDispatch.errorMessage
@@ -353,6 +359,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             return {
                 key: taskRuntimeId,
                 task: optimisticTask,
+                phase: taskPhase,
                 taskTiming: taskTimingMap.get(taskRuntimeId) || taskTimingMap.get(task.id) || null,
                 events: (task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
                     || taskEventsByRecordId.byTaskKey.get(task.id)
@@ -530,11 +537,12 @@ export const LiveSessionPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : (
-                        taskCardItems.map(({ key, task, taskTiming, events, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
+                        taskCardItems.map(({ key, task, phase, taskTiming, events, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
                             <LiveTaskCard
                                 key={key}
                                 task={task}
                                 allTasks={visibleTasksWithLiveActivities}
+                                phase={phase}
                                 taskTiming={taskTiming}
                                 events={events}
                                 onRerun={handleRerun}
