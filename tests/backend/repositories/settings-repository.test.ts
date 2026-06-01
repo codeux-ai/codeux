@@ -39,7 +39,7 @@ describe("SettingsRepository", () => {
     expect(system.defaults.cliWorkflow.containerMountCodexAuth).toBe(false);
     expect(system.defaults.cliWorkflow.containerMountClaudeCodeAuth).toBe(false);
     expect(system.defaults.agents.saveToProjectDirectory).toBe(true);
-    expect(system.defaults.agents.qualityAssurance.enabled).toBe(false);
+    expect(system.defaults.agents.qualityAssurance.enabled).toBe(true);
     expect(system.defaults.agents.qualityAssurance.maxTaskReviewRuns).toBe(1);
     expect(system.defaults.agents.qualityAssurance.taskCompletion.enabled).toBe(true);
     expect(system.defaults.agents.qualityAssurance.sprintCompletion.enabled).toBe(true);

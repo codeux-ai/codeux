@@ -418,13 +418,13 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     enabled: true,
     enableLivePrMonitoring: true,
     resolveAllCommentsBeforeMainMerge: true,
-    resolveMainMergeConflicts: false,
+    resolveMainMergeConflicts: true,
     resolveAllCommentsBeforeFeatureMerge: true,
-    resolveMergeConflicts: false,
+    resolveMergeConflicts: true,
     waitForJulesCiAutofix: false,
     julesCiAutofixMaxRetries: 3,
-    featurePrAutoMergeMode: "OFF",
-    mainBranchAutoMergeMode: "OFF",
+    featurePrAutoMergeMode: "ALWAYS",
+    mainBranchAutoMergeMode: "CREATE_PR",
   },
   guardrails: {
     enabled: true,
@@ -523,7 +523,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     },
     instructionTemplates: { ...DEFAULT_INSTRUCTION_TEMPLATES },
     qualityAssurance: {
-      enabled: false,
+      enabled: true,
       maxTaskReviewRuns: 1,
       taskCompletion: {
         enabled: true,
@@ -543,7 +543,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   mcpTools: DEFAULT_MCP_TOOL_TOGGLES.map((tool) => ({ ...tool })),
   customMcpServers: [],
   memory: {
-    enabled: false,
+    enabled: true,
     embeddingModel: null,
     autoCaptureSprint: true,
     autoCaptureAgent: true,

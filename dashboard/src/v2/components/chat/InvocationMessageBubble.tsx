@@ -2,7 +2,7 @@ import { type FunctionComponent } from "preact";
 import { Cloud } from "lucide-preact";
 import type { ExecutionInvocationMessageRecord } from "../../types.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
-import { getInvocationWidgetData } from "../../lib/chat-widget-view-models.js";
+import { getInvocationWidgetData, sanitizeInvocationOutputText } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
@@ -61,8 +61,8 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
 
   if (kind === "tool_call" || kind === "tool_result") {
     const tool = (message.toolCallsJson ?? {}) as Record<string, unknown>;
-    const args = asString(tool.arguments);
-    const output = asString(tool.output);
+    const args = sanitizeInvocationOutputText(asString(tool.arguments) || "");
+    const output = sanitizeInvocationOutputText(asString(tool.output) || "");
     const status = asString(message.metadata?.toolStatus) ?? asString(tool.resultStatus);
     const tokens = (message.metadata?.tokens ?? null) as ParsedTurnTokens | null;
     return (
@@ -148,7 +148,9 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
 
           {/* Message Body */}
           <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit break-words"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.contentMarkdown || "*(No message content)*") }}
+            dangerouslySetInnerHTML={{
+              __html: renderMarkdown(sanitizeInvocationOutputText(message.contentMarkdown || "*(No message content)*")),
+            }}
           />
 
           {message.toolCallsJson && !kind && (

@@ -152,7 +152,8 @@ When all sprint tasks are settled, the same completion path now also handles the
 - if the main merge gate is `DIRTY`, has failed checks, is review-blocked, or an open main-merge conflict handoff item for the same sprint run still exists, the sprint run pauses instead of completing
 - if a CLI task hits an unrecoverable Git push/auth/configuration error, Code UX now records that task run as `BLOCKED` rather than retryable `FAILED`, so the watch loop pauses the sprint instead of requeueing the same token-burning failure forever
 - if a CLI task hits an unrecoverable execution-environment failure such as missing Docker in a Docker-required path, Code UX also records that run as `BLOCKED` rather than retrying indefinitely
-- when a sprint run transitions to `completed`, `failed`, or terminal `cancelled`, Code UX now removes resumable CLI workspaces for that sprint immediately so disk usage drops without waiting for the next restart
+- successful task workspaces are retained while the sprint run remains non-terminal so QA/follow-up work can reuse the same workspace
+- when a sprint run transitions to `completed`, `failed`, or terminal `cancelled`, Code UX removes retained resumable CLI workspaces for that sprint immediately (using persisted workspace metadata/handles) so disk usage drops without waiting for the next restart
 
 ## Active Ownership
 

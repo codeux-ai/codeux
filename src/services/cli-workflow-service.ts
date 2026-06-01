@@ -233,6 +233,10 @@ export class CliWorkflowService {
     const qaSettings = settings.agents?.qualityAssurance;
     const preserveSuccessfulWorktree = qaSettings?.enabled === true
       && (qaSettings.taskCompletion.enabled || qaSettings.completedTaskWithoutPr.enabled);
+    const preserveSuccessfulWorktreeForActiveSprint = this.shouldPreserveSuccessfulWorkspaceForActiveSprint({
+      taskRunId: args.taskRunId,
+      sessionId: args.sessionId,
+    });
 
     // Resolve worker agent preset for per-agent memory tagging
     const manualAgentPresetId = settings.agents?.routing?.taskCoding?.mode === "MANUAL"
@@ -255,6 +259,7 @@ export class CliWorkflowService {
       initialHead: "",
       workflowSucceeded: false,
       preserveSuccessfulWorktree,
+      preserveSuccessfulWorktreeForActiveSprint,
       agentPresetId: workerAgent?.id,
       agentMcpAccess: workerAgent ? (workerAgent.mcpAccess ?? null) : undefined,
       memoryTemplateOverrideEnabled: workerAgent?.memoryTemplateOverrideEnabled,
@@ -296,6 +301,13 @@ export class CliWorkflowService {
       : undefined;
 
     try {
+      this.appendExecutionEvent(args, "cli_workspace_bound", {
+        provider: args.provider,
+        repoPath: args.repoPath,
+        worktreePath: ctx.worktreePath,
+        workspaceSessionId: ctx.workspaceSessionId,
+        executionMode: ctx.workflowSettings.executionMode,
+      }, `cli:workspace:bound:${ctx.workspaceSessionId}:${ctx.worktreePath}`);
       this.appendExecutionEvent(args, "cli_prepare_started", {
         provider: args.provider,
         workerBranch: args.workerBranch,
@@ -625,5 +637,20 @@ export class CliWorkflowService {
 
   private async hasWorkerBranchCommitsAgainstFeature(worktreePath: string, featureBranch: string, workerBranch: string): Promise<boolean> {
     return this.prService.hasWorkerBranchCommitsAgainstFeature(worktreePath, workerBranch, featureBranch, this.runCommand.bind(this));
+  }
+
+  private shouldPreserveSuccessfulWorkspaceForActiveSprint(args: {
+    taskRunId?: string;
+    sessionId: string;
+  }): boolean {
+    const taskRun = this.resolveTaskRun(args);
+    if (!taskRun?.sprintRunId || !this.deps.executionRepository) {
+      return false;
+    }
+    const sprintRun = this.deps.executionRepository.getSprintRun(taskRun.sprintRunId);
+    if (!sprintRun) {
+      return false;
+    }
+    return sprintRun.status !== "completed" && sprintRun.status !== "failed" && sprintRun.status !== "cancelled";
   }
 }

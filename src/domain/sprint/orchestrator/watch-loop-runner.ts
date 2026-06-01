@@ -32,7 +32,7 @@ import type { HeartbeatService } from "../../../services/heartbeat-service.js";
 import type { SprintIssueService } from "../../../services/sprint-issue-service.js";
 
 
-export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "finalizeSprintRunCancellationIfIdle" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "updateSprintRun" | "renewLease">;
+export type WatchLoopExecutionDependencies = Pick<ExecutionRepository, "appendSprintRunEvent" | "finalizeSprintRunCancellationIfIdle" | "getSprintRun" | "getTaskRunByDispatchId" | "listTaskDispatches" | "listTaskRunEvents" | "updateSprintRun" | "renewLease">;
 export type WatchLoopAttentionDependencies = Pick<ProjectAttentionService, "listActiveProjectItems" | "openItems" | "resolveItemsForSprintRun" | "resolveItem">;
 
 export interface WatchLoopDependencies {
@@ -710,11 +710,6 @@ export class WatchLoopRunner {
     sprintRunId: string;
     repoPath: string;
   }): Promise<void> {
-    const settings = this.deps.getDashboardSettings({
-      projectId: args.projectId,
-      sprintId: args.sprintId,
-    });
-    const executionMode = settings.cliWorkflow.executionMode;
     const dispatches = this.deps.executionRepository.listTaskDispatches({
       projectId: args.projectId,
       sprintId: args.sprintId,
@@ -728,21 +723,50 @@ export class WatchLoopRunner {
       }
       const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
       const sessionId = taskRun?.sessionId?.trim();
+      const workspaceRefFromEvents = taskRun
+        ? this.resolveWorkspaceReferenceFromTaskRunEvents(taskRun.id)
+        : undefined;
       if (!sessionId || cleanedSessionIds.has(sessionId)) {
+        if (workspaceRefFromEvents) {
+          await this.deps.workspaceManager.removeWorktree(args.repoPath, workspaceRefFromEvents).catch(() => undefined);
+        }
         continue;
       }
       cleanedSessionIds.add(sessionId);
 
-      const worktreePath = await this.deps.workspaceManager.resolveResumeWorktreePath(
+      const worktreePath = workspaceRefFromEvents || await this.deps.workspaceManager.resolveResumeWorktreePath(
         args.repoPath,
         sessionId,
-        executionMode,
+        "DOCKER",
+      ).catch(() => undefined) || await this.deps.workspaceManager.resolveResumeWorktreePath(
+        args.repoPath,
+        sessionId,
+        "HOST",
       ).catch(() => undefined);
       if (!worktreePath) {
         continue;
       }
       await this.deps.workspaceManager.removeWorktree(args.repoPath, worktreePath).catch(() => undefined);
     }
+  }
+
+  private resolveWorkspaceReferenceFromTaskRunEvents(taskRunId: string): string | undefined {
+    const events = this.deps.executionRepository.listTaskRunEvents(taskRunId, 200);
+    for (const event of events) {
+      if (event.eventType !== "cli_workspace_bound" && event.eventType !== "cli_prepare_completed" && event.eventType !== "cli_worktree_preserved") {
+        continue;
+      }
+      const payload = event.payload;
+      if (!payload || typeof payload !== "object") {
+        continue;
+      }
+      const worktreePath = (payload as Record<string, unknown>).worktreePath;
+      if (typeof worktreePath !== "string" || worktreePath.trim().length === 0) {
+        continue;
+      }
+      return worktreePath;
+    }
+    return undefined;
   }
 }
 function resolveMainMergeConflictAttentionItems(

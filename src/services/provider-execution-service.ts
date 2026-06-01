@@ -16,6 +16,7 @@ import { classifyProviderError, ProviderQuotaError } from "../shared/providers/p
 import { resolveProviderRetryDecision, sleepWithSignal } from "../shared/providers/provider-retry-policy.js";
 import { DEFAULT_PROVIDER_SETTINGS } from "../repositories/settings-defaults.js";
 import type { ProviderId } from "../contracts/app-types.js";
+import { sanitizeInvocationOutputText } from "./invocation-output-sanitizer.js";
 
 export interface ProviderExecutionServiceDeps {
   executionRepository?: ExecutionRepository;
@@ -106,20 +107,21 @@ function conversationTurnToMessage(
   provider: string,
   model: string | null,
 ): AppendExecutionInvocationMessageInput {
+  const sanitizedTurnText = sanitizeInvocationOutputText(turn.text || "");
   const base: Record<string, unknown> = { provider, model };
   if (turn.toolCallId) base.toolCallId = turn.toolCallId;
 
   switch (turn.kind) {
     case "user":
-      return { role: "user", contentMarkdown: turn.text, metadata: base };
+      return { role: "user", contentMarkdown: sanitizedTurnText, metadata: base };
     case "assistant":
-      return { role: "assistant", contentMarkdown: turn.text, metadata: base };
+      return { role: "assistant", contentMarkdown: sanitizedTurnText, metadata: base };
     case "reasoning":
-      return { role: "assistant", contentMarkdown: turn.text, metadata: { ...base, kind: "reasoning" } };
+      return { role: "assistant", contentMarkdown: sanitizedTurnText, metadata: { ...base, kind: "reasoning" } };
     case "tool_call":
       return {
         role: "tool",
-        contentMarkdown: turn.text || "",
+        contentMarkdown: sanitizedTurnText,
         toolCallsJson: { arguments: turn.toolArguments ?? null, callId: turn.toolCallId ?? null },
         metadata: {
           ...base,
@@ -132,7 +134,7 @@ function conversationTurnToMessage(
     case "tool_result":
       return {
         role: "tool",
-        contentMarkdown: turn.text || "",
+        contentMarkdown: sanitizedTurnText,
         toolCallsJson: { output: turn.toolOutput ?? null },
         metadata: { ...base, kind: "tool_result", toolName: turn.toolName ?? null },
       };
@@ -429,7 +431,9 @@ export class ProviderExecutionService {
             } else {
               this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
                 role: "assistant",
-                contentMarkdown: args.expectTextOutput ? (providerResult as any).text : providerResult.usageTelemetry.transcriptText,
+                contentMarkdown: sanitizeInvocationOutputText(
+                  args.expectTextOutput ? (providerResult as any).text : providerResult.usageTelemetry.transcriptText,
+                ),
               });
             }
           }
@@ -524,7 +528,9 @@ export class ProviderExecutionService {
         });
         this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
           role: "tool",
-          contentMarkdown: providerResult.stderr || providerResult.stdout || "Provider failed without output.",
+          contentMarkdown: sanitizeInvocationOutputText(
+            providerResult.stderr || providerResult.stdout || "Provider failed without output.",
+          ),
         });
       }
       return providerResult;

@@ -23,13 +23,13 @@ export const DEFAULT_CI_INTELLIGENCE_SETTINGS: CiIntelligenceSettings = {
   enabled: true,
   enableLivePrMonitoring: true,
   resolveAllCommentsBeforeMainMerge: true,
-  resolveMainMergeConflicts: false,
+  resolveMainMergeConflicts: true,
   resolveAllCommentsBeforeFeatureMerge: true,
-  resolveMergeConflicts: false,
+  resolveMergeConflicts: true,
   waitForJulesCiAutofix: false,
   julesCiAutofixMaxRetries: 3,
-  featurePrAutoMergeMode: "OFF",
-  mainBranchAutoMergeMode: "OFF",
+  featurePrAutoMergeMode: "ALWAYS",
+  mainBranchAutoMergeMode: "CREATE_PR",
 };
 
 export const DEFAULT_AUTOMATION_INTERVENTIONS_SETTINGS: AutomationInterventionsSettings = {

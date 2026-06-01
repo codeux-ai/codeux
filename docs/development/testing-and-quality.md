@@ -56,6 +56,7 @@ GitHub Actions optimization notes:
 - wall-clock performance assertions in normal Vitest suites should use broad regression thresholds; keep tight micro-benchmarks out of required CI because self-hosted runner load can add timing jitter
 - split heavy dashboard page tests from their child-component tests so simple component coverage can run under `happy-dom` without importing the full page shell
 - for dashboard page-shell tests, mock chart-heavy or animation-heavy visual subtrees when the assertion only cares about page wiring, headings, scope switching, or save flows
+- onboarding page tests should mock `DeepOceanBackground` when assertions target onboarding defaults/settings state; this avoids lazy `three` imports resolving after Vitest environment teardown in CI
 
 - Build backend and dashboard
 ```bash
@@ -86,6 +87,7 @@ pnpm run typecheck:dashboard
 
 ### Dashboard
 - Settings default cloning
+- Onboarding/settings default-state regressions: `tests/dashboard/v2/onboarding-defaults.test.tsx` verifies onboarding automation defaults and editability, while `tests/dashboard/v2/settings-page-state.test.tsx` verifies those defaults map into editable settings/view-model state
 - Activity helpers
 - Status helpers
 - UI tests that only need DOM events and markup assertions should use `@vitest-environment happy-dom` to reduce environment startup cost

@@ -28,6 +28,19 @@ export interface WorkingBubbleState {
   modelLabel?: string;
 }
 
+const BOOTSTRAP_BRANCH_FATAL_LINE_PATTERN =
+  /^fatal:\s+your current branch 'code-ux-bootstrap-[^']+' does not have any commits yet\s*$/i;
+
+export const sanitizeInvocationOutputText = (value: string): string => {
+  if (!value) {
+    return value;
+  }
+  return value
+    .split("\n")
+    .filter((line) => !BOOTSTRAP_BRANCH_FATAL_LINE_PATTERN.test(line.trim()))
+    .join("\n");
+};
+
 const extractWidgetStateFromMetadata = (
   metadata: Record<string, unknown> | null | undefined,
   bodyMarkdown?: string

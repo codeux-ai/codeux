@@ -28,6 +28,7 @@ const buildDeps = () => ({
     getSprintRun: vi.fn().mockReturnValue({ status: "running" }),
     listTaskDispatches: vi.fn().mockReturnValue([]),
     getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
+    listTaskRunEvents: vi.fn().mockReturnValue([]),
     updateSprintRun: vi.fn(),
     renewLease: vi.fn(),
   },
@@ -300,6 +301,85 @@ describe("WatchLoopRunner", () => {
 
     expect(resolveResumeWorktreePath).toHaveBeenCalledWith("/tmp/repo", "session-1", expect.anything());
     expect(removeWorktree).toHaveBeenCalledWith("/tmp/repo", "/tmp/repo/.worktrees/session-1");
+  });
+
+  it("cleans up terminal sprint CLI workspaces using persisted workspace handles", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const removeWorktree = vi.fn().mockResolvedValue(undefined);
+    const resolveResumeWorktreePath = vi.fn().mockResolvedValue(undefined);
+    deps.workspaceManager = {
+      resolveResumeWorktreePath,
+      removeWorktree,
+    };
+
+    deps.executionRepository.listTaskDispatches.mockReturnValue([
+      { id: "dispatch-1", executorType: "docker_cli" },
+    ]);
+    deps.executionRepository.getTaskRunByDispatchId.mockReturnValue({
+      id: "task-run-1",
+      sessionId: "session-1",
+    });
+    deps.executionRepository.listTaskRunEvents.mockReturnValue([
+      {
+        id: "event-1",
+        taskRunId: "task-run-1",
+        eventType: "cli_workspace_bound",
+        originator: "system",
+        payload: { worktreePath: "docker-volume://code-ux-repo-abcd1234ef56-session-1" },
+        sourceEventKey: "key",
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "INST",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
+    await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp/repo",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp/repo",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(resolveResumeWorktreePath).not.toHaveBeenCalled();
+    expect(removeWorktree).toHaveBeenCalledWith("/tmp/repo", "docker-volume://code-ux-repo-abcd1234ef56-session-1");
   });
 
   it("handles RUNNING transition properly by waiting and continuing the loop", async () => {

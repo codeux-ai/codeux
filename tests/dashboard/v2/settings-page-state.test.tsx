@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/preact";
 import { useSettingsPageState } from "../../../dashboard/src/v2/hooks/use-settings-page-state.js";
 import { CATEGORIES, CATEGORY_SEARCH_HINTS } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
+import { applyEffectiveProjectSettings } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
 import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
@@ -73,6 +74,40 @@ beforeEach(() => {
 });
 
 describe("useSettingsPageState", () => {
+  it("loads updated default CI, memory, and QA settings", async () => {
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.systemSettings?.defaults.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
+    expect(result.current.systemSettings?.defaults.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(result.current.systemSettings?.defaults.ciIntelligence.resolveMergeConflicts).toBe(true);
+    expect(result.current.systemSettings?.defaults.ciIntelligence.resolveMainMergeConflicts).toBe(true);
+    expect(result.current.systemSettings?.defaults.memory.enabled).toBe(true);
+    expect(result.current.systemSettings?.defaults.agents.qualityAssurance.enabled).toBe(true);
+    expect(result.current.editableSettings?.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
+    expect(result.current.editableSettings?.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(result.current.editableSettings?.ciIntelligence.resolveMergeConflicts).toBe(true);
+    expect(result.current.editableSettings?.ciIntelligence.resolveMainMergeConflicts).toBe(true);
+    expect(result.current.editableSettings?.memory.enabled).toBe(true);
+    expect(result.current.editableSettings?.agents.qualityAssurance.enabled).toBe(true);
+  });
+
+  it("maps fresh effective settings defaults into project settings view-model", () => {
+    const effective = {
+      settings: cloneDashboardSettings(),
+      sources: {},
+    } as any;
+
+    const mapped = applyEffectiveProjectSettings(effective);
+
+    expect(mapped.settings.ciIntelligence.featurePrAutoMergeMode).toBe("ALWAYS");
+    expect(mapped.settings.ciIntelligence.mainBranchAutoMergeMode).toBe("CREATE_PR");
+    expect(mapped.settings.ciIntelligence.resolveMergeConflicts).toBe(true);
+    expect(mapped.settings.ciIntelligence.resolveMainMergeConflicts).toBe(true);
+    expect(mapped.settings.memory.enabled).toBe(true);
+    expect(mapped.settings.agents.qualityAssurance.enabled).toBe(true);
+  });
+
   it("updates editable settings for project scope", async () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
     await waitFor(() => expect(result.current.loading).toBe(false));

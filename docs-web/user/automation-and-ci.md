@@ -44,8 +44,8 @@ The `ciIntelligence` block (Settings → CI & Merge) controls how Code UX intera
 | --- | --- | --- |
 | `resolveAllCommentsBeforeFeatureMerge` | `true` | Block feature-PR merge until inline comments are resolved. |
 | `resolveAllCommentsBeforeMainMerge` | `true` | Same gate for the main-branch merge step. |
-| `resolveMergeConflicts` | `false` | If true, dispatch a `merge_conflict` worker on conflict. |
-| `resolveMainMergeConflicts` | `false` | Same for the main-branch merge. |
+| `resolveMergeConflicts` | `true` | If true, dispatch a `merge_conflict` worker on conflict. |
+| `resolveMainMergeConflicts` | `true` | Same for the main-branch merge. |
 
 ### CI autofix
 
@@ -70,7 +70,7 @@ Two mode fields control auto-merge:
 | `WHEN_GREEN` | Open the PR, watch CI, merge when all checks pass and gates are satisfied. |
 | `ALWAYS` | Merge regardless of CI status. *Use with caution.* |
 
-Defaults: both `OFF` (zero-surprise default; opt in deliberately).
+Defaults: `featurePrAutoMergeMode = ALWAYS`, `mainBranchAutoMergeMode = CREATE_PR`.
 
 ## How the merge protocol decides
 
@@ -108,7 +108,7 @@ The `merge_indicator` field on a subtask documents the merge state:
 | `PR_ONLY` | PR is open, but the policy chose not to merge into the feature branch. |
 | `QA_PENDING` | A QA review is pending. |
 
-## QA gate (optional)
+## QA gate (enabled by default)
 
 If a QA agent preset is wired to `qa_review` in routing, completed tasks pass through a QA review *before* the merge protocol greenlights them. A failed review:
 

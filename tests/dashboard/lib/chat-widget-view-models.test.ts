@@ -3,10 +3,28 @@ import {
   getChatWidgetData,
   getInvocationWidgetData,
   getWorkingBubbleData,
+  sanitizeInvocationOutputText,
 } from "../../../dashboard/src/v2/lib/chat-widget-view-models.js";
 import type { ChatMessageRecord, ExecutionInvocationMessageRecord, ConversationRuntimeState } from "../../../dashboard/src/v2/types.js";
 
 describe("Chat Widget View Models", () => {
+  describe("sanitizeInvocationOutputText", () => {
+    it("removes only code-ux bootstrap unborn branch fatal lines", () => {
+      const input = [
+        "before",
+        "fatal: your current branch 'code-ux-bootstrap-1' does not have any commits yet",
+        "fatal: your current branch 'feature/main' does not have any commits yet",
+        "after",
+      ].join("\n");
+
+      expect(sanitizeInvocationOutputText(input)).toBe([
+        "before",
+        "fatal: your current branch 'feature/main' does not have any commits yet",
+        "after",
+      ].join("\n"));
+    });
+  });
+
   describe("getChatWidgetData", () => {
     it("returns none if there is no metadata", () => {
       const message = {

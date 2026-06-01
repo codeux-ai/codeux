@@ -66,7 +66,8 @@ Runtime resolution:
 - HTTPS GitHub remotes use the configured dashboard token as a temporary Git extraheader during origin refresh, remote branch checks, and branch pushes. HTTPS origin refreshes and branch preflight network checks run with interactive credential prompts disabled and a bounded timeout so orchestration cannot remain stuck waiting on local credential helpers. Mandatory CLI task refreshes fetch the requested starting branch's remote-tracking ref when possible, avoiding a whole-origin fetch for every task dispatch. They use a 120 second default fetch timeout, configurable with `CODE_UX_GIT_FETCH_TIMEOUT_MS` for slow Git transports. If direct remote inspection is unavailable, branch preflight can use an existing `refs/remotes/origin/<branch>` ref as remote-branch evidence. Local origin-refresh failures remain strict for CLI-backed work that needs local git state, but are best-effort for branch preflight and Jules dispatch because Jules works from the remote source and starting branch. SSH remotes continue to use the local SSH agent/key setup unchanged.
 - In remote git mode, Code UX also refreshes `origin` before branch-sensitive recovery flows such as QA review, QA follow-up continuation, clarification auto-replies, CI fix runs, and merge-conflict resolution. Clarification auto-replies refresh the recorded task worker branch when available; if the task has no worker branch yet, they refresh the scoped `git.defaultBranch` so project-level default branch overrides are used instead of falling back to `main`.
 - QA review execution uses an isolated snapshot workspace in Docker so review inspection does not mutate the task workspace directly.
-- QA-requested CLI follow-up work continues in the original task workspace when that workspace is still available. Before the follow-up provider runs, Code UX resets that preserved workspace to the latest remote worker branch when one exists, so fixes build on the existing task PR commit instead of replaying the original patch from an older feature-branch base.
+- QA-requested CLI follow-up work continues in the original task workspace when that workspace is still available. Code UX resolves the worker branch from task metadata first and falls back to the preserved workspace branch when metadata is missing, then fast-forwards the preserved workspace against `origin/<worker-branch>` when possible without cleaning local QA state.
+- If neither worker-branch metadata nor a resumable workspace branch is available, QA follow-up fails with an actionable error that names both missing branch metadata and the missing/non-resolvable resume workspace session.
 - CI autofix follow-up work reuses the existing task workspace for the same worker branch when available instead of always creating a fresh workspace.
 - if Docker is unavailable during a CI autofix follow-up, Code UX falls back to a host-backed git worktree for that repair run instead of escalating immediately or creating another doomed Docker attempt.
 - Merge-conflict resolution remains isolated in its own Docker workspace even when the underlying task already has a reusable task workspace.
@@ -376,20 +377,20 @@ Container execution notes:
 `ciIntelligence` also includes:
 - `enableLivePrMonitoring` (default `true`): controls live PR/CI monitoring gates in sprint loop (`REMOTE` mode only; auto-disabled in `LOCAL` mode).
 - Code UX state is currently backed by SQLite via `DatabaseAdapter`, but is staged for a Postgres migration (see [Postgres Migration Plan](../architecture/postgres-migration-plan.md)).
-- `resolveMainMergeConflicts` (default `false`): when enabled, a `feature -> main` PR in `DIRTY` merge state opens a worker-owned `merge_conflict` attention item with repo path, working-directory hint, conflicting branches, PR metadata, sprint context, and merged task prompts already present on the feature branch.
-- `resolveMergeConflicts` (default `false`): when enabled, feature PRs in `DIRTY` merge state open a dedicated worker-owned `merge_conflict` attention item instead of a generic merge-required item. The payload includes repo path, working directory hint, source/target branches, PR details, the current task prompt, and merged task prompts already on the feature branch so the virtual worker can resolve the conflict with full context.
+- `resolveMainMergeConflicts` (default `true`): when enabled, a `feature -> main` PR in `DIRTY` merge state opens a worker-owned `merge_conflict` attention item with repo path, working-directory hint, conflicting branches, PR metadata, sprint context, and merged task prompts already present on the feature branch.
+- `resolveMergeConflicts` (default `true`): when enabled, feature PRs in `DIRTY` merge state open a dedicated worker-owned `merge_conflict` attention item instead of a generic merge-required item. The payload includes repo path, working directory hint, source/target branches, PR details, the current task prompt, and merged task prompts already on the feature branch so the virtual worker can resolve the conflict with full context.
 - worker-owned merge conflicts do not end the watch loop as manual merge work anymore; Code UX keeps the loop alive while the selected worker runtime is expected to handle the conflict, and the dashboard no longer projects those worker-owned conflict items as human intervention.
 - feature PRs with `mergeStateStatus = DIRTY` short-circuit the feature-merge CI wait path; Code UX marks them as merge conflicts immediately instead of waiting for checks that cannot start until the conflict is resolved.
 - completed tasks with no recorded worker branch or PR URL are treated as already settled for dependency unlocks and sprint finalization; only tasks with merge evidence enter the feature-merge wait path.
 - when `featurePrAutoMergeMode = "WHEN_GREEN"` but a matched feature PR has no checks, Code UX inspects local `.github/workflows/*.yml` files and skips CI waiting only when it can confidently determine that no `pull_request` or `pull_request_target` workflow applies to that PR base branch.
 - `waitForJulesCiAutofix` (default `false`): when enabled with `featurePrAutoMergeMode = "WHEN_GREEN"`, completed tasks stay in work status while feature PR checks are pending/failed so Jules can apply CI autofix before merge.
 - `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): max Jules CI autofix notify attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names.
-- `featurePrAutoMergeMode` (default `"OFF"`):
+- `featurePrAutoMergeMode` (default `"ALWAYS"`):
   - `"OFF"`: no feature PR auto-merge
   - `"CREATE_PR"`: open or reuse the feature PR, then stop before auto-merge and mark the task settled with `PR_ONLY`
   - `"WHEN_GREEN"`: auto-merge when merge gates are clear, including green or confidently-not-applicable CI
   - `"ALWAYS"`: attempt auto-merge without waiting for CI, while still respecting merge conflicts and configured review-comment blockers
-- `mainBranchAutoMergeMode` (default `"OFF"`):
+- `mainBranchAutoMergeMode` (default `"CREATE_PR"`):
   - `"OFF"`: Code UX does not automatically open or merge the final `feature -> default` PR
   - `"CREATE_PR"`: when sprint work is complete, Code UX opens or resolves the main PR but does not auto-merge it
   - `"WHEN_GREEN"`: when sprint work is complete, Code UX opens or resolves the main PR if needed, then auto-merges after the main merge gate is green
@@ -440,7 +441,9 @@ Runtime cleanup notes:
 - when a stale `running` sprint run has no active dispatches and its heartbeat is older than the cleanup cutoff, Code UX fails that run and releases the expired sprint lease in the same sweep
 - startup now prunes orphaned virtual worker endpoints before new virtual cycles begin
 - startup prunes stale Docker workspaces and cached setup images for failed, finished, unrecoverable, and outdated sessions
-- terminal sprint completion/failure/cancellation also removes resumable CLI task workspaces immediately instead of waiting for the next restart sweep
+- successful CLI task runs now preserve their workspace while the owning sprint is still non-terminal (so QA follow-up and sprint-side retries can continue in the same workspace handle)
+- preserved workspaces are tagged by persisted task-run workspace metadata (including Docker `docker-volume://...` handles) and cleaned when the sprint reaches a terminal state (`completed`, `failed`, or `cancelled`)
+- terminal sprint completion/failure/cancellation removes those retained CLI task workspaces immediately instead of waiting for the next restart sweep
 - sprint planning and prompt improvement also honor worker mode, so `VIRTUAL` projects can plan without any live MCP listener
 
 ## Default Values

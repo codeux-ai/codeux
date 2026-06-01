@@ -39,6 +39,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       appendTaskRunEvent: vi.fn(),
       updateTaskRun: vi.fn(),
       updateTaskDispatch: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue(null),
     };
     const deps = {
       sessionTracking: {
@@ -78,8 +79,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       originator: "system",
       description: "Workflow failed: Stage failed",
     });
-    expect(executionRepository.appendTaskRunEvent).toHaveBeenNthCalledWith(
-      2,
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
       "run-1",
       "cli_workflow_failed",
       "system",
@@ -111,6 +111,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       appendTaskRunEvent: vi.fn(),
       updateTaskRun: vi.fn(),
       updateTaskDispatch: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue(null),
     };
     const deps = {
       sessionTracking: {
@@ -165,8 +166,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       "task-1",
       { status: "pending" },
     );
-    expect(executionRepository.appendTaskRunEvent).toHaveBeenNthCalledWith(
-      2,
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
       "run-1",
       "cli_workflow_blocked",
       "system",
@@ -192,6 +192,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       appendTaskRunEvent: vi.fn(),
       updateTaskRun: vi.fn(),
       updateTaskDispatch: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue(null),
     };
     const deps = {
       sessionTracking: {
@@ -293,6 +294,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       updateTaskRun: vi.fn(),
       updateTaskDispatch: vi.fn(),
       appendTaskRunEvent: vi.fn(),
+      getSprintRun: vi.fn().mockReturnValue(null),
     };
     const deps = {
       sessionTracking: {
@@ -448,6 +450,70 @@ describe("CliWorkflowService unpushed commit detection", () => {
       "worker/task-3",
       "feature/test",
       expect.any(Function),
+    );
+  });
+
+  it("preserves successful workspace for active sprint task runs", async () => {
+    const executionRepository = {
+      getTaskRun: vi.fn().mockReturnValue({
+        id: "run-1",
+        sprintRunId: "sprint-run-1",
+        startedAt: "2024-01-01T00:00:00Z",
+        taskId: "T1",
+        dispatchId: "dispatch-1",
+      }),
+      getSprintRun: vi.fn().mockReturnValue({ status: "running" }),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+      finalizeSprintRunCancellationIfIdle: vi.fn(),
+    };
+    const deps = {
+      sessionTracking: {
+        findLatestFailedCliSessionForTask: vi.fn().mockReturnValue(null),
+        createSession: vi.fn().mockImplementation((input) => ({ ...input, name: `sessions/${input.id}`, outputs: [] })),
+        appendActivity: vi.fn(),
+        updateSession: vi.fn(),
+      },
+      getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  ", cleanupWorktreeOnSuccess: true } }),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
+      getGithubToken: vi.fn().mockReturnValue("token"),
+      executionRepository,
+      logger: { error: vi.fn() },
+    };
+    const service = new CliWorkflowService(deps as any);
+
+    const { executePrepareStage } = await import("../../../src/services/cli-workflow/pipeline/prepare-stage.js");
+    const { executeGitFinalizeStage } = await import("../../../src/services/cli-workflow/pipeline/git-finalize-stage.js");
+    const { executeCleanupStage } = await import("../../../src/services/cli-workflow/pipeline/cleanup-stage.js");
+    vi.mocked(executePrepareStage).mockResolvedValue({ providerPrompt: "mock prompt" });
+    vi.mocked(executeGitFinalizeStage).mockResolvedValue({ hasChanges: false, committedChanges: false });
+    vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: false });
+
+    await (service as any).runTaskWorkflow({
+      provider: "gemini",
+      task: { id: "T1", prompt: "prompt", title: "title" },
+      repoPath: "/repo",
+      featureBranch: "main",
+      sprintNumber: 1,
+      sessionId: "sess-1",
+      taskRunId: "run-1",
+      workerBranch: "worker-1",
+      title: "Title",
+    });
+
+    expect(executeCleanupStage).toHaveBeenCalledWith(expect.objectContaining({
+      preserveSuccessfulWorktreeForActiveSprint: true,
+    }));
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "cli_workspace_bound",
+      "system",
+      expect.objectContaining({
+        worktreePath: expect.any(String),
+        workspaceSessionId: "sess-1",
+      }),
+      expect.any(Object),
     );
   });
 });

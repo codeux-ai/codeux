@@ -50,6 +50,59 @@ describe("WorkspaceManager", () => {
     expect(result).toBe("/repo/project/.worktrees/session-1");
   });
 
+  it("resolves current branch for a host workspace", async () => {
+    vi.mocked(fs.access).mockResolvedValue(undefined);
+    vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "feature/task-1\n", stderr: "", code: 0, signal: null } as any);
+
+    const result = await manager.resolveCurrentBranch("/repo/project/.worktrees/session-1");
+
+    expect(result).toBe("feature/task-1");
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "git",
+      ["rev-parse", "--abbrev-ref", "HEAD"],
+      "/repo/project/.worktrees/session-1",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("resolves current branch for a Docker workspace", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
+      if (command === "docker" && args[0] === "volume" && args[1] === "inspect") {
+        return { ok: true, stdout: "[]", stderr: "", code: 0, signal: null } as any;
+      }
+      if (command === "docker" && args[0] === "image" && args[1] === "inspect") {
+        return { ok: true, stdout: "[]", stderr: "", code: 0, signal: null } as any;
+      }
+      if (command === "docker" && args[0] === "run" && args.includes("git")) {
+        return { ok: true, stdout: "feature/task-2\n", stderr: "", code: 0, signal: null } as any;
+      }
+      return { ok: true, stdout: "", stderr: "", code: 0, signal: null } as any;
+    });
+
+    const result = await manager.resolveCurrentBranch("docker-volume://workspace-1");
+
+    expect(result).toBe("feature/task-2");
+    expect(runCommandStrict).toHaveBeenCalledWith("docker", expect.arrayContaining([
+      "run",
+      "--entrypoint",
+      "git",
+      "alpine/git",
+      "rev-parse",
+      "--abbrev-ref",
+      "HEAD",
+    ]), expect.any(String), expect.anything(), expect.anything());
+  });
+
+  it("returns null when current branch cannot be resolved", async () => {
+    vi.mocked(fs.access).mockRejectedValue(new Error("missing"));
+    expect(await manager.resolveCurrentBranch("/repo/project/.worktrees/session-1")).toBeNull();
+
+    vi.mocked(fs.access).mockResolvedValue(undefined);
+    vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "HEAD\n", stderr: "", code: 0, signal: null } as any);
+    expect(await manager.resolveCurrentBranch("/repo/project/.worktrees/session-1")).toBeNull();
+  });
+
   it("creates a fresh snapshot workspace volume", async () => {
     vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
       if (args[0] === "rev-parse" && args[1] === "--show-toplevel") {
@@ -270,6 +323,46 @@ describe("WorkspaceManager", () => {
     expect(runCommandStrict).not.toHaveBeenCalledWith(
       "docker",
       expect.arrayContaining(["volume", "create"]),
+      expect.any(String),
+    );
+  });
+
+  it("does not remove Docker volumes that are not Code UX-managed", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "inspect") {
+        return { ok: true, stdout: "[]", stderr: "" } as any;
+      }
+      throw new Error("unexpected");
+    });
+
+    await manager.removeWorktree("/repo/project", "docker-volume://external-workspace");
+
+    expect(runCommandStrict).not.toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining(["volume", "rm", "-f", "external-workspace"]),
+      expect.any(String),
+    );
+  });
+
+  it("removes Code UX-managed Docker workspace volumes", async () => {
+    vi.mocked(runCommandStrict).mockImplementation(async (_command, args) => {
+      if (args[0] === "volume" && args[1] === "inspect" && !args.includes("--format")) {
+        return { ok: true, stdout: "[]", stderr: "" } as any;
+      }
+      if (args[0] === "volume" && args[1] === "inspect" && args.includes("--format")) {
+        return { ok: true, stdout: "true\n", stderr: "" } as any;
+      }
+      if (args[0] === "volume" && args[1] === "rm") {
+        return { ok: true, stdout: "", stderr: "" } as any;
+      }
+      return { ok: true, stdout: "", stderr: "" } as any;
+    });
+
+    await manager.removeWorktree("/repo/project", "docker-volume://code-ux-project-abcd1234ef56-session-1");
+
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      ["volume", "rm", "-f", "code-ux-project-abcd1234ef56-session-1"],
       expect.any(String),
     );
   });

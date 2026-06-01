@@ -565,4 +565,18 @@ describe("executeCleanupStage", () => {
       description: expect.stringContaining("Preserving worktree")
     }));
   });
+
+  it("preserves the worktree for active sprint tasks even when success cleanup is enabled", async () => {
+    const ctx = createMockContext();
+    ctx.workflowSucceeded = true;
+    ctx.workflowSettings.cleanupWorktreeOnSuccess = true;
+    ctx.preserveSuccessfulWorktreeForActiveSprint = true;
+
+    await executeCleanupStage(ctx);
+
+    expect(ctx.workspaceManager.removeWorktree).not.toHaveBeenCalled();
+    expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
+      description: expect.stringContaining("Preserving worktree")
+    }));
+  });
 });

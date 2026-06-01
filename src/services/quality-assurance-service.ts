@@ -1,4 +1,3 @@
-import * as fs from "fs/promises";
 import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workflow-utils.js";
 import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import { StructuredAgentRequestService } from "./structured-agent-request-service.js";
@@ -1160,9 +1159,28 @@ export class QualityAssuranceService {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
     };
-    const workerBranch = args.task.worker_branch?.trim() || args.taskRun?.workerBranch?.trim();
+    const resumeWorkspacePath = await this.workspaceManager.resolveResumeWorktreePath(
+      args.repoPath,
+      args.sessionId,
+      workflowSettings.executionMode,
+    );
+    const hasPreservedWorkspace = Boolean(resumeWorkspacePath);
+    const worktreePath = resumeWorkspacePath
+      || this.workspaceManager.buildWorktreePath(args.repoPath, args.sessionId, workflowSettings.executionMode);
+    const resolvedWorkspaceBranch = hasPreservedWorkspace
+      ? await this.workspaceManager.resolveCurrentBranch(worktreePath)
+      : null;
+    const workerBranch = args.task.worker_branch?.trim()
+      || args.taskRun?.workerBranch?.trim()
+      || resolvedWorkspaceBranch
+      || undefined;
     if (!workerBranch) {
-      throw new Error(`Cannot continue CLI QA fixes for ${args.task.id}: worker branch is missing.`);
+      const workspaceState = hasPreservedWorkspace
+        ? `resume workspace ${worktreePath} does not expose a current branch`
+        : `resume workspace is missing for session ${args.sessionId}`;
+      throw new Error(
+        `Cannot continue CLI QA fixes for ${args.task.id}: worker branch metadata is missing and ${workspaceState}.`,
+      );
     }
 
     await this.syncRemoteBranchesIfNeeded(
@@ -1177,13 +1195,10 @@ export class QualityAssuranceService {
       gitlabToken: settings.git.gitlabToken,
     };
 
-    const worktreePath = await this.workspaceManager.resolveResumeWorktreePath(args.repoPath, args.sessionId, workflowSettings.executionMode)
-      || this.workspaceManager.buildWorktreePath(args.repoPath, args.sessionId, workflowSettings.executionMode);
-    const existed = await this.workspacePathExists(worktreePath);
-    if (!existed) {
+    if (!hasPreservedWorkspace) {
       await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch, undefined, gitAuth);
     } else {
-      await this.syncExistingCliFollowUpWorkspace(args.repoPath, worktreePath, workerBranch, gitAuth);
+      await this.syncExistingCliFollowUpWorkspace(worktreePath, workerBranch);
     }
 
     const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath);
@@ -1360,50 +1375,20 @@ export class QualityAssuranceService {
     await this.workspaceManager.removeWorktree(repoPath, worktreePath).catch(() => undefined);
   }
 
-  private async workspacePathExists(targetPath: string): Promise<boolean> {
-    if (targetPath.startsWith("docker-volume://")) {
-      return this.workspaceManager.workspaceExists(targetPath);
-    }
-    try {
-      await fs.access(targetPath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   private async syncExistingCliFollowUpWorkspace(
-    repoPath: string,
     worktreePath: string,
     workerBranch: string,
-    gitAuth: GitHttpAuthOptions,
   ): Promise<void> {
-    const fetchEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth);
+    const currentBranch = await this.workspaceManager.resolveCurrentBranch(worktreePath);
+    if (currentBranch !== workerBranch) {
+      await this.runWorkspaceCommand(worktreePath, "git", ["checkout", workerBranch]).catch(() => undefined);
+    }
+
     await this.runWorkspaceCommand(
       worktreePath,
       "git",
-      ["fetch", "origin", `+refs/heads/${workerBranch}:refs/remotes/origin/${workerBranch}`],
-      fetchEnv ?? process.env,
+      ["merge", "--ff-only", `origin/${workerBranch}`],
     ).catch(() => undefined);
-
-    const hasRemoteWorkerBranch = await this.runWorkspaceCommand(
-      worktreePath,
-      "git",
-      ["show-ref", "--verify", "--quiet", `refs/remotes/origin/${workerBranch}`],
-    ).then(() => true, () => false);
-
-    if (hasRemoteWorkerBranch) {
-      await this.runWorkspaceCommand(
-        worktreePath,
-        "git",
-        ["clean", "-fd", "-e", ".code-ux-home/", "-e", ".task-learnings.md"],
-      ).catch(() => undefined);
-      await this.runWorkspaceCommand(worktreePath, "git", ["checkout", "-B", workerBranch, `origin/${workerBranch}`]);
-      await this.runWorkspaceCommand(worktreePath, "git", ["reset", "--hard", `origin/${workerBranch}`]);
-      return;
-    }
-
-    await this.runWorkspaceCommand(worktreePath, "git", ["checkout", workerBranch]).catch(() => undefined);
   }
 
   private async runWorkspaceCommand(worktreePath: string, command: string, args: string[], env?: NodeJS.ProcessEnv) {

@@ -29,6 +29,7 @@ export interface IWorkspaceManager {
   buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   createSnapshotWorkspace(repoPath: string, sessionId: string): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
+  resolveCurrentBranch(worktreePath: string): Promise<string | null>;
   prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string, gitAuth?: GitHttpAuthOptions): Promise<{ worktreePath: string; resumed: boolean }>;
   removeWorktree(repoPath: string, worktreePath: string): Promise<void>;
   buildWorkspaceGuidance(taskPrompt: string, worktreePath: string): Promise<string>;
@@ -192,12 +193,31 @@ export class WorkspaceManager implements IWorkspaceManager {
     return { worktreePath: workspaceRef, resumed };
   }
 
+  async resolveCurrentBranch(worktreePath: string): Promise<string | null> {
+    if (!await this.workspaceExists(worktreePath)) {
+      return null;
+    }
+    try {
+      const result = await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+      const branch = result.stdout.trim();
+      if (!branch || branch === "HEAD" || branch === "(unknown)") {
+        return null;
+      }
+      return branch;
+    } catch {
+      return null;
+    }
+  }
+
   async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
     if (isWorkspaceHandle(worktreePath)) {
       if (!await this.workspaceExists(worktreePath)) {
         return;
       }
       const { volumeName } = parseWorkspaceHandle(worktreePath);
+      if (!await this.isCodeUxManagedVolume(volumeName)) {
+        return;
+      }
       await runCommandStrict("docker", ["volume", "rm", "-f", volumeName], process.cwd()).catch(() => undefined);
       return;
     }
@@ -362,6 +382,22 @@ export class WorkspaceManager implements IWorkspaceManager {
       ],
       process.cwd(),
     );
+  }
+
+  private async isCodeUxManagedVolume(volumeName: string): Promise<boolean> {
+    if (!volumeName.startsWith("code-ux-")) {
+      return false;
+    }
+    try {
+      const inspected = await runCommandStrict(
+        "docker",
+        ["volume", "inspect", "--format", "{{ index .Labels \"code-ux.workspace\" }}", volumeName],
+        process.cwd(),
+      );
+      return inspected.stdout.trim() === "true";
+    } catch {
+      return false;
+    }
   }
 
   private async seedWorkspaceFromBundle(repoPath: string, worktreePath: string): Promise<void> {

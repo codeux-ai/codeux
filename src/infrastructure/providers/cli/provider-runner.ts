@@ -7,6 +7,7 @@ import { CommandResult, runStreamingCommand } from "../../../services/cli-proces
 import type { IDockerRunner } from "./docker-runner.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import { resultHasSilentQuotaSignal } from "../../../shared/providers/provider-error-classifier.js";
+import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -220,7 +221,7 @@ export class ProviderRunner implements IProviderRunner {
 
       return {
         ...result,
-        text: capturedText || result.usageTelemetry.transcriptText || result.stdout || result.stderr,
+        text: sanitizeInvocationOutputText(capturedText || result.usageTelemetry.transcriptText || result.stdout || result.stderr),
       };
     } finally {
       await prepared.cleanup();

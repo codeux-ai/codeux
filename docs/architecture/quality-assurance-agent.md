@@ -145,6 +145,7 @@ For CLI follow-up runs, Code UX:
 
 - preserves the successful worktree after completion when QA is enabled for task completion
 - refreshes `origin` and starts follow-up work from the latest remote feature branch when remote GitHub mode is enabled
+- resolves the expected resume workspace from `sessionId` plus CLI execution mode and recovers the current branch from that workspace when `task.worker_branch` and `taskRun.workerBranch` are empty
 - resets a reused task workspace to the latest remote worker branch when that branch already exists, so QA fixes build on the current task PR tip
 - creates a missing local feature branch from `origin/<feature>` instead of recreating it from the default branch when the remote feature branch already exists
 - resumes the worker branch

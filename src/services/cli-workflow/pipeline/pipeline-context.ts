@@ -63,6 +63,7 @@ export interface PipelineContext {
   initialHead: string;
   workflowSucceeded: boolean;
   preserveSuccessfulWorktree?: boolean;
+  preserveSuccessfulWorktreeForActiveSprint?: boolean;
   /** Worker agent preset ID for per-agent memory tagging. */
   agentPresetId?: string;
   /**
