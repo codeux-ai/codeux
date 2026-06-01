@@ -203,7 +203,7 @@ export const ChatPage: FunctionComponent = () => {
               />
             ) : (
               <>
-                {messages.map((message) => <ChatMessageBubble key={message.id} message={message} />)}
+                {messages.map((message) => <ChatMessageBubble key={message.id} message={message} allMessages={messages} />)}
                 {hasWorkingReply && workingTimerPhase === "starting" ? (
                   <InvocationContainerWidget
                     containerPhase="starting"

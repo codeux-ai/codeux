@@ -73,6 +73,138 @@ describe("Chat Message Bubbles", () => {
       expect(getByText("My special plan")).toBeInTheDocument();
       expect(getByText("Navigating solutions...")).toBeInTheDocument();
     });
+
+    it("resolves dashboard message initially showing Queued to Processed when a later agent reply is present", () => {
+      const dashboardMessage: ChatMessageRecord = {
+        id: "msg_dash_1",
+        threadId: "thread_1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: "Hello worker",
+        deliveryStatus: "pending",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        metadata: null,
+      };
+
+      // Initially renders as Queued when no siblings
+      const { container: container1 } = render(<ChatMessageBubble message={dashboardMessage} />);
+      expect(container1.textContent).toContain("Queued");
+
+      const agentReply: ChatMessageRecord = {
+        id: "msg_agent_1",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "I am working on it",
+        deliveryStatus: "delivered",
+        createdAt: "2026-03-10T12:00:05.000Z",
+        metadata: null,
+      };
+
+      // With later reply sibling, resolves to Processed
+      const { container: container2 } = render(
+        <ChatMessageBubble message={dashboardMessage} allMessages={[dashboardMessage, agentReply]} />
+      );
+      expect(container2.textContent).toContain("Processed");
+    });
+
+    it("preserves Failed state even if a later agent reply is present", () => {
+      const dashboardMessage: ChatMessageRecord = {
+        id: "msg_dash_1",
+        threadId: "thread_1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: "Hello worker",
+        deliveryStatus: "failed",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        metadata: null,
+      };
+
+      const agentReply: ChatMessageRecord = {
+        id: "msg_agent_1",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "I am working on it",
+        deliveryStatus: "delivered",
+        createdAt: "2026-03-10T12:00:05.000Z",
+        metadata: null,
+      };
+
+      const { container } = render(
+        <ChatMessageBubble message={dashboardMessage} allMessages={[dashboardMessage, agentReply]} />
+      );
+      expect(container.textContent).toContain("Failed");
+      expect(container.textContent).not.toContain("Processed");
+    });
+
+    it("does not mark messages in other threads as processed", () => {
+      const dashboardMessage: ChatMessageRecord = {
+        id: "msg_dash_1",
+        threadId: "thread_1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: "Hello worker in thread 1",
+        deliveryStatus: "pending",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        metadata: null,
+      };
+
+      const agentReplyInOtherThread: ChatMessageRecord = {
+        id: "msg_agent_1",
+        threadId: "thread_2",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "Reply in thread 2",
+        deliveryStatus: "delivered",
+        createdAt: "2026-03-10T12:00:05.000Z",
+        metadata: null,
+      };
+
+      const { container } = render(
+        <ChatMessageBubble message={dashboardMessage} allMessages={[dashboardMessage, agentReplyInOtherThread]} />
+      );
+      expect(container.textContent).toContain("Queued");
+      expect(container.textContent).not.toContain("Processed");
+    });
+
+    it("keeps timestamp comparison using toChatTimestampMs semantics (does not update to processed if reply is older)", () => {
+      const dashboardMessage: ChatMessageRecord = {
+        id: "msg_dash_1",
+        threadId: "thread_1",
+        direction: "dashboard_to_connection",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        bodyMarkdown: "New message",
+        deliveryStatus: "delivered",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        metadata: null,
+      };
+
+      const olderAgentReply: ChatMessageRecord = {
+        id: "msg_agent_1",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "Old reply",
+        deliveryStatus: "delivered",
+        createdAt: "2026-03-10T11:59:59.000Z",
+        metadata: null,
+      };
+
+      const { container } = render(
+        <ChatMessageBubble message={dashboardMessage} allMessages={[dashboardMessage, olderAgentReply]} />
+      );
+      expect(container.textContent).toContain("Delivered");
+      expect(container.textContent).not.toContain("Processed");
+    });
   });
 
   describe("InvocationMessageBubble", () => {
