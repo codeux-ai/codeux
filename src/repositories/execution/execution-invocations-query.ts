@@ -22,16 +22,16 @@ export function queryExecutionInvocations(
     offset?: number;
   }
 ): ExecutionInvocationRecord[] {
-  const conditions = ["project_id = ?"];
+  const conditions = ["execution_invocations.project_id = ?"];
   const values: any[] = [params.projectId];
 
   if (params.sprintRunId) {
-    conditions.push("sprint_run_id = ?");
+    conditions.push("execution_invocations.sprint_run_id = ?");
     values.push(params.sprintRunId);
   }
 
   if (params.taskRunId) {
-    conditions.push("task_run_id = ?");
+    conditions.push("execution_invocations.task_run_id = ?");
     values.push(params.taskRunId);
   }
 
@@ -39,10 +39,16 @@ export function queryExecutionInvocations(
   const offset = params.offset ?? 0;
 
   const sql = `
-    SELECT *
+    SELECT
+      execution_invocations.*,
+      provider_invocations.input_tokens AS input_tokens,
+      provider_invocations.cached_input_tokens AS cached_input_tokens,
+      provider_invocations.output_tokens AS output_tokens,
+      provider_invocations.total_tokens AS total_tokens
     FROM execution_invocations
+    LEFT JOIN provider_invocations ON execution_invocations.provider_invocation_id = provider_invocations.id
     WHERE ${conditions.join(" AND ")}
-    ORDER BY started_at DESC
+    ORDER BY execution_invocations.started_at DESC
     LIMIT ? OFFSET ?
   `;
 
@@ -69,10 +75,16 @@ export function queryExecutionInvocationsByProviderInvocationId(
   providerInvocationId: string,
 ): ExecutionInvocationRecord[] {
   const rows = db.prepare(`
-    SELECT *
+    SELECT
+      execution_invocations.*,
+      provider_invocations.input_tokens AS input_tokens,
+      provider_invocations.cached_input_tokens AS cached_input_tokens,
+      provider_invocations.output_tokens AS output_tokens,
+      provider_invocations.total_tokens AS total_tokens
     FROM execution_invocations
-    WHERE provider_invocation_id = ?
-    ORDER BY started_at DESC, rowid DESC
+    LEFT JOIN provider_invocations ON execution_invocations.provider_invocation_id = provider_invocations.id
+    WHERE execution_invocations.provider_invocation_id = ?
+    ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
   `).all(providerInvocationId) as ExecutionInvocationRow[];
 
   return rows.map(mapExecutionInvocationRow);
@@ -80,12 +92,18 @@ export function queryExecutionInvocationsByProviderInvocationId(
 
 export function queryRunningRetryExecutionInvocations(db: Database): ExecutionInvocationRecord[] {
   const rows = db.prepare(`
-    SELECT *
+    SELECT
+      execution_invocations.*,
+      provider_invocations.input_tokens AS input_tokens,
+      provider_invocations.cached_input_tokens AS cached_input_tokens,
+      provider_invocations.output_tokens AS output_tokens,
+      provider_invocations.total_tokens AS total_tokens
     FROM execution_invocations
-    WHERE status = 'running'
-      AND last_retry_after_iso IS NOT NULL
-      AND last_error_category IN ('QUOTA_EXHAUSTED', 'RATE_LIMITED')
-    ORDER BY started_at ASC, rowid ASC
+    LEFT JOIN provider_invocations ON execution_invocations.provider_invocation_id = provider_invocations.id
+    WHERE execution_invocations.status = 'running'
+      AND execution_invocations.last_retry_after_iso IS NOT NULL
+      AND execution_invocations.last_error_category IN ('QUOTA_EXHAUSTED', 'RATE_LIMITED')
+    ORDER BY execution_invocations.started_at ASC, execution_invocations.rowid ASC
   `).all() as ExecutionInvocationRow[];
 
   return rows.map(mapExecutionInvocationRow);

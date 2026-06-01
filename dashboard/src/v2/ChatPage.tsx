@@ -4,6 +4,7 @@ import {
   ArrowUp,
   RefreshCw,
 } from "lucide-preact";
+import { buildPresetIndex } from "./lib/chat-entity-index.js";
 import { ChatThreadHeader } from "./components/chat/ChatThreadHeader.js";
 import { ChatPageShell } from "./components/chat/ChatPageShell.js";
 import { ChatRail } from "./components/chat/ChatRail.js";
@@ -26,6 +27,11 @@ import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import type { ExecutionInvocationRecord } from "./types.js";
 import { resolveProviderInfo } from "./lib/settings-view-models.js";
+import {
+  formatStatusContext,
+  formatTokenCount,
+  shortenIdentifier
+} from "./lib/chat-widget-view-models.js";
 
 const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
   switch (value) {
@@ -96,6 +102,64 @@ export const ChatPage: FunctionComponent = () => {
     handleCancel,
     effectiveSettings,
   } = useChatPageData({ composerRef, messagesRef });
+
+  // Build lookups from agentPresets
+  const presetIdMap = useMemo(() => {
+    return buildPresetIndex(agentPresets);
+  }, [agentPresets]);
+
+  const presetNameMap = useMemo(() => {
+    const map = new Map<string, typeof agentPresets[0]>();
+    for (const preset of agentPresets) {
+      map.set(preset.name.toLowerCase(), preset);
+    }
+    return map;
+  }, [agentPresets]);
+
+  // Resolve agent preset for a message
+  const getLinkedAgentPreset = (message: typeof messages[0]) => {
+    // a. message.metadata.agentPresetId
+    let presetId = message.metadata?.agentPresetId as string | undefined;
+
+    // b. message.metadata.agentId
+    if (!presetId) {
+      presetId = message.metadata?.agentId as string | undefined;
+    }
+
+    // c. selected thread runtime metadata
+    if (!presetId && selectedThread?.runtimeState) {
+      presetId = (selectedThread.runtimeState as any).agentPresetId || (selectedThread.runtimeState as any).agentId;
+    }
+
+    // d. active connection data where available
+    if (!presetId && activeConnection) {
+      presetId = (activeConnection as any).agentPresetId || (activeConnection as any).agentId || activeConnection.id;
+    }
+
+    if (presetId && presetIdMap.has(presetId)) {
+      return presetIdMap.get(presetId);
+    }
+
+    // e. message.metadata.agentName
+    let presetName = message.metadata?.agentName as string | undefined;
+
+    // f. selected thread runtime metadata
+    if (!presetName && selectedThread?.runtimeState) {
+      presetName = (selectedThread.runtimeState as any).agentName;
+    }
+
+    // g. active connection data
+    if (!presetName && activeConnection) {
+      presetName = activeConnection.displayName;
+    }
+
+    if (presetName) {
+      const matched = presetNameMap.get(presetName.toLowerCase());
+      if (matched) return matched;
+    }
+
+    return undefined;
+  };
 
   const INVOCATION_TYPE_MAP: Record<string, string> = {
     task_coding: "Coding",
@@ -255,7 +319,18 @@ export const ChatPage: FunctionComponent = () => {
               />
             ) : (
               <>
-                {messages.map((message) => <ChatMessageBubble key={message.id} message={message} />)}
+                {messages.map((message) => {
+                  const preset = getLinkedAgentPreset(message);
+                  return (
+                    <ChatMessageBubble
+                      key={message.id}
+                      message={message}
+                      allMessages={messages}
+                      agentAvatarConfig={preset?.avatarConfig}
+                      agentName={preset?.name}
+                    />
+                  );
+                })}
                 {hasWorkingReply && workingTimerPhase === "starting" ? (
                   <InvocationContainerWidget
                     containerPhase="starting"
@@ -383,9 +458,47 @@ export const ChatPage: FunctionComponent = () => {
                       {selectedInvocation.status === "running" && (
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-signal-500 animate-pulse shadow-[0_0_6px_rgba(0,224,160,0.6)]" />
                       )}
-                      {selectedInvocation.status}
+                      {formatStatusContext(selectedInvocation.provider, selectedInvocation.model, selectedInvocation.status)}
                     </span>
+                    {/* Linked Agent badge next to provider metadata */}
+                    {selectedAgentPreset && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
+                        Agent: {selectedAgentPreset.name}
+                      </span>
+                    )}
+                    {/* Sprint/Task identifier chips */}
+                    {selectedInvocation.sprintId && (
+                      <span className="rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
+                        Sprint: {shortenIdentifier(selectedInvocation.sprintId)}
+                      </span>
+                    )}
+                    {selectedInvocation.taskId && (
+                      <span className="rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
+                        Task: {shortenIdentifier(selectedInvocation.taskId)}
+                      </span>
+                    )}
+                    {/* Token usage chips */}
+                    {((selectedInvocation.inputTokens ?? 0) > 0 || (selectedInvocation.cachedInputTokens ?? 0) > 0 || (selectedInvocation.outputTokens ?? 0) > 0) && (
+                      <>
+                        {((selectedInvocation.inputTokens ?? 0) > 0) && (
+                          <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-signal-600 dark:text-signal-400">
+                            In: {formatTokenCount(selectedInvocation.inputTokens)}
+                          </span>
+                        )}
+                        {((selectedInvocation.cachedInputTokens ?? 0) > 0) && (
+                          <span className="rounded-full border border-teal-500/20 bg-teal-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-teal-600 dark:text-teal-400">
+                            Cached: {formatTokenCount(selectedInvocation.cachedInputTokens)}
+                          </span>
+                        )}
+                        {((selectedInvocation.outputTokens ?? 0) > 0) && (
+                          <span className="rounded-full border border-purple-500/20 bg-purple-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-purple-600 dark:text-purple-400">
+                            Out: {formatTokenCount(selectedInvocation.outputTokens)}
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
+
                 )}
                 {selectedInvocation?.lastErrorMessage && (
                   <div className="mt-3 max-w-2xl text-sm leading-relaxed text-status-amber">
@@ -456,6 +569,7 @@ export const ChatPage: FunctionComponent = () => {
                       key={message.id}
                       message={message}
                       agentAvatarConfig={message.role === "assistant" ? (selectedAgentPreset?.avatarConfig ?? null) : null}
+                      agentName={message.role === "assistant" ? (selectedAgentPreset?.name ?? null) : null}
                     />
                   );
                 })

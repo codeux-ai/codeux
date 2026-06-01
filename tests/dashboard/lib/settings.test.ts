@@ -71,4 +71,17 @@ describe("dashboard settings helpers", () => {
     expect(merged.aiProvider.providers["claude-code"].apiKey).toBe("resolved-claude");
     expect(merged.git.githubToken).toBe("resolved-gh");
   });
+
+  it("preserves autoApprovePlan: true in cloneDefaultSettings and allows manual toggling to false", () => {
+    const settings = cloneDefaultSettings();
+    expect(settings.automationInterventions.autoApprovePlan).toBe(true);
+
+    // Modify cloned settings
+    settings.automationInterventions.autoApprovePlan = false;
+    expect(settings.automationInterventions.autoApprovePlan).toBe(false);
+
+    // Get fresh clone, check it is still true
+    const fresh = cloneDefaultSettings();
+    expect(fresh.automationInterventions.autoApprovePlan).toBe(true);
+  });
 });

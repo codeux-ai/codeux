@@ -17,9 +17,15 @@ export function queryExecutionInvocation(
   id: string
 ): ExecutionInvocationRecord | null {
   const row = db.prepare(`
-    SELECT *
+    SELECT
+      execution_invocations.*,
+      provider_invocations.input_tokens AS input_tokens,
+      provider_invocations.cached_input_tokens AS cached_input_tokens,
+      provider_invocations.output_tokens AS output_tokens,
+      provider_invocations.total_tokens AS total_tokens
     FROM execution_invocations
-    WHERE id = ?
+    LEFT JOIN provider_invocations ON execution_invocations.provider_invocation_id = provider_invocations.id
+    WHERE execution_invocations.id = ?
   `).get(id) as ExecutionInvocationRow | undefined;
 
   if (!row) return null;

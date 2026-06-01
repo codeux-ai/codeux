@@ -9,6 +9,7 @@ import type { InstructionFileSummary, InstructionFileContent } from "../../lib/i
 import { fetchInstructionFile, saveInstructionFile } from "../../lib/instruction-file-api.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
+import { MARKDOWN_PROSE_CLASS } from "../ui/MarkdownEditorField.js";
 import { getInstructionAccentHex, formatBytes } from "../../lib/instruction-file-display.js";
 import { estimateTokens, formatTokenCount } from "../../lib/token-estimate.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
@@ -265,11 +266,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
           </div>
         ) : content.trim() ? (
           <div
-            className="h-[60vh] min-h-[420px] overflow-auto rounded-2xl border border-black/[0.05] bg-white/40 px-6 py-5 backdrop-blur-md
-                       prose prose-sm max-w-none text-slate-700 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-300
-                       prose-headings:font-display prose-headings:tracking-tight prose-headings:text-slate-900 dark:prose-headings:text-white
-                       prose-code:text-signal-600 dark:prose-code:text-signal-400 prose-code:bg-signal-500/[0.06] prose-code:px-1 prose-code:rounded-md
-                       prose-a:text-signal-600 dark:prose-a:text-signal-400 prose-pre:bg-black/[0.04] dark:prose-pre:bg-white/[0.04]"
+            className={`h-[60vh] min-h-[420px] overflow-auto rounded-2xl border border-black/[0.05] bg-white/40 px-6 py-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] ${MARKDOWN_PROSE_CLASS}`}
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
         ) : (
