@@ -252,12 +252,12 @@ describe("Provider Routing Logic", () => {
       expect(result.providers.gemini.model).toBe("gemini-2.5-pro");
     });
 
-    it("respects invocation-specific provider subsets and model overrides", () => {
-      const settings = mockSettings("MANUAL", "jules");
+    it("respects the WEIGHTED allowed-provider pool and model overrides", () => {
+      const settings = mockSettings("WEIGHTED", "jules");
       settings.aiProvider.invocationRouting.planning = {
         ...settings.aiProvider.invocationRouting.planning,
         profile: "GLOBAL",
-        strategy: "MANUAL",
+        strategy: "WEIGHTED",
         provider: "codex",
         allowedProviders: ["codex"],
         providers: {
@@ -276,6 +276,31 @@ describe("Provider Routing Logic", () => {
       expect(result.enabledProviders).toEqual(["codex"]);
       expect(result.provider).toBe("codex");
       expect(result.providers.codex.model).toBe("gpt-5.3-codex");
+    });
+
+    it("ignores the weighted allowed-provider pool under MANUAL strategy", () => {
+      // Regression: a MANUAL route must use its primary provider even when that
+      // provider is absent from the weighted pool. Previously the pool filtered
+      // the manual provider out of the enabled set and routing fell back to the
+      // first enabled provider (e.g. gemini).
+      const settings = mockSettings("MANUAL", "qwen-code", { "qwen-code": true });
+      settings.aiProvider.invocationRouting.task_coding = {
+        ...settings.aiProvider.invocationRouting.task_coding,
+        profile: "GLOBAL",
+        strategy: "MANUAL",
+        provider: null, // primary inherited from the global aiProvider.provider
+        allowedProviders: ["gemini"], // weighted pool excludes qwen-code
+        providers: {},
+      };
+
+      const result = resolveProviderForInvocation(settings, {
+        invocation: "task_coding",
+        task: mockTask({ prompt: "Implement the feature" }),
+      });
+
+      expect(result.providerConfigId).toBe("qwen-code");
+      expect(result.provider).toBe("qwen-code");
+      expect(result.enabledProviders).toContain("qwen-code");
     });
 
     it("treats a manually selected route provider as eligible even when the base provider is disabled", () => {

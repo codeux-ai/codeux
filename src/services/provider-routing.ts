@@ -221,7 +221,12 @@ const getEnabledProviders = (
   providers: Record<ProviderConfigId, ProviderSettings>,
 ): ProviderConfigId[] => {
   const route = settings.aiProvider.invocationRouting?.[input.invocation] || DEFAULT_INVOCATION_ROUTING[input.invocation];
-  const allowedProviders = route.allowedProviders.length > 0
+  // The allowed-provider pool only constrains WEIGHTED/AGENT selection. Under MANUAL
+  // the route uses its primary (manual) provider, so the weighted pool must be
+  // ignored — otherwise a manual provider left out of the pool gets filtered away
+  // and routing silently falls back to the first enabled provider. The Models UI
+  // mirrors this by locking the pool ("Locked to primary") when strategy is MANUAL.
+  const allowedProviders = route.strategy !== "MANUAL" && route.allowedProviders.length > 0
     ? new Set(route.allowedProviders)
     : null;
   const providerPool = input.providerPool ? new Set(input.providerPool) : null;
