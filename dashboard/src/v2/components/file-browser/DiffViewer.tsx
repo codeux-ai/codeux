@@ -15,7 +15,7 @@ interface DiffViewerProps {
 ensureMonacoConfigured();
 
 const ViewerShell: FunctionComponent<{ children: preact.ComponentChildren }> = ({ children }) => (
-  <div class="flex h-full w-full items-center justify-center p-10 text-center text-sm text-slate-500 dark:text-slate-400">
+  <div class="flex h-full w-full items-center justify-center bg-slate-50/35 p-10 text-center text-sm text-slate-500 dark:bg-void-950/45 dark:text-slate-400">
     {children}
   </div>
 );

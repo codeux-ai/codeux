@@ -311,6 +311,12 @@ Legacy runtime:
   - rebuild, stop, open-in-tab, startup-script editing, and log viewing
   - sprint previews are proxied through the dashboard instead of embedding raw localhost origins directly
   - extensionless preview-host deep links such as `/sprints` now recover to the preview app shell when the upstream dev server returns `404`, so direct loads and refreshes stay routable
+- File Browser page is project-scoped and mirrors the same v2 hierarchy and workbench visual language as Browser Preview:
+  - signal-accent eyebrow and `font-display` heading hierarchy with responsive supporting copy
+  - normalized control rail with semantic status badge, sprint/branch context, mode toggle, and rebuild/stop controls
+  - restrained panel surfaces for sidebar and viewer regions using shared neutral/light-dark borders and backgrounds
+  - launch state card matching Browser Preview container-launch conventions (accent icon treatment, selector styling, and primary action button)
+  - file browsing/diff behavior remains unchanged (`files` and `changes` modes, selected path display, side-by-side toggle, and status semantics)
 - Stats page now matches the high-interaction v2 dashboard card language more closely with a unified **Analysis Studio UX**:
   - unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
   - an embedded grouped metric selector instead of separate tabs, organizing Tokens, Time, and Git metrics into unified groupings
