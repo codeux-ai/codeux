@@ -21,6 +21,7 @@ import { ConfirmDialog } from "../../../dashboard/src/v2/components/ui/ConfirmDi
 import { RerunTaskModal } from "../../../dashboard/src/v2/components/ui/RerunTaskModal.js";
 import { Button } from "../../../dashboard/src/v2/components/ui/Button.js";
 import { ActionButton } from "../../../dashboard/src/v2/components/settings/SettingsSurface.js";
+import { PageContainer } from "../../../dashboard/src/v2/components/layout/PageContainer.js";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
 
@@ -391,5 +392,20 @@ describe("UI Components Coverage", () => {
     await act(async () => {
         await confirmPromise;
     });
+  });
+
+  it("renders PageContainer with padding='workbench' and asserts the expected workbench padding classes are present", () => {
+    const { container } = render(
+      <PageContainer padding="workbench">
+        <div>Workbench Content</div>
+      </PageContainer>
+    );
+    const element = container.firstChild as HTMLElement;
+    expect(element).toBeDefined();
+    expect(element.className).toContain("px-8");
+    expect(element.className).toContain("py-12");
+    expect(element.className).toContain("md:px-20");
+    expect(element.className).not.toContain("px-6");
+    expect(element.className).not.toContain("py-6");
   });
 });
