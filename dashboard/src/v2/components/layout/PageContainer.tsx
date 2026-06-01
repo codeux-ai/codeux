@@ -10,6 +10,7 @@ const pageContainerPadding = {
   settings: "px-4 py-16 md:px-8 xl:px-12",
   agents: "px-8 py-14 md:px-16 lg:px-20",
   browser: "px-6 py-6 md:px-8",
+  workbench: "px-8 py-12 md:px-20",
   chat: "px-8 py-12 md:px-20",
   sprintsEmpty: "px-8 py-12 md:px-20",
   none: "",

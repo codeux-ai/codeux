@@ -16,6 +16,7 @@ import {
 } from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
 import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
+import { Button } from "./components/ui/Button.js";
 import { useProjectData } from "./context/project-data.js";
 import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
 import { fetchSprints } from "./lib/project-api.js";
@@ -39,7 +40,7 @@ import type { QuicksprintTemplateRecord } from "../../../src/contracts/quickspri
 type SchedulerView = "calendar" | "day";
 type FeedbackState = { tone: "idle" | "success" | "error"; message: string | null };
 
-const SCHEDULER_FIELD_CLASS = "scheduler-field rounded-xl border border-black/[0.08] bg-white/95 px-3 text-sm font-semibold text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] outline-none transition focus:border-signal-500 focus:bg-white focus:ring-4 focus:ring-signal-500/10 dark:border-white/[0.10] dark:bg-[#10151b] dark:text-white dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] dark:focus:border-signal-400 dark:focus:bg-[#121922]";
+const SCHEDULER_FIELD_CLASS = "scheduler-field rounded-[var(--radius-ui)] border border-[color:var(--color-border-muted)] dark:border-white/[0.06] hover:border-[color:var(--color-border-muted)] dark:hover:border-white/[0.12] bg-white/80 dark:bg-white/[0.05] px-3.5 text-sm font-semibold text-slate-700 dark:text-slate-200 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] outline-none transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/20";
 const SCHEDULER_COMPACT_FIELD_CLASS = `${SCHEDULER_FIELD_CLASS} min-h-[40px]`;
 
 const TARGET_OPTIONS: Array<{
@@ -129,11 +130,11 @@ const recurrenceSummary = (recurrence: ScheduleRecurrenceRule): string => {
 };
 
 const ProjectPlaceholder: FunctionComponent = () => (
-  <div className="rounded-[1.8rem] border border-black/[0.06] bg-white/72 p-8 shadow-[0_18px_48px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62">
-    <div className="flex h-14 w-14 items-center justify-center rounded-[1.15rem] border border-signal-500/20 bg-signal-500/10 text-signal-500">
-      <CalendarDays className="h-6 w-6" />
+  <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-6 md:p-8 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/[0.08] text-signal-500 shadow-[0_0_15px_rgba(0,224,160,0.08)]">
+      <CalendarDays className="h-5 w-5" />
     </div>
-    <h2 className="mt-5 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">Select a project to schedule work.</h2>
+    <h2 className="mt-5 font-display text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white">Select a project to schedule work.</h2>
     <p className="mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
       Scheduler entries are project-scoped so sprints, quicksprints, and chat messages run against the right workspace.
     </p>
@@ -343,51 +344,59 @@ export const SchedulerPage: FunctionComponent = () => {
   }
 
   return (
-    <PageContainer padding="standard" className="gap-8">
-      <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-signal-500/15 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
-            <CalendarDays className="h-3.5 w-3.5" />
+    <PageContainer padding="standard" className="gap-8" data-testid="scheduler-page-root">
+      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-8" data-testid="scheduler-primary-header">
+        <div className="flex flex-col gap-5">
+          <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
+            <CalendarDays className="w-3.5 h-3.5" strokeWidth={2.5} />
             Runtime Scheduler
           </div>
-          <h2 className="font-display text-4xl font-black leading-none tracking-tight text-slate-900 dark:text-white md:text-6xl">
-            Schedule.
-          </h2>
-          <p className="mt-4 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400 md:text-base">
+
+          <div className="relative overflow-hidden">
+            <h2 aria-hidden className="absolute -top-10 -left-3 text-[7rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.03] pointer-events-none select-none font-display leading-none">
+              TIME
+            </h2>
+            <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] font-display relative z-10">
+              Schedule <br />
+              <span className="text-signal-500">Events.</span>
+            </h1>
+          </div>
+
+          <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
             Calendar control for future sprint starts, quicksprint launches, and timed messages into the project chat agent.
           </p>
         </div>
 
-        <div className="flex max-w-full flex-wrap items-center gap-2">
-          <button
-            type="button"
+        <div className="flex max-w-full flex-wrap items-center gap-2 shrink-0">
+          <Button
+            variant="secondary"
+            size="md"
             onClick={() => setSelectedDate(addDays(selectedDate, -7))}
-            className="min-h-[42px] rounded-full border border-black/[0.06] bg-white/70 px-4 text-xs font-bold text-slate-600 transition hover:text-slate-950 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white"
           >
             Previous
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={() => setSelectedDate(startOfDay(new Date()))}
-            className="min-h-[42px] rounded-full bg-slate-900 px-4 text-xs font-bold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950"
           >
             Today
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="md"
             onClick={() => setSelectedDate(addDays(selectedDate, 7))}
-            className="min-h-[42px] rounded-full border border-black/[0.06] bg-white/70 px-4 text-xs font-bold text-slate-600 transition hover:text-slate-950 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white"
           >
             Next
-          </button>
-          <div className="ml-0 flex rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.08] dark:bg-white/[0.05] lg:ml-2">
+          </Button>
+          <div className="ml-0 flex rounded-full border border-[color:var(--color-border-muted)] bg-white/72 p-1 dark:border-white/[0.06] dark:bg-white/[0.03] backdrop-blur-md lg:ml-2">
             {(["calendar", "day"] as SchedulerView[]).map((item) => (
               <button
                 key={item}
                 type="button"
                 onClick={() => setView(item)}
-                className={`min-h-[34px] rounded-full px-4 text-[10px] font-bold uppercase tracking-[0.14em] transition ${
-                  view === item ? "bg-signal-500 text-void-900" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                className={`min-h-[34px] rounded-full px-4 text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-150 ${
+                  view === item ? "bg-signal-500 text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 }`}
               >
                 {item === "calendar" ? "Calendar" : "24 Hours"}
@@ -409,16 +418,16 @@ export const SchedulerPage: FunctionComponent = () => {
             tone: "text-ember-500",
           },
         ].map((item) => (
-          <div key={item.label} className="relative overflow-hidden rounded-[1.35rem] border border-black/[0.06] bg-white/70 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.07] dark:bg-white/[0.045]">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent dark:via-white/18" />
+          <div key={item.label} className="relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_12px_rgba(0,0,0,0.02)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/80 to-transparent dark:via-white/10" />
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
+                <div className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">{item.label}</div>
                 <div className="mt-1 truncate font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{item.value}</div>
-                <div className="mt-1 truncate text-xs font-semibold text-slate-500 dark:text-slate-400">{item.detail}</div>
+                <div className="mt-0.5 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">{item.detail}</div>
               </div>
-              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-black/[0.035] dark:bg-white/[0.06] ${item.tone}`}>
-                <item.icon className="h-5 w-5" strokeWidth={1.8} />
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black/[0.03] dark:bg-white/[0.03] ${item.tone}`}>
+                <item.icon className="h-4.5 w-4.5" strokeWidth={2} />
               </div>
             </div>
           </div>
@@ -426,7 +435,7 @@ export const SchedulerPage: FunctionComponent = () => {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[24rem_minmax(0,1fr)]">
-        <aside className="rounded-[1.6rem] border border-black/[0.06] bg-white/78 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.07] dark:bg-[#0f141b]/82">
+        <aside data-testid="scheduler-form-panel" className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">Add entry</h3>
@@ -443,7 +452,7 @@ export const SchedulerPage: FunctionComponent = () => {
                 key={option.value}
                 type="button"
                 onClick={() => setTargetType(option.value)}
-                className={`min-h-[70px] rounded-2xl border p-3 text-left transition ${
+                className={`min-h-[70px] rounded-2xl border p-3 text-left transition-all duration-150 ${
                   targetType === option.value
                     ? option.activeClassName
                     : "border-black/[0.06] bg-black/[0.025] hover:bg-black/[0.04] dark:border-white/[0.06] dark:bg-white/[0.035] dark:hover:bg-white/[0.06]"
@@ -540,7 +549,7 @@ export const SchedulerPage: FunctionComponent = () => {
               </div>
             </label>
 
-            <div className="rounded-2xl border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
+            <div className="rounded-2xl border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
               <label className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
                   <Repeat className="h-4 w-4 text-signal-500" />
@@ -550,7 +559,7 @@ export const SchedulerPage: FunctionComponent = () => {
                   type="checkbox"
                   checked={repeatEnabled}
                   onChange={(event) => setRepeatEnabled(event.currentTarget.checked)}
-                  className="h-5 w-5 accent-signal-500"
+                  className="h-5 w-5 accent-signal-500 rounded border-black/[0.08] dark:border-white/[0.08]"
                 />
               </label>
 
@@ -608,20 +617,21 @@ export const SchedulerPage: FunctionComponent = () => {
               )}
             </div>
 
-            <button
-              type="button"
+            <Button
+              variant="signal"
+              size="lg"
               onClick={() => void submitSchedule()}
-              className="inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-full bg-signal-500 px-5 text-[10px] font-black uppercase tracking-[0.16em] text-void-900 shadow-[0_14px_34px_rgba(0,224,160,0.20)] transition hover:-translate-y-px hover:bg-signal-400"
+              className="w-full text-[10px] uppercase tracking-[0.16em]"
+              icon={Send}
             >
-              <Send className="h-4 w-4" />
               Schedule
-            </button>
+            </Button>
 
             {feedback.message && (
-              <div className={`rounded-xl px-3 py-2 text-xs font-bold ${
+              <div className={`rounded-[var(--radius-ui)] border px-4 py-3 text-xs font-semibold backdrop-blur-md transition-all duration-150 ${
                 feedback.tone === "error"
-                  ? "bg-status-red/10 text-status-red"
-                  : "bg-signal-500/10 text-signal-600 dark:text-signal-400"
+                  ? "border-status-red/20 bg-status-red/[0.06] text-status-red"
+                  : "border-signal-500/20 bg-signal-500/[0.06] text-signal-600 dark:text-signal-400"
               }`}>
                 {feedback.message}
               </div>
@@ -630,7 +640,7 @@ export const SchedulerPage: FunctionComponent = () => {
         </aside>
 
         <div className="min-w-0 space-y-6">
-          <section className="rounded-[1.6rem] border border-black/[0.06] bg-white/74 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/[0.07] dark:bg-[#0f141b]/72 md:p-5">
+          <section data-testid="scheduler-calendar-panel" className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-5">
             <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
                 <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
@@ -640,14 +650,15 @@ export const SchedulerPage: FunctionComponent = () => {
                   {loading ? "Refreshing schedule..." : `${schedulerStats.visibleCount} visible occurrences · ${formatDayLabel(range.from)} to ${formatDayLabel(range.to)}`}
                 </p>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => void refresh()}
-                className="inline-flex min-h-[38px] items-center gap-2 rounded-full border border-black/[0.06] bg-white/80 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition hover:text-slate-950 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white"
+                icon={RefreshCw}
+                className="uppercase tracking-[0.14em]"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
                 Refresh
-              </button>
+              </Button>
             </div>
 
             {view === "calendar" ? (
@@ -662,21 +673,21 @@ export const SchedulerPage: FunctionComponent = () => {
                       key={key}
                       type="button"
                       onClick={() => setSelectedDate(day)}
-                      className={`min-h-[13rem] rounded-2xl border p-3 text-left transition ${
+                      className={`min-h-[13rem] rounded-2xl border p-3.5 text-left transition-all duration-150 ${
                         selected
-                          ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_18px_45px_rgba(0,224,160,0.10)]"
-                          : "border-black/[0.06] bg-black/[0.02] hover:-translate-y-0.5 hover:bg-black/[0.035] dark:border-white/[0.06] dark:bg-white/[0.025] dark:hover:bg-white/[0.045]"
+                          ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_4px_16px_rgba(0,224,160,0.08)]"
+                          : "border-black/[0.06] bg-black/[0.015] hover:-translate-y-0.5 hover:bg-black/[0.03] dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:bg-white/[0.04]"
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="whitespace-nowrap text-xs font-black uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">{formatDayLabel(day)}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isToday ? "bg-signal-500 text-void-900" : "bg-white/80 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400"}`}>{dayItems.length}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isToday ? "bg-signal-500 text-void-900 shadow-[0_2px_8px_rgba(0,224,160,0.2)]" : "bg-white/80 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400"}`}>{dayItems.length}</span>
                       </div>
                       <div className="mt-3 space-y-2">
                         {dayItems.slice(0, 5).map((occurrence) => {
                           const option = targetOptionByType.get(occurrence.targetType);
                           return (
-                            <div key={occurrence.id} className="rounded-xl border border-white/70 bg-white/82 p-2 text-xs shadow-sm dark:border-white/[0.06] dark:bg-white/[0.055]">
+                            <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/80 p-2 text-xs shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
                               <div className="flex items-center justify-between gap-2">
                                 <span className="font-bold text-slate-800 dark:text-white">{formatTimeLabel(occurrence.startsAt)}</span>
                                 <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>{targetLabel(occurrence.targetType)}</span>
@@ -698,16 +709,16 @@ export const SchedulerPage: FunctionComponent = () => {
                 {Array.from({ length: 24 }, (_item, hour) => {
                   const hourItems = dayOccurrences.filter((occurrence) => new Date(occurrence.startsAt).getHours() === hour);
                   return (
-                    <div key={hour} className="grid min-h-[64px] grid-cols-[4.5rem_minmax(0,1fr)] gap-3 rounded-xl border border-black/[0.04] bg-black/[0.015] p-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                      <div className="pt-2 text-right text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">{pad(hour)}:00</div>
-                      <div className="space-y-2 border-l border-black/[0.05] pl-3 dark:border-white/[0.06]">
+                    <div key={hour} className="grid min-h-[64px] grid-cols-[4.5rem_minmax(0,1fr)] gap-3 rounded-xl border border-black/[0.04] bg-black/[0.01] p-2 dark:border-white/[0.04] dark:bg-white/[0.01]">
+                      <div className="pt-2 text-right text-[11px] font-mono font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">{pad(hour)}:00</div>
+                      <div className="space-y-2 border-l border-black/[0.05] pl-3 dark:border-white/[0.05]">
                         {hourItems.length === 0 && (
-                          <div className="h-full min-h-[42px] rounded-xl border border-dashed border-black/[0.04] bg-white/[0.28] dark:border-white/[0.04] dark:bg-white/[0.018]" />
+                          <div className="h-full min-h-[42px] rounded-xl border border-dashed border-black/[0.04] bg-white/[0.1] dark:border-white/[0.04] dark:bg-white/[0.01]" />
                         )}
                         {hourItems.map((occurrence) => {
                           const option = targetOptionByType.get(occurrence.targetType);
                           return (
-                            <div key={occurrence.id} className="rounded-xl border border-white/70 bg-white/82 p-3 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.055]">
+                            <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/80 p-3 shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="inline-flex items-center gap-2 text-xs font-black text-slate-900 dark:text-white">
                                   <Clock3 className={`h-3.5 w-3.5 ${option?.tone || "text-signal-500"}`} />
@@ -729,7 +740,7 @@ export const SchedulerPage: FunctionComponent = () => {
             )}
           </section>
 
-          <section className="rounded-[1.6rem] border border-black/[0.06] bg-white/74 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/[0.07] dark:bg-[#0f141b]/72 md:p-5">
+          <section className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">Scheduled entries</h3>
@@ -748,7 +759,7 @@ export const SchedulerPage: FunctionComponent = () => {
               {(schedule?.entries || []).map((entry) => {
                 const option = targetOptionByType.get(entry.targetType);
                 return (
-                  <div key={entry.id} className="grid gap-3 rounded-2xl border border-black/[0.06] bg-white/84 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-white/[0.048] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div key={entry.id} className="grid gap-3 rounded-2xl border border-black/[0.05] bg-white/60 p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.05] dark:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>
@@ -778,18 +789,18 @@ export const SchedulerPage: FunctionComponent = () => {
                         type="button"
                         onClick={() => void toggleEntryStatus(entry.id, entry.status === "paused")}
                         disabled={entry.status === "completed" || entry.status === "cancelled"}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/[0.06] bg-white text-slate-600 transition hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-white"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
                         aria-label={entry.status === "paused" ? "Resume schedule entry" : "Pause schedule entry"}
                       >
-                        {entry.status === "paused" ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                        {entry.status === "paused" ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
                       </button>
                       <button
                         type="button"
                         onClick={() => void removeEntry(entry.id)}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-status-red/15 bg-status-red/10 text-status-red transition hover:bg-status-red/15"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-status-red/20 bg-status-red/[0.06] text-status-red transition-all duration-150 hover:bg-status-red/[0.12]"
                         aria-label="Delete schedule entry"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>

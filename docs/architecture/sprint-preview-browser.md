@@ -147,6 +147,7 @@ The dashboard now exposes:
 - `/browser` route for the in-app browser workspace
 - dock and top-nav entry points for the browser
 - a dedicated horizontal session slider strip above the browser surface, so the iframe starts directly below the cards instead of sharing a stretched header row
+- Browser Preview now uses the same v2 visual language as Dashboard and Tasks: a `font-display` hero heading with signal eyebrow, translucent slate/void surfaces, semantic `signal`/`ember`/`sky`/`status-*` accents, and no browser-specific beige tool chrome
 - session cards in that rail are limited to persisted preview containers (`running`, `starting`, `stopped`, or `error`) rather than every sprint in the project
 - the rail ends with a placeholder-style `Launch Container` card that lets the operator choose any sprint from a selector and start a preview container without changing the current sprint scope elsewhere in the dashboard
 - in-app navigation no longer rebinds the iframe `src` for every route change; Browser chrome updates use the preview bridge so client-side routers can transition in place

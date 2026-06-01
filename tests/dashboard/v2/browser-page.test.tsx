@@ -201,6 +201,12 @@ describe("BrowserPage", () => {
     });
 
     expect(screen.getByText("Build previews per sprint, isolated by container.")).toBeInTheDocument();
+    const pageRoot = screen.getByTestId("browser-page-root");
+    expect(pageRoot.className).toContain("px-8");
+    expect(pageRoot.className).toContain("py-12");
+    expect(pageRoot.className).toContain("md:px-20");
+    expect(screen.getByTestId("browser-page-header")).toBeInTheDocument();
+    expect(screen.getByTestId("browser-main-tool-panel")).toBeInTheDocument();
     expect(screen.getAllByText("Sprint 2").length).toBeGreaterThan(0);
     expect(screen.getByText("Selected Sprint")).toBeInTheDocument();
     expect(screen.getAllByText("Launch Container").length).toBeGreaterThan(0);
@@ -210,6 +216,11 @@ describe("BrowserPage", () => {
     expect(iframe).toBeInTheDocument();
     const selectedSprintLabel = screen.getByText("Selected Sprint");
     expect((iframe?.compareDocumentPosition(selectedSprintLabel) || 0) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+
+    expect(container.innerHTML).not.toContain("#f5f1e8");
+    expect(container.innerHTML).not.toContain("#f7f3ea");
+    expect(screen.getByText("Port routing").parentElement?.className).toContain("bg-sky-500/10");
+    expect(screen.getByText("Script path").parentElement?.className).toContain("bg-ember-500/10");
   });
 
   it("loads the preview script only when the editor is opened", async () => {

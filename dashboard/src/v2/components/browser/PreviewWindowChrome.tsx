@@ -27,9 +27,9 @@ interface PreviewWindowChromeProps {
 type WindowState = "normal" | "minimized" | "fullscreen" | "closed";
 
 const statusTone: Record<SprintPreviewSession["status"], string> = {
-  running: "border-signal-500/30 bg-signal-500/10 text-signal-500",
-  starting: "border-amber-500/30 bg-amber-500/10 text-amber-500",
-  stopped: "border-black/[0.08] bg-black/[0.04] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400",
+  running: "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400",
+  starting: "border-ember-500/30 bg-ember-500/10 text-ember-600 dark:text-ember-400",
+  stopped: "border-slate-400/25 bg-slate-500/10 text-slate-600 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-300",
   error: "border-status-red/30 bg-status-red/10 text-status-red",
 };
 
@@ -48,8 +48,8 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
 
   if (!session) {
     return (
-      <div className="overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/70 shadow-[0_30px_80px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-[#05080d]/90 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-        <div className="relative h-[calc(100vh-23rem)] min-h-[540px] bg-[#f6f8fb] dark:bg-[#04070b]">
+      <div className="overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 shadow-[0_24px_72px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-void-900/55 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
+        <div className="relative h-[calc(100vh-23rem)] min-h-[540px] bg-slate-100/70 dark:bg-void-950">
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
             <Compass className="h-12 w-12 text-slate-300 dark:text-slate-600" strokeWidth={1.5} />
             <h2 className="mt-4 text-xl font-semibold text-slate-800 dark:text-slate-100">No preview active</h2>
@@ -70,7 +70,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
     <div className={isFullscreen ? "fixed inset-0 z-50 flex flex-col bg-white dark:bg-[#04070b]" : ""}>
       {/* Minimized state presentation */}
       {isMinimized && !isFullscreen && !isClosed && (
-        <div className="rounded-2xl border border-black/[0.06] bg-[#f5f1e8] p-4 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03] flex items-center justify-between mb-5">
+        <div className="mb-5 flex items-center justify-between rounded-2xl border border-black/[0.06] bg-white/72 p-4 shadow-sm dark:border-white/[0.06] dark:bg-void-900/45">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="h-2.5 w-2.5 rounded-full bg-status-red/80" />
@@ -97,8 +97,8 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
 
       {/* Closed state presentation */}
       {isClosed && !isFullscreen && !isMinimized && (
-        <div className="overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/70 shadow-[0_30px_80px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-[#05080d]/90 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)] mb-5">
-          <div className="relative h-[calc(100vh-23rem)] min-h-[540px] bg-[#f6f8fb] dark:bg-[#04070b] flex flex-col items-center justify-center px-8 text-center">
+        <div className="mb-5 overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 shadow-[0_24px_72px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-void-900/55 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
+          <div className="relative flex h-[calc(100vh-23rem)] min-h-[540px] flex-col items-center justify-center bg-slate-100/70 px-8 text-center dark:bg-void-950">
             <div className="h-12 w-12 rounded-full border border-black/[0.08] flex items-center justify-center mb-4 dark:border-white/[0.08]">
               <X className="h-5 w-5 text-slate-400" strokeWidth={2} />
             </div>
@@ -124,10 +124,10 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             ? "hidden"
             : isFullscreen
               ? "flex flex-col h-full w-full"
-              : "overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/70 shadow-[0_30px_80px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-[#05080d]/90 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]"
+              : "overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/72 shadow-[0_24px_72px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-void-900/55 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]"
         }
       >
-        <div className="border-b border-black/[0.06] bg-[#f5f1e8] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+        <div className="border-b border-black/[0.06] bg-white/72 px-4 py-3 dark:border-white/[0.06] dark:bg-void-900/55">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button
@@ -209,8 +209,8 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
       <div
         className={
           isFullscreen
-            ? "flex-1 bg-[#f6f8fb] dark:bg-[#04070b]"
-            : "relative h-[calc(100vh-23rem)] min-h-[540px] bg-[#f6f8fb] dark:bg-[#04070b]"
+            ? "flex-1 bg-slate-100/70 dark:bg-void-950"
+            : "relative h-[calc(100vh-23rem)] min-h-[540px] bg-slate-100/70 dark:bg-void-950"
         }
       >
         {children}

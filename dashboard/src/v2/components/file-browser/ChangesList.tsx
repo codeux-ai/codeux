@@ -12,7 +12,7 @@ const STATUS_META: Record<FileBrowserChangeStatus, { label: string; glyph: strin
   added: { label: "Added", glyph: "A", class: "bg-status-green/15 text-status-green border-status-green/30" },
   modified: { label: "Modified", glyph: "M", class: "bg-sky-500/15 text-sky-500 border-sky-500/30" },
   deleted: { label: "Deleted", glyph: "D", class: "bg-status-red/15 text-status-red border-status-red/30" },
-  renamed: { label: "Renamed", glyph: "R", class: "bg-violet-500/15 text-violet-400 border-violet-500/30" },
+  renamed: { label: "Renamed", glyph: "R", class: "bg-ember-500/15 text-ember-500 border-ember-500/30" },
 };
 
 const splitPath = (path: string): { dir: string; name: string } => {
@@ -51,7 +51,7 @@ export const ChangesList: FunctionComponent<ChangesListProps> = ({ files, select
             onClick={() => onSelect(change.path)}
             class={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
               isSelected
-                ? "bg-signal-500/12 ring-1 ring-inset ring-signal-500/25"
+                ? "bg-signal-500/[0.12] ring-1 ring-inset ring-signal-500/25"
                 : "hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
             }`}
           >

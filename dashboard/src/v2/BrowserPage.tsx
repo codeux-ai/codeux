@@ -367,7 +367,7 @@ export const BrowserPage: FunctionComponent = () => {
 
   if (!selectedProject) {
     return (
-      <PageContainer padding="browser">
+      <PageContainer padding="workbench">
         <div className="rounded-[2rem] border border-black/[0.06] bg-white/60 p-8 text-sm text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
           Select a project first. The in-app browser launches one isolated preview container per sprint.
         </div>
@@ -376,25 +376,25 @@ export const BrowserPage: FunctionComponent = () => {
   }
 
   return (
-    <PageContainer padding="browser" className="min-h-full">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
+    <PageContainer padding="workbench" className="min-h-full" data-testid="browser-page-root">
+      <div className="mb-8 flex flex-col justify-between gap-8 lg:flex-row lg:items-end" data-testid="browser-page-header">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
             <Compass className="h-3.5 w-3.5" strokeWidth={2} />
             Sprint Browser
           </div>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+          <h1 className="font-display text-5xl font-black leading-[0.92] tracking-tighter text-slate-900 dark:text-white md:text-7xl">
             Build previews per sprint, isolated by container.
           </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+          <p className="max-w-3xl text-base leading-relaxed text-slate-500 dark:text-slate-400">
             Each sprint preview runs from its own exported sprint snapshot and container, bound to a private host port and surfaced through the in-app browser.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={() => void refreshSessions()}
-          className="inline-flex h-11 items-center gap-2 rounded-2xl border border-black/[0.08] bg-white/70 px-4 text-sm font-semibold text-slate-700 backdrop-blur-md transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+          className="inline-flex min-h-[44px] items-center gap-2.5 rounded-full border border-black/[0.06] bg-white/75 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-all hover:-translate-y-px hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-white"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2} />
             Refresh
@@ -461,7 +461,7 @@ export const BrowserPage: FunctionComponent = () => {
       )}
 
       {showInAppBrowser && previewEnabled && (
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]" data-testid="browser-main-tool-panel">
         <PreviewWindowChrome
           session={visibleSelectedSession}
           onNavigateBack={() => postNavigationCommand("back")}
@@ -498,7 +498,7 @@ export const BrowserPage: FunctionComponent = () => {
             launchEnabled={launchEnabled}
             launchBusy={launching}
           />
-          <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Selected Sprint</div>
@@ -517,12 +517,12 @@ export const BrowserPage: FunctionComponent = () => {
             </div>
             <div className="mt-4 space-y-3 text-sm">
               {visibleSelectedSession && (
-                <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 dark:border-sky-500/25 dark:bg-sky-500/12">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Port routing</div>
                   <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(visibleSelectedSession)}</div>
                 </div>
               )}
-              <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <div className="rounded-2xl border border-ember-500/20 bg-ember-500/10 px-4 py-3 dark:border-ember-500/25 dark:bg-ember-500/12">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Script path</div>
                 <div className="mt-1 break-all font-mono text-[12px] text-slate-700 dark:text-slate-300">
                   {script?.path || visibleSelectedSession?.startupScriptPath || "Open editor to load script"}
@@ -533,7 +533,7 @@ export const BrowserPage: FunctionComponent = () => {
                   type="button"
                   onClick={handleRebuild}
                   disabled={!visibleSelectedSession || sessionActionPending}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <RotateCcw className={`h-4 w-4 ${sessionActionPending ? 'animate-spin' : ''}`} strokeWidth={2} />
                   {sessionActionPending ? "Rebuilding..." : "Rebuild"}
@@ -542,7 +542,7 @@ export const BrowserPage: FunctionComponent = () => {
                   type="button"
                   onClick={handleStop}
                   disabled={!visibleSelectedSession || sessionActionPending}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
                   {sessionActionPending ? "Stopping..." : "Stop"}
@@ -560,7 +560,7 @@ export const BrowserPage: FunctionComponent = () => {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Runtime notes</div>
             <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
               <p>Ports are assigned from the sprint preview range and bound to `127.0.0.1` to avoid conflicts with the main dashboard.</p>
@@ -569,7 +569,7 @@ export const BrowserPage: FunctionComponent = () => {
           </div>
 
           {showScriptEditor && (
-            <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Startup script</div>
@@ -590,14 +590,14 @@ export const BrowserPage: FunctionComponent = () => {
               <textarea
                 value={scriptDraft}
                 onInput={(event) => setScriptDraft((event.currentTarget as HTMLTextAreaElement).value)}
-                className="h-72 w-full rounded-[1.5rem] border border-black/[0.08] bg-[#f7f3ea] p-4 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-[#05080d] dark:text-slate-100"
+                className="h-72 w-full rounded-[1.5rem] border border-black/[0.08] bg-slate-100/80 p-4 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-void-950 dark:text-slate-100"
               />
             </div>
           )}
 
-          <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container logs</div>
-            <pre className="max-h-[360px] overflow-auto rounded-[1.5rem] bg-[#f7f3ea] p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-[#05080d] dark:text-slate-300">
+            <pre className="max-h-[360px] overflow-auto rounded-[1.5rem] bg-slate-100/80 p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-void-950 dark:text-slate-300">
               {logs || "No logs yet."}
             </pre>
           </div>

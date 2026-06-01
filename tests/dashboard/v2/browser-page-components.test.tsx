@@ -139,6 +139,10 @@ describe("PreviewWindowChrome", () => {
     );
     expect(screen.getByTestId("test-child")).toBeInTheDocument();
     expect(container.querySelector(".fixed")).not.toBeInTheDocument();
+    expect(container.innerHTML).not.toContain("#f5f1e8");
+    expect(container.innerHTML).not.toContain("#f7f3ea");
+    expect(container.querySelector(".dark\\:bg-void-900\\/55")).toBeInTheDocument();
+    expect(container.querySelector(".bg-slate-100\\/70")).toBeInTheDocument();
   });
 
   it("toggles fullscreen mode", async () => {

@@ -13,9 +13,9 @@ interface PreviewSessionSliderProps {
 }
 
 const statusTone: Record<SprintPreviewSession["status"], string> = {
-  running: "border-signal-500/30 bg-signal-500/10 text-signal-500",
-  starting: "border-amber-500/30 bg-amber-500/10 text-amber-500",
-  stopped: "border-black/[0.08] bg-black/[0.04] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400",
+  running: "border-signal-500/30 bg-signal-500/10 text-signal-600 dark:text-signal-400",
+  starting: "border-ember-500/30 bg-ember-500/10 text-ember-600 dark:text-ember-400",
+  stopped: "border-slate-400/25 bg-slate-500/10 text-slate-600 dark:border-slate-500/40 dark:bg-slate-500/15 dark:text-slate-300",
   error: "border-status-red/30 bg-status-red/10 text-status-red",
 };
 
@@ -64,7 +64,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
   };
 
   return (
-    <div className="w-full relative group">
+    <div className="relative w-full">
       {cardCount > 5 && (
         <>
           <button
@@ -98,14 +98,14 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           return (
             <div
               key={session.id}
-              className={`flex-none w-[280px] lg:w-[calc(20%-0.6rem)] snap-start rounded-[1.5rem] border p-4 transition-all relative ${
+              className={`relative w-[280px] flex-none snap-start rounded-[1.25rem] border p-4 transition-all lg:w-[calc(20%-0.6rem)] ${
                 active
-                  ? "border-signal-500/60 bg-white/95 shadow-[0_10px_40px_rgba(15,23,42,0.1)] ring-1 ring-signal-500/20 dark:bg-[#05080d]/95 dark:shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
-                  : "border-black/[0.08] bg-white/60 backdrop-blur-md hover:border-black/[0.16] hover:bg-white/80 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.04]"
+                  ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_10px_28px_rgba(0,224,160,0.1)] ring-1 ring-signal-500/25 dark:bg-signal-500/[0.1]"
+                  : "border-black/[0.08] bg-white/68 backdrop-blur-xl hover:border-black/[0.14] hover:bg-white/80 dark:border-white/[0.08] dark:bg-void-900/35 dark:hover:border-white/[0.14] dark:hover:bg-void-900/50"
               }`}
             >
               {active && (
-                <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-signal-500 rounded-full border-2 border-white dark:border-[#05080d] flex items-center justify-center shadow-sm">
+                <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-signal-500 shadow-sm dark:border-void-900">
                   <CheckCircle2 className="w-2.5 h-2.5 text-void-900" strokeWidth={3} />
                 </div>
               )}
