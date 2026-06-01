@@ -200,11 +200,54 @@ const CODEX_PATTERNS: ErrorPattern[] = [
   },
 ];
 
+// Antigravity's `agy` CLI surfaces an exhausted allowance with a message like:
+//   "Individual quota reached. Contact your administrator to enable overages. Resets in 3h4m52s."
+// Critically, it prints this to its normal output and exits 0, so it must be matched
+// both when classifying an explicit failure and when scanning an apparently-successful
+// run (see resultHasSilentQuotaSignal).
+const ANTIGRAVITY_QUOTA_PATTERNS: RegExp[] = [
+  /Individual quota reached/i,
+  /Contact your administrator to enable overages/i,
+  /enable overages/i,
+  /RESOURCE_EXHAUSTED/i,
+];
+
+const ANTIGRAVITY_PATTERNS: ErrorPattern[] = [
+  {
+    category: "QUOTA_EXHAUSTED",
+    patterns: ANTIGRAVITY_QUOTA_PATTERNS,
+    resetTimeExtractor: (text: string): string | null => {
+      const match = text.match(/Resets in\s+(\d+h\d+m\d+s|\d+h\d+m|\d+m\d+s|\d+h|\d+m|\d+s)/i);
+      return match?.[1] ?? null;
+    },
+  },
+  {
+    category: "AUTH_FAILURE",
+    patterns: [
+      /invalid.*api.?key/i,
+      /authentication.*failed/i,
+      /unauthorized/i,
+      /ANTIGRAVITY_API_KEY/i,
+      /invalid_api_key/i,
+      /authentication_error/i,
+    ],
+  },
+  {
+    category: "RATE_LIMITED",
+    patterns: [
+      /rate.?limit/i,
+      /too many requests/i,
+      /code:\s*429\b/,
+    ],
+  },
+];
+
 const PROVIDER_PATTERNS: Record<string, ErrorPattern[]> = {
   gemini: GEMINI_PATTERNS,
   "claude-code": CLAUDE_CODE_PATTERNS,
   codex: CODEX_PATTERNS,
   "qwen-code": CODEX_PATTERNS,
+  antigravity: ANTIGRAVITY_PATTERNS,
 };
 
 const PROVIDER_NOT_FOUND_PATTERNS: RegExp[] = [
@@ -219,7 +262,28 @@ const PROVIDER_LABELS: Record<string, string> = {
   codex: "Codex",
   "qwen-code": "Qwen Code",
   opencode: "OpenCode",
+  antigravity: "Antigravity",
 };
+
+/**
+ * Detects whether an apparently-successful provider result actually carries a quota
+ * signal. Some CLIs (notably Antigravity's `agy`) print a quota/limit message and
+ * still exit 0, so callers only consulting classifyProviderError on non-zero exits
+ * would treat the run as a successful, truncated "completion" — stranding the task as
+ * done mid-sprint. Use this to re-route such results through the normal failure/quota
+ * handling path. Scoped to providers known to exit 0 on quota to avoid false positives
+ * from agents that merely mention "quota" in their normal output.
+ */
+export function resultHasSilentQuotaSignal(
+  provider: Exclude<ProviderId, "jules">,
+  result: CommandResult,
+): boolean {
+  if (provider !== "antigravity") {
+    return false;
+  }
+  const combined = `${result.stdout}\n${result.stderr}`;
+  return ANTIGRAVITY_QUOTA_PATTERNS.some((pattern) => pattern.test(combined));
+}
 
 function isGeminiRuntimeStorageError(text: string): boolean {
   return /ENOENT/i.test(text)

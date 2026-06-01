@@ -6,6 +6,7 @@ import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { Bot, CheckCircle2, XCircle } from "lucide-preact";
 import { renderMarkdown } from "../../lib/markdown.js";
 import { formatTime } from "../../lib/time.js";
+import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { useExecutionTimeline } from "../../hooks/ExecutionTimelineContext.js";
 import { ATTENTION_OWNER_LABELS, ATTENTION_SEVERITY_TONE, ATTENTION_TYPE_LABELS, ATTENTION_STATUS_TONE, shortenRuntimeId } from "./live-session/ExecutionRuntimePanel.js";
 import type { ExecutionDashboardSnapshot } from "../../types.js";
@@ -155,9 +156,7 @@ export const AttentionLedger: FunctionComponent = memo(() => {
                                 </div>
 
                                 <div
-                                    className="mt-3 prose prose-sm max-w-none text-[11px] leading-relaxed text-slate-500 dark:text-slate-400
-                                               prose-p:my-0 prose-code:text-signal-600 dark:prose-code:text-signal-400
-                                               prose-code:bg-signal-500/[0.06] prose-code:px-1 prose-code:rounded-md line-clamp-3"
+                                    className={`mt-3 text-[11px] leading-relaxed prose-p:my-0 line-clamp-3 ${MARKDOWN_PROSE_CLASS}`}
                                     dangerouslySetInnerHTML={{ __html: renderMarkdown(item.summaryMarkdown || "No summary provided.") }}
                                 />
 

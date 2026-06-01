@@ -21,7 +21,7 @@ interface RerunTaskModalProps {
     allTasks: Subtask[];
     currentProvider?: string | null;
     onClose: () => void;
-    onConfirm: (options: { provider?: string; providerConfigId?: string; model?: string; clearWorktree: boolean; resetDependents: boolean }) => void | Promise<void>;
+    onConfirm: (options: { provider?: string; providerConfigId?: string; model?: string; clearWorktree: boolean; resetDependents: boolean; undoMerge: boolean }) => void | Promise<void>;
 }
 
 const MERGED_TASK_INDICATORS = new Set(["MERGED", "AUTOMERGE"]);
@@ -39,6 +39,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     const [providerConfigId, setProviderConfigId] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
     const [resetDependents, setResetDependents] = useState(false);
+    const [undoMerge, setUndoMerge] = useState(Boolean(task.is_merged) || MERGED_TASK_INDICATORS.has(task.merge_indicator || ""));
 
     const reducedMotion = useReducedMotion();
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -159,6 +160,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                 model: model || undefined,
                 clearWorktree,
                 resetDependents,
+                undoMerge: taskAlreadyMerged && undoMerge,
             });
             setIsSubmitting(false);
             handleClose();
@@ -294,6 +296,30 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                                         Some selected downstream work already merged. Undo those landed changes before rerunning the chain.
                                     </p>
                                 )}
+                            </div>
+                        </label>
+                    )}
+
+                    {/* Undo merge checkbox */}
+                    {taskAlreadyMerged && (
+                        <label className="flex items-start gap-3 cursor-pointer group">
+                            <input
+                                type="checkbox"
+                                checked={undoMerge}
+                                onChange={(e) => setUndoMerge((e.target as HTMLInputElement).checked)}
+                                disabled={isSubmitting}
+                                className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-status-amber focus-visible:ring-2 focus-visible:ring-status-amber focus:ring-offset-0 cursor-pointer disabled:opacity-50"
+                            />
+                            <div>
+                                <div className="flex items-center gap-1.5">
+                                    <RotateCcw className="w-3 h-3 text-slate-400 group-hover:text-status-amber transition-colors" strokeWidth={2} />
+                                    <span className="text-[12px] font-semibold text-slate-700 dark:text-slate-200">
+                                        Undo the Git merge
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                                    Programmatically revert the merge commit for this task in the feature branch.
+                                </p>
                             </div>
                         </label>
                     )}

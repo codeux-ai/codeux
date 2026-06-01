@@ -187,7 +187,7 @@ Checks:
   - selecting **Clear worktree** removes the previous workspace using the active CLI execution mode and suppresses workspace resume, forcing a new workspace for the rerun
   - provider overrides target the exact provider instance from **Settings -> Integrations** and may include a model override, so reruns can switch between multiple logins/configs for the same provider type
   - optional downstream reset rewrites dependent tasks to fresh pending execution snapshots so old completed/running descendants do not keep stale runtime metadata
-  - if a task already merged code, operators must undo those landed changes before rerunning that task chain
+  - if a task already merged code, operators can check the **Undo the Git merge** option to automatically revert the merge commit programmatically in the feature branch before restarting the task cleanly.
 
 ## Useful Commands
 

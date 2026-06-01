@@ -64,13 +64,30 @@ html.is-electron.is-fullscreen .app-shell {
     --status-green: #00A37E; /* WCAG AA on Void 900 (4.6:1) */
     --status-red: #FF4D4D;   /* WCAG AA on Void 900 (5.2:1) */
     --status-amber: #FFB347; /* WCAG AA on Void 900 (6.1:1) */
-    --signal-600: #00B882;   /* Default luminous jade for dark mode */
+    --signal-600: #00E0A0;   /* Brand luminous jade for dark mode */
     --ember-600: #E0A000;    /* Default warm amber for dark mode */
   }
 
   *:focus-visible {
     outline: 2px solid var(--signal-600);
     outline-offset: 2px;
+  }
+
+  a {
+    color: var(--signal-600);
+    text-decoration: none;
+    transition: color var(--motion-fast) var(--motion-ease-standard);
+  }
+
+  a:hover,
+  a:focus {
+    color: #008F65; /* signal.700 */
+    text-decoration: underline;
+  }
+
+  .dark a:hover,
+  .dark a:focus {
+    color: #33FFB8; /* signal.400 */
   }
 
   button {

@@ -6,6 +6,7 @@ import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
+import { resultHasSilentQuotaSignal } from "../../../shared/providers/provider-error-classifier.js";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -296,6 +297,14 @@ export class ProviderRunner implements IProviderRunner {
         ? CONTAINER_QWEN_OPENAI_LOG_DIR
         : this.resolveQwenHostLogDir(sessionId))
       : undefined;
+    // Antigravity's `agy` CLI writes its real diagnostics (quota/auth/executor errors)
+    // only to a glog log file — never to stdout/stderr — and exits 0 regardless. Point
+    // it at a controlled path we can read back so those failures aren't lost.
+    const antigravityLogPath = provider === "antigravity"
+      ? (workflowSettings.executionMode === "DOCKER"
+        ? this.resolveAntigravityContainerLogPath(sessionId)
+        : this.resolveAntigravityHostLogPath(sessionId))
+      : null;
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input, qwenProcessLogDir, gitlabToken);
     const nativeSessionId = provider === "opencode"
       ? isOpenCodeNativeSessionId(input.continueSessionId) ? input.continueSessionId! : null
@@ -317,6 +326,7 @@ export class ProviderRunner implements IProviderRunner {
       input.qwenAuthMode,
       input.qwenProtocol,
       codexProviderArgs,
+      antigravityLogPath,
     );
     const { command, args } = spec;
 
@@ -374,6 +384,27 @@ export class ProviderRunner implements IProviderRunner {
         await new Promise(r => setTimeout(r, 1500));
         result = await runCmd();
       }
+      // Antigravity's `agy` CLI writes quota/auth/executor failures only to its log file
+      // and exits 0, so an exhausted run would otherwise be reported as a successful but
+      // empty "completion" — finishing the task unfinished. Read the captured log, surface
+      // any error into stderr, and demote to a failure so the shared classification/quota
+      // path (the same one other providers use) puts the task on hold until quota resets.
+      if (provider === "antigravity" && antigravityLogPath) {
+        const diagnostics = await this.readAntigravityDiagnostics(cwd, antigravityLogPath, workflowSettings.executionMode);
+        if (diagnostics) {
+          result = {
+            ...result,
+            stderr: [result.stderr, diagnostics].filter(Boolean).join("\n"),
+          };
+          if (result.ok) {
+            const reason = resultHasSilentQuotaSignal(provider, result)
+              ? "Quota limit reached"
+              : "Provider reported an error";
+            onActivity(`[${provider}] ${reason}; provider stopped before completing the task.`, "provider");
+            result = { ...result, ok: false };
+          }
+        }
+      }
       const capturedText = input.codexOutputPath
         ? await this.readProviderOutputPath(cwd, input.codexOutputPath, workflowSettings.executionMode)
         : "";
@@ -419,6 +450,13 @@ export class ProviderRunner implements IProviderRunner {
       }
       if (provider === "qwen-code" && workflowSettings.executionMode !== "DOCKER") {
         await fs.rm(this.resolveQwenHostLogDir(sessionId), { recursive: true, force: true }).catch(() => undefined);
+      }
+      if (provider === "antigravity" && antigravityLogPath) {
+        if (workflowSettings.executionMode === "DOCKER") {
+          await this.dockerRunner.removeWorkspaceDir?.(cwd, antigravityLogPath).catch(() => undefined);
+        } else {
+          await fs.rm(antigravityLogPath, { force: true }).catch(() => undefined);
+        }
       }
     }
   }
@@ -472,6 +510,60 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     return (await fs.readFile(outputPath, "utf8").catch(() => "")).trim();
+  }
+
+  /** Host-side path for antigravity's glog log file in non-Docker runs, kept outside the worktree. */
+  private resolveAntigravityHostLogPath(sessionId: string): string {
+    const safeSession = (sessionId || "session").replace(/[^A-Za-z0-9_-]/g, "_");
+    return path.join(os.tmpdir(), "code-ux-antigravity-logs", `${safeSession}.log`);
+  }
+
+  /** Container path for antigravity's glog log file — under HOME on the workspace volume
+   *  (so the host can read it back) and excluded from exported patches. */
+  private resolveAntigravityContainerLogPath(sessionId: string): string {
+    const safeSession = (sessionId || "session").replace(/[^A-Za-z0-9_-]/g, "_");
+    return pathPosix.join(CONTAINER_RUNTIME_HOME, "antigravity-logs", `${safeSession}.log`);
+  }
+
+  /** Reads antigravity's captured log file and extracts only the meaningful failure lines
+   *  (executor/quota/auth errors), stripped of their glog prefix. Returns "" when the log is
+   *  absent or carries no error — i.e. a normal successful run. */
+  private async readAntigravityDiagnostics(
+    cwd: string,
+    logPath: string,
+    executionMode: CliWorkflowSettings["executionMode"],
+  ): Promise<string> {
+    const raw = executionMode === "DOCKER"
+      ? ((await this.dockerRunner.readWorkspaceFile?.(cwd, logPath).catch(() => null)) || "")
+      : (await fs.readFile(logPath, "utf8").catch(() => ""));
+    return this.extractAntigravityErrorLines(raw);
+  }
+
+  /** Pulls executor/quota/auth error lines out of agy's verbose glog output, strips the glog
+   *  prefix (`E0601 09:45:02.402482 813902 log.go:398] `), and de-duplicates them. agy logs the
+   *  same quota line twice and appends a redundant `: <repeat>` suffix, so both are normalized. */
+  private extractAntigravityErrorLines(rawLog: string): string {
+    if (!rawLog.trim()) {
+      return "";
+    }
+    const signal = /agent executor error|RESOURCE_EXHAUSTED|Individual quota reached|Contact your administrator to enable overages|enable overages/i;
+    const glogPrefix = /^[IWEF]\d{4}\s+[\d:.]+\s+\d+\s+\S+?:\d+\]\s*/;
+    const seen = new Set<string>();
+    const lines: string[] = [];
+    for (const rawLine of rawLog.split("\n")) {
+      if (!signal.test(rawLine)) {
+        continue;
+      }
+      let cleaned = rawLine.replace(glogPrefix, "").trim();
+      cleaned = cleaned.replace(/^agent executor error:\s*/i, "");
+      // agy repeats the message as `<msg>: <msg>`; collapse the exact duplicate to one copy.
+      cleaned = cleaned.replace(/^(.+?):\s+\1$/, "$1");
+      if (cleaned && !seen.has(cleaned)) {
+        seen.add(cleaned);
+        lines.push(cleaned);
+      }
+    }
+    return lines.join("\n");
   }
 
   /** Host-side directory for qwen-code OpenAI logs in non-Docker runs, kept outside the worktree. */
@@ -613,6 +705,7 @@ export class ProviderRunner implements IProviderRunner {
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER",
     qwenProtocol?: "openai" | "anthropic" | "gemini",
     codexProviderArgs: string[] = [],
+    antigravityLogPath?: string | null,
   ): { command: string; args: string[] } {
     if (provider === "codex" && codexOutputPath) {
       // `codex exec resume --last` continues the most recent session in the cwd
@@ -683,6 +776,11 @@ export class ProviderRunner implements IProviderRunner {
 
     if (provider === "antigravity") {
       const args = ["--dangerously-skip-permissions"];
+      if (antigravityLogPath) {
+        // Capture agy's diagnostics (quota/auth/executor errors) which it only writes
+        // to this log file, never to stdout/stderr. Placed ahead of the terminal -p flag.
+        args.push("--log-file", antigravityLogPath);
+      }
       if (model && model !== "default") {
         args.push("--model", model);
       }

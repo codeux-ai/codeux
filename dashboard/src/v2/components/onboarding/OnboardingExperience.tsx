@@ -1373,26 +1373,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                       </div>
                     </div>
 
-                    {(settings.defaults.appearance.backgroundMode || "ANIMATED") === "ANIMATED" ? (
-                      <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="text-sm font-black text-slate-900 dark:text-white">Animation Style</div>
-                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select an animated ambient backdrop.</div>
-                        <div className="mt-4">
-                          <SelectInput
-                            value={settings.defaults.appearance.animatedBackground || "deep-ocean"}
-                            onChange={(value) => updateAppearance({ animatedBackground: value })}
-                            options={[
-                              { value: "deep-ocean", label: "Deep Ocean" },
-                              { value: "neon-dreams", label: "Neon Dreams" },
-                              { value: "aurora-borealis", label: "Aurora Borealis" },
-                              { value: "cosmic-dust", label: "Cosmic Dust" },
-                              { value: "ethereal-mist", label: "Ethereal Mist" },
-                              { value: "quantum-field", label: "Quantum Field" },
-                            ]}
-                          />
-                        </div>
-                      </div>
-                    ) : (
+                    {(settings.defaults.appearance.backgroundMode || "ANIMATED") === "STATIC" && (
                       <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
                         <div className="text-sm font-black text-slate-900 dark:text-white">Static Color</div>
                         <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose a solid solid back color.</div>
@@ -1409,74 +1390,6 @@ export const OnboardingExperience: FunctionComponent = () => {
                         </div>
                       </div>
                     )}
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">Pattern Overlay</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select a structural overlay pattern.</div>
-                      <div className="mt-4">
-                        <SelectInput
-                          value={settings.defaults.appearance.backgroundPattern || "NONE"}
-                          onChange={(value) => updateAppearance({ backgroundPattern: value as any })}
-                          options={[
-                            { value: "NONE", label: "None" },
-                            { value: "DIAGONAL_LINES", label: "Diagonal Lines" },
-                            { value: "HORIZONTAL_LINES", label: "Horizontal Lines" },
-                            { value: "VERTICAL_LINES", label: "Vertical Lines" },
-                            { value: "CROSSHATCH", label: "Crosshatch" },
-                            { value: "DOTS", label: "Dots" },
-                            { value: "DIAMONDS", label: "Diamonds" },
-                            { value: "HEXAGONS", label: "Hexagons" },
-                            { value: "TRIANGLES", label: "Triangles" },
-                            { value: "WAVES", label: "Waves" },
-                            { value: "NOISE", label: "Noise" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">Custom Background Image</div>
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Upload a custom wallpaper.</div>
-                      <div className="mt-4 flex items-center gap-4">
-                        {settings.defaults.appearance.backgroundImage ? (
-                          <>
-                            <img src={settings.defaults.appearance.backgroundImage} alt="Background Thumbnail" className="h-16 w-16 rounded-lg object-cover border border-black/10 dark:border-white/10" />
-                            <button
-                              type="button"
-                              onClick={() => updateAppearance({ backgroundImage: null })}
-                              className="rounded-xl bg-black/[0.04] px-3 py-2 text-xs font-bold text-slate-600 hover:bg-black/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:bg-white/[0.1]"
-                            >
-                              Remove Image
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              id="onboarding-bg-image-input"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = (e.target as HTMLInputElement).files?.[0];
-                                if (!file) return;
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  updateAppearance({ backgroundImage: reader.result as string });
-                                };
-                                reader.readAsDataURL(file);
-                              }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => document.getElementById('onboarding-bg-image-input')?.click()}
-                              className="rounded-xl border border-black/10 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-void-800 dark:text-slate-200 dark:hover:bg-void-700"
-                            >
-                              Upload Image
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>

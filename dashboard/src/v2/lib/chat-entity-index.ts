@@ -1,4 +1,4 @@
-import type { AgentConnection, ChatThread, ExecutionInvocationRecord } from "../types.js";
+import type { AgentConnection, ChatThread, ExecutionInvocationRecord, AgentPreset } from "../types.js";
 
 export function buildThreadIndex(threads: ChatThread[]): Map<string, ChatThread> {
   const map = new Map<string, ChatThread>();
@@ -23,3 +23,12 @@ export function buildConnectionIndex(connections: AgentConnection[]): Map<string
   }
   return map;
 }
+
+export function buildPresetIndex(presets: AgentPreset[]): Map<string, AgentPreset> {
+  const map = new Map<string, AgentPreset>();
+  for (const preset of presets) {
+    map.set(preset.id, preset);
+  }
+  return map;
+}
+

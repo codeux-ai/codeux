@@ -34,6 +34,51 @@ function normalizeString(value: string | null | undefined): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+/** Runtime event the backend emits while it sleeps in-process waiting for a provider quota reset. */
+export const QUOTA_WAIT_EVENT_TYPE = "cli_provider_quota_wait";
+
+export interface ActiveQuotaWait {
+  retryAfterIso: string;
+}
+
+/**
+ * Detects an in-progress provider quota/rate-limit wait from a task's runtime events.
+ *
+ * When `retryOnQuotaReset` is enabled the backend sleeps in-process until the quota resets
+ * and deliberately keeps the dispatch in "running" — so neither the dispatch status nor the
+ * subtask record reflect the wait. It does emit a `cli_provider_quota_wait` event carrying the
+ * reset time. The provider only resumes at `retryAfterIso`, so while `now` is before that
+ * instant the task is unambiguously still waiting; we key off the latest such event and ignore
+ * interleaved heartbeats. Returns null once the reset time has passed (work has resumed).
+ */
+export function findActiveQuotaWait(
+  events: ExecutionRuntimeEventSummary[] | undefined,
+  now: number = Date.now(),
+): ActiveQuotaWait | null {
+  if (!events || events.length === 0) {
+    return null;
+  }
+  let latest: { createdAt: string; retryAfterIso: string } | null = null;
+  for (const event of events) {
+    if (event.eventType !== QUOTA_WAIT_EVENT_TYPE) {
+      continue;
+    }
+    const retryAfterIso = typeof event.payload?.retryAfterIso === "string" ? event.payload.retryAfterIso : null;
+    if (!retryAfterIso) {
+      continue;
+    }
+    if (!latest || compareIsoAsc(event.createdAt, latest.createdAt) > 0) {
+      latest = { createdAt: event.createdAt, retryAfterIso };
+    }
+  }
+  if (!latest) {
+    return null;
+  }
+  return new Date(latest.retryAfterIso).getTime() > now
+    ? { retryAfterIso: latest.retryAfterIso }
+    : null;
+}
+
 function normalizeProvider(value: string | null | undefined): ProviderId | undefined {
   switch (normalizeString(value)) {
     case "jules":

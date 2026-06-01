@@ -123,7 +123,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     };
 
     const statusColors: Record<SprintPreviewSession["status"], string> = {
-        starting: "bg-sky-500",
+        starting: "bg-signal-500",
         running: "bg-signal-500",
         stopped: "bg-slate-500",
         error: "bg-ember-500",
@@ -153,11 +153,11 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                 aria-label="Toggle active browser sessions"
                 className={`relative w-11 h-11 flex items-center justify-center rounded-xl transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     isMenuVisible
-                    ? "bg-sky-500/8 dark:bg-sky-400/10"
+                    ? "bg-signal-500/8 dark:bg-signal-400/10"
                     : "hover:bg-black/[0.05] dark:hover:bg-white/[0.05]"
                 }`}
             >
-                <Compass aria-hidden="true" className={"w-4 h-4 transition-colors " + (isMenuVisible ? "text-sky-600 dark:text-sky-300" : "text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white")} strokeWidth={1.5} />
+                <Compass aria-hidden="true" className={"w-4 h-4 transition-colors " + (isMenuVisible ? "text-signal-600 dark:text-signal-300" : "text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white")} strokeWidth={1.5} />
             </button>
 
             {isMenuVisible && (
@@ -172,7 +172,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                         <Link
                             to="/browser"
                             onClick={() => setInteractionState('closed')}
-                            className="text-[10px] font-bold uppercase tracking-[0.14em] text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 rounded-md px-1"
+                            className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 dark:text-signal-500 dark:hover:text-signal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-md px-1"
                         >
                             Open App
                         </Link>
@@ -180,7 +180,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                     <div className="max-h-64 overflow-y-auto pb-1 flex flex-col">
                         {loading ? (
                             <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3">
-                                <Loader2 className="w-5 h-5 text-sky-500 animate-spin" />
+                                <Loader2 className="w-5 h-5 text-signal-500 animate-spin" />
                                 <p className="text-xs text-slate-500 font-medium">Discovering active sessions...</p>
                             </div>
                         ) : sessions.length > 0 ? (
@@ -203,7 +203,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                                                 {session.sprintName || "Unknown Sprint"}
                                             </span>
                                         </div>
-                                        <ExternalLink aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-slate-400 group-hover:text-sky-500 transition-colors" />
+                                        <ExternalLink aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-slate-400 group-hover:text-signal-500 transition-colors" />
                                     </div>
                                     <div className="flex items-center pl-1">
                                         <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate">

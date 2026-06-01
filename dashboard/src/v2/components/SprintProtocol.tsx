@@ -3,6 +3,7 @@ import { memo } from "preact/compat";
 import { useMemo } from "preact/hooks";
 import { AlertTriangle } from "lucide-preact";
 import { CollapsiblePanel } from "./ui/CollapsiblePanel.js";
+import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { renderMarkdown } from "../../lib/markdown.js";
 export interface SprintProtocolProps {
     hasSprintContext: boolean;
@@ -27,11 +28,7 @@ export const SprintProtocol: FunctionComponent<SprintProtocolProps> = memo(({
             defaultOpen={false}
         >
             <div
-                className="prose prose-sm max-w-none text-slate-600 dark:text-slate-400
-                           prose-headings:text-slate-800 dark:prose-headings:text-slate-200
-                           prose-code:text-signal-600 dark:prose-code:text-signal-400
-                           prose-code:bg-signal-500/[0.06] prose-code:px-1 prose-code:rounded-md
-                           font-mono text-[12px] leading-relaxed max-h-64 overflow-y-auto dashboard-scrollbar"
+                className={`${MARKDOWN_PROSE_CLASS} font-mono text-[12px] leading-relaxed max-h-64 overflow-y-auto dashboard-scrollbar`}
                 dangerouslySetInnerHTML={{ __html: protocolMarkup }}
             />
         </CollapsiblePanel>

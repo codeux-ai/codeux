@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Subtask } from "../../../src/contracts/app-types.js";
 import { TaskRerunService } from "../../../src/services/task-rerun-service.js";
+import { commandRunner } from "../../../src/shared/subprocess/command-runner.js";
+
+vi.mock("../../../src/shared/subprocess/command-runner.js", () => ({
+  commandRunner: {
+    run: vi.fn(),
+  },
+}));
 
 describe("TaskRerunService", () => {
   const resolveTaskContext = vi.fn();
@@ -295,5 +302,55 @@ describe("TaskRerunService", () => {
     await service.rerunTask("task-record-1");
 
     expect(resumeSprintRun).toHaveBeenCalledWith("run-created");
+  });
+
+  it("reverts the merge commit if undoMerge is enabled", async () => {
+    resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-1", created: false });
+    startTask.mockResolvedValue({
+      id: "new-session",
+      name: "sessions/new-session",
+      prompt: "",
+      provider: "gemini",
+    });
+
+    // Mock git command execution
+    vi.mocked(commandRunner.run).mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === "git") {
+        if (args[0] === "checkout") {
+          return { ok: true, code: 0, stdout: "", stderr: "" } as any;
+        }
+        if (args[0] === "log") {
+          // Mock finding the merge commit hash
+          return { ok: true, code: 0, stdout: "merge-commit-hash-123\n", stderr: "" } as any;
+        }
+        if (args[0] === "rev-parse" && args[1] === "--verify") {
+          // Verify it is a merge commit (has parent ^2)
+          return { ok: true, code: 0, stdout: "parent-hash\n", stderr: "" } as any;
+        }
+        if (args[0] === "revert") {
+          return { ok: true, code: 0, stdout: "reverted successfully", stderr: "" } as any;
+        }
+        if (args[0] === "remote") {
+          return { ok: true, code: 0, stdout: "origin\n", stderr: "" } as any;
+        }
+        if (args[0] === "push") {
+          return { ok: true, code: 0, stdout: "pushed successfully", stderr: "" } as any;
+        }
+      }
+      return { ok: true, code: 0, stdout: "", stderr: "" } as any;
+    });
+
+    await service.rerunTask("task-record-1", { undoMerge: true });
+
+    // Assert that the revert commands were run in sequence
+    expect(commandRunner.run).toHaveBeenCalledWith("git", ["checkout", "feature/sprint7-implementation"], expect.any(Object));
+    expect(commandRunner.run).toHaveBeenCalledWith(
+      "git",
+      ["log", "--first-parent", "--grep=Merge pull request #12", "--format=%H", "-n", "1"],
+      expect.any(Object)
+    );
+    expect(commandRunner.run).toHaveBeenCalledWith("git", ["rev-parse", "--verify", "merge-commit-hash-123^2"], expect.any(Object));
+    expect(commandRunner.run).toHaveBeenCalledWith("git", ["revert", "--no-edit", "-m", "1", "merge-commit-hash-123"], expect.any(Object));
+    expect(commandRunner.run).toHaveBeenCalledWith("git", ["push", "origin", "feature/sprint7-implementation"], expect.any(Object));
   });
 });

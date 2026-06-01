@@ -60,6 +60,7 @@ function matchProviderToken(provider: string): ProviderId | null {
   if (normalized.includes("qwen")) return "qwen-code";
   if (normalized.includes("opencode")) return "opencode";
   if (normalized.includes("antigravity")) return "antigravity";
+  if (normalized.includes("jules")) return "jules" as any;
 
   return null;
 }
@@ -87,13 +88,11 @@ export const ChatAvatar: FunctionComponent<ChatAvatarProps> = ({
   const renderIcon = () => {
     switch (role) {
       case "jules":
-        // Brand mark — the Code UX logo robot in miniature, with the jade
-        // jewel pulse retained via the legacy `jules-j-glow` class so the
-        // existing CSS pulse animation continues to drive its breath.
         return (
-          <div class="w-full h-full p-0.5 jules-j-glow" aria-hidden="true">
-            <RobotLogo size="100%" rounded={false} idle={true} className="cux-trigger" />
-          </div>
+          <ProviderLogo
+            provider="jules"
+            size={20}
+          />
         );
 
       case "container":
@@ -114,20 +113,7 @@ export const ChatAvatar: FunctionComponent<ChatAvatarProps> = ({
 
       case "agent":
       default: {
-        // Provider-branded icon takes priority when provider is recognized
-        if (matchedProviderId) {
-          return (
-            <ProviderLogo
-              provider={matchedProviderId}
-              size={20}
-              title={providerLabels[matchedProviderId]}
-            />
-          );
-        }
-
-        // Logo-faithful mini robot. If we have a config use it, otherwise
-        // pick a deterministic variant from the agent's name so different
-        // agents are visually distinct in the chat.
+        // Logo-faithful mini robot. If we have a config use it first.
         if (avatarConfig) {
           try {
             const config = normalizeAgentAvatarConfig(avatarConfig);
@@ -140,6 +126,18 @@ export const ChatAvatar: FunctionComponent<ChatAvatarProps> = ({
             // Fall back to Bot icon if config is invalid
           }
         }
+
+        // Provider-branded icon takes priority when provider is recognized
+        if (matchedProviderId) {
+          return (
+            <ProviderLogo
+              provider={matchedProviderId}
+              size={20}
+              title={providerLabels[matchedProviderId]}
+            />
+          );
+        }
+
         return <Bot class="w-5 h-5 text-slate-400" aria-hidden="true" />;
       }
     }

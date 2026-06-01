@@ -62,9 +62,9 @@ const TARGET_OPTIONS: Array<{
     value: "quicksprint",
     label: "Quicksprint",
     icon: RefreshCw,
-    tone: "text-sky-500",
-    activeClassName: "border-sky-500/35 bg-sky-500/10 shadow-[0_12px_34px_rgba(14,165,233,0.13)]",
-    chipClassName: "bg-sky-500/12 text-sky-600 dark:text-sky-300",
+    tone: "text-signal-500",
+    activeClassName: "border-signal-500/35 bg-signal-500/10 shadow-[0_12px_34px_rgba(0,224,160,0.13)]",
+    chipClassName: "bg-signal-500/12 text-signal-600 dark:text-signal-400",
   },
   {
     value: "chat",
@@ -400,7 +400,7 @@ export const SchedulerPage: FunctionComponent = () => {
       <section className="grid gap-3 md:grid-cols-3">
         {[
           { label: "Active entries", value: schedulerStats.activeCount, detail: "ready to fire", icon: Play, tone: "text-signal-500" },
-          { label: "Repeating", value: schedulerStats.repeatingCount, detail: "recurrence rules", icon: Repeat, tone: "text-sky-500" },
+          { label: "Repeating", value: schedulerStats.repeatingCount, detail: "recurrence rules", icon: Repeat, tone: "text-signal-500" },
           {
             label: "Next run",
             value: schedulerStats.nextOccurrence ? formatTimeLabel(schedulerStats.nextOccurrence.startsAt) : "None",
@@ -543,7 +543,7 @@ export const SchedulerPage: FunctionComponent = () => {
             <div className="rounded-2xl border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.035]">
               <label className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
-                  <Repeat className="h-4 w-4 text-sky-500" />
+                  <Repeat className="h-4 w-4 text-signal-500" />
                   Repeat
                 </span>
                 <input

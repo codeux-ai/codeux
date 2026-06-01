@@ -117,16 +117,28 @@ export class ProjectRuntimeRepository {
         }
 
         const planningStatus = mapRuntimeStatusToPlanningStatus(runtimeState);
+        // Protect merge_indicator from stale sprint-cycle writes during a task rerun:
+        // After a rerun, the management API sets the DB task to status='pending' and
+        // merge_indicator=null. A concurrent sprint cycle that loaded the task before
+        // the rerun may still attempt to write the old merge_indicator (e.g. 'CI').
+        // The CASE expression below uses the pre-UPDATE DB status column value: when it
+        // is 'pending' (i.e. the task was just reset), always write NULL so that stale
+        // in-memory cycle data cannot restore a cleared indicator.
         this.db.prepare(`
           UPDATE tasks
           SET status = COALESCE(?, status),
               is_merged = ?,
-              merge_indicator = ?,
+              merge_indicator = CASE
+                WHEN status = 'pending' THEN NULL
+                WHEN ? IS NOT NULL THEN ?
+                ELSE merge_indicator
+              END,
               updated_at = ?
           WHERE id = ?
         `).run(
           planningStatus,
           Number(Boolean(subtask.is_merged)),
+          subtask.merge_indicator || null,
           subtask.merge_indicator || null,
           now,
           mappedTask.row.id

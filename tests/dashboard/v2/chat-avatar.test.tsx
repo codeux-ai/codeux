@@ -20,10 +20,46 @@ describe('ChatAvatar', () => {
     expect(img).toBeInTheDocument();
     expect(img.getAttribute('aria-label')).toBe('Jules');
 
-    // We render raw SVG directly so we look for the <svg> element.
-    const svg = img.querySelector('svg');
-    expect(svg).toBeInTheDocument();
-    expect(img.innerHTML).toContain('jules-j-glow');
+    const imgTag = img.querySelector('img');
+    if (imgTag) {
+      expect(imgTag.getAttribute('src')).toBe('/lobe-icons/google-color.svg');
+    } else {
+      const fallback = img.querySelector('span');
+      expect(fallback).toBeInTheDocument();
+      expect(fallback?.textContent).toBe('J');
+    }
+  });
+
+  it('renders an antigravity provider avatar', () => {
+    const { getByRole } = render(<ChatAvatar role="agent" provider="antigravity" />);
+    const img = getByRole('img');
+    expect(img).toBeInTheDocument();
+    expect(img.getAttribute('aria-label')).toBe('Antigravity');
+
+    const imgTag = img.querySelector('img');
+    if (imgTag) {
+      expect(imgTag.getAttribute('src')).toBe('/lobe-icons/google-color.svg');
+    } else {
+      const fallback = img.querySelector('span');
+      expect(fallback).toBeInTheDocument();
+      expect(fallback?.textContent).toBe('AGY');
+    }
+  });
+
+  it('renders a gemini provider avatar', () => {
+    const { getByRole } = render(<ChatAvatar role="agent" provider="gemini" />);
+    const img = getByRole('img');
+    expect(img).toBeInTheDocument();
+    expect(img.getAttribute('aria-label')).toBe('Gemini');
+
+    const imgTag = img.querySelector('img');
+    if (imgTag) {
+      expect(imgTag.getAttribute('src')).toBe('/lobe-icons/gemini-color.svg');
+    } else {
+      const fallback = img.querySelector('span');
+      expect(fallback).toBeInTheDocument();
+      expect(fallback?.textContent).toBe('G');
+    }
   });
 
   it('renders a Container avatar', () => {

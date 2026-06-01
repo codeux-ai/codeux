@@ -16,6 +16,8 @@ Operators can create entries for:
 - Built-in or custom quicksprint templates available to the selected project.
 - Messages sent into `/chat` at the selected date and time.
 
+Scheduler target selectors, recurrence indicators, and repeating-count summary icons use the dashboard signal jade palette for interactive accents. Sprint and next-run status tones remain differentiated with their existing ember/status colors.
+
 Repeating entries support:
 - no recurrence
 - hourly, daily, weekly, or monthly recurrence

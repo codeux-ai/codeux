@@ -201,4 +201,25 @@ describe("settings-sanitizer", () => {
     expect(localSettings.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(true);
     expect(localSettings.skills.find((skill) => skill.name === "git_manager")?.enabled).toBe(true);
   });
+
+  it("keeps autoApprovePlan true by default or fallback, but preserves explicit false", () => {
+    const missing = sanitizeSettings({
+      automationInterventions: {}
+    });
+    expect(missing.automationInterventions.autoApprovePlan).toBe(true);
+
+    const invalid = sanitizeSettings({
+      automationInterventions: {
+        autoApprovePlan: "not-a-boolean"
+      }
+    });
+    expect(invalid.automationInterventions.autoApprovePlan).toBe(true);
+
+    const explicitFalse = sanitizeSettings({
+      automationInterventions: {
+        autoApprovePlan: false
+      }
+    });
+    expect(explicitFalse.automationInterventions.autoApprovePlan).toBe(false);
+  });
 });

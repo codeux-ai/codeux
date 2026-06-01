@@ -210,6 +210,43 @@ describe("ProviderExecutionService", () => {
     expect(sleepWithSignal).toHaveBeenCalledTimes(3);
   });
 
+  it("Quota-reset wait: emits a cli_provider_quota_wait task-run event while sleeping in-process", async () => {
+    const failedResult = { ...mockResult, ok: false };
+    // First call hits quota, the in-process wait elapses, the retry succeeds.
+    providerRunner.runProvider
+      .mockResolvedValueOnce(failedResult)
+      .mockResolvedValueOnce(mockResult);
+
+    vi.mocked(classifyProviderError).mockReturnValue({
+      category: "QUOTA_EXHAUSTED",
+      userMessage: "Quota exceeded",
+      resetAtIso: "2026-06-01T12:00:00.000Z",
+      provider: "claude-code",
+      resetAfter: "2h0m0s",
+    });
+    vi.mocked(resolveProviderRetryDecision).mockReturnValue({
+      kind: "quota_reset",
+      delayMs: 1000,
+      retryAtIso: "2026-06-01T12:00:00.000Z",
+    });
+
+    const result = await service.executeProvider({ ...defaultArgs, taskRunId: "run-1" });
+
+    expect(result).toBe(mockResult);
+    expect(sleepWithSignal).toHaveBeenCalledTimes(1);
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "cli_provider_quota_wait",
+      "system",
+      expect.objectContaining({
+        kind: "quota_reset",
+        errorCategory: "QUOTA_EXHAUSTED",
+        retryAfterIso: "2026-06-01T12:00:00.000Z",
+      }),
+      expect.objectContaining({ sourceEventKey: expect.stringContaining("quota-wait") }),
+    );
+  });
+
   it("Quota error propagation: throws ProviderQuotaError on QUOTA_EXHAUSTED", async () => {
     const failedResult = { ...mockResult, ok: false };
     providerRunner.runProvider.mockResolvedValue(failedResult);

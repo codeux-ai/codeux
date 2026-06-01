@@ -8,6 +8,7 @@ import {
 } from "lucide-preact";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
+import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { TaskStagePills } from "./SprintStatsDeck.js";
 import { RuntimeEventFeed } from "./RuntimeEventFeed.js";
 import { renderMarkdown } from "../../lib/markdown.js";
@@ -16,7 +17,7 @@ import {
     MERGE_INDICATOR_CFG,
     getTaskCfg,
 } from "../lib/live-session-config.js";
-import { getTaskProgressPhase } from "../../lib/task-progress.js";
+import { getTaskProgressPhase, type TaskProgressPhase } from "../../lib/task-progress.js";
 import type { LiveTaskTimingSummary } from "../lib/live-stats.js";
 import {
     deriveLiveDurationDisplay,
@@ -127,11 +128,15 @@ export interface RerunOptions {
     model?: string;
     clearWorktree?: boolean;
     resetDependents?: boolean;
+    undoMerge?: boolean;
 }
 
 export interface LiveTaskCardProps {
     task: Subtask;
     allTasks: Subtask[];
+    /** Live execution phase resolved from the latest dispatch (e.g. QUOTA while waiting on
+     *  a provider quota reset). Falls back to the task's own status when not supplied. */
+    phase?: TaskProgressPhase | null;
     taskTiming?: LiveTaskTimingSummary | null;
     events?: ExecutionRuntimeEventSummary[];
     onRerun: (id: string, options?: RerunOptions) => void;
@@ -152,6 +157,7 @@ export interface LiveTaskCardProps {
 const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     task,
     allTasks,
+    phase,
     taskTiming,
     events,
     onRerun,
@@ -178,7 +184,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
     const isPreviewVisible = !expanded && !showFeed;
 
-    const taskPhase = getTaskProgressPhase(task);
+    const taskPhase = phase ?? getTaskProgressPhase(task);
     const cfg = getTaskCfg(taskPhase);
     const StatusIcon = cfg.icon;
     const hasEventFeed = Boolean(events && events.length > 0);
@@ -191,7 +197,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     const handleEditClick = useCallback(() => onEdit(task), [onEdit, task]);
     const handleForceCompleteClick = useCallback(() => onForceComplete(task), [onForceComplete, task]);
 
-    const handleRerunConfirm = useCallback((options: { provider?: string; providerConfigId?: string; model?: string; clearWorktree: boolean; resetDependents: boolean }) => {
+    const handleRerunConfirm = useCallback((options: { provider?: string; providerConfigId?: string; model?: string; clearWorktree: boolean; resetDependents: boolean; undoMerge?: boolean }) => {
         setShowRerunModal(false);
         onRerun(task.record_id || task.id, {
             provider: options.provider,
@@ -199,6 +205,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
             model: options.model,
             clearWorktree: options.clearWorktree,
             resetDependents: options.resetDependents,
+            undoMerge: options.undoMerge,
         });
     }, [task.id, task.record_id, onRerun]);
 
@@ -344,12 +351,12 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${cfg.dot}`} />
                                     {cfg.label}
                                 </span>
-                                {mergeCfg && (
+                                {mergeCfg && taskPhase !== "RUNNING" && taskPhase !== "PENDING" && (
                                     <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${mergeCfg.bg} ${mergeCfg.text} border ${mergeCfg.border}`}>
                                         {mergeCfg.label}
                                     </span>
                                 )}
-                                {task.latestReview && (
+                                {task.latestReview && taskPhase !== "RUNNING" && taskPhase !== "PENDING" && (
                                     <SprintReviewBadge summary={task.latestReview} compact showCompactLabel align="right" />
                                 )}
                             </div>
@@ -407,13 +414,10 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Task Prompt</span>
                         </div>
                         <div
-                            className="prose prose-sm max-w-none text-slate-600 dark:text-slate-400
-                                       prose-headings:text-slate-800 dark:prose-headings:text-slate-200
-                                       prose-code:text-signal-600 dark:prose-code:text-signal-400
-                                       prose-code:bg-signal-500/[0.06] prose-code:px-1.5 prose-code:rounded-md
-                                       prose-strong:text-slate-800 dark:prose-strong:text-slate-200
-                                       prose-a:text-signal-600 dark:prose-a:text-signal-400 prose-a:focus-visible:outline-none prose-a:focus-visible:ring-2 prose-a:focus-visible:ring-signal-500 prose-a:focus-visible:rounded prose-a:focus-visible:ring-offset-1 dark:prose-a:focus-visible:ring-offset-void-800
-                                       font-mono text-[12px] leading-relaxed"
+                            className={`${MARKDOWN_PROSE_CLASS}
+                                       prose-code:px-1.5
+                                       prose-a:focus-visible:outline-none prose-a:focus-visible:ring-2 prose-a:focus-visible:ring-signal-500 prose-a:focus-visible:rounded prose-a:focus-visible:ring-offset-1 dark:prose-a:focus-visible:ring-offset-void-800
+                                       font-mono text-[12px] leading-relaxed`}
                             dangerouslySetInnerHTML={{ __html: renderedPrompt }}
                         />
                     </div>
