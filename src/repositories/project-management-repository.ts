@@ -46,6 +46,7 @@ interface ProjectRow {
   default_branch: string | null;
   feature_branch_prefix: string | null;
   status: ProjectSummary["status"];
+  default_agent_presets_provisioned: number | string | null;
   created_at: string;
   updated_at: string;
   source_type: ProjectSourceType | null;
@@ -843,6 +844,24 @@ export class ProjectManagementRepository {
     }
   }
 
+  markDefaultAgentPresetsProvisioned(projectId: string): void {
+    try {
+      this.requireProject(projectId);
+      const now = new Date().toISOString();
+      this.db.prepare(`
+        UPDATE projects
+        SET default_agent_presets_provisioned = 1, updated_at = ?
+        WHERE id = ?
+      `).run(now, projectId);
+      this.publishProjectStructureRefresh(projectId);
+      this.publishProjectsRefresh();
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, projectId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
   notifyProjectsUpdated(): void {
     this.publishProjectsRefresh();
   }
@@ -1062,6 +1081,7 @@ export class ProjectManagementRepository {
       openTasks: toNumber(row.open_tasks),
       completedTasks: toNumber(row.completed_tasks),
       isRunning: toBoolean(row.has_active_runs),
+      defaultAgentPresetsProvisioned: toBoolean(row.default_agent_presets_provisioned),
       settingsOverrides,
       agentBindings,
       createdAt: row.created_at,

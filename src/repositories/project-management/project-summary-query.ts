@@ -9,6 +9,7 @@ export const projectSummaryQuery = {
         p.default_branch,
         p.feature_branch_prefix,
         p.status,
+        p.default_agent_presets_provisioned,
         p.created_at,
         p.updated_at,
         ps.source_type,
