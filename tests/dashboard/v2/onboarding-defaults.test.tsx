@@ -36,6 +36,10 @@ vi.mock("../../../dashboard/src/v2/components/onboarding/OnboardingIntro.js", ()
   },
 }));
 
+vi.mock("../../../dashboard/src/v2/components/chat/DeepOceanBackground.js", () => ({
+  DeepOceanBackground: () => null,
+}));
+
 vi.mock("../../../dashboard/src/v2/hooks/useOnboardingState.js", () => ({
   useOnboardingState: () => ({
     state: { completed: false, onboardingCompletedAt: null },
