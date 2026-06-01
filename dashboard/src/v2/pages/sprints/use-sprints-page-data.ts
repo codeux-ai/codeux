@@ -82,6 +82,24 @@ const compareString = (left: string, right: string): number => (
   left.localeCompare(right, undefined, { sensitivity: "base" })
 );
 
+function deriveSprintKeyPrefix(sprints: Sprint[], defaultPrefix: string): string {
+  for (const sprint of sprints) {
+    if (sprint.slug) {
+      const match = sprint.slug.match(/^([A-Za-z0-9_]+)-(\d+)$/);
+      if (match && match[1] && isNaN(Number(match[1]))) {
+        return match[1];
+      }
+    }
+    if (sprint.id) {
+      const match = sprint.id.match(/^([A-Za-z0-9_]+)-(\d+)$/);
+      if (match && match[1] && isNaN(Number(match[1]))) {
+        return match[1];
+      }
+    }
+  }
+  return defaultPrefix;
+}
+
 export function useSprintsPageData() {
   const [showCreateComposer, setShowCreateComposer] = useState(false);
   const [editingSprint, setEditingSprint] = useState<Sprint | null>(null);
@@ -103,6 +121,7 @@ export function useSprintsPageData() {
   }>(null);
   const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
+  const [stableNextIds, setStableNextIds] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchSystemSettings().then(setSystemSettings).catch(() => {});
@@ -201,7 +220,30 @@ export function useSprintsPageData() {
   ), [sprints]);
   const sprintKeyPrefix = effectiveSettings?.settings.git.sprintKeyPrefix || "SPR";
   const defaultAgentRouting = effectiveSettings?.settings.agents.routing;
-  const nextId = `${sprintKeyPrefix}-${String(nextSprintNumber).padStart(2, "0")}`;
+
+  const projectId = selectedProject?.id || null;
+  const computedNextId = useMemo(() => {
+    if (!projectId) return null;
+    const derivedPrefix = deriveSprintKeyPrefix(sprints, sprintKeyPrefix);
+    return `${derivedPrefix}-${String(nextSprintNumber).padStart(2, "0")}`;
+  }, [sprints, sprintKeyPrefix, nextSprintNumber, projectId]);
+
+  useEffect(() => {
+    if (projectId && !sprintsLoading && computedNextId) {
+      setStableNextIds((current) => ({
+        ...current,
+        [projectId]: computedNextId,
+      }));
+    }
+  }, [projectId, sprintsLoading, computedNextId]);
+
+  const nextId = useMemo(() => {
+    if (!projectId) return "";
+    if (sprintsLoading) {
+      return stableNextIds[projectId] || "...";
+    }
+    return computedNextId || "...";
+  }, [projectId, sprintsLoading, computedNextId, stableNextIds]);
 
   const actualActiveRunsBySprintId = useMemo(() => {
     const map = new Map<string, { id: string; status: string }>();
