@@ -28,9 +28,14 @@ const formatErrorCategory = (value: unknown): string | null => {
 export interface InvocationMessageBubbleProps {
   message: ExecutionInvocationMessageRecord;
   agentAvatarConfig?: AgentAvatarConfig | null;
+  agentName?: string | null;
 }
 
-export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleProps> = ({ message, agentAvatarConfig }) => {
+export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleProps> = ({
+  message,
+  agentAvatarConfig,
+  agentName,
+}) => {
   const fromUser = message.role === "user";
   const fromTool = message.role === "tool";
   const fromSystem = message.role === "system";
@@ -45,7 +50,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
     role = "jules";
   }
 
-  const senderName = (fromUser || fromTool) ? "User" : (message.metadata?.agentName as string) || "Assistant";
+  const senderName = (fromUser || fromTool) ? "User" : agentName || (message.metadata?.agentName as string) || "Assistant";
   const providerLabel = message.metadata?.provider as string | undefined;
   const modelLabel = message.metadata?.model as string | undefined;
   const rawStatus = typeof message.metadata?.status === "string" ? message.metadata.status : null;
@@ -74,8 +79,8 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
         }`}>
           {/* Header Row */}
           <div className={`flex items-center gap-3 mb-2 text-[11px] font-mono text-slate-400 ${fromUser || fromTool ? "justify-end flex-row-reverse" : "justify-start"}`}>
-            <span className="font-semibold text-slate-300 capitalize flex items-center gap-1.5">
-              {message.role}
+            <span className={`font-semibold text-slate-300 flex items-center gap-1.5 ${message.role === "assistant" && agentName ? "" : "capitalize"}`}>
+              {message.role === "assistant" && agentName ? agentName : message.role}
               {isExternalApi && <Cloud className="h-3 w-3 text-signal-500" />}
             </span>
             {providerLabel && (

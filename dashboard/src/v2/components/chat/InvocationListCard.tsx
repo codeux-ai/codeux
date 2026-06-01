@@ -6,6 +6,13 @@ import { ProviderLogo } from "../ui/ProviderLogo.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
+import {
+  formatProviderInstanceLabel,
+  formatStatusContext,
+  formatTokenCount,
+  shortenIdentifier
+} from "../../lib/chat-widget-view-models.js";
+
 
 const formatErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
   switch (value) {
@@ -75,7 +82,7 @@ export const InvocationListCard: FunctionComponent<{
               ${isOptimistic ? "opacity-70" : ""}
               ${isSelected
                 ? "border-2 border-signal-500/30 shadow-[0_0_24px_rgba(0,224,160,0.08)]"
-                : "border border-black/[0.06] dark:border-white/[0.06] hover:border-slate-300 dark:hover:border-white/[0.12]"
+                : "border-2 border-black/[0.06] dark:border-white/[0.06] hover:border-slate-300 dark:hover:border-white/[0.12]"
               }`}
           >
             <WaveFluid accentHex={accentHex} isActive={isRunning} />
@@ -113,7 +120,7 @@ export const InvocationListCard: FunctionComponent<{
                       {/* Status pill */}
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${ss.bg} ${ss.text} border ${ss.border}`}>
                         <span className={`inline-block w-1.5 h-1.5 rounded-full ${ss.dot} ${isRunning ? "animate-pulse" : ""}`} />
-                        {invocation.status}
+                        {formatStatusContext(invocation.provider, invocation.model, invocation.status)}
                       </span>
                       {isOptimistic && (
                         <span className="inline-flex items-center gap-1 rounded-full border border-slate-500/20 bg-slate-500/[0.08] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
@@ -121,10 +128,34 @@ export const InvocationListCard: FunctionComponent<{
                           Pending
                         </span>
                       )}
-                      {(invocation.sprintId || invocation.taskId) && (
+                      {invocation.sprintId && (
                         <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-                          {invocation.taskId ? "Task" : "Sprint"}
+                          Sprint: {shortenIdentifier(invocation.sprintId)}
                         </span>
+                      )}
+                      {invocation.taskId && (
+                        <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+                          Task: {shortenIdentifier(invocation.taskId)}
+                        </span>
+                      )}
+                      {((invocation.inputTokens ?? 0) > 0 || (invocation.cachedInputTokens ?? 0) > 0 || (invocation.outputTokens ?? 0) > 0) && (
+                        <>
+                          {((invocation.inputTokens ?? 0) > 0) && (
+                            <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-signal-600 dark:text-signal-400">
+                              In: {formatTokenCount(invocation.inputTokens)}
+                            </span>
+                          )}
+                          {((invocation.cachedInputTokens ?? 0) > 0) && (
+                            <span className="rounded-full border border-teal-500/20 bg-teal-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-teal-600 dark:text-teal-400">
+                              Cached: {formatTokenCount(invocation.cachedInputTokens)}
+                            </span>
+                          )}
+                          {((invocation.outputTokens ?? 0) > 0) && (
+                            <span className="rounded-full border border-purple-500/20 bg-purple-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-purple-600 dark:text-purple-400">
+                              Out: {formatTokenCount(invocation.outputTokens)}
+                            </span>
+                          )}
+                        </>
                       )}
                       {formatErrorCategory(invocation.lastErrorCategory) && (
                         <span className="rounded-full border border-status-amber/30 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-status-amber">
@@ -146,10 +177,7 @@ export const InvocationListCard: FunctionComponent<{
                     {/* Provider + agent line */}
                     <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                       <ProviderLogo provider={invocation.provider || ""} size={16} />
-                      <span className="font-medium">{invocation.provider}</span>
-                      {invocation.model && (
-                        <span className="text-slate-400 dark:text-slate-500">{invocation.model}</span>
-                      )}
+                      <span className="font-medium">{formatProviderInstanceLabel(invocation.provider, invocation.model)}</span>
                       {agentPreset && (
                         <>
                           <span className="text-slate-300 dark:text-slate-600">|</span>
@@ -157,6 +185,7 @@ export const InvocationListCard: FunctionComponent<{
                         </>
                       )}
                     </div>
+
                   </div>
                 </div>
 

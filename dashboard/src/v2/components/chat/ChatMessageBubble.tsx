@@ -1,17 +1,26 @@
 import { type FunctionComponent } from "preact";
 import { Check, CheckCheck, XCircle, Loader2 } from "lucide-preact";
-import type { ChatMessageRecord } from "../../types.js";
+import type { ChatMessageRecord, AgentAvatarConfig } from "../../types.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
 import { getChatWidgetData } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
+import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
 
 export interface ChatMessageBubbleProps {
   message: ChatMessageRecord;
+  allMessages?: ChatMessageRecord[];
+  agentAvatarConfig?: AgentAvatarConfig;
+  agentName?: string;
 }
 
-export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({ message }) => {
+export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
+  message,
+  allMessages = [],
+  agentAvatarConfig,
+  agentName,
+}) => {
   const fromDashboard = message.direction === "dashboard_to_connection";
   const widgetData = getChatWidgetData(message);
 
@@ -21,20 +30,16 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({ m
   } else if (message.authorType === "system") {
     role = "system";
   } else if (message.metadata?.provider === "jules" || message.authorType === "connection") {
-    role = "jules";
+    role = agentAvatarConfig ? "agent" : "jules";
   }
 
-  const senderName = fromDashboard ? "User" : (message.metadata?.agentName as string) || "Assistant";
+  const senderName = fromDashboard
+    ? "User"
+    : agentName || (message.metadata?.agentName as string) || "Assistant";
   const providerLabel = message.metadata?.provider as string | undefined;
   const createdAtLabel = formatChatTime(message.createdAt);
 
-  const invocationResponse = message.metadata?.response;
-  const hasInvocationResponse = typeof invocationResponse === "string"
-    ? invocationResponse.trim().length > 0
-    : Boolean(invocationResponse);
-  const displayDeliveryStatus = message.deliveryStatus === "pending" && hasInvocationResponse
-    ? "processed"
-    : message.deliveryStatus;
+  const displayDeliveryStatus = resolveDisplayDeliveryStatus(message, allMessages);
 
   const opacityClass = (fromDashboard && (displayDeliveryStatus === "pending" || displayDeliveryStatus === "failed"))
     ? "opacity-60"
@@ -44,7 +49,12 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({ m
     <div className={`flex ${fromDashboard ? "justify-end" : "justify-start"} ${opacityClass}`}>
       <div className={`flex max-w-[760px] items-start gap-3 w-full ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
-          <ChatAvatar role={role} provider={providerLabel} agentName={senderName} />
+          <ChatAvatar
+            role={role}
+            provider={providerLabel}
+            agentName={!fromDashboard ? agentName || senderName : undefined}
+            avatarConfig={!fromDashboard ? agentAvatarConfig : undefined}
+          />
         </div>
 
         <div className={`flex flex-col w-full max-w-[calc(100%-3rem)] rounded-2xl border bg-white/5 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${

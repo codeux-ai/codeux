@@ -27,6 +27,10 @@ export interface ExecutionInvocationRecord {
   lastMessageAt: string | null;
   invocationSource?: "internal" | "EXTERNAL_API";
   agentPresetId?: string | null;
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
   createdAt: string;
   updatedAt: string;
 }

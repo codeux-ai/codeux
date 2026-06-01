@@ -240,6 +240,84 @@ describe("ExecutionRepository", () => {
     expect(paginatedList[0]!.id).toBe(invocation2.id);
   });
 
+  it("projects provider invocation token usage when linked and defaults to 0 when not", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Token Usage Project",
+      sourceType: "local",
+      sourceRef: "/workspace/token-usage-project",
+    });
+
+    // 1. Create a provider invocation with some usage tokens
+    const usage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sessionId: "session-token-1",
+      provider: "openai",
+      purpose: "task_coding",
+      status: "completed",
+      startedAt: new Date().toISOString(),
+      promptChars: 100,
+      julesTokens: 10,
+      invocationSource: "internal",
+    });
+    const updatedUsage = executionRepository.updateProviderInvocationUsage(usage.id, {
+      status: "completed",
+      inputTokens: 123,
+      cachedInputTokens: 45,
+      outputTokens: 67,
+      totalTokens: 190,
+    });
+
+    // 2. Create an execution invocation linked to that provider invocation
+    const linkedInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      type: "planning",
+      status: "completed",
+      providerInvocationId: updatedUsage.id,
+      startedAt: new Date().toISOString(),
+    });
+
+    // 3. Create an execution invocation with no linked provider invocation
+    const unlinkedInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      type: "planning",
+      status: "completed",
+      providerInvocationId: null,
+      startedAt: new Date().toISOString(),
+    });
+
+    // 4. Query individual invocations and assert token usage fields
+    const fetchedLinked = executionRepository.getExecutionInvocation(linkedInvocation.id);
+    expect(fetchedLinked).toBeDefined();
+    expect(fetchedLinked?.inputTokens).toBe(123);
+    expect(fetchedLinked?.cachedInputTokens).toBe(45);
+    expect(fetchedLinked?.outputTokens).toBe(67);
+    expect(fetchedLinked?.totalTokens).toBe(190);
+
+    const fetchedUnlinked = executionRepository.getExecutionInvocation(unlinkedInvocation.id);
+    expect(fetchedUnlinked).toBeDefined();
+    expect(fetchedUnlinked?.inputTokens).toBe(0);
+    expect(fetchedUnlinked?.cachedInputTokens).toBe(0);
+    expect(fetchedUnlinked?.outputTokens).toBe(0);
+    expect(fetchedUnlinked?.totalTokens).toBe(0);
+
+    // 5. Query list of invocations and assert token usage fields
+    const list = executionRepository.listExecutionInvocations({ projectId: project.id });
+    expect(list).toHaveLength(2);
+
+    const foundLinked = list.find((i) => i.id === linkedInvocation.id);
+    expect(foundLinked?.inputTokens).toBe(123);
+    expect(foundLinked?.cachedInputTokens).toBe(45);
+    expect(foundLinked?.outputTokens).toBe(67);
+    expect(foundLinked?.totalTokens).toBe(190);
+
+    const foundUnlinked = list.find((i) => i.id === unlinkedInvocation.id);
+    expect(foundUnlinked?.inputTokens).toBe(0);
+    expect(foundUnlinked?.cachedInputTokens).toBe(0);
+    expect(foundUnlinked?.outputTokens).toBe(0);
+    expect(foundUnlinked?.totalTokens).toBe(0);
+  });
+
   it("coalesces burst invocation message refreshes per project and escalates overview when required", async () => {
     vi.useFakeTimers();
     try {
