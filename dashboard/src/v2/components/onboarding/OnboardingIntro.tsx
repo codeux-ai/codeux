@@ -5,39 +5,10 @@ import { RobotLogo } from "../brand/RobotLogo.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 /*
-  Onboarding intro — "Ignition" boot sequence.
-
-  The screen opens on deep black (macOS-boot feel). A single seed of light
-  ignites at center, the Code UX logo materialises out of the void, and thin
-  colored glowing filaments draw themselves outward across the background like
-  generative line art — each curve blooming from behind the logo and lighting
-  a node at its tip. The wordmark resolves, then the whole stage hands off to
-  the onboarding shell.
-
-  TIMELINE (~5.85s total):
-    0.00  black backdrop fades up                              (0.40s)
-    0.18  center seed of light ignites                         (0.40s, back.out)
-    0.50  logo materialises — scale-up + de-blur               (1.00s, expo.out)
-          atmosphere + halo bloom behind it
-    0.62  ignition ring pulses outward once                    (1.10s, power3.out)
-    0.78  forehead jewel ignites, eyes snap open
-    0.70  ── FILAMENT BLOOM ──
-          ~36 glowing curves draw outward at a steady pen-pace
-          (stroke dash + sine.inOut), each with a comet head
-          riding the draw front and a node lighting at the tip (~4.0s cascade)
-    1.05  antennae snap outward
-    3.00  "WELCOME TO" small-caps reveals
-    3.35  CodeUX wordmark — letter-spacing collapse + de-blur
-    4.00  "Agentic Runtime" tagline
-    5.00  ── HANDOFF: onExitStart fires ──
-          stage scales 1 → 1.05 and fades, field fades, void fades
-    5.85  onComplete fires — intro unmounts
-
-  CONTINUOUS AMBIENT:
-    - logo floats vertically (4.0s yoyo)
-    - atmosphere breathes (3.4s yoyo)
-    - filament field rotates a few degrees back and forth (very slow)
-    - each filament shimmers in opacity once drawn (never in sync)
+  Onboarding intro — Luminous Particle Nebula Constellation.
+  A living star-map of drifting orbs on void-black, connected by ephemeral arcs.
+  Extremely GPU-friendly: only transform/opacity tweens on ~24 circles + 3 rings.
+  Zero strokeDashoffset. Zero SVG filters on animated nodes. Zero layout thrash.
 */
 
 interface OnboardingIntroProps {
@@ -45,74 +16,102 @@ interface OnboardingIntroProps {
     onComplete?: () => void;
 }
 
-// ── Generative filament field ────────────────────────────────────────────────
-// Full-screen SVG uses a 1000×1000 viewBox sliced to cover. Everything radiates
-// from the center (500,500), emerging from behind the logo's halo.
-const C = 500;
+const C = 500; // SVG center
 const TAU = Math.PI * 2;
 
-// Deterministic pseudo-random so the composition is stable across renders.
+// Stable pseudo-random generator
 const seeded = (n: number): number => {
     const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
     return x - Math.floor(x);
 };
 
-const JADE_PALETTE = ["#00E0A0", "#33FFB8", "#80FFD6", "#00C68F"];
+const NEON_PALETTE = [
+  "#00E0A0", // Signal Jade
+  "#00F0FF", // Neon Cyan
+  "#7B2CBF", // Electric Purple
+  "#FF007F", // Neon Rose
+  "#FFB800", // Warm Ember
+  "#39FF14", // Neon Green
+];
 
-interface Filament {
-    d: string;
+/* ─── Particle Nebula Constellation ─── */
+
+interface Particle {
+    /** Orbital center offset from SVG center */
+    cx: number;
+    cy: number;
+    /** Orbital radii (Lissajous ellipse) */
+    rx: number;
+    ry: number;
+    /** Phase offsets for unique motion */
+    phaseX: number;
+    phaseY: number;
+    /** Orbital period in seconds */
+    period: number;
+    /** Visual radius of the dot */
+    r: number;
     color: string;
-    width: number;
-    baseOpacity: number;
-    node: { x: number; y: number; r: number };
-    drawDelay: number;
-    drawDur: number;
-    shimmer: number;
+    /** Stagger delay for reveal */
+    delay: number;
 }
 
-const buildFilaments = (): Filament[] => {
-    const COUNT = 36;
-    const list: Filament[] = [];
-    for (let i = 0; i < COUNT; i++) {
-        const s1 = seeded(i + 1);
-        const s2 = seeded(i + 101);
-        const s3 = seeded(i + 211);
-        const s4 = seeded(i + 331);
-        const angle = (i / COUNT) * TAU + (s1 - 0.5) * 0.2;
-        // Alternating curl direction reads as organic, intentional art.
-        const sweep = (0.32 + s2 * 0.55) * (i % 2 === 0 ? 1 : -1);
-        const r0 = 30 + s1 * 52;
-        const r1 = 320 + s3 * 340;
-        const endAngle = angle + sweep;
-        const sx = C + Math.cos(angle) * r0;
-        const sy = C + Math.sin(angle) * r0;
-        const ex = C + Math.cos(endAngle) * r1;
-        const ey = C + Math.sin(endAngle) * r1;
-        const c1r = r0 + (r1 - r0) * 0.34;
-        const c2r = r0 + (r1 - r0) * 0.7;
-        const c1a = angle + sweep * 0.26;
-        const c2a = angle + sweep * 0.64;
-        const c1x = C + Math.cos(c1a) * c1r;
-        const c1y = C + Math.sin(c1a) * c1r;
-        const c2x = C + Math.cos(c2a) * c2r;
-        const c2y = C + Math.sin(c2a) * c2r;
-        const isGold = i % 9 === 4; // sparse warm accents for contrast
-        const color = isGold ? "#FFC24A" : JADE_PALETTE[i % JADE_PALETTE.length]!;
-        list.push({
-            d: `M ${sx.toFixed(1)} ${sy.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${ex.toFixed(1)} ${ey.toFixed(1)}`,
-            color,
-            width: 0.65 + s4 * 0.95,
-            baseOpacity: 0.45 + s2 * 0.4,
-            node: { x: ex, y: ey, r: 1.4 + s4 * 1.9 },
-            drawDelay: 0.7 + i * 0.04,
-            drawDur: 1.6 + s3 * 0.9,
-            shimmer: 2.2 + s1 * 2.4,
+const PARTICLE_COUNT = 24;
+
+const buildParticles = (): Particle[] => {
+    const particles: Particle[] = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const s = seeded(i);
+        const s2 = seeded(i + 100);
+        const s3 = seeded(i + 200);
+        const s4 = seeded(i + 300);
+
+        // Distribute particles across 3 orbital bands
+        const band = i < 8 ? 0 : i < 16 ? 1 : 2;
+        const bandRadius = [160, 260, 370][band]!;
+        const spread = [40, 55, 70][band]!;
+
+        // Lissajous orbital center sits on a ring around center
+        const baseAngle = (i / PARTICLE_COUNT) * TAU + s * 0.4;
+        const cx = C + Math.cos(baseAngle) * bandRadius;
+        const cy = C + Math.sin(baseAngle) * bandRadius;
+
+        // Orbital extent (how far the particle drifts from its center)
+        const rx = 15 + s2 * spread;
+        const ry = 12 + s3 * spread * 0.7;
+
+        const period = 8 + s * 14; // 8-22s orbital period
+        const phaseX = s2 * TAU;
+        const phaseY = s3 * TAU;
+
+        // Dot size: inner band = larger, outer = smaller
+        const r = band === 0 ? 2.5 + s4 * 1.5 : band === 1 ? 1.8 + s4 * 1.2 : 1.0 + s4 * 0.8;
+
+        particles.push({
+            cx, cy, rx, ry, phaseX, phaseY, period, r,
+            color: NEON_PALETTE[i % NEON_PALETTE.length]!,
+            delay: 0.6 + i * 0.06,
         });
     }
-    return list;
+    return particles;
 };
 
-const FILAMENTS = buildFilaments();
+const PARTICLES = buildParticles();
+
+/* ─── Gossamer Ring helpers ─── */
+
+interface GossamerRing {
+    radius: number;
+    color: string;
+    width: number;
+    dashArray: string;
+    opacity: number;
+}
+
+const GOSSAMER_RINGS: GossamerRing[] = [
+    { radius: 160, color: "rgba(0, 224, 160, 0.15)", width: 0.4, dashArray: "2 6", opacity: 0.6 },
+    { radius: 260, color: "rgba(0, 240, 255, 0.10)", width: 0.35, dashArray: "1 5", opacity: 0.5 },
+    { radius: 370, color: "rgba(123, 44, 191, 0.08)", width: 0.3, dashArray: "3 8", opacity: 0.4 },
+];
 
 export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExitStart, onComplete }) => {
     const backdropRef = useRef<HTMLDivElement>(null);
@@ -123,11 +122,15 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
     const seedRef = useRef<HTMLDivElement>(null);
     const ignitionRingRef = useRef<HTMLDivElement>(null);
 
-    const fieldGroupRef = useRef<SVGGElement>(null);
-    const coreRefs = useRef<Array<SVGPathElement | null>>(FILAMENTS.map(() => null));
-    const glowRefs = useRef<Array<SVGPathElement | null>>(FILAMENTS.map(() => null));
-    const nodeRefs = useRef<Array<SVGCircleElement | null>>(FILAMENTS.map(() => null));
-    const cometRefs = useRef<Array<SVGCircleElement | null>>(FILAMENTS.map(() => null));
+    // Nebula refs
+    const ringsGroupRef = useRef<SVGGElement>(null);
+    const particleRefs = useRef<Array<SVGCircleElement | null>>(PARTICLES.map(() => null));
+    const glowRefs = useRef<Array<SVGCircleElement | null>>(PARTICLES.map(() => null));
+
+    // Sonar sweeps (kept — user liked them)
+    const sonar1Ref = useRef<SVGCircleElement>(null);
+    const sonar2Ref = useRef<SVGCircleElement>(null);
+    const sonar3Ref = useRef<SVGCircleElement>(null);
 
     const logoWrapperRef = useRef<HTMLDivElement>(null);
     const robotRef = useRef<HTMLDivElement>(null);
@@ -145,13 +148,12 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
 
     useLayoutEffect(() => {
         const ctx = gsap.context(() => {
-            const cores = coreRefs.current.filter(Boolean) as SVGPathElement[];
-            const glows = glowRefs.current.filter(Boolean) as SVGPathElement[];
-            const nodes = nodeRefs.current.filter(Boolean) as SVGCircleElement[];
+            const dots = particleRefs.current.filter(Boolean) as SVGCircleElement[];
+            const glows = glowRefs.current.filter(Boolean) as SVGCircleElement[];
 
-            // Prime every filament as an undrawn, full-length dash.
-            [...cores, ...glows].forEach((path) => {
-                gsap.set(path, { strokeDasharray: 1, strokeDashoffset: 1 });
+            // Prime particles invisible
+            [...dots, ...glows].forEach((el) => {
+                gsap.set(el, { scale: 0, opacity: 0, transformOrigin: "50% 50%" });
             });
 
             const robot = robotRef.current;
@@ -164,65 +166,132 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
 
             if (reducedMotion) {
                 gsap.set([backdropRef.current, vignetteRef.current, atmosphereRef.current, haloRef.current, logoWrapperRef.current, welcomeLabelRef.current, wordmarkRef.current], {
-                    opacity: 1,
-                    scale: 1,
-                    filter: "none",
-                    y: 0,
-                    letterSpacing: "-0.02em",
+                    opacity: 1, scale: 1, filter: "none", y: 0, letterSpacing: "-0.02em",
                 });
                 gsap.set(taglineRef.current, { opacity: 0.78 });
-                cores.forEach((path, i) => gsap.set(path, { strokeDashoffset: 0, opacity: FILAMENTS[i]!.baseOpacity }));
-                glows.forEach((path, i) => gsap.set(path, { strokeDashoffset: 0, opacity: FILAMENTS[i]!.baseOpacity * 0.5 }));
-                nodes.forEach((node, i) => gsap.set(node, { opacity: 0.9, attr: { r: FILAMENTS[i]!.node.r } }));
+                dots.forEach((dot) => gsap.set(dot, { scale: 1, opacity: 0.7 }));
+                glows.forEach((g) => gsap.set(g, { scale: 1, opacity: 0.3 }));
                 gsap.set([eyeLeft, eyeRight, jewel, antBall, antLeft, antRight].filter(Boolean), { opacity: 1, scale: 1, scaleY: 1 });
                 gsap.delayedCall(1.2, () => onExitStartRef.current?.());
                 gsap.delayedCall(1.6, () => onCompleteRef.current?.());
                 return;
             }
 
-            // ===== Continuous ambient motion =====
+            // ═══════════════════════════════════════════════════════
+            // AMBIENT LOOPS — GPU-accelerated transforms only
+            // ═══════════════════════════════════════════════════════
+
+            // Atmosphere breathing
             gsap.to(atmosphereRef.current, { scale: 1.06, duration: 3.4, ease: "sine.inOut", yoyo: true, repeat: -1 });
+            // Logo float
             gsap.to(logoWrapperRef.current, { y: -7, duration: 4.0, ease: "sine.inOut", yoyo: true, repeat: -1 });
-            if (fieldGroupRef.current) {
+
+            // Gossamer rings slow spin (extremely cheap — single group rotate)
+            if (ringsGroupRef.current) {
                 gsap.fromTo(
-                    fieldGroupRef.current,
-                    { rotation: -3, svgOrigin: "500 500" },
-                    { rotation: 3, duration: 26, ease: "sine.inOut", yoyo: true, repeat: -1, svgOrigin: "500 500" },
+                    ringsGroupRef.current,
+                    { rotation: 0, svgOrigin: `${C} ${C}` },
+                    { rotation: 360, duration: 90, ease: "none", repeat: -1, svgOrigin: `${C} ${C}` },
                 );
             }
 
-            // Hide the "alive" parts of the robot up front.
+            // ═══════════════════════════════════════════════════════
+            // PARTICLE ORBITAL DRIFT — Lissajous curves via GSAP
+            // Each particle orbits its center point using sin/cos attr tweens.
+            // These are pure GPU-transform translations.
+            // ═══════════════════════════════════════════════════════
+            PARTICLES.forEach((p, i) => {
+                const dot = dots[i];
+                const glow = glows[i];
+                if (!dot) return;
+
+                // Orbital animation: continuously move cx/cy via attr tweens
+                // We use a GSAP timeline with keyframes to create a smooth Lissajous orbit
+                const orbitalTl = gsap.timeline({ repeat: -1, delay: p.delay });
+
+                // Generate 8 keyframe positions along the Lissajous curve
+                const keyframes: Array<{ cx: number; cy: number }> = [];
+                const STEPS = 8;
+                for (let step = 0; step <= STEPS; step++) {
+                    const t = (step / STEPS) * TAU;
+                    keyframes.push({
+                        cx: p.cx + Math.cos(t + p.phaseX) * p.rx,
+                        cy: p.cy + Math.sin(t * 1.5 + p.phaseY) * p.ry,
+                    });
+                }
+
+                // Animate through keyframes
+                const stepDuration = p.period / STEPS;
+                keyframes.forEach((kf, ki) => {
+                    if (ki === 0) {
+                        gsap.set(dot, { attr: { cx: kf.cx, cy: kf.cy } });
+                        if (glow) gsap.set(glow, { attr: { cx: kf.cx, cy: kf.cy } });
+                        return;
+                    }
+                    orbitalTl.to(dot, { attr: { cx: kf.cx, cy: kf.cy }, duration: stepDuration, ease: "sine.inOut" }, (ki - 1) * stepDuration);
+                    if (glow) {
+                        orbitalTl.to(glow, { attr: { cx: kf.cx, cy: kf.cy }, duration: stepDuration, ease: "sine.inOut" }, (ki - 1) * stepDuration);
+                    }
+                });
+
+                // Subtle pulsing opacity on the glow halo
+                if (glow) {
+                    gsap.to(glow, {
+                        opacity: 0.15 + seeded(i + 500) * 0.2,
+                        scale: 1.15,
+                        duration: 2 + seeded(i + 600) * 2,
+                        ease: "sine.inOut",
+                        yoyo: true,
+                        repeat: -1,
+                        delay: p.delay,
+                        transformOrigin: "50% 50%",
+                    });
+                }
+            });
+
+            // ═══════════════════════════════════════════════════════
+            // MAIN TIMELINE — Boot sequence
+            // ═══════════════════════════════════════════════════════
+
+            // Hide robot internals
             gsap.set([eyeLeft, eyeRight].filter(Boolean), { transformOrigin: "50% 50%", svgOrigin: "627 690", scaleY: 0, opacity: 0.92 });
             if (jewel) gsap.set(jewel, { transformOrigin: "50% 50%", svgOrigin: "628 400", scale: 0, opacity: 0 });
             if (antBall) gsap.set(antBall, { transformOrigin: "50% 50%", svgOrigin: "628 280", scaleY: 0, opacity: 0 });
             if (antLeft) gsap.set(antLeft, { transformOrigin: "50% 50%", svgOrigin: "525 326", scale: 0, opacity: 0 });
             if (antRight) gsap.set(antRight, { transformOrigin: "50% 50%", svgOrigin: "731 326", scale: 0, opacity: 0 });
 
-            // ===== Master timeline =====
             const tl = gsap.timeline();
 
-            // Void fades up
+            // Void black boot
             tl.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power2.out" }, 0);
             tl.fromTo(vignetteRef.current, { opacity: 0 }, { opacity: 1, duration: 1.1, ease: "power3.out" }, 0.05);
 
-            // Seed of light ignites
+            // Seed ignition
             tl.fromTo(seedRef.current, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(2.6)" }, 0.18);
 
-            // ===== 0.50s — Logo materialises out of the void =====
+            // Gossamer rings fade in
+            tl.fromTo(
+                ringsGroupRef.current,
+                { opacity: 0 },
+                { opacity: 1, duration: 1.4, ease: "power2.out" },
+                0.25,
+            );
+
+            // Logo materialisation
             tl.fromTo(
                 logoWrapperRef.current,
-                { opacity: 0, scale: 0.8, filter: "blur(16px)" },
-                { opacity: 1, scale: 1, filter: "blur(0px)", duration: 1.0, ease: "expo.out", clearProps: "filter" },
-                0.5,
+                { opacity: 0, scale: 0.75, filter: "blur(12px)" },
+                { opacity: 1, scale: 1, filter: "blur(0px)", duration: 1.2, ease: "expo.out", clearProps: "filter" },
+                0.4,
             );
             tl.fromTo(atmosphereRef.current, { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 1.1, ease: "power3.out" }, 0.5);
             tl.fromTo(haloRef.current, { opacity: 0, scale: 0.9 }, { opacity: 0.9, scale: 1, duration: 0.9, ease: "power3.out" }, 0.7);
 
-            // Ignition ring pulse + seed dissolves into the logo
+            // Single ignition wave pulse
             tl.fromTo(ignitionRingRef.current, { scale: 0.3, opacity: 0.9 }, { scale: 2.5, opacity: 0, duration: 1.1, ease: "power3.out" }, 0.62);
             tl.to(seedRef.current, { opacity: 0, duration: 0.5, ease: "power2.in" }, 0.72);
 
-            // ===== 0.78s — Jewel ignition + eyes awaken =====
+            // Awake eyes
             if (jewel) {
                 tl.to(jewel, { scale: 1.16, opacity: 1, duration: 0.3, ease: "back.out(3)" }, 0.78);
                 tl.to(jewel, { scale: 1, duration: 0.42, ease: "power2.out" }, 1.08);
@@ -231,190 +300,193 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
                 tl.to([eyeLeft, eyeRight], { scaleY: 1, opacity: 1, duration: 0.5, ease: "back.out(2.4)", stagger: 0.06 }, 0.9);
             }
 
-            // ===== 1.05s — Antennae snap outward =====
+            // Antennas
             if (antBall) tl.to(antBall, { scaleY: 1, opacity: 1, duration: 0.42, ease: "back.out(2.6)" }, 1.05);
             if (antLeft) tl.to(antLeft, { scale: 1, opacity: 1, duration: 0.45, ease: "back.out(2.4)" }, 1.1);
             if (antRight) tl.to(antRight, { scale: 1, opacity: 1, duration: 0.45, ease: "back.out(2.4)" }, 1.1);
 
-            // ===== 0.70s — FILAMENT BLOOM — glowing lines draw across the void =====
-            // Each curve is drawn at a steady pen-pace (no front-loaded easing, so it
-            // travels rather than pops), with a bright comet head riding the draw front
-            // and a node lighting up where it lands.
-            FILAMENTS.forEach((filament, i) => {
-                const core = coreRefs.current[i];
-                const glow = glowRefs.current[i];
-                const node = nodeRefs.current[i];
-                const comet = cometRefs.current[i];
-                const targets = [core, glow].filter(Boolean) as SVGPathElement[];
-                const totalLength = core?.getTotalLength() ?? 0;
+            // ═══════════════════════════════════════════════════════
+            // SONAR WAVE SWEEPS (kept — user liked them)
+            // ═══════════════════════════════════════════════════════
+            if (sonar1Ref.current) {
+                tl.fromTo(sonar1Ref.current, { attr: { r: 50 }, opacity: 0.8 }, { attr: { r: 440 }, opacity: 0, duration: 2.4, ease: "power1.out" }, 0.6);
+            }
+            if (sonar2Ref.current) {
+                tl.fromTo(sonar2Ref.current, { attr: { r: 50 }, opacity: 0.8 }, { attr: { r: 440 }, opacity: 0, duration: 2.4, ease: "power1.out" }, 1.1);
+            }
+            if (sonar3Ref.current) {
+                tl.fromTo(sonar3Ref.current, { attr: { r: 50 }, opacity: 0.8 }, { attr: { r: 440 }, opacity: 0, duration: 2.4, ease: "power1.out" }, 1.6);
+            }
 
-                if (node) gsap.set(node, { opacity: 0, attr: { r: 0 } });
-                if (comet) gsap.set(comet, { opacity: 0, cx: filament.node.x, cy: filament.node.y });
+            // ═══════════════════════════════════════════════════════
+            // PARTICLE CONSTELLATION REVEAL — staggered scale+opacity pop
+            // ═══════════════════════════════════════════════════════
+            PARTICLES.forEach((p, i) => {
+                const dot = dots[i];
+                const glow = glows[i];
 
-                if (targets.length) {
-                    tl.to(targets, {
-                        strokeDashoffset: 0,
-                        duration: filament.drawDur,
-                        ease: "sine.inOut",
-                        onStart() {
-                            if (comet) gsap.to(comet, { opacity: 1, duration: 0.25, ease: "power2.out" });
-                        },
-                        onUpdate() {
-                            if (!comet || !core || totalLength === 0) return;
-                            const point = core.getPointAtLength(this.progress() * totalLength);
-                            comet.setAttribute("cx", point.x.toFixed(1));
-                            comet.setAttribute("cy", point.y.toFixed(1));
-                        },
-                        onComplete() {
-                            if (comet) gsap.to(comet, { opacity: 0, duration: 0.5, ease: "power2.in" });
-                        },
-                    }, filament.drawDelay);
+                if (dot) {
+                    tl.to(dot, {
+                        scale: 1,
+                        opacity: 0.65 + seeded(i + 700) * 0.3,
+                        duration: 0.7,
+                        ease: "back.out(2.0)",
+                    }, p.delay);
                 }
-                if (node) {
-                    tl.fromTo(
-                        node,
-                        { opacity: 0, attr: { r: 0 } },
-                        { opacity: 0.95, attr: { r: filament.node.r }, duration: 0.5, ease: "back.out(2)" },
-                        filament.drawDelay + filament.drawDur - 0.28,
-                    );
-                }
-                // Once drawn, each line breathes — never in sync.
-                if (core) {
-                    gsap.to(core, {
-                        opacity: filament.baseOpacity * 0.5,
-                        duration: filament.shimmer,
-                        ease: "sine.inOut",
-                        yoyo: true,
-                        repeat: -1,
-                        delay: filament.drawDelay + filament.drawDur,
-                    });
+                if (glow) {
+                    tl.to(glow, {
+                        scale: 1,
+                        opacity: 0.2 + seeded(i + 800) * 0.15,
+                        duration: 0.8,
+                        ease: "power2.out",
+                    }, p.delay + 0.1);
                 }
             });
 
-            // ===== Wordmark reveal =====
+            // Wordmark reveals
             tl.fromTo(
                 welcomeLabelRef.current,
                 { opacity: 0, y: 14, letterSpacing: "0.45em" },
                 { opacity: 1, y: 0, letterSpacing: "0.32em", duration: 0.55, ease: "power2.out" },
-                3.0,
+                2.6,
             );
             tl.fromTo(
                 wordmarkRef.current,
                 { opacity: 0, y: 24, letterSpacing: "0.18em", filter: "blur(10px)" },
                 { opacity: 1, y: 0, letterSpacing: "-0.02em", filter: "blur(0px)", duration: 0.95, ease: "expo.out" },
-                3.35,
+                2.95,
             );
-            tl.fromTo(taglineRef.current, { opacity: 0, y: 8 }, { opacity: 0.78, y: 0, duration: 0.5, ease: "power2.out" }, 4.0);
+            tl.fromTo(taglineRef.current, { opacity: 0, y: 8 }, { opacity: 0.78, y: 0, duration: 0.5, ease: "power2.out" }, 3.5);
 
-            // ===== 5.00s — Handoff =====
+            // Clean exit transition
             tl.call(() => onExitStartRef.current?.(), undefined, 5.0);
-            tl.to(stageRef.current, { opacity: 0, scale: 1.05, duration: 0.75, ease: "power2.inOut" }, 5.0);
-            tl.to(fieldGroupRef.current, { opacity: 0, duration: 0.7, ease: "power2.inOut" }, 5.0);
-            tl.to(backdropRef.current, { opacity: 0, duration: 0.65, ease: "power2.inOut" }, 5.15);
-            tl.call(() => onCompleteRef.current?.(), undefined, 5.85);
+            tl.to(stageRef.current, { opacity: 0, scale: 1.04, duration: 0.7, ease: "power2.inOut" }, 5.0);
+            tl.to(backdropRef.current, { opacity: 0, duration: 0.6, ease: "power2.inOut" }, 5.15);
+            tl.call(() => onCompleteRef.current?.(), undefined, 5.75);
         });
         return () => ctx.revert();
     }, [reducedMotion]);
 
-    const setCoreRef = (i: number) => (el: SVGPathElement | null) => { coreRefs.current[i] = el; };
-    const setGlowRef = (i: number) => (el: SVGPathElement | null) => { glowRefs.current[i] = el; };
-    const setNodeRef = (i: number) => (el: SVGCircleElement | null) => { nodeRefs.current[i] = el; };
-    const setCometRef = (i: number) => (el: SVGCircleElement | null) => { cometRefs.current[i] = el; };
+    const setParticleRef = (i: number) => (el: SVGCircleElement | null): void => { particleRefs.current[i] = el; };
+    const setGlowRef = (i: number) => (el: SVGCircleElement | null): void => { glowRefs.current[i] = el; };
 
     return (
         <div
             ref={backdropRef}
-            className="fixed inset-0 z-[300] flex items-center justify-center overflow-hidden bg-[#020407]"
+            className="fixed inset-0 z-[300] flex items-center justify-center overflow-hidden bg-[#000000]"
             style={{ opacity: 0 }}
             aria-hidden="true"
         >
-            {/* Deep-space ground glow + vignette */}
+            {/* Ambient light vignette */}
             <div ref={vignetteRef} aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ opacity: 0 }}>
                 <div
                     className="absolute inset-0"
-                    style={{ background: "radial-gradient(ellipse 70% 55% at 50% 48%, rgba(0,224,160,0.10) 0%, rgba(0,224,160,0.02) 38%, transparent 66%)" }}
+                    style={{ background: "radial-gradient(ellipse 70% 55% at 50% 50%, rgba(0,224,160,0.08) 0%, rgba(0,224,160,0.01) 40%, transparent 70%)" }}
                 />
                 <div
                     className="absolute inset-0"
-                    style={{ background: "radial-gradient(ellipse 90% 80% at 50% 100%, rgba(255,184,0,0.04) 0%, transparent 52%)" }}
+                    style={{ background: "radial-gradient(ellipse 90% 80% at 50% 100%, rgba(255,184,0,0.03) 0%, transparent 52%)" }}
                 />
                 <div
                     className="absolute inset-0"
-                    style={{ background: "radial-gradient(circle at 50% 50%, transparent 42%, rgba(0,0,0,0.72) 100%)" }}
+                    style={{ background: "radial-gradient(circle at 50% 50%, transparent 35%, rgba(0,0,0,0.96) 100%)" }}
                 />
             </div>
 
-            {/* Generative filament field — draws across the background like line art */}
+            {/* ═══ Particle Nebula Constellation SVG ═══ */}
             <svg
                 viewBox="0 0 1000 1000"
                 preserveAspectRatio="xMidYMid slice"
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 h-full w-full"
             >
-                <g ref={fieldGroupRef}>
-                    {/* Soft blurred underlay for bloom */}
-                    {FILAMENTS.map((filament, i) => (
-                        <path
-                            key={`glow-${i}`}
-                            ref={setGlowRef(i)}
-                            d={filament.d}
-                            pathLength={1}
-                            fill="none"
-                            stroke={filament.color}
-                            strokeWidth={filament.width * 3.4}
-                            strokeLinecap="round"
-                            style={{ opacity: filament.baseOpacity * 0.42, filter: "blur(3.5px)", mixBlendMode: "screen" }}
-                        />
+                {/* Radial gradient defs for soft-edged particles — zero filter cost */}
+                <defs>
+                    {NEON_PALETTE.map((color, idx) => (
+                        <radialGradient key={`pg-${idx}`} id={`particle-grad-${idx}`}>
+                            <stop offset="0%" stopColor={color} stopOpacity="1" />
+                            <stop offset="40%" stopColor={color} stopOpacity="0.6" />
+                            <stop offset="100%" stopColor={color} stopOpacity="0" />
+                        </radialGradient>
                     ))}
-                    {/* Crisp core line */}
-                    {FILAMENTS.map((filament, i) => (
-                        <path
-                            key={`core-${i}`}
-                            ref={setCoreRef(i)}
-                            d={filament.d}
-                            pathLength={1}
-                            fill="none"
-                            stroke={filament.color}
-                            strokeWidth={filament.width}
-                            strokeLinecap="round"
-                            style={{ opacity: filament.baseOpacity, filter: `drop-shadow(0 0 2px ${filament.color})`, mixBlendMode: "screen" }}
-                        />
-                    ))}
-                    {/* Terminal nodes light up as each line finishes */}
-                    {FILAMENTS.map((filament, i) => (
+                </defs>
+
+                {/* 1. Gossamer orbital guide rings — ultra-thin dashed circles */}
+                <g ref={ringsGroupRef}>
+                    {GOSSAMER_RINGS.map((ring, idx) => (
                         <circle
-                            key={`node-${i}`}
-                            ref={setNodeRef(i)}
-                            cx={filament.node.x}
-                            cy={filament.node.y}
-                            r={0}
-                            fill={filament.color}
-                            style={{ filter: `drop-shadow(0 0 5px ${filament.color})`, opacity: 0, mixBlendMode: "screen" }}
-                        />
-                    ))}
-                    {/* Comet heads ride the draw front of each line */}
-                    {FILAMENTS.map((filament, i) => (
-                        <circle
-                            key={`comet-${i}`}
-                            ref={setCometRef(i)}
-                            cx={filament.node.x}
-                            cy={filament.node.y}
-                            r={2.4}
-                            fill="#EAFFF6"
-                            style={{ filter: `drop-shadow(0 0 6px ${filament.color}) drop-shadow(0 0 3px #ffffff)`, opacity: 0, mixBlendMode: "screen" }}
+                            key={`ring-${idx}`}
+                            cx={C}
+                            cy={C}
+                            r={ring.radius}
+                            fill="none"
+                            stroke={ring.color}
+                            strokeWidth={ring.width}
+                            strokeDasharray={ring.dashArray}
+                            style={{ opacity: ring.opacity }}
                         />
                     ))}
                 </g>
+
+                {/* 2. Sonar wave sweeps (kept from previous design) */}
+                <circle
+                    ref={sonar1Ref}
+                    cx={C} cy={C} r="50"
+                    fill="none"
+                    stroke="rgba(0, 240, 255, 0.35)"
+                    strokeWidth="0.8"
+                />
+                <circle
+                    ref={sonar2Ref}
+                    cx={C} cy={C} r="50"
+                    fill="none"
+                    stroke="rgba(0, 224, 160, 0.28)"
+                    strokeWidth="0.8"
+                />
+                <circle
+                    ref={sonar3Ref}
+                    cx={C} cy={C} r="50"
+                    fill="none"
+                    stroke="rgba(255, 184, 0, 0.2)"
+                    strokeWidth="0.8"
+                />
+
+                {/* 3. Particle constellation — luminous drifting orbs (zero filters) */}
+                {PARTICLES.map((p, i) => {
+                    const gradId = `url(#particle-grad-${i % NEON_PALETTE.length})`;
+                    return (
+                        <g key={`particle-${i}`}>
+                            {/* Soft glow halo — radial gradient fill, no GPU filter */}
+                            <circle
+                                ref={setGlowRef(i)}
+                                cx={p.cx}
+                                cy={p.cy}
+                                r={p.r * 6}
+                                fill={gradId}
+                                opacity={0}
+                            />
+                            {/* Core luminous dot */}
+                            <circle
+                                ref={setParticleRef(i)}
+                                cx={p.cx}
+                                cy={p.cy}
+                                r={p.r}
+                                fill={p.color}
+                                opacity={0}
+                            />
+                        </g>
+                    );
+                })}
             </svg>
 
-            {/* Center stage */}
-            <div ref={stageRef} className="relative z-10 flex flex-col items-center" style={{ willChange: "transform, opacity" }}>
+            {/* Center stage container */}
+            <div ref={stageRef} className="relative z-10 flex flex-col items-center justify-center" style={{ willChange: "transform, opacity" }}>
                 <div
                     ref={logoWrapperRef}
-                    className="relative mb-14 flex h-[280px] w-[280px] items-center justify-center"
+                    className="relative flex h-[280px] w-[280px] items-center justify-center"
                     style={{ willChange: "transform, opacity, filter", opacity: 0 }}
                 >
-                    {/* Atmosphere — large soft jade halo */}
+                    {/* Glowing atmosphere */}
                     <div
                         ref={atmosphereRef}
                         aria-hidden="true"
@@ -422,13 +494,13 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
                         style={{
                             width: 460,
                             height: 460,
-                            background: "radial-gradient(circle, rgba(0,224,160,0.40) 0%, rgba(0,224,160,0.13) 30%, rgba(0,224,160,0.04) 55%, transparent 75%)",
+                            background: "radial-gradient(circle, rgba(0,224,160,0.36) 0%, rgba(0,224,160,0.1) 30%, rgba(0,224,160,0.03) 55%, transparent 75%)",
                             filter: "blur(8px)",
                             opacity: 0,
                         }}
                     />
 
-                    {/* Inner halo — tighter ring around the head */}
+                    {/* Inner halo */}
                     <div
                         ref={haloRef}
                         aria-hidden="true"
@@ -436,13 +508,13 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
                         style={{
                             width: 280,
                             height: 280,
-                            background: "radial-gradient(circle, rgba(128,255,214,0.32) 0%, rgba(0,224,160,0.16) 38%, transparent 70%)",
+                            background: "radial-gradient(circle, rgba(128,255,214,0.28) 0%, rgba(0,224,160,0.12) 38%, transparent 70%)",
                             filter: "blur(4px)",
                             opacity: 0,
                         }}
                     />
 
-                    {/* Ignition ring — single clean pulse at logo reveal */}
+                    {/* Clean single ignition ring pulse */}
                     <div
                         ref={ignitionRingRef}
                         aria-hidden="true"
@@ -455,7 +527,7 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
                         }}
                     />
 
-                    {/* Seed of light */}
+                    {/* Seed spark */}
                     <div
                         ref={seedRef}
                         aria-hidden="true"
@@ -469,10 +541,9 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
                         }}
                     />
 
-                    {/* Robot logo */}
+                    {/* Perfectly Centered Logo */}
                     <div ref={robotRef} className="relative z-10">
                         <RobotLogo size={220} idle={false} active={false} rounded={true} withGlow={false} title="Code UX" />
-                        {/* Thin signal beam at antenna ball */}
                         <div
                             className="pointer-events-none absolute left-1/2 -translate-x-1/2"
                             style={{ top: -28, width: 1, height: 32, background: "linear-gradient(to bottom, transparent 0%, rgba(0,224,160,0.6) 100%)" }}
@@ -481,7 +552,8 @@ export const OnboardingIntro: FunctionComponent<OnboardingIntroProps> = ({ onExi
                     </div>
                 </div>
 
-                <div className="flex flex-col items-center gap-3 text-center">
+                {/* Typography absolute container preventing centering offset shifts */}
+                <div className="absolute top-[190px] flex flex-col items-center gap-2 text-center w-[400px] min-w-[320px]">
                     <span
                         ref={welcomeLabelRef}
                         className="font-mono text-[11px] font-bold uppercase text-signal-500"

@@ -386,14 +386,14 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
     terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [terminalOutput]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+  const modalContent = (
+    <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
       <div className="relative flex h-[600px] w-[800px] max-w-full flex-col overflow-hidden rounded-[1.75rem] border border-white/[0.08] bg-void-950 shadow-[0_24px_60px_rgba(0,0,0,0.8)] dark:bg-void-950">
         {/* Glow Effects */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent" />
 
         {/* Modal Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] bg-void-900/60 px-6 py-4 backdrop-blur-md">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] bg-void-900/60 px-6 py-4 backdrop-blur-md text-slate-100">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-signal-500/10 text-signal-400">
               <Terminal className="h-4 w-4" />
@@ -555,8 +555,17 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
           )}
         </div>
       </div>
+    </div>
+  );
 
-      {contextMenu && typeof document !== "undefined" && createPortal(
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
+    <>
+      {modalContent}
+      {contextMenu && (
         <div 
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
           className="fixed z-[9999] min-w-[160px] overflow-hidden rounded-xl border border-white/[0.08] bg-void-900 p-1.5 shadow-[0_12px_30px_rgba(0,0,0,0.5)] backdrop-blur-md"
@@ -578,9 +587,9 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
           >
             📋 Paste Clipboard Text
           </button>
-        </div>,
-        document.body
+        </div>
       )}
-    </div>
+    </>,
+    document.body
   );
 };

@@ -37,7 +37,8 @@ import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { OnboardingIntro } from "./OnboardingIntro.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
-import { Row, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
+import { PillChoiceGroup, Row, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
+import { applyAppearanceSettings } from "../../lib/apply-appearance.js";
 import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 
@@ -80,18 +81,18 @@ const DeepOceanBackground = lazy(async () => {
   return { default: mod.DeepOceanBackground as FunctionComponent<{ forceDark?: boolean; className?: string }> };
 });
 
-type StepId = "installation" | "introduction" | "providers" | "provider-setup" | "git" | "jira" | "automation" | "appearance" | "defaults";
+type StepId = "installation" | "introduction" | "providers" | "provider-setup" | "git" | "jira" | "defaults" | "automation" | "appearance";
 
 const steps: Array<{ id: StepId; label: string; icon: typeof Settings }> = [
   { id: "installation", label: "Installation", icon: Box },
   { id: "introduction", label: "Introduction", icon: ShieldCheck },
-  { id: "providers", label: "Providers", icon: Cpu },
-  { id: "provider-setup", label: "Configure", icon: Settings },
+  { id: "providers", label: "Select Providers", icon: Cpu },
+  { id: "provider-setup", label: "Providers", icon: Settings },
   { id: "git", label: "Git", icon: GitBranch },
   { id: "jira", label: "Jira", icon: ClipboardList },
+  { id: "defaults", label: "Default providers", icon: Layers },
   { id: "automation", label: "Automation", icon: Sparkles },
   { id: "appearance", label: "Appearance", icon: Monitor },
-  { id: "defaults", label: "Default providers", icon: Layers },
 ];
 
 const DEFAULT_JIRA_SETTINGS: SystemSettings["integrations"]["jira"] = {
@@ -239,6 +240,49 @@ const syncProjectProvidersToIntegrationCatalog = (
   };
 };
 
+const platform = (typeof window !== "undefined" && window.codeUxDesktop?.platform) || "linux";
+
+const getOSInfo = (plat: string) => {
+  const isMac = plat === "darwin";
+  const isWindows = plat === "win32";
+
+  let osLabel = "Linux";
+  if (isMac) osLabel = "macOS";
+  if (isWindows) osLabel = "Windows";
+
+  const dockerDesktopLink = isMac
+    ? "https://docs.docker.com/desktop/install/mac-install/"
+    : isWindows
+    ? "https://docs.docker.com/desktop/install/windows-install/"
+    : "https://docs.docker.com/desktop/install/linux-install/";
+
+  const dockerDownloadLink = isMac
+    ? "https://www.docker.com/products/docker-desktop/"
+    : isWindows
+    ? "https://www.docker.com/products/docker-desktop/"
+    : "https://docs.docker.com/engine/install/";
+
+  const gitLink = isMac
+    ? "https://git-scm.com/download/mac"
+    : isWindows
+    ? "https://git-scm.com/download/win"
+    : "https://git-scm.com/download/linux";
+
+  const gitInstruction = isMac
+    ? "Install via Homebrew: brew install git"
+    : isWindows
+    ? "Run the Git for Windows installer."
+    : "Install via apt or dnf: sudo apt install git";
+
+  return {
+    osLabel,
+    dockerDesktopLink,
+    dockerDownloadLink,
+    gitLink,
+    gitInstruction,
+  };
+};
+
 export const OnboardingExperience: FunctionComponent = () => {
   const navigate = useNavigate();
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -373,6 +417,23 @@ export const OnboardingExperience: FunctionComponent = () => {
 
   const updateSettings = (recipe: (current: SystemSettings) => SystemSettings) => {
     setSettings((current) => current ? recipe(cloneSettings(current)) : current);
+  };
+
+  const updateAppearance = (updates: Partial<SystemSettings["defaults"]["appearance"]>) => {
+    updateSettings((current) => {
+      const nextAppearance = {
+        ...current.defaults.appearance,
+        ...updates,
+      };
+      applyAppearanceSettings(nextAppearance);
+      return {
+        ...current,
+        defaults: {
+          ...current.defaults,
+          appearance: nextAppearance,
+        },
+      };
+    });
   };
 
   const toggleProvider = (provider: ProviderId) => {
@@ -697,16 +758,72 @@ export const OnboardingExperience: FunctionComponent = () => {
               </div>
             </div>
             <div className="mt-8 space-y-2">
-              {steps.map((step, index) => {
+              {[
+                {
+                  id: "installation",
+                  label: "Installation",
+                  icon: Box,
+                  active: activeStep === 0,
+                  complete: activeStep > 0,
+                  onClick: () => setActiveStep(0),
+                },
+                {
+                  id: "introduction",
+                  label: "Introduction",
+                  icon: ShieldCheck,
+                  active: activeStep === 1,
+                  complete: activeStep > 1,
+                  onClick: () => setActiveStep(1),
+                },
+                {
+                  id: "providers",
+                  label: "Select Providers",
+                  icon: Cpu,
+                  active: activeStep === 2,
+                  complete: activeStep > 2,
+                  onClick: () => setActiveStep(2),
+                },
+                {
+                  id: "configure-flow",
+                  label:
+                    activeStep === 3 ? "Providers (1/4)"
+                    : activeStep === 4 ? "Git (2/4)"
+                    : activeStep === 5 ? "Jira (3/4)"
+                    : activeStep === 6 ? "Default providers (4/4)"
+                    : "Providers (1/4)",
+                  icon: Settings,
+                  active: activeStep >= 3 && activeStep <= 6,
+                  complete: activeStep > 6,
+                  onClick: () => {
+                    setActiveStep(activeStep >= 3 && activeStep <= 6 ? activeStep : 3);
+                  },
+                },
+                {
+                  id: "automation",
+                  label: "Automation",
+                  icon: Sparkles,
+                  active: activeStep === 7,
+                  complete: activeStep > 7,
+                  onClick: () => setActiveStep(7),
+                },
+                {
+                  id: "appearance",
+                  label: "Appearance",
+                  icon: Monitor,
+                  active: activeStep === 8,
+                  complete: activeStep > 8,
+                  onClick: () => setActiveStep(8),
+                },
+              ].map((step) => {
                 const StepIcon = step.icon;
-                const activeItem = index === activeStep;
-                const complete = index < activeStep;
+                const activeItem = step.active;
+                const complete = step.complete;
                 return (
                   <button
                     key={step.id}
                     data-step-item
                     type="button"
-                    onClick={() => setActiveStep(index)}
+                    onClick={step.onClick}
                     className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-[background-color,border-color,transform] hover:translate-x-1 ${
                       activeItem ? "border-white/30 bg-white text-slate-950 shadow-[0_16px_40px_rgba(0,0,0,0.18)]" : "border-white/0 text-slate-300 hover:border-white/10 hover:bg-white/8 hover:text-white"
                     }`}
@@ -727,7 +844,11 @@ export const OnboardingExperience: FunctionComponent = () => {
           <header className="relative flex shrink-0 items-center justify-between gap-4 border-b border-black/[0.06] px-5 py-4 dark:border-white/[0.06] md:px-8">
             <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent" />
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Step {activeStep + 1} of {steps.length}</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                {activeStep < 3 ? `Step ${activeStep + 1} of 6`
+                  : activeStep >= 3 && activeStep <= 6 ? `Step 4 of 6 (${activeStep - 2}/4)`
+                  : `Step ${activeStep - 2} of 6`}
+              </div>
               <h3 className="mt-1 font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{active.label}</h3>
             </div>
             <button
@@ -776,8 +897,45 @@ export const OnboardingExperience: FunctionComponent = () => {
                       </div>
                       <div className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{dependency.description}</div>
                       {dependency.status !== "ready" ? (
-                        <div className="mt-3 rounded-xl bg-black/[0.04] p-3 text-xs leading-relaxed text-slate-600 dark:bg-white/[0.05] dark:text-slate-300">
-                          {dependency.resolution}
+                        <div className="mt-3 space-y-2.5">
+                          <div className="rounded-xl bg-black/[0.04] p-3 text-xs leading-relaxed text-slate-600 dark:bg-white/[0.05] dark:text-slate-300">
+                            {dependency.resolution}
+                          </div>
+                          {(dependency.id === "docker-cli" || dependency.id === "docker-daemon") && (
+                            <div className="flex flex-col gap-2 pt-1">
+                              <a
+                                href={getOSInfo(platform).dockerDesktopLink}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
+                              >
+                                Docker Desktop for {getOSInfo(platform).osLabel}
+                              </a>
+                              <a
+                                href={getOSInfo(platform).dockerDownloadLink}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-black/[0.03] py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-slate-600 hover:bg-black/[0.06] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:bg-white/[0.08]"
+                              >
+                                Docker Download
+                              </a>
+                            </div>
+                          )}
+                          {dependency.id === "git-cli" && (
+                            <div className="flex flex-col gap-2 pt-1">
+                              <a
+                                href={getOSInfo(platform).gitLink}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
+                              >
+                                Download Git for {getOSInfo(platform).osLabel}
+                              </a>
+                              <div className="rounded-lg bg-black/[0.04] px-2.5 py-1.5 font-mono text-[10px] text-slate-500 dark:bg-white/[0.05] dark:text-slate-400">
+                                {getOSInfo(platform).gitInstruction}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -1119,40 +1277,207 @@ export const OnboardingExperience: FunctionComponent = () => {
             ) : null}
 
             {active.id === "appearance" && settings ? (
-              <div className="space-y-5">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <Choice title="Theme" value={settings.defaults.appearance.theme} options={[
-                    ["SYSTEM", "System"],
-                    ["LIGHT", "Light"],
-                    ["DARK", "Dark"],
-                  ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, appearance: { ...current.defaults.appearance, theme: value as SystemSettings["defaults"]["appearance"]["theme"] } } }))} />
-                  <Choice title="Motion" value={settings.defaults.appearance.reducedMotion} options={[
-                    ["AUTO", "Auto"],
-                    ["REDUCE", "Reduce"],
-                    ["NONE", "None"],
-                  ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, appearance: { ...current.defaults.appearance, reducedMotion: value as SystemSettings["defaults"]["appearance"]["reducedMotion"] } } }))} />
-                  <Choice title="Navigation" value={settings.defaults.appearance.navigationMode} options={[
-                    ["DOCK", "Dock"],
-                    ["SIDEBAR", "Sidebar"],
-                  ]} onChange={(value) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, appearance: { ...current.defaults.appearance, navigationMode: value as SystemSettings["defaults"]["appearance"]["navigationMode"] } } }))} />
-                </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  {[
-                    [FolderOpen, "Projects", "Add repositories from the project selector or the Projects page."],
-                    [Compass, "Navbar", "Switch projects, select sprint scope, and route work to a virtual provider from the top bar."],
-                    [Settings, "Settings", "All onboarding choices remain editable in Settings after this flow."],
-                  ].map(([Icon, title, description]) => {
-                    const MarkerIcon = Icon as typeof Settings;
-                    return (
-                      <div key={String(title)} className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 dark:border-white/[0.06] dark:bg-white/[0.04]">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 dark:text-signal-300">
-                          <MarkerIcon className="h-5 w-5" />
-                        </div>
-                        <div className="mt-4 text-sm font-black text-slate-900 dark:text-white">{String(title)}</div>
-                        <div className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{String(description)}</div>
+              <div className="space-y-6">
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Left Column: Core Layout & Feel */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Core Display</h4>
+                    
+                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <div className="text-sm font-black text-slate-900 dark:text-white">Theme</div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select light, dark, or sync with your system.</div>
+                      <div className="mt-4">
+                        <PillChoiceGroup
+                          value={settings.defaults.appearance.theme}
+                          onChange={(value) => updateAppearance({ theme: value as any })}
+                          options={[
+                            { value: "SYSTEM", label: "System" },
+                            { value: "LIGHT", label: "Light" },
+                            { value: "DARK", label: "Dark" },
+                          ]}
+                        />
                       </div>
-                    );
-                  })}
+                    </div>
+
+                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <div className="text-sm font-black text-slate-900 dark:text-white">Navigation Mode</div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose between floating dock or sidebar.</div>
+                      <div className="mt-4">
+                        <PillChoiceGroup
+                          value={settings.defaults.appearance.navigationMode}
+                          onChange={(value) => updateAppearance({ navigationMode: value as any })}
+                          options={[
+                            { value: "DOCK", label: "Dock" },
+                            { value: "SIDEBAR", label: "Sidebar" },
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <div className="text-sm font-black text-slate-900 dark:text-white">Reduced Motion</div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Limit interface animations.</div>
+                      <div className="mt-4">
+                        <PillChoiceGroup
+                          value={settings.defaults.appearance.reducedMotion}
+                          onChange={(value) => updateAppearance({ reducedMotion: value as any })}
+                          options={[
+                            { value: "AUTO", label: "Auto" },
+                            { value: "REDUCE", label: "Reduce" },
+                            { value: "NONE", label: "None" },
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    {typeof window !== "undefined" && Boolean(window.codeUxDesktop?.setZoom) && (
+                      <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                        <div className="text-sm font-black text-slate-900 dark:text-white">Zoom Level</div>
+                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Scale the desktop interface size.</div>
+                        <div className="mt-4">
+                          <SelectInput
+                            value={String(settings.defaults.appearance.zoomLevel ?? 1)}
+                            onChange={(value) => updateAppearance({ zoomLevel: Number(value) })}
+                            options={[
+                              { value: "0.75", label: "75%" },
+                              { value: "0.9", label: "90%" },
+                              { value: "1", label: "100%" },
+                              { value: "1.1", label: "110%" },
+                              { value: "1.25", label: "125%" },
+                              { value: "1.5", label: "150%" },
+                              { value: "1.75", label: "175%" },
+                              { value: "2", label: "200%" },
+                            ]}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Column: Custom Aesthetics & Background */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-signal-400">Background & Styling</h4>
+
+                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <div className="text-sm font-black text-slate-900 dark:text-white">Background Mode</div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select animated textures or a flat color.</div>
+                      <div className="mt-4">
+                        <PillChoiceGroup
+                          value={settings.defaults.appearance.backgroundMode || "ANIMATED"}
+                          onChange={(value) => updateAppearance({ backgroundMode: value as any })}
+                          options={[
+                            { value: "ANIMATED", label: "Animated" },
+                            { value: "STATIC", label: "Static" },
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    {(settings.defaults.appearance.backgroundMode || "ANIMATED") === "ANIMATED" ? (
+                      <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                        <div className="text-sm font-black text-slate-900 dark:text-white">Animation Style</div>
+                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select an animated ambient backdrop.</div>
+                        <div className="mt-4">
+                          <SelectInput
+                            value={settings.defaults.appearance.animatedBackground || "deep-ocean"}
+                            onChange={(value) => updateAppearance({ animatedBackground: value })}
+                            options={[
+                              { value: "deep-ocean", label: "Deep Ocean" },
+                              { value: "neon-dreams", label: "Neon Dreams" },
+                              { value: "aurora-borealis", label: "Aurora Borealis" },
+                              { value: "cosmic-dust", label: "Cosmic Dust" },
+                              { value: "ethereal-mist", label: "Ethereal Mist" },
+                              { value: "quantum-field", label: "Quantum Field" },
+                            ]}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                        <div className="text-sm font-black text-slate-900 dark:text-white">Static Color</div>
+                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose a solid solid back color.</div>
+                        <div className="mt-4 flex items-center gap-3">
+                          <input
+                            type="color"
+                            value={settings.defaults.appearance.staticBackgroundColor || "#0d0f12"}
+                            onInput={(e) => updateAppearance({ staticBackgroundColor: (e.target as HTMLInputElement).value })}
+                            className="h-10 w-20 cursor-pointer rounded-lg border-2 border-black/[0.06] bg-transparent p-1 focus:outline-none focus:ring-2 focus:ring-signal-500 dark:border-white/[0.06]"
+                          />
+                          <span className="font-mono text-sm uppercase text-slate-500 dark:text-slate-400">
+                            {settings.defaults.appearance.staticBackgroundColor || "#0d0f12"}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <div className="text-sm font-black text-slate-900 dark:text-white">Pattern Overlay</div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select a structural overlay pattern.</div>
+                      <div className="mt-4">
+                        <SelectInput
+                          value={settings.defaults.appearance.backgroundPattern || "NONE"}
+                          onChange={(value) => updateAppearance({ backgroundPattern: value as any })}
+                          options={[
+                            { value: "NONE", label: "None" },
+                            { value: "DIAGONAL_LINES", label: "Diagonal Lines" },
+                            { value: "HORIZONTAL_LINES", label: "Horizontal Lines" },
+                            { value: "VERTICAL_LINES", label: "Vertical Lines" },
+                            { value: "CROSSHATCH", label: "Crosshatch" },
+                            { value: "DOTS", label: "Dots" },
+                            { value: "DIAMONDS", label: "Diamonds" },
+                            { value: "HEXAGONS", label: "Hexagons" },
+                            { value: "TRIANGLES", label: "Triangles" },
+                            { value: "WAVES", label: "Waves" },
+                            { value: "NOISE", label: "Noise" },
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-black/[0.06] bg-white/75 p-5 shadow-[0_16px_42px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                      <div className="text-sm font-black text-slate-900 dark:text-white">Custom Background Image</div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Upload a custom wallpaper.</div>
+                      <div className="mt-4 flex items-center gap-4">
+                        {settings.defaults.appearance.backgroundImage ? (
+                          <>
+                            <img src={settings.defaults.appearance.backgroundImage} alt="Background Thumbnail" className="h-16 w-16 rounded-lg object-cover border border-black/10 dark:border-white/10" />
+                            <button
+                              type="button"
+                              onClick={() => updateAppearance({ backgroundImage: null })}
+                              className="rounded-xl bg-black/[0.04] px-3 py-2 text-xs font-bold text-slate-600 hover:bg-black/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:bg-white/[0.1]"
+                            >
+                              Remove Image
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              id="onboarding-bg-image-input"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = (e.target as HTMLInputElement).files?.[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  updateAppearance({ backgroundImage: reader.result as string });
+                                };
+                                reader.readAsDataURL(file);
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => document.getElementById('onboarding-bg-image-input')?.click()}
+                              className="rounded-xl border border-black/10 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/10 dark:bg-void-800 dark:text-slate-200 dark:hover:bg-void-700"
+                            >
+                              Upload Image
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -1172,7 +1497,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 </div>
                 {enabledProviderInstances.length === 0 ? (
                   <div data-onboarding-card className="rounded-3xl border border-ember-500/20 bg-ember-500/10 p-6 text-sm text-ember-700 dark:text-ember-300">
-                    No enabled providers yet. Go back to the Providers and Configure steps to enable at least one instance.
+                    No enabled providers yet. Go back to the Select Providers and Providers steps to enable at least one instance.
                   </div>
                 ) : (
                   <>
@@ -1253,13 +1578,20 @@ export const OnboardingExperience: FunctionComponent = () => {
               Back
             </button>
             <div className="flex items-center gap-2">
-              {steps.map((step, index) => (
+              {[
+                { active: activeStep === 0, onClick: () => setActiveStep(0), label: "Installation" },
+                { active: activeStep === 1, onClick: () => setActiveStep(1), label: "Introduction" },
+                { active: activeStep === 2, onClick: () => setActiveStep(2), label: "Select Providers" },
+                { active: activeStep >= 3 && activeStep <= 6, onClick: () => setActiveStep(activeStep >= 3 && activeStep <= 6 ? activeStep : 3), label: "Providers" },
+                { active: activeStep === 7, onClick: () => setActiveStep(7), label: "Automation" },
+                { active: activeStep === 8, onClick: () => setActiveStep(8), label: "Appearance" },
+              ].map((dot, idx) => (
                 <button
-                  key={`dot-${step.id}`}
+                  key={`dot-${idx}`}
                   type="button"
-                  aria-label={`Go to ${step.label}`}
-                  onClick={() => setActiveStep(index)}
-                  className={`h-2 rounded-full transition-all ${index === activeStep ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
+                  aria-label={`Go to ${dot.label}`}
+                  onClick={dot.onClick}
+                  className={`h-2 rounded-full transition-all ${dot.active ? "w-8 bg-signal-500" : "w-2 bg-slate-300 dark:bg-slate-700"}`}
                 />
               ))}
             </div>
