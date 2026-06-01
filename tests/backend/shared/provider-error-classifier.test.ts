@@ -3,6 +3,7 @@ import {
   classifyProviderError,
   extractProviderErrorCategory,
   extractRetryAfterIso,
+  resultHasSilentQuotaSignal,
   type ProviderErrorClassification,
 } from "../../../src/shared/providers/provider-error-classifier.js";
 import type { CommandResult } from "../../../src/shared/subprocess/command-runner.js";
@@ -128,6 +129,74 @@ describe("classifyProviderError", () => {
       );
       const classification = classifyProviderError("codex", result);
       expect(classification.category).toBe("UNKNOWN");
+    });
+  });
+
+  describe("antigravity", () => {
+    it("detects quota exhaustion with reset time from the agy message", () => {
+      const result = makeResult(
+        "Individual quota reached. Contact your administrator to enable overages. Resets in 3h4m52s.",
+        "",
+      );
+      const classification = classifyProviderError("antigravity", result);
+      expect(classification.category).toBe("QUOTA_EXHAUSTED");
+      expect(classification.resetAfter).toBe("3h4m52s");
+      expect(classification.resetAtIso).toBeTruthy();
+      expect(classification.userMessage).toContain("Antigravity quota exhausted");
+      expect(classification.userMessage).toContain("3h4m52s");
+    });
+
+    it("classifies quota even without a parseable reset time", () => {
+      const result = makeResult("Individual quota reached. Contact your administrator to enable overages.", "");
+      const classification = classifyProviderError("antigravity", result);
+      expect(classification.category).toBe("QUOTA_EXHAUSTED");
+      expect(classification.resetAfter).toBeNull();
+    });
+
+    it("detects auth failure", () => {
+      const result = makeResult("", "Error: invalid api key provided");
+      const classification = classifyProviderError("antigravity", result);
+      expect(classification.category).toBe("AUTH_FAILURE");
+      expect(classification.userMessage).toContain("Antigravity");
+    });
+
+    it("detects rate limiting via 429", () => {
+      const result = makeResult("", "code: 429, message: 'too many requests'");
+      const classification = classifyProviderError("antigravity", result);
+      expect(classification.category).toBe("RATE_LIMITED");
+    });
+  });
+
+  describe("resultHasSilentQuotaSignal", () => {
+    it("flags an exit-0 antigravity run whose output carries the quota message", () => {
+      const result: CommandResult = {
+        ok: true,
+        code: 0,
+        stdout: "Individual quota reached. Contact your administrator to enable overages. Resets in 3h4m52s.",
+        stderr: "",
+      };
+      expect(resultHasSilentQuotaSignal("antigravity", result)).toBe(true);
+    });
+
+    it("does not flag a normal antigravity completion", () => {
+      const result: CommandResult = {
+        ok: true,
+        code: 0,
+        stdout: "Implemented the feature and committed the changes.",
+        stderr: "",
+      };
+      expect(resultHasSilentQuotaSignal("antigravity", result)).toBe(false);
+    });
+
+    it("never flags other providers even if their output mentions quota", () => {
+      const result: CommandResult = {
+        ok: true,
+        code: 0,
+        stdout: "Individual quota reached. Contact your administrator to enable overages.",
+        stderr: "",
+      };
+      expect(resultHasSilentQuotaSignal("gemini", result)).toBe(false);
+      expect(resultHasSilentQuotaSignal("claude-code", result)).toBe(false);
     });
   });
 

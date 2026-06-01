@@ -64,6 +64,55 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it("demotes an exit-0 antigravity run to a failure when it hit quota", async () => {
+    dockerRunner.runProviderInDocker.mockResolvedValueOnce({
+      ok: true,
+      stdout: "Individual quota reached. Contact your administrator to enable overages. Resets in 3h4m52s.",
+      stderr: "",
+      code: 0,
+      signal: null,
+    });
+
+    const result = await runner.runProvider({
+      provider: "antigravity",
+      prompt: "implement the feature",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.stdout).toContain("Individual quota reached");
+  });
+
+  it("leaves a normal antigravity completion successful", async () => {
+    dockerRunner.runProviderInDocker.mockResolvedValueOnce({
+      ok: true,
+      stdout: "Implemented the feature and committed the changes.",
+      stderr: "",
+      code: 0,
+      signal: null,
+    });
+
+    const result = await runner.runProvider({
+      provider: "antigravity",
+      prompt: "implement the feature",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   it("forwards continueSessionId into Docker provider commands", async () => {
     await runner.runProvider({
       provider: "claude-code",

@@ -6,6 +6,7 @@ import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
+import { resultHasSilentQuotaSignal } from "../../../shared/providers/provider-error-classifier.js";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -373,6 +374,14 @@ export class ProviderRunner implements IProviderRunner {
         onActivity("Codex transport disconnected. Retrying once automatically...");
         await new Promise(r => setTimeout(r, 1500));
         result = await runCmd();
+      }
+      // Antigravity's `agy` CLI prints its quota message and still exits 0. Left as-is
+      // it would be reported as a successful (but truncated) run, completing the task
+      // unfinished. Demote it to a failure so the shared quota classification/hold path
+      // (the same one other providers use) puts the task on hold until quota resets.
+      if (result.ok && resultHasSilentQuotaSignal(provider, result)) {
+        onActivity(`[${provider}] Quota limit reached; provider stopped before completing the task.`, "provider");
+        result = { ...result, ok: false };
       }
       const capturedText = input.codexOutputPath
         ? await this.readProviderOutputPath(cwd, input.codexOutputPath, workflowSettings.executionMode)
