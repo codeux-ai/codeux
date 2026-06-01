@@ -131,6 +131,13 @@ export interface ProviderRunInput {
   /** Override the default API endpoint for providers that support it.
    *  Sets ANTHROPIC_BASE_URL (claude-code) or OPENAI_BASE_URL (codex). */
   customBaseUrl?: string;
+  /** Override the model identifier sent to the CLI for providers that support a custom
+   *  base URL (claude-code, codex). Used when routing through a gateway such as OpenRouter
+   *  whose model slugs differ from the built-in preset names. */
+  customModel?: string;
+  /** Wire protocol Codex uses against a custom base URL. Defaults to "chat" (OpenAI-compatible
+   *  gateways like OpenRouter); "responses" targets gateways proxying OpenAI's /responses API. */
+  codexWireApi?: "chat" | "responses";
   sessionId: string;
   workspaceSessionId?: string;
   workflowSettings: CliWorkflowSettings;
@@ -269,6 +276,8 @@ export class ProviderRunner implements IProviderRunner {
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     customBaseUrl?: string;
+    customModel?: string;
+    codexWireApi?: "chat" | "responses";
     sessionId: string;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
@@ -299,6 +308,7 @@ export class ProviderRunner implements IProviderRunner {
     const applicableCustomServers = enabledCustomServersFor(input.customMcpServers, provider);
     const hasMcpConfig = !!input.mcpConnection || applicableCustomServers.length > 0;
     const continueSession = !!input.continueSessionId;
+    const codexProviderArgs = this.buildCodexCustomProviderArgs(provider, input, workflowSettings);
     const spec = this.buildCommandSpec(
       provider,
       runModel,
@@ -309,7 +319,8 @@ export class ProviderRunner implements IProviderRunner {
       continueSession,
       hasMcpConfig,
       input.qwenAuthMode,
-      input.qwenProtocol
+      input.qwenProtocol,
+      codexProviderArgs,
     );
     const { command, args } = spec;
 
@@ -419,8 +430,13 @@ export class ProviderRunner implements IProviderRunner {
   private resolveRunModel(
     provider: CliProviderId,
     model: string,
-    config: Pick<ProviderRunInput, "qwenAuthMode" | "qwenModelId" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId">,
+    config: Pick<ProviderRunInput, "qwenAuthMode" | "qwenModelId" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId" | "customModel">,
   ): string {
+    // claude-code / codex routed through a custom base URL (e.g. OpenRouter) use the
+    // gateway's own model slug, which overrides the preset model the agent selected.
+    if ((provider === "claude-code" || provider === "codex") && config.customModel && config.customModel.trim().length > 0) {
+      return config.customModel.trim();
+    }
     if (provider === "qwen-code" && config.qwenAuthMode === "MODEL_PROVIDER") {
       if (model === "custom/model" || model === "local-model") {
         return (config.qwenModelId || "glm-4.7-flash").trim();
@@ -562,6 +578,36 @@ export class ProviderRunner implements IProviderRunner {
     return (await this.dockerRunner.readWorkspaceFile?.(cwd, sessionPath).catch(() => null)) || null;
   }
 
+  /** Builds the `-c` config overrides that point Codex at a custom OpenAI-compatible
+   *  model provider (e.g. OpenRouter). Codex's built-in `openai` provider defaults to the
+   *  `/responses` wire API, which most gateways do not implement, so we register a dedicated
+   *  provider with a configurable `wire_api` (default "chat") and `requires_openai_auth = false`
+   *  so non-`sk-` gateway keys are accepted. Returns an empty array for non-codex providers
+   *  or when no custom base URL is configured. */
+  private buildCodexCustomProviderArgs(
+    provider: CliProviderId,
+    config: Pick<ProviderRunInput, "customBaseUrl" | "codexWireApi">,
+    workflowSettings: CliWorkflowSettings,
+  ): string[] {
+    if (provider !== "codex" || !config.customBaseUrl || config.customBaseUrl.trim().length === 0) {
+      return [];
+    }
+    const providerId = "custom_gateway";
+    const baseUrl = this.rewriteLoopbackUrlForDocker(
+      config.customBaseUrl.trim(),
+      this.shouldRewriteDockerLoopbackUrls(workflowSettings),
+    );
+    const wireApi = config.codexWireApi === "responses" ? "responses" : "chat";
+    return [
+      "-c", `model_provider="${providerId}"`,
+      "-c", `model_providers.${providerId}.name="${providerId}"`,
+      "-c", `model_providers.${providerId}.base_url="${escapeTomlString(baseUrl)}"`,
+      "-c", `model_providers.${providerId}.env_key="OPENAI_API_KEY"`,
+      "-c", `model_providers.${providerId}.wire_api="${wireApi}"`,
+      "-c", `model_providers.${providerId}.requires_openai_auth=false`,
+    ];
+  }
+
   private buildCommandSpec(
     provider: CliProviderId,
     model: string,
@@ -573,12 +619,14 @@ export class ProviderRunner implements IProviderRunner {
     mcpNative?: boolean,
     qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER",
     qwenProtocol?: "openai" | "anthropic" | "gemini",
+    codexProviderArgs: string[] = [],
   ): { command: string; args: string[] } {
     if (provider === "codex" && codexOutputPath) {
       // `codex exec resume --last` continues the most recent session in the cwd
       const args = continueSession
         ? ["exec", "resume", "--last", "--yolo", "--json", "--output-last-message", codexOutputPath]
         : ["exec", "--yolo", "--json", "--output-last-message", codexOutputPath];
+      args.push(...codexProviderArgs);
       if (model && model !== "default") {
         args.push("--model", model);
       }
@@ -657,7 +705,13 @@ export class ProviderRunner implements IProviderRunner {
       throw new Error(`Unsupported CLI provider: ${provider}`);
     }
 
-    return providerSpec(model, prompt);
+    const spec = providerSpec(model, prompt);
+    if (provider === "codex" && codexProviderArgs.length > 0) {
+      // Inject the custom model-provider config flags right after the `exec` subcommand,
+      // ahead of the trailing prompt argument.
+      return { command: spec.command, args: ["exec", ...codexProviderArgs, ...spec.args.slice(1)] };
+    }
+    return spec;
   }
 
   private withProviderEnv(
@@ -667,7 +721,7 @@ export class ProviderRunner implements IProviderRunner {
     workflowSettings: CliWorkflowSettings,
     githubToken?: string,
     providerMountAuth?: boolean,
-    providerConfig?: Pick<ProviderRunInput, "qwenAuthMode" | "qwenRegion" | "qwenBaseUrl" | "qwenEnvKey" | "qwenModelId" | "qwenProtocol" | "qwenAdditionalModelProviders" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId" | "openCodeBaseUrl" | "openCodeEnvKey" | "openCodePackage" | "mcpConnection" | "customBaseUrl">,
+    providerConfig?: Pick<ProviderRunInput, "qwenAuthMode" | "qwenRegion" | "qwenBaseUrl" | "qwenEnvKey" | "qwenModelId" | "qwenProtocol" | "qwenAdditionalModelProviders" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId" | "openCodeBaseUrl" | "openCodeEnvKey" | "openCodePackage" | "mcpConnection" | "customBaseUrl" | "customModel">,
     qwenOpenAiLogDir?: string,
     gitlabToken?: string,
   ): NodeJS.ProcessEnv {
@@ -695,6 +749,17 @@ export class ProviderRunner implements IProviderRunner {
           providerConfig.customBaseUrl,
           this.shouldRewriteDockerLoopbackUrls(workflowSettings),
         );
+      }
+      if (providerConfig?.customModel && providerConfig.customModel.trim().length > 0) {
+        // A custom (gateway) model usually exposes a single slug, so point every Claude
+        // Code model tier at it — including the background "small/fast" tier that would
+        // otherwise request a Haiku model the gateway does not serve.
+        const customModel = providerConfig.customModel.trim();
+        env.ANTHROPIC_MODEL = customModel;
+        env.ANTHROPIC_SMALL_FAST_MODEL = customModel;
+        env.ANTHROPIC_DEFAULT_OPUS_MODEL = customModel;
+        env.ANTHROPIC_DEFAULT_SONNET_MODEL = customModel;
+        env.ANTHROPIC_DEFAULT_HAIKU_MODEL = customModel;
       }
     } else if (provider === "codex") {
       if (model && model !== "default") env.CODEX_MODEL = model;

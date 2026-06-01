@@ -231,6 +231,8 @@ export class TaskService {
           providerMountAuth: selectedProviderSettings.mountAuth,
           providerAuthPath: selectedProviderSettings.authPath,
           customBaseUrl: selectedProviderSettings.customBaseUrl,
+          customModel: selectedProviderSettings.customModel,
+          codexWireApi: selectedProviderSettings.codexWireApi,
         },
         task: {
           ...pseudoTask,
@@ -346,6 +348,8 @@ export class TaskService {
           providerMountAuth: selectedProviderSettings.mountAuth,
           providerAuthPath: selectedProviderSettings.authPath,
           customBaseUrl: selectedProviderSettings.customBaseUrl,
+          customModel: selectedProviderSettings.customModel,
+          codexWireApi: selectedProviderSettings.codexWireApi,
         },
         task,
         repoPath,

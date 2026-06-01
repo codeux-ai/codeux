@@ -323,6 +323,8 @@ export class VirtualWorkerService {
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
         customBaseUrl: providerSettings.customBaseUrl,
+        customModel: providerSettings.customModel,
+        codexWireApi: providerSettings.codexWireApi,
       },
       task: {
         record_id: claim.task.id,
@@ -687,6 +689,8 @@ export class VirtualWorkerService {
           providerMountAuth: providerSettings.mountAuth,
           providerAuthPath: providerSettings.authPath,
           customBaseUrl: providerSettings.customBaseUrl,
+          customModel: providerSettings.customModel,
+          codexWireApi: providerSettings.codexWireApi,
           githubToken: settings.git.githubToken,
         });
       }
@@ -954,6 +958,8 @@ export class VirtualWorkerService {
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
         customBaseUrl: providerSettings.customBaseUrl,
+        customModel: providerSettings.customModel,
+        codexWireApi: providerSettings.codexWireApi,
         githubToken: settings.git.githubToken,
       });
 
@@ -1194,6 +1200,8 @@ export class VirtualWorkerService {
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     customBaseUrl?: string;
+    customModel?: string;
+    codexWireApi?: "chat" | "responses";
     githubToken: string;
   }): Promise<void> {
     const result = await this.providerExecutionService.executeProvider({
@@ -1227,6 +1235,8 @@ export class VirtualWorkerService {
       providerMountAuth: args.providerMountAuth,
       providerAuthPath: args.providerAuthPath,
       customBaseUrl: args.customBaseUrl,
+      customModel: args.customModel,
+      codexWireApi: args.codexWireApi,
       sessionId: args.sessionId,
       workflowSettings: args.workflowSettings,
       repoPath: args.repoPath,

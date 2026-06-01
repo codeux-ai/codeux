@@ -80,6 +80,8 @@ interface StartCliTaskInput {
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     customBaseUrl?: string;
+    customModel?: string;
+    codexWireApi?: "chat" | "responses";
   };
   task: Subtask;
   repoPath: string;
