@@ -84,6 +84,8 @@ interface PlanningResultContext {
     openCodeBaseUrl?: string;
     openCodeEnvKey?: string;
     openCodePackage?: string;
+    customBaseUrl?: string;
+    customModel?: string;
   };
   memoryCaptureWorkspacePath: string;
   cleanupWorkspace?: () => Promise<void>;
@@ -553,6 +555,8 @@ export class PlanningAgentService {
         openCodePackage: providerSettings.openCodePackage,
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
+        customBaseUrl: providerSettings.customBaseUrl,
+        customModel: providerSettings.customModel,
         providerPrompt: args.rawPrompt,
         repoPath: args.repoPath,
         cwd: snapshotWorkspace,
@@ -603,6 +607,8 @@ export class PlanningAgentService {
           openCodeBaseUrl: providerSettings.openCodeBaseUrl,
           openCodeEnvKey: providerSettings.openCodeEnvKey,
           openCodePackage: providerSettings.openCodePackage,
+          customBaseUrl: providerSettings.customBaseUrl,
+          customModel: providerSettings.customModel,
           thinkingMode: providerSettings.thinkingMode,
         },
       };

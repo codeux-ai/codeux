@@ -310,12 +310,22 @@ export const ProviderInstanceCard: FunctionComponent<{
             label={provider.provider === "claude-code" ? "Anthropic base URL" : "OpenAI base URL"}
             description={
               provider.provider === "claude-code"
-                ? "Override ANTHROPIC_BASE_URL. Use an OpenRouter or compatible endpoint (e.g. https://openrouter.ai/api/v1). Leave empty to use the default Anthropic API."
-                : "Override OPENAI_BASE_URL. Route Codex through a custom OpenAI-compatible endpoint. Leave empty to use the default OpenAI API."
+                ? "Override ANTHROPIC_BASE_URL. Claude Code speaks the Anthropic Messages API and appends /v1/messages itself, so use an Anthropic-compatible endpoint WITHOUT a /v1 suffix — for OpenRouter that is https://openrouter.ai/api (not .../api/v1, which is the OpenAI URL used by Codex/Qwen). The API key is sent as a Bearer token. Leave empty to use the default Anthropic API."
+                : "Override OPENAI_BASE_URL. Route Codex through a custom OpenAI-compatible endpoint, e.g. https://openrouter.ai/api/v1. Leave empty to use the default OpenAI API."
+            }
+          >
+            <TextInput value={provider.customBaseUrl || ""} onChange={(value) => onUpdate({ customBaseUrl: value || undefined })} mono />
+          </Row>
+          <Row
+            label="Custom model"
+            description={
+              provider.provider === "claude-code"
+                ? "Model slug sent to the gateway (e.g. anthropic/claude-sonnet-4.5). Applied to every Claude Code tier so background calls hit the same model. Leave empty to use the agent's selected model."
+                : "Model slug sent to the gateway (e.g. openai/gpt-5-codex). Overrides the agent's selected model. Leave empty to use the agent's selected model."
             }
             last={isLast}
           >
-            <TextInput value={provider.customBaseUrl || ""} onChange={(value) => onUpdate({ customBaseUrl: value || undefined })} mono />
+            <TextInput value={provider.customModel || ""} onChange={(value) => onUpdate({ customModel: value || undefined })} mono />
           </Row>
         </>
       )}

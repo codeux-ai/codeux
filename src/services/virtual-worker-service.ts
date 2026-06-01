@@ -323,6 +323,7 @@ export class VirtualWorkerService {
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
         customBaseUrl: providerSettings.customBaseUrl,
+        customModel: providerSettings.customModel,
       },
       task: {
         record_id: claim.task.id,
@@ -687,6 +688,7 @@ export class VirtualWorkerService {
           providerMountAuth: providerSettings.mountAuth,
           providerAuthPath: providerSettings.authPath,
           customBaseUrl: providerSettings.customBaseUrl,
+          customModel: providerSettings.customModel,
           githubToken: settings.git.githubToken,
         });
       }
@@ -954,6 +956,7 @@ export class VirtualWorkerService {
         providerMountAuth: providerSettings.mountAuth,
         providerAuthPath: providerSettings.authPath,
         customBaseUrl: providerSettings.customBaseUrl,
+        customModel: providerSettings.customModel,
         githubToken: settings.git.githubToken,
       });
 
@@ -1194,6 +1197,7 @@ export class VirtualWorkerService {
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     customBaseUrl?: string;
+    customModel?: string;
     githubToken: string;
   }): Promise<void> {
     const result = await this.providerExecutionService.executeProvider({
@@ -1227,6 +1231,7 @@ export class VirtualWorkerService {
       providerMountAuth: args.providerMountAuth,
       providerAuthPath: args.providerAuthPath,
       customBaseUrl: args.customBaseUrl,
+      customModel: args.customModel,
       sessionId: args.sessionId,
       workflowSettings: args.workflowSettings,
       repoPath: args.repoPath,

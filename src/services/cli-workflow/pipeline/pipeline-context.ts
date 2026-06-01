@@ -51,6 +51,7 @@ export interface PipelineContext {
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     customBaseUrl?: string;
+    customModel?: string;
   };
   title: string;
   repoPath: string;

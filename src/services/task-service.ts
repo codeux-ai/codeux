@@ -231,6 +231,7 @@ export class TaskService {
           providerMountAuth: selectedProviderSettings.mountAuth,
           providerAuthPath: selectedProviderSettings.authPath,
           customBaseUrl: selectedProviderSettings.customBaseUrl,
+          customModel: selectedProviderSettings.customModel,
         },
         task: {
           ...pseudoTask,
@@ -346,6 +347,7 @@ export class TaskService {
           providerMountAuth: selectedProviderSettings.mountAuth,
           providerAuthPath: selectedProviderSettings.authPath,
           customBaseUrl: selectedProviderSettings.customBaseUrl,
+          customModel: selectedProviderSettings.customModel,
         },
         task,
         repoPath,

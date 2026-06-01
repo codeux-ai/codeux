@@ -198,6 +198,8 @@ export class ProjectSetupService {
         openCodePackage: providerConfig.openCodePackage,
         providerMountAuth: providerConfig.providerMountAuth,
         providerAuthPath: providerConfig.providerAuthPath,
+        customBaseUrl: providerConfig.customBaseUrl,
+        customModel: providerConfig.customModel,
         sessionId,
         workspaceSessionId: `${projectId}-project-setup`,
         workflowSettings: {
@@ -299,6 +301,8 @@ export class ProjectSetupService {
     openCodePackage?: string;
     providerMountAuth?: boolean;
     providerAuthPath?: string;
+    customBaseUrl?: string;
+    customModel?: string;
   } {
     const route = resolveProviderForInvocation(settings, {
       invocation: "planning",
@@ -340,6 +344,8 @@ export class ProjectSetupService {
       openCodePackage: providerSettings.openCodePackage,
       providerMountAuth: providerSettings.mountAuth,
       providerAuthPath: providerSettings.authPath,
+      customBaseUrl: providerSettings.customBaseUrl,
+      customModel: providerSettings.customModel,
     };
   }
 

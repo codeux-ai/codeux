@@ -191,6 +191,142 @@ describe("ProviderRunner", () => {
     });
   });
 
+  it("routes Claude Code through a custom base URL and model when configured", async () => {
+    await runner.runProvider({
+      provider: "claude-code",
+      prompt: "build it",
+      cwd: "/repo",
+      model: "sonnet",
+      apiKey: "sk-anthropic",
+      customBaseUrl: "https://openrouter.ai/api/v1",
+      customModel: "anthropic/claude-sonnet-4.5",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
+      command: "claude",
+      args: expect.arrayContaining(["--model", "anthropic/claude-sonnet-4.5", "-p", "build it"]),
+      providerEnv: expect.objectContaining({
+        // Gateway auth uses a Bearer token; ANTHROPIC_API_KEY is cleared to avoid conflicts.
+        ANTHROPIC_AUTH_TOKEN: "sk-anthropic",
+        ANTHROPIC_API_KEY: "",
+        // Trailing /v1 is normalized off so Claude Code's appended /v1/messages resolves.
+        ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
+        ANTHROPIC_MODEL: "anthropic/claude-sonnet-4.5",
+        ANTHROPIC_SMALL_FAST_MODEL: "anthropic/claude-sonnet-4.5",
+      }),
+    }));
+  });
+
+  it("strips a trailing /v1 from the Claude Code base URL so Messages API paths resolve", async () => {
+    await runner.runProvider({
+      provider: "claude-code",
+      prompt: "build it",
+      cwd: "/repo",
+      model: "sonnet",
+      apiKey: "sk-anthropic",
+      customBaseUrl: "https://openrouter.ai/api/v1",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const env = dockerRunner.runProviderInDocker.mock.calls[0][0].providerEnv;
+    expect(env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe("sk-anthropic");
+  });
+
+  it("uses the standard Anthropic API key header when no custom base URL is set", async () => {
+    await runner.runProvider({
+      provider: "claude-code",
+      prompt: "build it",
+      cwd: "/repo",
+      model: "sonnet",
+      apiKey: "sk-anthropic",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const env = dockerRunner.runProviderInDocker.mock.calls[0][0].providerEnv;
+    expect(env.ANTHROPIC_API_KEY).toBe("sk-anthropic");
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+  });
+
+  it("routes Codex through a custom base URL and model via a dedicated model provider", async () => {
+    await runner.runProvider({
+      provider: "codex",
+      prompt: "ship it",
+      cwd: "/repo",
+      model: "gpt-5-codex",
+      apiKey: "sk-openai",
+      customBaseUrl: "https://openrouter.ai/api/v1",
+      customModel: "openai/gpt-5-codex",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
+      command: "codex",
+      args: expect.arrayContaining([
+        "-c", `model_provider="custom_gateway"`,
+        "-c", `model_providers.custom_gateway.base_url="https://openrouter.ai/api/v1"`,
+        "-c", `model_providers.custom_gateway.env_key="OPENAI_API_KEY"`,
+        "-c", `model_providers.custom_gateway.requires_openai_auth=false`,
+        "--model", "openai/gpt-5-codex", "ship it",
+      ]),
+      providerEnv: expect.objectContaining({
+        OPENAI_API_KEY: "sk-openai",
+        OPENAI_BASE_URL: "https://openrouter.ai/api/v1",
+        CODEX_MODEL: "openai/gpt-5-codex",
+      }),
+    }));
+  });
+
+  it("does not set a Codex wire_api override (Codex only supports the responses default)", async () => {
+    await runner.runProvider({
+      provider: "codex",
+      prompt: "ship it",
+      cwd: "/repo",
+      model: "gpt-5-codex",
+      apiKey: "sk-openai",
+      customBaseUrl: "https://openrouter.ai/api/v1",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    expect(args.some((a) => a.includes("wire_api"))).toBe(false);
+  });
+
+  it("does not inject Codex custom provider flags without a custom base URL", async () => {
+    await runner.runProvider({
+      provider: "codex",
+      prompt: "ship it",
+      cwd: "/repo",
+      model: "gpt-5-codex",
+      apiKey: "sk-openai",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    expect(args).not.toContain("-c");
+    expect(args).not.toContain(`model_provider="custom_gateway"`);
+  });
+
   it("builds OpenCode run commands with generated config content", async () => {
     await runner.runProvider({
       provider: "opencode",

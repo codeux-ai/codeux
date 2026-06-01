@@ -222,6 +222,9 @@ export const normalizeSystemIntegrationProviders = (
       ...(typeof rawValue.customBaseUrl === "string" && rawValue.customBaseUrl.trim().length > 0
         ? { customBaseUrl: rawValue.customBaseUrl.trim() }
         : {}),
+      ...(typeof rawValue.customModel === "string" && rawValue.customModel.trim().length > 0
+        ? { customModel: rawValue.customModel.trim() }
+        : {}),
       ...(providerId === "qwen-code" ? {
         qwenAuthMode: normalizeQwenAuthMode(rawValue.qwenAuthMode),
         qwenRegion: normalizeQwenRegion(rawValue.qwenRegion),
@@ -375,6 +378,9 @@ export const buildDashboardProviderSettings = (
             || DEFAULT_PROVIDER_AUTH_PATHS[providerId],
           ...(integrationProviders[providerConfigId]?.customBaseUrl
             ? { customBaseUrl: integrationProviders[providerConfigId].customBaseUrl }
+            : {}),
+          ...(integrationProviders[providerConfigId]?.customModel
+            ? { customModel: integrationProviders[providerConfigId].customModel }
             : {}),
           ...(providerId === "qwen-code" ? {
             qwenAuthMode: integrationProviders[providerConfigId]?.qwenAuthMode,

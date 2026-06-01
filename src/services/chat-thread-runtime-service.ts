@@ -56,6 +56,8 @@ export interface ThreadRouteResolution {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  customBaseUrl?: string;
+  customModel?: string;
   thinkingMode?: string;
 }
 
@@ -127,6 +129,8 @@ export class ChatThreadRuntimeService {
         openCodePackage: providerSettings.openCodePackage,
       providerMountAuth: providerSettings.mountAuth,
       providerAuthPath: providerSettings.authPath,
+      customBaseUrl: providerSettings.customBaseUrl,
+      customModel: providerSettings.customModel,
       thinkingMode: providerSettings.thinkingMode,
     };
   }
@@ -371,6 +375,8 @@ export class ChatThreadRuntimeService {
       openCodePackage: route.openCodePackage,
       providerMountAuth: route.providerMountAuth,
       providerAuthPath: route.providerAuthPath,
+      customBaseUrl: route.customBaseUrl,
+      customModel: route.customModel,
       sessionId: continueSessionId || thread.id,
       settings: dashboardSettings,
       prompt: finalPrompt,
@@ -508,6 +514,8 @@ export class ChatThreadRuntimeService {
         openCodePackage: route.openCodePackage,
         providerMountAuth: route.providerMountAuth,
         providerAuthPath: route.providerAuthPath,
+        customBaseUrl: route.customBaseUrl,
+        customModel: route.customModel,
         sessionId: `${thread.id}:compaction`,
         workflowSettings,
         repoPath,

@@ -32,6 +32,8 @@ export interface StructuredRequestArgs<T> {
   openCodePackage?: string;
   providerMountAuth?: boolean;
   providerAuthPath?: string;
+  customBaseUrl?: string;
+  customModel?: string;
   providerPrompt: string;
   repoPath: string;
   cwd?: string;
@@ -138,6 +140,8 @@ export class StructuredAgentRequestService {
         openCodePackage: args.openCodePackage,
       providerMountAuth: args.providerMountAuth,
       providerAuthPath: args.providerAuthPath,
+      customBaseUrl: args.customBaseUrl,
+      customModel: args.customModel,
       sessionId,
       workspaceSessionId: args.workspaceSessionId,
       workflowSettings: args.settings.cliWorkflow,

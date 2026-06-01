@@ -80,6 +80,7 @@ interface StartCliTaskInput {
     providerMountAuth?: boolean;
     providerAuthPath?: string;
     customBaseUrl?: string;
+    customModel?: string;
   };
   task: Subtask;
   repoPath: string;
