@@ -15,7 +15,7 @@ export interface WatchLoopDecision {
 
 export function decideMainMergeWaitOrPause(params: {
   mergeFeedback: MergeFeedbackResult;
-  attentionItems: Array<{ id: string; attentionType: string }>;
+  attentionItems: Array<{ id: string; attentionType: string; ownerType?: string }>;
   mainMergeMode: CiIntelligenceSettings["mainBranchAutoMergeMode"];
   sprintNumber: number;
 }): WatchLoopDecision | null {
@@ -28,6 +28,14 @@ export function decideMainMergeWaitOrPause(params: {
     mergeFeedback.state === "review_blocked";
 
   if (shouldPauseForMainMergeBlocker) {
+    const hasOpenWorkerAttention = attentionItems.some((item) => item.ownerType === "worker");
+    if (hasOpenWorkerAttention) {
+      return {
+        status: "wait",
+        reportModifier: "\n⏳ **Sprint Still Active:** Waiting for worker attention items to be cleared.\n",
+      };
+    }
+
     return {
       status: "exit",
       reportModifier: "\n⏸️ **Sprint Paused:** Main-branch merge is blocked by a conflict, failed checks, or unresolved review state. Resolve the blocker and resume the sprint.\n",

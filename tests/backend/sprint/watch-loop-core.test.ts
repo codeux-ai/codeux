@@ -1514,6 +1514,71 @@ describe("Watch Loop Policies", () => {
       });
     });
 
+    it("returns wait decision if main merge is blocked but has active worker attention items", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Conflict",
+          state: "merge_conflict",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: true,
+          mergeStateStatus: "DIRTY",
+          hasFailedChecks: false,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [
+          { id: "att-1", attentionType: "merge_conflict", ownerType: "worker" }
+        ],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision).toEqual({
+        status: "wait",
+        reportModifier: expect.stringContaining("Sprint Still Active"),
+      });
+    });
+
+    it("returns pause exit decision if main merge is blocked and has human attention items", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Conflict",
+          state: "merge_conflict",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: true,
+          mergeStateStatus: "DIRTY",
+          hasFailedChecks: false,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [
+          { id: "att-2", attentionType: "merge_conflict", ownerType: "human" }
+        ],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision).toEqual({
+        status: "exit",
+        reportModifier: expect.stringContaining("Sprint Paused"),
+        terminalState: "paused",
+        pauseReason: "main_merge_blocked",
+        pausePayload: {
+          sprintNumber: 5,
+          mainMergeState: "merge_conflict",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: true,
+          attentionItemIds: ["att-2"],
+          attentionTypes: ["merge_conflict"],
+        },
+      });
+    });
+
     it("returns wait decision if main merge mode is WHEN_GREEN and state is pending_checks", () => {
       const decision = decideMainMergeWaitOrPause({
         mergeFeedback: {
