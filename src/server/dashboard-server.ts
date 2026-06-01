@@ -208,6 +208,16 @@ export interface DashboardServerOptions {
 
   rerunTask: (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean }) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
+  stopQaReview?: (args: { runId?: string; taskId?: string; sprintId?: string }) => Promise<{ ok: boolean }>;
+  runQaReview?: (args: {
+    projectId: string;
+    taskId?: string;
+    sprintId?: string;
+    provider?: string;
+    providerConfigId?: string;
+    model?: string;
+    agentPresetId?: string;
+  }) => Promise<{ ok: boolean }>;
 
   improveSprintPrompt?: (projectId: string, input: ImprovePromptInput, signal?: AbortSignal) => Promise<unknown>;
   planSprint?: (projectId: string, sprintId: string, options: PlanSprintOptions, signal?: AbortSignal) => Promise<unknown>;

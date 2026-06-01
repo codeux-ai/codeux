@@ -48,4 +48,36 @@ export function registerExecutionControlRoutes(app: Express, options: DashboardD
   app.post("/api/task-dispatches/:dispatchId/retry", asyncRoute(async (req, res) => {
     res.json(await options.retryTaskDispatch(requireTrimmedString(req.params.dispatchId, "dispatchId")));
   }));
+
+  app.post("/api/qa/stop", asyncRoute(async (req, res) => {
+    if (!options.stopQaReview) {
+      res.status(404).json({ error: "QA stop control is not available." });
+      return;
+    }
+    const { runId, taskId, sprintId } = req.body || {};
+    const result = await options.stopQaReview({ runId, taskId, sprintId });
+    res.json(result);
+  }));
+
+  app.post("/api/qa/run", asyncRoute(async (req, res) => {
+    if (!options.runQaReview) {
+      res.status(404).json({ error: "QA run control is not available." });
+      return;
+    }
+    const { projectId, taskId, sprintId, provider, providerConfigId, model, agentPresetId } = req.body || {};
+    if (!projectId) {
+      res.status(400).json({ error: "projectId is required." });
+      return;
+    }
+    const result = await options.runQaReview({
+      projectId,
+      taskId,
+      sprintId,
+      provider,
+      providerConfigId,
+      model,
+      agentPresetId,
+    });
+    res.json(result);
+  }));
 }

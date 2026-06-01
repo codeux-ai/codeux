@@ -984,7 +984,8 @@ export class ProjectManagementRepository {
             'summary', q.summary_markdown,
             'findings', COALESCE(json_extract(q.payload_json, '$.findings'), json_array()),
             'reviewer', q.agent_name,
-            'finishedAt', q.finished_at
+            'finishedAt', q.finished_at,
+            'errorCode', json_extract(q.payload_json, '$.error_code')
           ) AS latest_task_review_json
         FROM qa_review_runs q
         WHERE q.task_id`,
@@ -1084,6 +1085,11 @@ export class ProjectManagementRepository {
       }
     }
 
+    let effectiveStatus = mapEffectiveSprintStatus(row.status, row.latest_run_status);
+    if (latestReview?.errorCode === "QUOTA_EXHAUSTED" || latestReview?.errorCode === "RATE_LIMITED") {
+      effectiveStatus = "quota";
+    }
+
     return {
       id: row.id,
       projectId: row.project_id,
@@ -1092,7 +1098,7 @@ export class ProjectManagementRepository {
       name: row.name,
       originalPrompt: row.original_prompt || null,
       goal: row.goal || "",
-      status: mapEffectiveSprintStatus(row.status, row.latest_run_status),
+      status: effectiveStatus,
       showcasePinned: toBoolean(row.showcase_pinned),
       startDate: row.start_date,
       endDate: row.end_date,

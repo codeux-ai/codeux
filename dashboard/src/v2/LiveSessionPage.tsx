@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { lazy, Suspense } from "preact/compat";
-import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
+import { useLayoutEffect, useRef, useState, useEffect, useMemo, useCallback } from "preact/hooks";
 import gsap from "gsap";
 import {
     Zap, Clock, CheckCircle2, XCircle,
@@ -35,6 +35,8 @@ import {
     EMPTY_RUNTIME_STATS,
 } from "./lib/live-session-config.js";
 import { LiveTaskCard, TaskDuration, QuotaCountdown } from "./components/LiveTaskCard.js";
+import { ManualQaModal } from "./components/ui/ManualQaModal.js";
+import { stopQaReview, runQaReview } from "../lib/api/dashboard-api.js";
 import { LiveTransportBanner } from "./components/live-session/LiveTransportBanner.js";
 import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
 import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
@@ -137,6 +139,31 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
     const { feedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
+    const [qaTask, setQaTask] = useState<Subtask | null>(null);
+
+    const handleStopTaskQa = useCallback(async (task: Subtask) => {
+        try {
+            await stopQaReview({ taskId: task.record_id || task.id });
+        } catch (err) {
+            console.error("Failed to stop task QA", err);
+        }
+    }, []);
+
+    const handleRunTaskQaConfirm = useCallback(async (options: { provider?: string; providerConfigId?: string; model?: string; agentPresetId?: string }) => {
+        if (!qaTask || !selectedProjectId) return;
+        try {
+            await runQaReview({
+                projectId: selectedProjectId,
+                taskId: qaTask.record_id || qaTask.id,
+                provider: options.provider,
+                providerConfigId: options.providerConfigId,
+                model: options.model,
+                agentPresetId: options.agentPresetId,
+            });
+        } catch (err) {
+            console.error("Failed to run task QA", err);
+        }
+    }, [qaTask, selectedProjectId]);
 
     const {
         rerunningIds,
@@ -549,6 +576,8 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 forceCompleteError={forceCompleteError}
                                 dispatchInfo={dispatchInfo}
                                 agentPreset={task.agentPresetId ? agentPresetsMap.get(task.agentPresetId) ?? null : null}
+                                onRunQaReview={(t) => setQaTask(t)}
+                                onStopQaReview={(t) => void handleStopTaskQa(t)}
                             />
                         ))
                     )}
@@ -596,6 +625,13 @@ export const LiveSessionPage: FunctionComponent = () => {
                     />
                 </div>
             </div>
+            {qaTask && (
+                <ManualQaModal
+                    task={qaTask}
+                    onClose={() => setQaTask(null)}
+                    onConfirm={handleRunTaskQaConfirm}
+                />
+            )}
         </PageContainer>
     );
 };

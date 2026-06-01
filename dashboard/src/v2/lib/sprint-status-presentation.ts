@@ -82,6 +82,19 @@ export function getSprintStatusPresentation(input: SprintStatusPresentationInput
     };
   }
 
+  if (state === "quota") {
+    return {
+      statusLabel: "Quota Reached",
+      title: "Provider Quota Exceeded",
+      reason: "The provider's quota limits were reached during execution.",
+      detail: "Review the provider API keys or wait for quota resetting.",
+      showHumanInterventionBadge: false,
+      pauseSource,
+      isManualPause: false,
+      isSystemStop: false,
+    };
+  }
+
   if (state === "running" || state === "queued") {
     return {
       statusLabel: "Running",

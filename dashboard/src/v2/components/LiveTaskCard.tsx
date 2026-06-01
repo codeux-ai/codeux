@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useMemo, useCallback } fr
 import gsap from "gsap";
 import {
     Clock, ChevronDown, ChevronRight, Eye, EyeOff,
-    FileText, RotateCcw, GitPullRequest, ExternalLink, Timer, CheckCheck, PencilLine,
+    FileText, RotateCcw, GitPullRequest, ExternalLink, Timer, CheckCheck, PencilLine, Play, Square,
 } from "lucide-preact";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
@@ -147,6 +147,8 @@ export interface LiveTaskCardProps {
         status: string | null;
     } | null;
     agentPreset?: { name: string; avatarConfig?: import("../types.js").AgentAvatarConfig } | null;
+    onRunQaReview?: (task: Subtask) => void;
+    onStopQaReview?: (task: Subtask) => void;
 }
 
 const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
@@ -162,6 +164,8 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     forceCompleteError = null,
     dispatchInfo,
     agentPreset,
+    onRunQaReview,
+    onStopQaReview,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const [showFeed, setShowFeed] = useState(false);
@@ -503,6 +507,28 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         >
                             Rerun
                         </Button>
+                        {onStopQaReview && task.latestReview?.status === "running" && (
+                            <Button
+                                type="button"
+                                onClick={() => onStopQaReview(task)}
+                                variant="ghost"
+                                icon={Square}
+                                className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] text-status-red hover:bg-status-red/10 border-transparent focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
+                            >
+                                Stop QA
+                            </Button>
+                        )}
+                        {onRunQaReview && task.latestReview?.status !== "running" && (
+                            <Button
+                                type="button"
+                                onClick={() => onRunQaReview(task)}
+                                variant="ghost"
+                                icon={Play}
+                                className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] text-status-green hover:bg-status-green/10 border-transparent focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
+                            >
+                                Run QA
+                            </Button>
+                        )}
                     </div>
                     {task.pr_url && (
                         <a

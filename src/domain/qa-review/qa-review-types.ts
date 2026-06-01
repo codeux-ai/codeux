@@ -1,3 +1,5 @@
+import { ProviderQuotaError } from "../../shared/providers/provider-error-classifier.js";
+
 export interface QaReviewResultPayload {
   verdict?: unknown;
   summary?: unknown;
@@ -35,12 +37,15 @@ export interface NormalizedQaReviewResult {
   followUpTasks: NormalizedQaFollowUpTask[];
   raw: Record<string, unknown>;
 }
+
 export type QaReviewErrorCode =
   | 'API_TIMEOUT'
   | 'PARSE_FAILURE'
   | 'TRANSPORT_ERROR'
   | 'AUTH_FAILURE'
   | 'SCHEMA_VIOLATION'
+  | 'QUOTA_EXHAUSTED'
+  | 'RATE_LIMITED'
   | 'UNKNOWN';
 
 export class QaReviewError extends Error {
@@ -60,6 +65,24 @@ export function parseQaError(error: unknown): QaReviewError {
     return error;
   }
 
+  if (error instanceof ProviderQuotaError) {
+    if (error.category === 'QUOTA_EXHAUSTED') {
+      return new QaReviewError(
+        'QUOTA_EXHAUSTED',
+        error.message,
+        false,
+        { category: error.category, retryAfterIso: error.retryAfterIso }
+      );
+    } else if (error.category === 'RATE_LIMITED') {
+      return new QaReviewError(
+        'RATE_LIMITED',
+        error.message,
+        true,
+        { category: error.category, retryAfterIso: error.retryAfterIso }
+      );
+    }
+  }
+
   const message = error instanceof Error ? error.message : String(error);
   const lowerMessage = message.toLowerCase();
 
@@ -76,6 +99,12 @@ export function parseQaError(error: unknown): QaReviewError {
   ) {
     code = 'PARSE_FAILURE';
     isRetryable = false;
+  } else if (lowerMessage.includes("quota_exhausted") || lowerMessage.includes("quota exceeded") || lowerMessage.includes("insufficient_quota") || lowerMessage.includes("capacity")) {
+    code = 'QUOTA_EXHAUSTED';
+    isRetryable = false;
+  } else if (lowerMessage.includes("rate_limited") || lowerMessage.includes("rate limit") || lowerMessage.includes("too many requests") || lowerMessage.includes("429")) {
+    code = 'RATE_LIMITED';
+    isRetryable = true;
   } else if (lowerMessage.includes("timeout")) {
     code = 'API_TIMEOUT';
     isRetryable = true;
