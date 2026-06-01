@@ -722,4 +722,145 @@ describe("LiveSessionPage Integration Isolation", () => {
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).queryByText("Restart failure should be hidden")).not.toBeInTheDocument();
   });
+
+  it("renders the redesigned sidebar composition with active CI and stable card order", () => {
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      gitStatus: {
+        mode: "REMOTE",
+        available: true,
+        repositoryRoot: "/repo",
+        branch: "feat/live-sidebar",
+        hasRemote: true,
+        dirty: false,
+        tracking: {
+          scope: "FEATURE_PR_CI",
+          label: "Feature PR + CI",
+          branch: "feat/live-sidebar",
+        },
+        warnings: [],
+        lastUpdated: "2024-01-01T11:05:00Z",
+        openPullRequests: [
+          {
+            number: 17,
+            title: "Refine runtime sidebar",
+            url: "https://github.com/example/repo/pull/17",
+            state: "OPEN",
+            isDraft: false,
+            headRefName: "feat/live-sidebar",
+            baseRefName: "main",
+            mergeStateStatus: "QUEUED",
+            reviewDecision: null,
+            updatedAt: "2024-01-01T11:03:00Z",
+            comments: 2,
+            checks: [],
+          },
+        ],
+        ciRuns: [
+          {
+            id: 101,
+            name: "unit-and-integration",
+            workflowName: "CI",
+            status: "IN_PROGRESS",
+            conclusion: null,
+            event: "pull_request",
+            headBranch: "feat/live-sidebar",
+            url: "https://github.com/example/repo/actions/runs/101",
+            updatedAt: "2024-01-01T11:04:00Z",
+            failedJobs: [],
+          },
+        ],
+        mergedPullRequests: [],
+      },
+      gitStatusError: null,
+      initialLoadComplete: true,
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: "2024-01-01T11:05:00Z",
+      refreshGitStatus: vi.fn(),
+      refreshRuntimeStatus: vi.fn(),
+      selectedSprintId: "sprint-1",
+      status: {
+        project_id: "p1",
+        sprint_id: "sprint-1",
+        sprint_number: 1,
+        timestamp: "2024-01-01T11:05:00Z",
+        subtasks: [],
+      },
+      execution: {
+        ...mockExecution,
+        connections: [
+          {
+            id: "conn-1",
+            role: "listener",
+            status: "listening",
+            listenMode: true,
+            displayName: "Primary Listener",
+            transport: "streamable_http",
+            model: "gpt-5",
+            connectionKey: "listener-1",
+            lastHeartbeatAt: "2024-01-01T11:04:30Z",
+            pendingInboxCount: 1,
+            activeDispatchCount: 1,
+            threadCount: 3,
+            tasksRunCount: 4,
+            labels: ["runtime"],
+            instruction: "Handle live task orchestration updates.",
+            machineName: "runner-a",
+            platform: "linux",
+            arch: "x64",
+            localExecutionRuntime: "host",
+          },
+        ],
+        attentionItems: [
+          {
+            id: "attn-1",
+            projectId: "p1",
+            sprintId: "sprint-1",
+            taskId: "task-1",
+            dispatchId: "dispatch-1",
+            attentionType: "manual_attention",
+            ownerType: "worker",
+            status: "open",
+            severity: "medium",
+            title: "Review failing CI logs",
+            summaryMarkdown: "The worker needs a human decision before continuing.",
+            assignedWorkerEndpointId: null,
+            createdAt: "2024-01-01T11:02:00Z",
+            updatedAt: "2024-01-01T11:04:00Z",
+            expiresAt: null,
+          },
+        ],
+      },
+      stats: { total: 0 } as any,
+      tasksWithLiveActivities: [],
+    } as any);
+
+    render(<LiveSessionPage />);
+
+    const liveConnections = screen.getAllByText("Live Connections").find((node) => node.closest("aside")) ?? null;
+    const gitCiPr = screen.getByText("Git / CI / PR");
+    const attentionQueue = screen.getByText("Attention Queue");
+    const executionRuntime = screen.getByText("Execution Runtime");
+
+    expect(liveConnections).not.toBeNull();
+    expect(gitCiPr).toBeInTheDocument();
+    expect(attentionQueue).toBeInTheDocument();
+    expect(executionRuntime).toBeInTheDocument();
+    expect(screen.getAllByText("Primary Listener").length).toBeGreaterThan(0);
+    expect(screen.getByText("Review failing CI logs")).toBeInTheDocument();
+
+    expect(screen.queryByText("Latest Activity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Protocol")).not.toBeInTheDocument();
+
+    expect(Boolean((liveConnections as HTMLElement).compareDocumentPosition(gitCiPr) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(gitCiPr.compareDocumentPosition(attentionQueue) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(attentionQueue.compareDocumentPosition(executionRuntime) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+
+    const inProgressStatus = screen.getByText("IN_PROGRESS");
+    expect(inProgressStatus).toBeInTheDocument();
+    const ciRunCard = inProgressStatus.closest("a");
+    expect(ciRunCard).not.toBeNull();
+    expect(ciRunCard?.querySelector("svg.animate-spin")).toBeTruthy();
+  });
 });
