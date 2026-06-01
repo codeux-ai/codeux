@@ -206,7 +206,7 @@ export interface DashboardServerOptions {
   listProjectInvocations: (projectId: string) => ExecutionInvocationRecord[];
   listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];
 
-  rerunTask: (taskId: string, options?: { provider?: string; clearWorktree?: boolean; resetDependents?: boolean }) => Promise<unknown>;
+  rerunTask: (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean }) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
 
   improveSprintPrompt?: (projectId: string, input: ImprovePromptInput, signal?: AbortSignal) => Promise<unknown>;
@@ -221,6 +221,7 @@ export interface DashboardServerOptions {
   forceCancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   cancelTaskDispatch: (dispatchId: string) => Promise<unknown> | unknown;
   forceCancelTaskDispatch: (dispatchId: string) => Promise<unknown> | unknown;
+  forceCompleteTask: (projectId: string, taskId: string, reason: string) => Promise<void>;
   retryTaskDispatch: (dispatchId: string) => Promise<unknown>;
   realtimeService?: DashboardRealtimeService;
   logger?: Logger;

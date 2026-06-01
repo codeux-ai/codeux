@@ -535,9 +535,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     listProjectInvocations: (projectId) => deps.executionRepository.listExecutionInvocations({ projectId }),
     listInvocationMessages: (invocationId) => deps.executionRepository.listExecutionInvocationMessages(invocationId),
 
-    rerunTask: async (taskId: string, options?: { provider?: string; clearWorktree?: boolean; resetDependents?: boolean }) => {
+    rerunTask: async (taskId: string, options?: { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean }) => {
       const task = await deps.taskRerunService.rerunTask(taskId, {
         provider: options?.provider as import("../../contracts/app-types.js").ProviderId | undefined,
+        providerConfigId: options?.providerConfigId,
+        model: options?.model,
         clearWorktree: options?.clearWorktree,
         resetDependents: options?.resetDependents,
       });
@@ -563,6 +565,10 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     forceCancelSprintRun: async (sprintRunId) => deps.executionControlService.forceCancelSprintRun(sprintRunId),
     cancelTaskDispatch: async (dispatchId) => deps.executionControlService.cancelTaskDispatch(dispatchId),
     forceCancelTaskDispatch: async (dispatchId) => deps.executionControlService.forceCancelTaskDispatch(dispatchId),
+    forceCompleteTask: async (projectId, taskId, reason) => {
+      await deps.executionControlService.forceCompleteTask(projectId, taskId, reason);
+      deps.activityCacheService.invalidateLiveActivitiesCache();
+    },
     retryTaskDispatch: async (dispatchId) => {
       const result = await deps.executionControlService.retryTaskDispatch(dispatchId);
       deps.activityCacheService.invalidateGitStatusCache();

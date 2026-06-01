@@ -60,7 +60,9 @@ export function deriveLiveSessionRuntimeState(
     : execution.sprintRuns;
 
   const liveSprintRun = candidateRuns.find((run) => run.status === "running" || run.status === "queued") || null;
-  const pausedInterventionRun = getPrimaryPausedInterventionRun(execution, scopeSprintId);
+  const pausedInterventionRun = getPrimaryPausedInterventionRun(execution, scopeSprintId)
+    || candidateRuns.find((run) => run.status === "paused")
+    || null;
   const hasActiveSprint = Boolean(liveSprintRun);
   const hasSprintContext = Boolean(
     hasActiveSprint

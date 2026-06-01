@@ -297,7 +297,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       <div className="min-h-[20rem] px-3 py-4 sm:px-4 lg:px-5">
         <Table>
           <TableHeader>
-            <TableCell isHeader isFirst className="w-12">
+            <TableCell isHeader isFirst className="w-[80px] min-w-[80px]">
               <button
                 type="button"
                 disabled={windowedSprints.length === 0 || isAnyBulkPending}
@@ -310,7 +310,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   : <Square className="h-4 w-4" strokeWidth={2.2} />}
               </button>
             </TableCell>
-            <TableCell isHeader className="group">
+            <TableCell isHeader className="group w-[80px] min-w-[80px]">
               <button
                 type="button"
                 onClick={() => handleSort("showcasePinned")}
@@ -320,7 +320,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 {renderSortIndicator("showcasePinned")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]">
               <button
                 type="button"
                 onClick={() => handleSort("sprintKey")}
@@ -330,7 +330,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 {renderSortIndicator("sprintKey")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group">
+            <TableCell isHeader className="group w-[220px] min-w-[220px]">
               <button
                 type="button"
                 onClick={() => handleSort("name")}
@@ -340,7 +340,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 {renderSortIndicator("name")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]">
               <button
                 type="button"
                 onClick={() => handleSort("status")}
@@ -350,7 +350,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 {renderSortIndicator("status")}
               </button>
             </TableCell>
-            <TableCell isHeader align="right" className="group">
+            <TableCell isHeader align="right" className="group w-[100px] min-w-[100px]">
               <button
                 type="button"
                 onClick={() => handleSort("tasksCount")}
@@ -360,7 +360,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 Tasks
               </button>
             </TableCell>
-            <TableCell isHeader align="right" className="group">
+            <TableCell isHeader align="right" className="group w-[140px] min-w-[140px]">
               <button
                 type="button"
                 onClick={() => handleSort("completion")}
@@ -370,7 +370,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 Completion
               </button>
             </TableCell>
-            <TableCell isHeader className="group">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]">
               <button
                 type="button"
                 onClick={() => handleSort("createdAt")}
@@ -380,7 +380,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 {renderSortIndicator("createdAt")}
               </button>
             </TableCell>
-            <TableCell isHeader align="right" isLast>Controls</TableCell>
+            <TableCell isHeader align="right" isLast className="w-[140px] min-w-[140px]">Controls</TableCell>
           </TableHeader>
           <TableBody>
             {isLoading && windowedSprints.length === 0 ? (

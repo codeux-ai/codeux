@@ -26,6 +26,9 @@ import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { DropdownMenu } from "../ui/DropdownMenu.js";
+import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -85,6 +88,7 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onMarkCompleted,
 }) => {
   const settings = useProjectEffectiveSettings(sprint.projectId);
+  const reducedMotion = useReducedMotion();
   const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
 
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -93,7 +97,21 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   const StatusIcon = state.icon;
   const isCompleted = sprint.status === "completed";
   const isRunning = sprint.status === "running";
+  const statusPresentation = getSprintStatusPresentation({
+    state: sprint.status,
+    humanInterventionTitle: humanIntervention?.title ?? null,
+    humanInterventionReason: humanIntervention?.reason ?? null,
+    humanInterventionInstructions: humanIntervention?.instructions ?? null,
+    humanInterventionOwnerType: humanIntervention?.ownerType ?? null,
+  });
+  const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
   const animationClass = isCompleted ? "" : isEven ? "animate-organic" : "animate-organic-reverse";
+  const interventionPulseStyle = reducedMotion
+    ? undefined
+    : {
+      animationDuration: `calc(${MOTION_TOKENS.timing.slow} * 12)`,
+      animationTimingFunction: MOTION_TOKENS.easing.standard,
+    };
 
   const handleHoverEnter = () => {
     if (!bubbleRef.current || isCompleted) {
@@ -200,13 +218,15 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           {formatCardDate(sprint.createdAt)}
         </div>
 
-        {(humanIntervention || sprint.latestReview) && (
-          <div className="absolute right-7 top-7 flex items-center gap-2 z-[60]">
+{(showInterventionBadge || sprint.latestReview) && (
+          <div className="absolute right-4 top-4 z-[60] flex items-center gap-2 lg:right-5 lg:top-5">
             {sprint.latestReview && (
               <SprintReviewBadge summary={sprint.latestReview} compact align="right" />
             )}
-            {humanIntervention && (
-              <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="right" />
+            {showInterventionBadge && humanIntervention && (
+              <div className={reducedMotion ? "" : "animate-pulse"} style={interventionPulseStyle}>
+                <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="right" />
+              </div>
             )}
           </div>
         )}
@@ -233,13 +253,6 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Done</div>
           </div>
         </div>
-
-        {humanIntervention && (
-          <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-status-amber/20 bg-status-amber/10 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber transition-transform duration-300 group-hover:-translate-y-3">
-            <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.2} />
-            Human intervention required
-          </div>
-        )}
 
         <div className="absolute bottom-5 flex w-full translate-y-2 items-center justify-center gap-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
           <button

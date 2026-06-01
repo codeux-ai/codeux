@@ -18,7 +18,7 @@ import { DockerBootstrapBuilder } from "../infrastructure/providers/cli/docker-b
 import { DockerCredentialMountBuilder } from "../infrastructure/providers/cli/docker-credential-mount-builder.js";
 import { DockerSetupImageCache } from "../infrastructure/providers/cli/docker-setup-image-cache.js";
 import { resolveDockerRuntimeRoot } from "../infrastructure/providers/cli/docker-runtime-paths.js";
-import { formatSprintBranch } from "../git/sprint-branch-scheme.js";
+import { formatSprintBranch } from "../domain/sprint/branch-name-generator.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import {
   getDockerUserSpec,

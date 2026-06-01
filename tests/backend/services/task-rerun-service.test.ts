@@ -110,6 +110,10 @@ describe("TaskRerunService", () => {
       featureBranch: "feature/sprint7-implementation",
       repoPath: "/tmp/repo",
       sprintNumber: 7,
+      providerConfigId: undefined,
+      resumeWorkspaceSessionId: "old-session",
+      resumeWorkerBranch: "worker/task-1",
+      forceFreshWorkspace: false,
     });
     expect(rerunTask.session_id).toBe("new-session");
     expect(rerunTask.session_name).toBe("sessions/new-session");
@@ -120,6 +124,44 @@ describe("TaskRerunService", () => {
       projectId: "project-1",
     });
     expect(createResetTaskRun).not.toHaveBeenCalled();
+  });
+
+  it("keeps newer CLI providers on the restarted task", async () => {
+    resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-1", created: false });
+    startTask.mockResolvedValue({
+      id: "new-session",
+      name: "sessions/new-session",
+      prompt: "",
+      provider: "antigravity",
+    });
+
+    const rerunTask = await service.rerunTask("task-record-1", { provider: "antigravity" });
+
+    expect(rerunTask.provider).toBe("antigravity");
+  });
+
+  it("passes selected provider instance and model into the restarted task dispatch", async () => {
+    resolveSprintRunId.mockResolvedValue({ sprintRunId: "run-1", created: false });
+    startTask.mockResolvedValue({
+      id: "new-session",
+      name: "sessions/new-session",
+      prompt: "",
+      provider: "gemini",
+    });
+
+    await service.rerunTask("task-record-1", {
+      provider: "gemini",
+      providerConfigId: "gemini-secondary",
+      model: "gemini-2.5-flash",
+    });
+
+    expect(startTask).toHaveBeenCalledWith(expect.objectContaining({
+      providerConfigId: "gemini-secondary",
+      task: expect.objectContaining({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
+      }),
+    }));
   });
 
   it("marks the task failed when fresh session start fails", async () => {
@@ -226,6 +268,9 @@ describe("TaskRerunService", () => {
         pr_url: undefined,
         is_merged: false,
       }),
+      resumeWorkspaceSessionId: undefined,
+      resumeWorkerBranch: undefined,
+      forceFreshWorkspace: true,
     }));
   });
 

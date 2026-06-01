@@ -25,6 +25,7 @@ import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { SprintControls } from "./SprintControls.js";
 import { TableRow, TableCell } from "../ui/Table.js";
+import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
 
 // Polished badge tones: increased contrast for backgrounds and borders where appropriate
 const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
@@ -106,6 +107,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const pinActionId = `sprint-showcase:${sprint.id}`;
   const deleteActionId = `sprint-delete:${sprint.id}`;
   const isCompleted = sprint.status === "completed";
+  const statusPresentation = getSprintStatusPresentation({
+    state: sprint.status,
+    humanInterventionTitle: humanIntervention?.title ?? null,
+    humanInterventionReason: humanIntervention?.reason ?? null,
+    humanInterventionInstructions: humanIntervention?.instructions ?? null,
+    humanInterventionOwnerType: humanIntervention?.ownerType ?? null,
+  });
+  const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
 
   const isTogglePending = pendingActionIds.has(pendingToggleActionId);
   const isPauseResumePending = pendingPauseResumeActionId.length > 0 && pendingActionIds.has(pendingPauseResumeActionId);
@@ -129,7 +138,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     <TableRow
       className={`group transition-all duration-300 hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${isDeletePending ? "grayscale opacity-50" : ""} hover:bg-[var(--bg-hover-subtle)]`}
     >
-      <TableCell isFirst className={`w-12 ${desktopCellTone}`}>
+      <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
@@ -142,7 +151,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             : <Square className="h-4 w-4" strokeWidth={2.2} />}
         </button>
       </TableCell>
-      <TableCell className={`w-20 ${desktopCellTone}`}>
+      <TableCell className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
         <button
           type="button"
           onClick={() => onToggleShowcase(sprint)}
@@ -161,14 +170,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           )}
         </button>
       </TableCell>
-      <TableCell className={`min-w-[8rem] ${desktopCellTone}`}>
+      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Sprint ID</span>
         <div className="font-mono text-sm font-bold text-[var(--text-primary)] truncate">{formatSprintKey(sprint, sprintKeyPrefix)}</div>
         <div className="mt-1 text-[10px] font-bold text-slate-400 truncate">
           {shortenId(sprint.id)}
         </div>
       </TableCell>
-      <TableCell className={`min-w-0 max-w-full ${desktopCellTone}`}>
+      <TableCell className={`min-w-0 max-w-full lg:w-[220px] lg:min-w-[220px] ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Sprint</span>
         <div className="flex flex-wrap items-center gap-2">
           <div className={`font-display text-lg font-black leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-[var(--text-primary)]"}`}>{sprint.name}</div>
@@ -185,7 +194,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             Created {formatTableDate(sprint.createdAt)}
           </span>
         </div>
-        {humanIntervention && isSprintActionable(sprint.status) && humanIntervention.ownerType !== "worker" && (
+        {showInterventionBadge && isSprintActionable(sprint.status) && humanIntervention && (
           <div className="mt-3">
             <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="left" />
           </div>
@@ -203,21 +212,15 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           </p>
         ) : null}
       </TableCell>
-      <TableCell className={desktopCellTone}>
+      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
         <div className="flex flex-wrap items-center gap-2 lg:flex-col lg:items-start">
           <span className="text-[10px] font-bold text-slate-400 lg:hidden">Status</span>
           <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${STATUS_BADGE_TONES[sprint.status]}`}>
             {STATUS_LABELS[sprint.status]}
           </span>
-          {humanIntervention && isSprintActionable(sprint.status) && humanIntervention.ownerType !== "worker" && (
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-status-amber">
-              <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.2} />
-              Intervention
-            </div>
-          )}
         </div>
       </TableCell>
-      <TableCell align="right" className={desktopCellTone}>
+      <TableCell align="right" className={`lg:w-[100px] lg:min-w-[100px] ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Tasks</span>
         <div className="flex items-center gap-3 justify-end lg:block">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/70 text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04] lg:hidden">
@@ -229,7 +232,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           </div>
         </div>
       </TableCell>
-      <TableCell align="right" className={`min-w-[12rem] ${desktopCellTone}`}>
+      <TableCell align="right" className={`min-w-[12rem] lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Completion</span>
         <div className="flex items-center justify-end gap-3">
           <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10 ring-1 ring-black/[0.03] dark:bg-white/[0.08] dark:ring-white/[0.04]">
@@ -241,7 +244,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <span className="font-mono text-sm font-bold text-[var(--text-primary)]">{sprint.completion}%</span>
         </div>
       </TableCell>
-      <TableCell className={desktopCellTone}>
+      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Created</span>
         <div className="font-medium text-[var(--text-primary)]">{formatTableDate(sprint.createdAt)}</div>
         <div className="mt-1 text-[11px] text-slate-400">created</div>
@@ -261,7 +264,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           )}
         </div>
       </TableCell>
-      <TableCell align="right" isLast className={desktopCellTone}>
+      <TableCell align="right" isLast className={`lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`}>
         <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Controls</span>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:whitespace-nowrap">
           <SprintControls

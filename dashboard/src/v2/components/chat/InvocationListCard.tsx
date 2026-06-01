@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import type { ExecutionInvocationRecord, AgentPreset } from "../../types.js";
 import { formatRelativeChatTime } from "../../lib/chat-time.js";
-import { Activity, MessageSquare } from "lucide-preact";
+import { Activity, Loader2, MessageSquare } from "lucide-preact";
 import { ProviderLogo } from "../ui/ProviderLogo.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
@@ -59,6 +59,7 @@ export const InvocationListCard: FunctionComponent<{
       const ss = STATUS_STYLES[invocation.status] || DEFAULT_STATUS_STYLE;
       const isSelected = selectedInvocationId === invocation.id;
       const isRunning = invocation.status === "running";
+      const isOptimistic = invocation.id.startsWith("optimistic:");
       const agentPreset = invocation.agentPresetId
         ? agentPresets?.find(p => p.id === invocation.agentPresetId)
         : undefined;
@@ -71,6 +72,7 @@ export const InvocationListCard: FunctionComponent<{
             className={`w-full rounded-[1.75rem] p-5 text-left transition-all duration-200
               bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl
               shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
+              ${isOptimistic ? "opacity-70" : ""}
               ${isSelected
                 ? "border-2 border-signal-500/30 shadow-[0_0_24px_rgba(0,224,160,0.08)]"
                 : "border border-black/[0.06] dark:border-white/[0.06] hover:border-slate-300 dark:hover:border-white/[0.12]"
@@ -113,6 +115,12 @@ export const InvocationListCard: FunctionComponent<{
                         <span className={`inline-block w-1.5 h-1.5 rounded-full ${ss.dot} ${isRunning ? "animate-pulse" : ""}`} />
                         {invocation.status}
                       </span>
+                      {isOptimistic && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-slate-500/20 bg-slate-500/[0.08] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                          Pending
+                        </span>
+                      )}
                       {(invocation.sprintId || invocation.taskId) && (
                         <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
                           {invocation.taskId ? "Task" : "Sprint"}

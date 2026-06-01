@@ -15,6 +15,12 @@ import type {
   ThinkingMode,
 } from "../../types.js";
 import { cloneGuardrails } from "../../lib/settings.js";
+import {
+  BRANCH_NAME_TOKENS,
+  BRANCH_NAME_TOKEN_ALIASES,
+  type BranchNameToken,
+} from "../../../../src/domain/settings/branch-name-tokens.js";
+import { DEFAULT_PROVIDER_WEIGHT } from "../../../../src/repositories/settings-defaults.js";
 
 const cloneSkills = (skills: SkillToggle[]): SkillToggle[] => skills.map((skill) => ({ ...skill }));
 const cloneMcpTools = (tools: McpToolToggle[]): McpToolToggle[] => tools.map((tool) => ({ ...tool }));
@@ -313,7 +319,7 @@ export const createProjectProviderDraft = (
       : providerId === "opencode"
         ? "anthropic/claude-sonnet-4-5"
         : "default",
-  weight: providerId === "jules" ? 60 : providerId === "claude-code" || providerId === "qwen-code" || providerId === "opencode" ? 0 : 20,
+  weight: DEFAULT_PROVIDER_WEIGHT,
   thinkingMode: providerId === "codex" || providerId === "claude-code" || providerId === "qwen-code" || providerId === "opencode" ? "HIGH" : "MEDIUM",
   maxConcurrentTasks: providerId === "jules" ? 15 : 0,
 });
@@ -488,6 +494,9 @@ const getHintApiKey = (
   if (providerId === "qwen-code") {
     return hints?.resolved.qwenCodeApiKey || "";
   }
+  if (providerId === "antigravity") {
+    return hints?.resolved.antigravityApiKey || "";
+  }
   return hints?.resolved.openCodeApiKey || "";
 };
 
@@ -511,6 +520,9 @@ const getLegacyIntegrationApiKey = (
   if (providerId === "qwen-code") {
     return typeof integrations.qwenCodeApiKey === "string" ? integrations.qwenCodeApiKey : "";
   }
+  if (providerId === "antigravity") {
+    return typeof integrations.antigravityApiKey === "string" ? integrations.antigravityApiKey : "";
+  }
   return typeof integrations.openCodeApiKey === "string" ? integrations.openCodeApiKey : "";
 };
 
@@ -523,7 +535,7 @@ export const getSystemIntegrationProviders = (
   }
 
   const fallback: Record<ProviderConfigId, SystemProviderCredentialSettings> = {};
-  for (const providerId of ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode"] as ProviderId[]) {
+  for (const providerId of ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"] as ProviderId[]) {
     const apiKey = getLegacyIntegrationApiKey(systemSettings, providerId);
     fallback[providerId] = {
       provider: providerId,
@@ -540,7 +552,9 @@ export const getSystemIntegrationProviders = (
               ? "~/.qwen"
               : providerId === "opencode"
                 ? "~/.local/share/opencode"
-                : "",
+                : providerId === "antigravity"
+                  ? "~/.antigravity"
+                  : "",
       ...(providerId === "qwen-code" ? {
         qwenAuthMode: "LOCAL_AUTH" as const,
         qwenRegion: "international" as const,
@@ -581,6 +595,9 @@ const inferProviderTypeFromConfigId = (providerConfigId: ProviderConfigId): Prov
   }
   if (providerConfigId === "opencode" || providerConfigId.startsWith("opencode-")) {
     return "opencode";
+  }
+  if (providerConfigId === "antigravity" || providerConfigId.startsWith("antigravity-")) {
+    return "antigravity";
   }
   return null;
 };
@@ -863,3 +880,32 @@ export const PROVIDER_CARD_TOKENS: Record<ProviderId, {
     noteClassName: "border-black/[0.08] bg-black/[0.03] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
   },
 };
+
+export interface BranchSchemeOption {
+  value: string;
+  label: string;
+}
+
+export const BRANCH_NAME_TOKEN_LABELS: Record<BranchNameToken, string> = {
+  sprint_key_prefix: "Sprint Key Prefix",
+  sprint_number: "Sprint Number",
+  sprint_name: "Sprint Name",
+  sprint_id: "Sprint ID",
+  planning_agent: "Planning Agent",
+  agent_routing: "Agent Routing",
+  worker_agent: "Worker Agent",
+};
+
+export const getCanonicalBranchNameToken = (tokenOrScheme: string): BranchNameToken => {
+  const match = tokenOrScheme.match(/\{([^}]+)\}/);
+  const token = match ? match[1] : tokenOrScheme;
+  return BRANCH_NAME_TOKEN_ALIASES[token] || (BRANCH_NAME_TOKENS.includes(token as any) ? (token as BranchNameToken) : "sprint_id");
+};
+
+export const getBranchSchemeOptions = (): BranchSchemeOption[] => {
+  return BRANCH_NAME_TOKENS.map((token) => ({
+    value: `{${token}}`,
+    label: BRANCH_NAME_TOKEN_LABELS[token],
+  }));
+};
+

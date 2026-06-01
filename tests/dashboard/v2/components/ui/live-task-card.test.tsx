@@ -51,13 +51,13 @@ describe("LiveTaskCard", () => {
 
   it("renders running state properly", () => {
     const task = getMockTask("RUNNING");
-    const { container } = render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} isRerunning={false} />);
+    const { container } = render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
     expect(container).toBeTruthy();
   });
 
   it("renders completed state properly", () => {
     const task = getMockTask("COMPLETED");
-    const { container } = render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} isRerunning={false} />);
+    const { container } = render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
     expect(container).toBeTruthy();
   });
 
@@ -73,7 +73,7 @@ describe("LiveTaskCard", () => {
         finishedAt: null,
       },
     };
-    render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} isRerunning={false} />);
+    render(<LiveTaskCard task={task} allTasks={[task]} onRerun={vi.fn()} onEdit={vi.fn()} onForceComplete={vi.fn()} isRerunning={false} />);
     expect(screen.getByLabelText("QA review running")).toBeTruthy();
     expect(screen.getByText("QA")).toBeTruthy();
   });

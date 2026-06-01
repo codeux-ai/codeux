@@ -94,7 +94,7 @@ const AppLayout = () => {
   const appearanceSettings = appearancePreview || effectiveSettings?.settings.appearance || systemSettings?.defaults.appearance;
   const appearanceTheme = appearanceSettings?.theme || "SYSTEM";
   const reducedMotion = appearanceSettings?.reducedMotion || "AUTO";
-  const backgroundPattern = appearanceSettings?.backgroundPattern || "NONE";
+  const backgroundPattern = appearanceSettings?.backgroundPattern || "HEXAGONS";
   const backgroundImage = appearanceSettings?.backgroundImage;
   const backgroundMode = appearanceSettings?.backgroundMode || "ANIMATED";
   const animatedBackground = appearanceSettings?.animatedBackground || "deep-ocean";

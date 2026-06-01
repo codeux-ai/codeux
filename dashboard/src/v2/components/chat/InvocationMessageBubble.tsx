@@ -48,6 +48,9 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const senderName = (fromUser || fromTool) ? "User" : (message.metadata?.agentName as string) || "Assistant";
   const providerLabel = message.metadata?.provider as string | undefined;
   const modelLabel = message.metadata?.model as string | undefined;
+  const rawStatus = typeof message.metadata?.status === "string" ? message.metadata.status : null;
+  const hasInvocationResponse = Boolean(message.metadata?.response);
+  const displayStatus = rawStatus === "queued" && hasInvocationResponse ? "processed" : rawStatus;
   const errorLabel = formatErrorCategory(message.metadata?.errorCategory);
   const createdAtLabel = formatChatTime(message.createdAt);
   const isExternalApi = Boolean(message.metadata?.isExternalApi);
@@ -83,6 +86,11 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
             {modelLabel && (
               <span className="px-1.5 py-0.5 rounded-sm bg-black/20 text-slate-300">
                 {modelLabel}
+              </span>
+            )}
+            {displayStatus && (
+              <span className="px-1.5 py-0.5 rounded-sm bg-black/20 text-slate-300 capitalize">
+                {displayStatus}
               </span>
             )}
             {errorLabel && (
