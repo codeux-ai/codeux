@@ -5,6 +5,7 @@ import type { ExecutionRepository } from "../repositories/execution-repository.j
 import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
 import type { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
+import { forceCompleteTask } from "../domain/sprint/tasks/force-complete-task.js";
 import type { JulesApiClient } from "../integrations/jules-api-client.js";
 import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import type { Logger } from "../shared/logging/logger.js";
@@ -22,6 +23,22 @@ interface ExecutionControlServiceDeps {
 
 export class ExecutionControlService {
   constructor(private readonly deps: ExecutionControlServiceDeps) {}
+
+  async forceCompleteTask(projectId: string, taskId: string, reason: string): Promise<void> {
+    await forceCompleteTask(
+      {
+        executionRepository: this.deps.executionRepository,
+        projectManagementRepository: this.deps.projectManagementRepository,
+        activeDispatchRegistry: this.deps.activeDispatchRegistry,
+        logger: this.deps.logger?.child({ component: "force-complete-task" }),
+      },
+      {
+        projectId,
+        taskId,
+        reason,
+      }
+    );
+  }
 
   async orchestrateSprint(projectId: string, sprintId: string): Promise<{ ok: true }> {
     const project = this.deps.projectManagementRepository.getProject(projectId);

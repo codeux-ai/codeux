@@ -16,7 +16,7 @@ import type {
   WorkerExecutionMode,
   ThinkingMode,
 } from "../contracts/app-types.js";
-import { DEFAULT_SPRINT_BRANCH_SCHEME } from "../git/sprint-branch-scheme.js";
+import { DEFAULT_SPRINT_BRANCH_SCHEME } from "../domain/sprint/branch-name-generator.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_MCP_TOOL_TOGGLES } from "../mcp/mcp-tool-availability.js";
 

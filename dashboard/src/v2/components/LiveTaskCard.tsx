@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useMemo, useCallback } fr
 import gsap from "gsap";
 import {
     Clock, ChevronDown, ChevronRight, Eye, EyeOff,
-    FileText, RotateCcw, GitPullRequest, ExternalLink, Timer,
+    FileText, RotateCcw, GitPullRequest, ExternalLink, Timer, CheckCheck, PencilLine,
 } from "lucide-preact";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
@@ -135,7 +135,11 @@ export interface LiveTaskCardProps {
     taskTiming?: LiveTaskTimingSummary | null;
     events?: ExecutionRuntimeEventSummary[];
     onRerun: (id: string, options?: RerunOptions) => void;
+    onEdit: (task: Subtask) => void;
+    onForceComplete: (task: Subtask) => void;
     isRerunning: boolean;
+    isForceCompleting?: boolean;
+    forceCompleteError?: string | null;
     dispatchInfo?: {
         errorMessage: string | null;
         startedAt: string | null;
@@ -151,7 +155,11 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     taskTiming,
     events,
     onRerun,
+    onEdit,
+    onForceComplete,
     isRerunning,
+    isForceCompleting = false,
+    forceCompleteError = null,
     dispatchInfo,
     agentPreset,
 }) => {
@@ -180,6 +188,8 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     const handleRerunClick = useCallback(() => {
         setShowRerunModal(true);
     }, []);
+    const handleEditClick = useCallback(() => onEdit(task), [onEdit, task]);
+    const handleForceCompleteClick = useCallback(() => onForceComplete(task), [onForceComplete, task]);
 
     const handleRerunConfirm = useCallback((options: { provider?: string; providerConfigId?: string; model?: string; clearWorktree: boolean; resetDependents: boolean }) => {
         setShowRerunModal(false);
@@ -426,6 +436,11 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         <QuotaCountdown errorMessage={dispatchInfo.errorMessage} />
                     </div>
                 )}
+                {forceCompleteError && (
+                    <div role="alert" className="mb-4 rounded-xl border border-status-red/20 bg-status-red/[0.06] px-4 py-2.5 text-xs text-status-red">
+                        {forceCompleteError}
+                    </div>
+                )}
 
                 {/* Action bar */}
                 <div className={`flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-black/[0.04] dark:border-white/[0.04] transition-opacity duration-200 ${expanded || showFeed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100'}`}>
@@ -458,6 +473,26 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             <ChevronRight ref={chevronRef} className="w-3 h-3" strokeWidth={2.5} />
                             Prompt
                         </button>
+                        <Button
+                            type="button"
+                            onClick={handleEditClick}
+                            variant="ghost"
+                            icon={PencilLine}
+                            className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-signal-500 hover:border-signal-500/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
+                        >
+                            Edit
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={handleForceCompleteClick}
+                            isLoading={isForceCompleting}
+                            disabled={taskPhase === "COMPLETED"}
+                            variant="ghost"
+                            icon={CheckCheck}
+                            className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-green hover:border-status-green/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
+                        >
+                            Force complete
+                        </Button>
                         <Button
                             type="button"
                             onClick={handleRerunClick}

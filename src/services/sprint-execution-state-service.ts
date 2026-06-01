@@ -1,5 +1,5 @@
 import * as path from "path";
-import { formatSprintBranch } from "../git/sprint-branch-scheme.js";
+import { formatSprintBranch } from "../domain/sprint/branch-name-generator.js";
 import type { DashboardSettings, Subtask, SubtaskMergeIndicator } from "../contracts/app-types.js";
 import type { SprintAgentArgs } from "../sprint/sprint-types.js";
 import type { ProjectSummary, SprintRecord, TaskRecord } from "../contracts/project-management-types.js";

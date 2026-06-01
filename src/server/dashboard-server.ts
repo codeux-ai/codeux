@@ -221,6 +221,7 @@ export interface DashboardServerOptions {
   forceCancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   cancelTaskDispatch: (dispatchId: string) => Promise<unknown> | unknown;
   forceCancelTaskDispatch: (dispatchId: string) => Promise<unknown> | unknown;
+  forceCompleteTask: (projectId: string, taskId: string, reason: string) => Promise<void>;
   retryTaskDispatch: (dispatchId: string) => Promise<unknown>;
   realtimeService?: DashboardRealtimeService;
   logger?: Logger;

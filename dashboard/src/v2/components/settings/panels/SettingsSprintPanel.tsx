@@ -20,6 +20,8 @@ const GUARDRAIL_ACTION_OPTIONS: Array<{ value: GuardrailOnLimitAction; label: st
 ];
 import { SprintKeyEditor } from "../SprintKeyEditor.js";
 import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
+import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor.js";
+
 
 export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
@@ -97,14 +99,16 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           description="Template used when naming sprint branches."
           badge={getFieldBadge("git.sprintBranchScheme")}
           info={<InfoIconPopover items={[
-            { key: "{sprint}", desc: "Sprint identifier slug" },
-            { key: "{sprintNumber}", desc: "Sprint sequence number" },
-            { key: "{sprintName}", desc: "Sprint name" },
-            { key: "{date}", desc: "Current date" },
-            { key: "{taskCount}", desc: "Number of tasks in the sprint" },
+            { key: "{sprint_key_prefix}", desc: "Sprint Key Prefix" },
+            { key: "{sprint_number}", desc: "Sprint Number" },
+            { key: "{sprint_name}", desc: "Sprint Name" },
+            { key: "{sprint_id}", desc: "Sprint ID" },
+            { key: "{planning_agent}", desc: "Planning Agent" },
+            { key: "{agent_routing}", desc: "Agent Routing" },
+            { key: "{worker_agent}", desc: "Worker Agent" },
           ]} />}
         >
-          <TextInput
+          <BranchNameSchemeEditor
             value={editableSettings.git.sprintBranchScheme}
             onChange={(value) => updateEditableSettings((current) => ({
               ...current,
@@ -113,9 +117,9 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
                 sprintBranchScheme: value,
               },
             }))}
-            mono
           />
         </Row>
+
         <Row label="Auto-create PRs" description="Open pull requests automatically for remote git workflows." badge={getFieldBadge("git.autoCreatePr")}>
           <Toggle
             value={editableSettings.git.autoCreatePr}
