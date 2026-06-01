@@ -288,6 +288,39 @@ describe("ProviderExecutionService", () => {
     expect(providerRunner.runProvider).toHaveBeenCalledTimes(1);
   });
 
+  it("sanitizes bootstrap-branch fatal lines before persisting fallback failure output", async () => {
+    const failedResult = {
+      ...mockResult,
+      ok: false,
+      stderr: [
+        "fatal: your current branch 'code-ux-bootstrap-1' does not have any commits yet",
+        "keep this line",
+      ].join("\n"),
+      stdout: "",
+    };
+    providerRunner.runProvider.mockResolvedValue(failedResult);
+
+    vi.mocked(classifyProviderError).mockReturnValue({
+      category: "UNKNOWN",
+      userMessage: "Unknown error",
+      resetAtIso: null,
+      provider: "claude-code",
+      resetAfter: null,
+    });
+    vi.mocked(resolveProviderRetryDecision).mockReturnValue(null);
+    vi.mocked(isReadFileNotFoundToolError).mockReturnValue(false);
+
+    await service.executeProvider(defaultArgs);
+
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({
+        role: "tool",
+        contentMarkdown: "keep this line",
+      }),
+    );
+  });
+
   it("AbortSignal: passes signal to sleepWithSignal", async () => {
     const failedResult = { ...mockResult, ok: false };
     providerRunner.runProvider.mockResolvedValue(failedResult);

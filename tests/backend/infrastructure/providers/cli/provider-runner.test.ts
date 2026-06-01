@@ -101,6 +101,31 @@ describe("ProviderRunner", () => {
     expect(call.args[logFileIdx + 1]).toContain("antigravity-logs");
   });
 
+  it("sanitizes bootstrap-branch fatal fallback text in runProviderForText", async () => {
+    dockerRunner.readWorkspaceFile.mockResolvedValue("");
+    dockerRunner.runProviderInDocker.mockResolvedValueOnce({
+      ok: true,
+      stdout: "fatal: your current branch 'code-ux-bootstrap-1' does not have any commits yet\nkeep this line",
+      stderr: "",
+      code: 0,
+      signal: null,
+    });
+
+    const result = await runner.runProviderForText({
+      provider: "codex",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(result.text).toBe("keep this line");
+  });
+
   it("leaves a normal antigravity completion successful when the log has no errors", async () => {
     dockerRunner.runProviderInDocker.mockResolvedValueOnce({
       ok: true,

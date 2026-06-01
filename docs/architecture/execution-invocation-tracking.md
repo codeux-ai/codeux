@@ -19,6 +19,8 @@ For supported models, tracking relies on provider-reported usage. For Jules inte
 ### `execution_invocation_messages`
 This table records each granular interaction loop in an invocation, preserving the exact sequence of \`system\`, \`user\`, \`assistant\`, and \`tool\` messages. It persists markdown content and parsed JSON arguments for tool calls, serving as a replayable log of an agent's reasoning process.
 
+Invocation persistence applies a narrow hygiene sanitizer for one known noisy bootstrap case: lines matching `fatal: your current branch 'code-ux-bootstrap-*' does not have any commits yet` are removed before chat-facing invocation message content is written. Other `fatal:` lines and unrelated stderr/stdout remain unchanged so real failures still surface.
+
 ## Chat Thread Usage
 Execution invocations are heavily used by the Chat page to track activity.
 When chat conversations take place (routed to either connected workers or virtual providers), those discrete operations and interactions generate `execution_invocations` with `type === "chat"`.

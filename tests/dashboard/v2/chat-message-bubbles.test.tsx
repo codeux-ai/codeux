@@ -331,6 +331,49 @@ describe("Chat Message Bubbles", () => {
       expect(nameElement).toBeInTheDocument();
       expect(nameElement?.textContent).toBe("PresetAssistant");
     });
+
+    it("hides bootstrap branch unborn fatal lines while keeping other output", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_bootstrap_noise",
+        invocationId: "inv_1",
+        role: "tool",
+        contentMarkdown: [
+          "fatal: your current branch 'code-ux-bootstrap-1' does not have any commits yet",
+          "actual output line",
+        ].join("\n"),
+        toolCallsJson: {
+          output: [
+            "fatal: your current branch 'code-ux-bootstrap-1' does not have any commits yet",
+            "tool result kept",
+          ].join("\n"),
+        },
+        createdAt: new Date().toISOString(),
+        metadata: {
+          kind: "tool_result",
+          toolName: "git",
+          toolCallId: "call-1",
+        },
+      };
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      expect(container.textContent).not.toContain("code-ux-bootstrap-1");
+      expect(container.textContent).toContain("git");
+    });
+
+    it("keeps non-bootstrap unborn-branch fatal lines visible", () => {
+      const line = "fatal: your current branch 'feature/my-branch' does not have any commits yet";
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_non_bootstrap",
+        invocationId: "inv_1",
+        role: "assistant",
+        contentMarkdown: line,
+        toolCallsJson: null,
+        createdAt: new Date().toISOString(),
+      };
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      expect(container.textContent).toContain(line);
+    });
   });
 
   describe("InvocationListCard", () => {
