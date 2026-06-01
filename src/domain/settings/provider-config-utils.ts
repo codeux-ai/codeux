@@ -225,9 +225,6 @@ export const normalizeSystemIntegrationProviders = (
       ...(typeof rawValue.customModel === "string" && rawValue.customModel.trim().length > 0
         ? { customModel: rawValue.customModel.trim() }
         : {}),
-      ...(rawValue.codexWireApi === "responses" || rawValue.codexWireApi === "chat"
-        ? { codexWireApi: rawValue.codexWireApi }
-        : {}),
       ...(providerId === "qwen-code" ? {
         qwenAuthMode: normalizeQwenAuthMode(rawValue.qwenAuthMode),
         qwenRegion: normalizeQwenRegion(rawValue.qwenRegion),
@@ -384,9 +381,6 @@ export const buildDashboardProviderSettings = (
             : {}),
           ...(integrationProviders[providerConfigId]?.customModel
             ? { customModel: integrationProviders[providerConfigId].customModel }
-            : {}),
-          ...(integrationProviders[providerConfigId]?.codexWireApi
-            ? { codexWireApi: integrationProviders[providerConfigId].codexWireApi }
             : {}),
           ...(providerId === "qwen-code" ? {
             qwenAuthMode: integrationProviders[providerConfigId]?.qwenAuthMode,

@@ -103,9 +103,6 @@ export interface SystemProviderCredentialSettings {
   customBaseUrl?: string;
   /** Custom model identifier sent to the CLI when routing through a custom base URL (claude-code, codex). */
   customModel?: string;
-  /** Wire protocol Codex uses against a custom base URL. "chat" suits OpenAI-compatible
-   *  gateways (OpenRouter, etc.); "responses" suits gateways proxying OpenAI's /responses API. */
-  codexWireApi?: "chat" | "responses";
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;

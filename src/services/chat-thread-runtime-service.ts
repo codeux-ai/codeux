@@ -58,7 +58,6 @@ export interface ThreadRouteResolution {
   providerAuthPath?: string;
   customBaseUrl?: string;
   customModel?: string;
-  codexWireApi?: "chat" | "responses";
   thinkingMode?: string;
 }
 
@@ -132,7 +131,6 @@ export class ChatThreadRuntimeService {
       providerAuthPath: providerSettings.authPath,
       customBaseUrl: providerSettings.customBaseUrl,
       customModel: providerSettings.customModel,
-      codexWireApi: providerSettings.codexWireApi,
       thinkingMode: providerSettings.thinkingMode,
     };
   }
@@ -379,7 +377,6 @@ export class ChatThreadRuntimeService {
       providerAuthPath: route.providerAuthPath,
       customBaseUrl: route.customBaseUrl,
       customModel: route.customModel,
-      codexWireApi: route.codexWireApi,
       sessionId: continueSessionId || thread.id,
       settings: dashboardSettings,
       prompt: finalPrompt,
@@ -519,7 +516,6 @@ export class ChatThreadRuntimeService {
         providerAuthPath: route.providerAuthPath,
         customBaseUrl: route.customBaseUrl,
         customModel: route.customModel,
-        codexWireApi: route.codexWireApi,
         sessionId: `${thread.id}:compaction`,
         workflowSettings,
         repoPath,

@@ -200,7 +200,6 @@ export class ProjectSetupService {
         providerAuthPath: providerConfig.providerAuthPath,
         customBaseUrl: providerConfig.customBaseUrl,
         customModel: providerConfig.customModel,
-        codexWireApi: providerConfig.codexWireApi,
         sessionId,
         workspaceSessionId: `${projectId}-project-setup`,
         workflowSettings: {
@@ -304,7 +303,6 @@ export class ProjectSetupService {
     providerAuthPath?: string;
     customBaseUrl?: string;
     customModel?: string;
-    codexWireApi?: "chat" | "responses";
   } {
     const route = resolveProviderForInvocation(settings, {
       invocation: "planning",
@@ -348,7 +346,6 @@ export class ProjectSetupService {
       providerAuthPath: providerSettings.authPath,
       customBaseUrl: providerSettings.customBaseUrl,
       customModel: providerSettings.customModel,
-      codexWireApi: providerSettings.codexWireApi,
     };
   }
 

@@ -259,7 +259,7 @@ describe("ProviderRunner", () => {
     expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
   });
 
-  it("routes Codex through a custom base URL, model, and chat wire API by default", async () => {
+  it("routes Codex through a custom base URL and model via a dedicated model provider", async () => {
     await runner.runProvider({
       provider: "codex",
       prompt: "ship it",
@@ -280,7 +280,6 @@ describe("ProviderRunner", () => {
         "-c", `model_provider="custom_gateway"`,
         "-c", `model_providers.custom_gateway.base_url="https://openrouter.ai/api/v1"`,
         "-c", `model_providers.custom_gateway.env_key="OPENAI_API_KEY"`,
-        "-c", `model_providers.custom_gateway.wire_api="chat"`,
         "-c", `model_providers.custom_gateway.requires_openai_auth=false`,
         "--model", "openai/gpt-5-codex", "ship it",
       ]),
@@ -292,27 +291,22 @@ describe("ProviderRunner", () => {
     }));
   });
 
-  it("uses the responses wire API for Codex when explicitly configured", async () => {
+  it("does not set a Codex wire_api override (Codex only supports the responses default)", async () => {
     await runner.runProvider({
       provider: "codex",
       prompt: "ship it",
       cwd: "/repo",
       model: "gpt-5-codex",
       apiKey: "sk-openai",
-      customBaseUrl: "https://gateway.example/v1",
-      codexWireApi: "responses",
+      customBaseUrl: "https://openrouter.ai/api/v1",
       sessionId: "session-1",
       workflowSettings: { executionMode: "DOCKER" } as any,
       repoPath: "/repo",
       onActivity: vi.fn(),
     });
 
-    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
-      command: "codex",
-      args: expect.arrayContaining([
-        "-c", `model_providers.custom_gateway.wire_api="responses"`,
-      ]),
-    }));
+    const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    expect(args.some((a) => a.includes("wire_api"))).toBe(false);
   });
 
   it("does not inject Codex custom provider flags without a custom base URL", async () => {

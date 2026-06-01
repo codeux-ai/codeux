@@ -232,7 +232,6 @@ export class TaskService {
           providerAuthPath: selectedProviderSettings.authPath,
           customBaseUrl: selectedProviderSettings.customBaseUrl,
           customModel: selectedProviderSettings.customModel,
-          codexWireApi: selectedProviderSettings.codexWireApi,
         },
         task: {
           ...pseudoTask,
@@ -349,7 +348,6 @@ export class TaskService {
           providerAuthPath: selectedProviderSettings.authPath,
           customBaseUrl: selectedProviderSettings.customBaseUrl,
           customModel: selectedProviderSettings.customModel,
-          codexWireApi: selectedProviderSettings.codexWireApi,
         },
         task,
         repoPath,

@@ -135,9 +135,6 @@ export interface ProviderRunInput {
    *  base URL (claude-code, codex). Used when routing through a gateway such as OpenRouter
    *  whose model slugs differ from the built-in preset names. */
   customModel?: string;
-  /** Wire protocol Codex uses against a custom base URL. Defaults to "chat" (OpenAI-compatible
-   *  gateways like OpenRouter); "responses" targets gateways proxying OpenAI's /responses API. */
-  codexWireApi?: "chat" | "responses";
   sessionId: string;
   workspaceSessionId?: string;
   workflowSettings: CliWorkflowSettings;
@@ -277,7 +274,6 @@ export class ProviderRunner implements IProviderRunner {
     providerAuthPath?: string;
     customBaseUrl?: string;
     customModel?: string;
-    codexWireApi?: "chat" | "responses";
     sessionId: string;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
@@ -579,14 +575,13 @@ export class ProviderRunner implements IProviderRunner {
   }
 
   /** Builds the `-c` config overrides that point Codex at a custom OpenAI-compatible
-   *  model provider (e.g. OpenRouter). Codex's built-in `openai` provider defaults to the
-   *  `/responses` wire API, which most gateways do not implement, so we register a dedicated
-   *  provider with a configurable `wire_api` (default "chat") and `requires_openai_auth = false`
-   *  so non-`sk-` gateway keys are accepted. Returns an empty array for non-codex providers
-   *  or when no custom base URL is configured. */
+   *  model provider (e.g. OpenRouter). We register a dedicated provider with
+   *  `requires_openai_auth = false` so non-`sk-` gateway keys are accepted. The wire API is
+   *  left at Codex's default (`responses`); `chat` is no longer supported by Codex. Returns an
+   *  empty array for non-codex providers or when no custom base URL is configured. */
   private buildCodexCustomProviderArgs(
     provider: CliProviderId,
-    config: Pick<ProviderRunInput, "customBaseUrl" | "codexWireApi">,
+    config: Pick<ProviderRunInput, "customBaseUrl">,
     workflowSettings: CliWorkflowSettings,
   ): string[] {
     if (provider !== "codex" || !config.customBaseUrl || config.customBaseUrl.trim().length === 0) {
@@ -597,13 +592,11 @@ export class ProviderRunner implements IProviderRunner {
       config.customBaseUrl.trim(),
       this.shouldRewriteDockerLoopbackUrls(workflowSettings),
     );
-    const wireApi = config.codexWireApi === "responses" ? "responses" : "chat";
     return [
       "-c", `model_provider="${providerId}"`,
       "-c", `model_providers.${providerId}.name="${providerId}"`,
       "-c", `model_providers.${providerId}.base_url="${escapeTomlString(baseUrl)}"`,
       "-c", `model_providers.${providerId}.env_key="OPENAI_API_KEY"`,
-      "-c", `model_providers.${providerId}.wire_api="${wireApi}"`,
       "-c", `model_providers.${providerId}.requires_openai_auth=false`,
     ];
   }

@@ -34,7 +34,6 @@ export interface StructuredRequestArgs<T> {
   providerAuthPath?: string;
   customBaseUrl?: string;
   customModel?: string;
-  codexWireApi?: "chat" | "responses";
   providerPrompt: string;
   repoPath: string;
   cwd?: string;
@@ -143,7 +142,6 @@ export class StructuredAgentRequestService {
       providerAuthPath: args.providerAuthPath,
       customBaseUrl: args.customBaseUrl,
       customModel: args.customModel,
-      codexWireApi: args.codexWireApi,
       sessionId,
       workspaceSessionId: args.workspaceSessionId,
       workflowSettings: args.settings.cliWorkflow,

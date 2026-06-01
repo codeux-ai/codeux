@@ -158,7 +158,6 @@ export interface ProcessManagementActionArgs {
   providerAuthPath?: string;
   customBaseUrl?: string;
   customModel?: string;
-  codexWireApi?: "chat" | "responses";
   sessionId: string;
   settings: DashboardSettings;
   prompt: string;
@@ -281,7 +280,6 @@ export class ChatManagementActionService {
         providerAuthPath: args.providerAuthPath,
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
-        codexWireApi: args.codexWireApi,
         sessionId: args.sessionId,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
@@ -382,7 +380,6 @@ export class ChatManagementActionService {
         providerAuthPath: args.providerAuthPath,
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
-        codexWireApi: args.codexWireApi,
         sessionId: args.sessionId,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,

@@ -323,26 +323,10 @@ export const ProviderInstanceCard: FunctionComponent<{
                 ? "Model slug sent to the gateway (e.g. anthropic/claude-sonnet-4.5). Applied to every Claude Code tier so background calls hit the same model. Leave empty to use the agent's selected model."
                 : "Model slug sent to the gateway (e.g. openai/gpt-5-codex). Overrides the agent's selected model. Leave empty to use the agent's selected model."
             }
-            last={isLast && !(provider.provider === "codex" && !!provider.customBaseUrl)}
+            last={isLast}
           >
             <TextInput value={provider.customModel || ""} onChange={(value) => onUpdate({ customModel: value || undefined })} mono />
           </Row>
-          {provider.provider === "codex" && provider.customBaseUrl && (
-            <Row
-              label="Codex wire protocol"
-              description="How Codex talks to the gateway. Chat (/chat/completions) suits OpenRouter and most OpenAI-compatible gateways. Responses (/responses) suits gateways proxying OpenAI's newer API."
-              last={isLast}
-            >
-              <PillChoiceGroup
-                value={provider.codexWireApi || "chat"}
-                onChange={(value) => onUpdate({ codexWireApi: value as SystemProviderConfig["codexWireApi"] })}
-                options={[
-                  { value: "chat", label: "Chat" },
-                  { value: "responses", label: "Responses" },
-                ]}
-              />
-            </Row>
-          )}
         </>
       )}
 

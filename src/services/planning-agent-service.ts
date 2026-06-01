@@ -86,7 +86,6 @@ interface PlanningResultContext {
     openCodePackage?: string;
     customBaseUrl?: string;
     customModel?: string;
-    codexWireApi?: "chat" | "responses";
   };
   memoryCaptureWorkspacePath: string;
   cleanupWorkspace?: () => Promise<void>;
@@ -558,7 +557,6 @@ export class PlanningAgentService {
         providerAuthPath: providerSettings.authPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
-        codexWireApi: providerSettings.codexWireApi,
         providerPrompt: args.rawPrompt,
         repoPath: args.repoPath,
         cwd: snapshotWorkspace,
@@ -611,7 +609,6 @@ export class PlanningAgentService {
           openCodePackage: providerSettings.openCodePackage,
           customBaseUrl: providerSettings.customBaseUrl,
           customModel: providerSettings.customModel,
-          codexWireApi: providerSettings.codexWireApi,
           thinkingMode: providerSettings.thinkingMode,
         },
       };

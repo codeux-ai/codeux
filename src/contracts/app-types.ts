@@ -606,8 +606,6 @@ export interface ProviderSettings {
   customBaseUrl?: string;
   /** Custom model identifier sent to the CLI when routing through a custom base URL (claude-code, codex). */
   customModel?: string;
-  /** Wire protocol Codex uses against a custom base URL ("chat" for OpenAI-compatible gateways, "responses" otherwise). */
-  codexWireApi?: "chat" | "responses";
   maxConcurrentTasks: number;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";

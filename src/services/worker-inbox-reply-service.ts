@@ -182,7 +182,6 @@ export class WorkerInboxReplyService {
         providerAuthPath: providerSettings.authPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
-        codexWireApi: providerSettings.codexWireApi,
         githubToken: this.deps.getGithubToken(),
       });
       output = result.text;
@@ -368,7 +367,6 @@ export class WorkerInboxReplyService {
         providerAuthPath: providerSettings.authPath,
         customBaseUrl: providerSettings.customBaseUrl,
         customModel: providerSettings.customModel,
-        codexWireApi: providerSettings.codexWireApi,
         githubToken: this.deps.getGithubToken(),
       });
       output = providerResult.text;
@@ -483,7 +481,6 @@ export class WorkerInboxReplyService {
     providerAuthPath?: string;
     customBaseUrl?: string;
     customModel?: string;
-    codexWireApi?: "chat" | "responses";
     githubToken?: string;
   }): Promise<ProviderRunResult & { text: string }> {
     const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
@@ -511,7 +508,6 @@ export class WorkerInboxReplyService {
       providerAuthPath: input.providerAuthPath,
       customBaseUrl: input.customBaseUrl,
       customModel: input.customModel,
-      codexWireApi: input.codexWireApi,
       sessionId: "worker-reply-" + randomUUID(),
       workflowSettings,
       repoPath: input.repoPath,

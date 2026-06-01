@@ -60,7 +60,6 @@ export interface ExecutionProviderRunArgs {
   providerAuthPath?: string;
   customBaseUrl?: string;
   customModel?: string;
-  codexWireApi?: "chat" | "responses";
   sessionId: string;
   workspaceSessionId?: string;
   workflowSettings: DashboardSettings["cliWorkflow"];
@@ -231,7 +230,6 @@ export class ProviderExecutionService {
         providerAuthPath: args.providerAuthPath,
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
-        codexWireApi: args.codexWireApi,
         sessionId: args.sessionId,
         workspaceSessionId: args.workspaceSessionId,
         workflowSettings: args.workflowSettings,

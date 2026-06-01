@@ -52,7 +52,6 @@ export interface PipelineContext {
     providerAuthPath?: string;
     customBaseUrl?: string;
     customModel?: string;
-    codexWireApi?: "chat" | "responses";
   };
   title: string;
   repoPath: string;
