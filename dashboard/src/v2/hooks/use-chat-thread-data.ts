@@ -77,6 +77,41 @@ export const isWorkingMessage = (
   ));
 };
 
+export const resolveDisplayDeliveryStatus = (
+  message: ChatMessageRecord,
+  allMessages: ChatMessageRecord[],
+): ChatMessageRecord["deliveryStatus"] | "processed" => {
+  if (message.deliveryStatus === "failed") {
+    return "failed";
+  }
+
+  const invocationResponse = message.metadata?.response;
+  const hasInvocationResponse = typeof invocationResponse === "string"
+    ? invocationResponse.trim().length > 0
+    : Boolean(invocationResponse);
+
+  const status = message.deliveryStatus === "pending" && hasInvocationResponse
+    ? "processed"
+    : message.deliveryStatus;
+
+  if (message.direction !== "dashboard_to_connection") {
+    return status;
+  }
+
+  const messageTime = toChatTimestampMs(message.createdAt);
+  const hasLaterReply = allMessages.some((candidate) => (
+    candidate.threadId === message.threadId
+    && candidate.direction === "connection_to_dashboard"
+    && toChatTimestampMs(candidate.createdAt) >= messageTime
+  ));
+
+  if (hasLaterReply) {
+    return "processed";
+  }
+
+  return status;
+};
+
 export const useChatThreadData = (options: {
   selectedProject: { id: string } | null;
   cache: ReturnType<typeof useMessageCache>;

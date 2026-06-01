@@ -11,6 +11,7 @@ import { upsertChatThread } from "../lib/chat-thread-utils.js";
 import { removeThread, upsertMessage } from "./use-chat-thread-data.js";
 import { fetchAgentPresets } from "../lib/agent-preset-api.js";
 import type { AgentPresetRecord } from "../types.js";
+import { toChatTimestampMs } from "../lib/chat-time.js";
 
 export const areConnectionsEqual = (left: AgentConnection[], right: AgentConnection[]): boolean => (
   left.length === right.length
@@ -343,7 +344,22 @@ export const useChatPageResources = (options: {
       if (message.event.eventType === "conversation.message.created") {
         const realtimeMessage = message.event.payload as ChatMessageRecord;
         const cachedMessages = cache.getMessages(realtimeMessage.threadId) || [];
-        const nextMessages = upsertMessage(cachedMessages, realtimeMessage);
+        let nextMessages = upsertMessage(cachedMessages, realtimeMessage);
+
+        if (realtimeMessage.direction === "connection_to_dashboard") {
+          const replyTime = toChatTimestampMs(realtimeMessage.createdAt);
+          nextMessages = nextMessages.map((msg) => {
+            if (
+              msg.direction === "dashboard_to_connection" &&
+              (msg.deliveryStatus === "pending" || msg.deliveryStatus === "delivered") &&
+              toChatTimestampMs(msg.createdAt) < replyTime
+            ) {
+              return { ...msg, deliveryStatus: "processed" as const };
+            }
+            return msg;
+          });
+        }
+
         cache.setMessages(realtimeMessage.threadId, nextMessages);
         if (realtimeMessage.threadId === threadData.selectedThreadIdRef.current) {
           threadData.setMessagesSnapshot(nextMessages);

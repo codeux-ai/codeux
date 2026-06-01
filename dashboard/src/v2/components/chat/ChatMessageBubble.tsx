@@ -6,15 +6,18 @@ import { getChatWidgetData } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
+import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
 
 export interface ChatMessageBubbleProps {
   message: ChatMessageRecord;
+  allMessages?: ChatMessageRecord[];
   agentAvatarConfig?: AgentAvatarConfig;
   agentName?: string;
 }
 
 export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   message,
+  allMessages = [],
   agentAvatarConfig,
   agentName,
 }) => {
@@ -36,13 +39,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   const providerLabel = message.metadata?.provider as string | undefined;
   const createdAtLabel = formatChatTime(message.createdAt);
 
-  const invocationResponse = message.metadata?.response;
-  const hasInvocationResponse = typeof invocationResponse === "string"
-    ? invocationResponse.trim().length > 0
-    : Boolean(invocationResponse);
-  const displayDeliveryStatus = message.deliveryStatus === "pending" && hasInvocationResponse
-    ? "processed"
-    : message.deliveryStatus;
+  const displayDeliveryStatus = resolveDisplayDeliveryStatus(message, allMessages);
 
   const opacityClass = (fromDashboard && (displayDeliveryStatus === "pending" || displayDeliveryStatus === "failed"))
     ? "opacity-60"

@@ -101,6 +101,113 @@ describe("useChatPageResources integration", () => {
     expect(result.current.threadData.messages[0].id).toBe("msg-1");
   });
 
+  it("updates cached dashboard messages in the same thread to processed when a later connection reply is upserted", async () => {
+    const { result } = renderHook(() => {
+      const cache = useMessageCache();
+      const threadData = useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+
+      const invocationData = {
+        selectedInvocationIdRef: { current: null },
+        setInvocationsSnapshot: vi.fn(),
+        setInvocationMessagesSnapshot: vi.fn(),
+        setSelectedInvocationId: vi.fn(),
+        setError: vi.fn(),
+        activateInvocation: vi.fn(),
+        refreshInvocationMessages: vi.fn()
+      } as any;
+
+      useChatPageResources({
+        selectedProject: { id: "proj-1" },
+        cache,
+        chatMode: "threads",
+        threadData,
+        invocationData,
+      });
+
+      return { cache, threadData };
+    });
+
+    const initialMessages = [
+      {
+        id: "msg-dash-1",
+        threadId: "thread-1",
+        direction: "dashboard_to_connection",
+        deliveryStatus: "pending",
+        createdAt: "2026-03-10T12:00:00.000Z",
+        bodyMarkdown: "Hi 1",
+        metadata: null,
+      },
+      {
+        id: "msg-dash-2",
+        threadId: "thread-1",
+        direction: "dashboard_to_connection",
+        deliveryStatus: "delivered",
+        createdAt: "2026-03-10T12:00:01.000Z",
+        bodyMarkdown: "Hi 2",
+        metadata: null,
+      },
+      {
+        id: "msg-dash-3",
+        threadId: "thread-1",
+        direction: "dashboard_to_connection",
+        deliveryStatus: "failed",
+        createdAt: "2026-03-10T12:00:02.000Z",
+        bodyMarkdown: "Hi 3",
+        metadata: null,
+      },
+    ];
+
+    await act(async () => {
+      const threads = [{ id: "thread-1", title: "Thread", updatedAt: "2026-03-10T12:00:00.000Z", scope: "project" } as any];
+      result.current.threadData.setThreadsSnapshot(threads);
+      result.current.cache.setThreads("proj-1", threads);
+      result.current.threadData.setSelectedThreadId("thread-1");
+      result.current.threadData.selectedThreadIdRef.current = "thread-1";
+      result.current.cache.setMessages("thread-1", initialMessages as any[]);
+      result.current.threadData.setMessagesSnapshot(initialMessages as any[]);
+    });
+
+    expect(result.current.threadData.messages.length).toBe(3);
+
+    await act(async () => {
+      if (mockRealtimeCallback) {
+        mockRealtimeCallback({
+          type: "event",
+          event: {
+            eventType: "conversation.message.created",
+            payload: {
+              id: "msg-reply",
+              threadId: "thread-1",
+              direction: "connection_to_dashboard",
+              deliveryStatus: "delivered",
+              createdAt: "2026-03-10T12:00:05.000Z",
+              bodyMarkdown: "Hello from agent",
+              metadata: null,
+            },
+          },
+        });
+      }
+    });
+
+    const updated = result.current.threadData.messages;
+    expect(updated.length).toBe(4);
+
+    const msg1 = updated.find((m) => m.id === "msg-dash-1");
+    const msg2 = updated.find((m) => m.id === "msg-dash-2");
+    const msg3 = updated.find((m) => m.id === "msg-dash-3");
+    const reply = updated.find((m) => m.id === "msg-reply");
+
+    expect(msg1?.deliveryStatus).toBe("processed");
+    expect(msg2?.deliveryStatus).toBe("processed");
+    expect(msg3?.deliveryStatus).toBe("failed");
+    expect(reply?.deliveryStatus).toBe("delivered");
+  });
+
   it("handles real-time thread deletion logic properly", async () => {
     const { result } = renderHook(() => {
       const cache = useMessageCache();

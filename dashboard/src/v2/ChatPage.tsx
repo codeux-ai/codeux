@@ -275,6 +275,7 @@ export const ChatPage: FunctionComponent = () => {
                     <ChatMessageBubble
                       key={message.id}
                       message={message}
+                      allMessages={messages}
                       agentAvatarConfig={preset?.avatarConfig}
                       agentName={preset?.name}
                     />
