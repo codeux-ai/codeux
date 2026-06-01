@@ -42,7 +42,7 @@ describe("dashboard settings updater helpers", () => {
     expect(next.aiProvider.providers.gemini.model).toBe("gemini-2.5-pro");
     expect(next.aiProvider.providers.gemini.weight).toBe(35);
     expect(settings.aiProvider.providers.gemini.model).toBe("default");
-    expect(settings.aiProvider.providers.gemini.weight).toBe(20);
+    expect(settings.aiProvider.providers.gemini.weight).toBe(50);
     expect(next.aiProvider.providers.jules).toBe(settings.aiProvider.providers.jules);
   });
 

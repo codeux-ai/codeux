@@ -20,7 +20,7 @@ import {
   BRANCH_NAME_TOKEN_ALIASES,
   type BranchNameToken,
 } from "../../../../src/domain/settings/branch-name-tokens.js";
-
+import { DEFAULT_PROVIDER_WEIGHT } from "../../../../src/repositories/settings-defaults.js";
 
 const cloneSkills = (skills: SkillToggle[]): SkillToggle[] => skills.map((skill) => ({ ...skill }));
 const cloneMcpTools = (tools: McpToolToggle[]): McpToolToggle[] => tools.map((tool) => ({ ...tool }));
@@ -319,7 +319,7 @@ export const createProjectProviderDraft = (
       : providerId === "opencode"
         ? "anthropic/claude-sonnet-4-5"
         : "default",
-  weight: providerId === "jules" ? 60 : providerId === "claude-code" || providerId === "qwen-code" || providerId === "opencode" ? 0 : 20,
+  weight: DEFAULT_PROVIDER_WEIGHT,
   thinkingMode: providerId === "codex" || providerId === "claude-code" || providerId === "qwen-code" || providerId === "opencode" ? "HIGH" : "MEDIUM",
   maxConcurrentTasks: providerId === "jules" ? 15 : 0,
 });
@@ -494,6 +494,9 @@ const getHintApiKey = (
   if (providerId === "qwen-code") {
     return hints?.resolved.qwenCodeApiKey || "";
   }
+  if (providerId === "antigravity") {
+    return hints?.resolved.antigravityApiKey || "";
+  }
   return hints?.resolved.openCodeApiKey || "";
 };
 
@@ -517,6 +520,9 @@ const getLegacyIntegrationApiKey = (
   if (providerId === "qwen-code") {
     return typeof integrations.qwenCodeApiKey === "string" ? integrations.qwenCodeApiKey : "";
   }
+  if (providerId === "antigravity") {
+    return typeof integrations.antigravityApiKey === "string" ? integrations.antigravityApiKey : "";
+  }
   return typeof integrations.openCodeApiKey === "string" ? integrations.openCodeApiKey : "";
 };
 
@@ -529,7 +535,7 @@ export const getSystemIntegrationProviders = (
   }
 
   const fallback: Record<ProviderConfigId, SystemProviderCredentialSettings> = {};
-  for (const providerId of ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode"] as ProviderId[]) {
+  for (const providerId of ["jules", "gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"] as ProviderId[]) {
     const apiKey = getLegacyIntegrationApiKey(systemSettings, providerId);
     fallback[providerId] = {
       provider: providerId,
@@ -546,7 +552,9 @@ export const getSystemIntegrationProviders = (
               ? "~/.qwen"
               : providerId === "opencode"
                 ? "~/.local/share/opencode"
-                : "",
+                : providerId === "antigravity"
+                  ? "~/.antigravity"
+                  : "",
       ...(providerId === "qwen-code" ? {
         qwenAuthMode: "LOCAL_AUTH" as const,
         qwenRegion: "international" as const,
@@ -587,6 +595,9 @@ const inferProviderTypeFromConfigId = (providerConfigId: ProviderConfigId): Prov
   }
   if (providerConfigId === "opencode" || providerConfigId.startsWith("opencode-")) {
     return "opencode";
+  }
+  if (providerConfigId === "antigravity" || providerConfigId.startsWith("antigravity-")) {
+    return "antigravity";
   }
   return null;
 };

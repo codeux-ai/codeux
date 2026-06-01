@@ -89,6 +89,9 @@ interface StartCliTaskInput {
   agentPresetId?: string | null;
   dispatchId?: string;
   taskRunId?: string;
+  resumeWorkspaceSessionId?: string;
+  resumeWorkerBranch?: string;
+  forceFreshWorkspace?: boolean;
 }
 
 function isNonRecoverableGitWorkflowError(message: string): boolean {
@@ -147,7 +150,13 @@ export class CliWorkflowService {
     const sessionId = `cli-${input.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const taskRunKey = buildTaskRunKey(input.repoPath, input.sprintNumber, input.task.id);
     
-    const resumeTarget = workflowSettings.resumeFailedTaskInSameWorkspace
+    const explicitResumeTarget = !input.forceFreshWorkspace && input.resumeWorkspaceSessionId && input.resumeWorkerBranch
+      ? {
+        sessionId: input.resumeWorkspaceSessionId,
+        workerBranch: input.resumeWorkerBranch,
+      }
+      : null;
+    const failedResumeTarget = !input.forceFreshWorkspace && workflowSettings.resumeFailedTaskInSameWorkspace
       ? this.deps.sessionTracking.findLatestFailedCliSessionForTask({
         provider: input.provider,
         taskId: taskRunKey,
@@ -155,6 +164,7 @@ export class CliWorkflowService {
         repoPath: input.repoPath,
       })
       : null;
+    const resumeTarget = explicitResumeTarget || failedResumeTarget;
 
     const workerBranch = resumeTarget?.workerBranch || buildWorkerBranch(input.featureBranch, input.task.id, input.provider);
     const resumeWorktreePath = resumeTarget
@@ -184,8 +194,8 @@ export class CliWorkflowService {
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
         description: resumeWorktreePath
-          ? `Retry configured to resume failed workspace from ${resumeTarget.sessionId} at ${resumeWorktreePath}.`
-          : `Retry configured to resume failed workspace from ${resumeTarget.sessionId}.`,
+          ? `Retry configured to resume workspace from ${resumeTarget.sessionId} at ${resumeWorktreePath}.`
+          : `Retry configured to resume workspace from ${resumeTarget.sessionId}.`,
       });
     }
 

@@ -1,6 +1,6 @@
 interface NavigationBlockerRegistration {
   shouldBlock: () => boolean;
-  confirmNavigation: () => boolean;
+  confirmNavigation: (retry: () => void) => boolean;
 }
 
 type UnregisterNavigationBlocker = () => void;
@@ -38,7 +38,7 @@ const getBlockingRegistration = (): NavigationBlockerRegistration | null => {
   return null;
 };
 
-const shouldAllowNavigation = (): boolean => {
+const shouldAllowNavigation = (retry: () => void): boolean => {
   if (restoringNavigation) {
     return true;
   }
@@ -46,7 +46,7 @@ const shouldAllowNavigation = (): boolean => {
   if (!registration) {
     return true;
   }
-  return registration.confirmNavigation();
+  return registration.confirmNavigation(retry);
 };
 
 const resolveHref = (url?: string | URL | null): string => {
@@ -66,7 +66,11 @@ const installInterceptors = (): void => {
 
   window.history.pushState = ((data: unknown, unused: string, url?: string | URL | null): void => {
     const nextHref = resolveHref(url);
-    if (nextHref !== window.location.href && !shouldAllowNavigation()) {
+    if (nextHref !== window.location.href && !shouldAllowNavigation(() => {
+      withRestoreBypass(() => {
+        window.history.pushState(data, unused, url);
+      });
+    })) {
       return;
     }
     originalPushState?.(data, unused, url);
@@ -75,7 +79,11 @@ const installInterceptors = (): void => {
 
   window.history.replaceState = ((data: unknown, unused: string, url?: string | URL | null): void => {
     const nextHref = resolveHref(url);
-    if (nextHref !== window.location.href && !shouldAllowNavigation()) {
+    if (nextHref !== window.location.href && !shouldAllowNavigation(() => {
+      withRestoreBypass(() => {
+        window.history.replaceState(data, unused, url);
+      });
+    })) {
       return;
     }
     originalReplaceState?.(data, unused, url);
@@ -105,7 +113,11 @@ const installInterceptors = (): void => {
       return;
     }
 
-    if (!shouldAllowNavigation()) {
+    if (!shouldAllowNavigation(() => {
+      withRestoreBypass(() => {
+        window.location.href = anchorUrl.href;
+      });
+    })) {
       event.preventDefault();
       event.stopPropagation();
     }
@@ -117,7 +129,11 @@ const installInterceptors = (): void => {
       return;
     }
 
-    if (!shouldAllowNavigation()) {
+    if (!shouldAllowNavigation(() => {
+      withRestoreBypass(() => {
+        window.location.href = nextHref;
+      });
+    })) {
       withRestoreBypass(() => {
         originalPushState?.(window.history.state, document.title, currentHref);
       });
@@ -163,7 +179,7 @@ export const registerNavigationBlocker = ({
   confirmNavigation,
 }: {
   shouldBlock: () => boolean;
-  confirmNavigation?: () => boolean;
+  confirmNavigation?: (retry: () => void) => boolean;
 }): UnregisterNavigationBlocker => {
   if (typeof window === "undefined") {
     return () => undefined;
@@ -174,7 +190,7 @@ export const registerNavigationBlocker = ({
   const key = Symbol("navigation-blocker");
   blockers.set(key, {
     shouldBlock,
-    confirmNavigation: confirmNavigation ?? (() => window.confirm(DEFAULT_CONFIRM_MESSAGE)),
+    confirmNavigation: confirmNavigation ?? ((retry) => window.confirm(DEFAULT_CONFIRM_MESSAGE)),
   });
 
   return () => {

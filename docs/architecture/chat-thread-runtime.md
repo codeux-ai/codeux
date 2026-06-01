@@ -90,3 +90,11 @@ When querying threads (`listThreads`) or connections (`listConnections`), instea
 - utilizes `ROW_NUMBER() OVER (PARTITION BY thread_id ...)` to effortlessly pull the most recent visible preview text and timestamp alongside these stats.
 
 This keeps index alignments strict, avoids full table scans on global message tables, and ensures O(1) query complexity scaling relative to the number of returned threads or connections in the current project context.
+
+### Invocation Rail Optimistic State
+
+The dashboard invocation rail now inserts an optimistic `dashboard_reply` invocation immediately when a user sends a chat turn, before the server round-trip finishes. Optimistic records use temporary IDs and a pending visual treatment so users can see that execution has started without requiring a page refresh.
+
+After the send request resolves, the client refreshes project invocations and reconciles/removes the optimistic record by its temporary ID. Failed sends remove the optimistic entry to avoid stale phantom records.
+
+To keep long-running invocation statuses current even when realtime events are delayed, the chat page also runs a bounded polling loop (3s interval) while active/pending invocations exist. The loop is cleaned up on unmount and merges refreshed statuses through the existing invocation snapshot pipeline.

@@ -16,6 +16,10 @@ export interface StartSprintDispatchArgs {
   repoPath: string;
   sprintNumber: number;
   taskRecord?: import("../contracts/project-management-types.js").TaskRecord;
+  providerConfigId?: string;
+  resumeWorkspaceSessionId?: string;
+  resumeWorkerBranch?: string;
+  forceFreshWorkspace?: boolean;
 }
 
 export interface StartSprintDispatchResult {
@@ -96,6 +100,12 @@ export class SprintTaskDispatchService {
         settingsScope,
         dispatch.id,
         taskRun.id,
+        {
+          resumeWorkspaceSessionId: args.resumeWorkspaceSessionId,
+          resumeWorkerBranch: args.resumeWorkerBranch,
+          forceFreshWorkspace: args.forceFreshWorkspace,
+          providerConfigId: args.providerConfigId,
+        },
       );
       const sessionName = session.name || null;
       const sessionId = session.id || null;

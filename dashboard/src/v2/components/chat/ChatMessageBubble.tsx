@@ -28,7 +28,15 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({ m
   const providerLabel = message.metadata?.provider as string | undefined;
   const createdAtLabel = formatChatTime(message.createdAt);
 
-  const opacityClass = (fromDashboard && (message.deliveryStatus === "pending" || message.deliveryStatus === "failed"))
+  const invocationResponse = message.metadata?.response;
+  const hasInvocationResponse = typeof invocationResponse === "string"
+    ? invocationResponse.trim().length > 0
+    : Boolean(invocationResponse);
+  const displayDeliveryStatus = message.deliveryStatus === "pending" && hasInvocationResponse
+    ? "processed"
+    : message.deliveryStatus;
+
+  const opacityClass = (fromDashboard && (displayDeliveryStatus === "pending" || displayDeliveryStatus === "failed"))
     ? "opacity-60"
     : "opacity-100";
 
@@ -69,25 +77,25 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({ m
 
           {fromDashboard && (
              <div className="mt-2 flex items-center justify-end gap-1.5 text-[10px] font-mono">
-               {message.deliveryStatus === "pending" && (
+               {displayDeliveryStatus === "pending" && (
                  <>
                    <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
                    <span className="text-slate-400">Queued</span>
                  </>
                )}
-               {message.deliveryStatus === "delivered" && (
+               {displayDeliveryStatus === "delivered" && (
                  <>
                    <Check className="h-3 w-3 text-slate-400" />
                    <span className="text-slate-400">Delivered</span>
                  </>
                )}
-               {message.deliveryStatus === "processed" && (
+               {displayDeliveryStatus === "processed" && (
                  <>
                    <CheckCheck className="h-3 w-3 text-signal-500" />
                    <span className="text-signal-500">Processed</span>
                  </>
                )}
-               {message.deliveryStatus === "failed" && (
+               {displayDeliveryStatus === "failed" && (
                  <>
                    <XCircle className="h-3 w-3 text-status-red" />
                    <span className="text-status-red">Failed</span>

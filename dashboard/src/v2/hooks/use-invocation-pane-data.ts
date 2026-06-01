@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { ExecutionInvocationRecord, ExecutionInvocationMessageRecord, AgentPresetRecord } from "../types.js";
 import { useMessageCache } from "./useMessageCache.js";
-import { fetchInvocationMessages } from "../lib/invocation-api.js";
+import { fetchInvocationMessages, fetchProjectInvocations } from "../lib/invocation-api.js";
 import { buildInvocationIndex } from "../lib/chat-entity-index.js";
 
 export const areInvocationsEqual = (left: ExecutionInvocationRecord[], right: ExecutionInvocationRecord[]): boolean => (
@@ -98,10 +98,11 @@ export const useInvocationPaneData = (options: {
     }));
   }, []);
 
-  const addOptimisticInvocation = useCallback((input: { projectId: string; createdAt?: string }): void => {
+  const addOptimisticInvocation = useCallback((input: { projectId: string; createdAt?: string }): string => {
     const createdAt = input.createdAt || new Date().toISOString();
+    const optimisticId = `optimistic:${input.projectId}:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`;
     const nextInvocation: ExecutionInvocationRecord = {
-      id: `optimistic:${input.projectId}:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
+      id: optimisticId,
       projectId: input.projectId,
       sprintId: null,
       taskId: null,
@@ -129,7 +130,38 @@ export const useInvocationPaneData = (options: {
       updatedAt: createdAt,
     };
     setOptimisticInvocations((current) => [nextInvocation, ...current]);
+    return optimisticId;
   }, []);
+
+  const clearOptimisticInvocation = useCallback((optimisticId: string): void => {
+    setOptimisticInvocations((current) => current.filter((invocation) => invocation.id !== optimisticId));
+  }, []);
+
+  const reconcileOptimisticInvocation = useCallback(async (input: {
+    optimisticId: string;
+    projectId: string;
+    messageCreatedAt?: string | null;
+  }): Promise<void> => {
+    const { optimisticId, projectId, messageCreatedAt } = input;
+    const nextInvocations = await fetchProjectInvocations(projectId);
+    cache.setInvocations(projectId, nextInvocations);
+    setInvocationsSnapshot(nextInvocations);
+
+    const createdAtMs = messageCreatedAt ? Date.parse(messageCreatedAt) : NaN;
+    const matched = nextInvocations.find((candidate) => {
+      if (!Number.isFinite(createdAtMs)) {
+        return false;
+      }
+      const candidateStartMs = Date.parse(candidate.startedAt);
+      return Number.isFinite(candidateStartMs) && Math.abs(candidateStartMs - createdAtMs) <= 30_000;
+    });
+
+    setOptimisticInvocations((current) => current.filter((invocation) => invocation.id !== optimisticId));
+
+    if (matched && selectedInvocationIdRef.current === optimisticId) {
+      setSelectedInvocationId(matched.id);
+    }
+  }, [cache, setInvocationsSnapshot]);
 
   const setInvocationMessagesSnapshot = useCallback((nextMessages: ExecutionInvocationMessageRecord[]): void => {
     setInvocationMessages((current) => areInvocationMessagesEqual(current, nextMessages) ? current : nextMessages);
@@ -253,6 +285,8 @@ export const useInvocationPaneData = (options: {
     invocations: mergedInvocations,
     setInvocationsSnapshot,
     addOptimisticInvocation,
+    clearOptimisticInvocation,
+    reconcileOptimisticInvocation,
     selectedInvocationId,
     setSelectedInvocationId,
     selectedInvocationIdRef,

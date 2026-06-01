@@ -183,6 +183,9 @@ Checks:
 - Failed CLI sessions can preserve their worktree for manual follow-up or assisted retry, based on CLI Workflow settings.
 - Dashboard task reruns now support a full clean reset:
   - the selected task always clears session, PR, merge, and intervention state before restart
+  - normal reruns pass the previous CLI session/worktree into the next dispatch so the provider can continue from the same workspace when it still exists
+  - selecting **Clear worktree** removes the previous workspace using the active CLI execution mode and suppresses workspace resume, forcing a new workspace for the rerun
+  - provider overrides target the exact provider instance from **Settings -> Integrations** and may include a model override, so reruns can switch between multiple logins/configs for the same provider type
   - optional downstream reset rewrites dependent tasks to fresh pending execution snapshots so old completed/running descendants do not keep stale runtime metadata
   - if a task already merged code, operators must undo those landed changes before rerunning that task chain
 

@@ -10,6 +10,7 @@ import {
   saveSystemSettings,
 } from "../lib/settings-api.js";
 import { fetchAgentPresets } from "../lib/agent-preset-api.js";
+import { registerNavigationBlocker } from "../router/navigation-blocker.js";
 import {
   applyExternalHintsToSystemSettings,
   cloneProjectSettings,
@@ -570,7 +571,57 @@ export const useSettingsPageState = (
     }
   }, [systemSettings]);
 
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const pendingNavigationRef = useRef<(() => void) | null>(null);
+
+  const confirmDiscard = useCallback(() => {
+    setShowUnsavedModal(false);
+    if (pendingNavigationRef.current) {
+      pendingNavigationRef.current();
+      pendingNavigationRef.current = null;
+    }
+  }, []);
+
+  const cancelDiscard = useCallback(() => {
+    setShowUnsavedModal(false);
+    pendingNavigationRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const unregisterNavigationBlocker = registerNavigationBlocker({
+      shouldBlock: () => isDirtyRef.current,
+      confirmNavigation: (retry) => {
+        pendingNavigationRef.current = retry;
+        setShowUnsavedModal(true);
+        return false;
+      },
+    });
+
+    return () => {
+      unregisterNavigationBlocker();
+    };
+  }, []);
+
   const activeDirty = activeScope === "system" ? systemDirty : projectDirty;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !activeDirty) {
+      return;
+    }
+
+    const onBeforeUnload = (event: BeforeUnloadEvent): void => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [activeDirty]);
+
   const activeSaving = activeScope === "system" ? savingSystem : savingProject;
 
   return {
@@ -606,7 +657,8 @@ export const useSettingsPageState = (
     isDirtyRef,
     searchInputRef,
     resetFieldToDefault,
-    getFieldReset
+    getFieldReset,
+    showUnsavedModal, confirmDiscard, cancelDiscard
   };
 };
 

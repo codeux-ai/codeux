@@ -198,13 +198,15 @@ export const GUARDRAIL_ON_LIMIT_ACTIONS: GuardrailOnLimitAction[] = [
 /** Fallback cap used when migrating the legacy hardcoded clarification auto-answer limit. */
 export const LEGACY_CLARIFICATION_RETRY_CAP = 3;
 
+export const DEFAULT_PROVIDER_WEIGHT = 50;
+
 export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
   jules: {
     provider: "jules",
     name: DEFAULT_PROVIDER_CONFIG_NAMES.jules,
     enabled: true,
     model: "default",
-    weight: 60,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "MEDIUM",
     apiKey: "",
     mountAuth: false,
@@ -216,7 +218,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES.gemini,
     enabled: true,
     model: "default",
-    weight: 20,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "MEDIUM",
     apiKey: "",
     mountAuth: false,
@@ -228,7 +230,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES.codex,
     enabled: true,
     model: "gpt-5.3-codex",
-    weight: 20,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
     mountAuth: false,
@@ -240,7 +242,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES["claude-code"],
     enabled: false,
     model: "default",
-    weight: 0,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
     mountAuth: false,
@@ -252,7 +254,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES["qwen-code"],
     enabled: false,
     model: "qwen3-coder-plus",
-    weight: 0,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
     mountAuth: false,
@@ -264,7 +266,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES.opencode,
     enabled: false,
     model: "anthropic/claude-sonnet-4-5",
-    weight: 0,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
     mountAuth: false,
@@ -276,7 +278,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     name: DEFAULT_PROVIDER_CONFIG_NAMES.antigravity,
     enabled: false,
     model: "default",
-    weight: 0,
+    weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
     mountAuth: false,
@@ -367,6 +369,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     backgroundMode: "ANIMATED",
     animatedBackground: "deep-ocean",
     staticBackgroundColor: "#0d0f12",
+    backgroundPattern: "HEXAGONS",
     zoomLevel: 1,
   },
   automationLevel: "SEMI_AUTO",
@@ -485,11 +488,11 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     maxQuotaRetriesWithoutTimer: 5,
   },
   sprintPreview: {
-    enabled: true,
-    showInAppBrowser: true,
-    autoStartOnRunningSprint: true,
-    rebuildOnTaskCompletion: true,
-    rebuildOnSprintCompletion: true,
+    enabled: false,
+    showInAppBrowser: false,
+    autoStartOnRunningSprint: false,
+    rebuildOnTaskCompletion: false,
+    rebuildOnSprintCompletion: false,
     autoStopOnTerminalSprint: false,
     maxConcurrentContainers: 5,
     hostPortRangeStart: 5555,
@@ -577,3 +580,4 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     ].join("\n"),
   },
 };
+;

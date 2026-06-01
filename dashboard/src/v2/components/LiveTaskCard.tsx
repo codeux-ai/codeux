@@ -123,6 +123,7 @@ export const TaskDuration: FunctionComponent<{
 
 export interface RerunOptions {
     provider?: string;
+    providerConfigId?: string;
     model?: string;
     clearWorktree?: boolean;
     resetDependents?: boolean;
@@ -190,10 +191,11 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     const handleEditClick = useCallback(() => onEdit(task), [onEdit, task]);
     const handleForceCompleteClick = useCallback(() => onForceComplete(task), [onForceComplete, task]);
 
-    const handleRerunConfirm = useCallback((options: { provider?: string; model?: string; clearWorktree: boolean; resetDependents: boolean }) => {
+    const handleRerunConfirm = useCallback((options: { provider?: string; providerConfigId?: string; model?: string; clearWorktree: boolean; resetDependents: boolean }) => {
         setShowRerunModal(false);
         onRerun(task.record_id || task.id, {
             provider: options.provider,
+            providerConfigId: options.providerConfigId,
             model: options.model,
             clearWorktree: options.clearWorktree,
             resetDependents: options.resetDependents,

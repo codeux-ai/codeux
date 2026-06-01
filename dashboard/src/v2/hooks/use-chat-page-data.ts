@@ -38,14 +38,25 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     execution,
     composerRef: options?.composerRef,
     messagesRef: options?.messagesRef,
-    onMessageSent: (message) => {
+    onMessageSending: ({ projectId, createdAt }) => invocationData.addOptimisticInvocation({
+      projectId,
+      createdAt,
+    }),
+    onMessageSent: ({ message, optimisticInvocationId }) => {
       if (!selectedProject) {
         return;
       }
-      invocationData.addOptimisticInvocation({
+      if (!optimisticInvocationId) {
+        return;
+      }
+      void invocationData.reconcileOptimisticInvocation({
+        optimisticId: optimisticInvocationId,
         projectId: selectedProject.id,
-        createdAt: message.createdAt,
+        messageCreatedAt: message.createdAt,
       });
+    },
+    onMessageSendFailed: (optimisticInvocationId) => {
+      invocationData.clearOptimisticInvocation(optimisticInvocationId);
     },
   });
 
@@ -86,6 +97,35 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
       options.messagesRef.current.scrollTop = options.messagesRef.current.scrollHeight;
     }
   }, [threadData.messages, options?.messagesRef]);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      return;
+    }
+    const hasActiveInvocation = invocationData.invocations.some((invocation) => (
+      invocation.status === "running" || invocation.id.startsWith("optimistic:")
+    ));
+    if (!hasActiveInvocation) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void refreshThreads({ mode: "invocations" });
+      if (invocationData.selectedInvocationIdRef.current) {
+        void invocationData.refreshInvocationMessages(invocationData.selectedInvocationIdRef.current, { force: true });
+      }
+    }, 3000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [
+    invocationData.invocations,
+    invocationData.refreshInvocationMessages,
+    invocationData.selectedInvocationIdRef,
+    refreshThreads,
+    selectedProject,
+  ]);
 
   const activeConnection = useMemo(() => {
     if (!threadData.selectedThread?.connectionId) {

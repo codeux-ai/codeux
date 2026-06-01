@@ -126,6 +126,43 @@ describe("live session runtime state", () => {
     expect(state.pausedInterventionRun?.id).toBe("run-2");
   });
 
+  it("keeps sprint context for worker-owned paused runs so system-stop copy can render", () => {
+    const state = deriveLiveSessionRuntimeState(
+      createStatus(),
+      createExecution({
+        sprintRuns: [{
+          id: "run-worker",
+          projectId: "project-1",
+          sprintId: "sprint-2",
+          sprintName: "Sprint 2",
+          sprintNumber: 53,
+          status: "paused",
+          triggerType: "manual",
+          triggeredBy: null,
+          executorMode: "mixed",
+          startedAt: "2026-03-15T10:00:00.000Z",
+          finishedAt: null,
+          lastHeartbeatAt: null,
+          createdAt: "2026-03-15T10:00:00.000Z",
+          activeLeaseOwnerKey: null,
+          activeLeaseExpiresAt: null,
+          humanIntervention: {
+            title: "Worker pause",
+            reason: "No executable work was available.",
+            instructions: "Resolve and restart.",
+            attentionType: "manual_attention",
+            severity: "medium",
+            ownerType: "worker",
+          },
+        }],
+      }),
+    );
+
+    expect(state.hasActiveSprint).toBe(false);
+    expect(state.hasSprintContext).toBe(true);
+    expect(state.pausedInterventionRun?.id).toBe("run-worker");
+  });
+
   it("respects selectedSprintId when finding live sprint runs", () => {
     const execution = createExecution({
       sprintRuns: [

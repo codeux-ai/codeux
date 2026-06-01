@@ -83,9 +83,11 @@ export const useChatThreadData = (options: {
   execution: ExecutionDashboardSnapshot | null;
   composerRef?: RefObject<HTMLTextAreaElement>;
   messagesRef?: RefObject<HTMLDivElement>;
-  onMessageSent?: (message: ChatMessageRecord) => void;
+  onMessageSending?: (message: { projectId: string; createdAt: string }) => string | null | void;
+  onMessageSent?: (payload: { message: ChatMessageRecord; optimisticInvocationId?: string | null }) => void;
+  onMessageSendFailed?: (optimisticInvocationId: string) => void;
 }) => {
-  const { selectedProject, cache, execution, composerRef, messagesRef, onMessageSent } = options;
+  const { selectedProject, cache, execution, composerRef, messagesRef, onMessageSending, onMessageSent, onMessageSendFailed } = options;
 
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -302,6 +304,10 @@ export const useChatThreadData = (options: {
     }
 
     setSending(true);
+    const optimisticInvocationId = onMessageSending?.({
+      projectId: selectedProject.id,
+      createdAt: new Date().toISOString(),
+    }) || null;
     try {
       let thread = selectedThread || await createThreadForCompose();
 
@@ -309,7 +315,7 @@ export const useChatThreadData = (options: {
         threadId: thread.id,
         bodyMarkdown,
       });
-      onMessageSent?.(created);
+      onMessageSent?.({ message: created, optimisticInvocationId });
       setInput("");
       if (composerRef?.current) {
         composerRef.current.style.height = "auto";
@@ -324,11 +330,14 @@ export const useChatThreadData = (options: {
       // will handle the rest without needing full fetch.
       setError(null);
     } catch (sendError) {
+      if (optimisticInvocationId) {
+        onMessageSendFailed?.(optimisticInvocationId);
+      }
       setError(sendError instanceof Error ? sendError.message : String(sendError));
     } finally {
       setSending(false);
     }
-  }, [cache, composerRef, createThreadForCompose, execution, input, onMessageSent, selectedProject, selectedThread, setMessagesSnapshot]);
+  }, [cache, composerRef, createThreadForCompose, execution, input, onMessageSendFailed, onMessageSending, onMessageSent, selectedProject, selectedThread, setMessagesSnapshot]);
 
   const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
     const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);

@@ -8,14 +8,18 @@ import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
+import * as navigationBlocker from "../../../dashboard/src/v2/router/navigation-blocker.js";
+
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
-
-
   useProjectData: vi.fn(() => ({
     deleteProject: vi.fn(() => Promise.resolve()),
     selectedProject: { id: "proj-1", name: "Test Project" },
     selectedProjectId: "proj-1",
   }))
+}));
+
+vi.mock("../../../dashboard/src/v2/router/navigation-blocker.js", () => ({
+  registerNavigationBlocker: vi.fn(() => vi.fn()),
 }));
 
 let mockSaveSystem;
@@ -368,5 +372,38 @@ describe("useSettingsPageState", () => {
       await result.current.handleImportHints();
     });
     expect(mockFetchExternal).toHaveBeenCalled();
+  });
+
+  it("triggers unsaved changes modal when navigation is attempted while dirty", async () => {
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Get the mock registerNavigationBlocker
+    const mockRegister = navigationBlocker.registerNavigationBlocker as any;
+    expect(mockRegister).toHaveBeenCalled();
+
+    const blockerConfig = mockRegister.mock.calls[0][0];
+    const retry = vi.fn();
+
+    act(() => {
+      // Simulate dirty state
+      result.current.updateEditableSettings((curr) => ({ ...curr, aiProvider: { provider: "gemini" } } as any));
+    });
+
+    expect(blockerConfig.shouldBlock()).toBe(true);
+
+    act(() => {
+      // Simulate navigation attempt
+      blockerConfig.confirmNavigation(retry);
+    });
+
+    expect(result.current.showUnsavedModal).toBe(true);
+
+    act(() => {
+      result.current.confirmDiscard();
+    });
+
+    expect(result.current.showUnsavedModal).toBe(false);
+    expect(retry).toHaveBeenCalled();
   });
 });
