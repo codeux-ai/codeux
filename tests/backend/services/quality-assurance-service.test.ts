@@ -1144,7 +1144,6 @@ describe("QualityAssuranceService", () => {
     vi.spyOn((service as any).workspaceManager, "resolveCurrentBranch").mockResolvedValue("feature/recovered-branch");
     vi.spyOn((service as any).workspaceManager, "prepareWorktree").mockResolvedValue(undefined);
     vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
-    vi.spyOn(service as any, "workspacePathExists").mockResolvedValue(true);
     vi.spyOn(service as any, "runWorkspaceCommand").mockResolvedValue({ stdout: "abc123\n", stderr: "" });
     vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
     vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
@@ -1182,7 +1181,7 @@ describe("QualityAssuranceService", () => {
     }));
   });
 
-  it("keeps the missing worker branch error when metadata and workspace branch are unavailable", async () => {
+  it("returns an actionable error when branch metadata and resume workspace are unavailable", async () => {
     const service = new QualityAssuranceService({
       projectManagementRepository: {} as any,
       executionRepository: {} as any,
@@ -1220,10 +1219,12 @@ describe("QualityAssuranceService", () => {
         sprintId: "sprint-1",
       },
       followUpPrompt: "Address QA findings",
-    })).rejects.toThrow("Cannot continue CLI QA fixes for T1: worker branch is missing.");
+    })).rejects.toThrow(
+      "Cannot continue CLI QA fixes for T1: worker branch metadata is missing and resume workspace is missing for session session-1.",
+    );
   });
 
-  it("resets an existing CLI QA follow-up workspace to the latest worker branch before running the fix", async () => {
+  it("reuses an existing CLI QA follow-up workspace and syncs it with worker branch before running the fix", async () => {
     const runProvider = vi.fn().mockResolvedValue({
       ok: true,
       stdout: "",
@@ -1284,9 +1285,9 @@ describe("QualityAssuranceService", () => {
 
     vi.spyOn((service as any).workspaceManager, "resolveResumeWorktreePath").mockResolvedValue("/worktree");
     vi.spyOn((service as any).workspaceManager, "buildWorktreePath").mockReturnValue("/worktree");
+    vi.spyOn((service as any).workspaceManager, "resolveCurrentBranch").mockResolvedValue("feature/task-1");
     const prepareWorktree = vi.spyOn((service as any).workspaceManager, "prepareWorktree").mockResolvedValue(undefined);
     vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
-    vi.spyOn(service as any, "workspacePathExists").mockResolvedValue(true);
     const runWorkspaceCommand = vi.spyOn(service as any, "runWorkspaceCommand").mockImplementation(
       async (_worktreePath: string, _command: string, commandArgs: string[]) => {
         if (commandArgs[0] === "rev-parse") {
@@ -1327,23 +1328,120 @@ describe("QualityAssuranceService", () => {
     expect(runWorkspaceCommand).toHaveBeenCalledWith(
       "/worktree",
       "git",
-      ["fetch", "origin", "+refs/heads/feature/task-1:refs/remotes/origin/feature/task-1"],
-      expect.anything(),
-    );
-    expect(runWorkspaceCommand).toHaveBeenCalledWith(
-      "/worktree",
-      "git",
-      ["checkout", "-B", "feature/task-1", "origin/feature/task-1"],
-    );
-    expect(runWorkspaceCommand).toHaveBeenCalledWith(
-      "/worktree",
-      "git",
-      ["reset", "--hard", "origin/feature/task-1"],
+      ["merge", "--ff-only", "origin/feature/task-1"],
     );
     expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
       cwd: "/worktree",
     }));
     expect((service as any).workspaceArtifactService.exportBinaryPatch).toHaveBeenCalledWith("/worktree", "remote-worker-head");
+  });
+
+  it("continues QA follow-up on an existing docker workspace when branch metadata is only recoverable from workspace state", async () => {
+    const runProvider = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: "",
+      stderr: "",
+      text: "done",
+      usageTelemetry: {
+        transcriptText: "",
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        usageSource: "reported",
+        rawUsageJson: null,
+      },
+    });
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {
+        updateTask: vi.fn(),
+        getSprint: vi.fn().mockReturnValue(null),
+      } as any,
+      executionRepository: {
+        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue(null),
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-followup" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-followup" }),
+        updateProviderInvocationUsage: vi.fn(),
+      } as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {
+        updateSession: vi.fn(),
+        appendActivity: vi.fn(),
+      } as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue(undefined),
+      } as any,
+      providerRunner: {
+        runProvider,
+        runProviderForText: vi.fn(),
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        cliWorkflow: {
+          ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
+          executionMode: "DOCKER",
+        },
+        git: {
+          ...DEFAULT_DASHBOARD_SETTINGS.git,
+          autoCreatePr: false,
+        },
+        memory: {
+          ...DEFAULT_DASHBOARD_SETTINGS.memory,
+          enabled: false,
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    vi.spyOn((service as any).workspaceManager, "resolveResumeWorktreePath").mockResolvedValue("docker-volume://session-1");
+    vi.spyOn((service as any).workspaceManager, "buildWorktreePath").mockReturnValue("docker-volume://session-1");
+    vi.spyOn((service as any).workspaceManager, "resolveCurrentBranch").mockResolvedValue("worker/recovered");
+    const prepareWorktree = vi.spyOn((service as any).workspaceManager, "prepareWorktree").mockResolvedValue(undefined);
+    vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
+    vi.spyOn(service as any, "runWorkspaceCommand").mockResolvedValue({ stdout: "abc123\n", stderr: "" });
+    vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    const applyPatchToBranch = vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch")
+      .mockResolvedValue({ hasChanges: false });
+    vi.spyOn((service as any).prService, "hasUnpushedCommits").mockResolvedValue(false);
+    vi.spyOn((service as any).prService, "hasWorkerBranchCommitsAgainstFeature").mockResolvedValue(false);
+
+    await (service as any).continueCliTaskSession({
+      provider: "gemini",
+      sessionId: "session-1",
+      task: {
+        id: "T1",
+        record_id: "task-record-1",
+        title: "Fix thing",
+        prompt: "Implement the fix",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+      },
+      taskRun: null,
+      repoPath: "/repo",
+      featureBranch: "feature/sprint-1",
+      scope: {
+        projectId: "project-1",
+        sprintId: "sprint-1",
+      },
+      followUpPrompt: "Address QA findings",
+    });
+
+    expect(prepareWorktree).not.toHaveBeenCalled();
+    expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: "docker-volume://session-1",
+      sessionId: "session-1",
+    }));
+    expect(applyPatchToBranch).toHaveBeenCalledWith(expect.objectContaining({
+      workerBranch: "worker/recovered",
+      repoPath: "/repo",
+    }));
   });
 
   it("passes provider auth mount settings into QA follow-up provider runs", async () => {
@@ -1431,7 +1529,6 @@ describe("QualityAssuranceService", () => {
     vi.spyOn((service as any).workspaceManager, "buildWorktreePath").mockReturnValue("/worktree");
     vi.spyOn((service as any).workspaceManager, "prepareWorktree").mockResolvedValue(undefined);
     vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
-    vi.spyOn(service as any, "workspacePathExists").mockResolvedValue(true);
     vi.spyOn(service as any, "runWorkspaceCommand").mockResolvedValue({ stdout: "abc123\n", stderr: "" });
     vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
     vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
