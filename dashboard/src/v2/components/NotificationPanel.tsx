@@ -26,9 +26,9 @@ const severityClasses: Record<DashboardNotification["severity"], {
     accent: "bg-signal-500",
   },
   info: {
-    icon: "text-sky-600 dark:text-sky-300",
-    badge: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-    accent: "bg-sky-500",
+    icon: "text-signal-600 dark:text-signal-300",
+    badge: "border-signal-500/25 bg-signal-500/10 text-signal-700 dark:text-signal-300",
+    accent: "bg-signal-500",
   },
 };
 

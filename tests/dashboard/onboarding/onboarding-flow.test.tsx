@@ -6,6 +6,8 @@ import { cleanup } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { useOnboardingState } from "../../../dashboard/src/v2/hooks/useOnboardingState.js";
+import { OnboardingExperience } from "../../../dashboard/src/v2/components/onboarding/OnboardingExperience.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 const HookProbe = () => {
   const { state, loading, markCompleted } = useOnboardingState();
@@ -62,5 +64,105 @@ describe("onboarding state hook", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("/api/user/onboarding/complete", expect.objectContaining({ method: "POST" }));
     expect(fetchMock).toHaveBeenCalledWith("/api/user/onboarding/cancel", expect.objectContaining({ method: "POST" }));
+  });
+});
+
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => vi.fn(),
+}));
+
+vi.mock("../../../dashboard/src/v2/components/onboarding/OnboardingIntro.js", () => {
+  return {
+    OnboardingIntro: ({ onComplete }: { onComplete: () => void }) => {
+      queueMicrotask(() => onComplete());
+      return <div data-testid="mock-intro">Mock Intro</div>;
+    }
+  };
+});
+
+describe("onboarding appearance step", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+    delete (globalThis.window as any).codeUxDesktop;
+  });
+
+  it("renders remaining appearance controls and omits removed background controls", async () => {
+    globalThis.window.codeUxDesktop = {
+      setZoom: vi.fn(),
+    } as any;
+
+    const mockSystemSettings = {
+      runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+      integrations: {
+        providers: {},
+        githubToken: "",
+        jira: {
+          host: "",
+          email: "",
+          apiToken: "",
+          autoCloseLinkedIssues: false,
+          defaultProject: "",
+          closeTransitionName: "Done"
+        }
+      },
+      defaults: {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        appearance: {
+          theme: "DARK",
+          navigationMode: "DOCK",
+          reducedMotion: "NONE",
+          zoomLevel: 1,
+          backgroundMode: "ANIMATED",
+          animatedBackground: "deep-ocean",
+          backgroundPattern: "NONE",
+          backgroundImage: null,
+          staticBackgroundColor: "#0d0f12"
+        }
+      },
+      mcpTools: [],
+    };
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), { status: 200 });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(JSON.stringify({
+          checkedAt: "2026-06-01T00:00:00.000Z",
+          cluster: { status: "ready" },
+          dependencies: [],
+          providers: []
+        }), { status: 200 });
+      }
+      if (url.endsWith("/api/system-settings")) {
+        return new Response(JSON.stringify(mockSystemSettings), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    // Wait for onboarding to load and render the first step, then navigate to Appearance step
+    await screen.findByRole("button", { name: "Go to Appearance" });
+
+    const appearanceDotButton = screen.getByRole("button", { name: "Go to Appearance" });
+    await userEvent.click(appearanceDotButton);
+
+    // Verify remaining appearance controls are rendered
+    await screen.findByText("Theme");
+    expect(screen.queryByText("Navigation Mode")).not.toBeNull();
+    expect(screen.queryByText("Reduced Motion")).not.toBeNull();
+    expect(screen.queryByText("Zoom Level")).not.toBeNull();
+    expect(screen.queryByText("Background Mode")).not.toBeNull();
+
+    // Verify removed controls/options are ABSENT
+    expect(screen.queryByText("Animation Style")).toBeNull();
+    expect(screen.queryByText("Aurora Borealis")).toBeNull();
+    expect(screen.queryByText("Pattern Overlay")).toBeNull();
+    expect(screen.queryByText("Hexagons")).toBeNull();
+    expect(screen.queryByText("Custom Background Image")).toBeNull();
+    expect(screen.queryByText("Upload Image")).toBeNull();
   });
 });

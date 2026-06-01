@@ -7,9 +7,13 @@ type Mode = "write" | "preview";
 
 /** Shared prose styling for rendered markdown previews across the app. */
 export const MARKDOWN_PROSE_CLASS =
-  "prose prose-sm max-w-none text-slate-700 dark:text-slate-300 " +
-  "prose-headings:font-display prose-headings:tracking-tight prose-headings:text-slate-900 dark:prose-headings:text-white " +
-  "prose-a:text-signal-600 dark:prose-a:text-signal-400 prose-strong:text-slate-900 dark:prose-strong:text-white " +
+  "prose prose-sm max-w-none text-slate-950 dark:text-slate-300 " +
+  "prose-headings:font-display prose-headings:tracking-tight prose-headings:text-slate-950 dark:prose-headings:text-white " +
+  "prose-p:text-slate-950 dark:prose-p:text-slate-300 prose-li:text-slate-950 dark:prose-li:text-slate-300 " +
+  "prose-strong:text-slate-950 dark:prose-strong:text-white prose-em:text-slate-950 dark:prose-em:text-slate-300 " +
+  "prose-blockquote:text-slate-950 prose-blockquote:border-slate-300 dark:prose-blockquote:text-slate-300 dark:prose-blockquote:border-slate-600 " +
+  "prose-table:text-slate-950 prose-th:text-slate-950 prose-td:text-slate-950 dark:prose-table:text-slate-300 dark:prose-th:text-white dark:prose-td:text-slate-300 " +
+  "prose-a:text-signal-600 dark:prose-a:text-signal-400 " +
   "prose-code:text-signal-600 dark:prose-code:text-signal-400 prose-code:bg-signal-500/[0.06] prose-code:px-1 prose-code:rounded-md " +
   "prose-pre:bg-black/[0.04] dark:prose-pre:bg-white/[0.04]";
 

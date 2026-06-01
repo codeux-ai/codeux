@@ -212,6 +212,7 @@ Legacy runtime:
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
 - Sprint cells now surface a QA-reviewed indicator with an expandable overlay section inside the created column, and allow marking sprints completed directly from the cell menu
 - Task rows and Live task cards now surface task-level QA review badges from the latest task QA run, including a running indicator while QA review is in progress.
+- Rendered markdown previews use near-black body, heading, list, blockquote, and table text in light mode while preserving slate/white dark-mode text and signal-colored links/code.
 - Live task cards now include `Edit` and `Force complete` actions:
   - `Edit` deep-links to `/tasks?taskId=<taskId>&sprintId=<sprintId>` so operators can open the task editor directly from the live surface.
   - `Force complete` calls `POST /api/projects/:projectId/tasks/:taskId/force-complete`, disables itself for already completed tasks, and surfaces inline failures on the card.
