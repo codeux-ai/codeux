@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS projects (
         default_branch TEXT,
         feature_branch_prefix TEXT,
         status TEXT NOT NULL DEFAULT 'idle',
+        default_agent_presets_provisioned INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );

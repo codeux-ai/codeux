@@ -27,6 +27,7 @@ export interface ProjectSummary {
   openTasks: number;
   completedTasks: number;
   isRunning: boolean;
+  defaultAgentPresetsProvisioned: boolean;
   settingsOverrides: ProjectSettingsOverride;
   agentBindings: ProjectWorkerAssignmentRecord[];
   createdAt: string;

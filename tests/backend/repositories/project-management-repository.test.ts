@@ -699,4 +699,24 @@ describe("ProjectManagementRepository", () => {
 
     expect(cleared.model).toBeNull();
   });
+
+  it("defaults defaultAgentPresetsProvisioned to false for new projects and sets it to true when marked", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Flag Project",
+      sourceType: "local",
+      sourceRef: "/workspace/flag-project",
+    });
+
+    // Proving new projects default the flag to false
+    expect(project.defaultAgentPresetsProvisioned).toBe(false);
+
+    // Marking the flag true
+    repository.markDefaultAgentPresetsProvisioned(project.id);
+
+    // Proving marking the flag persists true
+    const fetched = repository.getProject(project.id);
+    expect(fetched).not.toBeNull();
+    expect(fetched!.defaultAgentPresetsProvisioned).toBe(true);
+  });
 });
