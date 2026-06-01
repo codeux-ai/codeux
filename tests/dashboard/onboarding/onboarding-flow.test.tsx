@@ -13,6 +13,16 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
 
+// Mock OnboardingIntro to fire callbacks immediately via microtask,
+// avoiding dependency on GSAP timers in JSDOM (which caused CI timeouts).
+vi.mock("../../../dashboard/src/v2/components/onboarding/OnboardingIntro.js", () => ({
+  OnboardingIntro: ({ onExitStart, onComplete }: { onExitStart?: () => void; onComplete?: () => void }) => {
+    queueMicrotask(() => onExitStart?.());
+    queueMicrotask(() => onComplete?.());
+    return null;
+  },
+}));
+
 const HookProbe = () => {
   const { state, loading, markCompleted } = useOnboardingState();
 
