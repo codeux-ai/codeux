@@ -64,6 +64,71 @@ describe("ProviderRunner", () => {
     }));
   });
 
+  it("captures antigravity diagnostics via a --log-file and demotes an exit-0 quota run", async () => {
+    // agy exits 0 with empty stdout/stderr; the real quota error lives only in its log file.
+    dockerRunner.runProviderInDocker.mockResolvedValueOnce({
+      ok: true,
+      stdout: "",
+      stderr: "",
+      code: 0,
+      signal: null,
+    });
+    dockerRunner.readWorkspaceFile.mockImplementation(async (_cwd: string, filePath: string) =>
+      filePath.includes("antigravity-logs")
+        ? "E0601 09:45:02.823154 813902 log.go:398] agent executor error: RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact your administrator to enable overages. Resets in 3h4m52s.: RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact your administrator to enable overages. Resets in 3h4m52s."
+        : "captured text");
+
+    const result = await runner.runProvider({
+      provider: "antigravity",
+      prompt: "implement the feature",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    // The run is demoted to a failure and the quota line (with reset time) is surfaced in stderr.
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain("Individual quota reached");
+    expect(result.stderr).toContain("Resets in 3h4m52s");
+    // The CLI must be told where to write its log so we can read it back.
+    const call = dockerRunner.runProviderInDocker.mock.calls[0][0];
+    const logFileIdx = call.args.indexOf("--log-file");
+    expect(logFileIdx).toBeGreaterThanOrEqual(0);
+    expect(call.args[logFileIdx + 1]).toContain("antigravity-logs");
+  });
+
+  it("leaves a normal antigravity completion successful when the log has no errors", async () => {
+    dockerRunner.runProviderInDocker.mockResolvedValueOnce({
+      ok: true,
+      stdout: "",
+      stderr: "",
+      code: 0,
+      signal: null,
+    });
+    dockerRunner.readWorkspaceFile.mockImplementation(async (_cwd: string, filePath: string) =>
+      filePath.includes("antigravity-logs")
+        ? "I0601 09:45:02.397366 813902 conversation_manager.go:284] Starting new conversation (agent=false)\nI0601 09:45:03.001858 813902 printmode_manager.go:90] Response complete"
+        : "captured text");
+
+    const result = await runner.runProvider({
+      provider: "antigravity",
+      prompt: "implement the feature",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "key",
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   it("forwards continueSessionId into Docker provider commands", async () => {
     await runner.runProvider({
       provider: "claude-code",

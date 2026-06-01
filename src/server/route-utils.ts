@@ -99,7 +99,7 @@ export function parsePlanSprintOptions(body: unknown): PlanSprintOptions {
   };
 }
 
-export function parseRerunTaskOptions(body: unknown): { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean } {
+export function parseRerunTaskOptions(body: unknown): { provider?: string; providerConfigId?: string; model?: string; clearWorktree?: boolean; resetDependents?: boolean; undoMerge?: boolean } {
   if (!body || typeof body !== "object") {
     throw new Error("Invalid input: body must be an object");
   }
@@ -110,6 +110,7 @@ export function parseRerunTaskOptions(body: unknown): { provider?: string; provi
     model: typeof typedBody.model === "string" ? typedBody.model : undefined,
     clearWorktree: Boolean(typedBody.clearWorktree),
     resetDependents: Boolean(typedBody.resetDependents),
+    undoMerge: Boolean(typedBody.undoMerge),
   };
 }
 

@@ -296,7 +296,7 @@ export const TaskStagePills: FunctionComponent<{
   ));
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-2">
+    <div className="mt-4 mb-4 flex flex-wrap items-center gap-2">
       {visibleStages.map((stage) => {
         const meta = STAGE_META[stage];
         const active = timing.activeStage === stage;

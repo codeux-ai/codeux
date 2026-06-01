@@ -74,6 +74,7 @@ export interface RerunTaskOptions {
   model?: string;
   clearWorktree?: boolean;
   resetDependents?: boolean;
+  undoMerge?: boolean;
 }
 
 export const rerunTask = async (taskId: string, options?: RerunTaskOptions): Promise<void> => {

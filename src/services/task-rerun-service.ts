@@ -2,6 +2,7 @@ import type { ProviderId, Subtask } from "../contracts/app-types.js";
 import type { StartSprintDispatchResult } from "./sprint-task-dispatch-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { createPendingTaskRuntimeReset } from "../domain/sprint/task-reset-state.js";
+import { commandRunner } from "../shared/subprocess/command-runner.js";
 
 const VALID_PROVIDER_IDS = new Set<ProviderId>([
   "jules",
@@ -33,6 +34,7 @@ export interface TaskRerunOptions {
   model?: string;
   clearWorktree?: boolean;
   resetDependents?: boolean;
+  undoMerge?: boolean;
 }
 
 export interface TaskRerunSprintRunResolution {
@@ -89,6 +91,10 @@ export class TaskRerunService {
     const context = this.deps.resolveTaskContext(taskId);
     if (!context) {
       throw new Error("Cannot rerun task: sprint context is incomplete. Run orchestration/status first.");
+    }
+
+    if (options?.undoMerge) {
+      await this.revertMerge(context);
     }
 
     const sprintRun = await this.deps.resolveSprintRunId({
@@ -296,5 +302,125 @@ export class TaskRerunService {
       }
     }
     return restartedTask;
+  }
+
+  private async revertMerge(context: TaskRerunContext): Promise<void> {
+    const task = context.task;
+    const repoPath = context.repoPath;
+    const featureBranch = context.featureBranch;
+    const prUrl = task.pr_url;
+    const workerBranch = task.worker_branch;
+
+    this.deps.logger?.info("Attempting to programmatically undo merge for task", {
+      taskId: task.id,
+      prUrl,
+      workerBranch,
+    });
+
+    let prNumber: string | undefined;
+    if (prUrl) {
+      const match = prUrl.match(/(?:pull|pr)\/(\d+)/);
+      if (match) {
+        prNumber = match[1];
+      }
+    }
+
+    // Checkout the feature branch
+    await commandRunner.run("git", ["checkout", featureBranch], { cwd: repoPath });
+
+    let commitHash: string | undefined;
+
+    // Search by PR number first
+    if (prNumber) {
+      const grepPatterns = [
+        `Merge pull request #${prNumber}`,
+        `(#${prNumber})`,
+        `PR #${prNumber}`,
+      ];
+
+      for (const pattern of grepPatterns) {
+        const result = await commandRunner.run(
+          "git",
+          ["log", "--first-parent", `--grep=${pattern}`, "--format=%H", "-n", "1"],
+          { cwd: repoPath }
+        );
+        const hash = result.stdout.trim();
+        if (hash) {
+          commitHash = hash;
+          break;
+        }
+      }
+
+      if (!commitHash) {
+        const fallbackResult = await commandRunner.run(
+          "git",
+          ["log", "--first-parent", `--grep=#${prNumber}`, "--format=%H", "-n", "1"],
+          { cwd: repoPath }
+        );
+        const hash = fallbackResult.stdout.trim();
+        if (hash) {
+          commitHash = hash;
+        }
+      }
+    }
+
+    // Fallback search by worker branch
+    if (!commitHash && workerBranch) {
+      const patterns = [
+        `Merge branch '${workerBranch}'`,
+        workerBranch,
+      ];
+      for (const pattern of patterns) {
+        const result = await commandRunner.run(
+          "git",
+          ["log", "--first-parent", `--grep=${pattern}`, "--format=%H", "-n", "1"],
+          { cwd: repoPath }
+        );
+        const hash = result.stdout.trim();
+        if (hash) {
+          commitHash = hash;
+          break;
+        }
+      }
+    }
+
+    if (!commitHash) {
+      throw new Error(`Could not locate the Git merge commit for task ${task.id} (PR #${prNumber || "unknown"}, branch ${workerBranch || "unknown"}) on branch ${featureBranch}.`);
+    }
+
+    this.deps.logger?.info("Found merge commit to revert", { taskId: task.id, commitHash });
+
+    // Determine if it's a merge commit (has more than 1 parent)
+    const checkParent = await commandRunner.run(
+      "git",
+      ["rev-parse", "--verify", `${commitHash}^2`],
+      { cwd: repoPath }
+    ).catch(() => ({ ok: false }));
+
+    const isMerge = checkParent.ok;
+
+    // Run git revert
+    const revertArgs = isMerge
+      ? ["revert", "--no-edit", "-m", "1", commitHash]
+      : ["revert", "--no-edit", commitHash];
+
+    const revertResult = await commandRunner.run("git", revertArgs, { cwd: repoPath });
+    if (!revertResult.ok) {
+      throw new Error(`Failed to revert merge commit ${commitHash}: ${revertResult.stderr || revertResult.stdout}`);
+    }
+
+    this.deps.logger?.info("Successfully reverted merge commit", { taskId: task.id, commitHash });
+
+    // Check if remote exists and push
+    const remoteCheck = await commandRunner.run("git", ["remote"], { cwd: repoPath });
+    if (remoteCheck.ok && remoteCheck.stdout.trim().length > 0) {
+      const pushResult = await commandRunner.run("git", ["push", "origin", featureBranch], { cwd: repoPath });
+      if (!pushResult.ok) {
+        this.deps.logger?.warn("Failed to push reverted merge to origin", {
+          taskId: task.id,
+          error: pushResult.stderr || pushResult.stdout,
+        });
+      }
+    }
   }
 }

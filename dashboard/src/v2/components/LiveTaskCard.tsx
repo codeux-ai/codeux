@@ -17,7 +17,7 @@ import {
     MERGE_INDICATOR_CFG,
     getTaskCfg,
 } from "../lib/live-session-config.js";
-import { getTaskProgressPhase } from "../../lib/task-progress.js";
+import { getTaskProgressPhase, type TaskProgressPhase } from "../../lib/task-progress.js";
 import type { LiveTaskTimingSummary } from "../lib/live-stats.js";
 import {
     deriveLiveDurationDisplay,
@@ -128,11 +128,15 @@ export interface RerunOptions {
     model?: string;
     clearWorktree?: boolean;
     resetDependents?: boolean;
+    undoMerge?: boolean;
 }
 
 export interface LiveTaskCardProps {
     task: Subtask;
     allTasks: Subtask[];
+    /** Live execution phase resolved from the latest dispatch (e.g. QUOTA while waiting on
+     *  a provider quota reset). Falls back to the task's own status when not supplied. */
+    phase?: TaskProgressPhase | null;
     taskTiming?: LiveTaskTimingSummary | null;
     events?: ExecutionRuntimeEventSummary[];
     onRerun: (id: string, options?: RerunOptions) => void;
@@ -153,6 +157,7 @@ export interface LiveTaskCardProps {
 const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     task,
     allTasks,
+    phase,
     taskTiming,
     events,
     onRerun,
@@ -179,7 +184,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
     const isPreviewVisible = !expanded && !showFeed;
 
-    const taskPhase = getTaskProgressPhase(task);
+    const taskPhase = phase ?? getTaskProgressPhase(task);
     const cfg = getTaskCfg(taskPhase);
     const StatusIcon = cfg.icon;
     const hasEventFeed = Boolean(events && events.length > 0);
@@ -192,7 +197,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     const handleEditClick = useCallback(() => onEdit(task), [onEdit, task]);
     const handleForceCompleteClick = useCallback(() => onForceComplete(task), [onForceComplete, task]);
 
-    const handleRerunConfirm = useCallback((options: { provider?: string; providerConfigId?: string; model?: string; clearWorktree: boolean; resetDependents: boolean }) => {
+    const handleRerunConfirm = useCallback((options: { provider?: string; providerConfigId?: string; model?: string; clearWorktree: boolean; resetDependents: boolean; undoMerge?: boolean }) => {
         setShowRerunModal(false);
         onRerun(task.record_id || task.id, {
             provider: options.provider,
@@ -200,6 +205,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
             model: options.model,
             clearWorktree: options.clearWorktree,
             resetDependents: options.resetDependents,
+            undoMerge: options.undoMerge,
         });
     }, [task.id, task.record_id, onRerun]);
 

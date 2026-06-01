@@ -430,6 +430,21 @@ export class ProviderExecutionService {
               },
             });
           }
+          // Surface the in-process wait as a task-run event so the live dashboard can show
+          // QUOTA + a countdown while we sleep here (the dispatch deliberately stays
+          // "running" during the wait, so this is the only signal the UI can key off).
+          if (args.taskRunId) {
+            this.deps.executionRepository?.appendTaskRunEvent(args.taskRunId, "cli_provider_quota_wait", "system", {
+              provider: args.provider,
+              model: args.model,
+              purpose: args.purpose,
+              kind: retryDecision.kind,
+              errorCategory: classification.category,
+              retryAfterIso: retryDecision.retryAtIso,
+            }, {
+              sourceEventKey: `cli:provider:quota-wait:${execInvocationId ?? args.sessionId}:${retryDecision.retryAtIso}`,
+            });
+          }
           continueSessionId = providerResult.nativeSessionId || (args.provider === "claude-code" ? null : args.sessionId);
           await sleepWithSignal(retryDecision.delayMs, args.signal);
           continue;
