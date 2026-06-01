@@ -305,6 +305,7 @@ describe("ProjectManagementRepository", () => {
       findings: ["Missing regression test"],
       reviewer: "QA Bot",
       finishedAt: "2026-05-30T09:06:00.000Z",
+      errorCode: null,
     });
   });
 

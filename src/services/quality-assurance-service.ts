@@ -123,6 +123,45 @@ export class QualityAssuranceService {
   private readonly providerExecutionService: ProviderExecutionService;
   private readonly structuredAgentRequestService: StructuredAgentRequestService;
 
+  private readonly activeQaRuns = new Map<string, AbortController>();
+
+  stopQaReview(args: { runId?: string; taskId?: string; sprintId?: string } | string): boolean {
+    let runId: string | undefined;
+    let taskId: string | undefined;
+    let sprintId: string | undefined;
+
+    if (typeof args === "string") {
+      runId = args;
+    } else {
+      runId = args.runId;
+      taskId = args.taskId;
+      sprintId = args.sprintId;
+    }
+
+    if (!runId && taskId) {
+      const activeRun = this.deps.qaReviewRepository.getLatestTaskRun(taskId);
+      if (activeRun && activeRun.status === "running") {
+        runId = activeRun.id;
+      }
+    }
+    if (!runId && sprintId) {
+      const activeRun = this.deps.qaReviewRepository.getLatestSprintRun(sprintId);
+      if (activeRun && activeRun.status === "running") {
+        runId = activeRun.id;
+      }
+    }
+
+    if (runId) {
+      const controller = this.activeQaRuns.get(runId);
+      if (controller) {
+        controller.abort();
+        this.activeQaRuns.delete(runId);
+        return true;
+      }
+    }
+    return false;
+  }
+
   constructor(private readonly deps: QualityAssuranceServiceDependencies) {
     this.providerExecutionService = new ProviderExecutionService({
       executionRepository: deps.executionRepository,
@@ -179,6 +218,13 @@ export class QualityAssuranceService {
     repoPath: string;
     task: Subtask;
     subtasks: Subtask[];
+    customProvider?: {
+      provider: string;
+      providerConfigId?: string;
+      model?: string;
+    };
+    agentPresetId?: string;
+    force?: boolean;
   }): Promise<TaskQaReviewOutcome> {
     const taskId = args.task.record_id?.trim();
     if (!taskId) {
@@ -191,24 +237,27 @@ export class QualityAssuranceService {
     };
     const settings = this.deps.getDashboardSettings(scope);
     const qaSettings = settings.agents.qualityAssurance;
-    if (!qaSettings.enabled) {
+    if (!qaSettings.enabled && !args.force) {
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
 
-    const triggerType = this.resolveTaskTriggerType(args.task, qaSettings);
+    let triggerType = this.resolveTaskTriggerType(args.task, qaSettings);
+    if (!triggerType && args.force) {
+      triggerType = args.task.pr_url ? "task_completion" : "completed_task_without_pr";
+    }
     if (!triggerType) {
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
 
     const existingRuns = this.deps.qaReviewRepository.countTaskRuns(taskId);
-    if (existingRuns >= qaSettings.maxTaskReviewRuns) {
+    if (existingRuns >= qaSettings.maxTaskReviewRuns && !args.customProvider && !args.force) {
       await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
 
     // Separate per-task QA guardrail (independent of the QA agent's own maxTaskReviewRuns).
     const qaGuardrail = this.deps.guardrailService.evaluateQa(scope, taskId);
-    if (!qaGuardrail.allowed && qaGuardrail.action !== "WARN_ONLY") {
+    if (!qaGuardrail.allowed && qaGuardrail.action !== "WARN_ONLY" && !args.customProvider && !args.force) {
       await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
       this.deps.logger?.info("QA review skipped: guardrail cap reached", {
         taskId,
@@ -225,9 +274,10 @@ export class QualityAssuranceService {
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
 
-    const agentPresetId = triggerType === "completed_task_without_pr"
+    const defaultAgentPresetId = triggerType === "completed_task_without_pr"
       ? qaSettings.completedTaskWithoutPr.agentPresetId
       : qaSettings.taskCompletion.agentPresetId;
+    const agentPresetId = args.agentPresetId || defaultAgentPresetId || "";
     const agent = await this.deps.agentPresetSyncService.resolveTargetedQualityAssuranceAgent(args.projectId, agentPresetId);
 
     const memoryInstructions = resolveAgentMemoryInstructions(
@@ -255,6 +305,9 @@ export class QualityAssuranceService {
       },
     });
 
+    const abortController = new AbortController();
+    this.activeQaRuns.set(run.id, abortController);
+
     // Record the QA invocation against the per-task guardrail ledger.
     this.deps.guardrailService.record(scope, taskId, "qa_review");
 
@@ -271,6 +324,8 @@ export class QualityAssuranceService {
         taskRun,
         sprintRunId: args.sprintRunId || null,
         agentPresetId: agent.id,
+        customProvider: args.customProvider,
+        abortSignal: abortController.signal,
       });
 
       if (review.verdict === "pass" || (triggerType === "completed_task_without_pr" && review.shouldHavePr === false)) {
@@ -355,18 +410,19 @@ export class QualityAssuranceService {
       };
     } catch (error) {
       const qaError = parseQaError(error);
+      const isStopped = error instanceof Error && error.message.includes("aborted");
       this.deps.qaReviewRepository.updateRun(run.id, {
         status: "failed",
-        summaryMarkdown: qaError.message,
+        summaryMarkdown: isStopped ? "QA review was stopped manually." : qaError.message,
         payload: {
-          error_code: qaError.code,
+          error_code: isStopped ? "CANCELLED" : qaError.code,
         },
         finishedAt: new Date().toISOString(),
       });
       this.appendTaskEvent(taskRun, "qa_review_failed", {
         triggerType,
-        error: qaError.message,
-        error_code: qaError.code,
+        error: isStopped ? "QA review was stopped manually." : qaError.message,
+        error_code: isStopped ? "CANCELLED" : qaError.code,
         qaReviewRunId: run.id,
       });
       this.deps.logger?.warn("Task QA review failed", {
@@ -383,15 +439,24 @@ export class QualityAssuranceService {
         mergeBlocked: qaError.isRetryable && (existingRuns + 1 < qaSettings.maxTaskReviewRuns),
         reportText: renderQaReviewFailedReport(args.task.id, error),
       };
+    } finally {
+      this.activeQaRuns.delete(run.id);
     }
   }
 
   async reviewSprintCompletion(args: {
     projectId: string;
     sprintId: string;
-    sprintRunId: string;
+    sprintRunId?: string | null;
     repoPath: string;
     subtasks: Subtask[];
+    customProvider?: {
+      provider: string;
+      providerConfigId?: string;
+      model?: string;
+    };
+    agentPresetId?: string;
+    force?: boolean;
   }): Promise<SprintQaReviewOutcome> {
     const scope = {
       projectId: args.projectId,
@@ -399,7 +464,7 @@ export class QualityAssuranceService {
     };
     const settings = this.deps.getDashboardSettings(scope);
     const qaSettings = settings.agents.qualityAssurance;
-    if (!qaSettings.enabled || !qaSettings.sprintCompletion.enabled) {
+    if ((!qaSettings.enabled || !qaSettings.sprintCompletion.enabled) && !args.force) {
       return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
     }
 
@@ -434,16 +499,18 @@ export class QualityAssuranceService {
         reportText: renderSprintQaPendingReport(latestRun),
       };
     }
-    if (latestRun?.outcome === "pass") {
+    if (latestRun?.outcome === "pass" && !args.customProvider && !args.force) {
       return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
     }
-    if (retriesExhausted) {
+    if (retriesExhausted && !args.customProvider && !args.force) {
       return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
     }
     if (
       (latestRun?.outcome === "changes_requested" || latestRun?.status === "failed")
       && !hasMeaningfulChangesSinceLatestRun
       && !recoveredStaleLatestRun
+      && !args.customProvider
+      && !args.force
     ) {
       return {
         reviewed: false,
@@ -455,21 +522,24 @@ export class QualityAssuranceService {
 
     const agent = await this.deps.agentPresetSyncService.resolveTargetedQualityAssuranceAgent(
       args.projectId,
-      qaSettings.sprintCompletion.agentPresetId,
+      args.agentPresetId || qaSettings.sprintCompletion.agentPresetId,
     );
     const run = this.deps.qaReviewRepository.createRun({
       projectId: args.projectId,
       sprintId: args.sprintId,
-      sprintRunId: args.sprintRunId,
+      sprintRunId: args.sprintRunId || null,
       triggerType: "sprint_completion",
       runIndex: (latestRun?.runIndex || 0) + 1,
       agentPresetId: agent.id,
       agentName: agent.name,
       payload: {
-        sprintRunId: args.sprintRunId,
+        sprintRunId: args.sprintRunId || null,
         taskSnapshot: currentTaskSnapshot,
       },
     });
+
+    const abortController = new AbortController();
+    this.activeQaRuns.set(run.id, abortController);
 
     try {
       const memoryInstructions = resolveAgentMemoryInstructions(
@@ -488,8 +558,10 @@ export class QualityAssuranceService {
         subtasks: args.subtasks,
         currentTask: null,
         taskRun: null,
-        sprintRunId: args.sprintRunId,
+        sprintRunId: args.sprintRunId || null,
         agentPresetId: agent.id,
+        customProvider: args.customProvider,
+        abortSignal: abortController.signal,
       });
 
       if (review.verdict === "pass") {
@@ -514,7 +586,7 @@ export class QualityAssuranceService {
       const targetTask = review.targetTaskKey
         ? args.subtasks.find((task) => task.id === review.targetTaskKey) ?? null
         : null;
-      const targetTaskRun = targetTask ? this.resolveTaskRunForSubtask(targetTask, args.sprintRunId) : null;
+      const targetTaskRun = targetTask ? this.resolveTaskRunForSubtask(targetTask, args.sprintRunId || undefined) : null;
       const fixInstructions = review.fixInstructions;
       const continued = targetTask && fixInstructions
         ? await this.requestFixesForTask({
@@ -574,11 +646,12 @@ export class QualityAssuranceService {
       };
     } catch (error) {
       const qaError = parseQaError(error);
+      const isStopped = error instanceof Error && error.message.includes("aborted");
       this.deps.qaReviewRepository.updateRun(run.id, {
         status: "failed",
-        summaryMarkdown: qaError.message,
+        summaryMarkdown: isStopped ? "QA review was stopped manually." : qaError.message,
         payload: {
-          error_code: qaError.code,
+          error_code: isStopped ? "CANCELLED" : qaError.code,
         },
         finishedAt: new Date().toISOString(),
       });
@@ -595,6 +668,8 @@ export class QualityAssuranceService {
         mergeBlocked: qaError.isRetryable,
         reportText: renderSprintQaFailedReport(error),
       };
+    } finally {
+      this.activeQaRuns.delete(run.id);
     }
   }
 
@@ -711,6 +786,12 @@ export class QualityAssuranceService {
     taskRun: TaskRunRecord | null;
     sprintRunId: string | null;
     agentPresetId: string | null;
+    customProvider?: {
+      provider: string;
+      providerConfigId?: string;
+      model?: string;
+    };
+    abortSignal?: AbortSignal;
   }): Promise<NormalizedQaReviewResult> {
     return await this.withSprintRunKeepAlive(args.sprintRunId, args.scope.sprintId, async () => {
       await this.syncRemoteBranchesIfNeeded(
@@ -728,13 +809,29 @@ export class QualityAssuranceService {
         is_independent: true,
         status: "COMPLETED",
       };
-      const route = this.deps.taskService.resolveInvocationProvider("qa_review", pseudoTask, {
-        scope: args.scope,
-        cliOnly: true,
-      });
-      const provider = route.provider as CliQaProvider;
-      const providerConfigId = route.providerConfigId || route.provider;
-      const providerSettings = route.providers[providerConfigId];
+
+      let provider: CliQaProvider;
+      let providerConfigId: string;
+      let providerSettings: any;
+
+      if (args.customProvider) {
+        provider = args.customProvider.provider as CliQaProvider;
+        providerConfigId = args.customProvider.providerConfigId || args.customProvider.provider;
+        const settings = this.deps.getDashboardSettings(args.scope);
+        const resolvedSettings = settings.aiProvider.providers[providerConfigId];
+        providerSettings = {
+          ...resolvedSettings,
+          model: args.customProvider.model || resolvedSettings?.model,
+        };
+      } else {
+        const route = this.deps.taskService.resolveInvocationProvider("qa_review", pseudoTask, {
+          scope: args.scope,
+          cliOnly: true,
+        });
+        provider = route.provider as CliQaProvider;
+        providerConfigId = route.providerConfigId || route.provider;
+        providerSettings = route.providers[providerConfigId];
+      }
 
       const memoryContext = args.agentPresetId
         ? this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, args.agentPresetId)
@@ -817,6 +914,7 @@ export class QualityAssuranceService {
           providerLabel: "QA",
           sessionIdPrefix: "qa-review",
           systemRoutingMessage: args.agentInstructions.trim(),
+          signal: args.abortSignal,
           onActivity: () => {
             this.touchSprintRunHeartbeat(args.sprintRunId, args.scope.sprintId);
           },

@@ -32,7 +32,8 @@ export const sprintSummaryQuery = {
             'summary', q.summary_markdown,
             'findings', COALESCE(json_extract(q.payload_json, '$.findings'), json_array()),
             'reviewer', q.agent_name,
-            'finishedAt', q.finished_at
+            'finishedAt', q.finished_at,
+            'errorCode', json_extract(q.payload_json, '$.error_code')
           )
           FROM qa_review_runs q
           WHERE q.sprint_id = s.id

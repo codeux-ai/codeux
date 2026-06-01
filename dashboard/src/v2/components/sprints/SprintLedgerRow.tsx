@@ -30,6 +30,7 @@ const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
   failed: "border-status-red/25 bg-status-red/10 text-status-red",
   cancelled: "border-slate-300/35 bg-slate-100/80 text-slate-500 dark:border-white/15 dark:bg-white/[0.05] dark:text-slate-400",
   idle: "border-signal-500/25 bg-signal-500/10 text-signal-700 dark:text-signal-300",
+  quota: "border-ember-500/25 bg-ember-500/10 text-ember-600 dark:text-ember-400",
 };
 
 const PROGRESS_TONES: Record<SprintStatus, string> = {
@@ -39,6 +40,7 @@ const PROGRESS_TONES: Record<SprintStatus, string> = {
   failed: "from-status-red to-status-red",
   cancelled: "from-slate-400 to-slate-300",
   idle: "from-signal-500 to-signal-300",
+  quota: "from-ember-500 to-ember-400",
 };
 
 const TABLE_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {

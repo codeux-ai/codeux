@@ -4,7 +4,7 @@ import type { ProjectWorkerAssignmentRecord } from "./worker-types.js";
 
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
 export type ProjectSourceType = "local" | "git";
-export type SprintStatus = "running" | "paused" | "completed" | "failed" | "cancelled" | "idle";
+export type SprintStatus = "running" | "paused" | "completed" | "failed" | "cancelled" | "idle" | "quota";
 export type TaskStatus = "pending" | "in_progress" | "coding_completed" | "completed" | "QA_REVIEW_FAILED";
 export type TaskPriority = "critical" | "high" | "medium" | "low";
 export type TaskExecutorType = "auto" | "docker_cli" | "jules";
@@ -41,6 +41,7 @@ export interface SprintReviewSummary {
   findings: string[];
   reviewer: string | null;
   finishedAt: string | null;
+  errorCode?: string | null;
 }
 
 export type LinkedIssueProvider = "github" | "gitlab" | "jira";

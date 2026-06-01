@@ -1,6 +1,7 @@
 import { setupDashboardServer, type DashboardServerHandle } from "../../server/dashboard-server.js";
 import { registerMemoryRoutes } from "../../server/memory-routes.js";
 import { InstructionFileService } from "../../services/instruction-file-service.js";
+import { QualityAssuranceService } from "../../services/quality-assurance-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { createLogger } from "../../shared/logging/logger.js";
 import * as path from "path";
@@ -26,6 +27,7 @@ import type {
   FileBrowserFileContent,
   FileBrowserChangeSet,
   FileBrowserDiff,
+  Subtask,
 } from "../../contracts/app-types.js";
 import type { McpConnectionRecord } from "../../contracts/connection-chat-types.js";
 import type { AppDbStorage } from "../../repositories/app-db-storage.js";
@@ -89,6 +91,7 @@ export interface BootDashboardDeps {
   sprintIssueService: SprintIssueService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   dashboardRealtimeService: DashboardRealtimeService;
+  qualityAssuranceService: QualityAssuranceService;
   logger: Logger;
   getLiveActivitiesForActiveTasks: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
@@ -604,6 +607,146 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     readFileBrowserFile: deps.readFileBrowserFile,
     getFileBrowserChanges: deps.getFileBrowserChanges,
     getFileBrowserDiff: deps.getFileBrowserDiff,
+    stopQaReview: async (args: { runId?: string; taskId?: string; sprintId?: string }) => {
+      const ok = deps.qualityAssuranceService.stopQaReview(args);
+      let projectId: string | undefined;
+      if (args.sprintId) {
+        projectId = deps.projectManagementRepository.getSprint(args.sprintId)?.projectId;
+      } else if (args.taskId) {
+        projectId = deps.projectManagementRepository.getTask(args.taskId)?.projectId;
+      } else if (args.runId) {
+        try {
+          const row = deps.appDbStorage
+            .getCachedStatement("SELECT project_id FROM qa_review_runs WHERE id = ?")
+            .get(args.runId) as { project_id: string } | undefined;
+          projectId = row?.project_id;
+        } catch {
+          // Ignore query issues
+        }
+      }
+      if (projectId) {
+        cache.invalidateProjectExecution(projectId);
+        cache.invalidateProjectStats(projectId);
+        deps.dashboardRealtimeService.scheduleProjectExecutionRefresh(projectId, {
+          includeOverview: true,
+          includeProjects: true,
+        });
+      }
+      return { ok };
+    },
+    runQaReview: async (args: {
+      projectId: string;
+      taskId?: string;
+      sprintId?: string;
+      provider?: string;
+      providerConfigId?: string;
+      model?: string;
+      agentPresetId?: string;
+    }) => {
+      const project = deps.projectManagementRepository.getProject(args.projectId);
+      if (!project) {
+        throw new Error(`Project not found: ${args.projectId}`);
+      }
+      const repoPath = project.baseDir;
+      if (!repoPath) {
+        throw new Error(`Project base directory is not configured for ${args.projectId}`);
+      }
+
+      const customProvider = args.provider
+        ? {
+            provider: args.provider,
+            providerConfigId: args.providerConfigId,
+            model: args.model,
+          }
+        : undefined;
+
+      if (args.taskId) {
+        const taskRecord = deps.projectManagementRepository.getTask(args.taskId);
+        if (!taskRecord) {
+          throw new Error(`Task not found: ${args.taskId}`);
+        }
+        const sprintId = taskRecord.sprintId;
+        const taskRecords = deps.projectManagementRepository.listTasks(args.projectId, sprintId);
+        const subtasks: Subtask[] = taskRecords.map((t) => ({
+          id: t.taskKey,
+          record_id: t.id,
+          project_id: t.projectId,
+          sprint_id: t.sprintId,
+          title: t.title,
+          prompt: t.promptMarkdown || t.description,
+          depends_on: t.dependsOnTaskIds,
+          status: t.status === "completed" ? "COMPLETED" : "PENDING",
+          agentPresetId: t.agentPresetId,
+          is_independent: t.isIndependent,
+          is_merged: t.isMerged,
+        }));
+        const targetSubtask = subtasks.find((s) => s.record_id === args.taskId);
+        if (!targetSubtask) {
+          throw new Error(`Target subtask not found in subtasks list for task: ${args.taskId}`);
+        }
+
+        deps.qualityAssuranceService.reviewCompletedTask({
+          projectId: args.projectId,
+          sprintId,
+          repoPath,
+          task: targetSubtask,
+          subtasks,
+          customProvider,
+          agentPresetId: args.agentPresetId,
+          force: true,
+        }).catch((err) => {
+          deps.logger.error("Failed manual task QA review run", { error: err, taskId: args.taskId });
+        });
+
+        cache.invalidateProjectExecution(args.projectId);
+        cache.invalidateProjectStats(args.projectId);
+        deps.dashboardRealtimeService.scheduleProjectExecutionRefresh(args.projectId, {
+          includeOverview: true,
+          includeProjects: true,
+        });
+
+        return { ok: true };
+      } else if (args.sprintId) {
+        const taskRecords = deps.projectManagementRepository.listTasks(args.projectId, args.sprintId);
+        const subtasks: Subtask[] = taskRecords.map((t) => ({
+          id: t.taskKey,
+          record_id: t.id,
+          project_id: t.projectId,
+          sprint_id: t.sprintId,
+          title: t.title,
+          prompt: t.promptMarkdown || t.description,
+          depends_on: t.dependsOnTaskIds,
+          status: t.status === "completed" ? "COMPLETED" : "PENDING",
+          agentPresetId: t.agentPresetId,
+          is_independent: t.isIndependent,
+          is_merged: t.isMerged,
+        }));
+
+        deps.qualityAssuranceService.reviewSprintCompletion({
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          sprintRunId: null,
+          repoPath,
+          subtasks,
+          customProvider,
+          agentPresetId: args.agentPresetId,
+          force: true,
+        }).catch((err) => {
+          deps.logger.error("Failed manual sprint completion QA review run", { error: err, sprintId: args.sprintId });
+        });
+
+        cache.invalidateProjectExecution(args.projectId);
+        cache.invalidateProjectStats(args.projectId);
+        deps.dashboardRealtimeService.scheduleProjectExecutionRefresh(args.projectId, {
+          includeOverview: true,
+          includeProjects: true,
+        });
+
+        return { ok: true };
+      }
+
+      return { ok: false };
+    },
   });
 
   deps.runtimeContext.dashboardRuntimePort = handle.port;

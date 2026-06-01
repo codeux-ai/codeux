@@ -162,3 +162,29 @@ export const resolveAttentionItem = async (
     },
   );
 };
+
+export interface RunQaReviewOptions {
+  projectId: string;
+  taskId?: string;
+  sprintId?: string;
+  provider?: string;
+  providerConfigId?: string;
+  model?: string;
+  agentPresetId?: string;
+}
+
+export const stopQaReview = async (options: { runId?: string; taskId?: string; sprintId?: string }): Promise<{ ok: boolean }> => {
+  return fetchJson<{ ok: boolean }>(`/api/qa/stop`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+};
+
+export const runQaReview = async (options: RunQaReviewOptions): Promise<{ ok: boolean }> => {
+  return fetchJson<{ ok: boolean }>(`/api/qa/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+};

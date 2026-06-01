@@ -33,6 +33,7 @@ import { SprintComposer } from "../../components/ui/SprintComposer.js";
 import { AddProjectModal } from "../../components/ui/AddProjectModal.js";
 import { SprintMarkdownModal } from "../../components/ui/SprintMarkdownModal.js";
 import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsOverrideModal.js";
+import { ManualQaModal } from "../../components/ui/ManualQaModal.js";
 import { SprintImportMenu } from "../../components/sprints/SprintImportMenu.js";
 import { SprintIssueImportModal } from "../../components/sprints/SprintIssueImportModal.js";
 import { SprintJiraImportModal } from "../../components/sprints/SprintJiraImportModal.js";
@@ -43,7 +44,8 @@ import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-windo
 import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
-import type { SprintLinkedIssueInput } from "../../types.js";
+import { stopQaReview, runQaReview } from "../../../lib/api/dashboard-api.js";
+import type { SprintLinkedIssueInput, Sprint } from "../../types.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const SPRINT_GALLERY_VISIBILITY_STORAGE_KEY = "code_ux_sprints_show_gallery";
@@ -211,6 +213,33 @@ export const SprintsPage: FunctionComponent = () => {
 
   const progressiveSprints = useProgressiveList(sortedSprints);
   const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
+  const [qaSprint, setQaSprint] = useState<Sprint | null>(null);
+
+  const handleStopQaReview = useCallback(async (sprintId: string) => {
+    try {
+      await stopQaReview({ sprintId });
+      void refreshSprints();
+    } catch (err) {
+      console.error("Failed to stop QA review", err);
+    }
+  }, [refreshSprints]);
+
+  const handleRunQaReviewConfirm = useCallback(async (options: { provider?: string; providerConfigId?: string; model?: string; agentPresetId?: string }) => {
+    if (!qaSprint) return;
+    try {
+      await runQaReview({
+        projectId: qaSprint.projectId,
+        sprintId: qaSprint.id,
+        provider: options.provider,
+        providerConfigId: options.providerConfigId,
+        model: options.model,
+        agentPresetId: options.agentPresetId,
+      });
+      void refreshSprints();
+    } catch (err) {
+      console.error("Failed to run QA review", err);
+    }
+  }, [qaSprint, refreshSprints]);
 
   useLayoutEffect(() => {
     const ctx = gsap.context(() => {
@@ -510,6 +539,8 @@ export const SprintsPage: FunctionComponent = () => {
                         onExport={() => { void handleOpenExport(sprint.id, sprint.name); }}
                         onOverrides={() => { setOverrideSprint(sprint); }}
                         onToggleShowcase={() => { void handleToggleShowcase(sprint); }}
+                        onRunQaReview={() => { setQaSprint(sprint); }}
+                        onStopQaReview={() => { void handleStopQaReview(sprint.id); }}
                       />
                     );
                   })}
@@ -700,6 +731,8 @@ export const SprintsPage: FunctionComponent = () => {
               onClose={() => setRowMenu(null)}
               markCompletedIcon="square"
               buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              onRunQaReview={() => { setQaSprint(activeRowMenuSprint); }}
+              onStopQaReview={() => { void handleStopQaReview(activeRowMenuSprint.id); }}
             />
           </div>
         </div>,
@@ -774,6 +807,14 @@ export const SprintsPage: FunctionComponent = () => {
             setAddTaskForSprint(null);
           }}
           onSubmit={handleAppendTask}
+        />
+      )}
+
+      {qaSprint && (
+        <ManualQaModal
+          sprint={qaSprint}
+          onClose={() => setQaSprint(null)}
+          onConfirm={handleRunQaReviewConfirm}
         />
       )}
     </ExecutionTimelineProvider>

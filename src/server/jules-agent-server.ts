@@ -48,6 +48,7 @@ import { DashboardRealtimeService } from "../services/dashboard-realtime-service
 import { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../services/planning-agent-service.js";
 import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
+import { QualityAssuranceService } from "../services/quality-assurance-service.js";
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-defaults.js";
@@ -154,6 +155,7 @@ export class JulesAgentServer {
   private runtimeCleanupService: RuntimeCleanupService;
   private runtimeStartupRecoveryService: RuntimeStartupRecoveryService;
   private dashboardRealtimeService: DashboardRealtimeService;
+  private qualityAssuranceService: QualityAssuranceService;
   private memoryService: import("../services/memory-service.js").MemoryService;
   private memoryPromotionService: import("../services/memory-promotion-service.js").MemoryPromotionService;
   private embeddingModelManager: import("../services/embedding-model-manager.js").EmbeddingModelManager;
@@ -205,6 +207,7 @@ export class JulesAgentServer {
     this.sessionTracking = deps.sessionTracking;
     this.cliWorkflowService = deps.cliWorkflowService;
     this.managementToolHandler = deps.managementToolHandler;
+    this.qualityAssuranceService = deps.qualityAssuranceService;
 
     this.activityCacheService = deps.activityCacheService;
     this.taskRerunService = deps.taskRerunService;
@@ -963,6 +966,7 @@ export class JulesAgentServer {
         sprintMarkdownService: this.sprintMarkdownService,
         sprintIssueService: this.sprintIssueService,
         activityCacheService: this.activityCacheService,
+        qualityAssuranceService: this.qualityAssuranceService,
         taskRerunService: this.taskRerunService,
         executionControlService: this.executionControlService,
         planningAgentService: this.planningAgentService,

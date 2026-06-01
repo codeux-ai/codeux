@@ -47,6 +47,7 @@ const statusMap: Record<SprintStatus, {
   failed: { ring: "border-status-red/55 shadow-[0_0_34px_rgba(227,0,15,0.3)]", text: "text-status-red", icon: XCircle, label: "Failed", accentHex: "#E3000F" },
   cancelled: { ring: "border-slate-300/35 shadow-[0_0_24px_rgba(148,163,184,0.16)]", text: "text-slate-400 dark:text-slate-500", icon: XCircle, label: "Cancelled", accentHex: "#94A3B8" },
   idle: { ring: "", text: "text-signal-600 dark:text-signal-300", icon: Clock3, label: "Draft", accentHex: "#00E0A0" },
+  quota: { ring: "border-status-amber/45 shadow-[0_0_34px_rgba(245,158,11,0.24)]", text: "text-status-amber", icon: AlertTriangle, label: "Quota Reached", accentHex: "#F59E0B" },
 };
 
 interface SprintCellProps {
@@ -63,6 +64,8 @@ interface SprintCellProps {
   onOverrides?: () => void;
   onToggleShowcase?: () => void;
   onMarkCompleted?: () => void;
+  onRunQaReview?: () => void;
+  onStopQaReview?: () => void;
 }
 
 const formatSprintKey = (sprint: Sprint, prefix: string = "SPR"): string => (
@@ -85,6 +88,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   onOverrides,
   onToggleShowcase,
   onMarkCompleted,
+  onRunQaReview,
+  onStopQaReview,
 }) => {
   const settings = useProjectEffectiveSettings(sprint.projectId);
   const reducedMotion = useReducedMotion();
@@ -344,6 +349,8 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
               markCompletedIcon="circle"
               role="menuitem"
               buttonClassName="flex w-full items-center gap-2 rounded-[1rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+              onRunQaReview={onRunQaReview}
+              onStopQaReview={onStopQaReview}
             />
           </div>
         </div>
