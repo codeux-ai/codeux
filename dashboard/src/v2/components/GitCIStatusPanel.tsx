@@ -5,11 +5,16 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import {
+  CheckCircle2,
   CircleDot,
   ExternalLink,
   GitBranch,
   GitMerge,
   GitPullRequest,
+  MessageCircle,
+  PauseCircle,
+  RotateCw,
+  TimerReset,
   XCircle,
 } from "lucide-preact";
 import { formatTime } from "../../lib/time.js";
@@ -42,6 +47,45 @@ function statusTone(value: string | null): string {
   return "text-slate-400";
 }
 
+function isActiveCiState(value: string | null | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  const normalized = value.toUpperCase();
+  return normalized === "IN_PROGRESS" || normalized === "QUEUED" || normalized === "PENDING" || normalized === "QUOTA";
+}
+
+function ciStatusIcon(statusValue: string | null | undefined, conclusionValue: string | null | undefined): FunctionComponent<any> {
+  const value = (conclusionValue ?? statusValue ?? "").toUpperCase();
+  if (isActiveCiState(statusValue) || isActiveCiState(conclusionValue)) {
+    return RotateCw;
+  }
+  if (value === "SUCCESS" || value === "COMPLETED") {
+    return CheckCircle2;
+  }
+  if (value === "CANCELLED" || value === "CANCEL_REQUESTED") {
+    return PauseCircle;
+  }
+  if (value === "FAILURE" || value === "FAILED" || value === "ERROR") {
+    return XCircle;
+  }
+  return CircleDot;
+}
+
+function prStatusIcon(value: string | null | undefined): FunctionComponent<any> {
+  const normalized = (value ?? "").toUpperCase();
+  if (normalized === "MERGED") {
+    return CheckCircle2;
+  }
+  if (normalized === "QUEUED" || normalized === "PENDING" || normalized === "IN_PROGRESS" || normalized === "QUOTA") {
+    return TimerReset;
+  }
+  if (normalized === "FAILURE" || normalized === "FAILED" || normalized === "ERROR" || normalized === "CANCELLED") {
+    return XCircle;
+  }
+  return GitPullRequest;
+}
+
 const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ status, error }) => {
   if (error) {
     return (
@@ -66,18 +110,32 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
     );
   }
 
+  const activeCiCount = status.ciRuns.filter((run) => isActiveCiState(run.status) || isActiveCiState(run.conclusion)).length;
+
   return (
     <div aria-live="polite" className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/80 p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
       <WaveFluid accentHex="#00E0A0" />
       <BorderTrace accentHex="#00E0A0" />
 
       <div className="relative z-10 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <GitBranch className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
-            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Git / CI / PR</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2.5">
+              <GitBranch className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
+              <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Git / CI / PR</span>
+            </div>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-mono text-xs text-slate-700 dark:text-slate-300">{status.branch ?? "no-branch"}</span>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${
+                status.dirty
+                  ? "bg-status-amber/15 text-status-amber"
+                  : "bg-status-green/15 text-status-green"
+              }`}>
+                {status.dirty ? "Dirty" : "Clean"}
+              </span>
+            </div>
           </div>
-          <span className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${
             status.mode === "REMOTE"
               ? "border border-signal-500/15 bg-signal-500/8 text-signal-500"
               : "bg-black/[0.04] text-slate-400 dark:bg-white/[0.04]"
@@ -86,16 +144,17 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "Branch", value: status.branch ?? "—" },
-            { label: "Workspace", value: status.dirty ? "Dirty" : "Clean" },
             { label: "Tracking", value: status.tracking.label },
+            { label: "Open PRs", value: String(status.openPullRequests.length) },
+            { label: "Active CI", value: String(activeCiCount) },
+            { label: "Merges", value: String(status.mergedPullRequests.length) },
             { label: "Updated", value: formatTime(status.lastUpdated) },
           ].map(({ label, value }) => (
-            <div key={label} className="rounded-xl bg-black/[0.02] p-3 dark:bg-white/[0.02]">
+            <div key={label} className="rounded-xl bg-black/[0.02] p-2.5 dark:bg-white/[0.02]">
               <span className="mb-1 block text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</span>
-              <span className="block truncate text-xs font-mono font-medium text-slate-700 dark:text-slate-300">{value}</span>
+              <span className="block truncate text-[11px] font-mono font-medium text-slate-700 dark:text-slate-300">{value}</span>
             </div>
           ))}
         </div>
@@ -118,24 +177,35 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
             <p className="font-mono text-[11px] text-slate-400 dark:text-slate-600">No open PRs tracked.</p>
           ) : (
             <div className="space-y-2">
-              {status.openPullRequests.slice(0, 5).map((pr) => (
-                <a
-                  key={pr.url}
-                  href={pr.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group/pr block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 hover:bg-signal-500/[0.02] dark:border-white/[0.04] dark:bg-white/[0.015]"
-                >
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">#{pr.number} {pr.title}</span>
-                    <ExternalLink className="h-3 w-3 text-slate-300 transition-colors duration-200 group-hover/pr:text-signal-500 dark:text-slate-600" strokeWidth={2} />
-                  </div>
-                  <p className="text-[10px] font-mono text-slate-400">{pr.headRefName ?? "?"} → {pr.baseRefName ?? "?"}</p>
-                  <p className={`mt-0.5 text-[10px] font-mono ${statusTone(pr.mergeStateStatus)}`}>
-                    merge: {pr.mergeStateStatus ?? "UNKNOWN"} · comments: {pr.comments}
-                  </p>
-                </a>
-              ))}
+              {status.openPullRequests.slice(0, 5).map((pr) => {
+                const PrIcon = prStatusIcon(pr.mergeStateStatus);
+                return (
+                  <a
+                    key={pr.url}
+                    href={pr.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="group/pr block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 hover:bg-signal-500/[0.02] dark:border-white/[0.04] dark:bg-white/[0.015]"
+                  >
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <div className="min-w-0 space-y-1">
+                        <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                          <span className="font-mono text-slate-500">#{pr.number}</span> {pr.title}
+                        </p>
+                        <p className="truncate text-[10px] font-mono text-slate-400">{pr.headRefName ?? "?"} → {pr.baseRefName ?? "?"}</p>
+                      </div>
+                      <ExternalLink className="h-3 w-3 shrink-0 text-slate-300 transition-colors duration-200 group-hover/pr:text-signal-500 dark:text-slate-600" strokeWidth={2} />
+                    </div>
+                    <p className={`mt-1 flex items-center gap-1.5 text-[10px] font-mono ${statusTone(pr.mergeStateStatus)}`}>
+                      <PrIcon className="h-3 w-3 shrink-0" strokeWidth={1.8} />
+                      <span className="truncate">merge: {pr.mergeStateStatus ?? "UNKNOWN"}</span>
+                      <span className="text-slate-400">·</span>
+                      <MessageCircle className="h-3 w-3 shrink-0 text-slate-400" strokeWidth={1.8} />
+                      <span className="text-slate-400">{pr.comments}</span>
+                    </p>
+                  </a>
+                );
+              })}
             </div>
           )}
         </div>
@@ -146,23 +216,34 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
             CI Runs
           </span>
           {status.ciRuns.length === 0 ? (
-            <p className="font-mono text-[11px] text-slate-400 dark:text-slate-600">No CI runs tracked.</p>
+            <p className="font-mono text-[11px] text-slate-400 dark:text-slate-600">No CI runs yet for tracked PRs.</p>
           ) : (
             <div className="space-y-2">
-              {status.ciRuns.slice(0, 5).map((run) => (
-                <a
-                  key={`${run.id ?? run.url}`}
-                  href={run.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
-                >
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{run.workflowName || run.name}</span>
-                  <p className={`mt-0.5 text-[10px] font-mono ${statusTone(run.conclusion || run.status)}`}>
-                    {run.status}{run.conclusion ? ` / ${run.conclusion}` : ""}
-                  </p>
-                </a>
-              ))}
+              {status.ciRuns.slice(0, 5).map((run) => {
+                const CiIcon = ciStatusIcon(run.status, run.conclusion);
+                const isActive = isActiveCiState(run.status) || isActiveCiState(run.conclusion);
+                return (
+                  <a
+                    key={`${run.id ?? run.url}`}
+                    href={run.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">{run.workflowName || run.name}</p>
+                      <ExternalLink className="h-3 w-3 shrink-0 text-slate-300 dark:text-slate-600" strokeWidth={2} />
+                    </div>
+                    <p className={`mt-0.5 flex items-center gap-1.5 text-[10px] font-mono ${statusTone(run.conclusion || run.status)}`}>
+                      <CiIcon
+                        className={`h-3 w-3 shrink-0 ${isActive ? "animate-spin motion-reduce:animate-none" : ""}`}
+                        strokeWidth={1.8}
+                      />
+                      <span>{run.status}{run.conclusion ? ` / ${run.conclusion}` : ""}</span>
+                    </p>
+                  </a>
+                );
+              })}
             </div>
           )}
         </div>
@@ -184,9 +265,14 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                   rel="noreferrer"
                   className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-status-green/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
                 >
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">#{merged.number} {merged.title}</span>
-                  <p className="mt-0.5 text-[10px] font-mono text-slate-400">{merged.headRefName ?? "?"} → {merged.baseRefName ?? "?"}</p>
-                  <p className="mt-0.5 text-[10px] font-mono text-status-green">merged {formatTime(merged.mergedAt ?? undefined)}</p>
+                  <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                    <span className="font-mono text-slate-500">#{merged.number}</span> {merged.title}
+                  </p>
+                  <p className="mt-0.5 truncate text-[10px] font-mono text-slate-400">{merged.headRefName ?? "?"} → {merged.baseRefName ?? "?"}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-[10px] font-mono text-status-green">
+                    <CheckCircle2 className="h-3 w-3" strokeWidth={1.8} />
+                    merged {formatTime(merged.mergedAt ?? undefined)}
+                  </p>
                 </a>
               ))}
             </div>
