@@ -96,6 +96,36 @@ describe("Dashboard Execution Invocation API", () => {
       expect(mockOptions.listProjectInvocations).toHaveBeenCalledWith("proj-1");
     });
 
+    it("returns invocation usage fields when present and zero values when no provider invocation is linked", async () => {
+      const mockInvocations = [
+        {
+          id: "inv-1",
+          projectId: "proj-1",
+          status: "completed",
+          inputTokens: 100,
+          cachedInputTokens: 10,
+          outputTokens: 50,
+          totalTokens: 150,
+        },
+        {
+          id: "inv-2",
+          projectId: "proj-1",
+          status: "running",
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        },
+      ];
+      vi.mocked(mockOptions.listProjectInvocations!).mockReturnValue(mockInvocations as any);
+
+      const response = await request(app).get("/api/projects/proj-1/execution/invocations");
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(mockInvocations);
+      expect(mockOptions.listProjectInvocations).toHaveBeenCalledWith("proj-1");
+    });
+
     it("handles errors when listing invocations", async () => {
       vi.mocked(mockOptions.listProjectInvocations!).mockImplementation(() => {
         throw new Error("DB Error");

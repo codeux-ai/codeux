@@ -167,6 +167,10 @@ export interface ExecutionInvocationRow {
   last_message_at: string | null;
   invocation_source?: string;
   agent_preset_id?: string | null;
+  input_tokens?: number | string | null;
+  cached_input_tokens?: number | string | null;
+  output_tokens?: number | string | null;
+  total_tokens?: number | string | null;
   created_at: string;
   updated_at: string;
 }
