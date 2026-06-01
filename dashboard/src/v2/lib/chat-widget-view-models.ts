@@ -83,3 +83,56 @@ export const getWorkingBubbleData = (runtimeState: ConversationRuntimeState | nu
     modelLabel: runtimeState.modelLabel,
   };
 };
+
+export interface ProviderStatusMetadata {
+  provider?: string | null;
+  model?: string | null;
+  status?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+/**
+ * Formats provider instance label, e.g., 'antigravity primary'
+ */
+export function formatProviderInstanceLabel(
+  provider: string | null | undefined,
+  model: string | null | undefined
+): string {
+  if (!provider) return "";
+  if (model) {
+    return `${provider} ${model}`;
+  }
+  return provider;
+}
+
+/**
+ * Formats status context, e.g., 'antigravity default running'
+ */
+export function formatStatusContext(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+  status: string | null | undefined
+): string {
+  const parts: string[] = [];
+  if (provider) parts.push(provider);
+  if (model) parts.push(model);
+  if (status) parts.push(status);
+  return parts.join(" ");
+}
+
+/**
+ * Formats token counts, e.g., producing clean numbers or values.
+ */
+export function formatTokenCount(tokens: number | null | undefined): string {
+  if (tokens === undefined || tokens === null) return "0";
+  return tokens.toLocaleString();
+}
+
+/**
+ * Shortens UUIDs or identifiers to be compact but unambiguous
+ */
+export function shortenIdentifier(id: string | null | undefined): string {
+  if (!id) return "";
+  if (id.length <= 8) return id;
+  return id.slice(0, 8);
+}

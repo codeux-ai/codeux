@@ -126,6 +126,10 @@ export const useInvocationPaneData = (options: {
       lastMessageAt: createdAt,
       invocationSource: "internal",
       agentPresetId: null,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
       createdAt,
       updatedAt: createdAt,
     };

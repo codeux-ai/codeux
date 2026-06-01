@@ -170,6 +170,10 @@ describe("Chat Message Bubbles", () => {
         lastRetryAfterIso: null,
         messageCount: 2,
         lastMessageAt: new Date().toISOString(),
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -185,6 +189,52 @@ describe("Chat Message Bubbles", () => {
       expect(container.textContent).toContain("Rate limit");
       expect(container.textContent).toContain("gemini");
       expect(container.textContent).toContain("default");
+    });
+
+    it("renders sprint, task, and token usage chips on cards when available", () => {
+      const invocation: ExecutionInvocationRecord = {
+        id: "inv-2",
+        projectId: "project-1",
+        sprintId: "sprint-uuid-12345",
+        taskId: "task-uuid-67890",
+        sprintRunId: null,
+        dispatchId: null,
+        taskRunId: null,
+        attentionItemId: null,
+        providerInvocationId: null,
+        type: "planning",
+        status: "completed",
+        provider: "gemini",
+        model: "default",
+        systemPrompt: null,
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        errorMessage: null,
+        lastErrorCategory: null,
+        lastErrorMessage: null,
+        lastRetryAfterIso: null,
+        messageCount: 0,
+        lastMessageAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        inputTokens: 1200,
+        cachedInputTokens: 300,
+        outputTokens: 450,
+      };
+
+      const { container } = render(
+        <InvocationListCard
+          invocations={[invocation]}
+          selectedInvocationId={null}
+          onSelect={vi.fn()}
+        />
+      );
+
+      expect(container.textContent).toContain("Sprint: sprint-u");
+      expect(container.textContent).toContain("Task: task-uui");
+      expect(container.textContent).toContain("In: 1,200");
+      expect(container.textContent).toContain("Cached: 300");
+      expect(container.textContent).toContain("Out: 450");
     });
   });
 

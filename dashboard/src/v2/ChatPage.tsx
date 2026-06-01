@@ -25,6 +25,13 @@ import { ProviderLogo } from "./components/ui/ProviderLogo.js";
 import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import type { ExecutionInvocationRecord } from "./types.js";
+import {
+  formatProviderInstanceLabel,
+  formatStatusContext,
+  formatTokenCount,
+  shortenIdentifier
+} from "./lib/chat-widget-view-models.js";
+
 
 const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
   switch (value) {
@@ -305,7 +312,7 @@ export const ChatPage: FunctionComponent = () => {
                     {selectedInvocation.provider && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
                         <ProviderLogo provider={selectedInvocation.provider} size={12} />
-                        {selectedInvocation.provider}
+                        {formatProviderInstanceLabel(selectedInvocation.provider, selectedInvocation.model)}
                       </span>
                     )}
                     {/* Model badge */}
@@ -327,9 +334,47 @@ export const ChatPage: FunctionComponent = () => {
                       {selectedInvocation.status === "running" && (
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-signal-500 animate-pulse shadow-[0_0_6px_rgba(0,224,160,0.6)]" />
                       )}
-                      {selectedInvocation.status}
+                      {formatStatusContext(selectedInvocation.provider, selectedInvocation.model, selectedInvocation.status)}
                     </span>
+                    {/* Linked Agent badge next to provider metadata */}
+                    {selectedAgentPreset && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
+                        Agent: {selectedAgentPreset.name}
+                      </span>
+                    )}
+                    {/* Sprint/Task identifier chips */}
+                    {selectedInvocation.sprintId && (
+                      <span className="rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
+                        Sprint: {shortenIdentifier(selectedInvocation.sprintId)}
+                      </span>
+                    )}
+                    {selectedInvocation.taskId && (
+                      <span className="rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
+                        Task: {shortenIdentifier(selectedInvocation.taskId)}
+                      </span>
+                    )}
+                    {/* Token usage chips */}
+                    {((selectedInvocation.inputTokens ?? 0) > 0 || (selectedInvocation.cachedInputTokens ?? 0) > 0 || (selectedInvocation.outputTokens ?? 0) > 0) && (
+                      <>
+                        {((selectedInvocation.inputTokens ?? 0) > 0) && (
+                          <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-signal-600 dark:text-signal-400">
+                            In: {formatTokenCount(selectedInvocation.inputTokens)}
+                          </span>
+                        )}
+                        {((selectedInvocation.cachedInputTokens ?? 0) > 0) && (
+                          <span className="rounded-full border border-teal-500/20 bg-teal-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-teal-600 dark:text-teal-400">
+                            Cached: {formatTokenCount(selectedInvocation.cachedInputTokens)}
+                          </span>
+                        )}
+                        {((selectedInvocation.outputTokens ?? 0) > 0) && (
+                          <span className="rounded-full border border-purple-500/20 bg-purple-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-purple-600 dark:text-purple-400">
+                            Out: {formatTokenCount(selectedInvocation.outputTokens)}
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
+
                 )}
                 {selectedInvocation?.lastErrorMessage && (
                   <div className="mt-3 max-w-2xl text-sm leading-relaxed text-status-amber">
