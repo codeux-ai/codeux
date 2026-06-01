@@ -187,6 +187,10 @@ export const useSprintComposerState = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSprint?.id]);
 
+  useEffect(() => {
+    setSprintKeyOverride(defaultSprintKey);
+  }, [defaultSprintKey]);
+
   const availableModes = getAvailableModes(isEditing, hasTasks);
 
   return {
