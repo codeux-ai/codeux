@@ -6,6 +6,12 @@ import { cleanup } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { useOnboardingState } from "../../../dashboard/src/v2/hooks/useOnboardingState.js";
+import { OnboardingExperience } from "../../../dashboard/src/v2/components/onboarding/OnboardingExperience.js";
+import { cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
+
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => vi.fn(),
+}));
 
 const HookProbe = () => {
   const { state, loading, markCompleted } = useOnboardingState();
@@ -64,3 +70,63 @@ describe("onboarding state hook", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/user/onboarding/cancel", expect.objectContaining({ method: "POST" }));
   });
 });
+
+describe("OnboardingExperience integration", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
+  it("initializes autoApprovePlan as true by default in settings", async () => {
+    const defaultSettings = cloneDefaultSettings();
+    const systemSettings = {
+      runtime: {
+        dashboardPort: defaultSettings.dashboardPort,
+        enableDebugLogFile: defaultSettings.enableDebugLogFile,
+        consoleLogLevel: defaultSettings.consoleLogLevel,
+      },
+      integrations: {
+        julesApiKey: "",
+        geminiApiKey: "",
+        codexApiKey: "",
+        claudeCodeApiKey: "",
+        githubToken: "",
+      },
+      defaults: defaultSettings,
+    };
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(
+          JSON.stringify({
+            checkedAt: "2026-06-01T00:00:00.000Z",
+            cluster: { status: "ready", label: "Healthy", detail: "Runtime environment is ready." },
+            dependencies: [],
+            providers: [],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (url.endsWith("/api/system-settings")) {
+        return new Response(JSON.stringify(systemSettings), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/system-settings", undefined));
+    expect(systemSettings.defaults.automationInterventions.autoApprovePlan).toBe(true);
+  });
+});
+

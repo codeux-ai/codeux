@@ -444,4 +444,27 @@ describe("SettingsRepository", () => {
     const p2Cached = resolver.resolveProjectDashboardSettings("project-2");
     expect(p2Cached).toBe(p2);
   });
+
+  it("resolves default autoApprovePlan as true, and preserves explicit false", async () => {
+    const { repo } = await createRepo();
+
+    // Default should be true
+    const system = repo.getSystemSettings();
+    expect(system.defaults.automationInterventions.autoApprovePlan).toBe(true);
+
+    // Save with explicit false
+    repo.saveSystemSettings({
+      ...system,
+      defaults: {
+        ...system.defaults,
+        automationInterventions: {
+          ...system.defaults.automationInterventions,
+          autoApprovePlan: false,
+        },
+      },
+    });
+
+    const updated = repo.getSystemSettings();
+    expect(updated.defaults.automationInterventions.autoApprovePlan).toBe(false);
+  });
 });
