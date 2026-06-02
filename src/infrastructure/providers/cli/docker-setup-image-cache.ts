@@ -109,6 +109,7 @@ export class DockerSetupImageCache {
     return [
       `FROM ${baseImage}`,
       "USER root",
+      "RUN if command -v apt-get >/dev/null 2>&1; then apt-get update -qy && apt-get install -qy --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*; fi",
       "COPY setup.sh /tmp/code-ux-setup.sh",
       "RUN sed -i 's/\\r//' /tmp/code-ux-setup.sh && bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh",
     ].join("\n");

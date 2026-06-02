@@ -120,13 +120,13 @@ export const getProviderFallbackInstallCommand = (providerCommand: string): stri
     case "codex":
       return "npm install -g @openai/codex";
     case "claude":
-      return "if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH=\"$HOME/.local/bin:$PATH\"; else echo \"provider-runner: curl not found; cannot install claude\" >&2; fi";
+      return "if ensure_curl; then curl -fsSL https://claude.ai/install.sh | bash && export PATH=\"$HOME/.local/bin:$PATH\"; else echo \"provider-runner: curl unavailable; cannot install claude\" >&2; fi";
     case "qwen":
       return "npm install -g @qwen-code/qwen-code";
     case "opencode":
-      return "if command -v curl >/dev/null 2>&1; then curl -fsSL https://opencode.ai/install | bash && export PATH=\"$HOME/.opencode/bin:$HOME/.local/bin:$PATH\"; else echo \"provider-runner: curl not found; cannot install opencode\" >&2; fi";
+      return "if ensure_curl; then curl -fsSL https://opencode.ai/install | bash && export PATH=\"$HOME/.opencode/bin:$HOME/.local/bin:$PATH\"; else echo \"provider-runner: curl unavailable; cannot install opencode\" >&2; fi";
     case "agy":
-      return 'if command -v curl >/dev/null 2>&1; then curl -fsSL https://antigravity.google/cli/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install antigravity" >&2; fi';
+      return 'if ensure_curl; then curl -fsSL https://antigravity.google/cli/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl unavailable; cannot install antigravity" >&2; fi';
     default:
       return undefined;
   }
