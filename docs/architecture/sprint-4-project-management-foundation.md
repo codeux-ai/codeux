@@ -8,7 +8,7 @@ The current runtime is still centered on:
 
 - single in-memory sprint status context,
 - markdown-first sprint/task persistence,
-- and a Jules-centric MCP surface.
+- and a provider-centric MCP surface.
 
 Product direction now requires a project-management-first model:
 

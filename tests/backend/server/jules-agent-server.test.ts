@@ -12,14 +12,14 @@ vi.mock("../../../src/app/lifecycle/mcp-lifecycle-service.js", () => ({
 }));
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
-import { JulesAgentServer } from "../../../src/server/jules-agent-server.js";
+import { CodeUxServer } from "../../../src/server/code-ux-server.js";
 import { loadAppConfig } from "../../../src/config/app-config.js";
 import axios from "axios";
 import path from "path";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { DefaultRuntimeContext } from "../../../src/app/runtime-context.js";
 
-const stopServer = async (server: JulesAgentServer): Promise<void> => {
+const stopServer = async (server: CodeUxServer): Promise<void> => {
   const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
   try {
     await (server as any).handleSigint?.().catch?.(() => undefined);
@@ -28,15 +28,15 @@ const stopServer = async (server: JulesAgentServer): Promise<void> => {
   }
 };
 
-describe("JulesAgentServer", () => {
-  let server: JulesAgentServer;
+describe("CodeUxServer", () => {
+  let server: CodeUxServer;
   let sharedSessionTracking: unknown;
   let sharedActivityCacheService: unknown;
   const projectRoot = path.resolve(process.cwd());
   const appConfig = loadAppConfig([], projectRoot);
 
   beforeAll(() => {
-    server = new JulesAgentServer({ projectRoot, appConfig });
+    server = new CodeUxServer({ projectRoot, appConfig });
     sharedSessionTracking = (server as any).sessionTracking;
     sharedActivityCacheService = (server as any).activityCacheService;
   });
@@ -749,10 +749,10 @@ describe("JulesAgentServer", () => {
   });
 
   describe("run", () => {
-    let runServer: JulesAgentServer;
+    let runServer: CodeUxServer;
 
     beforeEach(() => {
-      runServer = new JulesAgentServer({ projectRoot, appConfig });
+      runServer = new CodeUxServer({ projectRoot, appConfig });
     });
 
     afterEach(async () => {

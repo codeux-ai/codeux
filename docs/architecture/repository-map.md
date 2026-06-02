@@ -32,7 +32,7 @@ This map explains where major responsibilities live.
   - `jules-api-client.ts`
   - Jules API HTTP client.
 - `server/`
-  - `jules-agent-server.ts`
+  - `code-ux-server.ts`
   - Main runtime composition and MCP server class.
   - `mcp-request-router.ts`
   - MCP list/call handler registration and dispatch routing.

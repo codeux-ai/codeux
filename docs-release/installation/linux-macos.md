@@ -20,19 +20,19 @@ This guide will walk you through the process of installing the desktop applicati
 3. **Run the Installer (Linux - Debian/Ubuntu)**
    Open your terminal in the download folder and execute the installation command using your package manager.
    ```bash
-   sudo dpkg -i sprint-os_*.deb
+   sudo dpkg -i codeux_*.deb
    sudo apt-get install -f
    ```
 
 4. **Run the Installer (Linux - RedHat/Fedora)**
    Open your terminal in the download folder and execute the installation command.
    ```bash
-   sudo rpm -i sprint-os_*.rpm
+   sudo rpm -i codeux_*.rpm
    ```
 
 5. **Launch the Application**
-   Open your system's application launcher (or Spotlight on macOS) and search for **Sprint OS**. Click the application icon to launch it.
+   Open your system's application launcher (or Spotlight on macOS) and search for **Code UX**. Click the application icon to launch it.
 
 ## Expected Result
 
-The Sprint OS desktop application should open, displaying the login or setup screen. You are now ready to begin using the application natively on your system.
+The Code UX desktop application should open, displaying the login or setup screen. You are now ready to begin using the application natively on your system.

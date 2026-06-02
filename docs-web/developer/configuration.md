@@ -5,7 +5,7 @@ This page is the precise reference for every CLI flag, environment variable, and
 ## CLI flags
 
 ```
-jules-subagents [options]
+codeux [options]
 ```
 
 | Flag | Type | Default | Description |

@@ -48,11 +48,11 @@ The dashboard process died or the browser is on a different host than the server
 
 The MCP server failed to start. Common causes:
 
-- The `command` in client config is wrong (typo in `npx jules-subagents`).
+- The `command` in client config is wrong (typo in `npx codeux`).
 - The `JULES_API_KEY` is missing in the client-supplied env block, and the server exited.
 - The npx command needed network access at first launch and the network was unavailable.
 
-**Fix:** run the same command manually in a terminal — `npx -y jules-subagents --help` — and observe the output. Then check your MCP client's error log.
+**Fix:** run the same command manually in a terminal — `npx -y codeux --help` — and observe the output. Then check your MCP client's error log.
 
 ### `listen` returns no message and the call hangs
 
@@ -152,7 +152,7 @@ The download failed mid-stream.
 
 ## Where to find logs
 
-- **Dashboard process stdout/stderr** — the terminal you launched `jules-subagents` from. Logs are JSON-structured.
+- **Dashboard process stdout/stderr** — the terminal you launched `codeux` from. Logs are JSON-structured.
 - **MCP client logs** — depends on client. Gemini CLI: `~/.gemini/logs/`. Claude Desktop: app log directory per OS.
 - **Per-task activity** — visible in the dashboard task detail panel; also at `/api/live-activities` and `/api/execution/invocations/:id/messages`.
 - **Cycle telemetry** — `/api/projects/:projectId/execution/invocations` (typed by `type`).
@@ -169,11 +169,11 @@ If state is corrupted or unrecoverable:
 
 Include:
 
-- Code UX version (`jules-subagents --help` shows the version banner).
+- Code UX version (`codeux --help` shows the version banner).
 - Node version (`node --version`).
 - OS / shell.
 - The exact MCP client and version.
 - Relevant logs (last ~50 lines from the failing cycle, redacted of secrets).
 - Steps to reproduce.
 
-Issue tracker: https://github.com/numnx/jules-subagents-mcp/issues
+Issue tracker: https://github.com/codeux-ai/codeux/issues

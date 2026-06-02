@@ -25,7 +25,7 @@ If you have not installed Code UX yet, start with [Installation](./installation.
 - **Sprint** — A bounded unit of work containing one or more subtasks. Owns a feature branch; merges to `main` on completion.
 - **Subtask** — A single delegated unit of coding work. Stored as a markdown file with YAML frontmatter (status, dependencies, prompt).
 - **Agent preset** — A reusable persona (system instructions, avatar, memory template) that a worker can adopt.
-- **Worker** — A runtime that executes a task. Either the **Jules** hosted API or a **virtual worker** running a CLI provider (Gemini, Codex, Claude Code, Qwen Code, OpenCode) on the host or in Docker.
+- **Worker** — A runtime that executes a task. Either the **Jules** hosted API or a **virtual worker** running a CLI provider (Gemini, Codex, Claude Code, Qwen Code, OpenCode, Antigravity CLI) on the host or in Docker.
 - **Sprint run** — A single execution attempt of a sprint. A sprint can be run, paused, cancelled, and re-run repeatedly.
 - **Attention item** — Anything that needs human or worker attention: a merge conflict, a CI failure, an awaiting plan approval, a clarification request.
 - **Watch loop** — The continuous monitoring loop that polls task state, advances dependencies, and emits checkpoint reports.

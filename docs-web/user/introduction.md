@@ -70,7 +70,7 @@ PENDING → RUNNING → CODING_COMPLETED → COMPLETED
 A **worker** is anything that can execute a subtask. Two flavours:
 
 - **Jules hosted worker** — Runs on Google's Jules Agent API. No setup beyond an API key.
-- **Virtual worker** — Runs locally, wrapping one of the open CLI providers (Gemini, Codex, Claude Code, Qwen Code, OpenCode). Can run **on the host** or **inside a Docker container** (`node:24-bookworm` by default).
+- **Virtual worker** — Runs locally, wrapping one of the open CLI providers (Gemini, Codex, Claude Code, Qwen Code, OpenCode, Antigravity CLI). Can run **on the host** or **inside a Docker container** (`node:24-bookworm` by default).
 
 Workers are routed per *invocation type* (`task_coding`, `planning`, `dashboard_reply`, `clarification_reply`, `qa_review`, `ci_fix`, `merge_conflict`) so that, for example, planning runs on Gemini Pro while CI fixes run on Claude Sonnet.
 

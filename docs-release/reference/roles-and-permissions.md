@@ -1,6 +1,6 @@
 # Roles and Permissions
 
-Sprint OS uses a role-based access control (RBAC) system to manage what users can see and do within Workspaces and Projects. Understanding these roles is crucial for maintaining security and effective collaboration.
+Code UX uses a role-based access control (RBAC) system to manage what users can see and do within Workspaces and Projects. Understanding these roles is crucial for maintaining security and effective collaboration.
 
 ## Workspace Roles
 

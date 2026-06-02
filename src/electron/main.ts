@@ -207,12 +207,12 @@ async function startServer(): Promise<string> {
   const dotenv = await import("dotenv");
   dotenv.config({ path: path.join(projectRoot, ".env"), quiet: true });
 
-  const [{ loadAppConfig }, { JulesAgentServer }] = await Promise.all([
+  const [{ loadAppConfig }, { CodeUxServer }] = await Promise.all([
     import("../config/app-config.js"),
-    import("../server/jules-agent-server.js"),
+    import("../server/code-ux-server.js"),
   ]);
   const appConfig = loadAppConfig(["electron", "code-ux-desktop"], projectRoot);
-  server = new JulesAgentServer({ projectRoot, appConfig });
+  server = new CodeUxServer({ projectRoot, appConfig });
   await server.run();
 
   const port = server.getDashboardRuntimePort();

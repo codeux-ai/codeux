@@ -7,13 +7,13 @@ This document explains how MCP requests flow through the server.
 Startup sequence:
 
 1. `src/index.ts` loads environment and app config.
-2. `src/index.ts` constructs `JulesAgentServer`.
-3. `src/server/jules-agent-server.ts` constructs repositories/services/handlers/orchestrator.
-4. `src/server/jules-agent-server.ts` registers MCP request handlers.
-5. `src/server/jules-agent-server.ts` starts dashboard server.
+2. `src/index.ts` constructs `CodeUxServer`.
+3. `src/server/code-ux-server.ts` constructs repositories/services/handlers/orchestrator.
+4. `src/server/code-ux-server.ts` registers MCP request handlers.
+5. `src/server/code-ux-server.ts` starts dashboard server.
    - Dashboard API routes (such as project, sprint, task, conversation, and planning endpoints) are broken out into modular route files for maintainability.
-6. `src/server/jules-agent-server.ts` connects MCP stdio transport.
-7. `src/server/jules-agent-server.ts` optionally starts the MCP HTTP transport with the same project-manager tool surface.
+6. `src/server/code-ux-server.ts` connects MCP stdio transport.
+7. `src/server/code-ux-server.ts` optionally starts the MCP HTTP transport with the same project-manager tool surface.
 
 ## Runtime Modes
 
@@ -43,7 +43,7 @@ Returns enabled tool definitions from `src/contracts/mcp-tool-definitions.ts`, f
 
 MCP tool calls are wrapped in a correlation scope before dispatch.
 
-- `src/server/jules-agent-server.ts` derives a correlation ID from request metadata when available.
+- `src/server/code-ux-server.ts` derives a correlation ID from request metadata when available.
 - If no correlation ID is provided, one is generated.
 - `src/shared/logging/correlation-id.ts` stores the ID in `AsyncLocalStorage`.
 - `src/server/mcp-request-router.ts` logs request lifecycle events with the shared logger.

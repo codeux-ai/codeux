@@ -17,9 +17,9 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 - Bootstrap file: `src/index.ts`
 - Responsibilities:
   - Load `.env` and startup config.
-  - Construct and run `JulesAgentServer`.
+  - Construct and run `CodeUxServer`.
 
-- Runtime composition file: `src/server/jules-agent-server.ts`
+- Runtime composition file: `src/server/code-ux-server.ts`
 - Responsibilities:
   - Instantiate repositories, services, handlers, orchestrator.
   - Register MCP request handlers via `src/server/mcp-request-router.ts`.
@@ -69,7 +69,7 @@ This project is a Model Context Protocol (MCP) server with an integrated dashboa
 ```mermaid
 flowchart TD
   A[MCP Client] -->|stdio tool call| B[src/index.ts]
-  B --> R[src/server/jules-agent-server.ts]
+  B --> R[src/server/code-ux-server.ts]
   R --> C[src/mcp/core-tool-handler.ts]
   R --> D[src/mcp/agent-tool-handler.ts]
   C --> E[src/integrations/jules-api-client.ts]

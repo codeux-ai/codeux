@@ -9,14 +9,14 @@ export async function main(args: string[] = process.argv): Promise<void> {
     path,
     { fileURLToPath },
     { loadAppConfig },
-    { JulesAgentServer },
+    { CodeUxServer },
     { fixDockerHostEnvironment },
   ] = await Promise.all([
     import("dotenv"),
     import("path"),
     import("url"),
     import("./config/app-config.js"),
-    import("./server/jules-agent-server.js"),
+    import("./server/code-ux-server.js"),
     import("./shared/docker-env-helper.js"),
   ]);
 
@@ -31,7 +31,7 @@ export async function main(args: string[] = process.argv): Promise<void> {
   if (args.includes("--help") || args.includes("-h")) {
     console.log("Code UX MCP Server");
     console.log("");
-    console.log("Usage: code-ux [options]");
+    console.log("Usage: codeux [options]");
     console.log("");
     console.log("Options:");
     console.log("  --api-key VALUE   Set the Jules API key (overrides env and settings)");
@@ -59,7 +59,7 @@ export async function main(args: string[] = process.argv): Promise<void> {
     process.exit(0);
   }
 
-  const server = new JulesAgentServer({ projectRoot, appConfig });
+  const server = new CodeUxServer({ projectRoot, appConfig });
 
   try {
     await server.run();

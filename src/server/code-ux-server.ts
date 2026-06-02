@@ -97,12 +97,12 @@ function readAttentionPayloadRecord(item: ProjectAttentionItemRecord): Record<st
     : null;
 }
 
-export interface JulesAgentServerOptions {
+export interface CodeUxServerOptions {
   projectRoot: string;
   appConfig: AppConfig;
 }
 
-export class JulesAgentServer {
+export class CodeUxServer {
   private static readonly DASHBOARD_ACTIVITY_PAGE_SIZE = 20;
   private static readonly LIVE_ACTIVITY_CACHE_MS = 10_000;
   private static readonly GIT_STATUS_CACHE_MS = 10_000;
@@ -170,7 +170,7 @@ export class JulesAgentServer {
   private readonly mcpApprovalTracker = new McpApprovalTracker();
   private readonly sigintHandler: () => void;
 
-  constructor(options: JulesAgentServerOptions) {
+  constructor(options: CodeUxServerOptions) {
     this.projectRoot = options.projectRoot;
     this.appConfig = options.appConfig;
     this.dockerService = new DockerService();
@@ -247,11 +247,11 @@ export class JulesAgentServer {
       void this.handleSigint();
     };
 
-    if (JulesAgentServer.activeSigintHandler) {
-      process.off("SIGINT", JulesAgentServer.activeSigintHandler);
+    if (CodeUxServer.activeSigintHandler) {
+      process.off("SIGINT", CodeUxServer.activeSigintHandler);
     }
     process.on("SIGINT", this.sigintHandler);
-    JulesAgentServer.activeSigintHandler = this.sigintHandler;
+    CodeUxServer.activeSigintHandler = this.sigintHandler;
   }
 
   private async handleSigint(): Promise<void> {
@@ -353,7 +353,7 @@ export class JulesAgentServer {
 
     const initialTimer = setTimeout(runCleanup, 0);
     initialTimer.unref?.();
-    this.runtimeCleanupInterval = setInterval(runCleanup, JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS);
+    this.runtimeCleanupInterval = setInterval(runCleanup, CodeUxServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.runtimeCleanupInterval.unref?.();
   }
 
@@ -373,7 +373,7 @@ export class JulesAgentServer {
 
     const initialTimer = setTimeout(reconcile, 0);
     initialTimer.unref?.();
-    this.sprintPreviewInterval = setInterval(reconcile, JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS);
+    this.sprintPreviewInterval = setInterval(reconcile, CodeUxServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.sprintPreviewInterval.unref?.();
   }
 
@@ -393,7 +393,7 @@ export class JulesAgentServer {
 
     const initialTimer = setTimeout(refreshLiveSnapshot, 0);
     initialTimer.unref?.();
-    this.liveSnapshotInterval = setInterval(refreshLiveSnapshot, JulesAgentServer.LIVE_SNAPSHOT_REFRESH_INTERVAL_MS);
+    this.liveSnapshotInterval = setInterval(refreshLiveSnapshot, CodeUxServer.LIVE_SNAPSHOT_REFRESH_INTERVAL_MS);
     this.liveSnapshotInterval.unref?.();
   }
 
@@ -718,7 +718,7 @@ export class JulesAgentServer {
     return { sessions: merged };
   }
 
-  private async fetchRecentActivities(sessionName: string, pageSize: number = JulesAgentServer.DASHBOARD_ACTIVITY_PAGE_SIZE): Promise<JulesActivity[]> {
+  private async fetchRecentActivities(sessionName: string, pageSize: number = CodeUxServer.DASHBOARD_ACTIVITY_PAGE_SIZE): Promise<JulesActivity[]> {
     if (this.isTrackedCliSession(sessionName)) {
       return this.sessionTracking.fetchRecentActivities(sessionName, pageSize);
     }
@@ -796,7 +796,7 @@ export class JulesAgentServer {
         "REMOTE",
         this.getEffectiveGitHostTokens(),
         { scope: "REPOSITORY" },
-        JulesAgentServer.GIT_STATUS_CACHE_MS,
+        CodeUxServer.GIT_STATUS_CACHE_MS,
       );
     } catch {
       return null;
@@ -1018,7 +1018,7 @@ export class JulesAgentServer {
         syncGitSettingsFromDashboard: () => syncGitSettingsFromDashboard(this.runtimeContext),
         refreshJulesApiKey: () => this.refreshJulesApiKey(),
         setLogger: (logger) => { this.logger = logger; },
-        LIVE_ACTIVITY_CACHE_MS: JulesAgentServer.LIVE_ACTIVITY_CACHE_MS,
+        LIVE_ACTIVITY_CACHE_MS: CodeUxServer.LIVE_ACTIVITY_CACHE_MS,
         memoryService: this.memoryService,
         memoryPromotionService: this.memoryPromotionService,
         embeddingModelManager: this.embeddingModelManager,

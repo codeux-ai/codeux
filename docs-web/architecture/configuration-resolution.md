@@ -14,7 +14,7 @@ Code UX has three configuration layers, each loaded at a different time:
 
 ## Bootstrap config
 
-Loaded by `loadAppConfig` (`src/config/app-config.ts`) given `process.argv` and the project root. Outputs an `AppConfig` consumed by the `JulesAgentServer` constructor.
+Loaded by `loadAppConfig` (`src/config/app-config.ts`) given `process.argv` and the project root. Outputs an `AppConfig` consumed by the `CodeUxServer` constructor.
 
 ### Resolution order (per field)
 
