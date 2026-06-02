@@ -38,10 +38,12 @@ const isSafeBranchRefName = (branch: string): boolean => {
   return !/[\x00-\x20\x7f~^:?*\[]/.test(branch);
 };
 
+const PRUNE_FETCH_ARGS = ["fetch", "origin", "--prune"];
+
 const buildFetchArgs = (branch?: string): string[] => {
   const branchName = branch?.trim();
   if (!branchName || !isSafeBranchRefName(branchName)) {
-    return ["fetch", "origin", "--prune"];
+    return [...PRUNE_FETCH_ARGS];
   }
   return [
     "fetch",
@@ -49,6 +51,16 @@ const buildFetchArgs = (branch?: string): string[] => {
     "--prune",
     `+refs/heads/${branchName}:refs/remotes/origin/${branchName}`,
   ];
+};
+
+// A targeted refspec fetch fails hard when the branch was never pushed (e.g. a task
+// that completed without producing any file changes or a PR). Git reports this as
+// "couldn't find remote ref refs/heads/<branch>". In that case the branch simply does
+// not exist on the remote, which is not an error for our callers — they only need
+// origin refreshed so downstream ref checks can observe its absence.
+const isMissingRemoteRefError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return /couldn't find remote ref/i.test(message);
 };
 
 const normalizeOptions = (
@@ -98,9 +110,19 @@ export async function fetchOriginIfAvailable(
   }
 
   const fetchEnv = await resolveHttpsAuthOrFallback(remoteUrl, options);
-  await runGit(runner, buildFetchArgs(branch), repoPath, fetchEnv, {
-    timeoutMs: options.fetchTimeoutMs ?? getDefaultFetchTimeoutMs(),
-  });
+  const fetchTimeout = { timeoutMs: options.fetchTimeoutMs ?? getDefaultFetchTimeoutMs() };
+  const fetchArgs = buildFetchArgs(branch);
+  try {
+    await runGit(runner, fetchArgs, repoPath, fetchEnv, fetchTimeout);
+  } catch (error) {
+    // If the targeted branch was never pushed to the remote, fall back to a plain prune
+    // fetch so origin is still refreshed instead of failing the whole operation.
+    const isTargetedFetch = fetchArgs.length > PRUNE_FETCH_ARGS.length;
+    if (!isTargetedFetch || !isMissingRemoteRefError(error)) {
+      throw error;
+    }
+    await runGit(runner, [...PRUNE_FETCH_ARGS], repoPath, fetchEnv, fetchTimeout);
+  }
   return true;
 }
 
