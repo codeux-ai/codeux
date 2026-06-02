@@ -21,6 +21,7 @@ import { registerLocalDirectoryRoutes } from "./local-directory-routes.js";
 import { registerSchedulerRoutes } from "./scheduler-routes.js";
 import { registerTerminalRoutes } from "./terminal-routes.js";
 import { registerSprintComposerRoutes } from "./routes/sprint-composer.js";
+import { registerGitProviderRoutes } from "./git-provider-routes.js";
 
 export const registerDashboardRoutes = (
   app: Express,
@@ -47,4 +48,5 @@ export const registerDashboardRoutes = (
   registerQuicksprintRoutes(app, deps);
   registerSchedulerRoutes(app, deps);
   registerTerminalRoutes(app, deps);
+  registerGitProviderRoutes(app, deps);
 };

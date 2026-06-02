@@ -1,10 +1,12 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bot, FolderOpen, Plus, ExternalLink, Loader2, Trash2 } from "lucide-preact";
+import { Bot, FolderOpen, Plus, ExternalLink, Loader2, Trash2, Sparkles } from "lucide-preact";
 import type { Source, SourceStatus } from "./types.js";
 import { AddProjectModal } from "./components/ui/AddProjectModal.js";
+import { NewProjectModal } from "./components/ui/NewProjectModal.js";
 import { StatusDot } from "./components/ui/StatusDot.js";
+import { useGitProviders } from "./hooks/use-git-providers.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useProjectData } from "./context/project-data.js";
@@ -332,6 +334,8 @@ export const ProjectsPage: FunctionComponent = () => {
     const mainRef      = useRef<HTMLDivElement>(null);
     const gridRef = useRef<HTMLDivElement>(null);
     const [showModal, setShowModal]   = useState(false);
+    const [showNewModal, setShowNewModal] = useState(false);
+    const gitProviders = useGitProviders();
     const [setupProjectId, setSetupProjectId] = useState<string | null>(null);
     const [runningSetupProjectIds, setRunningSetupProjectIds] = useState<Set<string>>(() => new Set());
     const [setupInvocationByProjectId, setSetupInvocationByProjectId] = useState<Record<string, string>>({});
@@ -502,6 +506,25 @@ export const ProjectsPage: FunctionComponent = () => {
         }
     };
 
+    const handleInitProject = async (input: {
+        name: string;
+        initMode: "new-local" | "new-remote";
+        sourceRef: string;
+        cloneDir?: string;
+        remoteProvider?: "github" | "gitlab";
+        isPrivate?: boolean;
+    }) => {
+        await createProject({
+            name: input.name,
+            sourceType: input.initMode === "new-local" ? "local" : "git",
+            sourceRef: input.sourceRef,
+            cloneDir: input.cloneDir,
+            initMode: input.initMode,
+            remoteProvider: input.remoteProvider,
+            isPrivate: input.isPrivate,
+        });
+    };
+
     const activeSetupProject = sources.find(source => source.id === setupProjectId) || null;
 
     const handleRunSetup = async () => {
@@ -609,19 +632,29 @@ export const ProjectsPage: FunctionComponent = () => {
                         </div>
 
                         {/* CTA */}
-                        <button
-                            onClick={() => setShowModal(true)}
-                            className="group flex items-center gap-2.5 px-6 py-3.5
-                                       bg-ember-500 hover:bg-ember-400
-                                       text-void-900 font-bold text-sm rounded-2xl
-                                       transition-colors duration-300
-                                       shadow-[0_4px_20px_rgba(255,184,0,0.25)]
-                                       hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)]
-                                       hover:-translate-y-px transition-[background-color,box-shadow,transform]"
-                        >
-                            <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" strokeWidth={2.5} />
-                            Add Project
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowNewModal(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all active:scale-95 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
+                            >
+                                <Sparkles className="w-4 h-4" />
+                                New Project
+                            </button>
+
+                            <button
+                                onClick={() => setShowModal(true)}
+                                className="group flex items-center gap-2.5 px-6 py-3.5
+                                           bg-ember-500 hover:bg-ember-400
+                                           text-void-900 font-bold text-sm rounded-2xl
+                                           transition-colors duration-300
+                                           shadow-[0_4px_20px_rgba(255,184,0,0.25)]
+                                           hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)]
+                                           hover:-translate-y-px transition-[background-color,box-shadow,transform]"
+                            >
+                                <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" strokeWidth={2.5} />
+                                Add Project
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -694,6 +727,13 @@ export const ProjectsPage: FunctionComponent = () => {
                 <AddProjectModal
                     onClose={() => setShowModal(false)}
                     onAdd={handleAddProject}
+                />
+            )}
+            {showNewModal && (
+                <NewProjectModal
+                    onClose={() => setShowNewModal(false)}
+                    onAdd={handleInitProject}
+                    providers={gitProviders}
                 />
             )}
             {activeSetupProject && (
