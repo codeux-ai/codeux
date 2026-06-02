@@ -493,6 +493,12 @@ export const SprintsPage: FunctionComponent = () => {
                     const activeRun = activeRunsBySprintId.get(sprint.id);
                     const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
                     const pinActionId = `sprint-showcase:${sprint.id}`;
+                    const pauseResumeRun = pauseResumeRunsBySprintId.get(sprint.id);
+                    const isPaused = pauseResumeRun?.status === "paused";
+                    const pauseResumeBusy = !!pauseResumeRun && (
+                      pendingActionIds.has(`sprint-pause:${pauseResumeRun.id}`)
+                      || pendingActionIds.has(`sprint-resume:${pauseResumeRun.id}`)
+                    );
 
   return (
                       <SprintCell
@@ -502,8 +508,12 @@ export const SprintsPage: FunctionComponent = () => {
                         accentColor={ACCENT_CYCLE[index % ACCENT_CYCLE.length]}
                         primaryBusy={pendingActionIds.has(pendingActionId)}
                         showcaseBusy={pendingActionIds.has(pinActionId)}
+                        isPaused={isPaused}
+                        pauseResumeBusy={pauseResumeBusy}
                         humanIntervention={interventionBySprintId.get(sprint.id) || null}
                         onPrimaryAction={() => { handleSprintToggle(sprint.id); }}
+                        onPauseResume={pauseResumeRun ? () => { handleSprintPauseResume(sprint.id); } : undefined}
+                        onAddTasks={() => { void handleOpenAppendTasks(sprint); }}
                         onMarkCompleted={() => { void handleMarkCompleted(sprint.id); }}
                         onEdit={() => {
                           setEditingSprint(sprint);

@@ -1,6 +1,7 @@
 import { useMemo } from "preact/hooks";
 import { useProjectData } from "../context/project-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
+import { useExecutions } from "../../hooks/useExecutions.js";
 import { useProjectTasks } from "./use-project-tasks.js";
 import { useProjectStats } from "./use-project-stats.js";
 
@@ -11,6 +12,7 @@ export function useOverviewPageData() {
   const { data: sprints, loading: sprintsLoading } = useSprints(projectId);
   const { tasks, loading: tasksLoading } = useProjectTasks(projectId, projects, sprints);
   const { stats, loading: statsLoading } = useProjectStats(projectId, "7d");
+  const { data: execution } = useExecutions(projectId);
 
   const isLoading = projectsLoading || sprintsLoading || tasksLoading || statsLoading;
 
@@ -20,6 +22,7 @@ export function useOverviewPageData() {
     sprints,
     tasks,
     stats,
+    execution,
     isLoading
-  }), [projects, selectedProject, sprints, tasks, stats, isLoading]);
+  }), [projects, selectedProject, sprints, tasks, stats, execution, isLoading]);
 }

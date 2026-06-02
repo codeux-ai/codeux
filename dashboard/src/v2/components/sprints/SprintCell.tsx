@@ -63,8 +63,12 @@ interface SprintCellProps {
   accentColor: string;
   primaryBusy?: boolean;
   showcaseBusy?: boolean;
+  isPaused?: boolean;
+  pauseResumeBusy?: boolean;
   humanIntervention?: ExecutionHumanInterventionSummary | null;
   onPrimaryAction?: () => void;
+  onPauseResume?: () => void;
+  onAddTasks?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   onExport?: () => void;
@@ -92,8 +96,12 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   accentColor,
   primaryBusy = false,
   showcaseBusy = false,
+  isPaused = false,
+  pauseResumeBusy = false,
   humanIntervention = null,
   onPrimaryAction,
+  onPauseResume,
+  onAddTasks,
   onEdit,
   onDelete,
   onExport,
@@ -276,7 +284,11 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           </div>
         </div>
 
-        <div className="absolute bottom-5 flex w-full translate-y-2 items-center justify-center gap-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+        <div className={`absolute bottom-5 flex w-full items-center justify-center gap-3 transition-all duration-300 ${
+          menuOpen
+            ? "translate-y-0 opacity-100"
+            : "translate-y-2 opacity-0 pointer-events-none group-hover:translate-y-0 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+        }`}>
           <button
             type="button"
             onClick={(event) => {
@@ -319,6 +331,14 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
                 sprint={sprint}
                 isCompleted={isCompleted}
                 showcaseBusy={showcaseBusy}
+                isRunning={isRunning}
+                isPaused={isPaused}
+                primaryBusy={primaryBusy}
+                pauseResumeBusy={pauseResumeBusy}
+                onPrimaryAction={onPrimaryAction}
+                onPauseResume={onPauseResume}
+                onAddTasks={onAddTasks}
+                viewTasksHref={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
                 onEdit={onEdit}
                 onExport={onExport}
                 onToggleShowcase={onToggleShowcase}

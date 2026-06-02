@@ -1,10 +1,20 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { FolderGit2, CheckCircle2, Circle, PlayCircle, Clock, Play, Square, Settings, Maximize2 } from "lucide-preact";
+import { FolderGit2, CheckCircle2, Circle, PlayCircle, Clock, Play, Square, Settings, Maximize2, Loader2 } from "lucide-preact";
 import type { Task } from "../../types.js";
+import type { TaskStreamState } from "../../hooks/use-overview-stream-actions.js";
 import { SprintReviewBadge } from "../sprints/SprintReviewBadge.js";
 
-export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
+interface TaskRowProps {
+    task: Task;
+    state?: TaskStreamState;
+    onPlayStop?: () => void;
+}
+
+export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onPlayStop }) => {
+    const isRunning = state?.isRunning ?? task.status === "in_progress";
+    const busy = state?.busy ?? false;
+    return (
     <div
         className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.06] dark:border-white/[0.06] last:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 focus-visible:z-10 focus-visible:rounded-xl"
         tabIndex={0}
@@ -79,17 +89,40 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
 
                 {/* Quick actions */}
                 <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-xl rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] absolute right-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-[opacity,transform] duration-200 origin-right motion-safe:scale-95 motion-safe:group-hover:scale-100 motion-safe:group-focus-within:scale-100">
-                    <button className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95" title="Play/Stop">
-                        {task.status === 'in_progress' ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
+                    <button
+                        type="button"
+                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95"
+                        title={isRunning ? "Stop task" : "Rerun task"}
+                        aria-label={isRunning ? "Stop task" : "Rerun task"}
+                        disabled={busy || !onPlayStop}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onPlayStop?.();
+                        }}
+                    >
+                        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isRunning ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
                     </button>
-                    <button className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95" title="Configure">
+                    <a
+                        href={`/tasks?sprint=${encodeURIComponent(task.sprintId)}`}
+                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95"
+                        title="Configure task"
+                        aria-label="Configure task"
+                        onClick={(event: MouseEvent) => event.stopPropagation()}
+                    >
                         <Settings className="w-3.5 h-3.5" />
-                    </button>
-                    <button className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-status-green bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95" title="Expand">
+                    </a>
+                    <a
+                        href="/live"
+                        className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-status-green bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95"
+                        title="Open live session"
+                        aria-label="Open live session"
+                        onClick={(event: MouseEvent) => event.stopPropagation()}
+                    >
                         <Maximize2 className="w-3.5 h-3.5" />
-                    </button>
+                    </a>
                 </div>
             </div>
         </div>
     </div>
-));
+    );
+});

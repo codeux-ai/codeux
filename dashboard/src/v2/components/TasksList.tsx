@@ -5,10 +5,12 @@ import { Flip } from "gsap/Flip";
 
 gsap.registerPlugin(Flip);
 import { TaskRow } from "./ui/TaskRow.js";
+import { SprintStreamRow } from "./ui/SprintStreamRow.js";
 import { FilterStrip } from "./ui/FilterStrip.js";
 import { SkeletonRow } from "./layout/SkeletonLoader.js";
 import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../lib/overview-streams.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import { useOverviewStreamActions } from "../hooks/use-overview-stream-actions.js";
 type TaskFilter = "All Tasks" | "Running" | "Queued" | "Completed";
 
 const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
@@ -34,10 +36,11 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
         setActiveFilter("All Tasks");
     };
     const reducedMotion = useReducedMotion();
-    const { sprints, tasks, isLoading } = pageData;
+    const { sprints, tasks, execution, selectedProject, isLoading } = pageData;
 
+    const streamActions = useOverviewStreamActions(selectedProject?.id ?? null, execution);
 
-
+    const sprintById = useMemo(() => new Map(sprints.map((sprint) => [sprint.id, sprint])), [sprints]);
     const activeSprintIds = useMemo(() => deriveActiveSprintIds(sprints), [sprints]);
     const activeTasks = useMemo(() => filterTasksToActiveSprints(tasks, activeSprintIds), [tasks, activeSprintIds]);
 
@@ -48,6 +51,24 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
         if (activeFilter === "Completed") return task.status === "completed";
         return true;
     }), [activeTasks, activeFilter]);
+
+    // Group the active-sprint tasks under their sprint so each task visibly belongs to a
+    // sprint. Most recent sprint first; only sprints with matching tasks appear.
+    const sprintGroups = useMemo(() => {
+        const grouped = new Map<string, typeof filteredTasks>();
+        for (const task of filteredTasks) {
+            const list = grouped.get(task.sprintId) ?? [];
+            list.push(task);
+            grouped.set(task.sprintId, list);
+        }
+        return Array.from(grouped.entries())
+            .map(([sprintId, groupedTasks]) => ({
+                sprintId,
+                sprint: sprintById.get(sprintId) ?? null,
+                tasks: groupedTasks,
+            }))
+            .sort((a, b) => (b.sprint?.number ?? 0) - (a.sprint?.number ?? 0));
+    }, [filteredTasks, sprintById]);
 
     const initialMountRef = useRef(true);
 
@@ -113,9 +134,28 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         <SkeletonRow />
                     </>
                 ) : filteredTasks.length > 0 ? (
-                    filteredTasks.map((task) => (
-                        <div key={task.id} data-flip-id={task.id} className="task-flip-item"><TaskRow task={task} /></div>
-                    ))
+                    sprintGroups.flatMap((group) => [
+                        group.sprint ? (
+                            <div key={`sprint-${group.sprintId}`} data-flip-id={`sprint-${group.sprintId}`}>
+                                <SprintStreamRow
+                                    sprint={group.sprint}
+                                    taskCount={group.tasks.length}
+                                    state={streamActions.getSprintState(group.sprintId)}
+                                    onStartStop={() => streamActions.startStopSprint(group.sprintId)}
+                                    onPauseResume={() => streamActions.pauseResumeSprint(group.sprintId)}
+                                />
+                            </div>
+                        ) : null,
+                        ...group.tasks.map((task) => (
+                            <div key={task.id} data-flip-id={task.id} className="task-flip-item sm:pl-4">
+                                <TaskRow
+                                    task={task}
+                                    state={streamActions.getTaskState(task)}
+                                    onPlayStop={() => streamActions.playStopTask(task)}
+                                />
+                            </div>
+                        )),
+                    ])
                 ) : (
                     <div data-flip-id="empty-state" className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
                         <svg className="w-12 h-12 mb-4 text-slate-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
