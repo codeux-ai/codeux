@@ -4,6 +4,7 @@
 Var CodeUxBetaCheckbox
 Var CodeUxBetaAccepted
 
+!ifndef BUILD_UNINSTALLER
 !macro customPageAfterChangeDir
   Page custom CodeUxBetaPage CodeUxBetaPageLeave
 !macroend
@@ -38,3 +39,4 @@ Function CodeUxBetaPageLeave
     Abort
   ${EndIf}
 FunctionEnd
+!endif
