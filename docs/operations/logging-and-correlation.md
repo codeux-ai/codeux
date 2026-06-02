@@ -41,7 +41,7 @@ The Dashboard General settings page stores `runtime.consoleLogLevel` in system s
 
 ## MCP Correlation Flow
 
-1. `src/server/jules-agent-server.ts` passes a correlation wrapper to `registerMcpRequestHandlers`.
+1. `src/server/code-ux-server.ts` passes a correlation wrapper to `registerMcpRequestHandlers`.
 2. For each MCP `CallTool` request:
    - correlation ID is read from request metadata/arguments when present,
    - otherwise generated.

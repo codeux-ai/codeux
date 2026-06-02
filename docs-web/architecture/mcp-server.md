@@ -12,7 +12,7 @@ This page documents the transports, the tool registry, the request routing path,
 
 The capabilities object is empty (no specific tool/resource caps); it merely advertises that the categories exist.
 
-Source: `src/server/jules-agent-server.ts:295-311`.
+Source: `src/server/code-ux-server.ts:295-311`.
 
 ## Transports
 
@@ -24,7 +24,7 @@ StdioServerTransport (from @modelcontextprotocol/sdk)
 
 Activates when stdin is **not** a TTY. The Node process expects JSON-RPC frames on stdin and writes responses to stdout. All other logging is routed to stderr (so it doesn't corrupt the JSON-RPC stream).
 
-If launched interactively (TTY), stdio binding is skipped; this is what allows `jules-subagents` to act as a normal CLI without garbling the terminal.
+If launched interactively (TTY), stdio binding is skipped; this is what allows `codeux` to act as a normal CLI without garbling the terminal.
 
 Source: `src/app/lifecycle/mcp-lifecycle-service.ts:92-106`.
 

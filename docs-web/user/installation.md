@@ -1,8 +1,8 @@
 # Installation
 
-Code UX ships as the `jules-subagents` npm package. There are two supported installation paths:
+Code UX ships as the `codeux` npm package. There are two supported installation paths:
 
-1. **Global install** — recommended for most users. Lets you run `jules-subagents` (or `npx jules-subagents`) from anywhere.
+1. **Global install** — recommended for most users. Lets you run `codeux` (or `npx codeux`) from anywhere.
 2. **From source** — recommended for contributors and anyone customising the engine.
 
 ## Prerequisites
@@ -20,24 +20,24 @@ If you plan to use a CLI provider as a virtual worker, you must install that pro
 ## Option 1 — Global install (recommended)
 
 ```bash
-npm install -g jules-subagents
+npm install -g codeux
 ```
 
 Verify it is on your `PATH`:
 
 ```bash
-jules-subagents --help
+codeux --help
 ```
 
 You should see the option list ending with environment variable descriptions.
 
-> **Tip:** If you do not want a global install, you can always run the package on demand with `npx -y jules-subagents`. This is what most MCP client configurations use.
+> **Tip:** If you do not want a global install, you can always run the package on demand with `npx -y codeux`. This is what most MCP client configurations use.
 
 ## Option 2 — From source
 
 ```bash
-git clone https://github.com/numnx/jules-subagents-mcp.git
-cd jules-subagents-mcp
+git clone https://github.com/codeux-ai/codeux.git
+cd codeux
 pnpm install
 cp .env.example .env
 # Edit .env and set JULES_API_KEY
@@ -54,7 +54,7 @@ or globally link:
 
 ```bash
 pnpm link --global
-jules-subagents --help
+codeux --help
 ```
 
 For details on the test and CI workflow, see [Building from source](../developer/building-from-source.md).
@@ -106,7 +106,7 @@ You can enable provider auth mounting (so the worker container can use your loca
 Once installed, the simplest way to start everything is:
 
 ```bash
-jules-subagents
+codeux
 ```
 
 This starts:
@@ -117,13 +117,13 @@ This starts:
 To run **headless** (no dashboard), useful when Code UX is launched as a child process by an MCP client:
 
 ```bash
-jules-subagents --headless
+codeux --headless
 ```
 
 To enable the **remote MCP HTTP gateway** so external workers can connect:
 
 ```bash
-jules-subagents --mcp-http --mcp-http-auth-token "$(openssl rand -hex 32)"
+codeux --mcp-http --mcp-http-auth-token "$(openssl rand -hex 32)"
 ```
 
 See the full flag reference in [Configuration & CLI](../developer/configuration.md).
@@ -132,10 +132,10 @@ See the full flag reference in [Configuration & CLI](../developer/configuration.
 
 ```bash
 # Global install
-npm update -g jules-subagents
+npm update -g codeux
 
 # Source
-cd jules-subagents-mcp
+cd codeux
 git pull
 pnpm install
 pnpm run build
@@ -144,7 +144,7 @@ pnpm run build
 ## Uninstall
 
 ```bash
-npm uninstall -g jules-subagents
+npm uninstall -g codeux
 rm -rf ~/.code-ux ~/.jules-subagents
 ```
 

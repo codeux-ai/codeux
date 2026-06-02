@@ -1,14 +1,22 @@
 {
-  "name": "code-ux",
+  "name": "codeux",
   "version": "1.0.0",
   "description": "Containerized environment for running and managing AI sub-agents",
   "author": "Pierre Voss <p.voss@codeux.ai>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codeux-ai/codeux.git"
+  },
+  "bugs": {
+    "url": "https://github.com/codeux-ai/codeux/issues"
+  },
+  "homepage": "https://github.com/codeux-ai/codeux#readme",
   "packageManager": "pnpm@10.33.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "jules-subagents": "dist/index.js"
+    "codeux": "dist/index.js"
   },
   "scripts": {
     "build": "tsc --incremental --tsBuildInfoFile .cache/tsc/root.tsbuildinfo && tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo && vite build",

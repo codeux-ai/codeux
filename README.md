@@ -1,361 +1,284 @@
-# Sprint OS
-Production-grade agentic sprint orchestration via MCP.
+# Code UX
 
-[![Node.js 20+](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
-[![pnpm](https://img.shields.io/badge/pnpm-blue.svg)](https://pnpm.io/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-blue.svg)](https://www.typescriptlang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Protocol: MCP](https://img.shields.io/badge/Protocol-MCP-green.svg)](https://modelcontextprotocol.io/)
+**A containerized agentic runtime for professional software teams.**
 
-Sprint OS is a production-grade MCP server and multi-provider virtual worker engine supporting Jules, Gemini, Codex, Claude Code, and Qwen Code. It exposes a powerful suite of sprint orchestration tools alongside a real-time V2 Preact dashboard. Under the hood, a DB-backed sprint orchestration engine provides dependency-aware DAG scheduling and Git/CI intelligence to automate development workflows.
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22+-green.svg)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-10.33+-orange.svg)](https://pnpm.io/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-## 📚 Documentation
+Code UX is a local-first orchestration platform for running serious AI-assisted engineering work. It turns a feature, refactor, migration, QA pass, or CI repair into a managed sprint: planned, routed to the right agent provider, executed in isolated workspaces, tracked in a live dashboard, reviewed through Git and CI, and surfaced back to the developer with clear intervention points.
 
-Project documentation index:
-- [`docs/index.md`](./docs/index.md)
+The vision is simple: **a token-efficient agentic runtime built around how professional programmers and agencies already work.** Code UX does not try to replace the tools developers love. It coordinates them. Jules, Claude Code, Codex CLI, Gemini CLI, Qwen Code, OpenCode, Antigravity CLI, MCP tools, GitHub, GitLab, Jira, Docker, and browser previews all become part of one governed runtime.
 
----
+## Install
 
-## ✨ Key Features
+The recommended path is the desktop app. Download the latest installer for your platform from the project [GitHub Releases](https://github.com/codeux-ai/codeux/releases).
 
-- **Sprint Orchestration**: Intelligent task delegation with DAG dependency scheduling.
-- **Live Web Dashboard**: A beautiful, real-time V2 Preact dashboard to monitor your sprint progress at `http://localhost:4444`.
-- **AI Integrations**: Five supported AI provider integrations for varied workflows.
-- **Virtual Worker Routing**: Flexible execution using MANUAL, WEIGHTED, or ORCHESTRATOR routing strategies.
-- **Hierarchical Settings**: SQLite-backed settings following a system → project → sprint scope hierarchy.
-- **CI Intelligence**: Built-in git/CI intelligence with automated PR merge gates.
-- **Enterprise-Grade Tools**: 12+ MCP tools covering the full Jules API surface.
-- **Safety First**: Configurable emergency stop safety mechanism to prevent runaway loops.
-- **Customizable Protocol**: DB-backed editable instruction templates for protocol tuning.
+| Platform | Release artifact | Notes |
+| --- | --- | --- |
+| Windows | `.exe` installer | Assisted installer with license and beta notice screens. |
+| macOS | `.dmg` | Choose Apple Silicon or Intel according to your Mac. |
+| Linux | `.AppImage`, `.deb`, or other packaged target | Use AppImage for portable use or `.deb` for Debian/Ubuntu-style installs. |
 
----
+After launch, Code UX opens its local dashboard, normally at:
 
-## Installation
-
-### Global Install (NPM)
-
-Install globally via NPM to use the `jules-subagents` command anywhere:
-
-```bash
-npm install -g jules-subagents
+```text
+http://localhost:4444
 ```
 
-Verify the installation:
+Need to build or run from source? Jump to [Run From Source](#run-from-source).
+
+## What Code UX Does
+
+Code UX is an agentic desktop runtime with a full dashboard for projects, sprints, agents, settings, live execution, memory, telemetry, Git state, and browser previews.
+
+At a high level, Code UX:
+
+- Creates and manages projects backed by local Git repositories.
+- Plans sprints from natural-language goals, linked issues, or reusable quicksprint templates.
+- Breaks work into dependency-aware tasks and runs ready tasks in parallel.
+- Routes each invocation to the best configured provider, model, and agent preset.
+- Centralizes agent presets and MCP tool configuration so provider CLIs inherit one shared project setup.
+- Can generate specialized project agents automatically during project setup.
+- Runs provider sessions in Docker-backed workspaces by default for repeatability and isolation.
+- Opens and watches PRs/MRs, gates merges on CI, retries repair flows, and escalates when a human decision is needed.
+- Captures runtime events, provider usage, token/time statistics, memory, logs, and sprint status in a real-time dashboard.
+- Starts isolated Live Browser preview containers so UI work can be inspected from inside Code UX.
+
+## Why It Exists
+
+Most current agentic coding tools try to be a single autonomous agent for everything. They push more context into longer conversations, ask a model to reason through every operational step, and burn tokens on work that should be deterministic: branch setup, dependency ordering, merge checks, CI polling, PR state, reruns, conflict detection, and status bookkeeping.
+
+Code UX takes the opposite path. It keeps the coding path predictable and moves the repetitive operational work into software. The runtime plans work as a dependency-aware DAG, starts only the tasks that are ready, tracks each execution in durable state, watches Git and CI programmatically, and automates merge gates wherever policy allows. Agents spend their tokens on the parts that actually need judgment: planning, implementation, review, repair, and conflict resolution.
+
+That difference matters at professional scale:
+
+- Large goals become atomic subtasks with explicit dependencies instead of one enormous prompt thread.
+- Multiple tasks can run in parallel inside the same sprint without losing merge discipline.
+- Multiple sprints can advance inside the same project because Code UX understands branch state, task state, PR state, and dependency state separately.
+- Multiple projects can run side by side because execution is containerized, isolated, and visible from one dashboard.
+- Short-term sprint memory and long-term project memory keep only the relevant learnings in context instead of dragging every past agent conversation into every prompt.
+- Short-lived worker containers isolate agent execution and are destroyed after runs, reducing long-lived access and keeping company workspaces easier to govern.
+- CI failures, merge conflicts, PR gates, issue imports, sprint exports, and intervention states are handled by the runtime instead of repeatedly explained to a model.
+
+For agencies and senior engineers, this turns AI coding from an ad hoc chat workflow into an operating system for delivery. Jira, GitHub, and GitLab issue imports let teams start from the project-management systems they already use. Sprint planning turns client requests and backlog items into executable work. Containerized workers keep repositories separate. Sprint-aware memory carries forward what matters without bloating every provider call. Live Browser previews make frontend progress inspectable without terminal juggling. The dashboard gives leads a way to supervise many moving parts without reading every token of every agent conversation.
+
+Code UX is built for huge work: migrations, product features, cleanup waves, QA passes, and multi-branch delivery where one agent session is not enough. Its dispatch architecture is also the foundation for something larger: a real containerized agent cluster. The long-term direction is an agent runtime that feels less like an oversized chatbot and more like Kubernetes for Docker-backed coding workers: schedulable, observable, policy-driven, and efficient by design.
+
+## Core Features
+
+### Multi-provider agent routing
+
+Route work across all supported providers and models. Each provider can be configured with weights, concurrency limits, thinking mode, model defaults, credentials, Docker auth mounting, and route-specific overrides.
+
+| Provider | Runtime type | Typical role |
+| --- | --- | --- |
+| Jules | Hosted Jules Agent API | Hosted orchestration, planning, and task execution. |
+| Gemini | Local Gemini CLI | Fast iteration, planning, and general coding tasks. |
+| Codex | Local Codex CLI | High-quality implementation, CI repair, merge-conflict repair. |
+| Claude Code | Local Claude Code CLI | Planning, reasoning-heavy coding, QA review, clarification handling. |
+| Qwen Code | Local Qwen Code CLI | Local, private, or custom-endpoint coding workflows. |
+| OpenCode | Local OpenCode CLI | Multi-model CLI routing, OpenRouter-style provider flexibility, custom endpoints. |
+| Antigravity | Local Antigravity CLI | CLI routing for teams that use Antigravity in their development flow. |
+
+Code UX brings the same centralized routing, agents, memory, and tool setup to the provider CLIs teams already use: Claude Code, Codex CLI, Gemini CLI, Qwen Code, OpenCode, and Antigravity CLI.
+
+### Docker-first execution
+
+The default runtime is containerized. Code UX executes CLI providers in Docker-backed workspaces using a shared, configurable runtime image and setup flow. This keeps agent runs isolated from the host while still allowing controlled access to repository checkouts, Git credentials, provider auth, and runtime caches.
+
+Docker-backed execution provides:
+
+- Hermetic task workspaces and snapshot-based QA reviews.
+- Reusable runtime caches for package managers and provider CLIs.
+- Auth-copy support for provider credentials such as `~/.codex`, `~/.claude`, `~/.gemini`, `~/.qwen`, and OpenCode auth.
+- Short-lived execution containers that are cleaned up after runs instead of becoming permanent agent environments.
+- Isolated merge-conflict repair and CI autofix flows.
+- Startup cleanup for stale containers, workspaces, and preview sessions.
+
+Host execution is available for provider CLIs when speed or local tooling access is more important than isolation.
+
+### Security by deterministic isolation
+
+Code UX is designed for company environments where agent execution must be understandable, bounded, and auditable. The runtime avoids handing an autonomous agent an open-ended workspace and hoping it behaves correctly. Instead, Code UX keeps the workflow deterministic: tasks are dispatched through known routes, dependencies are explicit, merge rules are enforced by policy, CI state is checked programmatically, and human intervention points are surfaced when the runtime cannot safely proceed.
+
+The container model strengthens that control. Provider CLIs run in short-lived Docker workspaces by default, scoped to the task or repair flow they are handling. After the run, Code UX captures the resulting patch, memory learnings, logs, and execution state, then cleans up the worker environment. Credentials can be mounted deliberately, caches can be shared without exposing full host state, and stale containers are pruned on startup.
+
+For teams, this creates a stronger security posture than persistent, all-purpose agent sandboxes:
+
+- Agent access is scoped to the current project, sprint, task, and provider route.
+- Containers reduce direct exposure of the developer's host machine and unrelated repositories.
+- Merge conflict repair, CI autofix, and QA review can run in isolated workspaces instead of mutating the main checkout directly.
+- Structured execution records, logs, and correlation IDs make agent work reviewable after the fact.
+- Deterministic Git and CI gates keep sensitive delivery decisions in the runtime instead of inside a model's private chain of reasoning.
+
+### Live Browser preview containers
+
+Code UX can start one preview container per sprint and render the running app inside the dashboard. Preview sessions are isolated by project and sprint, receive their own local origin, proxy HTTP and websocket traffic, and can be rebuilt as tasks complete.
+
+The Browser page supports:
+
+- Starting, stopping, rebuilding, and opening preview sessions.
+- Per-sprint preview startup scripts.
+- Auto-start when a sprint starts running.
+- Rebuilds when task completion changes.
+- Preview logs and port mapping visibility.
+- Same-origin app previews for SPAs, APIs, cookies, local storage, and websocket clients.
+
+### Sprint orchestration
+
+Sprints are database-backed and can also round-trip through markdown for portable, reviewable task definitions. The orchestrator understands task dependencies, branch preparation, provider assignment, worker attention, CI gates, QA state, merge state, and terminal sprint outcomes.
+
+Important sprint capabilities include:
+
+- AI planning from a prompt, imported issues, or quicksprint templates.
+- Dependency-aware DAG scheduling.
+- Parallel task dispatch with provider-specific concurrency.
+- Planning prompt improvement before task generation.
+- Pause, resume, cancel, rerun, edit, force-complete, and human-intervention controls.
+- GitHub, GitLab, and Jira issue import support.
+- Sprint export back to markdown.
+
+### Sprint-aware memory
+
+Code UX treats memory as part of the runtime, not as an ever-growing prompt dump. It separates short-term sprint memory from long-term project memory so agents can learn from completed work without carrying irrelevant history into every task.
+
+The memory architecture is designed for token efficiency:
+
+- Sprint memory captures local decisions, fixes, constraints, and learnings that matter while a sprint is active.
+- Project memory preserves durable knowledge that should survive across sprints.
+- Planning, coding, QA, CI repair, and merge-conflict prompts can receive scoped memory instead of a full transcript.
+- Memory inspection in the dashboard lets operators see what the runtime has learned and where that context came from.
+
+This keeps context focused: a worker fixing a CI failure gets the relevant sprint and project learnings, not a noisy archive of unrelated conversations.
+
+### Professional dashboard
+
+The dashboard is a real-time Preact interface served locally by the backend and packaged inside the desktop app. It is designed for active operation, not passive reporting.
+
+Main surfaces include:
+
+- **Overview**: cross-project status, active runs, telemetry, and runtime health.
+- **Projects**: local and Git URL project creation, setup-agent initialization, project selection, and repository metadata.
+- **Sprints**: sprint composer, quicksprint templates, imported issues, live controls, status ledger, gallery, filters, and exports.
+- **Tasks**: task creation, dependency editing, board/list views, and sprint-scoped task management.
+- **Live Session**: active execution timeline, task cards, attention items, Git/CI/PR panels, and protocol guidance.
+- **Agents**: project agent presets, markdown sync, routing hints, and reusable instructions.
+- **Chat**: provider-backed project conversations and dashboard replies.
+- **Scheduler**: scheduled sprints, quicksprints, and project messages with recurrence support.
+- **File Browser**: project file inspection and repository navigation from the dashboard.
+- **Memory**: short-term and long-term agent memory inspection.
+- **Stats**: token, time, provider, purpose, task, and sprint analytics.
+- **Settings**: scoped system/project/sprint configuration, provider setup, route mapping, Git integrations, Docker controls, appearance, scheduler, and browser preview settings.
+- **Browser**: embedded sprint preview containers with logs, controls, and editable startup scripts.
+
+### Git, CI, and agency workflow support
+
+Code UX is built around existing professional delivery mechanics:
+
+- Feature branch preparation and remote synchronization.
+- GitHub and GitLab PR/MR discovery, creation, and status tracking.
+- CI status polling and merge gates.
+- Automated CI repair attempts through the selected provider.
+- Merge-conflict handling in isolated workspaces.
+- Jira, GitHub, and GitLab issue import and linked-issue closure options.
+- Structured logs and correlation IDs across dashboard, provider, and execution paths.
+
+### Centralized MCP and agent setup
+
+Code UX gives teams one place to configure the tools and agents used by all their favorite coding CLIs. Instead of maintaining separate agent files, MCP tool connections, and setup instructions for every provider, Code UX centralizes that configuration at the system, project, and sprint level.
+
+MCP support is provider-wide:
+
+- Add an external MCP tool server once in Code UX, for example Playwright.
+- Code UX makes it available to the configured provider CLIs inside their containers.
+- Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity CLI can receive the same tool surface without hand-configuring each CLI separately.
+- Containerized runs get the same project MCP setup as host runs, while still keeping execution scoped to the active project and task.
+
+Agent setup works the same way. Project agent presets live in Code UX, can be edited from the dashboard, synced to project markdown, and routed per invocation type. A team can define a planning agent, implementation agent, QA agent, CI repair agent, merge-conflict agent, and project-specific specialists once, then reuse them across all supported provider CLIs.
+
+For new repositories, the Project Setup Agent can bootstrap a tailored set of specialized agents, quicksprint templates, preview scripts, and CI guidance. That makes project onboarding much faster: add the repository, let Code UX inspect the project, generate the right operating structure, and start planning sprint work without rebuilding the same agent setup for every CLI.
+
+## Typical Workflow
+
+1. Install Code UX from Releases and open the dashboard.
+2. Add a local repository or clone a Git URL into a managed project.
+3. Configure provider credentials and choose Docker or host execution for each provider.
+4. Create a sprint from a prompt, linked issue set, or quicksprint template.
+5. Let the planning agent generate dependency-aware tasks.
+6. Start orchestration and follow the Live Session page.
+7. Inspect preview containers, task output, PR/CI state, and attention items.
+8. Let Code UX merge completed work according to your policy, or take over manually when the protocol requires it.
+
+## Documentation
+
+- [Documentation index](./docs/index.md)
+- [User quickstart](./docs-web/user/quickstart.md)
+- [Providers and models](./docs-web/user/providers-and-models.md)
+- [Dashboard guide](./docs/dashboard/dashboard-guide.md)
+- [Sprint preview browser](./docs/architecture/sprint-preview-browser.md)
+- [Configuration](./docs-web/developer/configuration.md)
+- [Building from source](./docs-web/developer/building-from-source.md)
+
+## Run From Source
+
+Use source builds when developing Code UX itself or when you need to inspect/modify the runtime.
+
+### Requirements
+
+- Node.js 22 LTS or newer.
+- pnpm 10.33 or newer.
+- Git 2.30 or newer.
+- Docker, recommended for virtual worker execution and required for preview containers.
+- Provider credentials are optional for installation and local startup; configure them later in the dashboard when you are ready to dispatch work.
+
+### Clone and install
 
 ```bash
-jules-subagents --help
-```
-
-### Build from Source
-
-Building from source requires Node.js 20+ and pnpm.
-
-```bash
+git clone https://github.com/codeux-ai/codeux.git
+cd codeux
 pnpm install
-pnpm run build
-pnpm start
 ```
 
----
+### Configure providers
 
-## Quickstart
+You can start Code UX without API keys or environment variables. When you are ready to run agent work, configure providers from the dashboard. For local CLI providers, authenticate with the provider's normal CLI login flow; Code UX can detect and optionally mount local auth for Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity CLI.
 
-Configure your API key using one of these methods (in priority order):
-
-1. **CLI Flag** (highest priority):
-   ```bash
-   --api-key YOUR_KEY
-   ```
-2. **Environment Variable**:
-   ```bash
-   export JULES_API_KEY=YOUR_KEY
-   ```
-   *(Note: `JULES_KEY` can also be used as a fallback)*
-3. **`.env` file** in the project root:
-   ```env
-   JULES_API_KEY=YOUR_KEY
-   ```
-4. **`settings.json`** in `.jules-subagents/` (project or home directory):
-   ```json
-   {
-     "julesApiKey": "YOUR_KEY"
-   }
-   ```
-
-Run the development server:
+### Run in development
 
 ```bash
 pnpm run dev
 ```
 
-Open the dashboard in your browser at `http://localhost:4444`. The server automatically increments the port (4445, 4446, etc.) if 4444 is in use. You can also override this by setting `DASHBOARD_PORT`.
+Then open:
 
-Verify health via API endpoints from another terminal:
+```text
+http://localhost:4444
+```
+
+### Build and run
 
 ```bash
-curl http://localhost:4444/api/status
+pnpm run build
+pnpm start
 ```
 
-### Common First Workflow
+### Validate locally
 
-1. Configure system settings in the dashboard, then adjust project settings and sprint overrides as needed.
-2. Create the sprint and tasks. (Code UX automatically prepares the local feature branch when orchestration starts).
-3. Connect your worker with `listen` so it can monitor inbox, dispatch, and attention events for the project.
-4. Start the sprint from the dashboard.
-5. Follow the merge/action-required protocol shown in the dashboard and resume the sprint there when manual work is finished.
-
----
-
-## MCP Client Setup
-
-### Gemini CLI
-You can add the server by editing your `~/.gemini/settings.json` or using the one-line CLI command.
-
-**Manual Configuration (`~/.gemini/settings.json`):**
-```json
-{
-  "mcpServers": {
-    "jules": {
-      "command": "npx",
-      "args": ["-y", "jules-subagents"],
-      "env": {
-        "JULES_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
-```
-
-**CLI Command:**
 ```bash
-gemini mcp add jules npx -- -y jules-subagents --api-key your_api_key_here
+pnpm run lint
+pnpm run typecheck
+pnpm run test
+pnpm run build
 ```
 
-### Codex CLI
-Add to your `~/.codex/config.toml` or use the one-line CLI command.
+For the full local CI equivalent:
 
-**Manual Configuration (`~/.codex/config.toml`):**
-```toml
-[mcp_servers.jules]
-command = "npx"
-args = ["-y", "jules-subagents", "--api-key", "your_api_key_here"]
-```
-
-**CLI Command:**
 ```bash
-codex mcp add jules -- npx -y jules-subagents --api-key your_api_key_here
+pnpm run ci
 ```
-
-### Claude Desktop
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "jules-subagents": {
-      "command": "npx",
-      "args": ["-y", "jules-subagents"],
-      "env": {
-        "JULES_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
-```
-
-### Claude Code
-Add to your `.claude/settings.json` or `~/.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "jules-subagents": {
-      "command": "npx",
-      "args": ["-y", "jules-subagents"],
-      "env": {
-        "JULES_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
-```
-
----
-
-## Live Dashboard
-
-The project features a real-time V2 web dashboard to visualize your sprint progress and orchestrate agents.
-
-- **Default URL**: `http://localhost:4444` (starts automatically with the server).
-- **Health APIs**: The dashboard exposes health APIs at `/api/status`, `/api/system-settings`, and `/api/git-status`.
-
-### Dashboard Pages
-
-- **Tasks**: Real-time task execution, DAG visualization, and boat-race timeline. Features key visualizations like `SprintBoatRace` (animated task timeline) and `SprintDag` (dependency graph).
-- **Projects**: Multi-project workspace management.
-- **Settings**: AI provider config, system and project overrides.
-- **Agents**: Virtual worker management and presets.
-- **Chat**: Interactive chat with AI providers via the dashboard.
-- **Browser**: Live preview and deployment integration.
-- **Live Session**: Active Jules session monitoring.
-- **Memory**: Agent memory inspection and management.
-- **Stats**: Usage telemetry, git analytics, and token metrics by provider.
-
----
-
-## AI Providers
-
-The system includes a multi-provider virtual worker routing system.
-
-### Built-in Provider Instances
-
-| ID | Name | Type | Typical Use |
-| :--- | :--- | :--- | :--- |
-| `jules` | Google Jules | Google Jules API | Primary orchestration / planning |
-| `gemini` | Google Gemini | Google Gemini | Virtual worker (code generation) |
-| `codex` | OpenAI Codex | OpenAI Codex CLI | Virtual worker (code generation) |
-| `claude-code` | Anthropic Claude Code | Anthropic Claude Code | Virtual worker (code generation) |
-| `qwen-code` | Qwen Code | Qwen Code CLI | Virtual worker (code generation) |
-
-### Routing Strategies
-
-- **`MANUAL`**: Uses one exact provider instance.
-- **`WEIGHTED`**: Load-balances requests across enabled instances based on assigned weight.
-- **`ORCHESTRATOR`**: Jules picks the appropriate provider type, then selects an enabled instance within that type.
-
-### Supported Invocation Routes
-
-Providers can be explicitly routed for different invocation types:
-- `task_coding`
-- `planning`
-- `dashboard_reply`
-- `clarification_reply`
-- `qa_review`
-- `ci_fix`
-- `merge_conflict`
-
-### Virtual Workers
-
-When configured with `executionMode: VIRTUAL`, virtual workers are ephemeral, one-shot processes. There are no persistent listen loops required. An ephemeral `virtual_cli` endpoint handles exactly one unit of work and is released.
-
-### Advanced Configuration
-
-You can add additional provider instances of the same type (e.g., two Codex credentials) with distinct weights, models, and auth-copy paths.
-
-Per-instance credential isolation is handled via Docker auth-copy settings (`mountAuth`, `authPath`), allowing different instances to mount different local authentication directories into the runtime.
-
----
-
-## Sprint Orchestration
-
-The `sprint_agent` tool provides a DB-backed orchestration workflow for executing complex, multi-task projects with dependency management.
-
-- **Sprint Creation Flow**: Create a project, then define tasks with titles and optional `dependsOn` keys. Sprint OS automatically resolves the DAG order.
-- **Parallel Execution**: Tasks with no unsatisfied dependencies start immediately. Dependent tasks are blocked until all of their dependencies are `COMPLETED` and merged.
-- **Automation Mode**: You can set `AUTO_CREATE_PR` on a task or at the sprint level. In this mode, the worker automatically opens a pull request upon completing its work.
-- **CI Intelligence**: Sprint OS actively monitors PR statuses and CI checks. If CI checks fail, it can automatically trigger a `ci_fix` invocation route for the worker.
-- **Emergency Stop**: To prevent runaway API spend, the sprint will enter an emergency stop state if a set number of consecutive task-start failures occur (default: 5). This is configurable via the `maxFailures` setting or `JULES_API_MAX_FAILS` environment variable.
-
-### Sprint Status Icons
-| Icon | State | Meaning |
-|---|---|---|
-| ✅ | **MERGED** | Task is fully integrated. |
-| 🤝 | **COMPLETED** | PR is open. Merge required to satisfy dependencies. |
-| ⏳ | **RUNNING** | Jules is currently working. |
-| ❌ | **FAILED** | Task encountered an error. |
-| 🚫 | **BLOCKED** | Waiting on upstream dependencies. |
-| 💤 | **PENDING** | Task is defined but not yet started. |
-
----
-
-## Settings & Configuration
-
-The server persists configuration using a SQLite database located at `~/.sprint-os/settings.db`.
-
-### Scope Hierarchy
-Settings are resolved in the following priority order (highest wins):
-1. **Sprint Overrides**: Settings specific to an active sprint execution.
-2. **Project Overrides**: Settings configured for a specific project.
-3. **System Defaults**: Global settings stored in the database.
-4. **Built-in Code Defaults**: Fallbacks defined in the source code.
-
-### Management
-Settings should be managed primarily through the **Dashboard Settings Page**. No manual JSON editing is required.
-
-For key and port configuration, you can optionally provide a local override file at `.jules-subagents/settings.json` within the project or home directory.
-
----
-
-## Configuration Reference
-
-| Setting | CLI Flag | Env Var | Description |
-|---|---|---|---|
-| API Key | `--api-key <key>` | `JULES_API_KEY` / `JULES_KEY` | Jules API authentication |
-| Dashboard Port | — | `DASHBOARD_PORT` | Override default port 4444 |
-| API Base URL | — | `JULES_API_BASE_URL` | Override Google API endpoint |
-| MCP HTTP mode | `--mcp-http` | `MCP_HTTP_ENABLED` | Enable streamable HTTP transport |
-| Headless mode | `--headless` | — | Run without dashboard UI |
-| Runtime role | `--runtime-role` | — | Set server runtime role |
-
----
-
-## Available MCP Tools
-
-### Sprint & Task Management
-| Tool | Description |
-|---|---|
-| `sprint_agent` | The core orchestrator for planning and executing complex multi-task sprints. |
-| `task_agent` | Execute a single specific task with built-in engineering standards, support for custom titles/branches, and optional completion waiting (`wait: true`). |
-
-### Sources
-| Tool | Description |
-|---|---|
-| `get_source` | Detailed metadata for a specific repository. |
-| `list_sources` | Paginated list of connected sources. |
-| `list_all_sources` | Convenience tool to fetch all sources automatically. |
-
-### Sessions
-| Tool | Description |
-|---|---|
-| `create_session` | Start a new agent task. Supports `require_plan_approval` and `automation_mode: "AUTO_CREATE_PR"`. |
-| `get_session` | Monitor state (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`). Includes `last_activity` for real-time status updates. |
-| `list_sessions` | List recent agent interactions. |
-| `approve_session_plan` | Authorize an agent to proceed with a plan. |
-| `send_session_message` | Send follow-up instructions to an active agent. |
-| `wait_for_session_completion`| Poll until completion, failure, or PR creation with configurable `poll_interval` and `timeout`. |
-| `get_activity` | Details for a specific interaction step. |
-| `list_activities` | History of all interactions in a session. |
-| `list_all_activities` | Convenience tool to fetch the full session history. |
-
----
-
-## Development
-
-Node.js 22 is required for CI, while Node.js 20+ is sufficient for local development.
-
-| Command | Description |
-|---|---|
-| `pnpm run dev` | Run the development server from source |
-| `pnpm run build` | Build the project |
-| `pnpm run test` | Run unit tests |
-| `pnpm run test:coverage` | Run tests with coverage |
-| `pnpm run ci` | Full CI gate |
-| `pnpm run typecheck` | Run type checking |
-| `pnpm run lint` | Run the linter |
-
----
-
-## Documentation
-
-For a comprehensive index of the project's documentation, please refer to the [Documentation Index](./docs/index.md).
-
-We recommend following one of three reading paths based on your needs:
-- **New to the project**: Get started with the quickstart, system overview, and dashboard guide.
-- **Building orchestration behavior**: Learn about DB-native orchestration, the execution schema, and worker endpoint foundations.
-- **MCP integrator**: Understand tool contracts, runtime dispatch, and operational runbooks.
-
----
 
 ## License
 
-This project is licensed under the **MIT License** — Copyright (c) 2026 Pierre Voss. See [LICENSE](./LICENSE) for the full text.
+Code UX is released under the [MIT License](./LICENSE).

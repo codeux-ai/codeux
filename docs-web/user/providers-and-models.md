@@ -1,6 +1,6 @@
 # Providers and models
 
-Code UX dispatches work across **six providers**, each accepting one or more **models**. This page is the catalog plus the routing system that decides which provider answers which kind of work.
+Code UX dispatches work across **seven providers**, each accepting one or more **models**. This page is the catalog plus the routing system that decides which provider answers which kind of work.
 
 ## The providers
 
@@ -12,6 +12,7 @@ Code UX dispatches work across **six providers**, each accepting one or more **m
 | `claude-code` | Local Claude Code CLI | `~/.claude/` | `0` (unlimited) |
 | `qwen-code` | Local Qwen Code CLI | `~/.qwen/` | `0` (unlimited) |
 | `opencode` | Local OpenCode CLI (multi-model) | `~/.local/share/opencode/` or `~/.config/opencode/` | `0` (unlimited) |
+| `antigravity` | Local Antigravity CLI | `~/.antigravity/` | `0` (unlimited) |
 
 All non-Jules providers are *virtual workers* — Code UX shells out to the provider's CLI, optionally inside a Docker container. Authentication is provided by the host CLI's normal login flow; Code UX merely detects and references it.
 
@@ -173,5 +174,6 @@ Rules of thumb:
 | Cheap, fast iteration | `gemini` (flash) |
 | Privacy / on-prem | `qwen-code` (local-model) |
 | Multi-model flexibility | `opencode` |
+| Agent workbench routing | `antigravity` |
 
 You are encouraged to mix providers via routing rather than picking one for everything.

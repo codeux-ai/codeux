@@ -4,7 +4,7 @@ Code UX is a Model Context Protocol server. Any MCP-compatible client can connec
 
 ## How the connection works
 
-By default, Code UX speaks MCP over **stdio**: the client launches the `jules-subagents` process and exchanges JSON-RPC messages on its stdin/stdout. The server detects stdio mode automatically when stdin is not a TTY.
+By default, Code UX speaks MCP over **stdio**: the client launches the `codeux` process and exchanges JSON-RPC messages on its stdin/stdout. The server detects stdio mode automatically when stdin is not a TTY.
 
 If you instead set `--mcp-http`, Code UX additionally exposes an MCP **Streamable HTTP** endpoint at `http://<host>:<port><path>` (defaults: `http://127.0.0.1:<dashboardPort + 1>/mcp`). This is used by external workers and by clients that prefer HTTP transport.
 
@@ -19,7 +19,7 @@ Add Code UX to `~/.gemini/settings.json`:
   "mcpServers": {
     "code-ux": {
       "command": "npx",
-      "args": ["-y", "jules-subagents"],
+      "args": ["-y", "codeux"],
       "env": {
         "JULES_API_KEY": "your_api_key_here"
       }
@@ -31,7 +31,7 @@ Add Code UX to `~/.gemini/settings.json`:
 …or with the one-liner:
 
 ```bash
-gemini mcp add code-ux npx -- -y jules-subagents --api-key your_api_key_here
+gemini mcp add code-ux npx -- -y codeux --api-key your_api_key_here
 ```
 
 Test from Gemini CLI:
@@ -49,13 +49,13 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.code-ux]
 command = "npx"
-args = ["-y", "jules-subagents", "--api-key", "your_api_key_here"]
+args = ["-y", "codeux", "--api-key", "your_api_key_here"]
 ```
 
 …or with the CLI:
 
 ```bash
-codex mcp add code-ux -- npx -y jules-subagents --api-key your_api_key_here
+codex mcp add code-ux -- npx -y codeux --api-key your_api_key_here
 ```
 
 ## Claude Desktop
@@ -67,7 +67,7 @@ Edit your platform's `claude_desktop_config.json` (location varies by OS — see
   "mcpServers": {
     "code-ux": {
       "command": "npx",
-      "args": ["-y", "jules-subagents"],
+      "args": ["-y", "codeux"],
       "env": {
         "JULES_API_KEY": "your_api_key_here"
       }
@@ -87,7 +87,7 @@ Claude Code reads its MCP servers from `~/.claude/settings.json` or per-project.
   "mcpServers": {
     "code-ux": {
       "command": "npx",
-      "args": ["-y", "jules-subagents"]
+      "args": ["-y", "codeux"]
     }
   }
 }
@@ -131,7 +131,7 @@ This pattern lets a chat thread on the dashboard appear to converse with a remot
 If you want external worker hosts to connect to Code UX over the network, enable the gateway:
 
 ```bash
-jules-subagents \
+codeux \
   --mcp-http \
   --mcp-http-host 0.0.0.0 \
   --mcp-http-port 4445 \

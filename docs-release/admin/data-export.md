@@ -10,7 +10,7 @@ Data exports do not include raw audit logs unless explicitly specified in the ex
 ## Steps
 
 1. **Navigate to Workspace Settings**
-   Log in to Sprint OS and click on **Workspace Settings** in the main navigation menu.
+   Log in to Code UX and click on **Workspace Settings** in the main navigation menu.
 
 2. **Access Data Portability**
    Select the **Data Portability** tab to view your export options.

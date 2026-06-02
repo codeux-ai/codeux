@@ -15,7 +15,7 @@ Primary implementation files:
 - `src/app/dependency-factory/sprint-factory.ts`
 - `src/app/dependency-factory/dashboard-factory.ts`
 - `src/app/lifecycle/dashboard-lifecycle-service.ts`
-- `src/server/jules-agent-server.ts`
+- `src/server/code-ux-server.ts`
 
 Key behavior:
 - orchestrator status updates are now mirrored into sqlite

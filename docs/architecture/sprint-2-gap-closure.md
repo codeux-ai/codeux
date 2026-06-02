@@ -6,7 +6,7 @@ Accepted
 ## Context
 Sprint 1 established the foundation for the domain-oriented modular architecture, transitioning key utilities and defining the target structure in [Refactor Target Architecture](./refactor-target-architecture.md). However, several core hotspots remain partially refactored, and technical debt (specifically `any` types and duplicated logic) persists in the integration layers.
 
-Sprint 2 is dedicated to closing these gaps, ensuring the system reaches a "Jules-Ready" state of high reliability and strict type safety before any further feature expansion.
+Sprint 2 is dedicated to closing these gaps, ensuring the system reaches a provider-ready state of high reliability and strict type safety before any further feature expansion.
 
 ## Scope: Sprint 2 Focus Areas
 - **Hotspot Decomposition**: Finalize the extraction of `cli-workflow-service.ts` into domain-specific modules (`src/domain/sprint/`, `src/domain/sessions/`).

@@ -30,7 +30,7 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
   "strategy": "MANUAL" | "WEIGHTED" | "ORCHESTRATOR",
   "providers": {
     "<configId>": {
-      "provider": "jules"|"gemini"|"codex"|"claude-code"|"qwen-code"|"opencode",
+      "provider": "jules"|"gemini"|"codex"|"claude-code"|"qwen-code"|"opencode"|"antigravity",
       "name": "string",
       "enabled": true,
       "model": "string",
@@ -64,12 +64,13 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
 | `claude-code` | ❌ | `default` | 0 | HIGH | 0 |
 | `qwen-code` | ❌ | `qwen3-coder-plus` | 0 | HIGH | 0 |
 | `opencode` | ❌ | `anthropic/claude-sonnet-4-5` | 0 | HIGH | 0 |
+| `antigravity` | ❌ | `default` | 0 | HIGH | 0 |
 
 ## `workers`
 
 ```jsonc
 {
-  "virtualWorkerProvider": "gemini"|"codex"|"claude-code"|"qwen-code"|"opencode",
+  "virtualWorkerProvider": "gemini"|"codex"|"claude-code"|"qwen-code"|"opencode"|"antigravity",
   "executionMode": "DOCKER" | "HOST",
   "dockerImage": "node:24-bookworm",
   "containerSetupScript": "string?"

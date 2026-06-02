@@ -18,7 +18,7 @@ The feature is designed for:
 - `src/repositories/sprint-preview-repository.ts`
 - `src/repositories/app-db-storage.ts`
 - `src/server/dashboard-server.ts`
-- `src/server/jules-agent-server.ts`
+- `src/server/code-ux-server.ts`
 - `dashboard/src/v2/BrowserPage.tsx`
 - `dashboard/src/v2/lib/browser-api.ts`
 - `dashboard/src/v2/SettingsPage.tsx`
@@ -108,7 +108,7 @@ Host-based preview routing also proxies websocket upgrades so preview apps that 
 
 ## Automation
 
-`SprintPreviewService.reconcileSessions()` runs on a background interval from `JulesAgentServer`.
+`SprintPreviewService.reconcileSessions()` runs on a background interval from `CodeUxServer`.
 
 It supports:
 - auto-start when a sprint becomes `running`

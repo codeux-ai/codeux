@@ -4,7 +4,7 @@ Code UX exposes **7 root MCP tools**. Six are connection / messaging primitives;
 
 This page is the exact contract for each tool: input schema, output shape, side effects, and runtime-role gating.
 
-> **Server identity:** When asked, the server identifies as `code-ux` v `1.2.0`. The package on npm is `jules-subagents`.
+> **Server identity:** When asked, the server identifies as `code-ux` v `1.2.0`. The package on npm is `codeux`.
 
 ## Tool availability
 

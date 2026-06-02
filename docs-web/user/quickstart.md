@@ -19,7 +19,7 @@ This guide takes you from a clean install to a finished sprint in about 10 minut
 In a terminal:
 
 ```bash
-jules-subagents
+codeux
 ```
 
 You should see structured logs ending with:

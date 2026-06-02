@@ -9,14 +9,14 @@ You will need a GitLab account with permissions to generate Personal Access Toke
 2. Navigate to your **User Settings** by clicking your avatar in the top right corner and selecting **Edit profile**.
 3. In the left sidebar, click on **Access Tokens**.
 4. Click on **Add new token**.
-5. Enter a **Token name** (e.g., "Sprint OS Integration").
+5. Enter a **Token name** (e.g., "Code UX Integration").
 6. Set an optional **Expiration date**.
 7. Under **Select scopes**, explicitly check the following permissions:
    - `api`
    - `read_repository`
 8. Click the **Create personal access token** button.
 9. **Copy** the generated token immediately, as it will not be shown again.
-10. Open the Sprint OS app and navigate to **Settings**.
+10. Open the Code UX app and navigate to **Settings**.
 11. Click on **Integrations** in the left sidebar.
 12. Find the GitLab integration and click **Configure**.
 13. **Paste** your generated token into the **Personal Access Token** field.

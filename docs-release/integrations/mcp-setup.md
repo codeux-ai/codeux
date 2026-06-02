@@ -23,9 +23,9 @@ The MCP server operates via stdio, allowing direct command-line execution and in
    ```json
    {
      "mcpServers": {
-       "jules-subagents": {
-         "command": "npx",
-         "args": ["-y", "jules-subagents"],
+      "code-ux": {
+        "command": "npx",
+        "args": ["-y", "codeux"],
          "env": {
            "JULES_API_KEY": "your_api_key_here"
          }
@@ -43,7 +43,7 @@ The MCP server operates via stdio, allowing direct command-line execution and in
 
 ### Connection Refused or Startup Errors
 If the client cannot connect, ensure your Node.js environment is configured correctly. Because the server uses `stdio`, "connection refused" typically means the process failed to start.
-* Check that `npx -y jules-subagents` runs successfully in a standalone terminal.
+* Check that `npx -y codeux` runs successfully in a standalone terminal.
 * Verify your `JULES_API_KEY` is correct in the environment configuration block.
 
 ## Expected Result

@@ -6,7 +6,7 @@ Code UX is a single Node process that hosts multiple cooperating services. This 
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                  jules-subagents (single Node process)           │
+│                  codeux (single Node process)                    │
 │                                                                  │
 │  ┌────────────────────────┐   ┌────────────────────────────┐    │
 │  │   Dashboard Server      │   │   MCP Server                │    │
@@ -41,7 +41,7 @@ Code UX is a single Node process that hosts multiple cooperating services. This 
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-The process is started by `src/index.ts` → `JulesAgentServer.run()`. Lifecycle:
+The process is started by `src/index.ts` → `CodeUxServer.run()`. Lifecycle:
 
 1. **Boot settings** — load and migrate the settings DB.
 2. **Refresh API key** — pull from CLI / env / settings.
@@ -55,7 +55,7 @@ The process is started by `src/index.ts` → `JulesAgentServer.run()`. Lifecycle
 10. **Start background loops** — runtime cleanup (15 s), sprint preview reconciliation (15 s), live snapshot refresh (30 s).
 11. **Start virtual worker service** — begin reconcile cycle (3 s).
 
-Source: `src/server/jules-agent-server.ts:870-994`.
+Source: `src/server/code-ux-server.ts:870-994`.
 
 ## Major services
 

@@ -93,7 +93,7 @@ This plan is based on the current implementation in:
 - `src/repositories/project-runtime-repository.ts`
 - `src/repositories/execution-repository.ts`
 - `src/repositories/connection-chat-repository.ts`
-- `src/server/jules-agent-server.ts`
+- `src/server/code-ux-server.ts`
 - `src/worker/code-ux-worker.ts`
 
 ## Current-State Findings
@@ -1062,7 +1062,7 @@ Work:
 Primary files:
 
 - `src/app/runtime-context.ts`
-- `src/server/jules-agent-server.ts`
+- `src/server/code-ux-server.ts`
 - `src/mcp/agent-tool-handler.ts`
 - `src/services/sprint-execution-state-service.ts`
 - `src/server/activity-cache-service.ts`
@@ -1271,7 +1271,7 @@ Primary files:
 
 - new `src/domain/orchestration/portfolio-coordinator.ts`
 - `src/services/execution-control-service.ts`
-- `src/server/jules-agent-server.ts`
+- `src/server/code-ux-server.ts`
 - dashboard APIs for automation control
 
 Exit criteria:

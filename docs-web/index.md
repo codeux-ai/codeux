@@ -79,16 +79,16 @@ This documentation site is the canonical reference for installing, operating, in
 
 ## Conventions used in this documentation
 
-- **Code paths** are given as repository-relative paths (e.g. `src/server/jules-agent-server.ts`) so you can jump straight to the source.
+- **Code paths** are given as repository-relative paths (e.g. `src/server/code-ux-server.ts`) so you can jump straight to the source.
 - **Defaults** appear inline in tables. Where a value is configurable, the configuration key is listed alongside it.
-- **CLI examples** assume the `jules-subagents` binary or `npx jules-subagents` is on `PATH`.
+- **CLI examples** assume the `codeux` binary or `npx codeux` is on `PATH`.
 - **Endpoints** use `:paramName` for path parameters and document required query parameters separately.
 
 ---
 
 ## Versioning
 
-This documentation tracks the `1.2.x` release line of the `jules-subagents` npm package, which is published from the `main` branch. The runtime announces its MCP server identity as `code-ux` (the active product name).
+This documentation tracks the `1.2.x` release line of the `codeux` npm package, which is published from the `main` branch. The runtime announces its MCP server identity as `code-ux`.
 
 ## License
 

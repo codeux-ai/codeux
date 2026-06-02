@@ -14,8 +14,8 @@ This page covers cloning, building, running, and contributing.
 ## Clone & install
 
 ```bash
-git clone https://github.com/numnx/jules-subagents-mcp.git
-cd jules-subagents-mcp
+git clone https://github.com/codeux-ai/codeux.git
+cd codeux
 pnpm install
 ```
 
@@ -86,7 +86,7 @@ Or `pnpm start`.
 
 ```bash
 pnpm link --global
-jules-subagents --help
+codeux --help
 ```
 
 ## Project structure
