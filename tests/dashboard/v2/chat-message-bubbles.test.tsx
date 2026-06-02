@@ -422,7 +422,7 @@ describe("Chat Message Bubbles", () => {
       expect(container.textContent).toContain("default");
     });
 
-    it("renders sprint, task, and token usage chips on cards when available", () => {
+    it("renders sprint key, task key, and token usage stats on cards when available", () => {
       const invocation: ExecutionInvocationRecord = {
         id: "inv-2",
         projectId: "project-1",
@@ -452,6 +452,10 @@ describe("Chat Message Bubbles", () => {
         cachedInputTokens: 300,
         outputTokens: 450,
         totalTokens: 1950,
+        sprintNumber: 12,
+        sprintName: "Smoke test",
+        taskKey: "T05",
+        taskTitle: "Create alpha.md",
       };
 
       const { container } = render(
@@ -462,11 +466,16 @@ describe("Chat Message Bubbles", () => {
         />
       );
 
-      expect(container.textContent).toContain("Sprint: sprint-u");
-      expect(container.textContent).toContain("Task: task-uui");
-      expect(container.textContent).toContain("In: 1,200");
-      expect(container.textContent).toContain("Cached: 300");
-      expect(container.textContent).toContain("Out: 450");
+      // Sprint key (prefix + number) and task key chips, linked to their pages.
+      expect(container.textContent).toContain("SPR-12");
+      expect(container.textContent).toContain("T05");
+      // Token usage now lives in the stat table as label/value pairs.
+      expect(container.textContent).toContain("Input");
+      expect(container.textContent).toContain("1,200");
+      expect(container.textContent).toContain("Cached");
+      expect(container.textContent).toContain("300");
+      expect(container.textContent).toContain("Output");
+      expect(container.textContent).toContain("450");
     });
 
     it("reserves border width in both selected and unselected states to prevent layout shift", () => {
@@ -509,7 +518,7 @@ describe("Chat Message Bubbles", () => {
           onSelect={vi.fn()}
         />
       );
-      const buttonUnselected = containerUnselected.querySelector("button");
+      const buttonUnselected = containerUnselected.querySelector('[role="button"]');
       expect(buttonUnselected).not.toBeNull();
       const classesUnselected = buttonUnselected!.className.split(/\s+/);
       expect(classesUnselected).toContain("border-2");
@@ -524,7 +533,7 @@ describe("Chat Message Bubbles", () => {
           onSelect={vi.fn()}
         />
       );
-      const buttonSelected = containerSelected.querySelector("button");
+      const buttonSelected = containerSelected.querySelector('[role="button"]');
       expect(buttonSelected).not.toBeNull();
       const classesSelected = buttonSelected!.className.split(/\s+/);
       expect(classesSelected).toContain("border-2");

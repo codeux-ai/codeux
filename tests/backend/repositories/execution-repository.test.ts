@@ -240,6 +240,33 @@ describe("ExecutionRepository", () => {
     expect(paginatedList[0]!.id).toBe(invocation2.id);
   });
 
+  it("enriches listed invocations with sprint number and task key for display/linking", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Sprint Context Project",
+      sourceType: "local",
+      sourceRef: "/workspace/sprint-context",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Smoke test", number: 7 });
+    const task = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Create alpha.md" });
+
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      type: "cli_task_coding",
+      status: "completed",
+      startedAt: "2026-06-02T07:00:00.000Z",
+    });
+
+    const [listed] = executionRepository.listExecutionInvocations({ projectId: project.id });
+    expect(listed!.id).toBe(invocation.id);
+    expect(listed!.sprintNumber).toBe(7);
+    expect(listed!.sprintName).toBe("Smoke test");
+    expect(listed!.taskKey).toBe(task.taskKey);
+    expect(listed!.taskTitle).toBe("Create alpha.md");
+  });
+
   it("projects provider invocation token usage when linked and defaults to 0 when not", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

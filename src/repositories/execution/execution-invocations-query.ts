@@ -12,6 +12,25 @@ import {
   mapExecutionInvocationMessageRow
 } from "./execution-read-model-mappers.js";
 
+// Shared projection: invocation columns + provider usage + the sprint key /
+// task key context the dashboard renders (and links) on each invocation card.
+const INVOCATION_SELECT = `
+      execution_invocations.*,
+      provider_invocations.input_tokens AS input_tokens,
+      provider_invocations.cached_input_tokens AS cached_input_tokens,
+      provider_invocations.output_tokens AS output_tokens,
+      provider_invocations.total_tokens AS total_tokens,
+      sprints.number AS sprint_number,
+      sprints.name AS sprint_name,
+      sprints.slug AS sprint_slug,
+      tasks.task_key AS task_key,
+      tasks.title AS task_title`;
+
+const INVOCATION_JOINS = `
+    LEFT JOIN provider_invocations ON execution_invocations.provider_invocation_id = provider_invocations.id
+    LEFT JOIN sprints ON execution_invocations.sprint_id = sprints.id
+    LEFT JOIN tasks ON execution_invocations.task_id = tasks.id`;
+
 export function queryExecutionInvocations(
   db: Database,
   params: {
@@ -39,14 +58,8 @@ export function queryExecutionInvocations(
   const offset = params.offset ?? 0;
 
   const sql = `
-    SELECT
-      execution_invocations.*,
-      provider_invocations.input_tokens AS input_tokens,
-      provider_invocations.cached_input_tokens AS cached_input_tokens,
-      provider_invocations.output_tokens AS output_tokens,
-      provider_invocations.total_tokens AS total_tokens
-    FROM execution_invocations
-    LEFT JOIN provider_invocations ON execution_invocations.provider_invocation_id = provider_invocations.id
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
     WHERE ${conditions.join(" AND ")}
     ORDER BY execution_invocations.started_at DESC
     LIMIT ? OFFSET ?
@@ -75,14 +88,8 @@ export function queryExecutionInvocationsByProviderInvocationId(
   providerInvocationId: string,
 ): ExecutionInvocationRecord[] {
   const rows = db.prepare(`
-    SELECT
-      execution_invocations.*,
-      provider_invocations.input_tokens AS input_tokens,
-      provider_invocations.cached_input_tokens AS cached_input_tokens,
-      provider_invocations.output_tokens AS output_tokens,
-      provider_invocations.total_tokens AS total_tokens
-    FROM execution_invocations
-    LEFT JOIN provider_invocations ON execution_invocations.provider_invocation_id = provider_invocations.id
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
     WHERE execution_invocations.provider_invocation_id = ?
     ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
   `).all(providerInvocationId) as ExecutionInvocationRow[];
@@ -92,14 +99,8 @@ export function queryExecutionInvocationsByProviderInvocationId(
 
 export function queryRunningRetryExecutionInvocations(db: Database): ExecutionInvocationRecord[] {
   const rows = db.prepare(`
-    SELECT
-      execution_invocations.*,
-      provider_invocations.input_tokens AS input_tokens,
-      provider_invocations.cached_input_tokens AS cached_input_tokens,
-      provider_invocations.output_tokens AS output_tokens,
-      provider_invocations.total_tokens AS total_tokens
-    FROM execution_invocations
-    LEFT JOIN provider_invocations ON execution_invocations.provider_invocation_id = provider_invocations.id
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
     WHERE execution_invocations.status = 'running'
       AND execution_invocations.last_retry_after_iso IS NOT NULL
       AND execution_invocations.last_error_category IN ('QUOTA_EXHAUSTED', 'RATE_LIMITED')

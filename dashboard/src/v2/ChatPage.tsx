@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { ComponentChildren, FunctionComponent } from "preact";
 import { useEffect, useRef, useState, useMemo } from "preact/hooks";
 import {
   ArrowUp,
@@ -15,6 +15,8 @@ import { EmptyState } from "./components/ui/EmptyState.js";
 import { MessageCircle } from "lucide-preact";
 import { ChatMessageBubble } from "./components/chat/ChatMessageBubble.js";
 import { useChatPageData } from "./hooks/use-chat-page-data.js";
+import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
+import { formatInvocationPurpose, formatInvocationDuration, InvocationContextChips } from "./components/chat/invocation-display.js";
 import { InvocationMessageBubble } from "./components/chat/InvocationMessageBubble.js";
 import { InvocationRoutingWidget } from "./components/chat/widgets/InvocationRoutingWidget.js";
 import { InvocationContainerWidget } from "./components/chat/widgets/InvocationContainerWidget.js";
@@ -27,10 +29,7 @@ import { AgentAvatarSvg } from "./components/agents/AgentAvatarSvg.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import type { ExecutionInvocationRecord } from "./types.js";
 import {
-  formatProviderInstanceLabel,
-  formatStatusContext,
   formatTokenCount,
-  shortenIdentifier,
   mergeInvocationToolMessages
 } from "./lib/chat-widget-view-models.js";
 
@@ -102,6 +101,9 @@ export const ChatPage: FunctionComponent = () => {
     handleConfirm,
     handleCancel,
   } = useChatPageData({ composerRef, messagesRef });
+
+  const effectiveSettings = useProjectEffectiveSettings(selectedProject?.id ?? null);
+  const sprintKeyPrefix = effectiveSettings.data?.settings?.git?.sprintKeyPrefix || "SPR";
 
   // Build lookups from agentPresets
   const presetIdMap = useMemo(() => {
@@ -227,6 +229,7 @@ export const ChatPage: FunctionComponent = () => {
             invocations={invocations}
             selectedInvocationId={selectedInvocationId}
             agentPresets={agentPresets}
+            sprintKeyPrefix={sprintKeyPrefix}
             onSelect={(invocationId) => {
               const preferredInvocation = invocationIndex.get(invocationId) || null;
               void activateInvocation(invocationId, { preferredInvocation });
@@ -340,123 +343,122 @@ export const ChatPage: FunctionComponent = () => {
       );
     }
 
+    // Clean horizontal stat strip for the active invocation header — mirrors the
+    // list card's label/value table, only meaningful entries are shown.
+    const inv = selectedInvocation;
+    const headerStatus = inv
+      ? inv.status === "failed"
+        ? { dot: "bg-status-red shadow-[0_0_6px_rgba(227,0,15,0.5)]", text: "text-status-red" }
+        : inv.status === "running"
+          ? { dot: "bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.6)] animate-pulse", text: "text-signal-500" }
+          : inv.status === "completed"
+            ? { dot: "bg-[#00AB84] shadow-[0_0_6px_rgba(0,171,132,0.4)]", text: "text-[#00AB84]" }
+            : { dot: "bg-slate-400", text: "text-slate-500" }
+      : null;
+    const headerDuration = inv ? formatInvocationDuration(inv.startedAt || inv.createdAt, inv.finishedAt) : null;
+    const headerTotalTokens = inv ? (inv.totalTokens ?? ((inv.inputTokens ?? 0) + (inv.outputTokens ?? 0))) : 0;
+    const headerStats: Array<{ label: string; value: ComponentChildren; tone?: string }> = [];
+    if (inv && headerStatus) {
+      headerStats.push({
+        label: "Status",
+        value: (
+          <span className={`flex items-center gap-1.5 ${headerStatus.text}`}>
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${headerStatus.dot}`} />
+            <span className="capitalize">{inv.status}</span>
+          </span>
+        ),
+      });
+      headerStats.push({ label: "Messages", value: inv.messageCount ?? 0 });
+      if ((inv.inputTokens ?? 0) > 0) headerStats.push({ label: "Input", value: formatTokenCount(inv.inputTokens), tone: "text-signal-600 dark:text-signal-400" });
+      if ((inv.outputTokens ?? 0) > 0) headerStats.push({ label: "Output", value: formatTokenCount(inv.outputTokens), tone: "text-purple-600 dark:text-purple-400" });
+      if ((inv.cachedInputTokens ?? 0) > 0) headerStats.push({ label: "Cached", value: formatTokenCount(inv.cachedInputTokens), tone: "text-teal-600 dark:text-teal-400" });
+      if (headerTotalTokens > 0) headerStats.push({ label: "Total", value: formatTokenCount(headerTotalTokens) });
+      if (headerDuration) headerStats.push({ label: "Duration", value: headerDuration });
+    }
+
     return (
       <>
         <div className="shrink-0 border-b border-black/[0.05] px-6 py-6 dark:border-white/[0.05]">
-          <div className="flex items-start justify-between gap-6">
-            <div className="flex items-start gap-4">
-              {/* Agent avatar or provider icon */}
-              {selectedAgentPreset ? (
-                <div className="w-11 h-11 rounded-[0.875rem] overflow-hidden border border-black/[0.06] dark:border-white/[0.06] bg-white/75 dark:bg-white/[0.04] flex items-center justify-center shrink-0">
-                  <AgentAvatarSvg config={selectedAgentPreset.avatarConfig || generateRandomAgentAvatar(selectedAgentPreset.name)} size={44} static />
-                </div>
-              ) : selectedInvocation?.provider ? (
-                <div className="w-11 h-11 rounded-[0.875rem] flex items-center justify-center shrink-0 bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06]">
-                  <ProviderLogo provider={selectedInvocation.provider} size={24} />
-                </div>
-              ) : null}
+          <div className="flex items-start gap-4">
+            {/* Agent avatar or provider icon */}
+            {selectedAgentPreset ? (
+              <div className="w-11 h-11 rounded-[0.875rem] overflow-hidden border border-black/[0.06] dark:border-white/[0.06] bg-white/75 dark:bg-white/[0.04] flex items-center justify-center shrink-0">
+                <AgentAvatarSvg config={selectedAgentPreset.avatarConfig || generateRandomAgentAvatar(selectedAgentPreset.name)} size={44} static />
+              </div>
+            ) : selectedInvocation?.provider ? (
+              <div className="w-11 h-11 rounded-[0.875rem] flex items-center justify-center shrink-0 bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.06] dark:border-white/[0.06]">
+                <ProviderLogo provider={selectedInvocation.provider} size={24} />
+              </div>
+            ) : null}
 
-              <div>
-                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
-                  <span>Active Invocation</span>
-                  {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null) && (
-                    <span className="rounded-full border border-status-amber/25 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-status-amber">
-                      {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null)}
-                    </span>
-                  )}
-                </div>
-                <h2 className="mt-1.5 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white capitalize">
-                  {selectedInvocation?.type?.replace(/_/g, " ") || "No Invocation Selected"}
-                </h2>
-                {selectedAgentPreset && (
-                  <div className="mt-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    {selectedAgentPreset.name}
-                  </div>
-                )}
-                {selectedInvocation && (
-                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                    {/* Invocation ID */}
-                    <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] text-slate-400">
-                      {selectedInvocation.id.slice(0, 8)}
-                    </span>
-                    {/* Provider badge with icon */}
-                    {selectedInvocation.provider && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
-                        <ProviderLogo provider={selectedInvocation.provider} size={12} />
-                        {formatProviderInstanceLabel(selectedInvocation.provider, selectedInvocation.model)}
-                      </span>
-                    )}
-                    {/* Model badge */}
-                    {selectedInvocation.model && (
-                      <span className="rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
-                        {selectedInvocation.model}
-                      </span>
-                    )}
-                    {/* Status badge */}
-                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
-                      selectedInvocation.status === "failed"
-                        ? "border-status-red/25 bg-status-red/[0.08] text-status-red"
-                        : selectedInvocation.status === "completed"
-                          ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-500"
-                          : selectedInvocation.status === "running"
-                            ? "border-signal-500/25 bg-signal-500/[0.08] text-signal-500"
-                            : "border-black/[0.08] bg-black/[0.04] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400"
-                    }`}>
-                      {selectedInvocation.status === "running" && (
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-signal-500 animate-pulse shadow-[0_0_6px_rgba(0,224,160,0.6)]" />
-                      )}
-                      {formatStatusContext(selectedInvocation.provider, selectedInvocation.model, selectedInvocation.status)}
-                    </span>
-                    {/* Linked Agent badge next to provider metadata */}
-                    {selectedAgentPreset && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
-                        Agent: {selectedAgentPreset.name}
-                      </span>
-                    )}
-                    {/* Sprint/Task identifier chips */}
-                    {selectedInvocation.sprintId && (
-                      <span className="rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
-                        Sprint: {shortenIdentifier(selectedInvocation.sprintId)}
-                      </span>
-                    )}
-                    {selectedInvocation.taskId && (
-                      <span className="rounded-full border border-black/[0.08] bg-black/[0.04] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
-                        Task: {shortenIdentifier(selectedInvocation.taskId)}
-                      </span>
-                    )}
-                    {/* Token usage chips */}
-                    {((selectedInvocation.inputTokens ?? 0) > 0 || (selectedInvocation.cachedInputTokens ?? 0) > 0 || (selectedInvocation.outputTokens ?? 0) > 0) && (
-                      <>
-                        {((selectedInvocation.inputTokens ?? 0) > 0) && (
-                          <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-signal-600 dark:text-signal-400">
-                            In: {formatTokenCount(selectedInvocation.inputTokens)}
-                          </span>
-                        )}
-                        {((selectedInvocation.cachedInputTokens ?? 0) > 0) && (
-                          <span className="rounded-full border border-teal-500/20 bg-teal-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-teal-600 dark:text-teal-400">
-                            Cached: {formatTokenCount(selectedInvocation.cachedInputTokens)}
-                          </span>
-                        )}
-                        {((selectedInvocation.outputTokens ?? 0) > 0) && (
-                          <span className="rounded-full border border-purple-500/20 bg-purple-500/[0.04] px-2 py-0.5 text-[9px] font-mono font-bold text-purple-600 dark:text-purple-400">
-                            Out: {formatTokenCount(selectedInvocation.outputTokens)}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                )}
-                {selectedInvocation?.lastErrorMessage && (
-                  <div className="mt-3 max-w-2xl text-sm leading-relaxed text-status-amber">
-                    {selectedInvocation.lastErrorMessage}
-                    {selectedInvocation.lastRetryAfterIso && ` Retry at ${selectedInvocation.lastRetryAfterIso}.`}
-                  </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
+                <span>Active Invocation</span>
+                {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null) && (
+                  <span className="rounded-full border border-status-amber/25 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-status-amber">
+                    {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null)}
+                  </span>
                 )}
               </div>
-            </div>
-            <div className="text-right text-[10px] font-mono text-slate-400">
-              <div>{selectedInvocation ? `${selectedInvocation.messageCount} messages` : "0 messages"}</div>
+
+              {/* Title: purpose */}
+              <h2 className="mt-1.5 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                {formatInvocationPurpose(selectedInvocation?.type)}
+              </h2>
+
+              {/* Provider · model subline */}
+              {selectedInvocation && (
+                <div className="mt-1 flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-slate-400">
+                  {selectedInvocation.provider && <ProviderLogo provider={selectedInvocation.provider} size={14} />}
+                  <span className="font-medium">
+                    {selectedInvocation.provider || "—"}
+                    {selectedInvocation.model ? <span className="text-slate-400 dark:text-slate-500"> · {selectedInvocation.model}</span> : null}
+                  </span>
+                  {selectedAgentPreset && (
+                    <>
+                      <span className="text-slate-300 dark:text-slate-600">·</span>
+                      <span className="font-medium">{selectedAgentPreset.name}</span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Sprint key / task number — linked to their respective pages */}
+              {selectedInvocation && (
+                <div className="mt-2.5 empty:hidden">
+                  <InvocationContextChips invocation={selectedInvocation} sprintKeyPrefix={sprintKeyPrefix} />
+                </div>
+              )}
+
+              {/* Clean horizontal stat strip */}
+              {headerStats.length > 0 && (
+                <div className="mt-3 flex w-full items-stretch divide-x divide-black/[0.06] overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.02] dark:divide-white/[0.06] dark:border-white/[0.06] dark:bg-white/[0.02]">
+                  {headerStats.map((stat) => (
+                    <div key={stat.label} className="flex flex-1 flex-col gap-0.5 whitespace-nowrap px-3.5 py-2">
+                      <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                        {stat.label}
+                      </span>
+                      <span className={`font-mono text-[13px] font-semibold tabular-nums ${stat.tone || "text-slate-700 dark:text-slate-200"}`}>
+                        {stat.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedInvocation?.lastErrorMessage && (
+                <div className="mt-3 max-w-2xl text-sm leading-relaxed text-status-amber">
+                  {selectedInvocation.lastErrorMessage}
+                  {selectedInvocation.lastRetryAfterIso && ` Retry at ${selectedInvocation.lastRetryAfterIso}.`}
+                </div>
+              )}
+
+              {/* Invocation id — tiny */}
+              {selectedInvocation && (
+                <div className="mt-2.5 font-mono text-[10px] text-slate-300 dark:text-slate-600">
+                  {selectedInvocation.id}
+                </div>
+              )}
             </div>
           </div>
         </div>

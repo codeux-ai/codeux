@@ -171,6 +171,11 @@ export interface ExecutionInvocationRow {
   cached_input_tokens?: number | string | null;
   output_tokens?: number | string | null;
   total_tokens?: number | string | null;
+  sprint_number?: number | string | null;
+  sprint_name?: string | null;
+  sprint_slug?: string | null;
+  task_key?: string | null;
+  task_title?: string | null;
   created_at: string;
   updated_at: string;
 }

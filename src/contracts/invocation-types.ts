@@ -31,6 +31,12 @@ export interface ExecutionInvocationRecord {
   cachedInputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  // Joined sprint/task context for display + deep-linking on the dashboard.
+  sprintNumber?: number | null;
+  sprintName?: string | null;
+  sprintSlug?: string | null;
+  taskKey?: string | null;
+  taskTitle?: string | null;
   createdAt: string;
   updatedAt: string;
 }
