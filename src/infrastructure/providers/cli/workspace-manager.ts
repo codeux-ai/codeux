@@ -9,6 +9,7 @@ import { CommandResult, runCommandStrict } from "../../../services/cli-process-r
 import { extractPathHints } from "../../../services/cli-workflow-text-utils.js";
 import {
   buildGitHttpAuthEnvForRepoWithFallbacks,
+  buildNonInteractiveGitEnv,
   type GitHttpAuthOptions,
 } from "../../../services/git-http-auth.js";
 
@@ -31,6 +32,7 @@ export interface IWorkspaceManager {
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
   resolveCurrentBranch(worktreePath: string): Promise<string | null>;
   prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string, gitAuth?: GitHttpAuthOptions): Promise<{ worktreePath: string; resumed: boolean }>;
+  fastForwardResumedWorkspace(worktreePath: string, workerBranch: string, repoPath: string, gitAuth?: GitHttpAuthOptions): Promise<boolean>;
   removeWorktree(repoPath: string, worktreePath: string): Promise<void>;
   buildWorkspaceGuidance(taskPrompt: string, worktreePath: string): Promise<string>;
   runWorkspaceCommand(worktreePath: string, command: string, args: string[], options?: WorkspaceCommandOptions): Promise<CommandResult>;
@@ -168,6 +170,11 @@ export class WorkspaceManager implements IWorkspaceManager {
       }
 
       if (resumeSessionId && await this.workspaceExists(workspaceRef) && await this.canResumeExistingWorkspace(workspaceRef, workerBranch)) {
+        // Re-point the resumed workspace at the already-pushed worker-branch tip so a
+        // follow-up run (e.g. continuing on a different provider) commits on top of the
+        // pushed history instead of a stale base ref, which would be rejected as a
+        // non-fast-forward push. No-ops when the workspace is already at the tip.
+        await this.fastForwardResumedWorkspace(workspaceRef, workerBranch, repoPath, gitAuth).catch(() => undefined);
         resumed = true;
         return;
       }
@@ -191,6 +198,73 @@ export class WorkspaceManager implements IWorkspaceManager {
     });
 
     return { worktreePath: workspaceRef, resumed };
+  }
+
+  /**
+   * Re-point a resumed workspace at the already-pushed worker-branch tip.
+   *
+   * Docker-volume workspaces are independent clones, so the host-side
+   * commit-tree/update-ref that finalises a task never advances the volume's
+   * branch ref — it stays parked on the original start ref with the prior work
+   * sitting as uncommitted changes. A follow-up run (a QA fix or a restart on a
+   * different provider) that commits from that stale base produces a commit which
+   * does not descend from origin, so the push is rejected as non-fast-forward.
+   * Fetch the pushed tip and fast-forward the workspace onto it so subsequent
+   * commits descend from origin.
+   *
+   * Only fast-forwards when the current HEAD is an ancestor of the pushed tip, so
+   * unpushed local work (e.g. an interrupted failed run that never pushed) is
+   * never discarded. Returns true when the workspace was advanced.
+   */
+  async fastForwardResumedWorkspace(
+    worktreePath: string,
+    workerBranch: string,
+    repoPath: string,
+    gitAuth?: GitHttpAuthOptions,
+  ): Promise<boolean> {
+    const baseAuthEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth ?? {});
+    const fetchEnv = buildNonInteractiveGitEnv(baseAuthEnv ?? process.env);
+    let fetchedTip = false;
+    try {
+      await this.runWorkspaceCommand(worktreePath, "git", ["fetch", "origin", workerBranch], { env: fetchEnv });
+      fetchedTip = true;
+    } catch {
+      // origin may be unavailable or not yet have the branch; fall back to local refs.
+    }
+
+    const tip = await this.resolveWorkspaceRef(worktreePath, [
+      ...(fetchedTip ? ["FETCH_HEAD"] : []),
+      `refs/remotes/origin/${workerBranch}`,
+      `refs/heads/${workerBranch}`,
+    ]);
+    if (!tip) {
+      return false;
+    }
+    const currentHead = await this.resolveWorkspaceRef(worktreePath, ["HEAD"]);
+    if (!currentHead || currentHead === tip) {
+      return false;
+    }
+    const fastForwardable = await this.runWorkspaceCommand(
+      worktreePath,
+      "git",
+      ["merge-base", "--is-ancestor", currentHead, tip],
+    ).then(() => true).catch(() => false);
+    if (!fastForwardable) {
+      return false;
+    }
+    await this.runWorkspaceCommand(worktreePath, "git", ["reset", "--hard", tip]);
+    return true;
+  }
+
+  private async resolveWorkspaceRef(worktreePath: string, candidates: string[]): Promise<string | null> {
+    for (const candidate of candidates) {
+      const sha = (await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "--verify", "--quiet", candidate])
+        .catch(() => null))?.stdout.trim();
+      if (sha) {
+        return sha;
+      }
+    }
+    return null;
   }
 
   async resolveCurrentBranch(worktreePath: string): Promise<string | null> {

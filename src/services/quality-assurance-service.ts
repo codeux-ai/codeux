@@ -1198,7 +1198,7 @@ export class QualityAssuranceService {
     if (!hasPreservedWorkspace) {
       await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch, undefined, gitAuth);
     } else {
-      await this.syncExistingCliFollowUpWorkspace(worktreePath, workerBranch);
+      await this.syncExistingCliFollowUpWorkspace(worktreePath, workerBranch, args.repoPath, gitAuth);
     }
 
     const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath);
@@ -1378,17 +1378,24 @@ export class QualityAssuranceService {
   private async syncExistingCliFollowUpWorkspace(
     worktreePath: string,
     workerBranch: string,
+    repoPath: string,
+    gitAuth: GitHttpAuthOptions,
   ): Promise<void> {
     const currentBranch = await this.workspaceManager.resolveCurrentBranch(worktreePath);
     if (currentBranch !== workerBranch) {
       await this.runWorkspaceCommand(worktreePath, "git", ["checkout", workerBranch]).catch(() => undefined);
     }
 
-    await this.runWorkspaceCommand(
-      worktreePath,
-      "git",
-      ["merge", "--ff-only", `origin/${workerBranch}`],
-    ).catch(() => undefined);
+    // The original task committed and pushed its work to origin/<workerBranch> via a
+    // host-side commit-tree/update-ref that never advanced this resumed workspace's
+    // HEAD (docker-volume workspaces are independent clones the host ref update cannot
+    // reach), so its branch is still parked on the original start ref. Re-point it at
+    // the pushed tip so the follow-up diff is computed against the real branch head and
+    // the resulting commit fast-forwards on push instead of being rejected as a
+    // non-fast-forward.
+    await this.workspaceManager
+      .fastForwardResumedWorkspace(worktreePath, workerBranch, repoPath, gitAuth)
+      .catch(() => undefined);
   }
 
   private async runWorkspaceCommand(worktreePath: string, command: string, args: string[], env?: NodeJS.ProcessEnv) {

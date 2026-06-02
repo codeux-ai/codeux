@@ -1291,11 +1291,16 @@ describe("QualityAssuranceService", () => {
     const runWorkspaceCommand = vi.spyOn(service as any, "runWorkspaceCommand").mockImplementation(
       async (_worktreePath: string, _command: string, commandArgs: string[]) => {
         if (commandArgs[0] === "rev-parse") {
-          return { stdout: "remote-worker-head\n", stderr: "" };
+          return { stdout: "pushed-worker-tip\n", stderr: "" };
         }
         return { stdout: "", stderr: "" };
       },
     );
+    // The resumed workspace is parked on a stale base ref; the follow-up must fast-forward
+    // it onto the already-pushed worker-branch tip so the new commit descends from origin
+    // and the push is not rejected as non-fast-forward.
+    const fastForwardResumedWorkspace = vi.spyOn((service as any).workspaceManager, "fastForwardResumedWorkspace")
+      .mockResolvedValue(true);
     vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
     vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
     vi.spyOn((service as any).prService, "hasUnpushedCommits").mockResolvedValue(false);
@@ -1325,7 +1330,15 @@ describe("QualityAssuranceService", () => {
     });
 
     expect(prepareWorktree).not.toHaveBeenCalled();
-    expect(runWorkspaceCommand).toHaveBeenCalledWith(
+    // The stale resumed workspace is fast-forwarded onto the pushed worker-branch tip.
+    expect(fastForwardResumedWorkspace).toHaveBeenCalledWith(
+      "/worktree",
+      "feature/task-1",
+      "/repo",
+      expect.objectContaining({}),
+    );
+    // It must NOT use the old silent ff-only merge that left the base ref stale.
+    expect(runWorkspaceCommand).not.toHaveBeenCalledWith(
       "/worktree",
       "git",
       ["merge", "--ff-only", "origin/feature/task-1"],
@@ -1333,7 +1346,8 @@ describe("QualityAssuranceService", () => {
     expect(runProvider).toHaveBeenCalledWith(expect.objectContaining({
       cwd: "/worktree",
     }));
-    expect((service as any).workspaceArtifactService.exportBinaryPatch).toHaveBeenCalledWith("/worktree", "remote-worker-head");
+    // initialHead (and thus the patch base) is the fast-forwarded tip.
+    expect((service as any).workspaceArtifactService.exportBinaryPatch).toHaveBeenCalledWith("/worktree", "pushed-worker-tip");
   });
 
   it("continues QA follow-up on an existing docker workspace when branch metadata is only recoverable from workspace state", async () => {

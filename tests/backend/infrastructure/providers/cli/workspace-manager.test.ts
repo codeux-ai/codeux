@@ -366,4 +366,73 @@ describe("WorkspaceManager", () => {
       expect.any(String),
     );
   });
+
+  describe("fastForwardResumedWorkspace", () => {
+    const WORKTREE = "/repo/project/.worktrees/session-1";
+    const ok = (stdout = "") => ({ ok: true, stdout, stderr: "", code: 0, signal: null } as any);
+
+    const mockGit = (overrides: { head: string; tip: string | null; ancestor: boolean }) => {
+      vi.mocked(runCommandStrict).mockImplementation(async (command: string, args: string[]) => {
+        if (command === "git" && args[0] === "remote") return ok(""); // no origin url → no auth env
+        if (command === "git" && args[0] === "fetch") return ok();
+        if (command === "git" && args[0] === "rev-parse") {
+          const ref = args[args.length - 1];
+          if (ref === "HEAD") return ok(`${overrides.head}\n`);
+          if (overrides.tip) return ok(`${overrides.tip}\n`);
+          throw new Error("unknown revision"); // missing ref
+        }
+        if (command === "git" && args[0] === "merge-base") {
+          if (overrides.ancestor) return ok();
+          throw new Error("not an ancestor");
+        }
+        if (command === "git" && args[0] === "reset") return ok();
+        return ok();
+      });
+    };
+
+    it("fast-forwards onto the pushed worker-branch tip when the base is an ancestor", async () => {
+      mockGit({ head: "stale-base", tip: "pushed-tip", ancestor: true });
+
+      const advanced = await manager.fastForwardResumedWorkspace(WORKTREE, "feature/task-1", "/repo/project");
+
+      expect(advanced).toBe(true);
+      expect(runCommandStrict).toHaveBeenCalledWith(
+        "git",
+        ["reset", "--hard", "pushed-tip"],
+        WORKTREE,
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it("does not reset when the workspace is already at the tip", async () => {
+      mockGit({ head: "same-tip", tip: "same-tip", ancestor: true });
+
+      const advanced = await manager.fastForwardResumedWorkspace(WORKTREE, "feature/task-1", "/repo/project");
+
+      expect(advanced).toBe(false);
+      expect(runCommandStrict).not.toHaveBeenCalledWith(
+        "git",
+        expect.arrayContaining(["reset"]),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it("never discards unpushed local work when the base is not an ancestor of the tip", async () => {
+      mockGit({ head: "local-only", tip: "diverged-tip", ancestor: false });
+
+      const advanced = await manager.fastForwardResumedWorkspace(WORKTREE, "feature/task-1", "/repo/project");
+
+      expect(advanced).toBe(false);
+      expect(runCommandStrict).not.toHaveBeenCalledWith(
+        "git",
+        expect.arrayContaining(["reset"]),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+  });
 });
