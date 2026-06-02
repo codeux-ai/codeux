@@ -304,6 +304,13 @@ export const useChatPageResources = (options: {
         setConnectionsSnapshot(nextConnections);
 
         void refreshThreads({ mode: "invocations" });
+        // The invocation list refresh above reuses cached messages, so a selected
+        // invocation whose transcript was appended to (or replaced on completion)
+        // would otherwise stay stale until a manual reload. Force-refetch its
+        // messages so the chat updates live as the runtime records activity.
+        if (invocationData.selectedInvocationIdRef.current) {
+          void invocationData.refreshInvocationMessages(invocationData.selectedInvocationIdRef.current, { force: true });
+        }
         return;
       }
 

@@ -72,8 +72,39 @@ function flattenOpenAiContent(content: unknown): string {
   return parts.join("").trim();
 }
 
-/** Maps a single OpenAI chat message to zero or more conversation turns. */
-function turnsFromOpenAiMessage(message: Record<string, unknown>, tokens?: ParsedConversationTurn["tokens"]): ParsedConversationTurn[] {
+/** Extracts the assistant response message from a single log record. */
+function responseMessageFromRecord(record: unknown): Record<string, unknown> | null {
+  const root = asRecord(record);
+  const response = asRecord(root?.response);
+  if (!response) return null;
+  const choices = Array.isArray(response.choices) ? response.choices : [];
+  return asRecord(asRecord(choices[0])?.message) ?? asRecord(response.message);
+}
+
+/** Pulls the chain-of-thought text from a message's `reasoning_content`/`reasoning` field. */
+function reasoningFromMessage(message: Record<string, unknown>): string {
+  return flattenOpenAiContent(message.reasoning_content ?? message.reasoning);
+}
+
+/** Reads the id of an OpenAI tool-call entry. */
+function toolCallId(call: unknown): string | undefined {
+  const id = asRecord(call)?.id;
+  return typeof id === "string" ? id : undefined;
+}
+
+/**
+ * Maps a single OpenAI chat message to zero or more conversation turns.
+ *
+ * `reasoningByCallId` lets us recover the per-step chain-of-thought: the API
+ * strips `reasoning_content` from history messages when it resends them, but
+ * each call's own response still carries it, keyed here by the tool-call ids
+ * that step produced. We prepend a reasoning turn before the matching step.
+ */
+function turnsFromOpenAiMessage(
+  message: Record<string, unknown>,
+  tokens?: ParsedConversationTurn["tokens"],
+  reasoningByCallId?: Map<string, string>,
+): ParsedConversationTurn[] {
   const role = typeof message.role === "string" ? message.role : "";
   const text = flattenOpenAiContent(message.content);
   const turns: ParsedConversationTurn[] = [];
@@ -92,10 +123,22 @@ function turnsFromOpenAiMessage(message: Record<string, unknown>, tokens?: Parse
     return turns;
   }
   if (role === "assistant") {
+    const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    // Thinking models (qwen3-thinking, deepseek-reasoner, …) carry their
+    // chain-of-thought in a separate `reasoning_content` / `reasoning` field
+    // rather than in `content`. Surface it as a reasoning turn so the
+    // transcript shows the model's deliberation, not just the final text.
+    let reasoning = reasoningFromMessage(message);
+    if (!reasoning && reasoningByCallId) {
+      const firstId = toolCalls.map(toolCallId).find((id): id is string => Boolean(id));
+      if (firstId) reasoning = reasoningByCallId.get(firstId) ?? "";
+    }
+    if (reasoning) {
+      turns.push({ kind: "reasoning", text: reasoning });
+    }
     if (text) {
       turns.push({ kind: "assistant", text, tokens });
     }
-    const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
     for (const call of toolCalls) {
       const callRec = asRecord(call);
       const fn = asRecord(callRec?.function);
@@ -135,13 +178,29 @@ export function buildQwenConversation(records: unknown[]): ParsedConversationTur
     return [];
   }
 
+  // Recover per-step reasoning that history messages no longer carry: every
+  // record's own response keeps its `reasoning_content`, keyed by the tool-call
+  // ids that step emitted, so we can re-attach it during reconstruction.
+  const reasoningByCallId = new Map<string, string>();
+  for (const record of sorted) {
+    const responseMsg = responseMessageFromRecord(record);
+    if (!responseMsg) continue;
+    const reasoning = reasoningFromMessage(responseMsg);
+    if (!reasoning) continue;
+    const calls = Array.isArray(responseMsg.tool_calls) ? responseMsg.tool_calls : [];
+    for (const call of calls) {
+      const id = toolCallId(call);
+      if (id) reasoningByCallId.set(id, reasoning);
+    }
+  }
+
   const conversation: ParsedConversationTurn[] = [];
   const request = asRecord(newest.request);
   const messages = Array.isArray(request?.messages) ? request!.messages : [];
   for (const message of messages) {
     const rec = asRecord(message);
     if (rec) {
-      conversation.push(...turnsFromOpenAiMessage(rec));
+      conversation.push(...turnsFromOpenAiMessage(rec, undefined, reasoningByCallId));
     }
   }
 

@@ -208,6 +208,55 @@ describe("useChatPageResources integration", () => {
     expect(reply?.deliveryStatus).toBe("delivered");
   });
 
+  it("force-refreshes the selected invocation's messages on a project.execution.updated event", async () => {
+    const refreshInvocationMessages = vi.fn();
+    const selectedInvocationIdRef = { current: "inv-1" };
+
+    renderHook(() => {
+      const cache = useMessageCache();
+      const threadData = useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+
+      const invocationData = {
+        selectedInvocationIdRef,
+        setInvocationsSnapshot: vi.fn(),
+        setInvocationMessagesSnapshot: vi.fn(),
+        setSelectedInvocationId: vi.fn(),
+        setError: vi.fn(),
+        activateInvocation: vi.fn(),
+        refreshInvocationMessages,
+      } as any;
+
+      useChatPageResources({
+        selectedProject: { id: "proj-1" },
+        cache,
+        chatMode: "invocations",
+        threadData,
+        invocationData,
+      });
+
+      return { cache, threadData };
+    });
+
+    await act(async () => {
+      if (mockRealtimeCallback) {
+        mockRealtimeCallback({
+          type: "event",
+          event: {
+            eventType: "project.execution.updated",
+            payload: { connections: [] },
+          },
+        });
+      }
+    });
+
+    expect(refreshInvocationMessages).toHaveBeenCalledWith("inv-1", { force: true });
+  });
+
   it("handles real-time thread deletion logic properly", async () => {
     const { result } = renderHook(() => {
       const cache = useMessageCache();

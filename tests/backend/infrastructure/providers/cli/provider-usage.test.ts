@@ -677,6 +677,52 @@ describe("buildQwenConversation", () => {
     expect(conversation[3].tokens).toMatchObject({ input: 200, output: 60 });
   });
 
+  it("captures per-step and final reasoning_content from thinking models", () => {
+    const records = [
+      {
+        // Step 1: the model thought, then called a tool. Its reasoning lives on
+        // this record's response, keyed by tool-call id t1.
+        timestamp: "2026-06-02T10:00:00.000Z",
+        request: { messages: [{ role: "user", content: "Add a test." }] },
+        response: {
+          usage: { prompt_tokens: 10, completion_tokens: 3 },
+          choices: [{ message: {
+            role: "assistant",
+            content: "",
+            reasoning_content: "I should run the existing tests first.",
+            tool_calls: [{ id: "t1", function: { name: "run_shell", arguments: "{\"cmd\":\"npm test\"}" } }],
+          } }],
+        },
+      },
+      {
+        // Newest record: history has the t1 call (reasoning stripped) + result,
+        // and the final response carries its own reasoning_content.
+        timestamp: "2026-06-02T10:00:05.000Z",
+        request: {
+          messages: [
+            { role: "user", content: "Add a test." },
+            { role: "assistant", content: "", tool_calls: [{ id: "t1", function: { name: "run_shell", arguments: "{\"cmd\":\"npm test\"}" } }] },
+            { role: "tool", tool_call_id: "t1", content: "passed" },
+          ],
+        },
+        response: {
+          usage: { prompt_tokens: 200, completion_tokens: 60 },
+          choices: [{ message: { role: "assistant", content: "Test added.", reasoning_content: "Tests pass, so I'm done." } }],
+        },
+      },
+    ];
+
+    const conversation = buildQwenConversation(records);
+    // Intermediate reasoning is recovered before the tool call it produced, and
+    // the final turn's own reasoning precedes the answer.
+    expect(conversation.map((t) => t.kind)).toEqual([
+      "user", "reasoning", "tool_call", "tool_result", "reasoning", "assistant",
+    ]);
+    expect(conversation[1]).toMatchObject({ kind: "reasoning", text: "I should run the existing tests first." });
+    expect(conversation[4]).toMatchObject({ kind: "reasoning", text: "Tests pass, so I'm done." });
+    expect(conversation[5]).toMatchObject({ kind: "assistant", text: "Test added." });
+  });
+
   it("threads qwen conversation through collectProviderUsageTelemetry", async () => {
     const result = await collectProviderUsageTelemetry({
       provider: "qwen-code",
