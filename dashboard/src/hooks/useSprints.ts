@@ -93,6 +93,7 @@ export function useSprints(projectId: string | null): UseSprintsResult {
       eventType: "project.structure.updated",
       updateDirectlyFromEvent: false, // Refetch to allow cache populating
     } : undefined,
+    pollIntervalMs: projectId ? 15000 : 0,
     isAlreadyLoaded: projectCacheEntryRef.current.hadInitialCache || !projectId,
     refreshOnMount: false,
   });
