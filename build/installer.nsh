@@ -1,10 +1,11 @@
 !include LogicLib.nsh
+
+!ifndef BUILD_UNINSTALLER
 !include nsDialogs.nsh
 
 Var CodeUxBetaCheckbox
 Var CodeUxBetaAccepted
 
-!ifndef BUILD_UNINSTALLER
 !macro customPageAfterChangeDir
   Page custom CodeUxBetaPage CodeUxBetaPageLeave
 !macroend
