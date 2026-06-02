@@ -93,6 +93,47 @@ describe("ProjectManagementRepository", () => {
     expect(repository.getSelectedSprintId(project.id)).toBeNull();
   });
 
+  it("normalizes stale provided sprint numbers to the next project number", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Stale Number Project",
+      sourceType: "local",
+      sourceRef: "/workspace/stale-number-project",
+    });
+
+    const sprint1 = repository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+    });
+    const sprint2 = repository.createSprint(project.id, {
+      name: "Sprint 2",
+      number: sprint1.number,
+    });
+
+    expect(sprint1.number).toBe(1);
+    expect(sprint2.number).toBe(2);
+  });
+
+  it("increments sprint number when number is omitted after an existing sprint", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Auto Number Project",
+      sourceType: "local",
+      sourceRef: "/workspace/auto-number-project",
+    });
+
+    const sprint1 = repository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 7,
+    });
+    const sprint2 = repository.createSprint(project.id, {
+      name: "Sprint 2",
+    });
+
+    expect(sprint1.number).toBe(7);
+    expect(sprint2.number).toBe(8);
+  });
+
   it("creates projects, sprints, tasks, and dependency summaries in sqlite", async () => {
     const { repository, executionRepository } = await createRepository();
 
