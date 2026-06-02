@@ -108,7 +108,7 @@ html.is-electron.is-fullscreen .app-shell {
   a:hover,
   a:focus {
     color: #008F65; /* signal.700 */
-    text-decoration: underline;
+    text-decoration: none;
   }
 
   .dark a:hover,

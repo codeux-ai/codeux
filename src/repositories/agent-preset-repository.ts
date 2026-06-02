@@ -336,6 +336,40 @@ export class AgentPresetRepository {
     `).run(agentPresetId);
   }
 
+  hasCopiedDefaultAgentPresets(projectId: string): boolean {
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
+    const row = this.db.prepare(`
+      SELECT payload
+      FROM app_settings
+      WHERE key = ?
+    `).get(this.defaultAgentCopyKey(projectId)) as { payload: string } | undefined;
+
+    if (!row) {
+      return false;
+    }
+
+    try {
+      const parsed = JSON.parse(row.payload) as { copied?: boolean };
+      return parsed.copied === true;
+    } catch {
+      return false;
+    }
+  }
+
+  markDefaultAgentPresetsCopied(projectId: string): void {
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO app_settings (key, payload, updated_at)
+      VALUES (?, ?, ?)
+      ${this.db.dialect.upsert(["key"], ["payload", "updated_at"])}
+    `).run(
+      this.defaultAgentCopyKey(projectId),
+      JSON.stringify({ copied: true, copiedAt: now }),
+      now,
+    );
+  }
+
   private mapRow(row: AgentPresetRow): AgentPresetRecord {
     return {
       id: row.id,
@@ -386,5 +420,9 @@ export class AgentPresetRepository {
       return value;
     }
     return null;
+  }
+
+  private defaultAgentCopyKey(projectId: string): string {
+    return `default_agent_presets_copied_${projectId}`;
   }
 }

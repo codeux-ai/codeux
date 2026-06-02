@@ -4,7 +4,7 @@ import { ActionButton, NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Bot, Cog, FolderOpen, Layers, Sparkles } from "lucide-preact";
+import { Bot, Cog, FolderOpen, Sparkles } from "lucide-preact";
 import { openOnboarding } from "../../../lib/onboarding-control.js";
 
 
@@ -123,6 +123,51 @@ const AutomationCard: FunctionComponent<{
   </SectionCard>
 );
 
+const DockerRuntimeCard: FunctionComponent<{
+  settings: ProjectSettings;
+  update: (recipe: (current: ProjectSettings) => ProjectSettings) => void;
+  getBadge: (...prefixes: string[]) => string | undefined;
+  getFieldBadge: (path: string) => string | undefined;
+}> = ({ settings, update, getBadge, getFieldBadge }) => (
+  <SectionCard title="Docker Runtime" watermark="DKR" badge={getBadge("cliWorkflow")} icon={<Cog strokeWidth={2.4} />}>
+    <Row label="Container image" description="Default container image used for the task execution runtime." badge={getFieldBadge("cliWorkflow.containerImage")}>
+      <TextInput
+        value={settings.cliWorkflow.containerImage}
+        onChange={(value) => update((current) => ({
+          ...current,
+          cliWorkflow: {
+            ...current.cliWorkflow,
+            containerImage: value,
+          },
+        }))}
+        mono
+      />
+    </Row>
+    <Row label="Container setup script" description="Optional setup script run inside the container before task execution." badge={getFieldBadge("cliWorkflow.containerSetupScriptPath")}>
+      <TextInput
+        value={settings.cliWorkflow.containerSetupScriptPath}
+        onChange={(value) => update((current) => ({
+          ...current,
+          cliWorkflow: {
+            ...current.cliWorkflow,
+            containerSetupScriptPath: value,
+          },
+        }))}
+        mono
+      />
+    </Row>
+    <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")} last>
+      <Toggle value={settings.cliWorkflow.containerCacheSetupScriptImage} onChange={() => update((current) => ({
+        ...current,
+        cliWorkflow: {
+          ...current.cliWorkflow,
+          containerCacheSetupScriptImage: !current.cliWorkflow.containerCacheSetupScriptImage,
+        },
+      }))} />
+    </Row>
+  </SectionCard>
+);
+
 export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
     activeScope,
@@ -193,22 +238,18 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
             </Row>
           </SectionCard>
 
+          {editableSettings ? (
+            <DockerRuntimeCard
+              settings={editableSettings}
+              update={updateEditableSettings}
+              getBadge={getBadge}
+              getFieldBadge={getFieldBadge}
+            />
+          ) : null}
+
           <SectionCard title="Onboarding" watermark="ONB" icon={<Sparkles strokeWidth={2.4} />}>
             <Row label="Show onboarding again" description="Launch the interactive setup flow from the beginning." last>
               <ActionButton label="Open Onboarding" tone="primary" onClick={openOnboarding} />
-            </Row>
-          </SectionCard>
-
-          <SectionCard title="Inheritance Model" watermark="SCP" icon={<Layers strokeWidth={2.4} />}>
-            <Row label="Selected project" description="Project-specific overrides are edited in the same page by switching scope.">
-              <div className="rounded-xl bg-black/[0.04] px-3 py-2 text-sm font-semibold text-slate-700 dark:bg-white/[0.04] dark:text-slate-200">
-                {selectedProject ? selectedProject.name : "No project selected"}
-              </div>
-            </Row>
-            <Row label="Project inheritance" description="System defaults stay live until a project explicitly overrides a field." last>
-              <div className="rounded-xl bg-black/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:bg-white/[0.04] dark:text-slate-300">
-                Live inheritance
-              </div>
             </Row>
           </SectionCard>
         </div>

@@ -10,7 +10,7 @@ Code UX now treats dashboard agents as database-backed records that can be seede
 - `<project>/.code-ux/agents/*.md`
 - `~/.code-ux/agents/*.md`
 
-When the packaged default assets are present, Code UX also seeds missing base agent files into `~/.code-ux/agents` before scanning. Existing user files are preserved, so local customizations remain the higher-priority home defaults.
+When the packaged default assets are present, Code UX also seeds missing base agent files into `~/.code-ux/agents` before scanning. Existing user files are preserved, so local customizations remain the higher-priority home defaults. Built-in default agent seeding is one-shot per project: after the defaults have been imported once, Code UX records `default_agent_presets_copied_<projectId>` in the application database and does not copy or re-import those built-in defaults again for that project. Deleting a built-in default agent is therefore respected on later syncs.
 
 The built-in roles are now:
 
@@ -100,13 +100,14 @@ The API record also exposes derived sync state:
 
 When Code UX syncs project agents:
 
-1. missing packaged base agents are installed into `~/.code-ux/agents` without overwriting existing files
+1. missing packaged base agents are installed into `~/.code-ux/agents` without overwriting existing files only until the project-level default-agent copy flag is recorded
 2. project-level `.code-ux/agents` is scanned first
 3. repo-default `.code-ux/agents` from the running Code UX checkout is scanned second
 4. home-level `.code-ux/agents` is scanned third
 5. filename without `.md` becomes the agent name
 6. project-scoped files win on name collisions
 7. previously unseen agents are imported into sqlite automatically
+8. after the first default-agent import for a project, built-in default/home roles are skipped on future automatic syncs so user deletions are not recreated
 
 ## Planning Agent Flow
 

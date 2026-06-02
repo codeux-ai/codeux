@@ -356,6 +356,13 @@ export const TasksPage: FunctionComponent = () => {
   }, [initialSprint, sprints]);
   const taskScopeSprintId = routeSprintId ?? selectedSprintId;
 
+  useEffect(() => {
+    if (!routeSprintId || routeSprintId === selectedSprintId) {
+      return;
+    }
+    void selectSprint(routeSprintId);
+  }, [routeSprintId, selectedSprintId, selectSprint]);
+
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);

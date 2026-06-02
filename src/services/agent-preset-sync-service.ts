@@ -170,7 +170,9 @@ export class AgentPresetSyncService {
     const existingPresets = this.deps.agentPresetRepository.listAgentPresets(projectId);
     const presetsById = new Map(existingPresets.map((preset) => [preset.id, preset]));
     const presetsByName = new Map(existingPresets.map((preset) => [this.normalizeName(preset.name), preset]));
-    const sourceFiles = await this.readAgentSources(project.baseDir);
+    const defaultAgentPresetsCopied = this.deps.agentPresetRepository.hasCopiedDefaultAgentPresets(projectId);
+    const sourceFiles = await this.readAgentSources(project.baseDir, { defaultAgentPresetsCopied });
+    let copiedDefaultAgentPresetThisSync = false;
 
     for (const source of sourceFiles) {
       const existing = existingPresets.find((preset) => preset.sourcePath === source.sourcePath)
@@ -198,6 +200,9 @@ export class AgentPresetSyncService {
         });
         presetsById.set(created.id, created);
         presetsByName.set(source.normalizedName, created);
+        if (this.isDefaultBaseAgentSource(source)) {
+          copiedDefaultAgentPresetThisSync = true;
+        }
         continue;
       }
 
@@ -238,6 +243,10 @@ export class AgentPresetSyncService {
         presetsById.set(imported.id, imported);
         presetsByName.set(source.normalizedName, imported);
       }
+    }
+
+    if (!defaultAgentPresetsCopied && copiedDefaultAgentPresetThisSync) {
+      this.deps.agentPresetRepository.markDefaultAgentPresetsCopied(projectId);
     }
   }
 
@@ -377,7 +386,12 @@ export class AgentPresetSyncService {
       const source = await this.readAgentSourceFile(preset.sourcePath, preset.sourceScope || "project");
       const sourceDiffersFromDb = this.normalizeName(source.name) !== this.normalizeName(preset.name)
         || (source.description || "") !== (preset.description || "")
-        || source.instructionMarkdown.trim() !== preset.instructionMarkdown.trim();
+        || source.instructionMarkdown.trim() !== preset.instructionMarkdown.trim()
+        || JSON.stringify(source.avatarConfig || {}) !== JSON.stringify(preset.avatarConfig || {})
+        || (source.providerConfigId || "") !== (preset.providerConfigId || "")
+        || (source.model || "") !== (preset.model || "")
+        || Boolean(source.memoryTemplateOverrideEnabled) !== Boolean(preset.memoryTemplateOverrideEnabled)
+        || (source.memoryTemplateMarkdown || "") !== (preset.memoryTemplateMarkdown || "");
       return {
         ...preset,
         sourceScope: source.sourceScope,
@@ -396,10 +410,11 @@ export class AgentPresetSyncService {
     }
   }
 
-  private async readAgentSources(repoPath: string): Promise<AgentSourceFile[]> {
+  private async readAgentSources(repoPath: string, options: { defaultAgentPresetsCopied: boolean }): Promise<AgentSourceFile[]> {
     await ensureDefaultCodeUxAssetsInstalled({
       projectRoot: this.deps.projectRoot,
       logger: this.deps.logger,
+      skipDefaultAgentFiles: options.defaultAgentPresetsCopied,
     });
 
     const collected = new Map<string, AgentSourceFile>();
@@ -417,6 +432,9 @@ export class AgentPresetSyncService {
         }
         const sourcePath = path.join(root.directory, entry.name);
         const source = await this.readAgentSourceFile(sourcePath, root.scope);
+        if (options.defaultAgentPresetsCopied && this.isDefaultBaseAgentSource(source)) {
+          continue;
+        }
         if (!collected.has(source.normalizedName)) {
           collected.set(source.normalizedName, source);
         }
@@ -424,6 +442,11 @@ export class AgentPresetSyncService {
     }
 
     return Array.from(collected.values());
+  }
+
+  private isDefaultBaseAgentSource(source: AgentSourceFile): boolean {
+    return (source.sourceScope === "default" || source.sourceScope === "home")
+      && Object.prototype.hasOwnProperty.call(BASE_AGENT_IDS, source.normalizedName);
   }
 
   private async readAgentSourceFile(sourcePath: string, sourceScope: AgentSourceScope): Promise<AgentSourceFile> {
@@ -564,6 +587,10 @@ export class AgentPresetSyncService {
 
     if (this.normalizeName(normalized) === "planning agent") {
       return "Planning agent";
+    }
+
+    if (this.normalizeName(normalized) === "worker") {
+      return "Worker";
     }
 
     if (this.normalizeName(normalized) === "project manager") {

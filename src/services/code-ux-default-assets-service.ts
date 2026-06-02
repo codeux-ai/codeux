@@ -16,6 +16,7 @@ const DEFAULT_CONTAINER_SETUP_FILE = "setup.sh";
 interface EnsureDefaultCodeUxAssetsOptions {
   projectRoot?: string;
   logger?: Pick<Logger, "info" | "warn">;
+  skipDefaultAgentFiles?: boolean;
 }
 
 interface InstalledAsset {
@@ -49,12 +50,14 @@ async function installDefaultCodeUxAssets(
 
   const installed: InstalledAsset[] = [];
 
-  for (const fileName of DEFAULT_AGENT_FILES) {
-    const asset = await copyIfMissing(
-      path.join(sourceDir, "agents", fileName),
-      getHomeCodeUxPath("agents", fileName),
-    );
-    if (asset) installed.push(asset);
+  if (!options.skipDefaultAgentFiles) {
+    for (const fileName of DEFAULT_AGENT_FILES) {
+      const asset = await copyIfMissing(
+        path.join(sourceDir, "agents", fileName),
+        getHomeCodeUxPath("agents", fileName),
+      );
+      if (asset) installed.push(asset);
+    }
   }
 
   const setupAsset = await copyOrUpdateSetupScript(

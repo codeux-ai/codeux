@@ -9,8 +9,16 @@ import { SettingsRepository } from "../../../src/repositories/settings-repositor
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 
 const tempDirs: string[] = [];
+const originalHome = process.env.HOME;
+const originalEnableInstallInTests = process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS;
 
 afterEach(async () => {
+  process.env.HOME = originalHome;
+  if (originalEnableInstallInTests === undefined) {
+    delete process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS;
+  } else {
+    process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS = originalEnableInstallInTests;
+  }
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
@@ -60,6 +68,64 @@ describe("AgentPresetSyncService", () => {
     expect(drifted[0]?.instructionMarkdown).toContain("Updated planning instructions");
     expect(drifted[0]?.avatarConfig).toBeUndefined();
     expect(drifted[0]?.memoryTemplateOverrideEnabled).toBe(false);
+  });
+
+  it("seeds built-in default agents only once per project", async () => {
+    process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS = "1";
+
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-default-once-"));
+    tempDirs.push(dir);
+
+    const projectRoot = path.join(dir, "app");
+    const repoPath = path.join(dir, "repo");
+    const homeDir = path.join(dir, "home");
+    process.env.HOME = homeDir;
+
+    await fs.mkdir(path.join(projectRoot, ".code-ux", "agents"), { recursive: true });
+    await fs.mkdir(path.join(projectRoot, ".code-ux", "container"), { recursive: true });
+    for (const fileName of ["planning_agent.md", "project_manager.md", "quality_assurance_agent.md", "worker.md"]) {
+      await fs.writeFile(
+        path.join(projectRoot, ".code-ux", "agents", fileName),
+        `default ${fileName}\n`,
+        "utf8",
+      );
+    }
+    await fs.writeFile(path.join(projectRoot, ".code-ux", "container", "setup.sh"), "#!/usr/bin/env bash\necho setup\n", "utf8");
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot,
+    });
+
+    const project = projectRepository.createProject({
+      name: "One Shot Defaults",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    const initial = await syncService.listAgentPresets(project.id);
+    expect(initial.map((preset) => preset.name).sort()).toEqual([
+      "Planning agent",
+      "Project manager",
+      "Quality assurance agent",
+      "Worker",
+    ]);
+    expect(agentPresetRepository.hasCopiedDefaultAgentPresets(project.id)).toBe(true);
+
+    const worker = initial.find((preset) => preset.name === "Worker");
+    expect(worker?.sourceScope).toBe("default");
+    await syncService.deleteAgentPreset(worker!.id);
+    await fs.rm(path.join(homeDir, ".code-ux", "agents", "worker.md"), { force: true });
+
+    const afterDelete = await syncService.listAgentPresets(project.id);
+    expect(afterDelete.some((preset) => preset.name === "Worker")).toBe(false);
+    await expect(fs.stat(path.join(homeDir, ".code-ux", "agents", "worker.md"))).rejects.toThrow();
   });
 
   it("normalizes project_manager sources and resolves the Project manager agent", async () => {

@@ -3,7 +3,7 @@ import type { SettingsPageState } from "../../../hooks/use-settings-page-state.j
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import type { ProjectSettings, GuardrailJobType, GuardrailOnLimitAction } from "../../../../types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Cog, Eye, GitBranch, GitMerge, PlayCircle, ShieldAlert, Sparkles, Timer } from "lucide-preact";
+import { Eye, GitBranch, GitMerge, PlayCircle, ShieldAlert, Sparkles, Timer } from "lucide-preact";
 
 const GUARDRAIL_JOB_META: Array<{ key: GuardrailJobType; label: string; description: string }> = [
   { key: "task_coding", label: "Coding attempts", description: "Max times a task is (re)dispatched for coding before it is blocked." },
@@ -466,45 +466,6 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
             }))} />
           </Row>
         </SectionCard>
-
-        <SectionCard title="Execution Runtime" watermark="RT" badge={getBadge("cliWorkflow")} icon={<Cog strokeWidth={2.4} />}>
-          <Row label="Container image" description="Default container image used for the task execution runtime." badge={getFieldBadge("cliWorkflow.containerImage")}>
-            <TextInput
-              value={editableSettings.cliWorkflow.containerImage}
-              onChange={(value) => updateEditableSettings((current) => ({
-                ...current,
-                cliWorkflow: {
-                  ...current.cliWorkflow,
-                  containerImage: value,
-                },
-              }))}
-              mono
-            />
-          </Row>
-          <Row label="Container setup script" description="Optional setup script run inside the container before task execution." badge={getFieldBadge("cliWorkflow.containerSetupScriptPath")}>
-            <TextInput
-              value={editableSettings.cliWorkflow.containerSetupScriptPath}
-              onChange={(value) => updateEditableSettings((current) => ({
-                ...current,
-                cliWorkflow: {
-                  ...current.cliWorkflow,
-                containerSetupScriptPath: value,
-              },
-            }))}
-              mono
-            />
-          </Row>
-          <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")} last>
-            <Toggle value={editableSettings.cliWorkflow.containerCacheSetupScriptImage} onChange={() => updateEditableSettings((current) => ({
-              ...current,
-              cliWorkflow: {
-                ...current.cliWorkflow,
-                containerCacheSetupScriptImage: !current.cliWorkflow.containerCacheSetupScriptImage,
-              },
-            }))} />
-          </Row>
-        </SectionCard>
-
     </div>
   );
 };
