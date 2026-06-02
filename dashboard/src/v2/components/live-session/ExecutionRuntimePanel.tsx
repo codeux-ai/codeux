@@ -398,11 +398,21 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                         )}
                                     </div>
                                     {run.humanIntervention && (
-                                        <div className="mt-3 rounded-xl border border-status-amber/18 bg-status-amber/8 p-3">
+                                        <div className={`mt-3 rounded-xl border ${
+                                            run.humanIntervention.ownerType === "system" || run.humanIntervention.ownerType === "worker"
+                                                ? "border-slate-400/18 bg-slate-400/8"
+                                                : "border-status-amber/18 bg-status-amber/8"
+                                        } p-3`}>
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
-                                                        Human intervention needed
+                                                    <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+                                                        run.humanIntervention.ownerType === "system" || run.humanIntervention.ownerType === "worker"
+                                                            ? "text-slate-500 dark:text-slate-400"
+                                                            : "text-status-amber"
+                                                    }`}>
+                                                        {run.humanIntervention.ownerType === "system" || run.humanIntervention.ownerType === "worker"
+                                                            ? "Stopped automatically"
+                                                            : "Human intervention needed"}
                                                     </div>
                                                     <div className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
                                                         {run.humanIntervention.title}
@@ -413,9 +423,11 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                             <p className="mt-2 text-[12px] leading-relaxed text-slate-600 dark:text-slate-300">
                                                 {run.humanIntervention.reason}
                                             </p>
-                                            <p className="mt-2 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                                                {run.humanIntervention.instructions}
-                                            </p>
+                                            {!(run.humanIntervention.ownerType === "system" || run.humanIntervention.ownerType === "worker") && (
+                                                <p className="mt-2 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                                    {run.humanIntervention.instructions}
+                                                </p>
+                                            )}
                                         </div>
                                     )}
                                 </div>
