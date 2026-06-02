@@ -113,7 +113,7 @@ describe("QuicksprintPanel", () => {
     });
     const mockOnExecute = vi.fn(() => executePromise);
 
-    const { getByText, queryByText } = render(
+    const { getByText, queryByText, queryByRole, queryAllByText } = render(
       <QuicksprintPanel {...defaultProps} onExecute={mockOnExecute} />
     );
 
@@ -138,6 +138,9 @@ describe("QuicksprintPanel", () => {
     await waitFor(() => {
       expect(queryByText("Quicksprint in motion")).not.toBeInTheDocument();
     });
+    expect(queryByRole("button", { name: "Minimize" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "New Quicksprint" })).not.toBeInTheDocument();
+    expect(queryAllByText("Cancel Active Request")).toHaveLength(0);
 
     // We didn't cancel, so we can now resolve the execution
     resolveExecute!();

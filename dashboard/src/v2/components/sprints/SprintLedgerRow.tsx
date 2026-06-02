@@ -26,6 +26,7 @@ import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-s
 import { SprintControls } from "./SprintControls.js";
 import { TableRow, TableCell } from "../ui/Table.js";
 import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
+import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
 
 // Polished badge tones: increased contrast for backgrounds and borders where appropriate
 const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
@@ -288,6 +289,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             position="bottom"
             align="end"
             className="min-w-[11.5rem]"
+            computePosition={({ triggerRect, menuRect, viewport }) => computeSprintActionMenuPosition(
+              triggerRect,
+              viewport,
+              { width: menuRect.width, height: menuRect.height },
+            )}
             content={
               <SprintActionMenu
                 sprint={sprint}

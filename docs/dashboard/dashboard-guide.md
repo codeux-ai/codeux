@@ -221,6 +221,7 @@ Legacy runtime:
 - Sprint creation now uses an in-page composer that replaces the showcase while writing, instead of opening a detached modal
 - The sprint composer supports `Plan & Start`, `Plan Only`, and `Save Draft`.
 - The sprint composer prompt area renders a full-width editor until an original prompt exists, at which point it uses a split layout.
+- Sprint key previews now reserve pending creation numbers in the page state, so opening `New Sprint` or `Quicksprint` while another create/plan request is still pending advances the visible key sequentially (for example `SPR-02` then `SPR-03`) and releases reservations after refresh or failure.
 - When planning a sprint (`Plan Only` or `Plan & Start`), the pre-improvement raw prompt is saved to `originalPrompt` if it isn't already set, keeping the worker-improved text as the goal.
 - The planning feedback overlay surfaces both an ETA countdown and an elapsed runtime timer. ETA comes from `GET /api/projects/:projectId/sprints/composer/eta`, computed server-side from the latest 10 planning invocations for the selected project, with a 3:00 fallback when no usable sample exists.
 - When editing a sprint that already has planned tasks, the composer offers `Replan` (discard and regenerate subtasks), `Append Tasks` (open a task-creation modal pre-scoped to the sprint with dependency selection from existing tasks), and `Save Draft` (update name/goal only)
@@ -230,6 +231,7 @@ Legacy runtime:
 - The sprint composer now features a visible, animated planning feedback overlay that replaces the generic spinner during `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan` actions.
 - Planning feedback is deterministic and staged, using an animated ship treatment (Wooden Ship for AI improvement, Container Ship for planning) that drifts across the composer based on elapsed time to make progress visible
 - Planning and prompt-improvement requests continue server-side if the browser tab is refreshed or closed. The overlay's `Cancel Active Request` action now sends an explicit cancellation request, while `New Sprint` detaches the current planning run from the composer and opens a fresh sprint form without blocking the active run.
+- Clicking `Minimize` fully dismisses the planning overlay action row (`Minimize`, secondary action, and overlay cancel button). Any progress restore affordance remains inside the composer/quicksprint panel layout instead of floating over unrelated page content.
 - Settings now expose separate CLI retry controls for quota resets and rate limits, including the rate-limit delay and a max rate-limit retry count (`5` by default). Session sync preserves quota/rate-limit dispatch errors so active retry timers remain visible, while expired or missing cooldown metadata requeues the task instead of leaving it stuck in `QUOTA`.
 - The v2 settings workspace restores the full Git Flow and Git host controls:
   - Git Flow lives in the Sprint tab with default branch, branch prefix, sprint branch scheme, remote/local mode, and auto-create PR
@@ -258,6 +260,7 @@ Legacy runtime:
 - New sprints and quicksprints are showcased by default, showcased sprints are controlled by the heart toggle, and the showcase gallery is no longer capped to 3 sprint cells
 - Showcase pinning is now fully operator-controlled; pinned sprints remain in the gallery until explicitly unpinned, surviving transitions like sprint start, pause, and completion
 - Showcase heart controls in the sprint ledger remain available for completed sprints, so completed work can stay pinned in or be removed from the gallery manually
+- Sprint ledger row action menus and sprint showcase cell action menus now use sprint-scoped fixed-position math (`dashboard/src/v2/lib/sprint-menu-positioning.ts`) that right-aligns to the trigger edge, clamps inside viewport padding, and flips upward near the viewport bottom without changing shared dropdown behavior used by unrelated components
 - The sprint gallery selection is now the full set of showcased sprints, ordered newest-first by sprint creation time
 - The Sprints page top action row includes a `Hide Gallery` / `Show Gallery` control that collapses or restores the sprint gallery cells without affecting Import, Quicksprint, New Sprint, or the ledger.
 - On a fresh installation with no selected project, the Sprints page renders a polished project-scope placeholder with working `Add First Project` and `Manage Projects` actions; the first action opens the shared Add Project dialog directly

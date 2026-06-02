@@ -210,7 +210,7 @@ describe("SprintComposer", () => {
 
     const mockOnSubmit = vi.fn(() => submitPromise);
 
-    const { getByText, getByPlaceholderText, queryByText, getAllByText } = render(
+    const { getByText, getByPlaceholderText, queryByText, getAllByText, queryByRole, queryAllByText } = render(
       <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} />
     );
 
@@ -239,6 +239,9 @@ describe("SprintComposer", () => {
     await waitFor(() => {
       expect(queryByText("Planning in motion")).not.toBeInTheDocument();
     });
+    expect(queryByRole("button", { name: "Minimize" })).not.toBeInTheDocument();
+    expect(queryByRole("button", { name: "New Sprint" })).not.toBeInTheDocument();
+    expect(queryAllByText("Cancel Active Request")).toHaveLength(1);
 
     // We didn't cancel, so we can now resolve the submit to finish
     resolveSubmit!(undefined);

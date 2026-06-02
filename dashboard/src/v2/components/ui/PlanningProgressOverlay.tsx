@@ -9,6 +9,7 @@ import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface PlanningProgressOverlayProps {
   isBusy: boolean;
+  isDismissed?: boolean;
   feedback: { shipType: "container" | "wooden"; shipProgress: number; text: string } | null;
   planningEta: number;
   elapsedMs: number;
@@ -23,6 +24,7 @@ interface PlanningProgressOverlayProps {
 
 export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayProps> = ({
   isBusy,
+  isDismissed = false,
   feedback,
   planningEta,
   elapsedMs,
@@ -53,7 +55,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
       return () => ctx.revert();
     }
   }, [feedback?.text, reducedMotion]);
-  if (!isBusy || !feedback) return null;
+  if (!isBusy || isDismissed || !feedback) return null;
 
   const accentColors = {
     signal: {

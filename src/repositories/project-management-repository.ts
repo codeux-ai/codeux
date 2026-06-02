@@ -326,7 +326,10 @@ export class ProjectManagementRepository {
 
       const id = randomUUID();
       const now = new Date().toISOString();
-      const number = input.number !== undefined ? input.number : this.getNextSprintNumber(projectId);
+      const nextSprintNumber = this.getNextSprintNumber(projectId);
+      const number = typeof input.number === "number" && input.number > nextSprintNumber - 1
+        ? input.number
+        : nextSprintNumber;
       const name = input.name.trim();
       const slug = input.slug ? input.slug.toLowerCase() : this.createUniqueSprintSlug(projectId, name);
 

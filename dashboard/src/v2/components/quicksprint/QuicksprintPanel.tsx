@@ -421,7 +421,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
       {/* ═══ Planning Overlay ═══ */}
       <PlanningProgressOverlay
-        isBusy={isBusy && !isOverlayDismissed}
+        isBusy={isBusy}
+        isDismissed={isOverlayDismissed}
         feedback={feedback}
         planningEta={planningEta}
         elapsedMs={elapsedMs}

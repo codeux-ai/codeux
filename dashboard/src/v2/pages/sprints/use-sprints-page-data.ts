@@ -111,6 +111,7 @@ export function useSprintsPageData() {
   const [quicksprintTemplates, setQuicksprintTemplates] = useState<QuicksprintTemplateRecord[]>([]);
   const [quicksprintLoading, setQuicksprintLoading] = useState(false);
   const [planningEta, setPlanningEta] = useState(DEFAULT_PLANNING_ETA_MS);
+  const [pendingSprintNumberReservations, setPendingSprintNumberReservations] = useState<Set<number>>(new Set());
 
   const { feedback, setError, clearFeedback } = useActionFeedback();
 
@@ -196,12 +197,37 @@ export function useSprintsPageData() {
     });
   }, [selectedProject?.id, effectiveSettings]);
 
-  const nextSprintNumber = useMemo(() => (
-    sprints.reduce((maxNumber: number, sprint: Sprint) => Math.max(maxNumber, sprint.number || 0), 0) + 1
+  const persistedMaxSprintNumber = useMemo(() => (
+    sprints.reduce((maxNumber: number, sprint: Sprint) => Math.max(maxNumber, sprint.number || 0), 0)
   ), [sprints]);
+  const nextSprintNumber = useMemo(() => (
+    persistedMaxSprintNumber + pendingSprintNumberReservations.size + 1
+  ), [pendingSprintNumberReservations.size, persistedMaxSprintNumber]);
   const sprintKeyPrefix = effectiveSettings?.settings.git.sprintKeyPrefix || "SPR";
   const defaultAgentRouting = effectiveSettings?.settings.agents.routing;
   const nextId = `${sprintKeyPrefix}-${String(nextSprintNumber).padStart(2, "0")}`;
+
+  const reserveNextSprintNumber = useCallback((): number => {
+    let reservedNumber = persistedMaxSprintNumber + 1;
+    setPendingSprintNumberReservations((current) => {
+      reservedNumber = persistedMaxSprintNumber + current.size + 1;
+      const next = new Set(current);
+      next.add(reservedNumber);
+      return next;
+    });
+    return reservedNumber;
+  }, [persistedMaxSprintNumber]);
+
+  const releaseSprintNumberReservation = useCallback((reservedNumber: number): void => {
+    setPendingSprintNumberReservations((current) => {
+      if (!current.has(reservedNumber)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.delete(reservedNumber);
+      return next;
+    });
+  }, []);
 
   const actualActiveRunsBySprintId = useMemo(() => {
     const map = new Map<string, { id: string; status: string }>();
@@ -556,39 +582,46 @@ export function useSprintsPageData() {
       return;
     }
 
-    const created = await createSprint(selectedProject.id, {
-      name: payload.name,
-      goal,
-      originalPrompt: payload.originalPrompt,
-      linkedIssues,
-      number: numberOverride !== undefined ? numberOverride : nextSprintNumber,
-      ...(slugOverride !== undefined ? { slug: slugOverride } : {}),
-      status: "idle",
-      showcasePinned: true,
-      startDate: null,
-      endDate: null,
-    });
+    const reservedNumber = numberOverride === undefined ? reserveNextSprintNumber() : null;
+    try {
+      const created = await createSprint(selectedProject.id, {
+        name: payload.name,
+        goal,
+        originalPrompt: payload.originalPrompt,
+        linkedIssues,
+        number: numberOverride !== undefined ? numberOverride : reservedNumber,
+        ...(slugOverride !== undefined ? { slug: slugOverride } : {}),
+        status: "idle",
+        showcasePinned: true,
+        startDate: null,
+        endDate: null,
+      });
 
-    if (payload.submitMode === "plan_only") {
-      await planSprint(selectedProject.id, created.id, {
-        autoStart: false,
-        clientRequestId: payload.clientRequestId,
-        planningAgentPresetId: payload.planningAgentPresetId || undefined,
-        overrides,
-      }, payload.signal);
-      await refreshPlanningEta(selectedProject.id);
-    } else if (payload.submitMode === "plan_and_start") {
-      await planSprint(selectedProject.id, created.id, {
-        autoStart: true,
-        clientRequestId: payload.clientRequestId,
-        planningAgentPresetId: payload.planningAgentPresetId || undefined,
-        overrides,
-      }, payload.signal);
-      await refreshPlanningEta(selectedProject.id);
+      if (payload.submitMode === "plan_only") {
+        await planSprint(selectedProject.id, created.id, {
+          autoStart: false,
+          clientRequestId: payload.clientRequestId,
+          planningAgentPresetId: payload.planningAgentPresetId || undefined,
+          overrides,
+        }, payload.signal);
+        await refreshPlanningEta(selectedProject.id);
+      } else if (payload.submitMode === "plan_and_start") {
+        await planSprint(selectedProject.id, created.id, {
+          autoStart: true,
+          clientRequestId: payload.clientRequestId,
+          planningAgentPresetId: payload.planningAgentPresetId || undefined,
+          overrides,
+        }, payload.signal);
+        await refreshPlanningEta(selectedProject.id);
+      }
+
+      await Promise.all([refresh(), refreshExecution()]);
+    } finally {
+      if (reservedNumber !== null) {
+        releaseSprintNumberReservation(reservedNumber);
+      }
     }
-
-    await Promise.all([refresh(), refreshExecution()]);
-  }, [editingSprint, nextSprintNumber, refresh, refreshExecution, refreshPlanningEta, selectedProject, sprintKeyPrefix]);
+  }, [editingSprint, refresh, refreshExecution, refreshPlanningEta, releaseSprintNumberReservation, reserveNextSprintNumber, selectedProject, sprintKeyPrefix]);
 
   const handleImprovePrompt = useCallback(async (draft: ImprovePromptInput, signal?: AbortSignal): Promise<string> => {
     if (!selectedProject) {
@@ -690,6 +723,7 @@ export function useSprintsPageData() {
 
   const handleQuicksprintExecute = useCallback(async (templateId: string, taskCount: number, submitMode: string, additionalPrompt?: string, routeOverride?: PlanningRouteOption | null, modelOverride?: string | null) => {
     if (!selectedProject) return;
+    const reservedNumber = reserveNextSprintNumber();
     try {
       await executeQuicksprint(selectedProject.id, {
         templateId,
@@ -704,8 +738,10 @@ export function useSprintsPageData() {
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error));
       throw error;
+    } finally {
+      releaseSprintNumberReservation(reservedNumber);
     }
-  }, [refresh, refreshPlanningEta, selectedProject, setError]);
+  }, [refresh, refreshPlanningEta, releaseSprintNumberReservation, reserveNextSprintNumber, selectedProject, setError]);
 
   const reloadQuicksprintTemplates = useCallback(async () => {
     if (!selectedProject) return;

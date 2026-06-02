@@ -15,6 +15,18 @@ interface DropdownMenuProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   triggerRef?: RefObject<HTMLElement>;
+  computePosition?: (args: {
+    triggerRect: DOMRect;
+    menuRect: DOMRect;
+    viewport: { width: number; height: number };
+    defaultPosition: Position;
+    defaultAlign: Alignment;
+    gap: number;
+  }) => {
+    top: number;
+    left: number;
+    transformOrigin?: string;
+  };
 }
 
 export const DropdownMenu = ({
@@ -27,6 +39,7 @@ export const DropdownMenu = ({
   isOpen,
   onOpenChange,
   triggerRef: externalTriggerRef,
+  computePosition,
 }: DropdownMenuProps) => {
   const isReducedMotion = useReducedMotion();
   const [isRendered, setIsRendered] = useState(false);
@@ -34,6 +47,7 @@ export const DropdownMenu = ({
   const triggerRef = externalTriggerRef || localTriggerRef;
   const menuRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const [transformOrigin, setTransformOrigin] = useState<string>("top center");
 
   // Generate a unique ID for ARIA wiring if none exists
   const [menuId] = useState(() => `menu-${Math.random().toString(36).substr(2, 9)}`);
@@ -41,16 +55,35 @@ export const DropdownMenu = ({
   const updatePosition = useCallback(() => {
     if (!triggerRef.current || !menuRef.current) return;
 
+    const triggerRect = triggerRef.current.getBoundingClientRect();
+    const menuRect = menuRef.current.getBoundingClientRect();
+    if (computePosition) {
+      const custom = computePosition({
+        triggerRect,
+        menuRect,
+        viewport: {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        },
+        defaultPosition: position,
+        defaultAlign: align,
+        gap,
+      });
+      setCoords({ top: custom.top, left: custom.left });
+      setTransformOrigin(custom.transformOrigin ?? "top center");
+      return;
+    }
     const { top, left } = calculatePosition({
-      triggerRect: triggerRef.current.getBoundingClientRect(),
-      contentRect: menuRef.current.getBoundingClientRect(),
+      triggerRect,
+      contentRect: menuRect,
       position,
       align,
       gap,
       padding: 8,
     });
     setCoords({ top, left });
-  }, [align, gap, position, triggerRef]);
+    setTransformOrigin("top center");
+  }, [align, computePosition, gap, position, triggerRef]);
 
   useEffect(() => {
     if (isOpen) {
@@ -158,7 +191,7 @@ export const DropdownMenu = ({
             ref={menuRef}
             role="menu"
             className={`fixed z-[100] bg-white/92 dark:bg-void-800/92 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] shadow-md dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-[1.75rem] p-2 ${className}`}
-            style={{ top: coords.top, left: coords.left }}
+            style={{ top: coords.top, left: coords.left, transformOrigin }}
             onClick={(e) => e.stopPropagation()}
           >
             {content}

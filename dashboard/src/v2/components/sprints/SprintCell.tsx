@@ -29,6 +29,7 @@ import { DropdownMenu } from "../ui/DropdownMenu.js";
 import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
+import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -287,6 +288,11 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
             position="top"
             align="end"
             className="min-w-[10rem]"
+            computePosition={({ triggerRect, menuRect, viewport }) => computeSprintActionMenuPosition(
+              triggerRect,
+              viewport,
+              { width: menuRect.width, height: menuRect.height },
+            )}
             content={
               <SprintActionMenu
                 sprint={sprint}
