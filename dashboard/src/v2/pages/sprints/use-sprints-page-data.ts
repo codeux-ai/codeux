@@ -113,6 +113,8 @@ export function useSprintsPageData() {
   const [planningEta, setPlanningEta] = useState(DEFAULT_PLANNING_ETA_MS);
   const [pendingSprintNumberReservations, setPendingSprintNumberReservations] = useState<Set<number>>(new Set());
 
+  const inFlightStartIds = useRef<Set<string>>(new Set());
+
   const { feedback, setError, clearFeedback } = useActionFeedback();
 
   const { projects, selectedProject, createProject } = useProjectData();
@@ -465,6 +467,9 @@ export function useSprintsPageData() {
     if (pendingActionIds.has(startActionId)) {
       return;
     }
+    if (inFlightStartIds.current.has(startActionId)) return;
+    inFlightStartIds.current.add(startActionId);
+
     setSuppressedRunningSprintIds((current) => {
       if (!current.has(sprintId)) {
         return current;
@@ -475,7 +480,7 @@ export function useSprintsPageData() {
     });
     void runSprintAction(startActionId, sprintId, async () => {
       await orchestrateSprint(selectedProject.id, sprintId);
-    }, { waitForActiveRun: true });
+    }, { waitForActiveRun: true }).finally(() => inFlightStartIds.current.delete(startActionId));
   }, [activeRunsBySprintId, pendingActionIds, runSprintAction, selectedProject]);
 
   const handleSprintPauseResume = useCallback((sprintId: string) => {
