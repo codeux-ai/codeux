@@ -221,6 +221,7 @@ Legacy runtime:
 - Sprint creation now uses an in-page composer that replaces the showcase while writing, instead of opening a detached modal
 - The sprint composer supports `Plan & Start`, `Plan Only`, and `Save Draft`.
 - The sprint composer prompt area renders a full-width editor until an original prompt exists, at which point it uses a split layout.
+- Sprint key previews now reserve pending creation numbers in the page state, so opening `New Sprint` or `Quicksprint` while another create/plan request is still pending advances the visible key sequentially (for example `SPR-02` then `SPR-03`) and releases reservations after refresh or failure.
 - When planning a sprint (`Plan Only` or `Plan & Start`), the pre-improvement raw prompt is saved to `originalPrompt` if it isn't already set, keeping the worker-improved text as the goal.
 - The planning feedback overlay surfaces both an ETA countdown and an elapsed runtime timer. ETA comes from `GET /api/projects/:projectId/sprints/composer/eta`, computed server-side from the latest 10 planning invocations for the selected project, with a 3:00 fallback when no usable sample exists.
 - When editing a sprint that already has planned tasks, the composer offers `Replan` (discard and regenerate subtasks), `Append Tasks` (open a task-creation modal pre-scoped to the sprint with dependency selection from existing tasks), and `Save Draft` (update name/goal only)
