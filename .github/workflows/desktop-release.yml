@@ -62,6 +62,24 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Restore desktop build caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/vite
+            .cache/vitest
+            .cache/tsc
+            .cache/electron-runtime
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-node-22-electron-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-node-22-electron-
+
       - name: Install Linux packaging dependencies
         if: runner.os == 'Linux'
         run: |

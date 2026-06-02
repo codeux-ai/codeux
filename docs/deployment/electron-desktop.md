@@ -22,6 +22,21 @@ The native picker is exposed through the isolated preload bridge:
 
 Renderer Node access remains disabled. The preload exposes only this narrow IPC surface.
 
+The desktop BrowserWindow is frameless and transparent on every supported platform so the renderer-level `.app-shell` clip can expose real rounded window corners. The shell uses a fixed corner radius and subtle gray border in normal windowed mode, then removes that treatment when Electron reports maximized or fullscreen state, matching the host operating system's square maximized-window behavior. Keep the native BrowserWindow `backgroundColor` transparent when changing package settings; an opaque native background will make the corners appear square even if the renderer content is clipped.
+
+## Installer Experience
+
+Windows release builds use an assisted NSIS installer instead of a one-click installer. The installer:
+
+- Shows the MIT open source license from `build/installer-license.txt` and requires acceptance before installation continues.
+- Allows the user to choose the installation directory.
+- Shows a dedicated beta notice page after directory selection with the copy: "Code UX is still in beta. Things may not work as expected, and some behavior can change between releases."
+- Uses generated Code UX Windows icon and NSIS wizard bitmap assets from `build/icon.ico`, `build/installerHeader.bmp`, and `build/installerSidebar.bmp`.
+
+The beta notice is intentionally installer UI copy only. It is not added to the license text and does not require a separate acknowledgement checkbox.
+
+macOS DMG builds include the MIT license resource through `build/license_en.txt` where supported by Electron Builder. Linux package formats currently include the packaged `LICENSE.txt` resource but do not provide an equivalent required license checkbox flow.
+
 ## Build Commands
 
 - `pnpm run electron:dev`: build and launch the desktop app from the local workspace.
@@ -30,11 +45,24 @@ Renderer Node access remains disabled. The preload exposes only this narrow IPC 
 - `pnpm run electron:dist:linux`: build Linux targets.
 - `pnpm run electron:dist:mac`: build macOS targets.
 - `pnpm run electron:dist:win`: build Windows targets.
+- `pnpm run electron:benchmark:win`: build Windows installers with `normal` and `store` compression and write timing/size data to `release/electron-benchmark/summary.json`.
 - `pnpm run electron:install-deps`: rebuild native app dependencies for Electron.
 
 The release output is written to `release/electron/`.
 
-Electron package builds run `pnpm run electron:prepare-deps` before Electron Builder. That script creates a production-only, hoisted runtime dependency tree in `.cache/electron-runtime/node_modules`, and Electron Builder copies it to `resources/node_modules` so ASAR-packaged builds can resolve pnpm transitive dependencies at runtime.
+Electron package builds run `pnpm run electron:prepare-deps` before Electron Builder. That script creates a production-only, hoisted runtime dependency tree in `.cache/electron-runtime/node_modules`, prunes non-runtime package files, generates deterministic PNG/ICO/BMP desktop artwork, and Electron Builder copies it to `resources/node_modules` so ASAR-packaged builds can resolve pnpm transitive dependencies at runtime.
+
+The runtime dependency tree is fingerprinted from production dependencies and the lockfile. If the fingerprint matches a previous run, `electron:prepare-deps` reuses the existing tree instead of deleting and reinstalling it.
+
+Dashboard-only libraries belong in `devDependencies` because Vite bundles them into `dashboard/dist/`; keeping them out of production dependencies prevents Electron packages from copying unused source packages into `resources/node_modules`.
+
+Native runtime binaries are pruned during `electron:prepare-deps` to the current native build platform and architecture. Native release runners are expected for production artifacts. Set `CODE_UX_ELECTRON_KEEP_ALL_NATIVE_BINARIES=1` only for diagnostic cross-packaging where all bundled native binaries must be preserved.
+
+Electron runtime locales are limited to `en-US` because the desktop UI is currently English-only. Add languages to `electronLanguages` in `electron-builder.config.cjs` when localized UI support is shipped.
+
+Windows installer compression defaults to `normal`. Set `CODE_UX_ELECTRON_COMPRESSION=store` to prioritize faster package creation and extraction during benchmarking, or run `pnpm run electron:benchmark:win` to compare both modes before changing the default.
+
+Linux `electron:pack` benchmark on WSL/Linux after the first installer optimization pass was 17.61s with a warm runtime dependency cache and produced a 595 MB unpacked app. After pruning non-target `onnxruntime-node` native binaries and unused Electron locales, the same local benchmark completed in 15.38s and produced a 373 MB unpacked app.
 
 ## GitHub Release Builds
 
@@ -49,6 +77,8 @@ The workflow builds on native runners:
 Each job uploads its generated files as a workflow artifact. For published GitHub Releases, the same generated files are also attached to the release.
 
 Release builds set `CSC_IDENTITY_AUTO_DISCOVERY=false`, so the default workflow produces unsigned desktop artifacts unless signing secrets and Electron Builder signing configuration are added later.
+
+The release workflow caches pnpm downloads, TypeScript/Vite caches, Electron downloads, Electron Builder caches, and `.cache/electron-runtime` to reduce repeated desktop build time on native runners.
 
 ## Cross-Platform Compatibility Findings
 

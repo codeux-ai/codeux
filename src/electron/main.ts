@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
-import dotenv from "dotenv";
 import * as fs from "fs";
 import Module from "module";
 import * as path from "path";
@@ -123,8 +122,8 @@ function createMainWindow(url: string): BrowserWindow {
     titleBarStyle: isMac ? "hiddenInset" : "hidden",
     titleBarOverlay: false,
     trafficLightPosition: isMac ? { x: 16, y: 16 } : undefined,
-    transparent: !isWindowsPackagedApp,
-    backgroundColor: isWindowsPackagedApp ? "#0D0F12" : "#00000000",
+    transparent: true,
+    backgroundColor: "#00000000",
     backgroundMaterial: "none",
     roundedCorners: true,
     hasShadow: true,
@@ -205,6 +204,7 @@ function createMainWindow(url: string): BrowserWindow {
 async function startServer(): Promise<string> {
   process.env.CODE_UX_DISABLE_MCP_STDIO = "1";
   registerPackagedNodeModules();
+  const dotenv = await import("dotenv");
   dotenv.config({ path: path.join(projectRoot, ".env"), quiet: true });
 
   const [{ loadAppConfig }, { JulesAgentServer }] = await Promise.all([

@@ -21,20 +21,46 @@ html.has-bg-image {
 }
 
 html.is-electron,
-html.is-electron body {
+html.is-electron body,
+html.is-electron #root {
   background: transparent !important;
+  height: 100%;
+  margin: 0;
   overflow: hidden;
+  width: 100%;
+}
+
+html.is-electron {
+  --electron-window-border-color: rgba(15, 23, 42, 0.18);
+  --electron-window-radius: 14px;
+}
+
+html.is-electron.dark {
+  --electron-window-border-color: rgba(255, 255, 255, 0.16);
 }
 
 html.is-electron .app-shell {
-  border-radius: 14px;
-  overflow: hidden;
-  clip-path: inset(0 round 14px);
+  background-clip: padding-box;
+  border: 1px solid var(--electron-window-border-color);
+  border-radius: var(--electron-window-radius);
+  box-sizing: border-box;
+  clip-path: inset(0 round var(--electron-window-radius));
+  height: 100vh;
+  isolation: isolate;
+  min-height: 100vh;
+  overflow: clip;
+}
+
+@supports not (overflow: clip) {
+  html.is-electron .app-shell {
+    overflow: hidden;
+  }
 }
 
 html.is-electron.is-maximized .app-shell,
 html.is-electron.is-fullscreen .app-shell {
-  border-radius: 0;
+  border-color: transparent;
+  --electron-window-radius: 0px;
   clip-path: none;
 }
 
