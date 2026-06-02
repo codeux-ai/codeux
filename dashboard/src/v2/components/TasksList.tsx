@@ -5,10 +5,12 @@ import { Flip } from "gsap/Flip";
 
 gsap.registerPlugin(Flip);
 import { TaskRow } from "./ui/TaskRow.js";
+import { SprintRow } from "./ui/SprintRow.js";
 import { FilterStrip } from "./ui/FilterStrip.js";
 import { SkeletonRow } from "./layout/SkeletonLoader.js";
 import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../lib/overview-streams.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import type { Sprint } from "../types.js";
 type TaskFilter = "All Tasks" | "Running" | "Queued" | "Completed";
 
 const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
@@ -40,6 +42,11 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
 
     const activeSprintIds = useMemo(() => deriveActiveSprintIds(sprints), [sprints]);
     const activeTasks = useMemo(() => filterTasksToActiveSprints(tasks, activeSprintIds), [tasks, activeSprintIds]);
+
+    const activeSprints = useMemo(() => 
+        sprints.filter(s => s.status === "running" || s.status === "paused") as Sprint[], 
+        [sprints]
+    );
 
     const filteredTasks = useMemo(() => activeTasks.filter(task => {
         if (activeFilter === "All Tasks") return true;
@@ -112,10 +119,22 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         <SkeletonRow />
                         <SkeletonRow />
                     </>
-                ) : filteredTasks.length > 0 ? (
-                    filteredTasks.map((task) => (
-                        <div key={task.id} data-flip-id={task.id} className="task-flip-item"><TaskRow task={task} /></div>
-                    ))
+                ) : (activeSprints.length > 0 || filteredTasks.length > 0) ? (
+                    <>
+                        {activeSprints.map((sprint) => (
+                            <div key={`sprint-${sprint.id}`} data-flip-id={`sprint-${sprint.id}`} className="sprint-flip-item">
+                                <SprintRow 
+                                    sprint={sprint} 
+                                    isRunning={sprint.status === "running"} 
+                                    onStartStop={undefined} 
+                                    startStopBusy={false} 
+                                />
+                            </div>
+                        ))}
+                        {filteredTasks.map((task) => (
+                            <div key={task.id} data-flip-id={task.id} className="task-flip-item"><TaskRow task={task} /></div>
+                        ))}
+                    </>
                 ) : (
                     <div data-flip-id="empty-state" className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
                         <svg className="w-12 h-12 mb-4 text-slate-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
