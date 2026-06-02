@@ -425,7 +425,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,184,0,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.1),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,184,0,0.09),transparent_34%)]" />
 
       <PlanningProgressOverlay
-        isBusy={isBusy && !isOverlayDismissed}
+        isBusy={isBusy}
+        isDismissed={isOverlayDismissed}
         feedback={feedback}
         planningEta={planningEta}
         elapsedMs={elapsedMs}
@@ -794,22 +795,6 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     </div>
                   </div>
                 </button>
-                <div className="flex shrink-0 items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={handleStartNewSprint}
-                    className="rounded-lg bg-slate-900 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-                  >
-                    New Sprint
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="rounded-lg border border-status-red/20 bg-status-red/[0.06] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/[0.12]"
-                  >
-                    Cancel Active Request
-                  </button>
-                </div>
               </div>
             )}
             <button
