@@ -9,6 +9,7 @@ export type TaskStatus = "pending" | "in_progress" | "coding_completed" | "compl
 export type TaskPriority = "critical" | "high" | "medium" | "low";
 export type TaskExecutorType = "auto" | "docker_cli" | "jules";
 export type GitProvider = "github" | "gitlab" | "local";
+export type ProjectInitMode = "existing" | "new-local" | "new-remote";
 
 export interface ProjectSummary {
   id: string;
@@ -171,6 +172,9 @@ export interface CreateProjectInput {
   defaultBranch?: string;
   featureBranchPrefix?: string;
   status?: ProjectStatus;
+  initMode?: ProjectInitMode;           // omitted = "existing" (backward compat)
+  isPrivate?: boolean;                  // new-remote: repo visibility, default true
+  remoteProvider?: "github" | "gitlab"; // new-remote: which hosting provider
 }
 
 export interface UpdateProjectInput {
