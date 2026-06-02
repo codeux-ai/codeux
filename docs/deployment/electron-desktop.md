@@ -54,7 +54,13 @@ The runtime dependency tree is fingerprinted from production dependencies and th
 
 Dashboard-only libraries belong in `devDependencies` because Vite bundles them into `dashboard/dist/`; keeping them out of production dependencies prevents Electron packages from copying unused source packages into `resources/node_modules`.
 
+Native runtime binaries are pruned during `electron:prepare-deps` to the current native build platform and architecture. Native release runners are expected for production artifacts. Set `CODE_UX_ELECTRON_KEEP_ALL_NATIVE_BINARIES=1` only for diagnostic cross-packaging where all bundled native binaries must be preserved.
+
+Electron runtime locales are limited to `en-US` because the desktop UI is currently English-only. Add languages to `electronLanguages` in `electron-builder.config.cjs` when localized UI support is shipped.
+
 Windows installer compression defaults to `normal`. Set `CODE_UX_ELECTRON_COMPRESSION=store` to prioritize faster package creation and extraction during benchmarking, or run `pnpm run electron:benchmark:win` to compare both modes before changing the default.
+
+Linux `electron:pack` benchmark on WSL/Linux after the first installer optimization pass was 17.61s with a warm runtime dependency cache and produced a 595 MB unpacked app. After pruning non-target `onnxruntime-node` native binaries and unused Electron locales, the same local benchmark completed in 15.38s and produced a 373 MB unpacked app.
 
 ## GitHub Release Builds
 

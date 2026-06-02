@@ -22,6 +22,7 @@ module.exports = {
   productName: "Code UX",
   artifactName: "Code-UX-${version}-${os}-${arch}.${ext}",
   compression,
+  electronLanguages: ["en-US"],
   directories: {
     output,
   },

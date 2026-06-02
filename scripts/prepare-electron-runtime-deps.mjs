@@ -23,7 +23,10 @@ const fingerprintPath = path.join(runtimeDir, ".runtime-fingerprint");
 const packageJson = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 const lockfile = readFileSync(path.join(projectRoot, "pnpm-lock.yaml"), "utf8");
 const workspace = readFileSync(path.join(projectRoot, "pnpm-workspace.yaml"), "utf8");
-const pruneVersion = 1;
+const pruneVersion = 2;
+const targetPlatform = process.env.CODE_UX_ELECTRON_TARGET_PLATFORM || process.platform;
+const targetArch = process.env.CODE_UX_ELECTRON_TARGET_ARCH || process.arch;
+const keepAllNativeBinaries = process.env.CODE_UX_ELECTRON_KEEP_ALL_NATIVE_BINARIES === "1";
 
 const fingerprint = crypto
   .createHash("sha256")
@@ -31,6 +34,9 @@ const fingerprint = crypto
     packageManager: packageJson.packageManager,
     dependencies: packageJson.dependencies,
     pruneVersion,
+    targetPlatform,
+    targetArch,
+    keepAllNativeBinaries,
   }))
   .update(lockfile)
   .update(workspace)
@@ -115,6 +121,59 @@ function pruneTree(dir) {
   }
 }
 
+function normalizeNativePlatform(platform) {
+  if (platform === "darwin" || platform === "win32" || platform === "linux") {
+    return platform;
+  }
+  return platform;
+}
+
+function normalizeNativeArch(arch) {
+  if (arch === "x64" || arch === "arm64") {
+    return arch;
+  }
+  return arch;
+}
+
+function pruneOnnxRuntimeNativeBinaries(rootDir) {
+  if (keepAllNativeBinaries) {
+    return;
+  }
+
+  const nativeRoot = path.join(
+    rootDir,
+    ".pnpm",
+    "onnxruntime-node@1.24.3",
+    "node_modules",
+    "onnxruntime-node",
+    "bin",
+    "napi-v6",
+  );
+  if (!existsSync(nativeRoot)) {
+    return;
+  }
+
+  const wantedPlatform = normalizeNativePlatform(targetPlatform);
+  const wantedArch = normalizeNativeArch(targetArch);
+
+  for (const platformEntry of readdirSync(nativeRoot, { withFileTypes: true })) {
+    if (!platformEntry.isDirectory()) {
+      continue;
+    }
+    const platformPath = path.join(nativeRoot, platformEntry.name);
+    if (platformEntry.name !== wantedPlatform) {
+      rmSync(platformPath, { recursive: true, force: true });
+      continue;
+    }
+
+    for (const archEntry of readdirSync(platformPath, { withFileTypes: true })) {
+      if (archEntry.isDirectory() && archEntry.name !== wantedArch) {
+        rmSync(path.join(platformPath, archEntry.name), { recursive: true, force: true });
+      }
+    }
+  }
+}
+
 function countFiles(dir) {
   if (!existsSync(dir)) {
     return 0;
@@ -148,6 +207,7 @@ function directorySize(dir) {
 }
 
 pruneTree(nodeModulesDir);
+pruneOnnxRuntimeNativeBinaries(nodeModulesDir);
 writeFileSync(fingerprintPath, `${fingerprint}\n`);
 
 const fileCount = countFiles(nodeModulesDir);
