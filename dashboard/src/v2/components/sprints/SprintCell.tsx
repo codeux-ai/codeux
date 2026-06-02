@@ -51,6 +51,12 @@ const statusMap: Record<SprintStatus, {
   idle: { ring: "", text: "text-signal-600 dark:text-signal-300", icon: Clock3, label: "Draft", accentHex: "#00E0A0" },
 };
 
+const ATTENTION_OVERRIDE_MAP: Partial<Record<string, { label: string; text: string; accentHex: string }>> = {
+  merge_required: { label: "Merge", text: "text-purple-600 dark:text-purple-400", accentHex: "#A855F7" },
+  merge_conflict: { label: "Conflict", text: "text-status-red", accentHex: "#E3000F" },
+  ci_fix_required: { label: "CI", text: "text-blue-600 dark:text-blue-400", accentHex: "#3B82F6" },
+};
+
 interface SprintCellProps {
   sprint: Sprint;
   isEven: boolean;
@@ -95,6 +101,15 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const state = statusMap[sprint.status];
+
+  const attentionOverride = (sprint.status === "running" || sprint.status === "paused") && humanIntervention?.attentionType
+    ? ATTENTION_OVERRIDE_MAP[humanIntervention.attentionType]
+    : undefined;
+
+  const effectiveLabel = attentionOverride?.label ?? state.label;
+  const effectiveTextTone = attentionOverride?.text ?? state.text;
+  const effectiveAccentHex = attentionOverride?.accentHex ?? state.accentHex;
+
   const StatusIcon = state.icon;
   const isCompleted = sprint.status === "completed";
   const isRunning = sprint.status === "running";
@@ -176,14 +191,14 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
           <div
             className="absolute inset-0 rounded-[inherit] border border-status-green/50 dark:mix-blend-screen"
             style={{
-              borderColor: `${state.accentHex}70`,
+              borderColor: `${effectiveAccentHex}70`,
             }}
           />
           {/* Breathtaking ambient breathing glow */}
           <div
             className="absolute inset-0 rounded-[inherit] animate-[pulse_3.5s_ease-in-out_infinite]"
             style={{
-              boxShadow: `0 0 20px ${state.accentHex}40, inset 0 0 10px ${state.accentHex}20`,
+              boxShadow: `0 0 20px ${effectiveAccentHex}40, inset 0 0 10px ${effectiveAccentHex}20`,
             }}
           />
         </div>
@@ -209,9 +224,9 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
       )}
 
       <div className="relative z-20 flex h-full w-full flex-col items-center justify-center p-8 text-center">
-        <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${state.text}`}>
+        <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${effectiveTextTone}`}>
           <StatusIcon className={`h-3.5 w-3.5 ${isRunning ? "animate-pulse" : ""}`} strokeWidth={2.5} />
-          <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{state.label}</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{effectiveLabel}</span>
         </div>
 
         <div className={`absolute left-7 top-7 inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] ${accentColor}`}>

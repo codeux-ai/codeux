@@ -38,6 +38,21 @@ const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
   idle: "border-signal-500/25 bg-signal-500/10 text-signal-700 dark:text-signal-300",
 };
 
+const ATTENTION_BADGE_OVERRIDES: Partial<Record<string, { tone: string; label: string }>> = {
+  merge_required: {
+    tone: "border-purple-500/25 bg-purple-500/10 text-purple-600 dark:text-purple-300",
+    label: "Merge",
+  },
+  merge_conflict: {
+    tone: "border-status-red/25 bg-status-red/10 text-status-red",
+    label: "Conflict",
+  },
+  ci_fix_required: {
+    tone: "border-blue-500/25 bg-blue-500/10 text-blue-600 dark:text-blue-300",
+    label: "CI",
+  },
+};
+
 const PROGRESS_TONES: Record<SprintStatus, string> = {
   running: "from-status-green to-signal-500",
   paused: "from-ember-500 to-ember-400",
@@ -135,6 +150,12 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       : "lg:border-black/[0.06] lg:bg-slate-50/80 dark:lg:border-white/[0.07] dark:lg:bg-white/[0.03]";
   const progressTone = PROGRESS_TONES[sprint.status];
 
+  const attentionOverride = humanIntervention?.attentionType
+    ? ATTENTION_BADGE_OVERRIDES[humanIntervention.attentionType]
+    : undefined;
+  const badgeTone = attentionOverride?.tone ?? STATUS_BADGE_TONES[sprint.status];
+  const badgeLabel = attentionOverride?.label ?? STATUS_LABELS[sprint.status];
+
   return (
     <TableRow
       className={`group transition-all duration-300 hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${isDeletePending ? "grayscale opacity-50" : ""} hover:bg-[var(--bg-hover-subtle)]`}
@@ -216,8 +237,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
         <div className="flex flex-wrap items-center gap-2 lg:flex-col lg:items-start">
           <span className="text-[10px] font-bold text-slate-400 lg:hidden">Status</span>
-          <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${STATUS_BADGE_TONES[sprint.status]}`}>
-            {STATUS_LABELS[sprint.status]}
+          <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
+            {badgeLabel}
           </span>
         </div>
       </TableCell>
