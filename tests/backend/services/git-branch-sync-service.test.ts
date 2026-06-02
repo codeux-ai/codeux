@@ -181,6 +181,47 @@ describe("git branch sync service", () => {
     });
   });
 
+  it("falls back to a whole-origin fetch when the branch was never pushed (no file changes / no PR)", async () => {
+    const runner = vi.fn()
+      // remote get-url origin
+      .mockResolvedValueOnce({ stdout: "git@github.com:owner/repo.git\n", stderr: "", exitCode: 0 })
+      // targeted fetch fails because the branch does not exist on the remote
+      .mockRejectedValueOnce(new Error(
+        "git fetch origin --prune +refs/heads/task/no-changes:refs/remotes/origin/task/no-changes failed: " +
+        "fatal: couldn't find remote ref refs/heads/task/no-changes",
+      ))
+      // fallback prune fetch succeeds
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      // show-ref for the (still absent) remote branch fails -> returns early
+      .mockRejectedValueOnce(new Error("missing remote branch"));
+
+    await expect(syncRemoteBranchIfAvailable("/repo", "task/no-changes", runner)).resolves.toBe(true);
+
+    expect(runner).toHaveBeenNthCalledWith(2, "git", [
+      "fetch",
+      "origin",
+      "--prune",
+      "+refs/heads/task/no-changes:refs/remotes/origin/task/no-changes",
+    ], "/repo", undefined, {
+      timeoutMs: 120000,
+    });
+    expect(runner).toHaveBeenNthCalledWith(3, "git", ["fetch", "origin", "--prune"], "/repo", undefined, {
+      timeoutMs: 120000,
+    });
+  });
+
+  it("rethrows fetch failures that are not a missing remote ref", async () => {
+    const runner = vi.fn()
+      .mockResolvedValueOnce({ stdout: "git@github.com:owner/repo.git\n", stderr: "", exitCode: 0 })
+      .mockRejectedValueOnce(new Error("fatal: unable to access remote: Connection timed out"));
+
+    await expect(syncRemoteBranchIfAvailable("/repo", "task/no-changes", runner)).rejects.toThrow(
+      /Connection timed out/,
+    );
+    // No fallback prune fetch is attempted for unrelated failures.
+    expect(runner).toHaveBeenCalledTimes(2);
+  });
+
   it("fast-forwards a non-current local branch to origin when possible", async () => {
     const runner = vi.fn()
       .mockResolvedValueOnce({ stdout: "git@github.com:owner/repo.git\n", stderr: "", exitCode: 0 })
