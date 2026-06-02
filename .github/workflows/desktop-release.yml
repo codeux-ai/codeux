@@ -45,25 +45,25 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.33.0
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Restore desktop build caches
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             .cache/vite
@@ -76,9 +76,7 @@ jobs:
             ~/AppData/Local/electron-builder/Cache
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-          key: ${{ runner.os }}-node-22-electron-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
-          restore-keys: |
-            ${{ runner.os }}-node-22-electron-
+          key: ${{ runner.os }}-node-22-electron-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'vite.config.ts', 'vitest.config.ts', 'tsconfig.json', 'dashboard/tsconfig.json', 'electron-builder.config.cjs', 'scripts/prepare-electron-runtime-deps.mjs') }}
 
       - name: Install Linux packaging dependencies
         if: runner.os == 'Linux'

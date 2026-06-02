@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { JulesAgentServer } from "../../src/server/jules-agent-server.js";
+import { CodeUxServer } from "../../src/server/code-ux-server.js";
 import { loadAppConfig } from "../../src/config/app-config.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 describe("Smoke Test", () => {
-  it("should initialize JulesAgentServer and return tools without console errors", async () => {
+  it("should initialize CodeUxServer and return tools without console errors", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -22,7 +22,7 @@ describe("Smoke Test", () => {
     const appConfig = loadAppConfig(argv, projectRoot);
     
     // This should not throw the TypeError reported by the user
-    const server = new JulesAgentServer({ projectRoot, appConfig });
+    const server = new CodeUxServer({ projectRoot, appConfig });
     
     expect(server).toBeDefined();
 

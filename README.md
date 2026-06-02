@@ -279,6 +279,12 @@ For the full local CI equivalent:
 pnpm run ci
 ```
 
+GitHub Actions also runs the high-severity dependency audit after the consolidated CI command:
+
+```bash
+pnpm run audit
+```
+
 ## License
 
 Code UX is released under the [MIT License](./LICENSE).

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { main } from "../../src/index.js";
-import { JulesAgentServer } from "../../src/server/jules-agent-server.js";
+import { CodeUxServer } from "../../src/server/code-ux-server.js";
 import { loadAppConfig } from "../../src/config/app-config.js";
 
-vi.mock("../../src/server/jules-agent-server.js", () => {
+vi.mock("../../src/server/code-ux-server.js", () => {
   return {
-    JulesAgentServer: vi.fn().mockImplementation(function() {
+    CodeUxServer: vi.fn().mockImplementation(function() {
       return {
         run: vi.fn().mockResolvedValue(undefined),
       };
@@ -48,7 +48,7 @@ describe("index.ts main function", () => {
 
     expect(consoleLogSpy).toHaveBeenCalledWith("Code UX MCP Server");
     expect(processExitSpy).toHaveBeenCalledWith(0);
-    expect(JulesAgentServer).not.toHaveBeenCalled();
+    expect(CodeUxServer).not.toHaveBeenCalled();
   });
 
   it("should output help and exit with 0 when -h is provided", async () => {
@@ -56,22 +56,22 @@ describe("index.ts main function", () => {
 
     expect(consoleLogSpy).toHaveBeenCalledWith("Code UX MCP Server");
     expect(processExitSpy).toHaveBeenCalledWith(0);
-    expect(JulesAgentServer).not.toHaveBeenCalled();
+    expect(CodeUxServer).not.toHaveBeenCalled();
   });
 
   it("should instantiate the server and call run() for normal execution", async () => {
     await main(["node", "script"]);
 
     expect(loadAppConfig).toHaveBeenCalled();
-    expect(JulesAgentServer).toHaveBeenCalled();
-    const mockServerInstance = vi.mocked(JulesAgentServer).mock.results[0].value;
+    expect(CodeUxServer).toHaveBeenCalled();
+    const mockServerInstance = vi.mocked(CodeUxServer).mock.results[0].value;
     expect(mockServerInstance.run).toHaveBeenCalled();
     expect(processExitSpy).not.toHaveBeenCalled();
   });
 
   it("should catch errors thrown by server.run() and exit with 1", async () => {
     const error = new Error("Server crash");
-    vi.mocked(JulesAgentServer).mockImplementationOnce(function() {
+    vi.mocked(CodeUxServer).mockImplementationOnce(function() {
       return {
         run: vi.fn().mockRejectedValueOnce(error),
       } as any;
