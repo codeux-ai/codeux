@@ -26,6 +26,7 @@ vi.mock("gsap", () => ({
       return { revert: () => {} };
     },
     set: () => {},
+    killTweensOf: () => {},
   },
 }));
 
@@ -303,5 +304,61 @@ describe("SprintLedger Component", () => {
       // Redundant inline text should be absent
       expect(screen.queryByText("Intervention")).not.toBeInTheDocument();
     });
+  });
+
+  it("positions row action menu right-aligned and flips upward near viewport bottom", async () => {
+    const originalWidth = window.innerWidth;
+    const originalHeight = window.innerHeight;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1000 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function getRect() {
+      const el = this as HTMLElement;
+      if (el.getAttribute("title") === "Open sprint actions") {
+        return {
+          x: 920, y: 760, top: 760, left: 920, right: 960, bottom: 790, width: 40, height: 30,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+      if (
+        el.getAttribute("aria-haspopup") === "menu" &&
+        typeof el.className === "string" &&
+        el.className.includes("inline-flex cursor-pointer")
+      ) {
+        return {
+          x: 920, y: 760, top: 760, left: 920, right: 960, bottom: 790, width: 40, height: 30,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+      if (typeof el.className === "string" && el.className.includes("fixed z-[100]")) {
+        return {
+          x: 0, y: 0, top: 0, left: 0, right: 240, bottom: 180, width: 240, height: 180,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+      return {
+        x: 0, y: 0, top: 0, left: 0, right: 120, bottom: 32, width: 120, height: 32,
+        toJSON: () => ({}),
+      } as DOMRect;
+    });
+
+    render(<SprintLedger {...defaultProps} listWindow="all" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha Design")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getAllByTitle("Open sprint actions")[0]);
+
+    const menu = await screen.findByRole("menu");
+    const fixedMenu = menu as HTMLDivElement;
+    await waitFor(() => {
+      expect(fixedMenu.style.left).toBe("720px");
+      expect(fixedMenu.style.top).toBe("572px");
+    });
+
+    rectSpy.mockRestore();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: originalHeight });
   });
 });

@@ -259,6 +259,7 @@ Legacy runtime:
 - New sprints and quicksprints are showcased by default, showcased sprints are controlled by the heart toggle, and the showcase gallery is no longer capped to 3 sprint cells
 - Showcase pinning is now fully operator-controlled; pinned sprints remain in the gallery until explicitly unpinned, surviving transitions like sprint start, pause, and completion
 - Showcase heart controls in the sprint ledger remain available for completed sprints, so completed work can stay pinned in or be removed from the gallery manually
+- Sprint ledger row action menus and sprint showcase cell action menus now use sprint-scoped fixed-position math (`dashboard/src/v2/lib/sprint-menu-positioning.ts`) that right-aligns to the trigger edge, clamps inside viewport padding, and flips upward near the viewport bottom without changing shared dropdown behavior used by unrelated components
 - The sprint gallery selection is now the full set of showcased sprints, ordered newest-first by sprint creation time
 - The Sprints page top action row includes a `Hide Gallery` / `Show Gallery` control that collapses or restores the sprint gallery cells without affecting Import, Quicksprint, New Sprint, or the ledger.
 - On a fresh installation with no selected project, the Sprints page renders a polished project-scope placeholder with working `Add First Project` and `Manage Projects` actions; the first action opens the shared Add Project dialog directly
