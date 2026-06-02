@@ -1,7 +1,8 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
+import { useState } from "preact/hooks";
 import type { ExecutionInvocationRecord, AgentPreset } from "../../types.js";
 import { formatRelativeChatTime } from "../../lib/chat-time.js";
-import { Loader2 } from "lucide-preact";
+import { Loader2, BarChart3 } from "lucide-preact";
 import { ProviderLogo } from "../ui/ProviderLogo.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
@@ -40,6 +41,24 @@ const STATUS_STYLES: Record<string, { dot: string; text: string }> = {
 
 const DEFAULT_STATUS_STYLE = { dot: "bg-slate-400", text: "text-slate-500" };
 
+const STATS_VISIBILITY_KEY = "code-ux:invocation-stats-visible";
+
+const readStoredStatsVisibility = (): boolean => {
+  try {
+    return localStorage.getItem(STATS_VISIBILITY_KEY) !== "false";
+  } catch {
+    return true;
+  }
+};
+
+const persistStatsVisibility = (visible: boolean): void => {
+  try {
+    localStorage.setItem(STATS_VISIBILITY_KEY, visible ? "true" : "false");
+  } catch {
+    // ignore storage failures (private mode, quota, …)
+  }
+};
+
 interface StatCell {
   label: string;
   value: ComponentChildren;
@@ -55,8 +74,36 @@ export const InvocationListCard: FunctionComponent<{
   onSelect: (invocationId: string) => void;
   agentPresets?: AgentPreset[];
   sprintKeyPrefix?: string;
-}> = ({ invocations, selectedInvocationId, onSelect, agentPresets, sprintKeyPrefix = "SPR" }) => (
+}> = ({ invocations, selectedInvocationId, onSelect, agentPresets, sprintKeyPrefix = "SPR" }) => {
+  const [showStats, setShowStats] = useState(readStoredStatsVisibility);
+
+  const toggleStats = () => {
+    setShowStats((current) => {
+      const next = !current;
+      persistStatsVisibility(next);
+      return next;
+    });
+  };
+
+  return (
   <div className="space-y-3">
+    {/* List toolbar — toggle the per-card stat tables on/off */}
+    <div className="flex items-center justify-end px-1">
+      <button
+        type="button"
+        onClick={toggleStats}
+        aria-pressed={showStats}
+        title={showStats ? "Hide stats" : "Show stats"}
+        className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors ${
+          showStats
+            ? "border-signal-500/30 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400"
+            : "border-black/[0.07] bg-black/[0.02] text-slate-400 hover:text-slate-600 dark:border-white/[0.07] dark:bg-white/[0.02] dark:hover:text-slate-200"
+        }`}
+      >
+        <BarChart3 className="h-3.5 w-3.5" />
+        Stats
+      </button>
+    </div>
     {invocations.map((invocation) => {
       const accentHex = getInvocationAccent(invocation.status);
       const ss = STATUS_STYLES[invocation.status] || DEFAULT_STATUS_STYLE;
@@ -178,6 +225,7 @@ export const InvocationListCard: FunctionComponent<{
               </div>
 
               {/* Stat table — clean 2-column label/value grid */}
+              {showStats && (
               <div className="mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-black/[0.05] bg-black/[0.015] dark:border-white/[0.06] dark:bg-white/[0.02]">
                 {cells.map((cell, idx) => {
                   const full = cell.full || (stretchLast && idx === lastIndex);
@@ -199,6 +247,7 @@ export const InvocationListCard: FunctionComponent<{
                   );
                 })}
               </div>
+              )}
 
               {/* Invocation id — tiny, bottom-right */}
               <div className="mt-2 text-right font-mono text-[10px] text-slate-300 dark:text-slate-600">
@@ -210,4 +259,5 @@ export const InvocationListCard: FunctionComponent<{
       );
     })}
   </div>
-);
+  );
+};
