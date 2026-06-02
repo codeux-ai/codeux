@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
-import dotenv from "dotenv";
 import * as fs from "fs";
 import Module from "module";
 import * as path from "path";
@@ -205,6 +204,7 @@ function createMainWindow(url: string): BrowserWindow {
 async function startServer(): Promise<string> {
   process.env.CODE_UX_DISABLE_MCP_STDIO = "1";
   registerPackagedNodeModules();
+  const dotenv = await import("dotenv");
   dotenv.config({ path: path.join(projectRoot, ".env"), quiet: true });
 
   const [{ loadAppConfig }, { JulesAgentServer }] = await Promise.all([

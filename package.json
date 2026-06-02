@@ -17,11 +17,12 @@
     "electron:generate-icons": "node scripts/generate-electron-icons.mjs",
     "electron:prepare-deps": "node scripts/prepare-electron-runtime-deps.mjs && pnpm run electron:generate-icons",
     "electron:dev": "pnpm run build && electron dist/electron/main.js",
-    "electron:pack": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --dir",
-    "electron:dist": "pnpm run build && pnpm run electron:prepare-deps && electron-builder",
-    "electron:dist:linux": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --linux",
-    "electron:dist:mac": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --mac",
-    "electron:dist:win": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --win",
+    "electron:pack": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --config electron-builder.config.cjs --dir",
+    "electron:dist": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --config electron-builder.config.cjs",
+    "electron:dist:linux": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --config electron-builder.config.cjs --linux",
+    "electron:dist:mac": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --config electron-builder.config.cjs --mac",
+    "electron:dist:win": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --config electron-builder.config.cjs --win",
+    "electron:benchmark:win": "node scripts/benchmark-electron-windows.mjs",
     "electron:install-deps": "electron-builder install-app-deps",
     "test": "vitest run",
     "test:backend": "vitest run tests/backend",
@@ -39,103 +40,24 @@
     "dev:dashboard": "vite",
     "typecheck:dashboard": "tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo"
   },
-  "build": {
-    "appId": "com.codeux.desktop",
-    "productName": "Code UX",
-    "artifactName": "Code-UX-${version}-${os}-${arch}.${ext}",
-    "directories": {
-      "output": "release/electron"
-    },
-    "extraMetadata": {
-      "main": "dist/electron/main.js"
-    },
-    "icon": "build/icon.png",
-    "files": [
-      "dist/**",
-      "dashboard/dist/**",
-      "build/icon*.png",
-      "package.json",
-      "!**/*.map",
-      "!**/*.tsbuildinfo"
-    ],
-    "asar": true,
-    "asarUnpack": [
-      "node_modules/**/*.node",
-      "node_modules/onnxruntime-node/**"
-    ],
-    "extraResources": [
-      {
-        "from": ".cache/electron-runtime/node_modules",
-        "to": "node_modules"
-      },
-      {
-        "from": "build",
-        "to": "build",
-        "filter": [
-          "icon*.png"
-        ]
-      },
-      {
-        "from": ".code-ux",
-        "to": ".code-ux-defaults",
-        "filter": [
-          "agents/planning_agent.md",
-          "agents/project_manager.md",
-          "agents/quality_assurance_agent.md",
-          "agents/worker.md",
-          "container/setup.sh"
-        ]
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.developer-tools",
-      "target": [
-        "dmg",
-        "zip"
-      ]
-    },
-    "win": {
-      "icon": "build/icon.png",
-      "target": [
-        "nsis"
-      ]
-    },
-    "linux": {
-      "category": "Development",
-      "maintainer": "Pierre Voss <p.voss@codeux.ai>",
-      "target": [
-        "AppImage",
-        "deb",
-        "tar.gz"
-      ]
-    }
-  },
   "dependencies": {
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@monaco-editor/react": "^4.7.0",
-    "@preact/signals": "^2.9.0",
-    "@tanstack/react-router": "1.166.2",
     "ajv": "^8.18.0",
     "axios": "^1.16.0",
     "colord": "^2.9.3",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "gsap": "^3.14.2",
     "js-tiktoken": "^1.0.21",
-    "lucide-preact": "^0.577.0",
-    "lucide-react": "^1.7.0",
-    "marked": "^17.0.3",
-    "monaco-editor": "^0.55.1",
     "onnxruntime-node": "^1.24.3",
-    "p-limit": "^7.3.0",
-    "preact": "^10.29.0",
-    "react-arborist": "^3.8.0",
-    "three": "^0.183.2"
+    "p-limit": "^7.3.0"
   },
   "devDependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@preact/signals": "^2.9.0",
     "@preact/preset-vite": "^2.10.5",
     "@resvg/resvg-js": "^2.6.2",
+    "@tanstack/react-router": "1.166.2",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.2.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -148,14 +70,22 @@
     "@vitest/coverage-v8": "^4.1.4",
     "electron": "42.3.0",
     "electron-builder": "26.8.1",
+    "gsap": "^3.14.2",
     "happy-dom": "^20.8.9",
     "jsdom": "^29.0.1",
+    "lucide-preact": "^0.577.0",
+    "lucide-react": "^1.7.0",
+    "marked": "^17.0.3",
+    "monaco-editor": "^0.55.1",
     "playwright": "^1.59.1",
+    "preact": "^10.29.0",
     "react": "^19.2.4",
+    "react-arborist": "^3.8.0",
     "react-dom": "^19.2.4",
     "react-is": "^19.2.4",
     "supertest": "^7.2.2",
     "tailwindcss": "^4.2.1",
+    "three": "^0.183.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "vite": "^8.0.8",
