@@ -381,3 +381,8 @@ export async function updateSprintShowcase(sprintId: string, pinned: boolean): P
     body: JSON.stringify({ pinned }),
   });
 }
+
+export interface AvailableGitProviders { github: boolean; gitlab: boolean; }
+
+export const fetchAvailableGitProviders = async (): Promise<AvailableGitProviders> =>
+  fetchJson<AvailableGitProviders>("/api/git-providers/available");
