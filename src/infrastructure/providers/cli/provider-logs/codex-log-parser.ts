@@ -92,7 +92,7 @@ export function parseCodexRolloutJsonl(jsonl: string, sinceMs?: number): CodexLo
   let latestUsage: Record<string, unknown> | null = null;
   let nativeSessionId: string | null = null;
   const conversation: ParsedConversationTurn[] = [];
-  const minMs = typeof sinceMs === "number" ? sinceMs - 2000 : null;
+  const minMs = typeof sinceMs === "number" ? sinceMs - 200 : null;
 
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();

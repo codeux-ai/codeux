@@ -627,12 +627,12 @@ describe("ProviderRunner", () => {
 
   it("reads Codex reported usage and conversation from the latest rollout .jsonl", async () => {
     const rollout = [
-      { timestamp: "2026-06-02T10:00:00.000Z", type: "session_meta", payload: { id: "codex-sess-1", cwd: "/workspace" } },
-      { timestamp: "2026-06-02T10:00:02.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] } },
-      { timestamp: "2026-06-02T10:00:04.000Z", type: "response_item", payload: { type: "function_call", name: "exec_command", arguments: "{\"cmd\":\"ls\"}", call_id: "call_1" } },
-      { timestamp: "2026-06-02T10:00:04.500Z", type: "response_item", payload: { type: "function_call_output", call_id: "call_1", output: "file.txt" } },
-      { timestamp: "2026-06-02T10:00:05.000Z", type: "event_msg", payload: { type: "token_count", info: { total_token_usage: { input_tokens: 300, cached_input_tokens: 40, output_tokens: 90, reasoning_output_tokens: 5, total_tokens: 390 } } } },
-      { timestamp: "2026-06-02T10:00:06.000Z", type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "Listed files." }] } },
+      { timestamp: "2026-06-02T11:00:00.000Z", type: "session_meta", payload: { id: "codex-sess-1", cwd: "/workspace" } },
+      { timestamp: "2026-06-02T11:00:02.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] } },
+      { timestamp: "2026-06-02T11:00:04.000Z", type: "response_item", payload: { type: "function_call", name: "exec_command", arguments: "{\"cmd\":\"ls\"}", call_id: "call_1" } },
+      { timestamp: "2026-06-02T11:00:04.500Z", type: "response_item", payload: { type: "function_call_output", call_id: "call_1", output: "file.txt" } },
+      { timestamp: "2026-06-02T11:00:05.000Z", type: "event_msg", payload: { type: "token_count", info: { total_token_usage: { input_tokens: 300, cached_input_tokens: 40, output_tokens: 90, reasoning_output_tokens: 5, total_tokens: 390 } } } },
+      { timestamp: "2026-06-02T11:00:06.000Z", type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "Listed files." }] } },
     ].map((line) => JSON.stringify(line)).join("\n");
     dockerRunner.readLatestWorkspaceFile = vi.fn(async () => rollout);
 
