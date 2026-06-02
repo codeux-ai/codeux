@@ -432,9 +432,9 @@ export const ChatPage: FunctionComponent = () => {
 
               {/* Clean horizontal stat strip */}
               {headerStats.length > 0 && (
-                <div className="mt-3 inline-flex flex-wrap items-stretch divide-x divide-black/[0.06] overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.02] dark:divide-white/[0.06] dark:border-white/[0.06] dark:bg-white/[0.02]">
+                <div className="mt-3 flex w-full items-stretch divide-x divide-black/[0.06] overflow-x-auto rounded-xl border border-black/[0.06] bg-black/[0.02] dark:divide-white/[0.06] dark:border-white/[0.06] dark:bg-white/[0.02]">
                   {headerStats.map((stat) => (
-                    <div key={stat.label} className="flex flex-col gap-0.5 px-3.5 py-2">
+                    <div key={stat.label} className="flex shrink-0 flex-col gap-0.5 whitespace-nowrap px-3.5 py-2">
                       <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
                         {stat.label}
                       </span>
