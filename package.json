@@ -1,7 +1,7 @@
 {
   "name": "code-ux",
   "version": "1.0.0",
-  "description": "Containerized environment for running and managing AI sub-agents, with a web-based dashboard for monitoring and control.",
+  "description": "Containerized environment for running and managing AI sub-agents",
   "author": "Pierre Voss <p.voss@codeux.ai>",
   "license": "MIT",
   "packageManager": "pnpm@10.33.0",
