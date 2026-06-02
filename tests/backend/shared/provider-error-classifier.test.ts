@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyProviderError,
+  computeResetAfterFromClockTime,
   extractProviderErrorCategory,
   extractRetryAfterIso,
   resultHasSilentQuotaSignal,
@@ -122,6 +123,31 @@ describe("classifyProviderError", () => {
       expect(classification.category).toBe("QUOTA_EXHAUSTED");
     });
 
+    it("detects the real `codex exec` usage-limit error and extracts the reset time", () => {
+      const result = makeResult(
+        "",
+        "ERROR: You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 3:54 AM.",
+      );
+      const classification = classifyProviderError("codex", result);
+      expect(classification.category).toBe("QUOTA_EXHAUSTED");
+      expect(classification.userMessage).toContain("Codex quota exhausted");
+      // "try again at 3:54 AM" resolves to a future reset timestamp.
+      expect(classification.resetAfter).toMatch(/^\d+h\d+m\d+s$/);
+      expect(classification.resetAtIso).toBeTruthy();
+      expect(new Date(classification.resetAtIso!).getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it("detects usage-limit exhaustion even without a parseable reset time", () => {
+      const result = makeResult(
+        "",
+        "ERROR: You've hit your usage limit. Upgrade to Pro to continue.",
+      );
+      const classification = classifyProviderError("codex", result);
+      expect(classification.category).toBe("QUOTA_EXHAUSTED");
+      expect(classification.resetAfter).toBeNull();
+      expect(classification.resetAtIso).toBeNull();
+    });
+
     it("does not misclassify websocket 500 transport failures as auth errors", () => {
       const result = makeResult(
         "",
@@ -198,6 +224,30 @@ describe("classifyProviderError", () => {
       };
       expect(resultHasSilentQuotaSignal("gemini", result)).toBe(false);
       expect(resultHasSilentQuotaSignal("claude-code", result)).toBe(false);
+    });
+  });
+
+  describe("computeResetAfterFromClockTime", () => {
+    it("resolves a clock time later today into a same-day duration", () => {
+      // Now: 01:00, reset at 3:54 AM → 2h54m0s away, same day.
+      const now = new Date(2026, 5, 2, 1, 0, 0, 0).getTime();
+      expect(computeResetAfterFromClockTime("try again at 3:54 AM.", now)).toBe("2h54m0s");
+    });
+
+    it("rolls a clock time that already passed today to tomorrow", () => {
+      // Now: 05:00, reset at 3:54 AM → already passed, so next 3:54 AM is ~21h57m away.
+      const now = new Date(2026, 5, 2, 5, 0, 30, 0).getTime();
+      expect(computeResetAfterFromClockTime("try again at 3:54 AM.", now)).toBe("22h53m30s");
+    });
+
+    it("handles 12-hour PM conversion", () => {
+      // Now: 10:00, reset at 2:30 PM → 14:30 → 4h30m away.
+      const now = new Date(2026, 5, 2, 10, 0, 0, 0).getTime();
+      expect(computeResetAfterFromClockTime("try again at 2:30 PM.", now)).toBe("4h30m0s");
+    });
+
+    it("returns null when no clock time is present", () => {
+      expect(computeResetAfterFromClockTime("You've hit your usage limit.")).toBeNull();
     });
   });
 

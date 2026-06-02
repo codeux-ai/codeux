@@ -168,6 +168,14 @@ const CLAUDE_CODE_PATTERNS: ErrorPattern[] = [
   },
 ];
 
+// Codex's `codex exec` prints its usage cap as a single ERROR line, e.g.:
+//   "ERROR: You've hit your usage limit. Upgrade to Pro (...), visit
+//    https://chatgpt.com/codex/settings/usage to purchase more credits or
+//    try again at 3:54 AM."
+// It exits non-zero, so it reaches classifyProviderError on the failure path.
+// The reset hint is a wall-clock time ("try again at 3:54 AM"), not a duration,
+// so it needs its own extractor (computeResetAfterFromClockTime) rather than the
+// shared HhMmSs parser used by the other providers.
 const CODEX_PATTERNS: ErrorPattern[] = [
   {
     category: "QUOTA_EXHAUSTED",
@@ -175,7 +183,12 @@ const CODEX_PATTERNS: ErrorPattern[] = [
       /quota.*exceeded/i,
       /billing.*limit/i,
       /insufficient.*quota/i,
+      /usage limit/i,
+      /hit your.*limit/i,
+      /purchase more credits/i,
+      /Upgrade to Pro/i,
     ],
+    resetTimeExtractor: computeResetAfterFromClockTime,
   },
   {
     category: "AUTH_FAILURE",
@@ -293,6 +306,48 @@ function isGeminiRuntimeStorageError(text: string): boolean {
 function isCodexTransportServerError(text: string): boolean {
   return /responses_websocket/i.test(text)
     && /HTTP error:\s*5\d\d/i.test(text);
+}
+
+/**
+ * Parses Codex's "try again at 3:54 AM" wall-clock reset hint into the same
+ * `HhMmSs` duration string the rest of the pipeline expects, measured from now.
+ * Codex reports a clock time without a date, so we resolve it to the next future
+ * occurrence of that time (rolling to tomorrow when it has already passed today).
+ * The duration then flows through computeResetAtIso like every other provider's
+ * reset hint. Returns null when no clock time is present.
+ */
+export function computeResetAfterFromClockTime(text: string, nowMs: number = Date.now()): string | null {
+  const match = text.match(/try again at\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!match) {
+    return null;
+  }
+  let hour = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour > 23 || minute > 59) {
+    return null;
+  }
+  const meridiem = match[3]?.toUpperCase();
+  if (meridiem === "PM" && hour !== 12) {
+    hour += 12;
+  } else if (meridiem === "AM" && hour === 12) {
+    hour = 0;
+  }
+
+  const now = new Date(nowMs);
+  const target = new Date(nowMs);
+  target.setHours(hour, minute, 0, 0);
+  if (target.getTime() <= now.getTime()) {
+    target.setDate(target.getDate() + 1);
+  }
+
+  const diffSeconds = Math.round((target.getTime() - now.getTime()) / 1000);
+  if (diffSeconds <= 0) {
+    return null;
+  }
+  const hours = Math.floor(diffSeconds / 3600);
+  const minutes = Math.floor((diffSeconds % 3600) / 60);
+  const seconds = diffSeconds % 60;
+  return `${hours}h${minutes}m${seconds}s`;
 }
 
 function computeResetAtIso(resetAfter: string): string | null {
