@@ -90,15 +90,11 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         const errors: Record<string, string> = {};
         if (!name.trim()) errors.name = "Project Name is required.";
 
-        if (sourceType === 'local') {
-            if (!localPath.trim()) {
-                errors.path = "Directory Path is required.";
-            }
-        } else if (sourceType === 'git') {
+        if (sourceType === 'git') {
             if (!gitUrl.trim()) {
                 errors.path = "Repository URL is required.";
             }
-        } else if (newInitMode === 'new-local' && !localPath.trim()) {
+        } else if (sourceType === 'new_project' && newInitMode === 'new-local' && !localPath.trim()) {
             errors.path = "Directory Path is required.";
         }
         return errors;
@@ -398,7 +394,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     <div className="relative z-10">
                         <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Source</div>
                         <div className="text-lg font-black text-white font-mono tracking-tight leading-snug">
-                            {sourceType === 'new_project' ? 'New Project' : sourceType === 'git' ? 'Git Repo' : 'Local Path'}
+                            {sourceType === 'new_project' ? 'New Project' : sourceType === 'git' ? 'Git Repo' : 'New Project'}
                         </div>
                         <div className="mt-3 w-8 h-[2px] bg-ember-500/50" />
                     </div>
@@ -483,7 +479,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     ? <GitBranch className="w-3.5 h-3.5" strokeWidth={2} />
                                                     : <Sparkles className="w-3.5 h-3.5" strokeWidth={2} />
                                             }
-                                            {type === 'local' ? 'Local Path' : type === 'git' ? 'Git URL' : 'New Project'}
+                                            {type === 'local' ? 'New Project' : type === 'git' ? 'Git URL' : 'New Project'}
                                         </button>
                                     ))}
                                 </div>
@@ -506,7 +502,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             }}
                                             placeholder="/home/user/projects/my-project"
                                             className={`${detailInputSurfaceClass} min-w-0 flex-1`}
-                                            required
                                             aria-invalid={!!validationErrors.path && touched.path}
                                             aria-describedby={validationErrors.path && touched.path ? "project-path-error" : undefined}
                                             onBlur={() => setTouched(prev => ({ ...prev, path: true }))}
@@ -721,7 +716,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                     }}
                                                     placeholder="/home/user/projects/my-project"
                                                     className={`${detailInputSurfaceClass} min-w-0 flex-1`}
-                                                    required
                                                     aria-invalid={!!validationErrors.path && touched.path}
                                                     aria-describedby={validationErrors.path && touched.path ? "project-new-path-error" : undefined}
                                                     onBlur={() => setTouched(prev => ({ ...prev, path: true }))}

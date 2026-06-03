@@ -34,7 +34,6 @@ import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js
 import { projectSummaryQuery } from "./project-management/project-summary-query.js";
 import { sprintSummaryQuery } from "./project-management/sprint-summary-query.js";
 import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
-import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 
@@ -194,7 +193,7 @@ export class ProjectManagementRepository {
       const slug = this.createUniqueProjectSlug(input.name);
       const sourceType = input.sourceType;
       const sourceRef = input.sourceRef.trim();
-      const baseDir = this.resolveBaseDir(sourceType, sourceRef, input.cloneDir);
+      const baseDir = this.resolveBaseDir(sourceType, sourceRef, slug, input.cloneDir);
       const repoUrl = sourceType === "git" ? sourceRef : null;
 
       const insert = this.db.prepare(`
@@ -248,7 +247,7 @@ export class ProjectManagementRepository {
       const nextSlug = nextName === current.name ? current.slug : this.createUniqueProjectSlug(nextName, projectId);
       const nextSourceType = input.sourceType || current.sourceType;
       const nextSourceRef = input.sourceRef?.trim() || current.sourceRef;
-      const nextBaseDir = input.baseDir?.trim() || this.resolveBaseDir(nextSourceType, nextSourceRef, undefined, current.baseDir);
+      const nextBaseDir = input.baseDir?.trim() || this.resolveBaseDir(nextSourceType, nextSourceRef, nextSlug, undefined, current.baseDir);
       const nextRepoUrl = nextSourceType === "git" ? nextSourceRef : null;
 
       const updateProject = this.db.prepare(`
@@ -1281,11 +1280,16 @@ export class ProjectManagementRepository {
   private resolveBaseDir(
     sourceType: ProjectSourceType,
     sourceRef: string,
+    slug: string,
     cloneDir?: string,
     fallback = ""
   ): string {
     if (sourceType === "local") {
-      return path.isAbsolute(sourceRef) ? sourceRef : path.resolve(os.homedir(), sourceRef);
+      const trimmedSourceRef = sourceRef.trim();
+      if (!trimmedSourceRef) {
+        return path.join(os.homedir(), ".codex-ux", "projects", slug);
+      }
+      return path.isAbsolute(trimmedSourceRef) ? trimmedSourceRef : path.resolve(os.homedir(), trimmedSourceRef);
     }
 
     const repoName = deriveRepoName(sourceRef);
@@ -1294,7 +1298,7 @@ export class ProjectManagementRepository {
       return path.resolve(resolvedClone, repoName);
     }
 
-    return fallback || path.resolve(getHomeCodeUxPath("projects"), repoName);
+    return fallback || path.resolve(os.homedir(), ".codex-ux", "projects", repoName);
   }
 
   private touchProject(projectId: string, updatedAt = new Date().toISOString()): void {
