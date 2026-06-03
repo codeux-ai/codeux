@@ -1,33 +1,50 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useMemo } from "preact/hooks";
 import gsap from "gsap";
-import { AlertCircle, Bot, Check, ChevronUp, FolderOpen, GitBranch, FolderInput, Home, Info, Link2, Loader2, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
+import { AlertCircle, Bot, Check, ChevronUp, Cloud, FolderOpen, GitBranch, FolderInput, Globe, Home, Info, Link2, Loader2, Lock, PlaySquare, Plus, RefreshCw, ShieldCheck, Sparkles, Workflow, X } from "lucide-preact";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { fetchLocalDirectories } from "../../lib/project-api.js";
 import type { LocalDirectoryBrowserResponse } from "../../types.js";
 
+export type SourceType = 'local' | 'git' | 'new_project';
+
+type ProjectSetupOptions = {
+    agents: boolean;
+    quicksprints: boolean;
+    previewScript: boolean;
+    ci: boolean;
+};
+
+type ExistingProjectSubmission = {
+    name: string;
+    type: 'local' | 'git';
+    path: string;
+    cloneDir?: string;
+    setup?: {
+        enabled: boolean;
+        options: ProjectSetupOptions;
+    };
+};
+
+type NewProjectSubmission = {
+    name: string;
+    type: 'new_project';
+    path: string;
+    initMode: 'new-local' | 'new-remote';
+    remoteProvider?: 'github' | 'gitlab';
+    isPrivate?: boolean;
+};
+
+export type AddProjectModalSubmission = ExistingProjectSubmission | NewProjectSubmission;
+
 interface AddProjectModalProps {
     onClose: () => void;
-    onAdd: (project: {
-        name: string;
-        type: 'local' | 'git';
-        path: string;
-        cloneDir?: string;
-        setup?: {
-            enabled: boolean;
-            options: {
-                agents: boolean;
-                quicksprints: boolean;
-                previewScript: boolean;
-                ci: boolean;
-            };
-        };
-    }) => void | Promise<void>;
+    onAdd: (project: AddProjectModalSubmission) => void | Promise<void>;
+    initialSourceType?: SourceType;
 }
 
-type SourceType = 'local' | 'git';
 type DirectoryPickerTarget = 'localPath' | 'cloneDir';
 
 const fieldLabelClass = "text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors";
@@ -38,15 +55,18 @@ const detailInputSurfaceClass = "w-full rounded-[1.15rem] border border-black/[0
 const detailInputClass = `mt-2.5 ${detailInputSurfaceClass}`;
 const modalMinHeight = "min(640px, calc(100vh - 2rem))";
 
-export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd }) => {
+export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd, initialSourceType }) => {
     const cardRef     = useRef<HTMLDivElement>(null);
     const fieldsRef   = useRef<HTMLDivElement>(null);
 
     const [name, setName]           = useState('');
-    const [sourceType, setSourceType] = useState<SourceType>('local');
+    const [sourceType, setSourceType] = useState<SourceType>(initialSourceType ?? 'local');
     const [localPath, setLocalPath] = useState('');
     const [gitUrl, setGitUrl]       = useState('');
     const [cloneDir, setCloneDir]   = useState('');
+    const [newInitMode, setNewInitMode] = useState<'new-local' | 'new-remote'>('new-local');
+    const [newProvider, setNewProvider] = useState<'github' | 'gitlab'>('github');
+    const [newIsPrivate, setNewIsPrivate] = useState(true);
     const [initializeProject, setInitializeProject] = useState(true);
     const [showSetupOptions, setShowSetupOptions] = useState(false);
     const [setupOptions, setSetupOptions] = useState({
@@ -70,12 +90,19 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         const errors: Record<string, string> = {};
         if (!name.trim()) errors.name = "Project Name is required.";
 
-        const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
-        if (!path) {
-            errors.path = sourceType === 'local' ? "Directory Path is required." : "Repository URL is required.";
+        if (sourceType === 'local') {
+            if (!localPath.trim()) {
+                errors.path = "Directory Path is required.";
+            }
+        } else if (sourceType === 'git') {
+            if (!gitUrl.trim()) {
+                errors.path = "Repository URL is required.";
+            }
+        } else if (newInitMode === 'new-local' && !localPath.trim()) {
+            errors.path = "Directory Path is required.";
         }
         return errors;
-    }, [name, localPath, gitUrl, sourceType]);
+    }, [name, localPath, gitUrl, sourceType, newInitMode]);
 
     useLayoutEffect(() => {
         const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
@@ -118,21 +145,36 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     };
 
     const submitProject = async () => {
-        const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
-
         setIsSubmitting(true);
         setSubmitError(null);
         try {
-            await Promise.resolve(onAdd({
-                name: name.trim(),
-                type: sourceType,
-                path,
-                ...(sourceType === 'git' && cloneDir.trim() ? { cloneDir: cloneDir.trim() } : {}),
-                setup: {
-                    enabled: initializeProject,
-                    options: setupOptions,
-                },
-            }));
+            if (sourceType === 'new_project') {
+                await Promise.resolve(onAdd({
+                    name: name.trim(),
+                    type: 'new_project',
+                    path: newInitMode === 'new-local' ? localPath.trim() : '',
+                    initMode: newInitMode,
+                    ...(newInitMode === 'new-remote'
+                        ? {
+                            remoteProvider: newProvider,
+                            isPrivate: newIsPrivate,
+                        }
+                        : {}),
+                }));
+            } else {
+                const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
+
+                await Promise.resolve(onAdd({
+                    name: name.trim(),
+                    type: sourceType,
+                    path,
+                    ...(sourceType === 'git' && cloneDir.trim() ? { cloneDir: cloneDir.trim() } : {}),
+                    setup: {
+                        enabled: initializeProject,
+                        options: setupOptions,
+                    },
+                }));
+            }
             handleClose();
         } catch (err) {
             setIsSubmitting(false);
@@ -144,7 +186,12 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         e.preventDefault();
 
         if (Object.keys(validationErrors).length > 0) {
-            setTouched({ name: true, path: true });
+            setTouched({ name: true, path: sourceType === 'new_project' ? newInitMode === 'new-local' : true });
+            return;
+        }
+
+        if (sourceType === 'new_project') {
+            await submitProject();
             return;
         }
 
@@ -351,7 +398,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     <div className="relative z-10">
                         <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Source</div>
                         <div className="text-lg font-black text-white font-mono tracking-tight leading-snug">
-                            {sourceType === 'git' ? 'Git Repo' : 'Local Path'}
+                            {sourceType === 'new_project' ? 'New Project' : sourceType === 'git' ? 'Git Repo' : 'Local Path'}
                         </div>
                         <div className="mt-3 w-8 h-[2px] bg-ember-500/50" />
                     </div>
@@ -419,7 +466,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     Source Type
                                 </legend>
                                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
-                                    {(['local', 'git'] as SourceType[]).map((type) => (
+                                    {(['local', 'git', 'new_project'] as SourceType[]).map((type) => (
                                         <button
                                             key={type}
                                             type="button"
@@ -432,9 +479,11 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         >
                                             {type === 'local'
                                                 ? <FolderInput className="w-3.5 h-3.5" strokeWidth={2} />
-                                                : <GitBranch className="w-3.5 h-3.5" strokeWidth={2} />
+                                                : type === 'git'
+                                                    ? <GitBranch className="w-3.5 h-3.5" strokeWidth={2} />
+                                                    : <Sparkles className="w-3.5 h-3.5" strokeWidth={2} />
                                             }
-                                            {type === 'local' ? 'Local Path' : 'Git URL'}
+                                            {type === 'local' ? 'Local Path' : type === 'git' ? 'Git URL' : 'New Project'}
                                         </button>
                                     ))}
                                 </div>
@@ -531,91 +580,238 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 </>
                             )}
 
-                            <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
-                                <label className="flex cursor-pointer items-start gap-3">
-                                    <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border transition-all ${
-                                        initializeProject
-                                            ? "border-ember-500 bg-ember-500 text-void-900"
-                                            : "border-slate-300 bg-white text-transparent dark:border-white/[0.14] dark:bg-white/[0.04]"
-                                    }`}>
-                                        <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                                    </span>
-                                    <input
-                                        type="checkbox"
-                                        checked={initializeProject}
-                                        onChange={(event) => {
-                                            setInitializeProject((event.target as HTMLInputElement).checked);
-                                            setShowSetupOptions(false);
-                                        }}
-                                        className="sr-only"
-                                    />
-                                    <span className="min-w-0">
-                                        <span className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
-                                            <Sparkles className="h-4 w-4 text-ember-500" />
-                                            Initialize with Project Setup Agent
-                                        </span>
-                                        <span className="mt-1 block text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                                            Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, and basic CI.
-                                        </span>
-                                    </span>
-                                </label>
-                            </div>
+                            {sourceType !== 'new_project' && (
+                                <>
+                                    <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                                        <label className="flex cursor-pointer items-start gap-3">
+                                            <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border transition-all ${
+                                                initializeProject
+                                                    ? "border-ember-500 bg-ember-500 text-void-900"
+                                                    : "border-slate-300 bg-white text-transparent dark:border-white/[0.14] dark:bg-white/[0.04]"
+                                            }`}>
+                                                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                                            </span>
+                                            <input
+                                                type="checkbox"
+                                                checked={initializeProject}
+                                                onChange={(event) => {
+                                                    setInitializeProject((event.target as HTMLInputElement).checked);
+                                                    setShowSetupOptions(false);
+                                                }}
+                                                className="sr-only"
+                                            />
+                                            <span className="min-w-0">
+                                                <span className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
+                                                    <Sparkles className="h-4 w-4 text-ember-500" />
+                                                    Initialize with Project Setup Agent
+                                                </span>
+                                                <span className="mt-1 block text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                                                    Research the codebase after creation and generate project-specific agents, routing, quicksprints, preview startup, and basic CI.
+                                                </span>
+                                            </span>
+                                        </label>
+                                    </div>
 
-                            {showSetupOptions && (
-                                <div className="rounded-[1.35rem] border border-ember-500/25 bg-ember-500/[0.045] p-4 shadow-[0_14px_38px_rgba(255,184,0,0.08)] dark:bg-ember-500/[0.06]">
-                                    <div className="mb-3 flex items-center justify-between gap-4">
-                                        <div>
-                                            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-ember-600 dark:text-ember-400">
-                                                Setup Scope
+                                    {showSetupOptions && (
+                                        <div className="rounded-[1.35rem] border border-ember-500/25 bg-ember-500/[0.045] p-4 shadow-[0_14px_38px_rgba(255,184,0,0.08)] dark:bg-ember-500/[0.06]">
+                                            <div className="mb-3 flex items-center justify-between gap-4">
+                                                <div>
+                                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-ember-600 dark:text-ember-400">
+                                                        Setup Scope
+                                                    </div>
+                                                    <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">
+                                                        Choose project assets
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true })}
+                                                    className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm transition-colors hover:text-slate-900 dark:bg-white/[0.08] dark:text-slate-300 dark:hover:text-white"
+                                                >
+                                                    All
+                                                </button>
                                             </div>
-                                            <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">
-                                                Choose project assets
+                                            <div className="grid gap-2 sm:grid-cols-2">
+                                                {setupOptionRows.map(({ key, label, description, icon: Icon }) => {
+                                                    const checked = setupOptions[key];
+                                                    return (
+                                                        <button
+                                                            key={key}
+                                                            type="button"
+                                                            onClick={() => setSetupOptions(prev => ({ ...prev, [key]: !prev[key] }))}
+                                                            className={`flex min-w-0 items-start gap-3 rounded-2xl border p-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                                                                checked
+                                                                    ? "border-ember-500/30 bg-white text-slate-900 shadow-sm dark:bg-white/[0.08] dark:text-white"
+                                                                    : "border-black/[0.06] bg-white/45 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
+                                                            }`}
+                                                            aria-pressed={checked}
+                                                        >
+                                                            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${checked ? "bg-ember-500 text-void-900" : "bg-black/[0.04] text-slate-400 dark:bg-white/[0.06]"}`}>
+                                                                <Icon className="h-4 w-4" />
+                                                            </span>
+                                                            <span className="min-w-0 flex-1">
+                                                                <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.12em]">
+                                                                    {label}
+                                                                    {key === "previewScript" && (
+                                                                        <Info 
+                                                                            className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-help" 
+                                                                            title="This is only needed when the container struggles to startup with the default script"
+                                                                            onClick={(e) => e.stopPropagation()} 
+                                                                        />
+                                                                    )}
+                                                                </span>
+                                                                <span className="mt-1 block text-[11px] font-medium leading-snug opacity-75">{description}</span>
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSetupOptions({ agents: true, quicksprints: true, previewScript: true, ci: true })}
-                                            className="rounded-xl bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm transition-colors hover:text-slate-900 dark:bg-white/[0.08] dark:text-slate-300 dark:hover:text-white"
-                                        >
-                                            All
-                                        </button>
-                                    </div>
-                                    <div className="grid gap-2 sm:grid-cols-2">
-                                        {setupOptionRows.map(({ key, label, description, icon: Icon }) => {
-                                            const checked = setupOptions[key];
-                                            return (
+                                    )}
+                                </>
+                            )}
+
+                            {sourceType === 'new_project' && (
+                                <>
+                                    <fieldset>
+                                        <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
+                                            Init Mode
+                                        </legend>
+                                        <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => setNewInitMode('new-local')}
+                                                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all active:scale-95 duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                                                    newInitMode === 'new-local'
+                                                        ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
+                                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                                }`}
+                                            >
+                                                <FolderInput className="w-3.5 h-3.5" strokeWidth={2} />
+                                                Local Repo
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setNewInitMode('new-remote')}
+                                                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all active:scale-95 duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                                                    newInitMode === 'new-remote'
+                                                        ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
+                                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                                }`}
+                                            >
+                                                <Cloud className="w-3.5 h-3.5" strokeWidth={2} />
+                                                Remote Repo
+                                            </button>
+                                        </div>
+                                    </fieldset>
+
+                                    {newInitMode === 'new-local' ? (
+                                        <div className="group/field">
+                                            <label htmlFor="add-project-new-path" className={`${fieldLabelClass} flex items-center gap-1.5`}>
+                                                <FolderInput className="w-3 h-3" /> Directory Path
+                                            </label>
+                                            <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                                                <input
+                                                    id="add-project-new-path"
+                                                    type="text"
+                                                    value={localPath}
+                                                    onInput={(e) => {
+                                                        setLocalPath((e.target as HTMLInputElement).value);
+                                                        if (submitError) setSubmitError(null);
+                                                    }}
+                                                    placeholder="/home/user/projects/my-project"
+                                                    className={`${detailInputSurfaceClass} min-w-0 flex-1`}
+                                                    required
+                                                    aria-invalid={!!validationErrors.path && touched.path}
+                                                    aria-describedby={validationErrors.path && touched.path ? "project-new-path-error" : undefined}
+                                                    onBlur={() => setTouched(prev => ({ ...prev, path: true }))}
+                                                />
                                                 <button
-                                                    key={key}
                                                     type="button"
-                                                    onClick={() => setSetupOptions(prev => ({ ...prev, [key]: !prev[key] }))}
-                                                    className={`flex min-w-0 items-start gap-3 rounded-2xl border p-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
-                                                        checked
-                                                            ? "border-ember-500/30 bg-white text-slate-900 shadow-sm dark:bg-white/[0.08] dark:text-white"
-                                                            : "border-black/[0.06] bg-white/45 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
-                                                    }`}
-                                                    aria-pressed={checked}
+                                                    onClick={() => handleOpenDirectoryPicker('localPath')}
+                                                    className="flex shrink-0 items-center justify-center gap-2 rounded-[1.15rem] border border-black/[0.06] bg-void-900 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-white transition-all duration-250 hover:-translate-y-px hover:bg-void-800 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 dark:border-white/[0.08] dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]"
+                                                    aria-expanded={activeDirectoryPickerTarget === 'localPath'}
+                                                    aria-controls="add-project-directory-picker"
+                                                    title="Browse directories"
                                                 >
-                                                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${checked ? "bg-ember-500 text-void-900" : "bg-black/[0.04] text-slate-400 dark:bg-white/[0.06]"}`}>
-                                                        <Icon className="h-4 w-4" />
-                                                    </span>
-                                                    <span className="min-w-0 flex-1">
-                                                        <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.12em]">
-                                                            {label}
-                                                            {key === "previewScript" && (
-                                                                <Info 
-                                                                    className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 cursor-help" 
-                                                                    title="This is only needed when the container struggles to startup with the default script"
-                                                                    onClick={(e) => e.stopPropagation()} 
-                                                                />
-                                                            )}
-                                                        </span>
-                                                        <span className="mt-1 block text-[11px] font-medium leading-snug opacity-75">{description}</span>
-                                                    </span>
+                                                    <FolderOpen className="h-4 w-4" />
+                                                    Browse
                                                 </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
+                                            </div>
+                                            {renderDirectoryPicker('localPath')}
+                                            {validationErrors.path && touched.path && <div id="project-new-path-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.path}</div>}
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="group/field">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <label className={fieldLabelClass}>
+                                                        Provider
+                                                    </label>
+                                                    <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                                                        Provider detection is optional here; both buttons are shown.
+                                                    </span>
+                                                </div>
+                                                <div className="mt-2.5 inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setNewProvider('github')}
+                                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all active:scale-95 duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                                                            newProvider === 'github'
+                                                                ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
+                                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                                        }`}
+                                                    >
+                                                        GitHub
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setNewProvider('gitlab')}
+                                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all active:scale-95 duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                                                            newProvider === 'gitlab'
+                                                                ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
+                                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                                        }`}
+                                                    >
+                                                        GitLab
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <fieldset>
+                                                <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
+                                                    Visibility
+                                                </legend>
+                                                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setNewIsPrivate(true)}
+                                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all active:scale-95 duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                                                            newIsPrivate
+                                                                ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
+                                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                                        }`}
+                                                    >
+                                                        <Lock className="w-3.5 h-3.5" strokeWidth={2} />
+                                                        Private
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setNewIsPrivate(false)}
+                                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all active:scale-95 duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                                                            !newIsPrivate
+                                                                ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
+                                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                                        }`}
+                                                    >
+                                                        <Globe className="w-3.5 h-3.5" strokeWidth={2} />
+                                                        Public
+                                                    </button>
+                                                </div>
+                                            </fieldset>
+                                        </>
+                                    )}
+                                </>
                             )}
 
                             {/* Spacer */}
@@ -641,8 +837,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     )}
                                     {isSubmitting
-                                        ? (initializeProject ? "Setting up..." : "Adding...")
-                                        : (initializeProject && !showSetupOptions ? "Continue" : "Add Project")}
+                                        ? (sourceType !== 'new_project' && initializeProject ? "Setting up..." : "Adding...")
+                                        : (sourceType !== 'new_project' && initializeProject && !showSetupOptions ? "Continue" : "Add Project")}
                                 </button>
                             </div>
                         </div>

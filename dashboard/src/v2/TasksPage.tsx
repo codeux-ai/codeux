@@ -25,6 +25,7 @@ import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { TaskComposer } from "./components/ui/TaskComposer.js";
 import { AddProjectModal } from "./components/ui/AddProjectModal.js";
+import type { AddProjectModalSubmission } from "./components/ui/AddProjectModal.js";
 import { buildDependentTasksMap, type DependentTaskMetadata } from "./lib/task-relations.js";
 import type { Sprint, Task, TaskPriority, TaskStatus } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
@@ -611,7 +612,19 @@ export const TasksPage: FunctionComponent = () => {
     setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }, []);
 
-  const handleAddProject = useCallback(async (project: { name: string; type: "local" | "git"; path: string; cloneDir?: string }) => {
+  const handleAddProject = useCallback(async (project: AddProjectModalSubmission) => {
+    if (project.type === 'new_project') {
+      await createProject({
+        name: project.name,
+        sourceType: project.initMode === 'new-local' ? 'local' : 'git',
+        sourceRef: project.path || project.name,
+        initMode: project.initMode,
+        remoteProvider: project.remoteProvider,
+        isPrivate: project.isPrivate,
+      });
+      return;
+    }
+
     await createProject({
       name: project.name,
       sourceType: project.type,
