@@ -145,6 +145,7 @@ It focuses on:
 - a full-width interactive trend graph (Usage Graph) with hover bucket inspection, staged smooth line-draw animation, and mouse drag zoom selection
 - a usage-graph filter submenu (time-window + metric-series controls) that opens inline from the graph header instead of separate execution-lane wrappers
 - an embedded grouped metric selector and a persistent right-side selected-metrics rail for configuring the chart series (including Token, Time, and Git series); same-window refreshes preserve user chart selection
+- the metric-series flyout groups series under labelled headers for Core, Purposes, Providers, and Git so related worker/provider series stay discoverable as the catalog grows
 - hourly windows keep one-hour hover buckets while rendering visible axis labels every three hours
 - alternate composition and reliability views with donut charts
 - task, sprint, provider, and purpose leaderboards
