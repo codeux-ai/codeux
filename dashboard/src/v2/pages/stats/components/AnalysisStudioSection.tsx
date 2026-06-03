@@ -17,6 +17,7 @@ export interface AnalysisStudioSectionProps {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  projectId: string;
   planningUsage: ExecutionStatsEntitySummary | null;
   providerSegments: SegmentDefinition[];
   tokenSegments: SegmentDefinition[];
@@ -31,6 +32,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   loading,
   error,
   refresh,
+  projectId,
   planningUsage,
   providerSegments,
   tokenSegments,
@@ -78,6 +80,15 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
           </div>
           <TelemetryLedgerTabs stats={stats} />
         </section>
+      ) : null}
+
+      {visualMode === "system" ? (
+        <div
+          className="py-12 text-center text-sm text-slate-400 dark:text-slate-500"
+          data-project-id={projectId}
+        >
+          System view loading…
+        </div>
       ) : null}
     </>
   );

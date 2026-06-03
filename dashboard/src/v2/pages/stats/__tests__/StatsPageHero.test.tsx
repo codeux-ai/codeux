@@ -29,8 +29,11 @@ describe('StatsPageHero', () => {
 
     const presetButton = screen.getByRole('button', { name: '24h' });
     const trendButton = screen.getByRole('button', { name: 'Trend' });
+    const ledgersButton = screen.getByRole('button', { name: 'Ledgers' });
+    const systemButton = screen.getByRole('button', { name: 'System' });
 
     expect(presetButton.compareDocumentPosition(trendButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(ledgersButton.compareDocumentPosition(systemButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.querySelectorAll('input[type="date"]').length).toBe(2);
     expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy();
   });

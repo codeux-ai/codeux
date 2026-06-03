@@ -108,6 +108,7 @@ export const StatsPage: FunctionComponent = () => {
               loading={loading}
               error={error}
               refresh={refresh}
+              projectId={selectedProject?.id || ""}
               planningUsage={planningUsage}
               providerSegments={providerSegments}
               tokenSegments={tokenSegments}

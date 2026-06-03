@@ -94,4 +94,53 @@ describe('StatsPage visual tests', () => {
     expect(getByText('Input Tokens')).toBeTruthy();
     expect(getByText('Output Tokens')).toBeTruthy();
   });
+
+  it('renders the system placeholder without crashing', () => {
+    vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValueOnce({
+      stats: {
+        usage: { invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
+        chartSeries: [],
+        range: { resolution: 'hour', bucketCount: 1, label: '24h' },
+        buckets: [],
+        providers: [],
+        purposes: [{
+          id: 'code_generation',
+          label: 'Code Generation',
+          lastActivityAt: null,
+          usage: {
+            invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0
+          }
+        }],
+        tokenSources: [],
+        activeSprint: null
+      } as any,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+      usage: {
+        invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0
+      },
+      tokenSeries: [0, 0, 0],
+      activeTimeSeries: [0, 0, 0],
+      wallTimeSeries: [0, 0, 0],
+      planningUsage: null,
+      activeQuery: { window: '24h' },
+      customFrom: '2026-01-01',
+      setCustomFrom: vi.fn(),
+      customTo: '2026-01-02',
+      setCustomTo: vi.fn(),
+      visualMode: 'system',
+      setVisualMode: vi.fn(),
+      chartState: { enabledSeries: {} } as any,
+      providerSegments: [],
+      sourceSegments: [],
+      tokenSegments: [],
+      applyPresetWindow: vi.fn(),
+      applyCustomRange: vi.fn(),
+      completionConfidence: '100%'
+    });
+
+    const { getByText } = render(<StatsPage />);
+    expect(getByText('System view loading…')).toBeTruthy();
+  });
 });

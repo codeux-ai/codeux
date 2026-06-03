@@ -4,3 +4,9 @@ export interface SystemSort {
   key: SystemSortKey;
   dir: "asc" | "desc";
 }
+
+export interface SystemFilters {
+  status: string[];
+  purpose: string[];
+  provider: string[];
+}

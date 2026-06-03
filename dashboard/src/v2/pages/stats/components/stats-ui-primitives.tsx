@@ -42,7 +42,7 @@ import {
 } from "../stats-utils.js";
 
 import type { DonutSliceGeometry, ChartPoint } from "./stats-geometry.js";
-export type StatsVisualMode = "trend" | "composition" | "reliability" | "ledgers";
+export type StatsVisualMode = "trend" | "composition" | "reliability" | "ledgers" | "system";
 export type ChartSeriesId = "tokens" | "active" | "invocations";
 export type LedgerSortKey = "last" | "tokens" | "active" | "input" | "output" | "name";
 
@@ -172,6 +172,7 @@ export const ViewToggle: FunctionComponent<{
     { id: "composition", label: "Composition", icon: PieChart },
     { id: "reliability", label: "Providers", icon: ShieldCheck },
     { id: "ledgers", label: "Ledgers", icon: Layers3 },
+    { id: "system", label: "System", icon: Terminal },
   ];
 
   return (

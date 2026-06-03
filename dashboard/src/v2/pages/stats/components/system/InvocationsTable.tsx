@@ -1,27 +1,25 @@
-import type { FunctionComponent, ComponentType, JSX } from "preact";
+import type { FunctionComponent } from "preact";
 import {
-  AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  CheckCircle2,
-  ChevronDown,
   ChevronRight,
-  Loader2,
-  MinusCircle,
-  PauseCircle,
+  ChevronDown,
+  CheckCircle2,
   XCircle,
+  Loader2,
+  PauseCircle,
+  MinusCircle,
+  AlertTriangle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-preact";
-import type { ExecutionInvocationRecord } from "../../../../types.js";
-import { formatDateTime, formatDuration, formatTokens } from "../../stats-utils.js";
+import type { ExecutionInvocationRecord } from "../../../types.js";
+import type { SystemSort, SystemSortKey } from "../../hooks/use-system-view-data.js";
+import { formatTokens, formatDuration, formatDateTime } from "../../stats-utils.js";
 import {
-  CHIP_CLASS,
   LEDGER_ROW_MODERN_CLASS,
-  PANEL_CLASS,
-  SUBPANEL_CLASS,
+  CHIP_CLASS,
   getProviderIcon,
 } from "../StatsShared.js";
-import type { SystemSort, SystemSortKey } from "../../hooks/use-system-view-data.js";
 
 export interface InvocationsTableProps {
   invocations: ExecutionInvocationRecord[];
@@ -32,331 +30,270 @@ export interface InvocationsTableProps {
   loading?: boolean;
 }
 
-type StatusTone = {
-  label: string;
-  containerClassName: string;
-  iconClassName: string;
-  icon: ComponentType<any>;
-};
-
-const STATUS_STYLES: Record<ExecutionInvocationRecord["status"], StatusTone> = {
-  running: {
-    label: "Running",
-    containerClassName: "border-blue-500/15 bg-blue-500/10 text-blue-300 dark:text-blue-300",
-    iconClassName: "text-blue-400",
-    icon: Loader2,
-  },
-  completed: {
-    label: "Completed",
-    containerClassName: "border-emerald-500/15 bg-emerald-500/10 text-emerald-300 dark:text-emerald-300",
-    iconClassName: "text-emerald-400",
-    icon: CheckCircle2,
-  },
-  failed: {
-    label: "Failed",
-    containerClassName: "border-red-500/15 bg-red-500/10 text-red-300 dark:text-red-300",
-    iconClassName: "text-red-400",
-    icon: XCircle,
-  },
-  cancelled: {
-    label: "Cancelled",
-    containerClassName: "border-slate-500/15 bg-slate-500/10 text-slate-300 dark:text-slate-300",
-    iconClassName: "text-slate-400",
-    icon: MinusCircle,
-  },
-  paused: {
-    label: "Paused",
-    containerClassName: "border-amber-500/15 bg-amber-500/10 text-amber-300 dark:text-amber-300",
-    iconClassName: "text-amber-400",
-    icon: PauseCircle,
-  },
-};
-
-function formatDurationFromInvocation(invocation: ExecutionInvocationRecord): string {
-  if (invocation.finishedAt === null) {
-    return "running";
-  }
-
-  const startedAt = Date.parse(invocation.startedAt);
-  const finishedAt = Date.parse(invocation.finishedAt);
-
-  if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt)) {
-    return "—";
-  }
-
-  return formatDuration(finishedAt - startedAt);
-}
-
-function getSortDirectionIcon(sort: SystemSort, key: SystemSortKey): ComponentType<any> {
-  if (sort.key !== key) {
-    return ArrowUpDown;
-  }
-
-  return sort.dir === "asc" ? ArrowUp : ArrowDown;
-}
-
-function toggleSort(sort: SystemSort, key: SystemSortKey, onSortChange: (nextSort: SystemSort) => void): void {
-  onSortChange({
-    key,
-    dir: sort.key === key ? (sort.dir === "desc" ? "asc" : "desc") : "desc",
-  });
-}
-
-function hasContext(invocation: ExecutionInvocationRecord): boolean {
-  return (
-    (invocation.sprintNumber !== null && invocation.sprintNumber !== undefined)
-    || (invocation.taskKey !== null && invocation.taskKey !== undefined)
-  );
-}
-
-function renderContextChips(invocation: ExecutionInvocationRecord): JSX.Element | null {
-  if (!hasContext(invocation)) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {invocation.sprintNumber !== null && invocation.sprintNumber !== undefined ? (
-        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
-          S{invocation.sprintNumber}
-        </span>
-      ) : null}
-      {invocation.taskKey !== null && invocation.taskKey !== undefined ? (
-        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
-          {invocation.taskKey}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function renderLoadingRow(index: number): JSX.Element {
-  return (
-    <div key={`loading-${index}`} className={`${LEDGER_ROW_MODERN_CLASS} animate-pulse`}>
-      <div className="grid min-w-[1220px] grid-cols-[8.5rem_9.5rem_7rem_14rem_6rem_6rem_6.5rem_7rem_8rem_10rem_3rem] items-center gap-4">
-        <div className="h-4 w-24 rounded-full bg-slate-200/80 dark:bg-white/10" />
-        <div className="h-8 w-28 rounded-full bg-slate-200/80 dark:bg-white/10" />
-        <div className="h-7 w-20 rounded-full bg-slate-200/80 dark:bg-white/10" />
-        <div className="h-5 w-40 rounded-full bg-slate-200/80 dark:bg-white/10" />
-        <div className="h-4 w-14 rounded-full bg-slate-200/80 dark:bg-white/10" />
-        <div className="h-4 w-14 rounded-full bg-slate-200/80 dark:bg-white/10" />
-        <div className="h-4 w-16 rounded-full bg-slate-200/80 dark:bg-white/10" />
-        <div className="h-4 w-16 rounded-full bg-slate-200/80 dark:bg-white/10" />
-        <div className="h-4 w-20 rounded-full bg-slate-200/80 dark:bg-white/10" />
-        <div className="h-8 w-28 rounded-full bg-slate-200/80 dark:bg-white/10" />
-        <div className="h-10 w-10 rounded-full bg-slate-200/80 dark:bg-white/10" />
-      </div>
-    </div>
-  );
-}
-
-function renderHeaderButton(
-  sort: SystemSort,
-  key: SystemSortKey,
-  label: string,
-  onSortChange: (sort: SystemSort) => void,
-): JSX.Element {
-  const Icon = getSortDirectionIcon(sort, key);
-
-  return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1.5 transition-colors hover:text-slate-200"
-      onClick={() => toggleSort(sort, key, onSortChange)}
-      aria-label={`Sort by ${label}`}
-      aria-sort={sort.key === key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-    >
-      {label}
-      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-    </button>
-  );
-}
-
-function renderStatusChip(invocation: ExecutionInvocationRecord): JSX.Element {
-  const status = STATUS_STYLES[invocation.status];
-  const Icon = status.icon;
-
-  return (
-    <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${status.containerClassName}`}>
-      <Icon className={`h-3.5 w-3.5 ${status.iconClassName}`} strokeWidth={2.25} />
-      {status.label}
-    </div>
-  );
-}
-
-function renderInvocationRow(
-  invocation: ExecutionInvocationRecord,
-  expandedId: string | null,
-  onRowExpand: (id: string | null) => void,
-): JSX.Element {
-  const isExpanded = expandedId === invocation.id;
-  const provider = getProviderIcon(invocation.provider);
-  const ProviderIcon = provider.icon;
-  const failedError = invocation.status === "failed" ? invocation.lastErrorMessage || invocation.errorMessage : null;
-
-  return (
-    <>
-      <tr key={invocation.id}>
-        <td colSpan={11} className="px-0">
-          <div className={`${LEDGER_ROW_MODERN_CLASS} overflow-visible`}>
-            <div className="grid min-w-[1220px] grid-cols-[8.5rem_9.5rem_7rem_14rem_6rem_6rem_6.5rem_7rem_8rem_10rem_3rem] items-start gap-4">
-              <div className="pt-0.5 text-[11px] font-mono text-slate-400">
-                {formatDateTime(invocation.startedAt)}
-              </div>
-
-              <div className="flex flex-col gap-1">
-                {renderStatusChip(invocation)}
-                {failedError ? (
-                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-red-400">
-                    <AlertTriangle className="h-3 w-3" />
-                    <span className="min-w-0 break-words">{failedError}</span>
-                  </div>
-                ) : null}
-              </div>
-
-              <div>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
-                  {invocation.type?.replace(/_/g, " ") || "unknown"}
-                </span>
-              </div>
-
-              <div className="flex min-w-0 items-start gap-2 text-[11px]">
-                <div className={`mt-0.5 inline-flex h-7 w-7 flex-none items-center justify-center rounded-xl ${provider.bg} ${provider.text}`}>
-                  <ProviderIcon className="h-3.5 w-3.5" strokeWidth={2.1} />
-                </div>
-                <div className="min-w-0">
-                  <div className="truncate text-[11px] font-medium text-slate-900 dark:text-white">
-                    {invocation.model || "—"}
-                  </div>
-                  <div className="mt-0.5 text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                    {invocation.provider || "unknown"}
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-right text-[11px] font-medium text-blue-400">
-                {formatTokens(invocation.inputTokens ?? 0)}
-              </div>
-              <div className="text-right text-[11px] font-medium text-emerald-400">
-                {formatTokens(invocation.outputTokens ?? 0)}
-              </div>
-              <div className="text-right text-[11px] font-medium text-purple-400">
-                {formatTokens(invocation.cachedInputTokens ?? 0)}
-              </div>
-              <div className="text-right text-[11px] font-bold text-white">
-                {formatTokens(invocation.totalTokens ?? 0)}
-              </div>
-              <div className="text-right text-[11px] font-medium text-slate-200">
-                {formatDurationFromInvocation(invocation)}
-              </div>
-              <div className="flex min-w-0 items-start justify-end">
-                {renderContextChips(invocation)}
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition-colors hover:border-signal-500/30 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/60"
-                  onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
-                  aria-label={`${isExpanded ? "Collapse" : "Expand"} invocation ${invocation.id}`}
-                  aria-expanded={isExpanded}
-                >
-                  {isExpanded ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </td>
-      </tr>
-      {isExpanded ? (
-        <tr key={`${invocation.id}-detail`}>
-          <td colSpan={11} className="px-0 pt-0">
-            <div className="rounded-2xl bg-slate-950/60 border border-white/[0.05] p-4 mt-1 text-sm text-slate-400">
-              Messages panel — wired in T06 ({invocation.id})
-            </div>
-          </td>
-        </tr>
-      ) : null}
-    </>
-  );
-}
-
 export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   invocations,
   sort,
   onSortChange,
   expandedId,
   onRowExpand,
-  loading = false,
+  loading,
 }) => {
+  const handleSort = (key: SystemSortKey) => {
+    if (sort.key === key) {
+      onSortChange({ key, dir: sort.dir === "asc" ? "desc" : "asc" });
+    } else {
+      onSortChange({ key, dir: "desc" });
+    }
+  };
+
+  const renderSortIcon = (key: SystemSortKey) => {
+    if (sort.key !== key) return <ArrowUpDown className="ml-1 h-3 w-3" />;
+    return sort.dir === "asc" ? (
+      <ArrowUp className="ml-1 h-3 w-3 text-signal-500" />
+    ) : (
+      <ArrowDown className="ml-1 h-3 w-3 text-signal-500" />
+    );
+  };
+
+  const renderStatusChip = (status: string) => {
+    switch (status) {
+      case "running":
+        return (
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-blue-500/40 bg-blue-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-300`}>
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Running
+          </div>
+        );
+      case "completed":
+        return (
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300`}>
+            <CheckCircle2 className="h-3 w-3" />
+            Completed
+          </div>
+        );
+      case "failed":
+        return (
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-red-500/40 bg-red-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-300`}>
+            <XCircle className="h-3 w-3" />
+            Failed
+          </div>
+        );
+      case "cancelled":
+        return (
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-slate-500/40 bg-slate-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300`}>
+            <MinusCircle className="h-3 w-3" />
+            Cancelled
+          </div>
+        );
+      case "paused":
+        return (
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300`}>
+            <PauseCircle className="h-3 w-3" />
+            Paused
+          </div>
+        );
+      default:
+        return (
+          <div className={`${CHIP_CLASS} px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400`}>
+            {status}
+          </div>
+        );
+    }
+  };
+
   if (loading) {
     return (
-      <div className={`${PANEL_CLASS} max-h-[42rem] overflow-auto`}>
-        <div className="space-y-2">
-          {Array.from({ length: 6 }, (_value, index) => renderLoadingRow(index))}
-        </div>
+      <div className="space-y-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 animate-pulse bg-slate-100/50 dark:bg-white/5`} />
+        ))}
       </div>
     );
   }
 
   if (invocations.length === 0) {
     return (
-      <div className={`${PANEL_CLASS} flex min-h-[22rem] items-center justify-center overflow-hidden`}>
-        <div className={`${SUBPANEL_CLASS} flex max-w-md flex-col items-center gap-3 px-8 py-10 text-center`}>
-          <AlertTriangle className="h-6 w-6 text-amber-400" />
-          <div className="text-sm font-medium text-slate-300">
-            No invocations match the current filters
-          </div>
-        </div>
+      <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+        <AlertTriangle className="mb-4 h-10 w-10 opacity-20" />
+        <div className="text-sm font-medium">No invocations match the current filters</div>
       </div>
     );
   }
 
   return (
-    <div className={`${PANEL_CLASS} max-h-[42rem] overflow-auto`}>
+    <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-y-2">
         <thead className="sticky top-0 z-10">
-          <tr className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-left backdrop-blur-sm dark:bg-void-800/80">
-              {renderHeaderButton(sort, "startedAt", "Time", onSortChange)}
+          <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+            <th className="pb-2 pl-6">
+              <button
+                type="button"
+                onClick={() => handleSort("startedAt")}
+                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+              >
+                Time {renderSortIcon("startedAt")}
+              </button>
             </th>
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-left backdrop-blur-sm dark:bg-void-800/80">
-              Status
+            <th className="pb-2">Status</th>
+            <th className="pb-2">Type</th>
+            <th className="pb-2">Model</th>
+            <th className="pb-2">
+              <button
+                type="button"
+                onClick={() => handleSort("inputTokens")}
+                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+              >
+                In {renderSortIcon("inputTokens")}
+              </button>
             </th>
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-left backdrop-blur-sm dark:bg-void-800/80">
-              Type
+            <th className="pb-2">
+              <button
+                type="button"
+                onClick={() => handleSort("outputTokens")}
+                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+              >
+                Out {renderSortIcon("outputTokens")}
+              </button>
             </th>
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-left backdrop-blur-sm dark:bg-void-800/80">
-              Model
+            <th className="pb-2">Cached</th>
+            <th className="pb-2">
+              <button
+                type="button"
+                onClick={() => handleSort("totalTokens")}
+                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+              >
+                Total {renderSortIcon("totalTokens")}
+              </button>
             </th>
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-right backdrop-blur-sm dark:bg-void-800/80">
-              {renderHeaderButton(sort, "inputTokens", "In", onSortChange)}
+            <th className="pb-2">
+              <button
+                type="button"
+                onClick={() => handleSort("durationMs")}
+                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+              >
+                Duration {renderSortIcon("durationMs")}
+              </button>
             </th>
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-right backdrop-blur-sm dark:bg-void-800/80">
-              {renderHeaderButton(sort, "outputTokens", "Out", onSortChange)}
-            </th>
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-right backdrop-blur-sm dark:bg-void-800/80">
-              Cached
-            </th>
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-right backdrop-blur-sm dark:bg-void-800/80">
-              {renderHeaderButton(sort, "totalTokens", "Total", onSortChange)}
-            </th>
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-right backdrop-blur-sm dark:bg-void-800/80">
-              {renderHeaderButton(sort, "durationMs", "Duration", onSortChange)}
-            </th>
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-left backdrop-blur-sm dark:bg-void-800/80">
-              Context
-            </th>
-            <th scope="col" className="sticky top-0 z-10 bg-white/80 px-4 pb-2 text-right backdrop-blur-sm dark:bg-void-800/80">
-              <span className="sr-only">Expand</span>
-            </th>
+            <th className="pb-2">Context</th>
+            <th className="pb-2 pr-6 text-right">Expand</th>
           </tr>
         </thead>
         <tbody>
-          {invocations.map((invocation) => renderInvocationRow(invocation, expandedId, onRowExpand))}
+          {invocations.map((invocation) => {
+            const isExpanded = expandedId === invocation.id;
+            const { icon: ProviderIcon, bg: providerBg, text: providerText } = getProviderIcon(invocation.provider);
+            const duration = invocation.finishedAt
+              ? formatDuration(Date.parse(invocation.finishedAt) - Date.parse(invocation.startedAt))
+              : "running";
+
+            return (
+              <tr key={invocation.id}>
+                <td colSpan={11} className="p-0">
+                  <div className={`${LEDGER_ROW_MODERN_CLASS} mb-1 flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:p-6`}>
+                    <div className="grid w-full grid-cols-2 gap-4 lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center">
+                      {/* Time */}
+                      <div className="text-[11px] font-mono text-slate-400">
+                        {formatDateTime(invocation.startedAt)}
+                      </div>
+
+                      {/* Status */}
+                      <div>{renderStatusChip(invocation.status)}</div>
+
+                      {/* Type */}
+                      <div className="flex">
+                        <div className={`${CHIP_CLASS} px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
+                          {invocation.type?.replace(/_/g, " ") || "unknown"}
+                        </div>
+                      </div>
+
+                      {/* Model */}
+                      <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                        <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
+                          <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
+                        </div>
+                        <span className="truncate">{invocation.model || "—"}</span>
+                      </div>
+
+                      {/* In Tokens */}
+                      <div className="text-[11px] font-bold text-blue-400">
+                        {formatTokens(invocation.inputTokens ?? 0)}
+                      </div>
+
+                      {/* Out Tokens */}
+                      <div className="text-[11px] font-bold text-emerald-400">
+                        {formatTokens(invocation.outputTokens ?? 0)}
+                      </div>
+
+                      {/* Cached Tokens */}
+                      <div className="text-[11px] font-bold text-purple-400">
+                        {formatTokens(invocation.cachedInputTokens ?? 0)}
+                      </div>
+
+                      {/* Total Tokens */}
+                      <div className="text-[11px] font-black text-slate-900 dark:text-white">
+                        {formatTokens(invocation.totalTokens ?? 0)}
+                      </div>
+
+                      {/* Duration */}
+                      <div className={`text-[11px] font-medium ${invocation.finishedAt ? "text-slate-500" : "text-blue-400"}`}>
+                        {duration}
+                      </div>
+
+                      {/* Context Chips */}
+                      <div className="flex flex-wrap gap-1">
+                        {invocation.sprintNumber !== null && (
+                          <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-slate-400`}>
+                            S{invocation.sprintNumber}
+                          </div>
+                        )}
+                        {invocation.taskKey !== null && (
+                          <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-slate-400`}>
+                            {invocation.taskKey}
+                          </div>
+                        )}
+                        {invocation.sprintNumber === null && invocation.taskKey === null && (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </div>
+
+                      {/* Expand Toggle */}
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
+                          className={`rounded-full p-2 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${
+                            isExpanded ? "text-signal-500" : "text-slate-400"
+                          }`}
+                        >
+                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Error Sub-row inside card */}
+                    {invocation.status === "failed" && (invocation.lastErrorMessage || invocation.errorMessage) && (
+                      <div className="mt-2 flex items-center gap-1.5 border-t border-red-500/10 pt-2 text-[11px] text-red-400">
+                        <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{invocation.lastErrorMessage || invocation.errorMessage}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Expanded Detail Row */}
+                  {isExpanded && (
+                    <div className="px-6 pb-4">
+                      <div className="rounded-2xl border border-white/[0.05] bg-slate-950/60 p-4 text-sm text-slate-400 shadow-inner">
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-1.5 rounded-full bg-signal-500" />
+                          Messages panel — wired in T06 ({invocation.id})
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

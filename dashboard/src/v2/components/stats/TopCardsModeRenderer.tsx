@@ -230,6 +230,8 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     cardsContent = renderReliabilityMode();
   } else if (mode === "ledgers") {
     cardsContent = renderLedgersMode();
+  } else if (mode === "system") {
+    cardsContent = null;
   }
 
   return (
