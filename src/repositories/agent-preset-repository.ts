@@ -241,7 +241,7 @@ export class AgentPresetRepository {
       input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
-      null,
+      input.memoryConfig ? JSON.stringify(input.memoryConfig) : null,
       now,
       now,
     );
@@ -313,6 +313,7 @@ export class AgentPresetRepository {
     model?: string | null;
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
+    memoryConfig?: AgentMemoryConfig;
   }): AgentPresetRecord {
     const current = requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
     if (!current.sourcePath || !current.sourceScope) {
@@ -335,7 +336,9 @@ export class AgentPresetRepository {
       input.model === undefined ? current.model || null : input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
-      current.memoryConfig ? JSON.stringify(current.memoryConfig) : null,
+      input.memoryConfig === undefined
+        ? (current.memoryConfig ? JSON.stringify(current.memoryConfig) : null)
+        : (input.memoryConfig ? JSON.stringify(input.memoryConfig) : null),
       now,
       agentPresetId,
     );

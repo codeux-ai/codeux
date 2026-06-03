@@ -105,7 +105,7 @@ describe("AgentPresetRepository", () => {
     expect(agentPresetRepository.listAgentPresets(project.id)).toEqual([]);
   });
 
-  it("ignores memory config when importing a preset from markdown source", async () => {
+  it("saves memory config when importing a preset from markdown source", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-preset-import-"));
     tempDirs.push(dir);
     const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -136,7 +136,14 @@ describe("AgentPresetRepository", () => {
       },
     });
 
-    expect(imported.memoryConfig).toBeUndefined();
+    expect(imported.memoryConfig).toEqual({
+      tier: "short_term",
+      categories: [],
+      minStrength: 0,
+      minStrengthPerCategory: {},
+      maxShortTerm: 0,
+      maxLongTerm: 0,
+    });
   });
 
   it("persists and sanitizes per-agent MCP access config", async () => {
