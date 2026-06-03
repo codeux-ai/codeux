@@ -9,6 +9,8 @@ interface CellActionsProps {
     to?: string;
     primaryBusy?: boolean;
     onPrimaryAction?: () => void;
+    onSprintsClick?: () => void | Promise<void>;
+    onSettingsClick?: () => void | Promise<void>;
 }
 
 /**
@@ -17,17 +19,19 @@ interface CellActionsProps {
  */
 export const CellActions: FunctionComponent<CellActionsProps> = ({
     isRunning,
-    label = "Open",
+    label = "Sprints",
     to = "#",
     primaryBusy = false,
     onPrimaryAction,
+    onSprintsClick,
+    onSettingsClick,
 }) => (
     <div className="absolute bottom-5 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-[50ms] w-full">
         <button
             className={`flex items-center justify-center w-9 h-9 rounded-full text-slate-800 dark:text-white bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 ${SHARED_INTERACTION_CLASSES}`}
             aria-label={isRunning ? "Stop" : "Play"}
             disabled={!onPrimaryAction || primaryBusy}
-            onClick={(e: any) => {
+            onClick={(e: MouseEvent) => {
                 e.stopPropagation();
                 onPrimaryAction?.();
             }}
@@ -42,17 +46,31 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
         </button>
         <Link 
             to={to}
-            onClick={(e: any) => e.stopPropagation()}
+            onClick={(e: MouseEvent) => {
+                e.stopPropagation();
+                void onSprintsClick?.();
+            }}
             className={`flex items-center gap-1.5 px-5 h-9 bg-transparent text-slate-800 dark:text-white hover:bg-slate-900 hover:text-white dark:hover:bg-white dark:hover:text-void-900 rounded-full font-bold text-[10px] uppercase tracking-[0.1em] shadow-[0_4px_12px_rgba(0,0,0,0.15)] ${SHARED_INTERACTION_CLASSES}`}
         >
             {label} <Maximize2 className="w-2.5 h-2.5" />
         </Link>
-        <button
+        <Link
+            to="/config"
+            onClick={(e: MouseEvent) => {
+                e.stopPropagation();
+                void onSettingsClick?.();
+            }}
             className={`flex items-center justify-center w-11 h-11 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full text-slate-800 dark:text-white ${SHARED_INTERACTION_CLASSES}`}
             aria-label="Settings"
-            onClick={(e: any) => e.stopPropagation()}
         >
-            <Settings className="w-3.5 h-3.5" />
-        </button>
+            <button
+                type="button"
+                aria-hidden="true"
+                tabIndex={-1}
+                className="pointer-events-none"
+            >
+                <Settings className="w-3.5 h-3.5" />
+            </button>
+        </Link>
     </div>
 );

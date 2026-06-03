@@ -3,6 +3,7 @@ import { useRef, useCallback } from "preact/hooks";
 import gsap from "gsap";
 import { FolderGit2, Activity, AlertTriangle, XCircle } from "lucide-preact";
 import type { Source } from "../../types.js";
+import { useProjectData } from "../../context/project-data.js";
 import { CellActions } from "./CellActions.js";
 
 const statusMap = {
@@ -20,6 +21,7 @@ interface SourceCellProps {
 
 export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven, animDelay = 0 }) => {
     const cellRef = useRef<HTMLDivElement>(null);
+    const { selectProject } = useProjectData();
     const anim = isEven ? 'animate-organic' : 'animate-organic-reverse';
     const state = statusMap[source.status] ?? statusMap.idle;
     const StatusIcon = state.icon;
@@ -101,7 +103,9 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
                 {/* Actions */}
                 <CellActions 
                     isRunning={source.status === 'running'} 
-                    to={`/projects?id=${source.id}`}
+                    to="/sprints"
+                    onSprintsClick={() => selectProject(source.id)}
+                    onSettingsClick={() => selectProject(source.id)}
                 />
             </div>
         </div>
