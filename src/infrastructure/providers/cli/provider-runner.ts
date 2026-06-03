@@ -86,7 +86,6 @@ export const providerSpecs: Record<CliProviderId, ProviderCommandSpec> = {
   },
   antigravity: (model: string, prompt: string) => {
     const args = ["--dangerously-skip-permissions"];
-    if (model && model !== "default") args.push("--model", model);
     args.push("-p", prompt);
     return { command: "agy", args };
   },
@@ -794,9 +793,6 @@ export class ProviderRunner implements IProviderRunner {
         // to this log file, never to stdout/stderr. Placed ahead of the terminal -p flag.
         args.push("--log-file", antigravityLogPath);
       }
-      if (model && model !== "default") {
-        args.push("--model", model);
-      }
       if (continueSession && nativeSessionId) {
         args.push(`--conversation=${nativeSessionId}`);
       }
@@ -959,6 +955,10 @@ export class ProviderRunner implements IProviderRunner {
     } else if (provider === "antigravity") {
       if (apiKey && !useProviderMount) {
         env.ANTIGRAVITY_API_KEY = apiKey;
+      }
+      if (model && model !== "default") {
+        env.ANTIGRAVITY_MODEL = model;
+        env.AGY_MODEL = model;
       }
     }
     return env;

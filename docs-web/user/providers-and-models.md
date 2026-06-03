@@ -64,6 +64,13 @@ openrouter/anthropic/claude-sonnet-4.5
 
 OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode config. Code UX writes that generated config to a temporary `opencode.json`, sets `OPENCODE_CONFIG`, and maps the saved key to `OPENCODE_API_KEY`. The Custom endpoint preset is Ollama-compatible by default: API key `your_api_key`, provider/model `ollama/glm-4.7-flash`, environment key `OLLAMA_API_KEY`, and base URL `http://127.0.0.1:11434/v1`. In Docker mode on Docker Desktop, WSL, macOS, or Windows, Code UX rewrites that loopback URL to `host.docker.internal` inside the container.
 
+### Antigravity
+```
+default, gemini-3.5-flash, gemini-3.1-pro-high, gemini-3.1-pro-low,
+gemini-3-flash, claude-sonnet-4.6-thinking, claude-opus-4.6-thinking,
+gpt-oss-120b
+```
+
 ### Default per provider
 
 | Provider | Default model |
@@ -71,9 +78,10 @@ OpenCode provider-key and custom-endpoint instances generate a per-run OpenCode 
 | Jules | `default` |
 | Gemini | `auto` |
 | Claude Code | `default` |
-| Codex | `gpt-5.3-codex` |
+| Codex | `gpt-5.5` |
 | Qwen | `qwen3-coder-plus` |
 | OpenCode | `anthropic/claude-sonnet-4-5` |
+| Antigravity | `default` |
 
 Set per-provider model in **Settings → AI providers**.
 
@@ -119,13 +127,13 @@ A common high-quality setup:
 
 | ID | Provider | Model | Why |
 | --- | --- | --- | --- |
-| `task_coding` | Codex | `gpt-5.3-codex` | Strong code generation. |
+| `task_coding` | Codex | `gpt-5.5` | Strong code generation. |
 | `planning` | Claude Code | `opus` | Best at structured decomposition. |
 | `dashboard_reply` | Gemini | `flash` | Cheap, fast, conversational. |
 | `clarification_reply` | Claude Code | `sonnet` | Strong reasoning, lower cost than opus. |
 | `qa_review` | Claude Code | `opus` | Thorough review. |
-| `ci_fix` | Codex | `gpt-5.3-codex` | Iterative debugging. |
-| `merge_conflict` | Codex | `gpt-5.3-codex` | Mechanical merging. |
+| `ci_fix` | Codex | `gpt-5.5` | Iterative debugging. |
+| `merge_conflict` | Codex | `gpt-5.5` | Mechanical merging. |
 
 ## Choosing a virtual worker provider
 
