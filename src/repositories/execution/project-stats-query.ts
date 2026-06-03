@@ -38,6 +38,24 @@ export function normalizeProjectStatsQuery(
     return buildStatsRangeFromBounds(query, fromDate, toDate);
   }
 
+  if (query.window === "1h") {
+    const alignedEnd = new Date(now);
+    alignedEnd.setMinutes(0, 0, 0);
+    const bucketSizeMs = 60 * 60 * 1000;
+    const bucketCount = 1;
+    const start = new Date(alignedEnd.getTime() - (bucketCount - 1) * bucketSizeMs);
+    return buildStatsRange({
+      query,
+      window: "1h",
+      from: start,
+      bucketSizeMs,
+      bucketCount,
+      resolution: "hour",
+      label: "Last 1 hour",
+      resolutionLabel: "Hourly telemetry buckets",
+    });
+  }
+
   if (query.window === "24h") {
     const alignedEnd = new Date(now);
     alignedEnd.setMinutes(0, 0, 0);
