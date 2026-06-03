@@ -1,5 +1,6 @@
 import { buildProviderPrompt } from "../../cli-workflow-utils.js";
 import type { PipelineContext } from "./pipeline-context.js";
+import type { AgentMemoryConfig } from "../../../contracts/agent-preset-types.js";
 import type { MemoryRecord } from "../../../contracts/memory-types.js";
 import { resolveProviderForInvocation } from "../../provider-routing.js";
 import { resolveAgentMemoryInstructions } from "../../agent-memory-instructions.js";
@@ -16,6 +17,18 @@ function formatMemoryContext(shortTerm: MemoryRecord[], longTerm: MemoryRecord[]
     for (const m of shortTerm) sections.push(`- [${m.category}] ${m.content.slice(0, 300)}`);
   }
   return sections.join("\n");
+}
+
+function passesStrength(m: MemoryRecord, cfg: AgentMemoryConfig | undefined): boolean {
+  if (!cfg || cfg.minStrength === 0) return true;
+  const perCat = cfg.minStrengthPerCategory?.[m.category];
+  const threshold = perCat !== undefined ? perCat : cfg.minStrength;
+  return m.strength >= threshold;
+}
+
+function passesCategory(m: MemoryRecord, cfg: AgentMemoryConfig | undefined): boolean {
+  if (!cfg || cfg.categories.length === 0) return true;
+  return cfg.categories.includes(m.category);
 }
 
 export async function executePrepareStage(
@@ -36,6 +49,7 @@ export async function executePrepareStage(
   // Inject memory context (short-term + long-term) for this worker agent
   if (ctx.settings.memory?.enabled && ctx.deps.memoryService && ctx.agentPresetId) {
     try {
+      const memCfg = ctx.agentMemoryConfig;
       let projectId: string | undefined;
       let sprintId: string | undefined;
       if (ctx.taskRunId && ctx.deps.executionRepository) {
@@ -43,10 +57,18 @@ export async function executePrepareStage(
         if (taskRun) { projectId = taskRun.projectId; sprintId = taskRun.sprintId ?? undefined; }
       }
       if (projectId) {
-        const shortTerm = sprintId
-          ? ctx.deps.memoryService.listBySprintAndAgent(projectId, sprintId, ctx.agentPresetId, 10)
+        const fetchShort = !memCfg || memCfg.tier !== "long_term";
+        const fetchLong = !memCfg || memCfg.tier !== "short_term";
+        let shortTerm = fetchShort && sprintId
+          ? ctx.deps.memoryService.listBySprintAndAgent(projectId, sprintId, ctx.agentPresetId, 100)
           : [];
-        const longTerm = ctx.deps.memoryService.listLongTermByAgent(projectId, ctx.agentPresetId, 10);
+        let longTerm = fetchLong
+          ? ctx.deps.memoryService.listLongTermByAgent(projectId, ctx.agentPresetId, 100)
+          : [];
+        shortTerm = shortTerm.filter((m) => passesCategory(m, memCfg) && passesStrength(m, memCfg));
+        longTerm = longTerm.filter((m) => passesCategory(m, memCfg) && passesStrength(m, memCfg));
+        if (memCfg?.maxShortTerm && memCfg.maxShortTerm > 0) shortTerm = shortTerm.slice(0, memCfg.maxShortTerm);
+        if (memCfg?.maxLongTerm && memCfg.maxLongTerm > 0) longTerm = longTerm.slice(0, memCfg.maxLongTerm);
         const memorySection = formatMemoryContext(shortTerm, longTerm);
         if (memorySection) promptBody += `\n\n${memorySection}`;
       }

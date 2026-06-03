@@ -345,6 +345,7 @@ Legacy runtime:
 - Agents are generated with a random persisted avatar on creation and can be fully customized in the dedicated edit mode.
 - Edit mode exposes a new toggleable Memory Template Override control, allowing operators to explicitly provide custom memory injection instructions on a per-agent basis.
 - Edit mode now also exposes a dedicated memory injection panel for tier selection, category filtering, global and per-category minimum strength, and short/long-term memory caps. Empty category selection means all categories are included, and per-category overrides are only shown for categories currently eligible for injection.
+- Worker prompt preparation honors that memory config at runtime by filtering injected memories after retrieval, so the prompt only includes the configured tier(s), categories, strength thresholds, and per-tier caps.
 - Agents page is DB-backed and manages project-scoped agents (`name`, `short routing description`, `instruction markdown`, `memory template markdown`)
 - Agents are auto-imported from project and home `.code-ux/agents/*.md` when first discovered
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.code-ux/agents/*.md` in the selected repo without touching shipped defaults

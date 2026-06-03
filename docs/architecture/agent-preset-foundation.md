@@ -75,6 +75,8 @@ Agent labels are still stored in the data model for markdown sync and built-in p
 
 Provider and model preferences are intentionally nullable. They only take effect when a provider invocation route uses the `AGENT` strategy; otherwise the agent inherits the configured route, worker, or global defaults.
 
+At runtime, the CLI workflow now reads `AgentMemoryConfig` from the resolved worker agent and post-filters injected memories by configured tier, categories, strength thresholds, and max counts before composing the prompt. When the config is absent, the workflow keeps the default unrestricted memory injection path.
+
 This foundation gave Code UX a clean product base for:
 
 - reusable planning roles
