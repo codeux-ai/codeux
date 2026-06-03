@@ -10,10 +10,12 @@ import { formatDateTime } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   CHIP_CLASS,
-  RangeToggle,
+  INPUT_CLASS,
   ViewToggle,
   type StatsVisualMode,
 } from "./StatsShared.js";
+
+const WINDOW_PRESETS = ["1h", "24h", "7d", "30d", "all"] as const;
 
 export interface StatsPageHeroProps {
   selectedProject: Source | null;
@@ -75,6 +77,49 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
           </div>
         </div>
         <div className="flex flex-col items-start gap-4 xl:items-end xl:justify-end">
+          <div className={`inline-flex flex-wrap p-1 ${CHIP_CLASS}`}>
+            {WINDOW_PRESETS.map((window) => {
+              const isActive = activeQuery.window === window;
+              return (
+                <button
+                  key={window}
+                  type="button"
+                  onClick={() => applyPresetWindow(window)}
+                  aria-pressed={isActive}
+                  className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
+                    isActive
+                      ? "bg-void-900 text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] dark:bg-white dark:text-void-900"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}
+                >
+                  {window === "all" ? "All time" : window}
+                </button>
+              );
+            })}
+          </div>
+          {activeQuery.window === "custom" ? (
+            <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <input
+                type="date"
+                value={customFrom}
+                onInput={(event) => setCustomFrom((event.currentTarget as HTMLInputElement).value)}
+                className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
+              />
+              <input
+                type="date"
+                value={customTo}
+                onInput={(event) => setCustomTo((event.currentTarget as HTMLInputElement).value)}
+                className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
+              />
+              <button
+                type="button"
+                onClick={applyCustomRange}
+                className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
+              >
+                Apply
+              </button>
+            </div>
+          ) : null}
           <ViewToggle value={visualMode} onChange={setVisualMode} />
         </div>
       </div>

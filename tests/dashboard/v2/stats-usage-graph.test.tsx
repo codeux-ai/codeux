@@ -312,7 +312,7 @@ describe("InteractiveUsageChart", () => {
     render(<InteractiveUsageChart stats={stats} loading={false} error={null} refresh={vi.fn()} chartState={chartState} />);
 
     expect(screen.getByText("No Activity Detected")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reset Filters" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset Filters" })).not.toBeInTheDocument();
   });
 });
 

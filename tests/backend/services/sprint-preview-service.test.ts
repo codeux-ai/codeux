@@ -3,11 +3,13 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { execFile as execFileCallback } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { SprintPreviewService } from "../../../src/services/sprint-preview-service.js";
 
 const execFile = promisify(execFileCallback);
 const tempDirs: string[] = [];
+const dockerAvailable = spawnSync("docker", ["--version"], { stdio: "ignore" }).status === 0;
 
 const run = async (command: string, args: string[], cwd?: string): Promise<void> => {
   await execFile(command, args, cwd ? { cwd } : undefined);
@@ -27,7 +29,9 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true, maxRetries: 3 })));
 });
 
-describe("SprintPreviewService workspace export", () => {
+const describeIfDocker = dockerAvailable ? describe : describe.skip;
+
+describeIfDocker("SprintPreviewService workspace export", () => {
   it("exports a remote-only sprint branch into an isolated preview workspace", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-preview-service-"));
     tempDirs.push(root);

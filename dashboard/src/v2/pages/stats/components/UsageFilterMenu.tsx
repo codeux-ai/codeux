@@ -4,24 +4,12 @@ import gsap from 'gsap';
 import { X } from 'lucide-preact';
 import type {
   ProjectExecutionStatsSnapshot,
-  ProjectStatsWindow,
 } from '../../../types.js';
-import {
-  CHIP_CLASS,
-  INPUT_CLASS,
-} from './StatsShared.js';
 import styles from './UsageFilterMenu.module.css';
 
 interface UsageFilterMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  activeWindow: ProjectStatsWindow | string;
-  customFrom: string;
-  customTo: string;
-  onSelectPreset: (value: Exclude<ProjectStatsWindow, "custom">) => void;
-  onCustomFromChange: (value: string) => void;
-  onCustomToChange: (value: string) => void;
-  onApplyCustom: () => void;
   stats: ProjectExecutionStatsSnapshot | null;
   enabledSeries: Record<string, boolean>;
   setEnabledSeries: (val: Record<string, boolean> | ((curr: Record<string, boolean>) => Record<string, boolean>)) => void;
@@ -30,13 +18,6 @@ interface UsageFilterMenuProps {
 export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   isOpen,
   onClose,
-  activeWindow,
-  customFrom,
-  customTo,
-  onSelectPreset,
-  onCustomFromChange,
-  onCustomToChange,
-  onApplyCustom,
   stats,
   enabledSeries,
   setEnabledSeries,
@@ -99,51 +80,6 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
           >
             <X className="h-4 w-4" />
           </button>
-        </div>
-
-        <div className={styles.section}>
-          <label className={styles.label}>Time Window</label>
-          <div className="flex flex-wrap gap-2">
-            {(['1h', '24h', '7d', '30d', 'all'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => onSelectPreset(value)}
-                className={`rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-all ${
-                  activeWindow === value
-                    ? 'bg-slate-900 text-white dark:bg-white dark:text-void-900'
-                    : 'bg-black/[0.04] text-slate-500 hover:bg-black/[0.08] dark:bg-white/[0.04] dark:text-slate-400'
-                }`}
-              >
-                {value === 'all' ? 'All time' : value}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className={styles.section}>
-          <label className={styles.label}>Custom Range</label>
-          <div className="grid gap-2">
-            <input
-              type="date"
-              value={customFrom}
-              onInput={(e) => onCustomFromChange((e.currentTarget as HTMLInputElement).value)}
-              className={`${INPUT_CLASS} !h-9 !px-3 !text-[12px]`}
-            />
-            <input
-              type="date"
-              value={customTo}
-              onInput={(e) => onCustomToChange((e.currentTarget as HTMLInputElement).value)}
-              className={`${INPUT_CLASS} !h-9 !px-3 !text-[12px]`}
-            />
-            <button
-              type="button"
-              onClick={onApplyCustom}
-              className="mt-1 flex h-9 items-center justify-center rounded-xl bg-slate-900 px-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
-            >
-              Apply Range
-            </button>
-          </div>
         </div>
 
         {stats && (

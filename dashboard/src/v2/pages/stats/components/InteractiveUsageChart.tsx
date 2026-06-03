@@ -3,7 +3,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import gsap from 'gsap';
 import type {
   ProjectExecutionStatsSnapshot,
-  ProjectStatsWindow,
 } from '../../../types.js';
 import {
   formatTokens,
@@ -39,26 +38,12 @@ export const InteractiveUsageChart: FunctionComponent<{
   error: string | null;
   refresh: () => Promise<void>;
   chartState: UsageChartState;
-  activeWindow: ProjectStatsWindow | string;
-  customFrom: string;
-  customTo: string;
-  onSelectPreset: (value: Exclude<ProjectStatsWindow, "custom">) => void;
-  onCustomFromChange: (value: string) => void;
-  onCustomToChange: (value: string) => void;
-  onApplyCustom: () => void;
 }> = ({
   stats,
   loading,
   error,
   refresh,
   chartState,
-  activeWindow,
-  customFrom,
-  customTo,
-  onSelectPreset,
-  onCustomFromChange,
-  onCustomToChange,
-  onApplyCustom,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const svgContainerRef = useRef<HTMLDivElement>(null);
@@ -289,13 +274,6 @@ export const InteractiveUsageChart: FunctionComponent<{
           <UsageFilterMenu
             isOpen={isFiltersOpen}
             onClose={closeFilters}
-            activeWindow={activeWindow}
-            customFrom={customFrom}
-            customTo={customTo}
-            onSelectPreset={onSelectPreset}
-            onCustomFromChange={onCustomFromChange}
-            onCustomToChange={onCustomToChange}
-            onApplyCustom={onApplyCustom}
             stats={stats}
             enabledSeries={enabledSeries}
             setEnabledSeries={setEnabledSeries}
@@ -387,7 +365,7 @@ export const InteractiveUsageChart: FunctionComponent<{
 
               {buckets.length === 0 ? (
                 <div className={`absolute inset-0 h-full w-full transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
-                  <UsageGraphEmpty onReset={() => onSelectPreset("7d")} />
+                  <UsageGraphEmpty />
                 </div>
               ) : (
                 <svg viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
@@ -573,4 +551,3 @@ export const InteractiveUsageChart: FunctionComponent<{
     </div>
   );
 };
-

@@ -26,7 +26,6 @@ import type {
   ExecutionStatsEntitySummary,
   ExecutionUsageBucketSummary,
   ProjectExecutionStatsSnapshot,
-  ProjectStatsWindow,
   SegmentDefinition,
 } from "../../../types.js";
 import {
@@ -45,7 +44,7 @@ export * from "./stats-geometry.js";
 export * from "./stats-formatters.js";
 export * from "./stats-ui-primitives.js";
 
-import { PANEL_CLASS, SUBPANEL_CLASS, CHIP_CLASS, INPUT_CLASS, LEDGER_ROW_CLASS, LEDGER_ROW_MODERN_CLASS, SignalMetricCard, DonutCard, PurposeRibbon, StudioHeader, TokenChip, TokenFlowBar, ChurnFlowBar, SortButton, RangeToggle, ViewToggle, SeriesLegendButton, CHART_SERIES, type StatsVisualMode, type ChartSeriesId } from "./stats-ui-primitives.js";
+import { PANEL_CLASS, SUBPANEL_CLASS, CHIP_CLASS, LEDGER_ROW_CLASS, LEDGER_ROW_MODERN_CLASS, SignalMetricCard, DonutCard, PurposeRibbon, StudioHeader, TokenChip, TokenFlowBar, ChurnFlowBar, SortButton, ViewToggle, SeriesLegendButton, CHART_SERIES, type StatsVisualMode, type ChartSeriesId } from "./stats-ui-primitives.js";
 import { formatDay, formatHourTick, formatShortDate, toTimestamp, getAxisLabelStep, formatAxisLabel, getLedgerSortValue } from "./stats-formatters.js";
 import { buildPath, buildSmoothPath, buildAreaPath, buildSmoothAreaPath, buildPoints, polarToCartesian, buildDonutArcPath, buildDonutSlices } from "./stats-geometry.js";
 import { InteractiveUsageChart } from "./InteractiveUsageChart.js";
@@ -58,13 +57,6 @@ export const TrendStudio: FunctionComponent<{
   refresh: () => Promise<void>;
   planningUsage: ExecutionStatsEntitySummary | null;
   chartState: UsageChartState;
-  activeWindow: ProjectStatsWindow | string;
-  customFrom: string;
-  customTo: string;
-  onSelectPreset: (value: Exclude<ProjectStatsWindow, "custom">) => void;
-  onCustomFromChange: (value: string) => void;
-  onCustomToChange: (value: string) => void;
-  onApplyCustom: () => void;
 }> = ({
   stats,
   loading,
@@ -72,13 +64,6 @@ export const TrendStudio: FunctionComponent<{
   refresh,
   planningUsage,
   chartState,
-  activeWindow,
-  customFrom,
-  customTo,
-  onSelectPreset,
-  onCustomFromChange,
-  onCustomToChange,
-  onApplyCustom,
 }) => (
   <section className="space-y-6">
 
@@ -89,13 +74,6 @@ export const TrendStudio: FunctionComponent<{
       error={error}
       refresh={refresh}
       chartState={chartState}
-      activeWindow={activeWindow}
-      customFrom={customFrom}
-      customTo={customTo}
-      onSelectPreset={onSelectPreset}
-      onCustomFromChange={onCustomFromChange}
-      onCustomToChange={onCustomToChange}
-      onApplyCustom={onApplyCustom}
     />
   </section>
 );
@@ -238,4 +216,3 @@ export const ReliabilityStudio: FunctionComponent<{
     </div>
   </section>
 );
-
