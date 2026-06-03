@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
 import { h } from "preact";
-import { render, screen, fireEvent, cleanup } from "@testing-library/preact";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { AddProjectModal } from "../../../dashboard/src/v2/components/ui/AddProjectModal.js";
@@ -72,6 +72,14 @@ describe("AddProjectModal", () => {
     expect(dialogCard.style.minHeight).toBe("min(640px, calc(100vh - 2rem))");
   });
 
+  it("keeps git-only fields unmounted when local source is selected", () => {
+    render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} />);
+
+    expect(screen.getByLabelText(/Directory Path/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Repository URL/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Clone Into Directory/i)).not.toBeInTheDocument();
+  });
+
   it("browses into a directory and applies it to the local path input", async () => {
     vi.mocked(fetchLocalDirectories)
       .mockResolvedValueOnce({
@@ -101,7 +109,7 @@ describe("AddProjectModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^use$/i }));
 
-    expect(screen.getByLabelText("Directory Path")).toHaveValue("/home/user/project");
+    expect(screen.getByLabelText(/Directory Path/i)).toHaveValue("/home/user/project");
   });
 
   it("applies the directory picker selection to the optional clone directory", async () => {
@@ -135,5 +143,27 @@ describe("AddProjectModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /^use$/i }));
 
     expect(screen.getByLabelText(/Clone Into Directory/i)).toHaveValue("/home/user/repos");
+  });
+
+  it("submits a local project with an empty directory path", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} />);
+
+    fireEvent.input(screen.getByLabelText("Project Name"), { target: { value: "Local Project" } });
+    fireEvent.click(screen.getByLabelText(/Initialize with Project Setup Agent/i));
+
+    fireEvent.click(screen.getByRole("button", { name: /add project/i }));
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+
+    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Local Project",
+      type: "local",
+      path: "",
+      setup: expect.objectContaining({
+        enabled: false,
+      }),
+    }));
   });
 });

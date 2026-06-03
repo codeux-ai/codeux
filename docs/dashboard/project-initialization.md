@@ -46,6 +46,7 @@ Project creation also resolves local storage paths before the record is persiste
 
 - git projects keep using the configured clone root and repository name
 - local projects with an empty `sourceRef` now default to `~/.codex-ux/projects/<slug>`
+- the Add Project modal mirrors that contract by making the local Directory Path optional and leaving the path empty when the operator wants the backend default
 - when that default path is used, the same resolved path is stored as `source_ref` so later lookups do not depend on an empty string placeholder
 
 ## Generated Artifacts

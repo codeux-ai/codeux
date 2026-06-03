@@ -70,9 +70,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         const errors: Record<string, string> = {};
         if (!name.trim()) errors.name = "Project Name is required.";
 
-        const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
-        if (!path) {
-            errors.path = sourceType === 'local' ? "Directory Path is required." : "Repository URL is required.";
+        if (sourceType === 'git' && !gitUrl.trim()) {
+            errors.path = "Repository URL is required.";
         }
         return errors;
     }, [name, localPath, gitUrl, sourceType]);
@@ -445,6 +444,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <div className="group/field">
                                     <label htmlFor="add-project-path" className={`${fieldLabelClass} flex items-center gap-1.5`}>
                                         <FolderInput className="w-3 h-3" /> Directory Path
+                                        <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">(optional)</span>
                                     </label>
                                     <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
                                         <input
@@ -455,12 +455,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 setLocalPath((e.target as HTMLInputElement).value);
                                                 if (submitError) setSubmitError(null);
                                             }}
-                                            placeholder="/home/user/projects/my-project"
+                                            placeholder="Defaults to ~/.codex-ux/projects/<name>"
                                             className={`${detailInputSurfaceClass} min-w-0 flex-1`}
-                                            required
-                                            aria-invalid={!!validationErrors.path && touched.path}
-                                            aria-describedby={validationErrors.path && touched.path ? "project-path-error" : undefined}
-                                            onBlur={() => setTouched(prev => ({ ...prev, path: true }))}
                                         />
                                         <button
                                             type="button"
@@ -475,7 +471,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         </button>
                                     </div>
                                     {renderDirectoryPicker('localPath')}
-                                    {validationErrors.path && touched.path && <div id="project-path-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.path}</div>}
                                 </div>
                             ) : (
                                 <>
