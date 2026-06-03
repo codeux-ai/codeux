@@ -3,6 +3,7 @@ import type {
   ExecutionRuntimeEventSummary,
   ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
+  ExecutionUsageTotals,
   Subtask,
 } from "../../../dashboard/src/types.js";
 import {
@@ -56,6 +57,7 @@ function makeDispatch(overrides: Partial<ExecutionTaskDispatchSummary> & Pick<Ex
     errorMessage: overrides.errorMessage ?? null,
     activeLeaseOwnerKey: overrides.activeLeaseOwnerKey ?? null,
     activeLeaseExpiresAt: overrides.activeLeaseExpiresAt ?? null,
+    usage: overrides.usage,
   };
 }
 
@@ -109,6 +111,24 @@ function makeSprintRun(overrides: Partial<ExecutionSprintRunSummary> = {}): Exec
     activeLeaseOwnerKey: overrides.activeLeaseOwnerKey ?? null,
     activeLeaseExpiresAt: overrides.activeLeaseExpiresAt ?? null,
     humanIntervention: overrides.humanIntervention ?? null,
+    usage: overrides.usage,
+  };
+}
+
+function makeUsageTotals(overrides: Partial<ExecutionUsageTotals> = {}): ExecutionUsageTotals {
+  return {
+    invocationCount: overrides.invocationCount ?? 0,
+    activeTimeMs: overrides.activeTimeMs ?? 0,
+    wallTimeMs: overrides.wallTimeMs ?? 0,
+    inputTokens: overrides.inputTokens ?? 0,
+    cachedInputTokens: overrides.cachedInputTokens ?? 0,
+    outputTokens: overrides.outputTokens ?? 0,
+    reasoningOutputTokens: overrides.reasoningOutputTokens ?? 0,
+    totalTokens: overrides.totalTokens ?? 0,
+    reportedInvocationCount: overrides.reportedInvocationCount ?? 0,
+    estimatedInvocationCount: overrides.estimatedInvocationCount ?? 0,
+    unavailableInvocationCount: overrides.unavailableInvocationCount ?? 0,
+    unsupportedInvocationCount: overrides.unsupportedInvocationCount ?? 0,
   };
 }
 
@@ -1058,5 +1078,140 @@ describe("live stats timing model", () => {
 
     // But the stats deck order should not include it
     expect(STATS_DECK_VISIBLE_STAGES).not.toContain("queued");
+  });
+
+  it("aggregates token totals from scoped dispatch usage and ignores older sprint runs", () => {
+    const tasks = [
+      makeTask({
+        id: "T01",
+        title: "Current sprint task",
+        sprint_id: "sprint-current",
+        status: "COMPLETED",
+      }),
+    ];
+    const dispatches = [
+      makeDispatch({
+        id: "dispatch-old",
+        sprintRunId: "run-old",
+        sprintId: "sprint-old",
+        taskId: "task-old",
+        taskKey: "T01",
+        taskTitle: "Older sprint task",
+        startedAt: "2026-03-18T10:00:00.000Z",
+        finishedAt: "2026-03-18T10:05:00.000Z",
+        usage: makeUsageTotals({ inputTokens: 999, outputTokens: 888, cachedInputTokens: 777 }),
+      }),
+      makeDispatch({
+        id: "dispatch-current-a",
+        sprintRunId: "run-current",
+        sprintId: "sprint-current",
+        taskId: "task-current-a",
+        taskKey: "T01",
+        taskTitle: "Current sprint task",
+        startedAt: "2026-03-19T10:00:00.000Z",
+        finishedAt: "2026-03-19T10:03:00.000Z",
+        usage: makeUsageTotals({ inputTokens: 10, outputTokens: 20, cachedInputTokens: 30 }),
+      }),
+      makeDispatch({
+        id: "dispatch-current-b",
+        sprintRunId: "run-current",
+        sprintId: "sprint-current",
+        taskId: "task-current-b",
+        taskKey: "T02",
+        taskTitle: "Second current sprint task",
+        startedAt: "2026-03-19T10:05:00.000Z",
+        finishedAt: "2026-03-19T10:07:00.000Z",
+        usage: makeUsageTotals({ inputTokens: 4, outputTokens: 6, cachedInputTokens: 8 }),
+      }),
+    ];
+    const sprintRuns = [
+      makeSprintRun({
+        id: "run-old",
+        sprintId: "sprint-old",
+        startedAt: "2026-03-18T09:00:00.000Z",
+        usage: makeUsageTotals({ inputTokens: 500, outputTokens: 400, cachedInputTokens: 300 }),
+      }),
+      makeSprintRun({
+        id: "run-current",
+        sprintId: "sprint-current",
+        startedAt: "2026-03-19T09:00:00.000Z",
+      }),
+    ];
+
+    const summary = buildLiveSprintTimingSummary({
+      tasks,
+      dispatches,
+      events: [],
+      sprintRuns,
+      nowIso: "2026-03-19T10:10:00.000Z",
+    });
+
+    expect(summary.tokenTotals).toEqual({
+      inputTokens: 14,
+      outputTokens: 26,
+      cachedInputTokens: 38,
+    });
+  });
+
+  it("falls back to sprint-run usage when scoped dispatches have no usage data", () => {
+    const tasks = [
+      makeTask({
+        id: "T01",
+        title: "Fallback sprint task",
+        sprint_id: "sprint-current",
+        status: "RUNNING",
+      }),
+    ];
+    const dispatches = [
+      makeDispatch({
+        id: "dispatch-current",
+        sprintId: "sprint-current",
+        taskId: "task-current",
+        taskKey: "T01",
+        taskTitle: "Fallback sprint task",
+        startedAt: "2026-03-19T10:00:00.000Z",
+        finishedAt: null,
+      }),
+    ];
+    const sprintRuns = [
+      makeSprintRun({
+        id: "run-current",
+        sprintId: "sprint-current",
+        startedAt: "2026-03-19T09:00:00.000Z",
+        usage: makeUsageTotals({ inputTokens: 41, outputTokens: 52, cachedInputTokens: 63 }),
+      }),
+    ];
+
+    const summary = buildLiveSprintTimingSummary({
+      tasks,
+      dispatches,
+      events: [],
+      sprintRuns,
+      nowIso: "2026-03-19T10:10:00.000Z",
+    });
+
+    expect(summary.tokenTotals).toEqual({
+      inputTokens: 41,
+      outputTokens: 52,
+      cachedInputTokens: 63,
+    });
+  });
+
+  it("returns zero token totals when neither dispatch nor sprint-run usage exists", () => {
+    const tasks = [makeTask({ id: "T01", title: "No usage task", status: "RUNNING" })];
+
+    const summary = buildLiveSprintTimingSummary({
+      tasks,
+      dispatches: [],
+      events: [],
+      sprintRuns: [],
+      nowIso: "2026-03-19T10:10:00.000Z",
+    });
+
+    expect(summary.tokenTotals).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+    });
   });
 });

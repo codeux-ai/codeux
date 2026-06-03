@@ -2,6 +2,7 @@ import type {
   ExecutionRuntimeEventSummary,
   ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
+  ExecutionUsageTotals,
   Subtask,
 } from "../../types.js";
 import {
@@ -58,6 +59,11 @@ export interface LiveSprintTimingSummary {
   trackedTaskCount: number;
   completedTaskCount: number;
   averageCompletedTaskSeconds: number;
+  tokenTotals: {
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens: number;
+  };
   activeStageCounts: Record<LiveTaskStageKey, number>;
   stageTotals: Record<LiveTaskStageKey, number>;
   longestTask: {
@@ -106,6 +112,48 @@ function maxIso(...values: Array<string | null | undefined>): string | null {
     .filter((value): value is string => typeof value === "string" && value.length > 0)
     .sort(compareIsoAsc);
   return normalized.length > 0 ? normalized[normalized.length - 1] : null;
+}
+
+function zeroTokenTotals(): LiveSprintTimingSummary["tokenTotals"] {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedInputTokens: 0,
+  };
+}
+
+function addTokenTotals(
+  accumulator: LiveSprintTimingSummary["tokenTotals"],
+  usage: Pick<ExecutionUsageTotals, "inputTokens" | "outputTokens" | "cachedInputTokens"> | null | undefined,
+): LiveSprintTimingSummary["tokenTotals"] {
+  return {
+    inputTokens: accumulator.inputTokens + (usage?.inputTokens ?? 0),
+    outputTokens: accumulator.outputTokens + (usage?.outputTokens ?? 0),
+    cachedInputTokens: accumulator.cachedInputTokens + (usage?.cachedInputTokens ?? 0),
+  };
+}
+
+function getSprintTokenTotals(args: {
+  dispatches: ExecutionTaskDispatchSummary[];
+  sprintRun: ExecutionSprintRunSummary | null;
+}): LiveSprintTimingSummary["tokenTotals"] {
+  const hasScopedDispatchUsage = args.dispatches.some((dispatch) => dispatch.usage != null);
+  if (hasScopedDispatchUsage) {
+    return args.dispatches.reduce<LiveSprintTimingSummary["tokenTotals"]>(
+      (accumulator, dispatch) => addTokenTotals(accumulator, dispatch.usage),
+      zeroTokenTotals(),
+    );
+  }
+
+  if (args.sprintRun?.usage) {
+    return {
+      inputTokens: args.sprintRun.usage.inputTokens,
+      outputTokens: args.sprintRun.usage.outputTokens,
+      cachedInputTokens: args.sprintRun.usage.cachedInputTokens,
+    };
+  }
+
+  return zeroTokenTotals();
 }
 
 function secondsBetween(startedAt: string, endedAt: string): number {
@@ -570,13 +618,17 @@ function scopeExecutionHistoryToRelevantSprintRun(args: {
 export function buildLiveSprintTimingSummary(args: LiveStatsModelArgs): LiveSprintTimingSummary {
   const nowIso = args.nowIso || new Date().toISOString();
   const scopedHistory = scopeExecutionHistoryToRelevantSprintRun(args);
+  const relevantSprintRun = selectRelevantSprintRun(args.tasks, args.sprintRuns);
   const taskTimings = buildLiveTaskTimingSummaries({
     tasks: args.tasks,
     dispatches: scopedHistory.dispatches,
     events: scopedHistory.events,
     nowIso,
   });
-  const relevantSprintRun = selectRelevantSprintRun(args.tasks, args.sprintRuns);
+  const tokenTotals = getSprintTokenTotals({
+    dispatches: scopedHistory.dispatches,
+    sprintRun: relevantSprintRun,
+  });
   const sprintStartedAt = relevantSprintRun?.startedAt
     || taskTimings
       .map((timing) => timing.startedAt)
@@ -624,6 +676,7 @@ export function buildLiveSprintTimingSummary(args: LiveStatsModelArgs): LiveSpri
     averageCompletedTaskSeconds: completedTaskCount > 0
       ? Math.round(completedTaskDurationTotal / completedTaskCount)
       : 0,
+    tokenTotals,
     activeStageCounts,
     stageTotals,
     longestTask,
