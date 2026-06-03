@@ -36,6 +36,7 @@ export const SettingsPage: FunctionComponent = () => {
     showUnsavedModal,
     confirmDiscard,
     cancelDiscard,
+    saveAndLeave,
   } = state;
 
   useLayoutEffect(() => {
@@ -279,7 +280,12 @@ export const SettingsPage: FunctionComponent = () => {
       </div>
 
       {showUnsavedModal && (
-        <UnsavedChangesModal onConfirm={confirmDiscard} onCancel={cancelDiscard} />
+        <UnsavedChangesModal
+          onConfirm={confirmDiscard}
+          onCancel={cancelDiscard}
+          onSave={() => void saveAndLeave()}
+          saving={activeSaving}
+        />
       )}
     </PageContainer>
   );

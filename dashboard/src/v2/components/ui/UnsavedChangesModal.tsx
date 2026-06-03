@@ -8,11 +8,15 @@ import { AlertTriangle } from "lucide-preact";
 interface UnsavedChangesModalProps {
   onConfirm: () => void;
   onCancel: () => void;
+  onSave?: () => void;
+  saving?: boolean;
 }
 
 export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = ({
   onConfirm,
   onCancel,
+  onSave,
+  saving = false,
 }) => {
   const backdropRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -44,13 +48,13 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !saving) {
         onCancel();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
+  }, [onCancel, saving]);
 
   return (
     <div
@@ -80,25 +84,37 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
             </h2>
           </div>
           <p id="unsaved-modal-body" className="mt-4 text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-            You have unsaved settings. Discard changes and leave?
+            You have unsaved settings. Save them, discard them, or keep editing?
           </p>
         </div>
 
-        <div className="flex items-center justify-end gap-3 bg-void-50 dark:bg-void-900/30 p-5 border-t border-black/[0.06] dark:border-white/[0.06]">
+        <div className="flex flex-wrap items-center justify-end gap-3 bg-void-50 dark:bg-void-900/30 p-5 border-t border-black/[0.06] dark:border-white/[0.06]">
           <button
             type="button"
             onClick={onCancel}
-            className="px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl border border-black/[0.06] bg-white/70 text-slate-600 hover:text-slate-900 transition-all dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
+            disabled={saving}
+            className="px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl border border-black/[0.06] bg-white/70 text-slate-600 hover:text-slate-900 transition-all disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
           >
             Keep editing
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl bg-status-red text-white shadow-[0_4px_12px_rgba(227,0,15,0.25)] hover:bg-status-red/90 transition-all active:scale-95"
+            disabled={saving}
+            className="px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl border border-status-red/30 bg-white/70 text-status-red hover:bg-status-red/10 transition-all disabled:cursor-not-allowed disabled:opacity-50 dark:border-status-red/30 dark:bg-white/[0.03]"
           >
             Discard changes
           </button>
+          {onSave ? (
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              className="px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

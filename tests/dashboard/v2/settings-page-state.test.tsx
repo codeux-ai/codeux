@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/preact";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+import { renderHook, act, waitFor, cleanup } from "@testing-library/preact";
 import { useSettingsPageState } from "../../../dashboard/src/v2/hooks/use-settings-page-state.js";
 import { CATEGORIES, CATEGORY_SEARCH_HINTS } from "../../../dashboard/src/v2/components/settings/SettingsCategoryRail.js";
 import { applyEffectiveProjectSettings } from "../../../dashboard/src/v2/lib/settings-view-models.js";
@@ -71,6 +71,12 @@ beforeEach(() => {
       claudeCode: { hasApiKey: false, hasLocalAuth: false },
     },
   });
+});
+
+// Unmount hooks between tests so leftover `beforeunload`/navigation listeners from
+// one test cannot leak into the next (each mounted settings hook attaches its own).
+afterEach(() => {
+  cleanup();
 });
 
 describe("useSettingsPageState", () => {
@@ -422,7 +428,7 @@ describe("useSettingsPageState", () => {
 
     act(() => {
       // Simulate dirty state
-      result.current.updateEditableSettings((curr) => ({ ...curr, aiProvider: { provider: "gemini" } } as any));
+      result.current.updateEditableSettings((curr) => ({ ...curr, memory: { ...curr.memory, enabled: !curr.memory.enabled } } as any));
     });
 
     expect(blockerConfig.shouldBlock()).toBe(true);
@@ -440,5 +446,87 @@ describe("useSettingsPageState", () => {
 
     expect(result.current.showUnsavedModal).toBe(false);
     expect(retry).toHaveBeenCalled();
+  });
+
+  it("warns on real unload while dirty but suppresses the prompt during an intentional discard", async () => {
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const mockRegister = navigationBlocker.registerNavigationBlocker as any;
+    const blockerConfig = mockRegister.mock.calls[0][0];
+    const retry = vi.fn();
+
+    act(() => {
+      result.current.updateEditableSettings((curr) => ({ ...curr, memory: { ...curr.memory, enabled: !curr.memory.enabled } } as any));
+    });
+    await waitFor(() => expect(result.current.activeDirty).toBe(true));
+
+    // A genuine tab-close / hard-refresh must still surface the native guard.
+    const guardedEvent = new Event("beforeunload", { cancelable: true });
+    act(() => { window.dispatchEvent(guardedEvent); });
+    expect(guardedEvent.defaultPrevented).toBe(true);
+
+    act(() => { blockerConfig.confirmNavigation(retry); });
+    act(() => { result.current.confirmDiscard(); });
+    expect(retry).toHaveBeenCalled();
+
+    // The intentional discard navigation must not re-trigger the native prompt
+    // (which surfaces as a double prompt in the browser and silently cancels
+    // navigation inside Electron).
+    const bypassedEvent = new Event("beforeunload", { cancelable: true });
+    act(() => { window.dispatchEvent(bypassedEvent); });
+    expect(bypassedEvent.defaultPrevented).toBe(false);
+  });
+
+  it("saves from the modal and then completes the pending navigation", async () => {
+    mockSaveSystem.mockResolvedValueOnce({
+      runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+      integrations: { providers: {}, githubToken: "" },
+      defaults: cloneDashboardSettings(),
+      mcpTools: [],
+    } as any);
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const mockRegister = navigationBlocker.registerNavigationBlocker as any;
+    const blockerConfig = mockRegister.mock.calls[0][0];
+    const retry = vi.fn();
+
+    act(() => {
+      result.current.updateEditableSettings((curr) => ({ ...curr, memory: { ...curr.memory, enabled: !curr.memory.enabled } } as any));
+    });
+    act(() => { blockerConfig.confirmNavigation(retry); });
+    expect(result.current.showUnsavedModal).toBe(true);
+
+    await act(async () => {
+      await result.current.saveAndLeave();
+    });
+
+    expect(mockSaveSystem).toHaveBeenCalled();
+    expect(result.current.showUnsavedModal).toBe(false);
+    expect(retry).toHaveBeenCalled();
+  });
+
+  it("keeps the modal open and skips navigation when saving from the modal fails", async () => {
+    mockSaveSystem.mockRejectedValueOnce(new Error("save boom"));
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const mockRegister = navigationBlocker.registerNavigationBlocker as any;
+    const blockerConfig = mockRegister.mock.calls[0][0];
+    const retry = vi.fn();
+
+    act(() => {
+      result.current.updateEditableSettings((curr) => ({ ...curr, memory: { ...curr.memory, enabled: !curr.memory.enabled } } as any));
+    });
+    act(() => { blockerConfig.confirmNavigation(retry); });
+
+    await act(async () => {
+      await result.current.saveAndLeave();
+    });
+
+    expect(result.current.showUnsavedModal).toBe(true);
+    expect(retry).not.toHaveBeenCalled();
+    expect(result.current.error).toBeTruthy();
   });
 });

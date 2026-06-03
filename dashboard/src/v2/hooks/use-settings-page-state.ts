@@ -399,10 +399,10 @@ export const useSettingsPageState = (
     }
   }, [systemSettings]);
 
-  const handleSave = useCallback(async (): Promise<void> => {
+  const handleSave = useCallback(async (): Promise<boolean> => {
     if (activeScope === "system") {
       if (!systemSettings) {
-        return;
+        return false;
       }
       setSavingSystem(true);
       try {
@@ -420,16 +420,17 @@ export const useSettingsPageState = (
 
         setError(null);
         setSaveMessage("System settings saved.");
+        return true;
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : String(saveError));
+        return false;
       } finally {
         setSavingSystem(false);
       }
-      return;
     }
 
     if (!selectedProject || !projectSettings) {
-      return;
+      return false;
     }
 
     setSavingProject(true);
@@ -442,8 +443,10 @@ export const useSettingsPageState = (
       setProjectSources(effectiveProject.sources);
       setError(null);
       setSaveMessage(`Project settings saved for ${selectedProject.name}.`);
+      return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError));
+      return false;
     } finally {
       setSavingProject(false);
     }
@@ -573,19 +576,43 @@ export const useSettingsPageState = (
 
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const pendingNavigationRef = useRef<(() => void) | null>(null);
+  // When the user resolves the unsaved-changes modal we navigate away on purpose.
+  // That navigation must not re-trigger the native `beforeunload` prompt: in the
+  // browser it would surface a second, redundant confirm dialog, and in Electron a
+  // returned value silently cancels the navigation (leaving the user stuck). This
+  // ref lets the beforeunload handler distinguish an intentional leave from a real
+  // tab-close / hard-refresh.
+  const bypassUnloadGuardRef = useRef(false);
+
+  const runPendingNavigation = useCallback(() => {
+    const navigate = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    if (navigate) {
+      bypassUnloadGuardRef.current = true;
+      navigate();
+    }
+  }, []);
 
   const confirmDiscard = useCallback(() => {
     setShowUnsavedModal(false);
-    if (pendingNavigationRef.current) {
-      pendingNavigationRef.current();
-      pendingNavigationRef.current = null;
-    }
-  }, []);
+    runPendingNavigation();
+  }, [runPendingNavigation]);
 
   const cancelDiscard = useCallback(() => {
     setShowUnsavedModal(false);
     pendingNavigationRef.current = null;
   }, []);
+
+  const saveAndLeave = useCallback(async () => {
+    const saved = await handleSave();
+    if (!saved) {
+      // Keep the modal open so the user can retry, discard, or keep editing; the
+      // failure reason is surfaced in the settings error panel behind the modal.
+      return;
+    }
+    setShowUnsavedModal(false);
+    runPendingNavigation();
+  }, [handleSave, runPendingNavigation]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -614,6 +641,9 @@ export const useSettingsPageState = (
     }
 
     const onBeforeUnload = (event: BeforeUnloadEvent): void => {
+      if (bypassUnloadGuardRef.current) {
+        return;
+      }
       event.preventDefault();
       event.returnValue = "";
     };
@@ -658,7 +688,7 @@ export const useSettingsPageState = (
     searchInputRef,
     resetFieldToDefault,
     getFieldReset,
-    showUnsavedModal, confirmDiscard, cancelDiscard
+    showUnsavedModal, confirmDiscard, cancelDiscard, saveAndLeave
   };
 };
 
