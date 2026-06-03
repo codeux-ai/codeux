@@ -17,6 +17,9 @@ import { render } from '@testing-library/preact';
 import { StatsPage } from '../StatsPage.js';
 import * as useProjectDataModule from '../../../context/project-data.js';
 import * as useStatsPageDataModule from '../use-stats-page-data.js';
+vi.mock('../components/system/SystemStudio.js', () => ({
+  SystemStudio: (props: { projectId: string }) => <div data-testid="system-studio">{props.projectId}</div>
+}));
 
 vi.mock('../../context/project-data.js', () => ({
   useProjectData: vi.fn()
@@ -95,7 +98,7 @@ describe('StatsPage visual tests', () => {
     expect(getByText('Output Tokens')).toBeTruthy();
   });
 
-  it('renders the system placeholder without crashing', () => {
+  it('renders the system studio without crashing', () => {
     vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValueOnce({
       stats: {
         usage: { invocationCount: 1, activeTimeMs: 1000, wallTimeMs: 1000, inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
@@ -140,7 +143,7 @@ describe('StatsPage visual tests', () => {
       completionConfidence: '100%'
     });
 
-    const { getByText } = render(<StatsPage />);
-    expect(getByText('System view loading…')).toBeTruthy();
+    const { getByTestId } = render(<StatsPage />);
+    expect(getByTestId('system-studio')).toBeTruthy();
   });
 });

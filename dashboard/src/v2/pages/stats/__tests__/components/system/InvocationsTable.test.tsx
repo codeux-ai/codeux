@@ -105,9 +105,9 @@ describe("InvocationsTable", () => {
     expect(textContent).toContain("running");
 
     const runningRow = within(root).getByText("running").closest("tr");
-    expect(runningRow?.querySelector("svg.text-blue-400")).toBeTruthy();
+    expect(runningRow?.querySelector("div.text-blue-400")).toBeTruthy();
     const failedRow = within(root).getByText("Latest failure").closest("tr");
-    expect(failedRow?.querySelector("svg.text-red-400")).toBeTruthy();
+    expect(failedRow?.querySelector("div.text-red-400")).toBeTruthy();
 
     const modelCell = within(root).getByText("claude-sonnet-4");
     expect(within((modelCell.closest("td") as HTMLElement) ?? root).getByText("claude-sonnet-4")).toBeTruthy();
@@ -127,8 +127,8 @@ describe("InvocationsTable", () => {
     );
     const root = container as HTMLElement;
 
-    fireEvent.click(within(root).getByRole("button", { name: "Sort by Time" }));
-    fireEvent.click(within(root).getByRole("button", { name: "Sort by In" }));
+    fireEvent.click(within(root).getByRole("button", { name: "Time" }));
+    fireEvent.click(within(root).getByRole("button", { name: "In" }));
 
     expect(onSortChange).toHaveBeenNthCalledWith(1, { key: "startedAt", dir: "asc" });
     expect(onSortChange).toHaveBeenNthCalledWith(2, { key: "inputTokens", dir: "desc" });

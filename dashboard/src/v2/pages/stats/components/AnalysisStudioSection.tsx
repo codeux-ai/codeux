@@ -10,6 +10,7 @@ import {
   StudioHeader,
   PANEL_CLASS,
 } from "./StatsShared.js";
+import { SystemStudio } from "./system/SystemStudio.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
 
 export interface AnalysisStudioSectionProps {
@@ -83,12 +84,7 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
       ) : null}
 
       {visualMode === "system" ? (
-        <div
-          className="py-12 text-center text-sm text-slate-400 dark:text-slate-500"
-          data-project-id={projectId}
-        >
-          System view loading…
-        </div>
+        <SystemStudio projectId={projectId} />
       ) : null}
     </>
   );

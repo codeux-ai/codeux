@@ -97,33 +97,29 @@ describe("InvocationsTable", () => {
       />
     );
 
-    const inHeader = getByRole("button", { name: /In/i });
+    const inHeader = getByRole("button", { name: "In" });
     fireEvent.click(inHeader);
     expect(onSortChange).toHaveBeenCalledWith({ key: "inputTokens", dir: "desc" });
 
     // Click again to toggle direction
-    const timeHeader = getByRole("button", { name: /Time/i });
+    const timeHeader = getByRole("button", { name: "Time" });
     fireEvent.click(timeHeader);
     expect(onSortChange).toHaveBeenCalledWith({ key: "startedAt", dir: "asc" });
   });
 
   it("handles row expansion", () => {
-    const { getByText, queryByText, getAllByRole } = render(<Harness />);
+    const { getByText, queryByText, getByRole } = render(<Harness />);
 
     expect(queryByText(/Messages panel/)).toBeNull();
 
     // The first 5 buttons are sort headers in the thead
-    const allButtons = getAllByRole("button");
-    const expandButtons = allButtons.slice(5);
-    
-    if (expandButtons.length > 0) {
-      fireEvent.click(expandButtons[0]!);
-      expect(getByText(/Messages panel/)).toBeTruthy();
-      expect(getByText(/inv-1/)).toBeTruthy();
+    const expandButton = getByRole("button", { name: "Expand invocation inv-1" });
+    fireEvent.click(expandButton);
+    expect(getByText(/Messages panel/)).toBeTruthy();
+    expect(getByText(/inv-1/)).toBeTruthy();
 
-      fireEvent.click(expandButtons[0]!);
-      expect(queryByText(/Messages panel/)).toBeNull();
-    }
+    fireEvent.click(expandButton);
+    expect(queryByText(/Messages panel/)).toBeNull();
   });
 
   it("renders loading skeleton", () => {
