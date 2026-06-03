@@ -28,6 +28,11 @@ describe("SprintStatsDeck", () => {
     trackedTaskCount: 10,
     completedTaskCount: 3,
     averageCompletedTaskSeconds: 1200,
+    tokenTotals: {
+      inputTokens: 1250,
+      outputTokens: 2320,
+      cachedInputTokens: 3456,
+    },
     longestTask: null,
     stageTotals: {
       queued: 0,
@@ -91,5 +96,27 @@ describe("SprintStatsDeck", () => {
 
     expect(labelContainer).toHaveClass("text-status-green");
     expect(labelContainer).not.toHaveClass("text-ember-500");
+  });
+
+  it("renders compact sprint token totals in the clock grid", () => {
+    const { getAllByText } = render(
+      <SprintStatsDeck
+        hasSprintContext={true}
+        stats={mockStats}
+        tasks={[]}
+        sprintTiming={mockSprintTiming}
+      />
+    );
+
+    const inputTile = getAllByText("Input")[0].parentElement;
+    const outputTile = getAllByText("Output")[0].parentElement;
+    const cachedTile = getAllByText("Cached")[0].parentElement;
+
+    expect(inputTile).toHaveTextContent("Input");
+    expect(inputTile).toHaveTextContent("1.3k");
+    expect(outputTile).toHaveTextContent("Output");
+    expect(outputTile).toHaveTextContent("2.3k");
+    expect(cachedTile).toHaveTextContent("Cached");
+    expect(cachedTile).toHaveTextContent("3.5k");
   });
 });

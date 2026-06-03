@@ -34,6 +34,7 @@ import {
 import { formatTime } from "../../lib/time.js";
 import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
+import { formatTokens } from "../pages/stats/stats-utils.js";
 
 export interface Tone {
   accent: string;
@@ -439,6 +440,18 @@ export const SprintStatsDeck: FunctionComponent<{
                 <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Accumulated</div>
                   <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatDuration(totalTrackedStageSeconds)}</div>
+                </div>
+                <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Input</div>
+                  <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.inputTokens)}</div>
+                </div>
+                <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Output</div>
+                  <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.outputTokens)}</div>
+                </div>
+                <div className="rounded-[1.75rem] border border-black/[0.06] bg-black/[0.025] p-7 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Cached</div>
+                  <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatTokens(sprintTiming.tokenTotals.cachedInputTokens)}</div>
                 </div>
               </div>
             </div>

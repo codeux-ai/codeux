@@ -165,6 +165,7 @@ It focuses on:
 - Heavy list views, such as the scrollable lazy-loaded task and sprint ledgers, are backed by a page-scoped progressive list strategy (`useProgressiveList`) that renders items in batches to optimize performance.
 - Backend read-model optimizations efficiently supply data to these page-scoped modules, ensuring fast telemetry rendering while **API contracts and routes remain completely unchanged**.
 - The Stats page header owns the time-window chips and custom range inputs so the window selector stays visible across all analysis tabs and the shared trend-chart flyout can focus exclusively on metric-series toggles.
+- The Live Sprint Clock card now surfaces sprint token totals inline, using compact token formatting for input, output, and cached input values so the live orchestration view can show usage rollups without leaving the sprint surface.
 
 This page is intentionally separate from the live execution view so the live dashboard can stay optimized for orchestration while the Stats page handles historical analysis.
 
