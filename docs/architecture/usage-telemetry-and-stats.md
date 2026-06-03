@@ -79,12 +79,55 @@ Code UX first looks for `token_count` JSONL events, then normalizes the usage pa
 
 Claude Code runs with a generated native `--session-id`.
 
-Code UX reads usage from the persisted Claude session JSONL artifact under `~/.claude/projects/...`. If usage is absent, it falls back to token estimation using `@anthropic-ai/tokenizer` over the prompt plus recovered transcript text.
+Code UX now uses a dedicated parser (`src/infrastructure/providers/cli/provider-logs/claude-code-log-parser.ts`) to read the Claude session JSONL artifacts stored at `~/.claude/projects/<cwd-slug>/<sessionId>.jsonl`.
+
+The parser handles:
+- **Token usage**: accumulates `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens` across all unique assistant messages (deduplicated by `message.id` to avoid double-counting streaming fragments).
+- **Full conversation transcript**: extracts ordered turns of all kinds:
+  - `assistant` turns from `type: "text"` content blocks.
+  - `reasoning` turns from `type: "thinking"` blocks (only when non-empty; encrypted thinking blocks are silently skipped).
+  - `tool_call` turns from `type: "tool_use"` blocks with tool name, id, and JSON-serialized input.
+  - `tool_result` turns from user-entry `type: "tool_result"` content with output and error status.
+  - `user` turns from plain user text entries.
+- **Backwards compatibility**: legacy bare `{ message: { usage, content } }` entries (produced by older Claude Code versions and container artifact dumps) are handled as assistant turns.
+- **Run-window isolation**: when `sinceMs` is provided, only entries at/after `sinceMs - 2000ms` are included, matching the Codex/Qwen convention.
+
+If usage is absent or totals are zero, Code UX falls back to token estimation using `@anthropic-ai/tokenizer` over the prompt plus recovered transcript text.
+
 For Docker-backed Claude Code runs, Code UX reads the same session JSONL from the isolated workspace runtime home (`/workspace/.code-ux-home`) before the Docker volume is cleaned up.
 
 ### Jules
 
 Jules does not expose a compatible native token contract. Instead of excluding it, Code UX computes **estimated** tokens for Jules by accumulating input and output characters divided by 4 (the characters-per-token heuristic).
+
+## OpenTelemetry Integration
+
+Code UX provides a lightweight, dependency-free OpenTelemetry module at `src/infrastructure/providers/cli/otel-span-collector.ts` that:
+
+1. **Configures CLI providers for OTLP export** via `buildOtelEnv(opts)` — returns an env-var fragment that enables Claude Code's native telemetry:
+
+   ```
+   CLAUDE_CODE_ENABLE_TELEMETRY=1
+   OTEL_METRICS_EXPORTER=otlp
+   OTEL_LOGS_EXPORTER=otlp
+   OTEL_EXPORTER_OTLP_PROTOCOL=http/json
+   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+   ```
+
+   Optional flags include `OTEL_TRACES_EXPORTER`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_LOG_USER_PROMPTS`, and `OTEL_LOG_TOOL_DETAILS`.
+
+2. **Collects spans via `OtelSpanCollector`** — a buffered HTTP/JSON OTLP exporter that:
+   - Batches spans and logs and flushes them to `/v1/traces` and `/v1/logs`.
+   - Operates as a no-op when no endpoint is configured (never breaks the agent path).
+   - Supports auth headers, service-name resource attributes, and configurable batch size and export timeout.
+
+3. **Builds provider spans via `buildProviderSpan(args)`** — creates OTLP spans aligned with the OpenTelemetry GenAI semantic conventions draft:
+   - `gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.usage.cache_creation_tokens`, `gen_ai.usage.cache_read_tokens`, `gen_ai.usage.reasoning_tokens`.
+   - Provider extensions: `provider.session_id`, `provider.execution_mode`, `provider.cwd`, `provider.conversation_turns`, `provider.duration_ms`.
+
+4. **Builds log records via `buildProviderLogRecord(args)`** — ties INFO/WARN/ERROR log records to a trace/span context.
+
+The `OtelSpanCollector` is designed to be instantiated once per server process and reused across all provider invocations. The entire module has zero npm dependencies beyond Node.js built-ins.
 
 ## Usage Source Semantics
 

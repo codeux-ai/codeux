@@ -15,6 +15,10 @@ import {
   extractQwenUsageRecord,
   type QwenUsageTotals,
 } from "./provider-logs/qwen-log-parser.js";
+import {
+  parseClaudeCodeSessionJsonl,
+  type ClaudeCodeLogResult,
+} from "./provider-logs/claude-code-log-parser.js";
 
 // Re-export the qwen log helpers so existing importers (provider-runner, tests)
 // keep their import paths. The implementations now live in provider-logs/.
@@ -27,6 +31,9 @@ export {
 };
 export type { QwenUsageTotals };
 export type { ParsedConversationTurn };
+// Re-export the Claude Code parser so callers can use it directly.
+export { parseClaudeCodeSessionJsonl };
+export type { ClaudeCodeLogResult };
 
 export interface ProviderUsageTelemetry {
   inputTokens: number;
@@ -234,68 +241,65 @@ function parseGeminiTokens(stats: Record<string, unknown> | null): ProviderUsage
   return null;
 }
 
-function extractClaudeTranscript(lines: Array<Record<string, unknown>>): string {
-  const parts: string[] = [];
-  for (const line of lines) {
-    const message = line.message && typeof line.message === "object" ? line.message as Record<string, unknown> : null;
-    const content = Array.isArray(message?.content) ? message!.content as Array<Record<string, unknown>> : [];
-    for (const item of content) {
-      if (item?.type === "text" && typeof item.text === "string") {
-        parts.push(item.text);
-      }
-    }
-  }
-  return parts.join("\n").trim();
-}
-
-async function parseClaudeSessionTelemetry(cwd: string, nativeSessionId: string): Promise<ProviderUsageTelemetry | null> {
+/**
+ * Reads the Claude Code session JSONL from the host ~/.claude/projects directory
+ * and delegates to the dedicated parser (now in claude-code-log-parser.ts).
+ * Kept here as a private async wrapper so the public API surface is unchanged.
+ */
+async function parseClaudeSessionTelemetry(
+  cwd: string,
+  nativeSessionId: string,
+  sinceMs?: number,
+): Promise<ProviderUsageTelemetry | null> {
   // Claude Code slugifies cwd for its projects directory by replacing path
   // separators and drive-letter colons. Handle both Unix ("/") and Windows
   // ("\\", "C:") forms so the lookup works on every host.
   const slug = cwd.replace(/[/\\:]/g, "-");
   const sessionPath = path.join(os.homedir(), ".claude", "projects", slug, `${nativeSessionId}.jsonl`);
   const raw = await fs.readFile(sessionPath, "utf8").catch(() => "");
-  return parseClaudeSessionJsonl(raw, nativeSessionId, { sessionPath });
+  if (!raw.trim()) return null;
+  return claudeJsonlToTelemetry(raw, nativeSessionId, { sessionPath }, sinceMs);
 }
 
-function parseClaudeSessionJsonl(
+/**
+ * Converts a raw Claude Code session JSONL string to a `ProviderUsageTelemetry`
+ * record using the dedicated `parseClaudeCodeSessionJsonl` parser.
+ */
+function claudeJsonlToTelemetry(
   raw: string,
   nativeSessionId: string,
   rawUsageJson: Record<string, unknown> | null,
+  sinceMs?: number,
 ): ProviderUsageTelemetry | null {
-  if (!raw.trim()) {
-    return null;
-  }
+  if (!raw.trim()) return null;
 
-  const parsedLines = raw.split("\n")
-    .map((line) => parseJsonObject(line.trim()))
-    .filter((line): line is Record<string, unknown> => Boolean(line));
-  if (parsedLines.length === 0) {
-    return null;
-  }
+  const parsed = parseClaudeCodeSessionJsonl(raw, sinceMs);
 
-  let inputTokens = 0;
-  let cachedInputTokens = 0;
-  let outputTokens = 0;
-  for (const line of parsedLines) {
-    const message = line.message && typeof line.message === "object" ? line.message as Record<string, unknown> : null;
-    const usage = message?.usage && typeof message.usage === "object" ? message.usage as Record<string, unknown> : null;
-    if (!usage) {
-      continue;
-    }
-    inputTokens += toNumber(usage.input_tokens);
-    cachedInputTokens += toNumber(usage.cache_creation_input_tokens) + toNumber(usage.cache_read_input_tokens);
-    outputTokens += toNumber(usage.output_tokens);
-  }
+  // Prefer the session id embedded in the JSONL entries over the caller-supplied one.
+  const resolvedSessionId = parsed.nativeSessionId ?? nativeSessionId;
 
-  const totalTokens = inputTokens + outputTokens;
-  if (totalTokens === 0) {
+  // Extract a plain-text transcript from the parsed conversation turns.
+  const transcriptText = parsed.conversation
+    .filter((t) => t.kind === "assistant")
+    .map((t) => t.text)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+
+  const conversation = withLeadingUserTurn(parsed.conversation, "");
+
+  if (!parsed.usage) {
     return {
       ...emptyTelemetry(),
-      transcriptText: extractClaudeTranscript(parsedLines),
-      nativeSessionId,
+      transcriptText,
+      nativeSessionId: resolvedSessionId,
+      conversation,
     };
   }
+
+  const { inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens } = parsed.usage;
+  const cachedInputTokens = cacheCreationTokens + cacheReadTokens;
+  const totalTokens = inputTokens + outputTokens;
 
   return {
     ...emptyTelemetry(),
@@ -303,10 +307,11 @@ function parseClaudeSessionJsonl(
     cachedInputTokens,
     outputTokens,
     totalTokens,
-    usageSource: "reported",
-    rawUsageJson,
-    transcriptText: extractClaudeTranscript(parsedLines),
-    nativeSessionId,
+    usageSource: totalTokens > 0 ? "reported" : "unavailable",
+    rawUsageJson: parsed.rawUsageJson ?? rawUsageJson,
+    transcriptText,
+    nativeSessionId: resolvedSessionId,
+    conversation,
   };
 }
 
@@ -433,19 +438,26 @@ export async function collectProviderUsageTelemetry(args: {
 
   if (args.nativeSessionId) {
     if (args.claudeSessionJsonl) {
-      const usage = parseClaudeSessionJsonl(args.claudeSessionJsonl, args.nativeSessionId, { source: "container-session-jsonl" });
-      if (usage && usage.totalTokens > 0) {
-        return usage;
-      }
+      const usage = claudeJsonlToTelemetry(
+        args.claudeSessionJsonl,
+        args.nativeSessionId,
+        { source: "container-session-jsonl" },
+        args.startTimeMs,
+      );
       if (usage) {
+        const conversation = withLeadingUserTurn(usage.conversation, args.prompt);
+        if (usage.totalTokens > 0) {
+          return { ...usage, conversation };
+        }
         return estimateTelemetry("claude-code", args.model, args.prompt, usage.transcriptText || fallbackOutput);
       }
     }
-    const usage = await parseClaudeSessionTelemetry(args.cwd, args.nativeSessionId);
-    if (usage && usage.totalTokens > 0) {
-      return usage;
-    }
+    const usage = await parseClaudeSessionTelemetry(args.cwd, args.nativeSessionId, args.startTimeMs);
     if (usage) {
+      const conversation = withLeadingUserTurn(usage.conversation, args.prompt);
+      if (usage.totalTokens > 0) {
+        return { ...usage, conversation };
+      }
       return estimateTelemetry("claude-code", args.model, args.prompt, usage.transcriptText || fallbackOutput);
     }
   }
