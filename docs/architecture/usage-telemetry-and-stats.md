@@ -142,6 +142,7 @@ It focuses on:
 - source mix
 - unified Analysis Studio UX with analysis-mode controls that focus the workspace on trend, composition, or reliability
 - standalone execution-purpose telemetry cards in the trend view so purpose context is visible before entering detailed chart analysis
+- a richer Trend Studio that adds a window-level summary band, period context chips, the interactive usage chart, and a purpose activity section in a single self-contained analytical flow
 - a full-width interactive trend graph (Usage Graph) with hover bucket inspection, staged smooth line-draw animation, and mouse drag zoom selection
 - a usage-graph filter submenu (time-window + metric-series controls) that opens inline from the graph header instead of separate execution-lane wrappers
 - an embedded grouped metric selector and a persistent right-side selected-metrics rail for configuring the chart series (including Token, Time, and Git series); same-window refreshes preserve user chart selection

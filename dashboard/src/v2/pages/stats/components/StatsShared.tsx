@@ -62,12 +62,43 @@ export const TrendStudio: FunctionComponent<{
   loading,
   error,
   refresh,
-  planningUsage,
+  planningUsage: _planningUsage,
   chartState,
 }) => (
   <section className="space-y-6">
-
-
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className={`${SUBPANEL_CLASS} p-4`}>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Total Tokens</div>
+        <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatTokens(stats.usage.totalTokens)}</div>
+      </div>
+      <div className={`${SUBPANEL_CLASS} p-4`}>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Invocations</div>
+        <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.invocationCount.toLocaleString()}</div>
+      </div>
+      <div className={`${SUBPANEL_CLASS} p-4`}>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Active Time</div>
+        <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatDuration(stats.usage.activeTimeMs)}</div>
+      </div>
+      <div className={`${SUBPANEL_CLASS} p-4`}>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Cache Hit Rate</div>
+        <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">
+          {stats.usage.inputTokens + stats.usage.cachedInputTokens > 0
+            ? formatPercent((stats.usage.cachedInputTokens / (stats.usage.inputTokens + stats.usage.cachedInputTokens)) * 100)
+            : "—"}
+        </div>
+      </div>
+    </div>
+    <div className="flex flex-wrap gap-3">
+      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+        {stats.range.label}
+      </div>
+      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+        {stats.range.resolutionLabel}
+      </div>
+      <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+        {stats.buckets.length} buckets
+      </div>
+    </div>
     <InteractiveUsageChart
       stats={stats}
       loading={loading}
@@ -75,6 +106,15 @@ export const TrendStudio: FunctionComponent<{
       refresh={refresh}
       chartState={chartState}
     />
+    <div className="mt-6">
+      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Purpose Activity</div>
+      <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+        Token volume and active time by invocation purpose over the selected window.
+      </div>
+      <div className="mt-4">
+        <PurposeRibbon purposes={stats.purposes} />
+      </div>
+    </div>
   </section>
 );
 
