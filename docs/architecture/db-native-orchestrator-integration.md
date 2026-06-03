@@ -149,7 +149,9 @@ When all sprint tasks are settled, the same completion path now also handles the
 - `ALWAYS` attempts the final main PR merge without waiting for CI
 - Code UX now emits `sprint_completed` only after an enabled main auto-merge flow actually settles, including the case where the `feature -> default` PR has already been merged
 - while main auto-merge is still pending, waiting on CI, ready to merge, or armed in GitHub, the sprint stays active instead of completing early
-- if the main merge gate is `DIRTY`, has failed checks, is review-blocked, or an open main-merge conflict handoff item for the same sprint run still exists, the sprint run pauses instead of completing
+- if the main merge gate is `DIRTY`, has failed checks, or is review-blocked, the sprint pauses unless the conflict is already being handled by a worker
+- if a worker-owned `merge_conflict` attention item is open for the sprint run, the sprint keeps the watch loop alive in wait mode — the sprint will NOT pause while a worker is actively resolving the conflict; only once the worker escalates to a human (or fails to resolve) does the sprint transition to paused
+- if a human-escalation (`human_escalation_required` or `dashboard_reply_required`) attention item exists for the main merge, the sprint pauses as usual until the human resolves it and the sprint is resumed
 - if a CLI task hits an unrecoverable Git push/auth/configuration error, Code UX now records that task run as `BLOCKED` rather than retryable `FAILED`, so the watch loop pauses the sprint instead of requeueing the same token-burning failure forever
 - if a CLI task hits an unrecoverable execution-environment failure such as missing Docker in a Docker-required path, Code UX also records that run as `BLOCKED` rather than retrying indefinitely
 - successful task workspaces are retained while the sprint run remains non-terminal so QA/follow-up work can reuse the same workspace

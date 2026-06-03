@@ -805,6 +805,141 @@ describe("WatchLoopRunner", () => {
     nowSpy.mockRestore();
   });
 
+  it("keeps the sprint active (wait, not pause) while a worker-owned main-merge conflict attention item is present", async () => {
+    // Regression test: previously the sprint would incorrectly switch to 'paused'
+    // while a worker was still handling a main-branch merge conflict. The sprint
+    // should keep looping in 'wait' mode until the worker resolves the conflict.
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowValues = [0, 1_000, 2_000, 3_000, 61_000];
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowValues.shift() ?? 61_000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+    deps.executionRepository.getSprintRun = vi.fn()
+      .mockReturnValueOnce({ status: "running" })
+      .mockReturnValueOnce({ status: "running" })
+      .mockReturnValueOnce({ status: "running" });
+
+    // First cycle: conflict present, worker attention item is open.
+    // Second cycle: conflict resolved, sprint completes.
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "worker/task-1" })],
+        reportText: "REPORT_CONFLICT",
+        statusTable: "TABLE",
+        instructions: "",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "worker/task-1" })],
+        reportText: "REPORT_DONE",
+        statusTable: "TABLE_DONE",
+        instructions: "",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      });
+
+    // listActiveProjectItems is called multiple times per loop iteration
+    // (watch-loop eval + finalizeSprintRun conflict checks). We use a call counter
+    // to serve the worker-owned item for the entire first iteration, then return
+    // empty once the second iteration starts (simulating the worker resolving the conflict).
+    const workerConflictItem = {
+      id: "attention-worker-conflict",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: null,
+      sprintRunId: "run-1",
+      dispatchId: null,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      status: "claimed",
+      assignedWorkerEndpointId: "worker-endpoint-1",
+      title: "Main merge conflict for Sprint 1",
+      summaryMarkdown: "Worker is resolving the main branch merge conflict.",
+      payload: { mergeStage: "main" },
+      openedAt: "2026-03-10T00:00:00.000Z",
+      claimedAt: "2026-03-10T00:01:00.000Z",
+      resolvedAt: null,
+      updatedAt: "2026-03-10T00:01:00.000Z",
+    };
+    let listCallCount = 0;
+    // The first iteration triggers ~3 calls (watch-loop eval, resolveMainMerge check,
+    // collectActiveMainMerge). Return the item for calls 1-3, empty afterwards.
+    deps.projectAttentionService.listActiveProjectItems = vi.fn().mockImplementation(() => {
+      listCallCount += 1;
+      return listCallCount <= 3 ? [workerConflictItem] : [];
+    });
+
+    const renderMergeFeedbackMock = vi.fn()
+      .mockResolvedValueOnce({
+        text: "CONFLICT_TEXT",
+        state: "merge_conflict",
+        prNumber: 42,
+        prUrl: "https://github.com/example/repo/pull/42",
+        hasMergeConflict: true,
+        mergeStateStatus: "DIRTY",
+        hasFailedChecks: false,
+        hasPendingChecks: false,
+        hasReviewBlockers: false,
+        failedChecks: [],
+      })
+      .mockResolvedValueOnce({
+        text: "MERGED",
+        state: "merged",
+        prNumber: 42,
+        prUrl: "https://github.com/example/repo/pull/42",
+        hasMergeConflict: false,
+        mergeStateStatus: "MERGED",
+        hasFailedChecks: false,
+        hasPendingChecks: false,
+        hasReviewBlockers: false,
+        failedChecks: [],
+      });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMergeFeedbackMock);
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      githubMode: "REMOTE",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 0.01 } as any,
+      ciIntelligence: { resolveMainMergeConflicts: true } as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    // Sprint should complete, NOT pause, because the worker handled the conflict.
+    expect(result).toContain("Sprint Execution Finished");
+    expect(result).not.toContain("Sprint Paused");
+    expect(deps.executionRepository.updateSprintRun).not.toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "paused" }),
+    );
+    expect(cycleRunner.run).toHaveBeenCalledTimes(2);
+    nowSpy.mockRestore();
+  });
+
   it("completes the sprint when the only completed task produced no merge output", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
@@ -1592,6 +1727,91 @@ describe("Watch Loop Policies", () => {
           attentionTypes: [],
         },
       });
+    });
+
+    it("returns wait decision when a worker-owned attention item is handling the main merge conflict", () => {
+      // A worker-owned item means the sprint system is actively resolving the
+      // conflict — the sprint should keep running (wait), not pause.
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Conflict",
+          state: "merge_conflict",
+          prNumber: 10,
+          prUrl: "url",
+          hasMergeConflict: true,
+          mergeStateStatus: "DIRTY",
+          hasFailedChecks: false,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [{
+          id: "item-worker-1",
+          attentionType: "merge_conflict",
+          ownerType: "worker",
+        }],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision?.status).toBe("wait");
+      expect(decision?.terminalState).toBeUndefined();
+      expect(decision?.reportModifier).toContain("worker is resolving");
+    });
+
+    it("pauses when a human-escalated attention item is present for a main merge conflict", () => {
+      // After the worker fails and escalates to a human, the sprint must pause.
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Conflict",
+          state: "merge_conflict",
+          prNumber: 10,
+          prUrl: "url",
+          hasMergeConflict: true,
+          mergeStateStatus: "DIRTY",
+          hasFailedChecks: false,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [{
+          id: "item-human-escalation",
+          attentionType: "human_escalation_required",
+          ownerType: "human",
+        }],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision?.status).toBe("exit");
+      expect(decision?.terminalState).toBe("paused");
+    });
+
+    it("pauses when dashboard_reply_required escalation item is present", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "",
+          state: "merge_conflict",
+          prNumber: 10,
+          prUrl: "url",
+          hasMergeConflict: true,
+          mergeStateStatus: "DIRTY",
+          hasFailedChecks: false,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [{
+          id: "item-dashboard",
+          attentionType: "dashboard_reply_required",
+          ownerType: "worker",  // ownerType may still be worker, but type overrides
+        }],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision?.status).toBe("exit");
+      expect(decision?.terminalState).toBe("paused");
     });
 
     it("returns wait decision if main merge mode is WHEN_GREEN and state is pending_checks", () => {

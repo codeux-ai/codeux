@@ -13,19 +13,51 @@ export interface WatchLoopDecision {
   completedTaskCount?: number;
 }
 
+/**
+ * Returns true when the attention item requires a human to act — i.e. it has escalated
+ * beyond worker ownership. Items still assigned to a worker do not block the sprint.
+ */
+function isHumanEscalatedAttentionItem(item: { attentionType: string; ownerType?: string }): boolean {
+  // An item is human-escalated when it is explicitly owned by a human, or when its type
+  // signals that the worker could not resolve it automatically.
+  if (item.ownerType === "human") {
+    return true;
+  }
+  // human_escalation_required and dashboard_reply_required are created only after a worker
+  // has tried and failed — they always require human action.
+  if (item.attentionType === "human_escalation_required" || item.attentionType === "dashboard_reply_required") {
+    return true;
+  }
+  // Worker-owned merge conflict items mean the worker is actively handling the conflict.
+  return false;
+}
+
 export function decideMainMergeWaitOrPause(params: {
   mergeFeedback: MergeFeedbackResult;
-  attentionItems: Array<{ id: string; attentionType: string }>;
+  attentionItems: Array<{ id: string; attentionType: string; ownerType?: string }>;
   mainMergeMode: CiIntelligenceSettings["mainBranchAutoMergeMode"];
   sprintNumber: number;
 }): WatchLoopDecision | null {
   const { mergeFeedback, attentionItems, mainMergeMode, sprintNumber } = params;
 
+  // Separate items that require human action from those that a worker is still handling.
+  // Worker-owned items indicate the sprint system is actively resolving the conflict;
+  // only human-escalated items (or raw merge-state blockers without an assigned worker)
+  // should cause the sprint to pause.
+  const humanEscalatedItems = attentionItems.filter(isHumanEscalatedAttentionItem);
+  const workerHandledItems = attentionItems.filter((item) => !isHumanEscalatedAttentionItem(item));
+  const hasWorkerHandlingConflict = workerHandledItems.length > 0;
+
+  // Pause only when a human must act: either an explicit escalation item exists, or
+  // the merge state itself is blocked without any worker taking over (no attention item
+  // was opened because the worker feature is disabled or not yet assigned).
   const shouldPauseForMainMergeBlocker =
-    attentionItems.length > 0 ||
-    mergeFeedback.state === "merge_conflict" ||
-    mergeFeedback.state === "failed_checks" ||
-    mergeFeedback.state === "review_blocked";
+    humanEscalatedItems.length > 0 ||
+    (!hasWorkerHandlingConflict && (
+      mergeFeedback.state === "merge_conflict" ||
+      mergeFeedback.state === "failed_checks" ||
+      mergeFeedback.state === "review_blocked"
+    ));
 
   if (shouldPauseForMainMergeBlocker) {
     return {
@@ -42,6 +74,14 @@ export function decideMainMergeWaitOrPause(params: {
         attentionItemIds: attentionItems.map((item) => item.id),
         attentionTypes: attentionItems.map((item) => item.attentionType),
       },
+    };
+  }
+
+  // A worker is actively handling the conflict — keep the sprint alive and wait.
+  if (hasWorkerHandlingConflict) {
+    return {
+      status: "wait",
+      reportModifier: "\n⏳ **Sprint Still Active:** A worker is resolving a main-branch merge conflict. Waiting for the worker to complete before finishing the sprint.\n",
     };
   }
 
