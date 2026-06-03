@@ -42,6 +42,10 @@ describe('UsageFilterMenu', () => {
 
   it('should call onSelectPreset when a preset button is clicked', () => {
     const { getByText, getAllByText } = render(<UsageFilterMenu {...mockProps} />);
+    const presetButton1h = getAllByText('1h')[0];
+    fireEvent.click(presetButton1h);
+    expect(mockProps.onSelectPreset).toHaveBeenCalledWith('1h');
+
     const presetButton = getAllByText('24h')[0];
     fireEvent.click(presetButton);
     expect(mockProps.onSelectPreset).toHaveBeenCalledWith('24h');

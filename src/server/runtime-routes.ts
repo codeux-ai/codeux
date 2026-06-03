@@ -14,7 +14,8 @@ import type { ProjectStatsQuery, ProjectStatsWindow } from "../contracts/app-typ
 export function parseProjectStatsQuery(query: Record<string, unknown>): ProjectStatsQuery {
   const requestedWindow = typeof query.window === "string" ? query.window.trim() : "";
   const window: ProjectStatsWindow = (
-    requestedWindow === "24h"
+    requestedWindow === "1h"
+    || requestedWindow === "24h"
     || requestedWindow === "7d"
     || requestedWindow === "30d"
     || requestedWindow === "all"

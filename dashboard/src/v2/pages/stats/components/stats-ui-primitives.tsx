@@ -110,7 +110,7 @@ export const RangeToggle: FunctionComponent<{
 }) => (
   <div className="flex flex-col gap-4">
     <div className={`inline-flex flex-wrap p-1 ${CHIP_CLASS}`}>
-      {(["24h", "7d", "30d", "all"] as const).map((value) => (
+      {(["1h", "24h", "7d", "30d", "all"] as const).map((value) => (
         <button
           key={value}
           type="button"

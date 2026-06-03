@@ -104,7 +104,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
         <div className={styles.section}>
           <label className={styles.label}>Time Window</label>
           <div className="flex flex-wrap gap-2">
-            {(['24h', '7d', '30d', 'all'] as const).map((value) => (
+            {(['1h', '24h', '7d', '30d', 'all'] as const).map((value) => (
               <button
                 key={value}
                 type="button"
