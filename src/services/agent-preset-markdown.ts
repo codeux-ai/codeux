@@ -1,4 +1,4 @@
-import type { AgentAvatarConfig } from "../contracts/agent-preset-types.js";
+import type { AgentAvatarConfig, AgentMemoryConfig } from "../contracts/agent-preset-types.js";
 
 export interface ParsedAgentMarkdown {
   description?: string;
@@ -8,6 +8,7 @@ export interface ParsedAgentMarkdown {
   model?: string | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
+  memoryConfig?: AgentMemoryConfig;
 }
 
 const FRONTMATTER_REGEX = /^---\s*json\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/i;
@@ -35,6 +36,7 @@ export function parseAgentMarkdown(rawMarkdown: string): ParsedAgentMarkdown {
     model: typeof parsedMetadata.model === "string" ? parsedMetadata.model : undefined,
     memoryTemplateOverrideEnabled: parsedMetadata.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: parsedMetadata.memoryTemplateMarkdown,
+    memoryConfig: parsedMetadata.memoryConfig,
   };
 }
 
@@ -45,8 +47,9 @@ export function formatAgentMarkdown(input: ParsedAgentMarkdown): string {
   const hasModel = input.model !== undefined && input.model !== null;
   const hasMemoryTemplateOverrideEnabled = input.memoryTemplateOverrideEnabled !== undefined;
   const hasMemoryTemplateMarkdown = input.memoryTemplateMarkdown !== undefined;
+  const hasMemoryConfig = input.memoryConfig !== undefined && input.memoryConfig !== null;
 
-  if (!hasAvatarConfig && !hasDescription && !hasProviderConfigId && !hasModel && !hasMemoryTemplateOverrideEnabled && !hasMemoryTemplateMarkdown) {
+  if (!hasAvatarConfig && !hasDescription && !hasProviderConfigId && !hasModel && !hasMemoryTemplateOverrideEnabled && !hasMemoryTemplateMarkdown && !hasMemoryConfig) {
     return input.instructionMarkdown;
   }
 
@@ -68,6 +71,9 @@ export function formatAgentMarkdown(input: ParsedAgentMarkdown): string {
   }
   if (hasMemoryTemplateMarkdown) {
     metadata.memoryTemplateMarkdown = input.memoryTemplateMarkdown;
+  }
+  if (hasMemoryConfig) {
+    metadata.memoryConfig = input.memoryConfig;
   }
 
   const jsonFrontmatter = JSON.stringify(metadata, null, 2);

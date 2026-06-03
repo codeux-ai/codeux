@@ -459,4 +459,77 @@ describe("AgentPresetSyncService", () => {
       expect(resolved.name).toBe("Just a Worker");
     });
   });
+
+  it("syncs agent memory settings down to md file on update and imports memory settings from md file", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-memory-sync-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    const agentPath = path.join(repoPath, ".code-ux", "agents", "planning_agent.md");
+    await fs.writeFile(agentPath, "---json\n{\"memoryConfig\":{\"tier\":\"short_term\",\"categories\":[\"context\"],\"minStrength\":5,\"minStrengthPerCategory\":{},\"maxShortTerm\":0,\"maxLongTerm\":0}}\n---\nPlanning instructions.\n", "utf8");
+
+    const project = projectRepository.createProject({
+      name: "Sync Memory Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      agents: {
+        saveToProjectDirectory: true,
+      },
+    });
+
+    // 1. Initial import check: memoryConfig should sync from MD to DB
+    const imported = await syncService.listAgentPresets(project.id);
+    expect(imported).toHaveLength(1);
+    expect(imported[0]?.memoryConfig).toEqual({
+      tier: "short_term",
+      categories: ["context"],
+      minStrength: 5,
+      minStrengthPerCategory: {},
+      maxShortTerm: 0,
+      maxLongTerm: 0,
+    });
+
+    // 2. Update check: updating memoryConfig in DB should write back to the MD file
+    const updated = await syncService.updateAgentPreset(imported[0]!.id, {
+      memoryConfig: {
+        tier: "long_term",
+        categories: ["patterns"],
+        minStrength: 2,
+        minStrengthPerCategory: {},
+        maxShortTerm: 10,
+        maxLongTerm: 20,
+      }
+    });
+
+    expect(updated.memoryConfig).toEqual({
+      tier: "long_term",
+      categories: ["patterns"],
+      minStrength: 2,
+      minStrengthPerCategory: {},
+      maxShortTerm: 10,
+      maxLongTerm: 20,
+    });
+
+    const mdContent = await fs.readFile(agentPath, "utf8");
+    expect(mdContent).toContain('"tier": "long_term"');
+    expect(mdContent).toContain('"categories": [\n      "patterns"\n    ]');
+    expect(mdContent).toContain('"minStrength": 2');
+    expect(mdContent).toContain('"maxShortTerm": 10');
+    expect(mdContent).toContain('"maxLongTerm": 20');
+  });
 });

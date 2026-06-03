@@ -23,6 +23,7 @@ export const createAgentPreset = async (
     model: input.model,
     memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
+    memoryConfig: input.memoryConfig,
   };
   return fetchJson<AgentPreset>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets`, {
     method: "POST",
@@ -46,6 +47,7 @@ export const updateAgentPreset = async (
     memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
     memoryTemplateMarkdown: input.memoryTemplateMarkdown,
     mcpAccess: input.mcpAccess,
+    memoryConfig: input.memoryConfig,
   };
   return fetchJson<AgentPreset>(`/api/agent-presets/${encodeURIComponent(agentPresetId)}`, {
     method: "PATCH",
