@@ -27,7 +27,7 @@ Foundation fields:
 - `labels_json`
 - `provider_config_id`
 - `model`
-- `memory_config`
+- `memory_config_json` stores `AgentMemoryConfig` as a JSON blob
 - `created_at`
 - `updated_at`
 
@@ -68,6 +68,8 @@ Foundation-supported fields:
 - optional provider instance preference
 - optional model override
 - optional per-agent memory injection configuration
+
+The memory injection configuration is stored in sqlite as `memory_config_json` and parsed back into `AgentMemoryConfig` on reads, matching the existing JSON-column pattern used by `mcp_access_json`.
 
 Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead, including tags for built-in fallback selections on Planning agent, Worker, Project manager, and Quality assurance agent.
 

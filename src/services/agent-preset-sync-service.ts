@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { AgentMcpAccessConfig, AgentPresetRecord, AgentSourceScope, AgentAvatarConfig } from "../contracts/agent-preset-types.js";
+import type { AgentMcpAccessConfig, AgentMemoryConfig, AgentPresetRecord, AgentSourceScope, AgentAvatarConfig } from "../contracts/agent-preset-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import { parseAgentMarkdown, formatAgentMarkdown } from "./agent-preset-markdown.js";
@@ -59,6 +59,7 @@ export class AgentPresetSyncService {
     model?: string | null;
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
+    memoryConfig?: AgentMemoryConfig;
   }): Promise<AgentPresetRecord> {
     const nextName = input.name.trim();
     this.assertAgentNameAvailable(projectId, nextName);
@@ -75,6 +76,7 @@ export class AgentPresetSyncService {
         model: input.model,
         memoryTemplateOverrideEnabled: input.memoryTemplateOverrideEnabled,
         memoryTemplateMarkdown: input.memoryTemplateMarkdown,
+        memoryConfig: input.memoryConfig,
       });
       const created = this.deps.agentPresetRepository.importAgentPresetFromSource(projectId, {
         id: input.id,
@@ -110,6 +112,7 @@ export class AgentPresetSyncService {
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
     mcpAccess?: AgentMcpAccessConfig;
+    memoryConfig?: AgentMemoryConfig;
   }): Promise<AgentPresetRecord> {
     const existing = this.deps.agentPresetRepository.getAgentPreset(agentPresetId);
     if (!existing) {
@@ -533,6 +536,7 @@ export class AgentPresetSyncService {
     model?: string | null;
     memoryTemplateOverrideEnabled?: boolean;
     memoryTemplateMarkdown?: string;
+    memoryConfig?: AgentMemoryConfig;
     previousProjectSourcePath?: string | null;
   }): Promise<AgentSourceFile> {
     const directory = getRepoCodeUxPath(args.projectBaseDir, "agents");

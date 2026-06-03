@@ -4,6 +4,7 @@ import { requireRecord } from "./repository-utils.js";
 import { sanitizeAgentMcpAccess } from "../services/agent-mcp-access.js";
 import type {
   AgentMcpAccessConfig,
+  AgentMemoryConfig,
   AgentSourceScope,
   AgentPresetRecord,
   CreateAgentPresetInput,
@@ -27,6 +28,7 @@ interface AgentPresetRow {
   memory_template_override_enabled: number;
   memory_template_markdown: string | null;
   mcp_access_json: string | null;
+  memory_config_json: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -80,6 +82,25 @@ function parseMcpAccess(value: string | null): AgentMcpAccessConfig | undefined 
   } catch {
     return undefined;
   }
+}
+
+function parseMemoryConfig(value: string | null): AgentMemoryConfig | undefined {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed && typeof parsed === "object") {
+      return parsed as AgentMemoryConfig;
+    }
+  } catch {
+    // Ignore invalid JSON
+  }
+  return undefined;
+}
+
+function serializeMemoryConfig(value: AgentMemoryConfig | undefined): string | null {
+  return value ? JSON.stringify(value) : null;
 }
 
 export class AgentPresetRepository {
@@ -147,10 +168,11 @@ export class AgentPresetRepository {
         model,
         memory_template_override_enabled,
         memory_template_markdown,
+        memory_config_json,
         mcp_access_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -167,6 +189,7 @@ export class AgentPresetRepository {
       input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
+      serializeMemoryConfig(input.memoryConfig),
       this.serializeMcpAccess(input.mcpAccess),
       now,
       now,
@@ -198,9 +221,10 @@ export class AgentPresetRepository {
         model,
         memory_template_override_enabled,
         memory_template_markdown,
+        memory_config_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -217,6 +241,7 @@ export class AgentPresetRepository {
       input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
+      null,
       now,
       now,
     );
@@ -229,7 +254,7 @@ export class AgentPresetRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, mcp_access_json = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, memory_config_json = ?, mcp_access_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name?.trim() || current.name,
@@ -243,6 +268,9 @@ export class AgentPresetRepository {
       input.model === undefined ? current.model || null : input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled === undefined ? (current.memoryTemplateOverrideEnabled ? 1 : 0) : (input.memoryTemplateOverrideEnabled ? 1 : 0),
       input.memoryTemplateMarkdown === undefined ? (current.memoryTemplateMarkdown || null) : (input.memoryTemplateMarkdown || null),
+      input.memoryConfig === undefined
+        ? (current.memoryConfig ? JSON.stringify(current.memoryConfig) : null)
+        : (input.memoryConfig ? JSON.stringify(input.memoryConfig) : null),
       input.mcpAccess === undefined ? this.serializeMcpAccess(current.mcpAccess) : this.serializeMcpAccess(input.mcpAccess),
       now,
       agentPresetId,
@@ -294,7 +322,7 @@ export class AgentPresetRepository {
 
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, description = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
+      SET name = ?, description = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, provider_config_id = ?, model = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, memory_config_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name.trim(),
@@ -307,6 +335,7 @@ export class AgentPresetRepository {
       input.model === undefined ? current.model || null : input.model?.trim() || null,
       input.memoryTemplateOverrideEnabled ? 1 : 0,
       input.memoryTemplateMarkdown || null,
+      current.memoryConfig ? JSON.stringify(current.memoryConfig) : null,
       now,
       agentPresetId,
     );
@@ -389,6 +418,7 @@ export class AgentPresetRepository {
       model: row.model || null,
       memoryTemplateOverrideEnabled: Boolean(row.memory_template_override_enabled),
       memoryTemplateMarkdown: row.memory_template_markdown || undefined,
+      memoryConfig: parseMemoryConfig(row.memory_config_json),
       mcpAccess: parseMcpAccess(row.mcp_access_json),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
