@@ -261,6 +261,7 @@ export class CliWorkflowService {
       preserveSuccessfulWorktree,
       preserveSuccessfulWorktreeForActiveSprint,
       agentPresetId: workerAgent?.id,
+      agentMemoryConfig: workerAgent?.memoryConfig,
       agentMcpAccess: workerAgent ? (workerAgent.mcpAccess ?? null) : undefined,
       memoryTemplateOverrideEnabled: workerAgent?.memoryTemplateOverrideEnabled,
       memoryTemplateMarkdown: workerAgent?.memoryTemplateMarkdown,
