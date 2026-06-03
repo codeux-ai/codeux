@@ -194,6 +194,23 @@ describe("ProjectManagementRepository", () => {
     });
   });
 
+  it("defaults empty local source refs into the home codex projects directory", async () => {
+    const { repository } = await createRepository();
+
+    const project = repository.createProject({
+      name: "Local Default Path",
+      sourceType: "local",
+      sourceRef: "",
+    });
+
+    const expectedBaseDir = path.join(os.homedir(), ".codex-ux", "projects", project.slug);
+
+    expect(project.baseDir).toBe(expectedBaseDir);
+    expect(project.baseDir.endsWith(path.join(".codex-ux", "projects", project.slug))).toBe(true);
+    expect(project.sourceRef).toBe(expectedBaseDir);
+    expect(project.sourceRef).not.toBe("");
+  });
+
 
   it("supports optional sprint review summaries in listSprints and ignores task-level QA", async () => {
     const { repository, storage } = await createRepository();

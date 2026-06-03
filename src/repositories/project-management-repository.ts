@@ -34,6 +34,7 @@ import { projectSummaryQuery } from "./project-management/project-summary-query.
 import { sprintSummaryQuery } from "./project-management/sprint-summary-query.js";
 import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
 import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
+import { getHomeCodexUxProjectPath } from "../shared/config/codex-ux-paths.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 
@@ -193,7 +194,8 @@ export class ProjectManagementRepository {
       const slug = this.createUniqueProjectSlug(input.name);
       const sourceType = input.sourceType;
       const sourceRef = input.sourceRef.trim();
-      const baseDir = this.resolveBaseDir(sourceType, sourceRef, input.cloneDir);
+      const baseDir = this.resolveBaseDir(sourceType, sourceRef, input.cloneDir, "", slug);
+      const storedSourceRef = sourceType === "local" && !sourceRef ? baseDir : sourceRef;
       const repoUrl = sourceType === "git" ? sourceRef : null;
 
       const insert = this.db.prepare(`
@@ -220,7 +222,7 @@ export class ProjectManagementRepository {
           now,
           now
         );
-        insertSource.run(randomUUID(), id, sourceType, sourceRef, now);
+        insertSource.run(randomUUID(), id, sourceType, storedSourceRef, now);
 
         if (!this.getSelectedProjectId()) {
           this.setSelectedProjectId(id);
@@ -247,7 +249,7 @@ export class ProjectManagementRepository {
       const nextSlug = nextName === current.name ? current.slug : this.createUniqueProjectSlug(nextName, projectId);
       const nextSourceType = input.sourceType || current.sourceType;
       const nextSourceRef = input.sourceRef?.trim() || current.sourceRef;
-      const nextBaseDir = input.baseDir?.trim() || this.resolveBaseDir(nextSourceType, nextSourceRef, undefined, current.baseDir);
+      const nextBaseDir = input.baseDir?.trim() || this.resolveBaseDir(nextSourceType, nextSourceRef, undefined, current.baseDir, nextSlug);
       const nextRepoUrl = nextSourceType === "git" ? nextSourceRef : null;
 
       const updateProject = this.db.prepare(`
@@ -1256,10 +1258,11 @@ export class ProjectManagementRepository {
     sourceType: ProjectSourceType,
     sourceRef: string,
     cloneDir?: string,
-    fallback = ""
+    fallback = "",
+    projectSlug = ""
   ): string {
     if (sourceType === "local") {
-      return sourceRef;
+      return sourceRef || fallback || getHomeCodexUxProjectPath(projectSlug);
     }
 
     const repoName = deriveRepoName(sourceRef);

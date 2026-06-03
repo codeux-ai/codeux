@@ -42,6 +42,12 @@ Project creation can also include:
 
 The dashboard uses background mode for user-triggered setup. The endpoint returns `202` with the created `invocationId` immediately, then the setup run continues server-side. The project card shows an `Initializing` state with the invocation short id, and toast notifications link directly to `/chat?mode=invocations&invocation=<id>` for live tracking and completion review.
 
+Project creation also resolves local storage paths before the record is persisted:
+
+- git projects keep using the configured clone root and repository name
+- local projects with an empty `sourceRef` now default to `~/.codex-ux/projects/<slug>`
+- when that default path is used, the same resolved path is stored as `source_ref` so later lookups do not depend on an empty string placeholder
+
 ## Generated Artifacts
 
 When selected, setup can create or update:

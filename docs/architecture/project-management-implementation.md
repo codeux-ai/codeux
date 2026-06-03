@@ -115,6 +115,7 @@ Current behavior:
 - Top navigation sprint selection remains a persisted management/view preference
 - The Live page now follows that selected sprint for display scope, but runtime execution still resolves from active sprint runs so the header selection does not interfere with parallel sprint execution
 - Projects page creates, lists, selects, and deletes projects
+- Local project creation now falls back to `~/.codex-ux/projects/<slug>` when no explicit `sourceRef` is supplied, and persists that resolved path as the project source reference
 - Sprints page creates and lists sprints for the selected project
 - Sprint list/status views derive their effective sprint state from the latest `sprint_run`, so paused or cancelled runs do not continue to render as running
 - Sprints page run controls now operate on project-scoped execution data and update sprint cards optimistically while the execution snapshot refreshes
