@@ -169,4 +169,6 @@ The v2 live page now uses this DB timeline in two places:
 - the execution runtime sidebar panel (OverviewTelemetry) shows a project-scoped runtime timeline with compact presentation and differentiated event coloring
 - each task card can open a runtime feed derived from recent `task_run_events`
 
+The standalone `ExecutionTimeline` dashboard card now derives its active sprint runs from the live execution snapshot by default, so it can render as a top-level sidebar card without a required prop from the parent. It still preserves the same 24-event slice, empty state text, and scrollable feed when a sprint run is active.
+
 This means the main live feed is now DB-native even when execution is happening through Docker/CLI providers, connected MCP workers, or sprint-scoped orchestration control paths.
