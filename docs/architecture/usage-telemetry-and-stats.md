@@ -155,7 +155,8 @@ It focuses on:
 - that filter bar renders status toggle chips, purpose/provider multi-select chips, a searchable text field with inline clear affordance, and a result-count badge so the system list can stay reactive without local state
 - task, sprint, provider, and purpose leaderboards
 - tabbed task and sprint telemetry sections integrated into the Analysis Studio, complete with search, recency, richer token breakdowns, and client-side sorting by date and usage dimensions
-- a System mode entry in the analysis toggle that intentionally renders a placeholder while the dedicated system workspace is being developed, keeping the mode contract stable without exposing a broken view
+- a System mode entry in the analysis toggle that provides a dedicated system workspace with a dense ledger surface
+- the system invocation table exposes sortable per-invocation token columns, sticky header controls, status color-coding, sprint/task context chips, loading skeletons, empty states, and expandable detail placeholders for future message panels
 - animated donut charts now expose slice-level hover focus with center-detail readouts instead of only static composition rings
 - the System stats view now uses a dedicated client-side invocation hook that fetches the project invocation ledger, applies local search/filter/sort state, and derives summary metrics from the filtered result set
 - Heavy list views, such as the scrollable lazy-loaded task and sprint ledgers, are backed by a page-scoped progressive list strategy (`useProgressiveList`) that renders items in batches to optimize performance.

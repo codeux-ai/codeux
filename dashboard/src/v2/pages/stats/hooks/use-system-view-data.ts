@@ -2,17 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import { fetchProjectInvocations } from "../../../lib/invocation-api.js";
 import type { ExecutionInvocationRecord, ExecutionInvocationStatus } from "../../../types.js";
 
-export interface SystemFilters {
-  status: ExecutionInvocationStatus[];
-  purpose: string[];
-  provider: string[];
-}
-
-export type SystemSortKey = "startedAt" | "totalTokens" | "durationMs" | "inputTokens" | "outputTokens";
+export type SystemSortKey = "startedAt" | "inputTokens" | "outputTokens" | "totalTokens" | "durationMs";
 
 export interface SystemSort {
   key: SystemSortKey;
   dir: "asc" | "desc";
+}
+
+export interface SystemFilters {
+  status: ExecutionInvocationStatus[];
+  purpose: string[];
+  provider: string[];
 }
 
 export interface SystemSummaryMetrics {
