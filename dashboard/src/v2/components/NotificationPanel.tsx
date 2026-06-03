@@ -1,9 +1,14 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { CheckCheck, RefreshCw, X } from "lucide-preact";
+import { useOverviewTelemetry } from "../../hooks/use-overview-telemetry.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import type { DashboardNotification } from "../hooks/use-notifications.js";
+import {
+  buildInterventionNotifications,
+  type InterventionNotificationViewModel,
+} from "../lib/overview-telemetry-view-models.js";
 
 const severityClasses: Record<DashboardNotification["severity"], {
   icon: string;
@@ -32,6 +37,113 @@ const severityClasses: Record<DashboardNotification["severity"], {
   },
 };
 
+const interventionClasses = {
+  icon: "text-status-amber",
+  badge: "border-status-amber/25 bg-status-amber/10 text-status-amber",
+  accent: "bg-status-amber",
+};
+
+type NotificationRowData = DashboardNotification | InterventionNotificationViewModel;
+
+const NotificationRow: FunctionComponent<{
+  id: string;
+  icon: DashboardNotification["icon"];
+  iconClass: string;
+  badgeClass: string;
+  accentClass: string;
+  title: string;
+  subtitle: string;
+  trailingLabel: string;
+  unread: boolean;
+  interactive?: boolean;
+  onMarkRead?: (id: string) => void;
+  onDismiss?: (id: string) => void;
+  actionLabel?: string;
+  onAction?: () => void;
+  dismissible?: boolean;
+}> = ({
+  id,
+  icon,
+  iconClass,
+  badgeClass,
+  accentClass,
+  title,
+  subtitle,
+  trailingLabel,
+  unread,
+  interactive = true,
+  onMarkRead,
+  onDismiss,
+  actionLabel,
+  onAction,
+  dismissible = false,
+}) => {
+  const Icon = icon;
+
+  return (
+    <div
+      data-notification-item
+      role={interactive ? "menuitem" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onFocus={interactive ? () => onMarkRead?.(id) : undefined}
+      className="group relative mb-2 rounded-2xl border border-black/[0.05] bg-white/75 p-3 text-left transition-colors hover:border-black/[0.1] hover:bg-black/[0.025] last:mb-0 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.1] dark:hover:bg-white/[0.06]"
+    >
+      {unread ? (
+        <div className={`absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full ${accentClass}`} />
+      ) : null}
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${badgeClass}`}>
+          <Icon className={`h-4 w-4 ${iconClass}`} strokeWidth={2.3} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{title}</div>
+              <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{subtitle}</div>
+            </div>
+            <div className="shrink-0 text-[10px] font-medium text-slate-400">{trailingLabel}</div>
+          </div>
+          {interactive ? (
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => onMarkRead?.(id)}
+                className="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+              >
+                {unread ? "Mark read" : "Read"}
+              </button>
+              <div className="flex items-center gap-1.5">
+                {actionLabel && onAction ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onMarkRead?.(id);
+                      onAction();
+                    }}
+                    className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-300"
+                  >
+                    {actionLabel}
+                  </button>
+                ) : null}
+                {dismissible ? (
+                  <button
+                    type="button"
+                    onClick={() => onDismiss?.(id)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-black/[0.05] hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+                    aria-label={`Dismiss ${title}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const NotificationPanel: FunctionComponent<{
   notifications: DashboardNotification[];
   unreadCount: number;
@@ -49,6 +161,13 @@ export const NotificationPanel: FunctionComponent<{
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
+  const { telemetry, refresh: refreshTelemetry } = useOverviewTelemetry();
+
+  const interventionNotifications = useMemo(() => buildInterventionNotifications(telemetry), [telemetry]);
+  const visibleNotifications = useMemo<NotificationRowData[]>(
+    () => [...interventionNotifications, ...notifications],
+    [interventionNotifications, notifications],
+  );
 
   useLayoutEffect(() => {
     if (!panelRef.current) return;
@@ -73,7 +192,12 @@ export const NotificationPanel: FunctionComponent<{
     });
 
     return () => ctx.revert();
-  }, [prefersReducedMotion, notifications.length]);
+  }, [prefersReducedMotion, visibleNotifications.length]);
+
+  const handleRefresh = (): void => {
+    onRefresh();
+    void refreshTelemetry();
+  };
 
   return (
     <div
@@ -96,7 +220,7 @@ export const NotificationPanel: FunctionComponent<{
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={onRefresh}
+            onClick={handleRefresh}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
             aria-label="Refresh notifications"
           >
@@ -115,7 +239,7 @@ export const NotificationPanel: FunctionComponent<{
       </div>
 
       <div className="dashboard-scrollbar max-h-96 overflow-y-auto p-2">
-        {notifications.length === 0 ? (
+        {visibleNotifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-5 py-10 text-center">
             <div className="rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-300">
               Clear
@@ -125,70 +249,45 @@ export const NotificationPanel: FunctionComponent<{
               Startup checks are healthy and there is nothing waiting for operator attention.
             </div>
           </div>
-        ) : notifications.map((notification) => {
+        ) : visibleNotifications.map((notification) => {
+          if ("projectName" in notification) {
+            return (
+              <NotificationRow
+                key={notification.id}
+                id={notification.id}
+                icon={notification.icon}
+                iconClass={interventionClasses.icon}
+                badgeClass={interventionClasses.badge}
+                accentClass={interventionClasses.accent}
+                title={notification.title}
+                subtitle={notification.subtitle}
+                trailingLabel={notification.projectName}
+                unread={notification.unread}
+                interactive={false}
+              />
+            );
+          }
+
           const classes = severityClasses[notification.severity];
-          const Icon = notification.icon;
 
           return (
-            <div
+            <NotificationRow
               key={notification.id}
-              data-notification-item
-              role="menuitem"
-              tabIndex={0}
-              onFocus={() => onMarkRead(notification.id)}
-              className="group relative mb-2 rounded-2xl border border-black/[0.05] bg-white/75 p-3 text-left transition-colors hover:border-black/[0.1] hover:bg-black/[0.025] last:mb-0 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.1] dark:hover:bg-white/[0.06]"
-            >
-              {notification.unread ? (
-                <div className={`absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full ${classes.accent}`} />
-              ) : null}
-              <div className="flex items-start gap-3">
-                <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${classes.badge}`}>
-                  <Icon className={`h-4 w-4 ${classes.icon}`} strokeWidth={2.3} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{notification.title}</div>
-                      <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{notification.body}</div>
-                    </div>
-                    <div className="shrink-0 text-[10px] font-medium text-slate-400">{notification.time}</div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onMarkRead(notification.id)}
-                      className="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
-                    >
-                      {notification.unread ? "Mark read" : "Read"}
-                    </button>
-                    <div className="flex items-center gap-1.5">
-                      {notification.actionLabel && notification.onAction ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onMarkRead(notification.id);
-                            notification.onAction?.();
-                          }}
-                          className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-300"
-                        >
-                          {notification.actionLabel}
-                        </button>
-                      ) : null}
-                      {notification.dismissible ? (
-                        <button
-                          type="button"
-                          onClick={() => onDismiss(notification.id)}
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-black/[0.05] hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
-                          aria-label={`Dismiss ${notification.title}`}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+              id={notification.id}
+              icon={notification.icon}
+              iconClass={classes.icon}
+              badgeClass={classes.badge}
+              accentClass={classes.accent}
+              title={notification.title}
+              subtitle={notification.body}
+              trailingLabel={notification.time}
+              unread={notification.unread}
+              onMarkRead={onMarkRead}
+              onDismiss={onDismiss}
+              actionLabel={notification.actionLabel}
+              onAction={notification.onAction}
+              dismissible={notification.dismissible}
+            />
           );
         })}
       </div>

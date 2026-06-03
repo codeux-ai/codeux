@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { AlertTriangle } from "lucide-preact";
 import { NotificationPanel } from "../../../src/v2/components/NotificationPanel.js";
+import { useOverviewTelemetry } from "../../../src/hooks/use-overview-telemetry.js";
+import type { OverviewTelemetrySnapshot } from "../../../src/types.js";
 
 expect.extend(matchers);
 
@@ -23,12 +25,28 @@ vi.mock("../../../src/v2/hooks/use-reduced-motion.js", () => ({
   useReducedMotion: () => true,
 }));
 
+vi.mock("../../../src/hooks/use-overview-telemetry.js", () => ({
+  useOverviewTelemetry: vi.fn(),
+}));
+
 describe("NotificationPanel", () => {
   afterEach(() => {
     cleanup();
   });
 
   it("renders startup notifications and exposes actions", () => {
+    vi.mocked(useOverviewTelemetry).mockReturnValue({
+      telemetry: {
+        activeProjects: [],
+        attentionProjects: [],
+        recentEvents: [],
+        updatedAt: null,
+      } as OverviewTelemetrySnapshot,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
     const markAllRead = vi.fn();
     const markRead = vi.fn();
     const dismiss = vi.fn();
@@ -70,5 +88,61 @@ describe("NotificationPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh notifications" }));
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders intervention notifications from overview telemetry", () => {
+    const refreshTelemetry = vi.fn();
+
+    vi.mocked(useOverviewTelemetry).mockReturnValue({
+      telemetry: {
+        activeProjects: [],
+        attentionProjects: [
+          {
+            projectId: "project-1",
+            projectName: "Alpha Project",
+            sprintId: "sprint-1",
+            sprintName: "Sprint One",
+            sprintNumber: 1,
+            sprintRunId: "run-1",
+            sprintRunStatus: "paused",
+            activeDispatchCount: 0,
+            runningDispatchCount: 0,
+            updatedAt: null,
+            humanIntervention: {
+              title: "Merge Required",
+              reason: "Approve the outstanding pull request before resuming.",
+              instructions: "Review and merge the PR.",
+              attentionType: "merge",
+              severity: "high",
+              ownerType: "human",
+            },
+          },
+        ],
+        recentEvents: [],
+        updatedAt: null,
+      } as OverviewTelemetrySnapshot,
+      loading: false,
+      error: null,
+      refresh: refreshTelemetry,
+    });
+
+    render(
+      <NotificationPanel
+        unreadCount={0}
+        notifications={[]}
+        onMarkAllRead={vi.fn()}
+        onMarkRead={vi.fn()}
+        onDismiss={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Alpha Project")).toBeInTheDocument();
+    expect(screen.getByText("Merge Required")).toBeInTheDocument();
+    expect(screen.getByText("Approve the outstanding pull request before resuming.")).toBeInTheDocument();
+
+    const amberIcon = screen.getByText("Merge Required").closest("[data-notification-item]")?.querySelector(".text-status-amber");
+    expect(amberIcon).toBeInTheDocument();
+    expect(screen.queryByText("No notifications")).not.toBeInTheDocument();
   });
 });

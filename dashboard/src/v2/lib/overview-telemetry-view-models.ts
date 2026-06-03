@@ -1,8 +1,19 @@
+import { AlertTriangle, type LucideIcon } from "lucide-preact";
 import type { OverviewTelemetryProjectSummary, OverviewTelemetrySnapshot, ExecutionRuntimeEventSummary } from "../../types.js";
 
 export interface EventStyle {
   label: string;
   toneClass: string;
+}
+
+export interface InterventionNotificationViewModel {
+  id: string;
+  projectName: string;
+  title: string;
+  subtitle: string;
+  icon: LucideIcon;
+  toneClass: string;
+  unread: boolean;
 }
 
 export function buildProjectLookup(telemetry: OverviewTelemetrySnapshot): Map<string, string> {
@@ -54,4 +65,21 @@ export function getInterventionContent(project: OverviewTelemetryProjectSummary)
   return {
     title: project.humanIntervention.title || "Human intervention required",
   };
+}
+
+export function buildInterventionNotifications(telemetry: OverviewTelemetrySnapshot): InterventionNotificationViewModel[] {
+  return (telemetry?.attentionProjects || [])
+    .filter((project) => project.humanIntervention !== null)
+    .map((project) => {
+      const intervention = project.humanIntervention;
+      return {
+        id: project.projectId,
+        projectName: project.projectName,
+        title: getInterventionContent(project)?.title || "Human intervention required",
+        subtitle: intervention?.reason || "",
+        icon: AlertTriangle,
+        toneClass: "text-status-amber",
+        unread: true,
+      };
+    });
 }

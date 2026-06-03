@@ -345,6 +345,7 @@ Legacy runtime:
 - Execution runtime panel for sprint runs, dispatch queue state, live project connections, worker assignment, lease ownership, and recent runtime events
 - Live runtime visuals are only considered active when the selected project has a `running` or `queued` sprint run; cancelled, paused, and completed runs fall back to a waiting state
 - When no sprint is running but a paused sprint needs human intervention, the overview telemetry now switches from an empty state to an attention state with the exact reason and operator instructions
+- The notifications panel now surfaces cross-project attention telemetry as amber intervention rows when a project reports `humanIntervention`, keeping operator-facing blockers visible alongside the existing startup notifications
 - Task pipeline cards
 - Task cards include a `Rerun` action with confirmation prompt; rerun clears session/PR/merge state for that task and starts it again
 - Rerun now performs a full runtime reset instead of only changing task status:

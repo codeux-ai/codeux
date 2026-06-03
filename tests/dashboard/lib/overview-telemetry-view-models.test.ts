@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { AlertTriangle } from "lucide-preact";
 import {
+  buildInterventionNotifications,
   buildProjectLookup,
   getEventStyle,
   getInterventionContent,
@@ -82,6 +84,80 @@ describe("overview-telemetry-view-models", () => {
       const content = getInterventionContent(project);
       expect(content).toEqual({ title: "Merge Required" });
       expect((content as any).reason).toBeUndefined();
+    });
+  });
+
+  describe("buildInterventionNotifications", () => {
+    it("maps human interventions into amber notification rows", () => {
+      const telemetry: OverviewTelemetrySnapshot = {
+        activeProjects: [],
+        attentionProjects: [
+          {
+            projectId: "project-1",
+            projectName: "Alpha Project",
+            sprintId: "sprint-1",
+            sprintName: "Sprint One",
+            sprintNumber: 1,
+            sprintRunId: "run-1",
+            sprintRunStatus: "paused",
+            activeDispatchCount: 0,
+            runningDispatchCount: 0,
+            updatedAt: null,
+            humanIntervention: {
+              title: "Merge Required",
+              reason: "Approve the outstanding pull request before resuming.",
+              instructions: "Review the diff and merge it.",
+              attentionType: "merge",
+              severity: "high",
+              ownerType: "human",
+            },
+          },
+        ],
+        recentEvents: [],
+        updatedAt: null,
+      };
+
+      expect(buildInterventionNotifications(telemetry)).toEqual([{
+        id: "project-1",
+        projectName: "Alpha Project",
+        title: "Merge Required",
+        subtitle: "Approve the outstanding pull request before resuming.",
+        icon: AlertTriangle,
+        toneClass: "text-status-amber",
+        unread: true,
+      }]);
+    });
+
+    it("falls back to a default title when the intervention title is empty", () => {
+      const telemetry: OverviewTelemetrySnapshot = {
+        activeProjects: [],
+        attentionProjects: [
+          {
+            projectId: "project-2",
+            projectName: "Beta Project",
+            sprintId: "sprint-2",
+            sprintName: "Sprint Two",
+            sprintNumber: 2,
+            sprintRunId: "run-2",
+            sprintRunStatus: "paused",
+            activeDispatchCount: 0,
+            runningDispatchCount: 0,
+            updatedAt: null,
+            humanIntervention: {
+              title: "",
+              reason: "Waiting on operator input.",
+              instructions: "Take action.",
+              attentionType: "manual",
+              severity: "medium",
+              ownerType: "human",
+            },
+          },
+        ],
+        recentEvents: [],
+        updatedAt: null,
+      };
+
+      expect(buildInterventionNotifications(telemetry)[0]?.title).toBe("Human intervention required");
     });
   });
 });
