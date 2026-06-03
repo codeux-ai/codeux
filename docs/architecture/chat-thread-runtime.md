@@ -36,6 +36,8 @@ This keeps the chat page's explicit route selector authoritative for new-thread 
 
 Message posting is an awaited runtime operation. `POST /api/projects/:projectId/conversations/messages` waits for the chat runtime to finish routing the dashboard turn before returning the stored dashboard message, so provider/runtime errors are handled inside the same request lifecycle instead of continuing as detached background work.
 
+The dashboard chat bubbles now use paired light and dark surface tokens so message bodies, sender labels, and metadata remain legible in both themes while preserving the existing dark-mode visual treatment.
+
 Virtual chat failures are terminal for that dashboard turn:
 - the dashboard message is moved from `pending`/`delivered` to `failed`
 - a visible system message is appended with the worker execution error

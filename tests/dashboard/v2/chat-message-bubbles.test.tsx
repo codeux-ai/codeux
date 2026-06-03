@@ -16,6 +16,14 @@ vi.mock("../../../dashboard/src/v2/lib/markdown.js", () => ({
   renderMarkdown: (md: string) => `<p>${md}</p>`
 }));
 
+vi.mock("../../../dashboard/src/v2/lib/chat-time.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../dashboard/src/v2/lib/chat-time.js")>();
+  return {
+    ...actual,
+    formatChatTime: () => "2026-06-03 12:34",
+  };
+});
+
 describe("Chat Message Bubbles", () => {
   describe("ChatMessageBubble", () => {
     it("renders plain markdown when no planning metadata is present", () => {
@@ -72,6 +80,38 @@ describe("Chat Message Bubbles", () => {
       const { container, getByText } = render(<ChatMessageBubble message={message} />);
       expect(getByText("My special plan")).toBeInTheDocument();
       expect(getByText("Navigating solutions...")).toBeInTheDocument();
+    });
+
+    it("uses light-mode contrast tokens for the message shell and body", () => {
+      const message: ChatMessageRecord = {
+        id: "msg_3",
+        threadId: "thread_1",
+        direction: "connection_to_dashboard",
+        authorType: "connection",
+        authorConnectionId: "conn_1",
+        bodyMarkdown: "Contrast check",
+        deliveryStatus: "delivered",
+        createdAt: "2026-06-03T12:34:56.000Z",
+        metadata: {
+          provider: "gemini",
+          agentName: "Assistant",
+        },
+      };
+
+      const { container, getByText, queryAllByText } = render(<ChatMessageBubble message={message} />);
+      const sender = queryAllByText("Assistant")[0];
+      const bubble = sender.parentElement?.parentElement;
+      const body = getByText("Contrast check").parentElement;
+      const providerChip = getByText("gemini");
+      const createdAt = queryAllByText("2026-06-03 12:34")[0];
+
+      expect(bubble).toHaveClass("bg-black/[0.03]", "dark:bg-white/5");
+      expect(bubble).toHaveClass("border-black/[0.06]", "dark:border-white/10");
+      expect(sender).toHaveClass("text-slate-700", "dark:text-slate-300");
+      expect(providerChip).toHaveClass("bg-black/[0.03]", "dark:bg-white/5", "text-slate-700", "dark:text-slate-300");
+      expect(createdAt.parentElement).toHaveClass("text-slate-500", "dark:text-slate-400");
+      expect(body).toHaveClass("text-slate-700", "dark:text-slate-300");
+      expect(container.textContent).toContain("Contrast check");
     });
   });
 
@@ -143,6 +183,38 @@ describe("Chat Message Bubbles", () => {
       expect(getByText("Rate limit")).toBeInTheDocument();
       expect(getByText("default")).toBeInTheDocument();
     });
+
+    it("uses light-mode contrast tokens for the invocation shell and metadata chips", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_4",
+        invocationId: "inv_1",
+        role: "assistant",
+        contentMarkdown: "Invocation contrast",
+        toolCallsJson: { tool: "test" },
+        createdAt: "2026-06-03T12:34:56.000Z",
+        metadata: {
+          provider: "gemini",
+          model: "flash",
+        },
+      };
+
+      const { container, getByText, queryAllByText } = render(<InvocationMessageBubble message={message} />);
+      const sender = queryAllByText("assistant")[0];
+      const bubble = sender.parentElement?.parentElement;
+      const body = getByText("Invocation contrast").parentElement;
+      const providerChip = queryAllByText("gemini")[0];
+      const modelChip = queryAllByText("flash")[0];
+      const toolCalls = container.querySelector("pre")?.parentElement;
+
+      expect(bubble).toHaveClass("bg-black/[0.03]", "dark:bg-white/5");
+      expect(bubble).toHaveClass("border-black/[0.06]", "dark:border-white/10");
+      expect(sender).toHaveClass("text-slate-700", "dark:text-slate-300");
+      expect(providerChip).toHaveClass("bg-black/[0.03]", "dark:bg-white/5", "text-slate-700", "dark:text-slate-300");
+      expect(modelChip).toHaveClass("bg-black/[0.03]", "dark:bg-white/5", "text-slate-700", "dark:text-slate-300");
+      expect(body).toHaveClass("text-slate-700", "dark:text-slate-300");
+      expect(toolCalls).toHaveClass("border-black/[0.06]", "dark:border-white/10", "bg-black/[0.03]", "dark:bg-white/5");
+      expect(container.textContent).toContain("Invocation contrast");
+    });
   });
 
   describe("InvocationListCard", () => {
@@ -202,6 +274,18 @@ describe("Chat Message Bubbles", () => {
       const { getAllByText } = render(<WorkingBubble displayName="TestWorker" runtimeState={runtimeState} />);
       expect(getAllByText("Execution Plan").length).toBeGreaterThan(0);
       expect(getAllByText("Working").length).toBeGreaterThan(0);
+    });
+
+    it("uses light-mode contrast tokens for the working state shell and labels", () => {
+      const { container, getByText, queryAllByText } = render(<WorkingBubble displayName="TestWorker" runtimeState={null} />);
+      const bubble = queryAllByText("TestWorker is preparing a reply")[0].parentElement?.parentElement;
+      const footer = queryAllByText("Working")[0];
+
+      expect(bubble).toHaveClass("bg-black/[0.03]", "dark:bg-white/5");
+      expect(bubble).toHaveClass("border-black/[0.06]", "dark:border-white/10");
+      expect(queryAllByText("TestWorker is preparing a reply")[0]).toHaveClass("text-slate-700", "dark:text-slate-300");
+      expect(footer).toHaveClass("text-slate-500", "dark:text-slate-400");
+      expect(container.textContent).toContain("Pending Reply");
     });
   });
 });

@@ -29,9 +29,9 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
           {data.isPlanning ? (
             <PlanningRequestWidget status="running" planName={data.planName || "Execution Plan"} />
           ) : (
-            <div className="flex flex-col w-full rounded-2xl border bg-white/5 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] rounded-tl-sm border-white/10 text-slate-200">
+            <div className="flex flex-col w-full rounded-2xl border bg-black/[0.03] backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] rounded-tl-sm border-black/[0.06] text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300">
               <div className="flex items-center gap-2">
-                <span className="text-[13px] font-medium text-slate-300">
+                <span className="text-[13px] font-medium text-slate-700 dark:text-slate-300">
                   {displayName || "Listener"} is preparing a reply
                   <span className="ml-2 inline-flex items-center rounded-md border border-signal-500/30 bg-signal-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-signal-500">
                     Pending Reply
@@ -45,7 +45,7 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
               </div>
             </div>
           )}
-          <div className="px-1 text-[10px] font-mono text-slate-400">Working</div>
+          <div className="px-1 text-[10px] font-mono text-slate-500 dark:text-slate-400">Working</div>
         </div>
       </div>
     </div>

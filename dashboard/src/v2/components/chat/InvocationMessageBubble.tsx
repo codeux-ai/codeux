@@ -64,24 +64,24 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           />
         </div>
 
-        <div className={`flex flex-col w-full max-w-[calc(100%-3rem)] rounded-2xl border bg-white/5 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
+        <div className={`flex flex-col w-full max-w-[calc(100%-3rem)] rounded-2xl border bg-black/[0.03] backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] dark:bg-white/5 ${
           fromUser || fromTool
             ? "rounded-tr-sm border-signal-500/20"
-            : "rounded-tl-sm border-white/10"
+            : "rounded-tl-sm border-black/[0.06] dark:border-white/10"
         }`}>
           {/* Header Row */}
-          <div className={`flex items-center gap-3 mb-2 text-[11px] font-mono text-slate-400 ${fromUser || fromTool ? "justify-end flex-row-reverse" : "justify-start"}`}>
-            <span className="font-semibold text-slate-300 capitalize flex items-center gap-1.5">
+          <div className={`flex items-center gap-3 mb-2 text-[11px] font-mono text-slate-500 dark:text-slate-400 ${fromUser || fromTool ? "justify-end flex-row-reverse" : "justify-start"}`}>
+            <span className="font-semibold text-slate-700 dark:text-slate-300 capitalize flex items-center gap-1.5">
               {message.role}
               {isExternalApi && <Cloud className="h-3 w-3 text-signal-500" />}
             </span>
             {providerLabel && (
-              <span className="px-1.5 py-0.5 rounded-sm bg-black/20 text-slate-300">
+              <span className="px-1.5 py-0.5 rounded-sm bg-black/[0.03] text-slate-700 dark:bg-white/5 dark:text-slate-300">
                 {providerLabel}
               </span>
             )}
             {modelLabel && (
-              <span className="px-1.5 py-0.5 rounded-sm bg-black/20 text-slate-300">
+              <span className="px-1.5 py-0.5 rounded-sm bg-black/[0.03] text-slate-700 dark:bg-white/5 dark:text-slate-300">
                 {modelLabel}
               </span>
             )}
@@ -94,13 +94,13 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           </div>
 
           {/* Message Body */}
-          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit break-words"
+          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-700 dark:text-slate-300 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit break-words"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(message.contentMarkdown || "*(No message content)*") }}
           />
 
           {message.toolCallsJson && (
-            <div className="mt-4 rounded border border-white/10 bg-black/20 p-3 text-xs">
-              <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-slate-400">
+            <div className="mt-4 rounded border border-black/[0.06] bg-black/[0.03] p-3 text-xs dark:border-white/10 dark:bg-white/5">
+              <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-slate-500 dark:text-slate-400">
                 {JSON.stringify(message.toolCallsJson, null, 2)}
               </pre>
             </div>
@@ -108,7 +108,7 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
 
           {/* Widget Slot */}
           {widgetData.type === "planning" && (
-            <div className="mt-4 border-t border-white/5 pt-4">
+            <div className="mt-4 border-t border-black/[0.06] pt-4 dark:border-white/10">
               <PlanningRequestWidget status={widgetData.status} planName={widgetData.planName} />
             </div>
           )}
