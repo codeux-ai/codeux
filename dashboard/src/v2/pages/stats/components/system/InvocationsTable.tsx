@@ -12,7 +12,7 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-preact";
-import type { ExecutionInvocationRecord } from "../../../types.js";
+import type { ExecutionInvocationRecord } from "../../../../types.js";
 import type { SystemSort, SystemSortKey } from "../../hooks/use-system-view-data.js";
 import { formatTokens, formatDuration, formatDateTime } from "../../stats-utils.js";
 import {
