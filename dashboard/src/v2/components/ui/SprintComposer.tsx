@@ -107,6 +107,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const defaultSprintKey = initialSprint
     ? (initialSprint.number ? nextId.replace(/\d+$/, String(initialSprint.number)).toUpperCase() : initialSprint.slug.toUpperCase())
     : nextId.toUpperCase();
+  const previousDefaultSprintKeyRef = useRef(defaultSprintKey);
   const state = useSprintComposerState(initialSprint, defaultSprintKey, {
     planningAgentPresetId: defaultPlanningAgentPresetId,
     agentRoutingMode: defaultAgentRoutingMode,
@@ -171,6 +172,16 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
     previousDefaultsRef.current = next;
   }, [defaultPlanningAgentPresetId, defaultAgentRoutingMode, defaultWorkerAgentPresetId]);
+
+  useEffect(() => {
+    const prev = previousDefaultSprintKeyRef.current;
+    if (defaultSprintKey === prev) return;
+    previousDefaultSprintKeyRef.current = defaultSprintKey;
+    if (!initialSprint && state.sprintKeyOverride === prev) {
+      state.setSprintKeyOverride(defaultSprintKey);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultSprintKey]);
 
   useEffect(() => {
     if (agentPresetOptions.length === 0) {
