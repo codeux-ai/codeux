@@ -132,8 +132,8 @@ export const KineticDock: FunctionComponent = () => {
                     gsap.to(iconWrapper, {
                         scale: 1,
                         y: 0,
-                        duration: 0.35,
-                        ease: "power4.out",
+                        duration: 0.6,
+                        ease: "elastic.out(1, 0.5)",
                         overwrite: "auto"
                     });
                 }
@@ -151,8 +151,8 @@ export const KineticDock: FunctionComponent = () => {
                 gsap.to(iconWrapper, {
                     scale: 1,
                     y: 0,
-                    duration: 0.35,
-                    ease: "power4.out",
+                    duration: 0.6,
+                    ease: "elastic.out(1, 0.5)",
                     overwrite: "auto",
                     clearProps: "transform"
                 });
@@ -188,6 +188,30 @@ export const KineticDock: FunctionComponent = () => {
         };
     }, [updateIndicatorPosition]);
 
+
+    /* Keyboard Navigation (1-9) */
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+
+            const num = parseInt(e.key, 10);
+            if (!isNaN(num) && num >= 1 && num <= 9) {
+                const targetIndex = num - 1;
+                if (targetIndex < allItems.length) {
+                    const el = itemRefs.current[targetIndex];
+                    if (el) {
+                        el.click();
+                        el.focus();
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [allItems]);
+
     const renderItem = (item: DockItem, globalIndex: number) => {
         const isActive = activeIndex === globalIndex;
         return (
@@ -196,7 +220,7 @@ export const KineticDock: FunctionComponent = () => {
                 to={item.path}
                 ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
                 data-tour-id={`nav-${item.label.toLowerCase()}`}
-                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] rounded-[1.4rem] transition-colors duration-300 decoration-none"
+                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] rounded-[1.4rem] transition-colors duration-300 decoration-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 focus-visible:z-10"
             >
                 <div className="absolute inset-0 bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] group-focus-visible:bg-black/[0.04] dark:group-focus-visible:bg-white/[0.05] rounded-[1.4rem] pointer-events-none transition-colors duration-300" />
 
