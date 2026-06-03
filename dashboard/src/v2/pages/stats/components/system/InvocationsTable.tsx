@@ -123,13 +123,13 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-y-2">
-        <thead className="sticky top-0 z-10">
+        <thead className="sticky top-0 z-10 bg-[#0E0C0A]/80 backdrop-blur-md">
           <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
             <th className="pb-2 pl-6">
               <button
                 type="button"
                 onClick={() => handleSort("startedAt")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center hover:text-white"
               >
                 Time {renderSortIcon("startedAt")}
               </button>
@@ -141,7 +141,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("inputTokens")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center hover:text-white"
               >
                 In {renderSortIcon("inputTokens")}
               </button>
@@ -150,7 +150,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("outputTokens")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center hover:text-white"
               >
                 Out {renderSortIcon("outputTokens")}
               </button>
@@ -160,7 +160,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("totalTokens")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center hover:text-white"
               >
                 Total {renderSortIcon("totalTokens")}
               </button>
@@ -169,7 +169,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("durationMs")}
-                className="flex items-center hover:text-slate-900 dark:hover:text-white"
+                className="flex items-center hover:text-white"
               >
                 Duration {renderSortIcon("durationMs")}
               </button>
@@ -187,111 +187,115 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               : "running";
 
             return (
-              <tr key={invocation.id}>
-                <td colSpan={11} className="p-0">
-                  <div className={`${LEDGER_ROW_MODERN_CLASS} mb-1 flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:p-6`}>
-                    <div className="grid w-full grid-cols-2 gap-4 lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center">
-                      {/* Time */}
-                      <div className="text-[11px] font-mono text-slate-400">
-                        {formatDateTime(invocation.startedAt)}
-                      </div>
-
-                      {/* Status */}
-                      <div>{renderStatusChip(invocation.status)}</div>
-
-                      {/* Type */}
-                      <div className="flex">
-                        <div className={`${CHIP_CLASS} px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
-                          {invocation.type?.replace(/_/g, " ") || "unknown"}
+              <>
+                <tr key={invocation.id}>
+                  <td colSpan={11} className="p-0">
+                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-6`}>
+                      <div className="grid w-full grid-cols-2 gap-4 lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center lg:gap-2">
+                        {/* Time */}
+                        <div className="text-[11px] font-mono text-slate-400">
+                          {formatDateTime(invocation.startedAt)}
                         </div>
-                      </div>
 
-                      {/* Model */}
-                      <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
-                        <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
-                          <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
+                        {/* Status */}
+                        <div>{renderStatusChip(invocation.status)}</div>
+
+                        {/* Type */}
+                        <div className="flex">
+                          <div className={`${CHIP_CLASS} px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
+                            {invocation.type?.replace(/_/g, " ") || "unknown"}
+                          </div>
                         </div>
-                        <span className="truncate">{invocation.model || "—"}</span>
-                      </div>
 
-                      {/* In Tokens */}
-                      <div className="text-[11px] font-bold text-blue-400">
-                        {formatTokens(invocation.inputTokens ?? 0)}
-                      </div>
-
-                      {/* Out Tokens */}
-                      <div className="text-[11px] font-bold text-emerald-400">
-                        {formatTokens(invocation.outputTokens ?? 0)}
-                      </div>
-
-                      {/* Cached Tokens */}
-                      <div className="text-[11px] font-bold text-purple-400">
-                        {formatTokens(invocation.cachedInputTokens ?? 0)}
-                      </div>
-
-                      {/* Total Tokens */}
-                      <div className="text-[11px] font-black text-slate-900 dark:text-white">
-                        {formatTokens(invocation.totalTokens ?? 0)}
-                      </div>
-
-                      {/* Duration */}
-                      <div className={`text-[11px] font-medium ${invocation.finishedAt ? "text-slate-500" : "text-blue-400"}`}>
-                        {duration}
-                      </div>
-
-                      {/* Context Chips */}
-                      <div className="flex flex-wrap gap-1">
-                        {invocation.sprintNumber !== null && (
-                          <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-slate-400`}>
-                            S{invocation.sprintNumber}
+                        {/* Model */}
+                        <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                          <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
+                            <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
                           </div>
-                        )}
-                        {invocation.taskKey !== null && (
-                          <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-slate-400`}>
-                            {invocation.taskKey}
-                          </div>
-                        )}
-                        {invocation.sprintNumber === null && invocation.taskKey === null && (
-                          <span className="text-slate-500">—</span>
-                        )}
-                      </div>
+                          <span className="truncate">{invocation.model || "—"}</span>
+                        </div>
 
-                      {/* Expand Toggle */}
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
-                          className={`rounded-full p-2 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${
-                            isExpanded ? "text-signal-500" : "text-slate-400"
-                          }`}
-                        >
-                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        </button>
+                        {/* In Tokens */}
+                        <div className="text-[11px] text-blue-400">
+                          {formatTokens(invocation.inputTokens ?? 0)}
+                        </div>
+
+                        {/* Out Tokens */}
+                        <div className="text-[11px] text-emerald-400">
+                          {formatTokens(invocation.outputTokens ?? 0)}
+                        </div>
+
+                        {/* Cached Tokens */}
+                        <div className="text-[11px] text-purple-400">
+                          {formatTokens(invocation.cachedInputTokens ?? 0)}
+                        </div>
+
+                        {/* Total Tokens */}
+                        <div className="text-[11px] font-bold text-white">
+                          {formatTokens(invocation.totalTokens ?? 0)}
+                        </div>
+
+                        {/* Duration */}
+                        <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-300" : "text-blue-400"}`}>
+                          {duration}
+                        </div>
+
+                        {/* Context Chips */}
+                        <div className="flex flex-wrap gap-1">
+                          {(invocation.sprintNumber !== null || invocation.taskKey !== null) && (
+                            <>
+                              {invocation.sprintNumber !== null && (
+                                <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-slate-400`}>
+                                  S{invocation.sprintNumber}
+                                </div>
+                              )}
+                              {invocation.taskKey !== null && (
+                                <div className={`${CHIP_CLASS} px-1.5 py-0.5 text-[9px] font-bold text-slate-400`}>
+                                  {invocation.taskKey}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {/* Expand Toggle */}
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
+                            className={`rounded-full p-2 transition-colors hover:bg-white/5 ${
+                              isExpanded ? "text-signal-500" : "text-slate-400"
+                            }`}
+                          >
+                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </button>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Error Sub-row inside card */}
+                    {/* Error Sub-row inside main card if failed */}
                     {invocation.status === "failed" && (invocation.lastErrorMessage || invocation.errorMessage) && (
-                      <div className="mt-2 flex items-center gap-1.5 border-t border-red-500/10 pt-2 text-[11px] text-red-400">
-                        <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-                        <span className="truncate">{invocation.lastErrorMessage || invocation.errorMessage}</span>
+                      <div className="mt-[-8px] px-6 pb-4">
+                        <div className="flex items-center gap-1.5 text-[11px] text-red-400">
+                          <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                          <span>{invocation.lastErrorMessage || invocation.errorMessage}</span>
+                        </div>
                       </div>
                     )}
-                  </div>
+                  </td>
+                </tr>
 
-                  {/* Expanded Detail Row */}
-                  {isExpanded && (
-                    <div className="px-6 pb-4">
-                      <div className="rounded-2xl border border-white/[0.05] bg-slate-950/60 p-4 text-sm text-slate-400 shadow-inner">
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-1.5 rounded-full bg-signal-500" />
-                          Messages panel — wired in T06 ({invocation.id})
-                        </div>
+                {/* Expanded Detail Row */}
+                {isExpanded && (
+                  <tr key={`${invocation.id}-detail`}>
+                    <td colSpan={11} className="px-6 pb-2">
+                      <div className="rounded-2xl border border-white/[0.05] bg-slate-950/60 p-4 mt-1 text-sm text-slate-400">
+                        Messages panel — wired in T06 ({invocation.id})
                       </div>
-                    </div>
-                  )}
-                </td>
-              </tr>
+                    </td>
+                  </tr>
+                )}
+              </>
             );
           })}
         </tbody>
