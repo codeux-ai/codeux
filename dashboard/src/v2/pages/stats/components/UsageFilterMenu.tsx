@@ -85,40 +85,75 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
         {stats && (
           <div className={styles.section}>
             <label className={styles.label}>Metric Series</label>
-            <div className="flex flex-col gap-2 max-h-[280px] overflow-y-auto pr-2">
-              {stats.chartSeries.map((s) => {
-                const active = enabledSeries[s.id] || false;
-                const disabled = activeSeriesCount === 1 && active;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => {
-                      if (activeSeriesCount === 1 && enabledSeries[s.id]) return;
-                      setEnabledSeries((curr) => ({ ...curr, [s.id]: !curr[s.id] }));
-                    }}
-                    disabled={disabled}
-                    className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all ${
-                      active
-                        ? 'border-signal-500/20 bg-signal-500/[0.03] text-slate-900 dark:text-white'
-                        : 'border-black/[0.05] bg-transparent text-slate-500 hover:border-black/[0.1] dark:border-white/[0.05] dark:text-slate-400'
-                    } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: s.color || '#ccc' }}
-                      />
-                      <span className="text-[10px] font-bold uppercase tracking-[0.14em]">
-                        {s.label}
-                      </span>
+            <div className="flex max-h-[280px] flex-col gap-2 overflow-y-auto pr-2">
+              {(() => {
+                const groups = stats.chartSeries.reduce((acc, s) => {
+                  (acc[s.grouping] ??= []).push(s);
+                  return acc;
+                }, {} as Record<string, typeof stats.chartSeries>);
+                const displayOrder = ['core', 'purposes', 'providers', 'git'];
+                const orderedGroups = [
+                  ...displayOrder.filter((groupKey) => groups[groupKey]?.length),
+                  ...Object.keys(groups).filter((groupKey) => !displayOrder.includes(groupKey) && groups[groupKey]?.length),
+                ];
+
+                return orderedGroups.map((groupKey) => {
+                  const groupLabel = (
+                    groupKey === 'core'
+                      ? 'Core'
+                      : groupKey === 'purposes'
+                        ? 'Purposes'
+                        : groupKey === 'providers'
+                          ? 'Providers'
+                          : groupKey === 'git'
+                            ? 'Git'
+                            : groupKey.charAt(0).toUpperCase() + groupKey.slice(1)
+                  );
+
+                  return (
+                    <div key={groupKey} className="flex flex-col">
+                      <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mt-3 mb-1 px-1">
+                        {groupLabel}
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {groups[groupKey].map((s) => {
+                          const active = enabledSeries[s.id] || false;
+                          const disabled = activeSeriesCount === 1 && active;
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => {
+                                if (activeSeriesCount === 1 && enabledSeries[s.id]) return;
+                                setEnabledSeries((curr) => ({ ...curr, [s.id]: !curr[s.id] }));
+                              }}
+                              disabled={disabled}
+                              className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all ${
+                                active
+                                  ? 'border-signal-500/20 bg-signal-500/[0.03] text-slate-900 dark:text-white'
+                                  : 'border-black/[0.05] bg-transparent text-slate-500 hover:border-black/[0.1] dark:border-white/[0.05] dark:text-slate-400'
+                              } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: s.color || '#ccc' }}
+                                />
+                                <span className="text-[10px] font-bold uppercase tracking-[0.14em]">
+                                  {s.label}
+                                </span>
+                              </div>
+                              {active && (
+                                <div className="h-1.5 w-1.5 rounded-full bg-signal-500" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    {active && (
-                      <div className="h-1.5 w-1.5 rounded-full bg-signal-500" />
-                    )}
-                  </button>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           </div>
         )}
