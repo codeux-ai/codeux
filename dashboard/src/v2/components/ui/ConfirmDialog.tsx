@@ -135,18 +135,36 @@ function DestructiveConfirmButton({
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       aria-label={isHolding ? `Holding — ${Math.round(progress)}% complete, release to cancel` : `Hold to ${label}`}
     >
-      {isHolding && (
-        <div
-          className="absolute inset-0 bg-black/20 dark:bg-white/20 origin-left transition-transform duration-100"
-          style={{ transform: `scaleX(${progress / 100})` }}
-        />
-      )}
-
       <span aria-live="polite" aria-atomic="true" className="sr-only">
         {isHolding ? `Holding ${Math.round(progress)} percent — release to cancel` : `Hold button to ${label}`}
       </span>
       <span className="relative z-10 flex items-center justify-center gap-2">
         {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+        {!isLoading && isHolding && (
+          <svg className="w-4 h-4 -ml-1 transform -rotate-90" viewBox="0 0 24 24">
+            <circle
+              className="text-white/20"
+              strokeWidth="3"
+              stroke="currentColor"
+              fill="transparent"
+              r="10"
+              cx="12"
+              cy="12"
+            />
+            <circle
+              className="text-white drop-shadow-sm"
+              strokeWidth="3"
+              strokeDasharray={62.831853}
+              strokeDashoffset={62.831853 - (progress / 100) * 62.831853}
+              strokeLinecap="round"
+              stroke="currentColor"
+              fill="transparent"
+              r="10"
+              cx="12"
+              cy="12"
+            />
+          </svg>
+        )}
         {isHolding ? `Hold to ${label}` : isLoading ? "Processing..." : label}
       </span>
     </button>
@@ -167,7 +185,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
 
   const backdropRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const trapRef = useFocusTrap(shouldRender && !isClosing, () => handleClose(onCancel));
+  const trapRef = useFocusTrap(isOpen, () => handleClose(onCancel));
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -214,27 +232,17 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
 
   useEffect(() => {
     if (isClosing) {
-      const d = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
-
       if (cardRef.current) {
-        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
+        gsap.killTweensOf(cardRef.current);
+        cardRef.current.style.transform = '';
+        cardRef.current.style.opacity = '';
+        cardRef.current.style.filter = '';
       }
-
       if (backdropRef.current) {
-        gsap.to(backdropRef.current, {
-          opacity: 0,
-          duration: d,
-          delay: reducedMotion ? 0 : 0.05,
-          onComplete: () => {
-            setShouldRender(false);
-            setIsClosing(false);
-            if (pendingCallback.current) {
-              pendingCallback.current();
-              pendingCallback.current = null;
-            }
-          }
-        });
-      } else {
+        gsap.killTweensOf(backdropRef.current);
+        backdropRef.current.style.opacity = '';
+      }
+      if (reducedMotion) {
         setShouldRender(false);
         setIsClosing(false);
         if (pendingCallback.current) {
@@ -245,6 +253,18 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
     }
   }, [isClosing, reducedMotion]);
 
+  const handleAnimationEnd = (e: h.JSX.TargetedTransitionEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (isClosing) {
+      setShouldRender(false);
+      setIsClosing(false);
+      if (pendingCallback.current) {
+        pendingCallback.current();
+        pendingCallback.current = null;
+      }
+    }
+  };
+
   if (!shouldRender || !options) return null;
 
   const { title, body, confirmLabel = "Confirm", cancelLabel = "Cancel", destructive = false } = options;
@@ -252,7 +272,8 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-void-900/50 backdrop-blur-sm p-4"
+      onTransitionEnd={handleAnimationEnd}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-void-900/50 backdrop-blur-sm p-4 ${isClosing && !reducedMotion ? 'transition-opacity duration-200 ease-in opacity-0' : 'opacity-100'}`}
     >
       <div
         ref={(el) => {
@@ -265,7 +286,8 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-body"
-        className="bg-white dark:bg-void-800 w-full max-w-md rounded-[1.75rem] shadow-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.06] flex flex-col"
+        tabIndex={-1}
+        className={`bg-white dark:bg-void-800 w-full max-w-md rounded-[1.75rem] shadow-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.06] flex flex-col ${isClosing && !reducedMotion ? 'transition-all duration-200 ease-in scale-95 opacity-0 blur-md' : 'scale-100 opacity-100 blur-0'}`}
       >
         <div className="p-6 pb-4">
           <h2 id="confirm-dialog-title" className="text-xl font-semibold text-void-900 dark:text-white">
