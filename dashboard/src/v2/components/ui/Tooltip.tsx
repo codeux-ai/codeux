@@ -23,7 +23,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
     className = "",
     triggerClassName = "",
     unstyled = false,
-    delay = 150
+    delay = 300
 }) => {
     const [isVisible, setIsVisible] = useState(false);
     const [isRendered, setIsRendered] = useState(false);
@@ -54,32 +54,54 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
 
     const handleMouseLeave = () => {
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-        setIsVisible(false);
+        hoverTimeout.current = window.setTimeout(() => {
+            setIsVisible(false);
+        }, 150);
     };
-
-    useLayoutEffect(() => {
-        if (isVisible && wrapperRef.current && tooltipRef.current) {
-            const { top, left } = calculatePosition({
-                triggerRect: wrapperRef.current.getBoundingClientRect(),
-                contentRect: tooltipRef.current.getBoundingClientRect(),
-                position,
-                align: "center",
-                gap: 8,
-                padding: 8
-            });
-            setCoords({ top, left });
-        }
-    }, [isVisible, position]);
 
     useLayoutEffect(() => {
         if (!tooltipRef.current) return;
 
         gsap.killTweensOf(tooltipRef.current);
 
-        if (isVisible) {
-            tooltipMotion.enter(tooltipRef.current, position, { duration: durations.fast, ease: GSAP_EASINGS.spring });
+        if (isVisible && wrapperRef.current) {
+            const triggerRect = wrapperRef.current.getBoundingClientRect();
+            const contentRect = tooltipRef.current.getBoundingClientRect();
+
+            const { top, left } = calculatePosition({
+                triggerRect,
+                contentRect,
+                position,
+                align: "center",
+                gap: 8,
+                padding: 8
+            });
+
+            setCoords({ top, left });
+
+            // Calculate precise transform origin relative to tooltip
+            const triggerCenterX = triggerRect.left + triggerRect.width / 2;
+            const triggerCenterY = triggerRect.top + triggerRect.height / 2;
+
+            const originX = triggerCenterX - left;
+            const originY = triggerCenterY - top;
+
+            gsap.set(tooltipRef.current, { transformOrigin: `${originX}px ${originY}px` });
+
+            gsap.fromTo(
+                tooltipRef.current,
+                { opacity: 0, scale: 0.95 },
+                { opacity: 1, scale: 1, duration: durations.fast, ease: GSAP_EASINGS.spring, overwrite: "auto" }
+            );
         } else if (isRendered) {
-            tooltipMotion.exit(tooltipRef.current, position, () => setIsRendered(false), { duration: durations.fast, ease: GSAP_EASINGS.smooth });
+            gsap.to(tooltipRef.current, {
+                opacity: 0,
+                scale: 0.95,
+                duration: durations.fast,
+                ease: GSAP_EASINGS.smooth,
+                overwrite: "auto",
+                onComplete: () => setIsRendered(false)
+            });
         }
     }, [isVisible, isRendered, position]);
 
@@ -93,18 +115,21 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
 
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Escape" && isVisible) {
+                e.preventDefault();
+                e.stopPropagation();
                 if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
                 setIsVisible(false);
+                setIsRendered(false);
             }
         };
 
         if (isVisible) {
-            document.addEventListener("keydown", handleKeyDown);
+            document.addEventListener("keydown", handleKeyDown, { capture: true });
             window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
         }
 
         return () => {
-            document.removeEventListener("keydown", handleKeyDown);
+            document.removeEventListener("keydown", handleKeyDown, { capture: true });
             window.removeEventListener("scroll", handleScroll, { capture: true });
             if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         };
