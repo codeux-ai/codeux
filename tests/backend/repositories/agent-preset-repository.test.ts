@@ -36,6 +36,14 @@ describe("AgentPresetRepository", () => {
       model: "openai/gpt-5",
       memoryTemplateOverrideEnabled: true,
       memoryTemplateMarkdown: "Memory format",
+      memoryConfig: {
+        tier: "both",
+        categories: ["tasks"],
+        minStrength: 0.25,
+        minStrengthPerCategory: { tasks: 0.5 },
+        maxShortTerm: 3,
+        maxLongTerm: 5,
+      },
     });
 
     expect(created).toMatchObject({
@@ -49,6 +57,14 @@ describe("AgentPresetRepository", () => {
       model: "openai/gpt-5",
       memoryTemplateOverrideEnabled: true,
       memoryTemplateMarkdown: "Memory format",
+      memoryConfig: {
+        tier: "both",
+        categories: ["tasks"],
+        minStrength: 0.25,
+        minStrengthPerCategory: { tasks: 0.5 },
+        maxShortTerm: 3,
+        maxLongTerm: 5,
+      },
     });
 
     const updated = agentPresetRepository.updateAgentPreset(created.id, {
@@ -71,6 +87,14 @@ describe("AgentPresetRepository", () => {
       model: "gpt-5.4",
       memoryTemplateOverrideEnabled: false,
       memoryTemplateMarkdown: "Memory format",
+      memoryConfig: {
+        tier: "both",
+        categories: ["tasks"],
+        minStrength: 0.25,
+        minStrengthPerCategory: { tasks: 0.5 },
+        maxShortTerm: 3,
+        maxLongTerm: 5,
+      },
     });
 
     const listed = agentPresetRepository.listAgentPresets(project.id);
@@ -79,6 +103,40 @@ describe("AgentPresetRepository", () => {
 
     agentPresetRepository.deleteAgentPreset(created.id);
     expect(agentPresetRepository.listAgentPresets(project.id)).toEqual([]);
+  });
+
+  it("ignores memory config when importing a preset from markdown source", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-agent-preset-import-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Import Project",
+      sourceType: "local",
+      sourceRef: "/workspace/import-project",
+    });
+
+    const imported = agentPresetRepository.importAgentPresetFromSource(project.id, {
+      name: "Planning Agent",
+      description: "Imported from markdown.",
+      instructionMarkdown: "Plan the sprint.",
+      labels: ["planning"],
+      sourcePath: "/workspace/import-project/.code-ux/agents/planning_agent.md",
+      sourceScope: "project",
+      sourceUpdatedAt: new Date().toISOString(),
+      memoryConfig: {
+        tier: "short_term",
+        categories: [],
+        minStrength: 0,
+        minStrengthPerCategory: {},
+        maxShortTerm: 0,
+        maxLongTerm: 0,
+      },
+    });
+
+    expect(imported.memoryConfig).toBeUndefined();
   });
 
   it("persists and sanitizes per-agent MCP access config", async () => {
