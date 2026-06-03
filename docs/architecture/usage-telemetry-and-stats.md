@@ -154,6 +154,7 @@ It focuses on:
 - task, sprint, provider, and purpose leaderboards
 - tabbed task and sprint telemetry sections integrated into the Analysis Studio, complete with search, recency, richer token breakdowns, and client-side sorting by date and usage dimensions
 - animated donut charts now expose slice-level hover focus with center-detail readouts instead of only static composition rings
+- the System stats view now uses a dedicated client-side invocation hook that fetches the project invocation ledger, applies local search/filter/sort state, and derives summary metrics from the filtered result set
 - Heavy list views, such as the scrollable lazy-loaded task and sprint ledgers, are backed by a page-scoped progressive list strategy (`useProgressiveList`) that renders items in batches to optimize performance.
 - Backend read-model optimizations efficiently supply data to these page-scoped modules, ensuring fast telemetry rendering while **API contracts and routes remain completely unchanged**.
 - The Stats page header owns the time-window chips and custom range inputs so the window selector stays visible across all analysis tabs and the shared trend-chart flyout can focus exclusively on metric-series toggles.

@@ -186,6 +186,7 @@ Legacy runtime:
 ### Stats page
 - The Stats page keeps the time-window selector in the hero header, above the visual mode tabs, so preset and custom range controls remain visible no matter which analysis tab is active.
 - The trend-chart filter flyout is now metric-series only, which keeps the graph controls focused on series visibility while the header owns the time range.
+- The System stats view uses a local `useSystemViewData(projectId)` hook to fetch project invocation records, apply client-side search/filter/sort state, and derive summary metrics directly from the filtered list.
 
 ### V2 project management
 - Interactive dashboard controls use pointer cursors consistently: enabled buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays expose a pointer affordance, while disabled controls retain `not-allowed`.
