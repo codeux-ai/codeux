@@ -316,7 +316,7 @@ describe("Chat Message Bubbles", () => {
       };
 
       const avatarConfig = { chassis: 'square', accent: 'amber', eyes: 'smile' } as any;
-      const { container } = render(
+      const { container, getByText } = render(
         <InvocationMessageBubble
           message={message}
           agentAvatarConfig={avatarConfig}
@@ -327,9 +327,7 @@ describe("Chat Message Bubbles", () => {
       const svg = container.querySelector('svg[data-testid="agent-avatar-svg"]');
       expect(svg).toBeInTheDocument();
 
-      const nameElement = container.querySelector('.font-semibold.text-slate-300');
-      expect(nameElement).toBeInTheDocument();
-      expect(nameElement?.textContent).toBe("PresetAssistant");
+      expect(getByText("PresetAssistant")).toBeInTheDocument();
     });
 
     it("hides bootstrap branch unborn fatal lines while keeping other output", () => {
