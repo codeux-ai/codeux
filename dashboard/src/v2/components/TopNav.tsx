@@ -10,6 +10,7 @@ import { GlobalSearch } from "./top-nav/GlobalSearch.js";
 import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
 import { AddProjectModal } from "./ui/AddProjectModal.js";
+import type { AddProjectModalSubmission } from "./ui/AddProjectModal.js";
 import { useProjectData } from "../context/project-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
@@ -229,7 +230,17 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
         return () => document.removeEventListener("mousedown", handler);
     }, []);
 
-    const handleCreateProject = async (project: { name: string; type: 'local' | 'git'; path: string; cloneDir?: string }) => {
+    const handleCreateProject = async (project: AddProjectModalSubmission) => {
+        if (project.type === "new_project") {
+            const sourceType = project.initMode === "new-local" ? "local" : "git";
+            await createProject({
+                name: project.name,
+                sourceType,
+                sourceRef: sourceType === "local" ? project.path : (project.path || project.name),
+            });
+            return;
+        }
+
         await createProject({
             name: project.name,
             sourceType: project.type,

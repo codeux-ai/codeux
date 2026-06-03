@@ -8,6 +8,7 @@ export const CODE_UX_DIRNAME = ".code-ux";
 export const CODE_UX_SERVICE_NAME = "code-ux";
 export const CODE_UX_DISPLAY_NAME = "Code UX";
 export const CODE_UX_VERSION: string = version;
+export const CODEX_UX_DIRNAME = ".codex-ux";
 
 export function getRelativeCodeUxPath(...segments: string[]): string {
   return path.join(CODE_UX_DIRNAME, ...segments);
@@ -27,6 +28,18 @@ export function getHomeCodeUxDir(): string {
 
 export function getHomeCodeUxPath(...segments: string[]): string {
   return path.join(getHomeCodeUxDir(), ...segments);
+}
+
+export function getHomeCodexUxDir(): string {
+  return path.join(os.homedir(), CODEX_UX_DIRNAME);
+}
+
+export function getHomeCodexUxProjectsPath(): string {
+  return path.join(getHomeCodexUxDir(), "projects");
+}
+
+export function getHomeCodexUxProjectPath(projectSlug: string): string {
+  return path.join(getHomeCodexUxProjectsPath(), projectSlug);
 }
 
 export function getCodeUxSubtasksDir(repoPath: string, sprintNumber: number): string {

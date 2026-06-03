@@ -2,11 +2,15 @@ import { type FunctionComponent } from "preact";
 import { Cloud } from "lucide-preact";
 import type { ExecutionInvocationMessageRecord } from "../../types.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
-import { getInvocationWidgetData } from "../../lib/chat-widget-view-models.js";
+import { getInvocationWidgetData, sanitizeInvocationOutputText, type ParsedTurnTokens } from "../../lib/chat-widget-view-models.js";
 import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
+import { ToolCallWidget } from "./widgets/ToolCallWidget.js";
+import { ReasoningWidget } from "./widgets/ReasoningWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import type { AgentAvatarConfig } from "../../types.js";
+
+const asString = (value: unknown): string | null => (typeof value === "string" ? value : null);
 
 const formatErrorCategory = (value: unknown): string | null => {
   switch (value) {
@@ -35,6 +39,40 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const fromTool = message.role === "tool";
   const fromSystem = message.role === "system";
   const widgetData = getInvocationWidgetData(message);
+  const kind = asString(message.metadata?.kind);
+
+  if (kind === "reasoning") {
+    return (
+      <div className="flex justify-start">
+        <div className="w-full max-w-[760px] pl-11">
+          <ReasoningWidget text={message.contentMarkdown || ""} />
+        </div>
+      </div>
+    );
+  }
+
+  if (kind === "tool_call" || kind === "tool_result") {
+    const tool = (message.toolCallsJson ?? {}) as Record<string, unknown>;
+    const args = sanitizeInvocationOutputText(asString(tool.arguments) || "");
+    const output = sanitizeInvocationOutputText(asString(tool.output) || "");
+    const status = asString(message.metadata?.toolStatus) ?? asString(tool.resultStatus);
+    const tokens = (message.metadata?.tokens ?? null) as ParsedTurnTokens | null;
+
+    return (
+      <div className="flex justify-start">
+        <div className="w-full max-w-[760px] pl-11">
+          <ToolCallWidget
+            toolName={asString(message.metadata?.toolName)}
+            status={status}
+            args={args}
+            output={output}
+            tokens={tokens}
+            callId={asString(message.metadata?.toolCallId)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   let role: AvatarRole = "agent";
   if (fromUser || fromTool) {
@@ -48,6 +86,9 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
   const senderName = (fromUser || fromTool) ? "User" : (message.metadata?.agentName as string) || "Assistant";
   const providerLabel = message.metadata?.provider as string | undefined;
   const modelLabel = message.metadata?.model as string | undefined;
+  const rawStatus = typeof message.metadata?.status === "string" ? message.metadata.status : null;
+  const hasInvocationResponse = Boolean(message.metadata?.response);
+  const displayStatus = rawStatus === "queued" && hasInvocationResponse ? "processed" : rawStatus;
   const errorLabel = formatErrorCategory(message.metadata?.errorCategory);
   const createdAtLabel = formatChatTime(message.createdAt);
   const isExternalApi = Boolean(message.metadata?.isExternalApi);
@@ -71,8 +112,8 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
         }`}>
           {/* Header Row */}
           <div className={`flex items-center gap-3 mb-2 text-[11px] font-mono text-slate-500 dark:text-slate-400 ${fromUser || fromTool ? "justify-end flex-row-reverse" : "justify-start"}`}>
-            <span className="font-semibold text-slate-700 dark:text-slate-300 capitalize flex items-center gap-1.5">
-              {message.role}
+            <span className={`font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 ${message.role === "assistant" ? "" : "capitalize"}`}>
+              {message.role === "assistant" && message.metadata?.agentName ? message.metadata.agentName : message.role}
               {isExternalApi && <Cloud className="h-3 w-3 text-signal-500" />}
             </span>
             {providerLabel && (
@@ -85,6 +126,11 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
                 {modelLabel}
               </span>
             )}
+            {displayStatus && (
+              <span className="px-1.5 py-0.5 rounded-sm bg-black/[0.03] text-slate-700 dark:bg-white/5 dark:text-slate-300 capitalize">
+                {displayStatus}
+              </span>
+            )}
             {errorLabel && (
               <span className="rounded-sm border border-status-amber/30 bg-status-amber/10 px-1.5 py-0.5 text-status-amber">
                 {errorLabel}
@@ -95,10 +141,10 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
 
           {/* Message Body */}
           <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-700 dark:text-slate-300 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit break-words"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.contentMarkdown || "*(No message content)*") }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(sanitizeInvocationOutputText(message.contentMarkdown || "*(No message content)*")) }}
           />
 
-          {message.toolCallsJson && (
+          {message.toolCallsJson && !kind && (
             <div className="mt-4 rounded border border-black/[0.06] bg-black/[0.03] p-3 text-xs dark:border-white/10 dark:bg-white/5">
               <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-slate-500 dark:text-slate-400">
                 {JSON.stringify(message.toolCallsJson, null, 2)}

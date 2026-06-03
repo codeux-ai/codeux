@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { Bot, FolderOpen, Plus, ExternalLink, Loader2, Trash2 } from "lucide-preact";
 import type { Source, SourceStatus } from "./types.js";
 import { AddProjectModal } from "./components/ui/AddProjectModal.js";
+import type { AddProjectModalSubmission } from "./components/ui/AddProjectModal.js";
 import { StatusDot } from "./components/ui/StatusDot.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
@@ -476,21 +477,17 @@ export const ProjectsPage: FunctionComponent = () => {
         });
     };
 
-    const handleAddProject = async (project: {
-        name: string;
-        type: 'local' | 'git';
-        path: string;
-        cloneDir?: string;
-        setup?: {
-            enabled: boolean;
-            options: {
-                agents: boolean;
-                quicksprints: boolean;
-                previewScript: boolean;
-                ci: boolean;
-            };
-        };
-    }) => {
+    const handleAddProject = async (project: AddProjectModalSubmission) => {
+        if (project.type === 'new_project') {
+            const sourceType = project.initMode === 'new-local' ? 'local' : 'git';
+            await createProject({
+                name: project.name,
+                sourceType,
+                sourceRef: sourceType === 'local' ? project.path : (project.path || project.name),
+            });
+            return;
+        }
+
         const createdProject = await createProject({
             name: project.name,
             sourceType: project.type,

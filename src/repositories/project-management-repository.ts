@@ -1,4 +1,5 @@
 import * as path from "path";
+import os from "os";
 import { randomUUID } from "crypto";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { ValidationError, EntityNotFoundError, RepositoryError } from "./repository-utils.js";
@@ -33,8 +34,7 @@ import { readLocalGitOriginUrl } from "../infrastructure/git/local-git-origin.js
 import { projectSummaryQuery } from "./project-management/project-summary-query.js";
 import { sprintSummaryQuery } from "./project-management/sprint-summary-query.js";
 import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
-import { getHomeCodeUxPath } from "../shared/config/code-ux-paths.js";
-import { getHomeCodexUxProjectPath } from "../shared/config/codex-ux-paths.js";
+import { getHomeCodeUxPath, getHomeCodexUxProjectPath } from "../shared/config/code-ux-paths.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 
@@ -195,7 +195,7 @@ export class ProjectManagementRepository {
       const sourceType = input.sourceType;
       const sourceRef = input.sourceRef.trim();
       const baseDir = this.resolveBaseDir(sourceType, sourceRef, input.cloneDir, "", slug);
-      const storedSourceRef = sourceType === "local" && !sourceRef ? baseDir : sourceRef;
+      const storedSourceRef = sourceType === "local" ? baseDir : sourceRef;
       const repoUrl = sourceType === "git" ? sourceRef : null;
 
       const insert = this.db.prepare(`
@@ -251,6 +251,7 @@ export class ProjectManagementRepository {
       const nextSourceRef = input.sourceRef?.trim() || current.sourceRef;
       const nextBaseDir = input.baseDir?.trim() || this.resolveBaseDir(nextSourceType, nextSourceRef, undefined, current.baseDir, nextSlug);
       const nextRepoUrl = nextSourceType === "git" ? nextSourceRef : null;
+      const nextStoredSourceRef = nextSourceType === "local" ? nextBaseDir : nextSourceRef;
 
       const updateProject = this.db.prepare(`
         UPDATE projects
@@ -275,7 +276,7 @@ export class ProjectManagementRepository {
           now,
           projectId
         );
-        updateSource.run(nextSourceType, nextSourceRef, projectId);
+        updateSource.run(nextSourceType, nextStoredSourceRef, projectId);
       });
 
       const updated = this.requireProject(projectId);
@@ -1262,7 +1263,10 @@ export class ProjectManagementRepository {
     projectSlug = ""
   ): string {
     if (sourceType === "local") {
-      return sourceRef || fallback || getHomeCodexUxProjectPath(projectSlug);
+      if (!sourceRef) {
+        return fallback || getHomeCodexUxProjectPath(projectSlug);
+      }
+      return path.isAbsolute(sourceRef) ? sourceRef : path.resolve(os.homedir(), sourceRef);
     }
 
     const repoName = deriveRepoName(sourceRef);

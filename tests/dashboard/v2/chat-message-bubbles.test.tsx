@@ -2,7 +2,7 @@
 // @vitest-environment happy-dom
 import { h } from "preact";
 import { describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/preact";
+import { fireEvent, render } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { ChatMessageBubble } from "../../../dashboard/src/v2/components/chat/ChatMessageBubble.js";
 import { InvocationMessageBubble } from "../../../dashboard/src/v2/components/chat/InvocationMessageBubble.js";
@@ -184,6 +184,103 @@ describe("Chat Message Bubbles", () => {
       expect(getByText("default")).toBeInTheDocument();
     });
 
+    it("renders reasoning content as a dedicated reasoning card", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_reasoning",
+        invocationId: "inv_1",
+        role: "assistant",
+        contentMarkdown: "Thoughtful analysis over several steps to choose the safest branch.",
+        toolCallsJson: null,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          kind: "reasoning",
+        },
+      };
+
+      const { container, getByText } = render(<InvocationMessageBubble message={message} />);
+      expect(getByText("Reasoning")).toBeInTheDocument();
+      expect(container.textContent).toContain("Thoughtful analysis");
+      expect(container.querySelector("div")?.className).toContain("justify-start");
+    });
+
+    it("renders tool call output as a dedicated tool card with expandable details", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_tool_call",
+        invocationId: "inv_1",
+        role: "assistant",
+        contentMarkdown: "Call the filesystem tool.",
+        toolCallsJson: {
+          arguments: JSON.stringify({ cmd: "find src" }),
+          output: "src/index.ts\nsrc/routes.ts",
+        },
+        createdAt: new Date().toISOString(),
+        metadata: {
+          kind: "tool_call",
+          toolName: "search_files",
+          toolStatus: "running",
+          toolCallId: "call-123456789",
+          tokens: {
+            input: 12,
+            output: 34,
+            total: 46,
+          },
+        },
+      };
+
+      const { container, getByText } = render(<InvocationMessageBubble message={message} />);
+      expect(getByText("search_files")).toBeInTheDocument();
+      expect(getByText("running")).toBeInTheDocument();
+      expect(getByText("46")).toBeInTheDocument();
+      expect(container.textContent).toContain("find src");
+
+      fireEvent.click(getByText("search_files").closest("button")!);
+      expect(getByText("Input")).toBeInTheDocument();
+      expect(getByText("Output")).toBeInTheDocument();
+    });
+
+    it("hides bootstrap branch fatal lines while keeping other output visible", () => {
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_bootstrap_noise",
+        invocationId: "inv_1",
+        role: "tool",
+        contentMarkdown: [
+          "fatal: your current branch 'code-ux-bootstrap-1' does not have any commits yet",
+          "actual output line",
+        ].join("\n"),
+        toolCallsJson: {
+          output: [
+            "fatal: your current branch 'code-ux-bootstrap-1' does not have any commits yet",
+            "tool result kept",
+          ].join("\n"),
+        },
+        createdAt: new Date().toISOString(),
+        metadata: {
+          kind: "tool_result",
+          toolName: "git",
+          toolCallId: "call-1",
+        },
+      };
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      expect(container.textContent).not.toContain("code-ux-bootstrap-1");
+      expect(container.textContent).toContain("git");
+    });
+
+    it("keeps non-bootstrap fatal lines visible", () => {
+      const line = "fatal: your current branch 'feature/my-branch' does not have any commits yet";
+      const message: ExecutionInvocationMessageRecord = {
+        id: "msg_non_bootstrap",
+        invocationId: "inv_1",
+        role: "assistant",
+        contentMarkdown: line,
+        toolCallsJson: null,
+        createdAt: new Date().toISOString(),
+      };
+
+      const { container } = render(<InvocationMessageBubble message={message} />);
+      expect(container.textContent).toContain(line);
+    });
+
     it("uses light-mode contrast tokens for the invocation shell and metadata chips", () => {
       const message: ExecutionInvocationMessageRecord = {
         id: "msg_4",
@@ -257,6 +354,108 @@ describe("Chat Message Bubbles", () => {
       expect(container.textContent).toContain("Rate limit");
       expect(container.textContent).toContain("gemini");
       expect(container.textContent).toContain("default");
+    });
+
+    it("renders the scope chip on cards when available", () => {
+      const invocation: ExecutionInvocationRecord = {
+        id: "inv-2",
+        projectId: "project-1",
+        sprintId: "sprint-uuid-12345",
+        taskId: "task-uuid-67890",
+        sprintRunId: null,
+        dispatchId: null,
+        taskRunId: null,
+        attentionItemId: null,
+        providerInvocationId: null,
+        type: "planning",
+        status: "completed",
+        provider: "gemini",
+        model: "default",
+        systemPrompt: null,
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        errorMessage: null,
+        lastErrorCategory: null,
+        lastErrorMessage: null,
+        lastRetryAfterIso: null,
+        messageCount: 0,
+        lastMessageAt: new Date().toISOString(),
+        inputTokens: 1200,
+        cachedInputTokens: 300,
+        outputTokens: 450,
+        totalTokens: 1950,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const { container } = render(
+        <InvocationListCard
+          invocations={[invocation]}
+          selectedInvocationId={null}
+          onSelect={vi.fn()}
+        />
+      );
+
+      expect(container.textContent).toContain("Task");
+    });
+
+    it("reserves border width in both selected and unselected states to prevent layout shift", () => {
+      const invocation: ExecutionInvocationRecord = {
+        id: "inv-1",
+        projectId: "project-1",
+        sprintId: null,
+        taskId: null,
+        sprintRunId: null,
+        dispatchId: null,
+        taskRunId: null,
+        attentionItemId: null,
+        providerInvocationId: null,
+        type: "planning",
+        status: "completed",
+        provider: "gemini",
+        model: "default",
+        systemPrompt: null,
+        startedAt: new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+        errorMessage: null,
+        lastErrorCategory: null,
+        lastErrorMessage: null,
+        lastRetryAfterIso: null,
+        messageCount: 0,
+        lastMessageAt: new Date().toISOString(),
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const { container: containerUnselected, unmount: unmountUnselected } = render(
+        <InvocationListCard
+          invocations={[invocation]}
+          selectedInvocationId={null}
+          onSelect={vi.fn()}
+        />
+      );
+      const buttonUnselected = containerUnselected.querySelector("button");
+      expect(buttonUnselected).not.toBeNull();
+      const classesUnselected = buttonUnselected!.className.split(/\s+/);
+      expect(classesUnselected).toContain("border");
+      expect(classesUnselected).not.toContain("border-2");
+      unmountUnselected();
+
+      const { container: containerSelected } = render(
+        <InvocationListCard
+          invocations={[invocation]}
+          selectedInvocationId={invocation.id}
+          onSelect={vi.fn()}
+        />
+      );
+      const buttonSelected = containerSelected.querySelector("button");
+      expect(buttonSelected).not.toBeNull();
+      const classesSelected = buttonSelected!.className.split(/\s+/);
+      expect(classesSelected).toContain("border-2");
     });
   });
 

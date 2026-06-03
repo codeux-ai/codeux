@@ -4,6 +4,15 @@ import type { ExecutionStatus } from "../components/chat/widgets/ChatWidgetFrame
 
 export type ChatWidgetType = "planning" | "none";
 
+/** Per-turn token usage carried on tool-call invocation messages. */
+export interface ParsedTurnTokens {
+  input?: number;
+  cached?: number;
+  output?: number;
+  reasoning?: number;
+  total?: number;
+}
+
 export interface ChatWidgetState {
   type: ChatWidgetType;
   status: ExecutionStatus;
@@ -17,6 +26,20 @@ export interface WorkingBubbleState {
   providerLabel?: string;
   modelLabel?: string;
 }
+
+const BOOTSTRAP_BRANCH_FATAL_LINE_PATTERN =
+  /^fatal:\s+your current branch 'code-ux-bootstrap-[^']+' does not have any commits yet\s*$/i;
+
+export const sanitizeInvocationOutputText = (value: string): string => {
+  if (!value) {
+    return value;
+  }
+
+  return value
+    .split("\n")
+    .filter((line) => !BOOTSTRAP_BRANCH_FATAL_LINE_PATTERN.test(line.trim()))
+    .join("\n");
+};
 
 const extractWidgetStateFromMetadata = (
   metadata: Record<string, unknown> | null | undefined,
@@ -64,6 +87,57 @@ export const getInvocationWidgetData = (message: ExecutionInvocationMessageRecor
   return extractWidgetStateFromMetadata(message.metadata, message.contentMarkdown);
 };
 
+const metaKind = (message: ExecutionInvocationMessageRecord): string | undefined =>
+  typeof message.metadata?.kind === "string" ? message.metadata.kind : undefined;
+
+const metaCallId = (message: ExecutionInvocationMessageRecord): string | undefined =>
+  typeof message.metadata?.toolCallId === "string" ? message.metadata.toolCallId : undefined;
+
+/**
+ * Collapses a `tool_call` message and its matching `tool_result` into a
+ * single invocation message so the transcript can render one tool card with
+ * both the input and output attached.
+ */
+export const mergeInvocationToolMessages = (
+  messages: ExecutionInvocationMessageRecord[],
+): ExecutionInvocationMessageRecord[] => {
+  const consumed = new Set<string>();
+  const merged: ExecutionInvocationMessageRecord[] = [];
+
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i];
+    if (consumed.has(message.id)) {
+      continue;
+    }
+
+    const callId = metaCallId(message);
+    if (metaKind(message) === "tool_call" && callId) {
+      const result = messages.slice(i + 1).find(
+        (candidate) => metaKind(candidate) === "tool_result" && metaCallId(candidate) === callId,
+      );
+
+      if (result) {
+        consumed.add(result.id);
+        const callTool = (message.toolCallsJson ?? {}) as Record<string, unknown>;
+        const resultTool = (result.toolCallsJson ?? {}) as Record<string, unknown>;
+        merged.push({
+          ...message,
+          toolCallsJson: {
+            ...callTool,
+            output: resultTool.output ?? null,
+            resultStatus: typeof result.metadata?.toolStatus === "string" ? result.metadata.toolStatus : null,
+          },
+        });
+        continue;
+      }
+    }
+
+    merged.push(message);
+  }
+
+  return merged;
+};
+
 export const getWorkingBubbleData = (runtimeState: ConversationRuntimeState | null | undefined): WorkingBubbleState => {
   if (!runtimeState) {
     return { isPlanning: false };
@@ -83,3 +157,44 @@ export const getWorkingBubbleData = (runtimeState: ConversationRuntimeState | nu
     modelLabel: runtimeState.modelLabel,
   };
 };
+
+export interface ProviderStatusMetadata {
+  provider?: string | null;
+  model?: string | null;
+  status?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export function formatProviderInstanceLabel(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+): string {
+  if (!provider) return "";
+  if (model) {
+    return `${provider} ${model}`;
+  }
+  return provider;
+}
+
+export function formatStatusContext(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+  status: string | null | undefined,
+): string {
+  const parts: string[] = [];
+  if (provider) parts.push(provider);
+  if (model) parts.push(model);
+  if (status) parts.push(status);
+  return parts.join(" ");
+}
+
+export function formatTokenCount(tokens: number | null | undefined): string {
+  if (tokens === undefined || tokens === null) return "0";
+  return tokens.toLocaleString();
+}
+
+export function shortenIdentifier(id: string | null | undefined): string {
+  if (!id) return "";
+  if (id.length <= 8) return id;
+  return id.slice(0, 8);
+}

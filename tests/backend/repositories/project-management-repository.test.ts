@@ -211,6 +211,21 @@ describe("ProjectManagementRepository", () => {
     expect(project.sourceRef).not.toBe("");
   });
 
+  it("resolves relative local source refs against the user's home directory", async () => {
+    const { repository } = await createRepository();
+
+    const project = repository.createProject({
+      name: "Relative Local Project",
+      sourceType: "local",
+      sourceRef: "workspace/relative-local-project",
+    });
+
+    const expectedBaseDir = path.resolve(os.homedir(), "workspace/relative-local-project");
+
+    expect(project.baseDir).toBe(expectedBaseDir);
+    expect(project.sourceRef).toBe(expectedBaseDir);
+  });
+
 
   it("supports optional sprint review summaries in listSprints and ignores task-level QA", async () => {
     const { repository, storage } = await createRepository();

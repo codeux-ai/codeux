@@ -7,6 +7,8 @@ Project Initialization runs a repository-specific setup pass through the `Projec
 - `Add Project` includes `Initialize with Project Setup Agent`, checked by default in the dashboard.
 - When that checkbox is enabled, the dialog opens a setup scope step before creation.
 - Existing projects expose a `Setup Project` action from the project card agent button.
+- The Add Project modal also includes a `New Project` source type for blank project creation.
+- When `New Project` is selected, the local and git-specific fields are hidden and the modal switches to its own init-mode controls instead of the standard setup flow.
 
 Both flows let the operator choose which artifacts to create:
 
@@ -46,6 +48,7 @@ Project creation also resolves local storage paths before the record is persiste
 
 - git projects keep using the configured clone root and repository name
 - local projects with an empty `sourceRef` now default to `~/.codex-ux/projects/<slug>`
+- local projects with a relative `sourceRef` are resolved against the user's home directory before persistence
 - the Add Project modal mirrors that contract by making the local Directory Path optional and leaving the path empty when the operator wants the backend default
 - when that default path is used, the same resolved path is stored as `source_ref` so later lookups do not depend on an empty string placeholder
 

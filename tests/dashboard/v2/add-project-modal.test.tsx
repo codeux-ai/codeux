@@ -80,6 +80,36 @@ describe("AddProjectModal", () => {
     expect(screen.queryByLabelText(/Clone Into Directory/i)).not.toBeInTheDocument();
   });
 
+  it("preselects the new project flow and hides the setup controls", () => {
+    render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} initialSourceType="new_project" />);
+
+    expect(screen.getByRole("button", { name: /new project/i })).toHaveClass("bg-ember-500");
+    expect(screen.queryByLabelText(/Repository URL/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Clone Into Directory/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Initialize with Project Setup Agent/i)).not.toBeInTheDocument();
+  });
+
+  it("submits the new project payload without setup fields", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} initialSourceType="new_project" />);
+
+    fireEvent.input(screen.getByLabelText("Project Name"), { target: { value: "Alpha" } });
+    fireEvent.input(screen.getByLabelText(/Directory Path/i), { target: { value: "/tmp/alpha" } });
+
+    const form = screen.getByLabelText("Project Name").closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(onAdd).toHaveBeenCalledWith({
+      name: "Alpha",
+      type: "new_project",
+      path: "/tmp/alpha",
+      initMode: "new-local",
+    });
+  });
+
   it("browses into a directory and applies it to the local path input", async () => {
     vi.mocked(fetchLocalDirectories)
       .mockResolvedValueOnce({
