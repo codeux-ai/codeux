@@ -8,6 +8,7 @@ import {
   Link as LinkIcon,
   Loader2,
   Sparkles,
+  GripVertical,
   Tag,
   Target,
   Workflow,
@@ -17,7 +18,7 @@ import {
 import type { Sprint, AgentPreset, SprintLinkedIssueInput } from "../../types.js";
 import { AvantgardeSelect } from "./AvantgardeSelect.js";
 import {
-  useSprintComposerState, 
+  useSprintComposerState,
   type SprintSubmitMode,
   type PlanningRouteOption,
   toPlanningOverrides,
@@ -28,10 +29,14 @@ import { getPlanningFeedback, type PlanningActionType, PLANNING_ACTION_LABELS } 
 import { PlanningProgressOverlay } from "./PlanningProgressOverlay.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
+
+const SPRINT_NAME_MAX_LENGTH = 80;
+const SPRINT_NAME_SOFT_LIMIT = 64;
 
 interface SprintComposerProps {
   nextId: string;
@@ -88,6 +93,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
+  const changesRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const activeRequestRef = useRef<{ id: string; detached: boolean; cancelled: boolean } | null>(null);
   const ignoredRequestIdsRef = useRef<Set<string>>(new Set());
@@ -103,6 +109,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const { feedback: actionFeedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   const defaultSprintKey = initialSprint
     ? (initialSprint.number ? nextId.replace(/\d+$/, String(initialSprint.number)).toUpperCase() : initialSprint.slug.toUpperCase())
@@ -427,6 +434,35 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const modelOptions = currentRoute?.provider ? getProviderModelOptions(currentRoute.provider) : [];
 
   const isDark = document.documentElement.classList.contains("dark");
+  const sprintNameLength = state.name.length;
+  const sprintNameTrimmedLength = state.name.trim().length;
+  const sprintNameAtLimit = sprintNameLength >= SPRINT_NAME_SOFT_LIMIT;
+  const sprintNameCounterTone = sprintNameLength >= SPRINT_NAME_MAX_LENGTH
+    ? "text-status-red"
+    : sprintNameAtLimit
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-slate-400";
+
+  useLayoutEffect(() => {
+    if (reducedMotion || !changesRef.current) {
+      return;
+    }
+
+    const stagedEntries = Array.from(changesRef.current.querySelectorAll<HTMLElement>("[data-composer-entry]"));
+    if (stagedEntries.length === 0) {
+      return;
+    }
+
+    const context = gsap.context(() => {
+      gsap.fromTo(
+        stagedEntries,
+        { opacity: 0, y: 14, scale: 0.99, filter: "blur(4px)" },
+        { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", duration: 0.42, ease: "power3.out", stagger: 0.04, clearProps: "filter" },
+      );
+    }, changesRef);
+
+    return () => context.revert();
+  }, [reducedMotion, state.originalPrompt, visibleLinkedIssues.length]);
 
   return (
     <section
@@ -556,18 +592,56 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             </div>
           </div>
 
-          <label data-composer-stagger className="mt-8 block space-y-2">
-            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Name</span>
+          <label data-composer-stagger className="mt-8 block space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Name</span>
+              <div className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] ${sprintNameCounterTone} ${
+                sprintNameLength >= SPRINT_NAME_MAX_LENGTH
+                  ? "border-status-red/20 bg-status-red/[0.08]"
+                  : sprintNameAtLimit
+                    ? "border-amber-500/20 bg-amber-500/[0.08]"
+                    : "border-black/[0.06] bg-black/[0.025] dark:border-white/[0.06] dark:bg-white/[0.03]"
+              }`}>
+                {sprintNameLength}/{SPRINT_NAME_MAX_LENGTH}
+              </div>
+            </div>
             <input
               type="text"
               value={state.name}
               onInput={(event) => state.setName((event.target as HTMLInputElement).value)}
               disabled={isBusy}
               placeholder="Runtime hardening"
-              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
+              maxLength={SPRINT_NAME_MAX_LENGTH}
+              aria-describedby="sprint-name-feedback sprint-name-counter"
+              className={`w-full border-0 border-b-2 bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight outline-none transition-all placeholder:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50 dark:placeholder:text-slate-700 sm:text-[1.9rem] ${
+                sprintNameLength >= SPRINT_NAME_MAX_LENGTH
+                  ? "border-status-red/40 text-status-red focus:border-status-red dark:border-status-red/35"
+                  : sprintNameAtLimit
+                    ? "border-amber-500/35 text-slate-900 focus:border-amber-500 dark:border-amber-400/35 dark:text-white"
+                    : "border-black/[0.08] text-slate-900 focus:border-signal-500 dark:border-white/[0.08] dark:text-white"
+              }`}
               required
               autoFocus
             />
+            <div className="flex flex-wrap items-center justify-between gap-3 text-[10px] leading-none">
+              <p
+                id="sprint-name-feedback"
+                className={sprintNameLength >= SPRINT_NAME_MAX_LENGTH
+                  ? "text-status-red"
+                  : sprintNameAtLimit
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-slate-400 dark:text-slate-500"}
+              >
+                {sprintNameTrimmedLength === 0
+                  ? "Required to submit a sprint."
+                  : sprintNameAtLimit
+                    ? "Close to the limit. Keep the label concise for the ledger and logs."
+                    : "Use a short label that still reads clearly in sprint cards and audit trails."}
+              </p>
+              <p id="sprint-name-counter" className={`font-mono ${sprintNameCounterTone}`}>
+                {sprintNameLength} / {SPRINT_NAME_MAX_LENGTH}
+              </p>
+            </div>
           </label>
 
           <div data-composer-stagger className="mt-8 space-y-3">
@@ -585,7 +659,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             </div>
 
             {visibleLinkedIssues.length > 0 && (
-              <div data-composer-stagger className="rounded-[1.7rem] border border-black/[0.07] bg-white/62 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.04)] dark:border-white/[0.08] dark:bg-white/[0.035]">
+              <div ref={changesRef} data-composer-stagger className="rounded-[1.7rem] border border-black/[0.07] bg-white/62 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.04)] dark:border-white/[0.08] dark:bg-white/[0.035]">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div className="inline-flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">
                     <LinkIcon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
@@ -601,10 +675,19 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     return (
                       <article
                         key={`${issue.provider}:${issue.repository}:${issue.issueNumber}`}
-                        className="group relative overflow-hidden rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 transition-all hover:-translate-y-0.5 hover:border-signal-500/24 hover:bg-white/88 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:bg-white/[0.055]"
+                        data-composer-entry
+                        className="group relative overflow-hidden rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] p-4 transition-all hover:-translate-y-0.5 hover:border-signal-500/24 hover:bg-white/88 focus-within:-translate-y-0.5 focus-within:border-signal-500/28 focus-within:bg-white/92 focus-within:shadow-[0_0_0_1px_rgba(0,224,160,0.12),0_14px_28px_rgba(15,23,42,0.05)] active:border-signal-500/30 dark:border-white/[0.07] dark:bg-white/[0.03] dark:focus-within:bg-white/[0.06] dark:hover:bg-white/[0.055] dark:focus-within:shadow-[0_0_0_1px_rgba(0,224,160,0.12),0_14px_28px_rgba(0,0,0,0.2)]"
                       >
                         <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-signal-500 via-ember-500 to-slate-300 opacity-70" />
                         <div className="flex items-start gap-3">
+                          <button
+                            type="button"
+                            title={`Drag ${issue.title} to reorder`}
+                            aria-label={`Drag ${issue.title} to reorder`}
+                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.85rem] border border-black/[0.06] bg-white/78 text-slate-300 transition-all hover:border-signal-500/25 hover:text-signal-500 focus-visible:border-signal-500/35 focus-visible:ring-2 focus-visible:ring-signal-500/20 focus-visible:ring-offset-2 focus-visible:ring-offset-white active:cursor-grabbing dark:border-white/[0.07] dark:bg-white/[0.04] dark:hover:text-signal-300 dark:focus-visible:ring-offset-void-800"
+                          >
+                            <GripVertical className="h-4 w-4" strokeWidth={2.2} />
+                          </button>
                           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.85rem] border ${
                             issue.provider === "jira"
                               ? "border-[#0052CC]/20 bg-[#0052CC]/10 text-[#0052CC] dark:border-[#4C9AFF]/20 dark:bg-[#4C9AFF]/10 dark:text-[#4C9AFF]"
@@ -681,7 +764,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               </div>
 
               {state.originalPrompt && (
-                <div className="flex flex-col rounded-[1.7rem] border border-black/[0.05] bg-black/[0.01] p-5 dark:border-white/[0.05] dark:bg-white/[0.015]">
+                <div data-composer-entry className="flex flex-col rounded-[1.7rem] border border-black/[0.05] bg-black/[0.01] p-5 dark:border-white/[0.05] dark:bg-white/[0.015]">
                   <div className="mb-3 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Original Prompt</div>
                   <div className="max-h-[220px] overflow-y-auto text-xs italic leading-relaxed text-slate-400 dark:text-slate-500 sm:max-h-[260px]">
                     {state.originalPrompt}

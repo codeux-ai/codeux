@@ -28,6 +28,7 @@ vi.mock("../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
   useExecutionTimeline: vi.fn(() => ({ execution: { connections: [] } })),
 }));
 
+import gsap from "gsap";
 import { SprintComposer } from "../../../dashboard/src/v2/components/ui/SprintComposer.js";
 
 describe("SprintComposer", () => {
@@ -75,6 +76,36 @@ describe("SprintComposer", () => {
       expect(onSubmit).toHaveBeenCalled();
     });
     expect(onSubmit.mock.calls[0]?.[0].linkedIssues).toEqual([issue]);
+  });
+
+  it("shows sprint name boundary feedback and a live counter", () => {
+    const { getByText, getByPlaceholderText } = render(<SprintComposer {...defaultProps} />);
+
+    expect(getByText("0 / 80")).toBeInTheDocument();
+    expect(getByText("Required to submit a sprint.")).toBeInTheDocument();
+
+    fireEvent.input(getByPlaceholderText("Runtime hardening"), { target: { value: "A".repeat(65) } });
+
+    expect(getByText("65 / 80")).toBeInTheDocument();
+    expect(getByText("Close to the limit. Keep the label concise for the ledger and logs.")).toBeInTheDocument();
+  });
+
+  it("animates conditional composer entries when they appear", () => {
+    const issue = {
+      provider: "github" as const,
+      hostDomain: "github.com",
+      repository: "openai/example",
+      issueNumber: 12,
+      issueKey: "#12",
+      title: "Improve issue import",
+      url: "https://github.com/openai/example/issues/12",
+      labels: ["ux"],
+      assignees: ["pierre"],
+    };
+
+    render(<SprintComposer {...defaultProps} linkedIssues={[issue]} />);
+
+    expect((gsap as unknown as { fromTo: ReturnType<typeof vi.fn> }).fromTo).toHaveBeenCalled();
   });
 
   it("uses default planning and worker agents for new sprint submissions", async () => {
