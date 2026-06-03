@@ -263,6 +263,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                           <button
                             type="button"
                             onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
+                            aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
                             className={`rounded-full p-2 transition-colors hover:bg-white/5 ${
                               isExpanded ? "text-signal-500" : "text-slate-400"
                             }`}
