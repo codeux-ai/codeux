@@ -23,6 +23,16 @@ function executionTaskDispatchStatusRank(status: string): number {
   }
 }
 
+/**
+ * Recency key matching the client's `pickLatestTaskDispatch` ordering: a dispatch is
+ * "newer" by its most recent lifecycle timestamp, falling back through the lifecycle.
+ * The `id` suffix mirrors the SQL tie-break so dedup is deterministic.
+ */
+function dispatchRecencyKey(row: ExecutionTaskDispatchSummaryRow): string {
+  const recency = row.last_heartbeat_at || row.started_at || row.claimed_at || row.queued_at || "";
+  return `${recency}|${row.id}`;
+}
+
 function compareExecutionTaskDispatchSummaryRows(
   left: ExecutionTaskDispatchSummaryRow,
   right: ExecutionTaskDispatchSummaryRow,
@@ -44,6 +54,12 @@ export function queryExecutionTaskDispatches(
   projectId: string,
   expandedSprintRunIds: string[]
 ): ExecutionTaskDispatchSummaryRow[] {
+  // Collapse to the single most-recent dispatch per task before applying the
+  // status-rank ordering and cap. A task only ever has one *current* dispatch;
+  // keeping older ones lets a stale terminal dispatch (e.g. a FAILED attempt that
+  // was later rerun to COMPLETED) shadow the task's real state — `failed` ranks
+  // ahead of `completed`, so the cap could otherwise evict the fresh dispatch while
+  // retaining the stale one, leaving the live card stuck on FAILED after a rerun.
   const recentTaskDispatches = db.prepare(`
     SELECT
       td.id,
@@ -69,14 +85,23 @@ export function queryExecutionTaskDispatches(
       td.error_message,
       el.owner_key AS active_lease_owner_key,
       el.expires_at AS active_lease_expires_at
-    FROM task_dispatches td
+    FROM (
+      SELECT
+        td.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY td.task_id
+          ORDER BY COALESCE(td.last_heartbeat_at, td.started_at, td.claimed_at, td.queued_at) DESC, td.id DESC
+        ) AS dispatch_rank
+      FROM task_dispatches td
+      WHERE td.project_id = ?
+    ) td
     INNER JOIN sprints s ON s.id = td.sprint_id
     INNER JOIN tasks t ON t.id = td.task_id
     LEFT JOIN mcp_connections c ON c.id = td.connection_id
     LEFT JOIN execution_leases el
       ON el.scope_type = 'task_dispatch'
      AND el.scope_id = td.id
-    WHERE td.project_id = ?
+    WHERE td.dispatch_rank = 1
     ORDER BY
       CASE td.status WHEN 'running' THEN 0 WHEN 'cancel_requested' THEN 1 WHEN 'claimed' THEN 2 WHEN 'queued' THEN 3 WHEN 'blocked' THEN 4 WHEN 'failed' THEN 5 WHEN 'completed' THEN 6 ELSE 7 END,
       td.priority DESC,
@@ -130,7 +155,20 @@ export function queryExecutionTaskDispatches(
   for (const row of [...expandedSprintTaskDispatches, ...recentTaskDispatches]) {
     taskDispatchById.set(row.id, row);
   }
-  const taskDispatches = [...taskDispatchById.values()].sort(compareExecutionTaskDispatchSummaryRows);
+
+  // Keep only the most-recent dispatch per task. The expanded-sprint-run union can
+  // re-introduce an older dispatch alongside the task's current one (e.g. a failed
+  // attempt and its rerun living under the same active sprint run); a task has a
+  // single current dispatch, so collapsing here keeps the live view from surfacing
+  // stale terminal state once a task has been rerun.
+  const latestDispatchByTaskId = new Map<string, ExecutionTaskDispatchSummaryRow>();
+  for (const row of taskDispatchById.values()) {
+    const existing = latestDispatchByTaskId.get(row.task_id);
+    if (!existing || dispatchRecencyKey(row) > dispatchRecencyKey(existing)) {
+      latestDispatchByTaskId.set(row.task_id, row);
+    }
+  }
+  const taskDispatches = [...latestDispatchByTaskId.values()].sort(compareExecutionTaskDispatchSummaryRows);
 
   const dispatchIds = taskDispatches.map((row) => row.id);
   const taskRunByDispatchId = new Map<string, { id: string; state: string; provider: string | null; session_id: string | null; session_name: string | null; worker_branch: string | null; pr_url: string | null; }>();
