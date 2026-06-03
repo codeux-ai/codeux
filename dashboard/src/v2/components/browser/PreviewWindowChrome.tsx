@@ -21,6 +21,10 @@ interface PreviewWindowChromeProps {
   addressValue: string;
   onAddressChange: (value: string) => void;
   navigationEnabled?: boolean;
+  canNavigateBack?: boolean;
+  canNavigateForward?: boolean;
+  isLoading?: boolean;
+  error?: string | null;
   children: ComponentChildren;
 }
 
@@ -42,6 +46,10 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
   addressValue,
   onAddressChange,
   navigationEnabled = true,
+  canNavigateBack = true,
+  canNavigateForward = true,
+  isLoading = false,
+  error = null,
   children,
 }) => {
   const [windowState, setWindowState] = useState<WindowState>("normal");
@@ -164,7 +172,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <button
             type="button"
             onClick={onNavigateBack}
-            disabled={!navigationEnabled}
+            disabled={!navigationEnabled || !canNavigateBack}
             title={navigationEnabled ? "Go back" : "Back navigation requires a running container"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
@@ -173,7 +181,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <button
             type="button"
             onClick={onNavigateForward}
-            disabled={!navigationEnabled}
+            disabled={!navigationEnabled || !canNavigateForward}
             title={navigationEnabled ? "Go forward" : "Forward navigation requires a running container"}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
@@ -195,25 +203,49 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               onAddressSubmit(addressValue);
             }}
           >
-            <input
-              value={addressValue}
-              onInput={(event) => onAddressChange((event.currentTarget as HTMLInputElement).value)}
-              disabled={!navigationEnabled}
-              title={navigationEnabled ? "Preview address" : "Address entry requires a running container"}
-              placeholder={navigationEnabled ? "Enter path..." : "Container not running..."}
-              className="h-10 w-full rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800 outline-none transition focus:border-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
-            />
+            <div className="relative w-full overflow-hidden rounded-2xl">
+              <input
+                value={addressValue}
+                onInput={(event) => onAddressChange((event.currentTarget as HTMLInputElement).value)}
+                disabled={!navigationEnabled}
+                title={navigationEnabled ? "Preview address" : "Address entry requires a running container"}
+                placeholder={navigationEnabled ? "Enter path..." : "Container not running..."}
+                className="h-10 w-full rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800 outline-none transition focus:border-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
+              />
+              <div
+                className="absolute bottom-0 left-0 h-0.5 bg-signal-500 transition-all duration-500 ease-out"
+                style={{ width: isLoading ? "100%" : "0%", opacity: isLoading ? 1 : 0 }}
+              />
+            </div>
           </form>
         </div>
       </div>
       <div
         className={
           isFullscreen
-            ? "flex-1 bg-slate-100/70 dark:bg-void-950"
-            : "relative h-[calc(100vh-23rem)] min-h-[540px] bg-slate-100/70 dark:bg-void-950"
+            ? "relative flex-1 overflow-hidden bg-slate-100/70 dark:bg-void-950"
+            : "relative h-[calc(100vh-23rem)] min-h-[540px] overflow-hidden bg-slate-100/70 dark:bg-void-950"
         }
       >
         {children}
+        {/* Error overlay */}
+        <div
+          className={`absolute bottom-0 left-0 right-0 z-10 p-4 transition-transform duration-200 ease-out ${error ? "translate-y-0" : "translate-y-full"}`}
+          {...(!error ? { inert: "" } : {})}
+        >
+          <div className="mx-auto flex max-w-xl items-center justify-between gap-4 rounded-2xl border border-status-red/20 bg-status-red/10 p-4 text-sm shadow-lg backdrop-blur-xl dark:border-status-red/30 dark:bg-status-red/20">
+            <div className="flex-1 text-status-red dark:text-red-400">
+              <span className="font-semibold">Error loading page:</span> {error}
+            </div>
+            <button
+              type="button"
+              onClick={onReload}
+              className="inline-flex h-8 shrink-0 items-center justify-center rounded-xl border border-status-red/30 bg-white/50 px-3 font-semibold text-status-red transition hover:bg-white/80 dark:border-status-red/40 dark:bg-black/20 dark:text-red-300 dark:hover:bg-black/40"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
       </div>
       </div>
     </div>
