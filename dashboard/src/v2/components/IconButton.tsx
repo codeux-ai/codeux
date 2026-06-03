@@ -21,7 +21,7 @@ export const IconButton: FunctionComponent<IconButtonProps> = memo(({ children, 
             {...props}
             disabled={disabled || isPending}
             aria-label={ariaLabel || title}
-            className={`flex items-center justify-center p-2 rounded-xl relative hover:bg-black/5 dark:hover:bg-white/5 active:scale-[0.98] touch-target ${SHARED_INTERACTION_CLASSES} ${className}`}
+            className={`flex items-center justify-center p-2 rounded-xl relative hover:bg-black/5 dark:hover:bg-white/5 touch-target ${SHARED_INTERACTION_CLASSES} ${className}`}
         >
             <div className={`flex items-center justify-center transition-opacity duration-200 ${childrenOpacity}`}>
                 {children}

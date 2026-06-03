@@ -38,13 +38,18 @@ export function useMagnetic(
             const distX = (e.clientX - centerX) / (rect.width / 2);
             const distY = (e.clientY - centerY) / (rect.height / 2);
 
-            // Clamp to -1 to 1 just in case
+            // Clamp to -1 to 1
             const clampedX = Math.max(-1, Math.min(1, distX));
             const clampedY = Math.max(-1, Math.min(1, distY));
 
+            // Apply a cubic falloff to ensure displacement is 0 at the boundaries
+            // This prevents visual jumping when the mouse enters or leaves the trigger
+            const dist = Math.sqrt(clampedX * clampedX + clampedY * clampedY);
+            const falloff = Math.max(0, 1 - Math.pow(Math.min(1, dist), 3));
+
             gsap.to(target, {
-                x: clampedX * maxDisplacement,
-                y: clampedY * maxDisplacement,
+                x: clampedX * maxDisplacement * falloff,
+                y: clampedY * maxDisplacement * falloff,
                 duration: 0.3,
                 ease: "power2.out",
                 overwrite: "auto",

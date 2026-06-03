@@ -8,7 +8,7 @@ import { useMagnetic } from "../../hooks/use-magnetic.js";
 import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
-export const SHARED_INTERACTION_CLASSES = "cursor-pointer transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-primary-accent)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed motion-safe:active:scale-[0.98] touch-target";
+export const SHARED_INTERACTION_CLASSES = "cursor-pointer transition-[transform,background-color,border-color,color,box-shadow,opacity] duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 disabled:opacity-40 disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:cursor-not-allowed active:scale-[0.97] motion-reduce:active:scale-100 touch-target";
 
 export interface ButtonProps extends ComponentProps<"button"> {
   success?: boolean;
