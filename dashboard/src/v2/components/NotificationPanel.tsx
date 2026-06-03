@@ -128,6 +128,9 @@ export const NotificationPanel: FunctionComponent<{
         ) : notifications.map((notification) => {
           const classes = severityClasses[notification.severity];
           const Icon = notification.icon;
+          const details = notification.body ?? notification.subtitle;
+          const accentClass = notification.type === "intervention" ? "bg-signal-500" : classes.accent;
+          const iconClass = notification.iconColor ?? classes.icon;
 
           return (
             <div
@@ -139,17 +142,19 @@ export const NotificationPanel: FunctionComponent<{
               className="group relative mb-2 rounded-2xl border border-black/[0.05] bg-white/75 p-3 text-left transition-colors hover:border-black/[0.1] hover:bg-black/[0.025] last:mb-0 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.1] dark:hover:bg-white/[0.06]"
             >
               {notification.unread ? (
-                <div className={`absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full ${classes.accent}`} />
+                <div className={`absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full ${accentClass}`} />
               ) : null}
               <div className="flex items-start gap-3">
                 <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${classes.badge}`}>
-                  <Icon className={`h-4 w-4 ${classes.icon}`} strokeWidth={2.3} />
+                  <Icon className={`h-4 w-4 ${iconClass}`} strokeWidth={2.3} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{notification.title}</div>
-                      <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{notification.body}</div>
+                      {details ? (
+                        <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{details}</div>
+                      ) : null}
                     </div>
                     <div className="shrink-0 text-[10px] font-medium text-slate-400">{notification.time}</div>
                   </div>

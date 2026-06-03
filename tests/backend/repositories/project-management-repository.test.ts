@@ -134,6 +134,17 @@ describe("ProjectManagementRepository", () => {
     expect(sprint2.number).toBe(8);
   });
 
+  it("defaults blank local projects into the codex ux projects folder", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Blank Local Project",
+      sourceType: "local",
+      sourceRef: "",
+    });
+
+    expect(project.baseDir).toBe(path.join(os.homedir(), ".codex-ux", "projects", project.slug));
+  });
+
   it("creates projects, sprints, tasks, and dependency summaries in sqlite", async () => {
     const { repository, executionRepository } = await createRepository();
 

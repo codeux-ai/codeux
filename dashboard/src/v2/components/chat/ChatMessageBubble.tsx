@@ -57,16 +57,16 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           />
         </div>
 
-        <div className={`flex flex-col w-full max-w-[calc(100%-3rem)] rounded-2xl border bg-white/5 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
+        <div className={`flex flex-col w-full max-w-[calc(100%-3rem)] rounded-2xl border bg-slate-100/80 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] dark:bg-white/5 ${
           fromDashboard
             ? "rounded-tr-sm border-signal-500/20"
-            : "rounded-tl-sm border-white/10"
+            : "rounded-tl-sm border-slate-200/60 dark:border-white/10"
         }`}>
           {/* Header Row */}
           <div className={`flex items-center gap-3 mb-2 text-[11px] font-mono text-slate-400 ${fromDashboard ? "justify-end flex-row-reverse" : "justify-start"}`}>
-            <span className="font-semibold text-slate-300">{senderName}</span>
+            <span className="font-semibold text-slate-900 dark:text-slate-300">{senderName}</span>
             {providerLabel && (
-              <span className="px-1.5 py-0.5 rounded-sm bg-black/20 text-slate-300">
+              <span className="px-1.5 py-0.5 rounded-sm bg-slate-200 text-slate-600 dark:bg-black/20 dark:text-slate-300">
                 {providerLabel}
               </span>
             )}
@@ -74,7 +74,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
           </div>
 
           {/* Message Body */}
-          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit break-words"
+          <div className="prose prose-sm max-w-none text-[14px] leading-7 text-slate-800 dark:text-slate-200 prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit break-words"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
           />
 

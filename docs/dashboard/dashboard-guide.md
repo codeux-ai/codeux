@@ -205,6 +205,7 @@ Legacy runtime:
 - Connected MCP worker selection has been removed; the worker selector is now virtual-only
 - Projects page is DB-backed and can create/select/delete projects
 - Project source cells now select the clicked project before routing: the `Sprints` action loads `/sprints`, and the settings gear loads `/config`.
+- The Projects page now uses the dashed grid Add Project card as the single entry point for creating a project; the top-right header CTA was removed to keep creation affordance in one place.
 - The `Add Project` dialog now keeps keyboard focus inside the active form field while typing, and its initial focus respects the form's `autofocus` input instead of jumping to the header close button
 - The Projects page `Add Project` placeholder card uses the same full-height card footprint and internal padding as project cards, and the add dialog fields use rounded field surfaces with amber focus states instead of bare underline inputs; the dialog also constrains itself to the viewport on shorter screens
 - The `Add Project` dialog now has a wider desktop layout, keeps a stable Git-form-height floor while switching source types, and exposes the inline directory browser on both local project paths and optional Git clone destination paths, with home, refresh, parent-directory navigation, child-directory traversal, and an explicit use-current-folder action
@@ -253,7 +254,7 @@ Legacy runtime:
 - Settings -> Appearance previews unsaved edits immediately in the active dashboard shell. Theme, motion, navigation mode, animated/static background selection, static color, uploaded background image, and pattern overlay all update before Save Changes; leaving Settings clears the preview back to the persisted effective settings.
 - Settings now guard unsaved edits during route transitions and browser refresh/close events. Internal navigation prompts only when the active settings scope is dirty, and listeners are removed immediately after save, explicit reset/discard flows, or Settings page unmount.
 - Saved system or project settings invalidate cached effective project settings in mounted dashboard routes, so persisted appearance changes continue applying after navigating away from Settings without requiring a full app reload.
-- The notification center now renders startup-check notifications from real readiness data and persists read/dismissed notification state in browser storage.
+- The notification center now renders startup-check notifications from real readiness data, surfaces human-intervention alerts when a sprint needs operator attention, and persists read/dismissed notification state in browser storage.
 - GitLab support is available from Integrations with dashboard token persistence, backend GitLab host detection, `glab` support, and GitLab CI queries. `GITLAB_TOKEN` / `GLAB_TOKEN` remain supported as external fallbacks.
 - The Integrations catalog is grouped by purpose (`CLI`, `GIT`, `PM`) and keeps host hint import plus runtime auth-copy status in the panel header.
 - Jira support is available from Integrations with system-scoped site URL, account email, API token, default project key, close transition, and Jira-specific auto-close controls. The Sprints page Jira import opens directly from the Import menu and links selected issues into the same composer flow as GitHub/GitLab imports.
@@ -368,6 +369,7 @@ Legacy runtime:
 - Invocation cards and the invocation message stream now surface classified provider errors such as `Rate limit` and `Quota reset`, including retry wait information when Code UX is backing off automatically. If Code UX restarts while an invocation is sleeping until a retry time, startup recovery closes the stale running invocation with a recovery message and moves task-backed work back to a retryable state so the recovered sprint loop can start a fresh continuation.
 - Chat page now receives websocket updates for thread assignment changes and incoming thread messages in the active thread
 - Chat page now shows a live "working" bubble once a listener has picked up a dashboard message and is preparing a reply
+- Chat page message, invocation, and working bubbles now use light-mode slate surfaces and darker text to keep chat transcripts readable without altering the Warm Void dark theme
 - Chat page now force-refreshes the selected thread when realtime thread updates arrive, so virtual replies clear stale `pending` delivery badges and sidebar counts as soon as the reply lands
 - Chat message and thread timestamp chrome now suppresses malformed timestamps instead of rendering `Invalid Date`
 - Thread compaction now works on both virtual and connected chat routes: virtual routes invoke the selected CLI chat worker directly, while connected routes send a hidden control request to the selected live worker, store its compaction summary, and use that saved handoff for the next fresh reply prompt

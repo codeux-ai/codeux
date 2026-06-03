@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import { AlertTriangle, CheckCircle, Info, KeyRound, type LucideIcon } from "lucide-preact";
+import { AlertTriangle, CheckCircle, HelpCircle, Info, KeyRound, type LucideIcon } from "lucide-preact";
 import { fetchOnboardingReadiness } from "../../lib/api/dashboard-api.js";
 import type { OnboardingRuntimeReadiness } from "../../types.js";
 import { openOnboarding } from "../lib/onboarding-control.js";
@@ -10,13 +10,16 @@ export type NotificationSeverity = "critical" | "warning" | "success" | "info";
 
 export interface DashboardNotification {
   id: string;
+  type?: "intervention";
   severity: NotificationSeverity;
   title: string;
-  body: string;
+  body?: string;
+  subtitle?: string;
   time: string;
   unread: boolean;
   dismissible: boolean;
   icon: LucideIcon;
+  iconColor?: string;
   actionLabel?: string;
   onAction?: () => void;
 }
@@ -137,6 +140,18 @@ const deriveStartupNotifications = (
       onAction: markAction,
     });
   }
+
+  notifications.push({
+    id: "4",
+    type: "intervention",
+    severity: "warning",
+    title: "Human Intervention Required",
+    subtitle: "Task T01 in sprint SPR-10 requires manual decision.",
+    time: "3m ago",
+    dismissible: true,
+    icon: HelpCircle,
+    iconColor: "text-status-amber",
+  });
 
   return notifications;
 };
