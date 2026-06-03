@@ -1,24 +1,26 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import {
-  AlertTriangle,
   Calendar,
   CheckCircle2,
   CheckSquare,
+  Download,
   Heart,
-  Link2,
   Loader2,
   ListChecks,
   Maximize2,
   MoreVertical,
+  Pencil,
+  Sparkles,
   Square,
+  XCircle,
 } from "lucide-preact";
 import { useState } from "preact/hooks";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
+import { LinkedIssueTag } from "../sprint/LinkedIssueTag.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
 import { DropdownMenu } from "../ui/DropdownMenu.js";
-import { LinkedIssueTag } from "../sprint/LinkedIssueTag.js";
 import type { Sprint, SprintStatus } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js";
@@ -119,9 +121,16 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   onSprintToggle,
   onSprintPauseResume,
   onOpenRowMenu,
+  onEdit,
+  onExport,
+  onOverrides,
+  onMarkCompleted,
+  onDelete,
 }) => {
   const settings = useProjectEffectiveSettings(sprint.projectId);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isPointerExpanded, setIsPointerExpanded] = useState(false);
+  const [isFocusExpanded, setIsFocusExpanded] = useState(false);
   const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
 
   const pendingToggleActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
@@ -163,217 +172,326 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     : undefined;
   const badgeTone = attentionOverride?.tone ?? STATUS_BADGE_TONES[sprint.status];
   const badgeLabel = attentionOverride?.label ?? STATUS_LABELS[sprint.status];
+  const isActionStripExpanded = isPointerExpanded || isFocusExpanded || menuOpen;
+  const hiddenActionTabIndex = isActionStripExpanded ? 0 : -1;
+  const quickActionBaseClass = "inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/80 px-3 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white";
 
   return (
-    <TableRow
-      className={`group transition-all duration-300 hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${isDeletePending ? "grayscale opacity-50" : ""} hover:bg-[var(--bg-hover-subtle)]`}
-    >
-      <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
-        <button
-          type="button"
-          onClick={() => onToggleRow(sprint.id)}
-          disabled={isRowPending || isAnyBulkPending}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-black/[0.06] bg-white/72 text-slate-400 transition-colors hover:border-signal-500/25 hover:text-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.07] dark:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
-          title={isSelected ? "Deselect sprint" : "Select sprint"}
-        >
-          {isSelected
-            ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
-            : <Square className="h-4 w-4" strokeWidth={2.2} />}
-        </button>
-      </TableCell>
-      <TableCell className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
-        <button
-          type="button"
-          onClick={() => onToggleShowcase(sprint)}
-          disabled={isPinPending}
-          className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition-all focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
-            sprint.showcasePinned
-              ? "border-status-red/20 bg-status-red/10 text-status-red shadow-[0_8px_20px_rgba(239,68,68,0.10)]"
-              : "border-black/[0.06] bg-white/70 text-slate-400 hover:border-status-red/20 hover:text-status-red dark:border-white/[0.07] dark:bg-white/[0.04]"
-          } disabled:cursor-not-allowed disabled:opacity-50`}
-          title={sprint.showcasePinned ? "Remove from showcase" : "Pin to showcase"}
-        >
-          {isPinPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
-          ) : (
-            <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
+    <>
+      <TableRow
+        onMouseEnter={() => setIsPointerExpanded(true)}
+        onMouseLeave={() => setIsPointerExpanded(false)}
+        onFocusCapture={() => setIsFocusExpanded(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setIsFocusExpanded(false);
+          }
+        }}
+        className={`group transition-all duration-300 hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${isDeletePending ? "grayscale opacity-50" : ""} hover:bg-[var(--bg-hover-subtle)]`}
+      >
+        <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
+          <button
+            type="button"
+            onClick={() => onToggleRow(sprint.id)}
+            disabled={isRowPending || isAnyBulkPending}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-black/[0.06] bg-white/72 text-slate-400 transition-colors hover:border-signal-500/25 hover:text-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.07] dark:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+            title={isSelected ? "Deselect sprint" : "Select sprint"}
+          >
+            {isSelected
+              ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
+              : <Square className="h-4 w-4" strokeWidth={2.2} />}
+          </button>
+        </TableCell>
+        <TableCell className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
+          <button
+            type="button"
+            onClick={() => onToggleShowcase(sprint)}
+            disabled={isPinPending}
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition-all focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
+              sprint.showcasePinned
+                ? "border-status-red/20 bg-status-red/10 text-status-red shadow-[0_8px_20px_rgba(239,68,68,0.10)]"
+                : "border-black/[0.06] bg-white/70 text-slate-400 hover:border-status-red/20 hover:text-status-red dark:border-white/[0.07] dark:bg-white/[0.04]"
+            } disabled:cursor-not-allowed disabled:opacity-50`}
+            title={sprint.showcasePinned ? "Remove from showcase" : "Pin to showcase"}
+          >
+            {isPinPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
+            ) : (
+              <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
+            )}
+          </button>
+        </TableCell>
+        <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
+          <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Sprint ID</span>
+          <div className="font-mono text-sm font-bold text-[var(--text-primary)] truncate">{formatSprintKey(sprint, sprintKeyPrefix)}</div>
+          <div className="mt-1 text-[10px] font-bold text-slate-400 truncate">
+            {shortenId(sprint.id)}
+          </div>
+        </TableCell>
+        <TableCell className={`min-w-0 max-w-full lg:w-[220px] lg:min-w-[220px] ${desktopCellTone}`}>
+          <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Sprint</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className={`font-display text-lg font-black leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-[var(--text-primary)]"}`}>{sprint.name}</div>
+            {sprint.latestReview && (
+              <SprintReviewBadge summary={sprint.latestReview} compact align="left" />
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-400">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.05] bg-black/[0.025] px-2 py-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <Calendar className="h-3 w-3" strokeWidth={2.1} />
+              Updated {formatMetaDate(sprint.updatedAt)}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.05] bg-black/[0.025] px-2 py-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              Created {formatTableDate(sprint.createdAt)} <span className="ml-1 font-mono text-[10px] text-slate-400">{formatTableTime(sprint.createdAt)}</span>
+            </span>
+          </div>
+          {showInterventionBadge && isSprintActionable(sprint.status) && humanIntervention && (
+            <div className="mt-3">
+              <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="left" />
+            </div>
           )}
-        </button>
-      </TableCell>
-      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Sprint ID</span>
-        <div className="font-mono text-sm font-bold text-[var(--text-primary)] truncate">{formatSprintKey(sprint, sprintKeyPrefix)}</div>
-        <div className="mt-1 text-[10px] font-bold text-slate-400 truncate">
-          {shortenId(sprint.id)}
-        </div>
-      </TableCell>
-      <TableCell className={`min-w-0 max-w-full lg:w-[220px] lg:min-w-[220px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Sprint</span>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className={`font-display text-lg font-black leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-[var(--text-primary)]"}`}>{sprint.name}</div>
-          {sprint.latestReview && (
-            <SprintReviewBadge summary={sprint.latestReview} compact align="left" />
+          {sprint.linkedIssues && sprint.linkedIssues.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {sprint.linkedIssues.map((issue) => (
+                <LinkedIssueTag key={issue.id} issue={issue} />
+              ))}
+            </div>
           )}
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-400">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.05] bg-black/[0.025] px-2 py-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            <Calendar className="h-3 w-3" strokeWidth={2.1} />
-            Updated {formatMetaDate(sprint.updatedAt)}
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.05] bg-black/[0.025] px-2 py-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            Created {formatTableDate(sprint.createdAt)} <span className="ml-1 font-mono text-[10px] text-slate-400">{formatTableTime(sprint.createdAt)}</span>
-          </span>
-        </div>
-        {showInterventionBadge && isSprintActionable(sprint.status) && humanIntervention && (
-          <div className="mt-3">
-            <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="left" />
+          {sprint.goal ? (
+            <p className={`mt-3 max-w-2xl text-sm leading-relaxed ${isCompleted ? "text-slate-400 dark:text-slate-500" : "text-slate-500 dark:text-slate-400"}`}>
+              {sprint.goal}
+            </p>
+          ) : null}
+        </TableCell>
+        <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
+          <div className="flex flex-wrap items-center gap-2 lg:flex-col lg:items-start">
+            <span className="text-[10px] font-bold text-slate-400 lg:hidden">Status</span>
+            <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
+              {badgeLabel}
+            </span>
           </div>
-        )}
-        {sprint.linkedIssues && sprint.linkedIssues.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {sprint.linkedIssues.map((issue) => (
-              <LinkedIssueTag key={issue.id} issue={issue} />
-            ))}
+        </TableCell>
+        <TableCell align="right" className={`lg:w-[100px] lg:min-w-[100px] ${desktopCellTone}`}>
+          <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Tasks</span>
+          <div className="flex items-center justify-end gap-3 lg:block">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/70 text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04] lg:hidden">
+              <ListChecks className="h-4 w-4" strokeWidth={2.2} />
+            </div>
+            <div>
+              <div className="font-mono text-lg font-bold text-[var(--text-primary)]">{sprint.tasksCount}</div>
+              <div className="text-[11px] text-slate-400">planned tasks</div>
+            </div>
           </div>
-        )}
-        {sprint.goal ? (
-          <p className={`mt-3 max-w-2xl text-sm leading-relaxed ${isCompleted ? "text-slate-400 dark:text-slate-500" : "text-slate-500 dark:text-slate-400"}`}>
-            {sprint.goal}
-          </p>
-        ) : null}
-      </TableCell>
-      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
-        <div className="flex flex-wrap items-center gap-2 lg:flex-col lg:items-start">
-          <span className="text-[10px] font-bold text-slate-400 lg:hidden">Status</span>
-          <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
-            {badgeLabel}
-          </span>
-        </div>
-      </TableCell>
-      <TableCell align="right" className={`lg:w-[100px] lg:min-w-[100px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Tasks</span>
-        <div className="flex items-center gap-3 justify-end lg:block">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/70 text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04] lg:hidden">
-            <ListChecks className="h-4 w-4" strokeWidth={2.2} />
+        </TableCell>
+        <TableCell align="right" className={`min-w-[12rem] lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`}>
+          <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Completion</span>
+          <div className="flex items-center justify-end gap-3">
+            <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10 ring-1 ring-black/[0.03] dark:bg-white/[0.08] dark:ring-white/[0.04]">
+              <div
+                className={`h-full rounded-full bg-gradient-to-r ${progressTone} transition-[width] duration-500 ease-out`}
+                style={{ width: `${sprint.completion}%` }}
+              />
+            </div>
+            <span className="font-mono text-sm font-bold text-[var(--text-primary)]">{sprint.completion}%</span>
           </div>
-          <div>
-            <div className="font-mono text-lg font-bold text-[var(--text-primary)]">{sprint.tasksCount}</div>
-            <div className="text-[11px] text-slate-400">planned tasks</div>
+        </TableCell>
+        <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
+          <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Created</span>
+          <div className="font-medium text-[var(--text-primary)]">
+            {formatTableDate(sprint.createdAt)}
+            <span className="ml-1.5 font-mono text-[10px] text-slate-400">{formatTableTime(sprint.createdAt)}</span>
           </div>
-        </div>
-      </TableCell>
-      <TableCell align="right" className={`min-w-[12rem] lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Completion</span>
-        <div className="flex items-center justify-end gap-3">
-          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10 ring-1 ring-black/[0.03] dark:bg-white/[0.08] dark:ring-white/[0.04]">
-            <div
-              className={`h-full rounded-full bg-gradient-to-r ${progressTone} transition-[width] duration-500 ease-out`}
-              style={{ width: `${sprint.completion}%` }}
+          <div className="mt-1 text-[11px] text-slate-400">created</div>
+          <div className="mt-1.5 inline-flex items-center gap-1">
+            {sprint.latestReview?.status === "running" ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 text-signal-500 animate-spin" strokeWidth={2.2} />
+                <span className="text-[11px] font-bold text-signal-500 animate-pulse">Reviewing</span>
+              </>
+            ) : sprint.latestReview?.status === "completed" || sprint.latestReview?.status === "reviewed" ? (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
+                <span className="text-[11px] font-bold text-signal-500">Reviewed</span>
+              </>
+            ) : (
+              <span className="text-[11px] font-bold text-slate-400">Not reviewed</span>
+            )}
+          </div>
+        </TableCell>
+        <TableCell align="right" isLast className={`lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`}>
+          <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Controls</span>
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:whitespace-nowrap">
+            <SprintControls
+              isActive={Boolean(activeRun)}
+              isPaused={sprint.status === "paused"}
+              isStartStopPending={isTogglePending}
+              isPauseResumePending={isPauseResumePending}
+              onStartStop={() => onSprintToggle(sprint.id)}
+              onPauseResume={() => onSprintPauseResume(sprint.id)}
             />
           </div>
-          <span className="font-mono text-sm font-bold text-[var(--text-primary)]">{sprint.completion}%</span>
-        </div>
-      </TableCell>
-      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Created</span>
-        <div className="font-medium text-[var(--text-primary)]">
-          {formatTableDate(sprint.createdAt)}
-          <span className="ml-1.5 font-mono text-[10px] text-slate-400">{formatTableTime(sprint.createdAt)}</span>
-        </div>
-        <div className="mt-1 text-[11px] text-slate-400">created</div>
-        <div className="mt-1.5 inline-flex items-center gap-1">
-          {sprint.latestReview?.status === 'running' ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 text-signal-500 animate-spin" strokeWidth={2.2} />
-              <span className="text-[11px] font-bold text-signal-500 animate-pulse">Reviewing</span>
-            </>
-          ) : sprint.latestReview?.status === 'completed' || sprint.latestReview?.status === 'reviewed' ? (
-            <>
-              <CheckCircle2 className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
-              <span className="text-[11px] font-bold text-signal-500">Reviewed</span>
-            </>
-          ) : (
-            <span className="text-[11px] font-bold text-slate-400">Not reviewed</span>
-          )}
-        </div>
-      </TableCell>
-      <TableCell align="right" isLast className={`lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Controls</span>
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:whitespace-nowrap">
-          <SprintControls
-            isActive={Boolean(activeRun)}
-            isPaused={sprint.status === "paused"}
-            isStartStopPending={isTogglePending}
-            isPauseResumePending={isPauseResumePending}
-            onStartStop={() => onSprintToggle(sprint.id)}
-            onPauseResume={() => onSprintPauseResume(sprint.id)}
-          />
-          <a
-            href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
-            className="inline-flex h-10 min-w-[5rem] flex-1 items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/80 px-4 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white sm:flex-none"
+        </TableCell>
+      </TableRow>
+      <tr className="block lg:table-row">
+        <TableCell colSpan={9} className="!border-t-0 !border-b-0 !px-4 !py-0 lg:!border-y-0">
+          <div
+            aria-hidden={!isActionStripExpanded}
+            className={`overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              isActionStripExpanded ? "max-h-[14rem] translate-y-0 opacity-100" : "max-h-0 -translate-y-1 opacity-0"
+            }`}
           >
-            Open
-            <Maximize2 className="h-3.5 w-3.5" />
-          </a>
-          {onOpenRowMenu ? (
-            <button
-              type="button"
-              disabled={isRowPending}
-              onClick={(e) => onOpenRowMenu(e, sprint.id)}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-              title="Open sprint actions"
+            <div
+              aria-busy={isRowPending || isAnyBulkPending}
+              className={`relative -mt-4 flex flex-wrap items-center gap-2 rounded-b-[1.35rem] border border-t-0 border-black/[0.06] bg-white/75 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] backdrop-blur-sm dark:border-white/[0.07] dark:bg-white/[0.04] ${
+                isRowPending || isAnyBulkPending ? "animate-pulse" : ""
+              }`}
             >
-              {isRowPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2.2} />
-              ) : (
-                <MoreVertical className="h-3.5 w-3.5" />
+              {(isRowPending || isAnyBulkPending) && (
+                <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-b-[1.35rem] bg-gradient-to-r from-signal-500/0 via-signal-500/12 to-signal-500/0 opacity-75 blur-xl" />
               )}
-            </button>
-          ) : (
-            <DropdownMenu
-              isOpen={menuOpen}
-              onOpenChange={setMenuOpen}
-              position="bottom"
-              align="end"
-              className="min-w-[11.5rem]"
-              computePosition={({ triggerRect, menuRect, viewport }) => computeSprintActionMenuPosition(
-                triggerRect,
-                viewport,
-                { width: menuRect.width, height: menuRect.height },
-              )}
-              content={
-                <SprintActionMenu
-                  sprint={sprint}
-                  isCompleted={isCompleted}
-                  showcaseBusy={isPinPending}
-                  markCompletedDisabled={false}
-                  onToggleShowcase={() => onToggleShowcase(sprint)}
-                  onClose={() => setMenuOpen(false)}
-                  markCompletedIcon="square"
-                  role="menuitem"
-                  buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
-                />
-              }
-            >
-              <button
-                type="button"
-                disabled={isRowPending}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                title="Open sprint actions"
-              >
-                {isRowPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2.2} />
-                ) : (
-                  <MoreVertical className="h-3.5 w-3.5" />
+
+              <div className="relative flex flex-wrap items-center gap-2" role="group" aria-label="Sprint quick actions">
+                <a
+                  href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
+                  tabIndex={hiddenActionTabIndex}
+                  aria-hidden={!isActionStripExpanded}
+                  className={quickActionBaseClass}
+                >
+                  <Maximize2 className="h-3.5 w-3.5" />
+                  Open
+                </a>
+                <button
+                  type="button"
+                  tabIndex={hiddenActionTabIndex}
+                  aria-hidden={!isActionStripExpanded}
+                  onClick={() => onEdit()}
+                  className={quickActionBaseClass}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  tabIndex={hiddenActionTabIndex}
+                  aria-hidden={!isActionStripExpanded}
+                  onClick={() => onExport()}
+                  className={quickActionBaseClass}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export
+                </button>
+                <button
+                  type="button"
+                  tabIndex={hiddenActionTabIndex}
+                  aria-hidden={!isActionStripExpanded}
+                  onClick={() => onOverrides()}
+                  className={quickActionBaseClass}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Overrides
+                </button>
+                <button
+                  type="button"
+                  tabIndex={hiddenActionTabIndex}
+                  aria-hidden={!isActionStripExpanded}
+                  onClick={() => onToggleShowcase(sprint)}
+                  disabled={isPinPending}
+                  className={`${quickActionBaseClass} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
+                  {sprint.showcasePinned ? "Remove Showcase" : "Add Showcase"}
+                </button>
+                {!isCompleted && (
+                  <button
+                    type="button"
+                    tabIndex={hiddenActionTabIndex}
+                    aria-hidden={!isActionStripExpanded}
+                    onClick={() => onMarkCompleted()}
+                    className={quickActionBaseClass}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.1} />
+                    Mark Completed
+                  </button>
                 )}
-              </button>
-            </DropdownMenu>
-          )}
-        </div>
-      </TableCell>
-    </TableRow>
+                <button
+                  type="button"
+                  tabIndex={hiddenActionTabIndex}
+                  aria-hidden={!isActionStripExpanded}
+                  onClick={() => onDelete()}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-status-red/20 bg-status-red/8 px-3 text-xs font-bold text-status-red transition-colors hover:bg-status-red/12 focus-visible:ring-2 focus-visible:ring-status-red/30 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <XCircle className="h-3.5 w-3.5" strokeWidth={2.1} />
+                  Delete
+                </button>
+                {onOpenRowMenu ? (
+                  <button
+                    type="button"
+                    tabIndex={hiddenActionTabIndex}
+                    aria-hidden={!isActionStripExpanded}
+                    onClick={(event) => onOpenRowMenu(event as MouseEvent, sprint.id)}
+                    disabled={isRowPending || isAnyBulkPending}
+                    className={`${quickActionBaseClass} disabled:cursor-not-allowed disabled:opacity-50`}
+                    title="Open sprint actions"
+                    aria-haspopup="menu"
+                  >
+                    {isRowPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2.1} />
+                    ) : (
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    )}
+                    More actions
+                  </button>
+                ) : (
+                  <DropdownMenu
+                    isOpen={menuOpen}
+                    onOpenChange={setMenuOpen}
+                    position="bottom"
+                    align="end"
+                    className="min-w-[11.5rem]"
+                    computePosition={({ triggerRect, menuRect, viewport }) => computeSprintActionMenuPosition(
+                      triggerRect,
+                      viewport,
+                      { width: menuRect.width, height: menuRect.height },
+                    )}
+                    content={
+                      <SprintActionMenu
+                        sprint={sprint}
+                        isCompleted={isCompleted}
+                        showcaseBusy={isPinPending}
+                        markCompletedDisabled={false}
+                        onToggleShowcase={() => onToggleShowcase(sprint)}
+                        onClose={() => setMenuOpen(false)}
+                        markCompletedIcon="square"
+                        role="menuitem"
+                        buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                      />
+                    }
+                  >
+                    <button
+                      type="button"
+                      tabIndex={hiddenActionTabIndex}
+                      aria-hidden={!isActionStripExpanded}
+                      disabled={isRowPending}
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                      className={`${quickActionBaseClass} disabled:cursor-not-allowed disabled:opacity-50`}
+                      title="Open sprint actions"
+                    >
+                      {isRowPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2.1} />
+                      ) : (
+                        <MoreVertical className="h-3.5 w-3.5" />
+                      )}
+                      More actions
+                    </button>
+                  </DropdownMenu>
+                )}
+              </div>
+            </div>
+          </div>
+        </TableCell>
+      </tr>
+    </>
   );
 };
 

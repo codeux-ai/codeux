@@ -347,6 +347,10 @@ describe("SprintLedger Component", () => {
       expect(screen.getByText("Alpha Design")).toBeInTheDocument();
     });
 
+    const row = screen.getByText("Alpha Design").closest("tr");
+    expect(row).not.toBeNull();
+    fireEvent.mouseEnter(row as Element);
+
     fireEvent.click(screen.getAllByTitle("Open sprint actions")[0]);
 
     const menu = await screen.findByRole("menu");

@@ -215,6 +215,7 @@ Legacy runtime:
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown plus GitHub/GitLab/Jira issue import capabilities, plus markdown export controls. See [Sprint Imports](./sprint-imports.md).
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
+- Sprint ledger rows now reveal quick actions on hover or keyboard focus, expand a compact action strip with a smooth height transition, and pulse a glow state while row actions are pending so operators can discover controls without disrupting the table layout.
 - Sprint cells and ledger rows now surface a dedicated human-intervention badge when a paused sprint needs merge work, planning, or another operator action, and the hover card explains what to do before resuming
 - Sprint and Live status messaging now uses a shared presentation mapper (`dashboard/src/v2/lib/sprint-status-presentation.ts`) so manual pauses and system-stopped states render consistent title/reason/detail copy and consistent human-intervention badge visibility across cards, rows, and live detail panels
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
