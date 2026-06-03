@@ -232,12 +232,19 @@ export function bootDashboardRealtimeWebSocketServer(args: {
           if (afterSequence > 0 && validScopes.length > 0) {
             const latestSequence = args.realtimeService.getLatestSequenceForScopes(validScopes);
 
-            const isUpToDateWithLatest = latestSequence !== null && afterSequence >= latestSequence;
-            const receivedViaPush = client.lastPushedSequence !== null && afterSequence >= client.lastPushedSequence;
-            const isGenuinelyBehind = !isUpToDateWithLatest && !receivedViaPush;
+            // If the client claims a sequence beyond anything the server currently knows about,
+            // the server has restarted (its in-memory snapshot watermarks are gone). Treat the
+            // client as stale and force a fresh snapshot rather than silently leaving it behind.
+            const serverGlobalLatest = args.realtimeService.getLatestSequence();
+            const clientAheadOfServer = serverGlobalLatest !== null && afterSequence > serverGlobalLatest;
+
+            const isUpToDateWithLatest = !clientAheadOfServer && latestSequence !== null && afterSequence >= latestSequence;
+            const receivedViaPush = !clientAheadOfServer && client.lastPushedSequence !== null && afterSequence >= client.lastPushedSequence;
+            const isGenuinelyBehind = clientAheadOfServer || (!isUpToDateWithLatest && !receivedViaPush);
 
             if (isGenuinelyBehind) {
-              const missedNonReplayableSnapshot = args.realtimeService.hasNonReplayableEventsSince(validScopes, afterSequence);
+              const missedNonReplayableSnapshot = clientAheadOfServer
+                || args.realtimeService.hasNonReplayableEventsSince(validScopes, afterSequence);
               const replayEvents = args.realtimeService.replay(validScopes, afterSequence, 200);
               const replayLastSequence = replayEvents[replayEvents.length - 1]?.sequence ?? afterSequence;
 

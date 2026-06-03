@@ -251,6 +251,53 @@ const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal
     };
   }, []);
 
+  // Coalesce direct realtime updates to at most one render per animation frame. The server
+  // can push large snapshots many times per second (project.live, execution, overview); applying
+  // each one synchronously runs a deep-equality pass + Preact reconciliation per message and can
+  // saturate the main thread, freezing the tab. Buffering the latest payload and flushing on a
+  // rAF collapses a burst into a single render while always converging on the newest snapshot.
+  const pendingDirectPayloadRef = useRef<{ value: T } | null>(null);
+  const directUpdateFrameRef = useRef<number | null>(null);
+
+  const flushDirectUpdate = useCallback(() => {
+    directUpdateFrameRef.current = null;
+    const pending = pendingDirectPayloadRef.current;
+    if (!pending) {
+      return;
+    }
+    pendingDirectPayloadRef.current = null;
+    const nextPayload = pending.value;
+    setData((prev) => {
+      const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextPayload) : nextPayload;
+      if (prev === stabilized) return prev;
+      const checkEqual = optionsRef.current.isEqual ?? isDeepEqual;
+      return checkEqual(prev, stabilized) ? prev : stabilized;
+    });
+    setError(null);
+    setLoading((prev) => (prev !== false ? false : prev));
+  }, [setData]);
+
+  const scheduleDirectUpdate = useCallback((payload: T) => {
+    pendingDirectPayloadRef.current = { value: payload };
+    if (directUpdateFrameRef.current !== null) {
+      return;
+    }
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+      flushDirectUpdate();
+      return;
+    }
+    directUpdateFrameRef.current = window.requestAnimationFrame(() => flushDirectUpdate());
+  }, [flushDirectUpdate]);
+
+  useEffect(() => {
+    return () => {
+      if (directUpdateFrameRef.current !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(directUpdateFrameRef.current);
+        directUpdateFrameRef.current = null;
+      }
+    };
+  }, []);
+
   // 2. Realtime WebSocket Subscription Effect
 
   // We extract scopes as a joined string to avoid referential equality triggers
@@ -276,19 +323,9 @@ const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal
 
         if (eventType && message.type === "event" && message.event.eventType === eventType) {
           if (updateDirectlyFromEvent) {
-            const nextPayload = message.event.payload as T;
-            setData((prev) => {
-              const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextPayload) : nextPayload;
-              if (prev === stabilized) return prev;
-              const checkEqual = optionsRef.current.isEqual ?? isDeepEqual;
-              return checkEqual(prev, stabilized) ? prev : stabilized;
-            });
-            setError(null);
-            // Instead of directly depending on the reactive `loading` state here,
-            // we use the functional update pattern or just accept we might trigger a
-            // reactive render by setting `setLoading((prev) => (prev !== false ? false : prev))` unconditionally
-            // but preact will batch it if it's identical.
-            setLoading((prev) => (prev !== false ? false : prev));
+            // Coalesce to one render per animation frame (see scheduleDirectUpdate) so a burst
+            // of large snapshots cannot saturate the main thread and freeze the tab.
+            scheduleDirectUpdate(message.event.payload as T);
           } else {
             // Received event but configured to refetch instead of direct update
             scheduleSilentRefresh();
@@ -309,7 +346,7 @@ const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal
     );
 
     return cleanupSubscription;
-  }, [scopesKey, options.realtime?.eventType, options.realtime?.updateDirectlyFromEvent, options.realtime?.onTransportState, scheduleSilentRefresh]);
+  }, [scopesKey, options.realtime?.eventType, options.realtime?.updateDirectlyFromEvent, options.realtime?.onTransportState, scheduleSilentRefresh, scheduleDirectUpdate]);
 
   // 3. Fallback Polling Effect
   useEffect(() => {

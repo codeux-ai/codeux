@@ -7,11 +7,23 @@ import { DashboardRealtimeEventRepository } from "../../../src/repositories/dash
 
 const tempDirs: string[] = [];
 
-async function createRepository(): Promise<DashboardRealtimeEventRepository> {
+async function createStorage(): Promise<AppDbStorage> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-realtime-events-"));
   tempDirs.push(dir);
-  const storage = new AppDbStorage(path.join(dir, "app.db"));
+  return new AppDbStorage(path.join(dir, "app.db"));
+}
+
+async function createRepository(): Promise<DashboardRealtimeEventRepository> {
+  const storage = await createStorage();
   return new DashboardRealtimeEventRepository(storage);
+}
+
+function countPersistedRows(storage: AppDbStorage): number {
+  const row = storage
+    .getDatabase()
+    .prepare("SELECT COUNT(*) AS c FROM dashboard_realtime_events")
+    .get() as { c: number };
+  return row.c;
 }
 
 afterEach(async () => {
@@ -120,5 +132,91 @@ describe("DashboardRealtimeEventRepository", () => {
       sequence: 2,
       eventType: "project.runtime_status.updated",
     });
+  });
+
+  it("does not persist non-replayable snapshot events to the table", async () => {
+    const storage = await createStorage();
+    const repository = new DashboardRealtimeEventRepository(storage);
+
+    for (let i = 0; i < 50; i++) {
+      repository.appendEvent({
+        scopeType: "project",
+        scopeId: "project-1",
+        eventType: "project.live.updated",
+        entityType: "project_live",
+        entityId: "project-1",
+        projectId: "project-1",
+        replayable: false,
+        payload: { tick: i },
+      });
+    }
+    // One replayable event should be the only thing written to disk.
+    repository.appendEvent({
+      scopeType: "project",
+      scopeId: "project-1",
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: "m1",
+      projectId: "project-1",
+      payload: { id: "m1" },
+    });
+
+    expect(countPersistedRows(storage)).toBe(1);
+    expect(repository.getLatestSequence()).toBe(51);
+    expect(repository.hasNonReplayableEventsSince(["project:project-1"], 0)).toBe(true);
+    expect(repository.hasNonReplayableEventsSince(["project:project-1"], 60)).toBe(false);
+  });
+
+  it("reseeds the sequence from persisted rows after a restart", async () => {
+    const storage = await createStorage();
+    const first = new DashboardRealtimeEventRepository(storage);
+
+    // Two replayable events (persisted) interleaved with a non-replayable one (in-memory only).
+    first.appendEvent({
+      scopeType: "project",
+      scopeId: "p1",
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: "m1",
+      projectId: "p1",
+      payload: { id: "m1" },
+    });
+    first.appendEvent({
+      scopeType: "project",
+      scopeId: "p1",
+      eventType: "project.live.updated",
+      entityType: "project_live",
+      entityId: "p1",
+      projectId: "p1",
+      replayable: false,
+      payload: { tick: 1 },
+    });
+    first.appendEvent({
+      scopeType: "project",
+      scopeId: "p1",
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: "m2",
+      projectId: "p1",
+      payload: { id: "m2" },
+    });
+    expect(first.getLatestSequence()).toBe(3);
+
+    // Simulate a process restart: a fresh repository on the same database. The in-memory
+    // non-replayable watermark is gone, and the sequence reseeds from the max persisted row (3).
+    const second = new DashboardRealtimeEventRepository(storage);
+    expect(second.getLatestSequence()).toBe(3);
+    expect(second.hasNonReplayableEventsSince(["project:p1"], 0)).toBe(false);
+
+    const next = second.appendEvent({
+      scopeType: "project",
+      scopeId: "p1",
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: "m3",
+      projectId: "p1",
+      payload: { id: "m3" },
+    });
+    expect(next.sequence).toBe(4);
   });
 });
