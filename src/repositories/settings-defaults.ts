@@ -151,7 +151,14 @@ export const OPENCODE_MODELS: string[] = [
 ];
 
 export const ANTIGRAVITY_MODELS: string[] = [
-  "default"
+  "default",
+  "gemini-3.5-flash",
+  "gemini-3.1-pro-high",
+  "gemini-3.1-pro-low",
+  "gemini-3-flash",
+  "claude-sonnet-4.6-thinking",
+  "claude-opus-4.6-thinking",
+  "gpt-oss-120b",
 ];
 
 export const AI_MODEL_CATALOG: Record<string, string[]> = {
@@ -166,7 +173,7 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
 export const DEFAULT_VIRTUAL_WORKER_MODELS: Record<string, string> = {
   gemini: "auto",
   "claude-code": "default",
-  codex: "gpt-5.3-codex",
+  codex: "gpt-5.5",
   "qwen-code": "qwen3-coder-plus",
   opencode: "anthropic/claude-sonnet-4-5",
   antigravity: "default",
@@ -229,7 +236,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     provider: "codex",
     name: DEFAULT_PROVIDER_CONFIG_NAMES.codex,
     enabled: true,
-    model: "gpt-5.3-codex",
+    model: "gpt-5.5",
     weight: DEFAULT_PROVIDER_WEIGHT,
     thinkingMode: "HIGH",
     apiKey: "",
@@ -504,7 +511,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   workers: {
     executionMode: "VIRTUAL",
     virtualWorkerProvider: DEFAULT_PROVIDER_CONFIG_IDS.codex,
-    model: "gpt-5.3-codex",
+    model: "gpt-5.5",
     maxConcurrency: 1,
     timeoutSeconds: 300,
   },

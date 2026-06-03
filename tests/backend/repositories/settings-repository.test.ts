@@ -32,7 +32,7 @@ describe("SettingsRepository", () => {
     expect(system.runtime.consoleLogLevel).toBe("standard");
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
     expect(system.defaults.aiProvider.provider).toBe("jules");
-    expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.3-codex");
+    expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.5");
     expect(system.defaults.git.defaultBranch).toBe("main");
     expect(system.defaults.cliWorkflow.containerMountGithubAuth).toBe(false);
     expect(system.defaults.cliWorkflow.containerMountGeminiAuth).toBe(false);

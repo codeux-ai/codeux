@@ -65,6 +65,8 @@ export const pickContainerEnv = (env: NodeJS.ProcessEnv): Array<{ key: string; v
     "OPENCODE_API_KEY",
     "OPENCODE_CONFIG_CONTENT",
     "ANTIGRAVITY_API_KEY",
+    "ANTIGRAVITY_MODEL",
+    "AGY_MODEL",
     "GH_TOKEN",
     "GITHUB_TOKEN",
     "HTTP_PROXY",

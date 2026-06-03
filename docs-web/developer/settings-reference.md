@@ -60,7 +60,7 @@ Settings are evaluated in cascade: **Defaults → System → Project → Sprint*
 | --- | --- | --- | --- | --- | --- |
 | `jules` | ✅ | `default` | 60 | MEDIUM | 15 |
 | `gemini` | ✅ | `default` (`auto`) | 20 | MEDIUM | 0 |
-| `codex` | ✅ | `gpt-5.3-codex` | 20 | HIGH | 0 |
+| `codex` | ✅ | `gpt-5.5` | 20 | HIGH | 0 |
 | `claude-code` | ❌ | `default` | 0 | HIGH | 0 |
 | `qwen-code` | ❌ | `qwen3-coder-plus` | 0 | HIGH | 0 |
 | `opencode` | ❌ | `anthropic/claude-sonnet-4-5` | 0 | HIGH | 0 |

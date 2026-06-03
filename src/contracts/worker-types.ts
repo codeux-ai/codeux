@@ -47,7 +47,17 @@ export type CodexModel =
   | "gpt-5-codex-mini"
   | "gpt-5";
 
-export type VirtualWorkerModel = GeminiModel | ClaudeModel | CodexModel;
+export type AntigravityModel =
+  | "default"
+  | "gemini-3.5-flash"
+  | "gemini-3.1-pro-high"
+  | "gemini-3.1-pro-low"
+  | "gemini-3-flash"
+  | "claude-sonnet-4.6-thinking"
+  | "claude-opus-4.6-thinking"
+  | "gpt-oss-120b";
+
+export type VirtualWorkerModel = GeminiModel | ClaudeModel | CodexModel | AntigravityModel;
 
 export interface WorkerRuntimeSettings {
   model: string;

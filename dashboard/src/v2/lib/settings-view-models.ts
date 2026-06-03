@@ -317,7 +317,7 @@ export const createProjectProviderDraft = (
   name,
   enabled: providerId !== "claude-code" && providerId !== "qwen-code" && providerId !== "opencode",
   model: providerId === "codex"
-    ? "gpt-5.3-codex"
+    ? "gpt-5.5"
     : providerId === "qwen-code"
       ? "qwen3-coder-plus"
       : providerId === "opencode"
@@ -468,6 +468,16 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
     "openai/gpt-5-mini",
     "github-copilot/gpt-5",
     "openrouter/anthropic/claude-sonnet-4.5",
+  ],
+  antigravity: [
+    "default",
+    "gemini-3.5-flash",
+    "gemini-3.1-pro-high",
+    "gemini-3.1-pro-low",
+    "gemini-3-flash",
+    "claude-sonnet-4.6-thinking",
+    "claude-opus-4.6-thinking",
+    "gpt-oss-120b",
   ],
 };
 
