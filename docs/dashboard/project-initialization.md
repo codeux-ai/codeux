@@ -5,6 +5,7 @@ Project Initialization runs a repository-specific setup pass through the `Projec
 ## Entry Points
 
 - `Add Project` keeps the existing `Initialize with Project Setup Agent` flow for local and git source types.
+- Local project creation now accepts a blank directory path in the modal; the backend resolves it to `~/.codex-ux/projects/<slug>` when no source path is provided.
 - `New Project` opens the same modal with the `new_project` source selected, which exposes `Local Repo` / `Remote Repo` init modes instead of the setup scope controls.
 - The `new_project` branch hides the Project Setup Agent section entirely and routes creation through the backend `initMode` fields.
 - Existing projects expose a `Setup Project` action from the project card agent button.
