@@ -1,4 +1,6 @@
 import { type FunctionComponent } from "preact";
+import { useRef, useEffect, useState } from "preact/hooks";
+import gsap from "gsap";
 import { Check, CheckCheck, XCircle, Loader2 } from "lucide-preact";
 import type { ChatMessageRecord, AgentAvatarConfig } from "../../types.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
@@ -40,13 +42,148 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   const createdAtLabel = formatChatTime(message.createdAt);
 
   const displayDeliveryStatus = resolveDisplayDeliveryStatus(message, allMessages);
+  const foundIndex = allMessages.findIndex((m) => m.id === message.id);
+
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const [initialDelay] = useState(() => {
+    const recentIndex = allMessages.length - foundIndex;
+    return recentIndex <= 5 ? (5 - recentIndex) * 0.08 : 0;
+  });
+
+  useEffect(() => {
+    if (!bubbleRef.current) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(bubbleRef.current,
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.3, delay: initialDelay, ease: "power2.out" }
+      );
+    });
+    return () => ctx.revert();
+  }, [initialDelay]);
+
+  useEffect(() => {
+    if (!bubbleRef.current) return;
+    const preElements = bubbleRef.current.querySelectorAll("pre");
+    if (!preElements.length) return;
+
+    const cleanupFns: Array<() => void> = [];
+
+    preElements.forEach((pre) => {
+      // Check if already wrapped
+      if (pre.parentElement?.classList.contains("code-block-wrapper")) return;
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "code-block-wrapper rounded-md border border-white/10 bg-black/30 my-4 overflow-hidden";
+
+      // Wrap the pre element
+      if (pre.parentNode) {
+        pre.parentNode.insertBefore(wrapper, pre);
+      }
+      wrapper.appendChild(pre);
+
+      const header = document.createElement("div");
+      header.className = "flex items-center justify-between px-3 py-2 bg-white/5 border-b border-white/5 text-xs text-slate-400 font-mono";
+
+      const codeElement = pre.querySelector("code");
+      const languageClass = codeElement?.className.match(/language-(\w+)/)?.[1] || "text";
+
+      const langLabel = document.createElement("span");
+      langLabel.textContent = languageClass;
+
+      const actions = document.createElement("div");
+      actions.className = "flex items-center gap-2";
+
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "flex items-center gap-1.5 hover:text-slate-200 transition-colors code-copy-btn";
+      copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span>Copy</span>`;
+
+      const toggleBtn = document.createElement("button");
+      toggleBtn.className = "flex items-center hover:text-slate-200 transition-colors code-toggle-btn";
+      toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-up"><path d="m18 15-6-6-6 6"/></svg>`;
+
+      actions.appendChild(copyBtn);
+      actions.appendChild(toggleBtn);
+      header.appendChild(langLabel);
+      header.appendChild(actions);
+
+      wrapper.insertBefore(header, pre);
+
+      const onCopyClick = () => {
+        if (!codeElement) return;
+        const text = codeElement.innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          const badge = document.createElement("span");
+          badge.className = "text-signal-400 absolute right-full mr-2";
+          badge.textContent = "Copied!";
+          copyBtn.style.position = "relative";
+          copyBtn.appendChild(badge);
+          gsap.to(badge, { opacity: 0, duration: 0.3, delay: 1.5, onComplete: () => {
+            badge.remove();
+          }});
+        });
+      };
+      copyBtn.addEventListener("click", onCopyClick);
+
+      let isCollapsed = false;
+      let originalHeight = 0;
+
+      const onToggleClick = () => {
+        if (!originalHeight) {
+          originalHeight = pre.scrollHeight;
+        }
+
+        isCollapsed = !isCollapsed;
+
+        if (isCollapsed) {
+          pre.style.overflow = "hidden";
+          gsap.fromTo(pre,
+            { maxHeight: originalHeight, opacity: 1 },
+            { maxHeight: 0, opacity: 0, duration: 0.3, ease: "power2.inOut" }
+          );
+          toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>`;
+        } else {
+          gsap.fromTo(pre,
+            { maxHeight: 0, opacity: 0 },
+            {
+              maxHeight: originalHeight,
+              opacity: 1,
+              duration: 0.3,
+              ease: "power2.inOut",
+              onComplete: () => {
+                pre.style.overflow = "auto";
+                pre.style.maxHeight = "none";
+              }
+            }
+          );
+          toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-up"><path d="m18 15-6-6-6 6"/></svg>`;
+        }
+      };
+      toggleBtn.addEventListener("click", onToggleClick);
+
+      cleanupFns.push(() => {
+        copyBtn.removeEventListener("click", onCopyClick);
+        toggleBtn.removeEventListener("click", onToggleClick);
+      });
+
+      // Adjust pre styles for embedding
+      pre.style.margin = "0";
+      pre.style.borderRadius = "0";
+      pre.style.border = "none";
+      pre.style.background = "transparent";
+      pre.style.padding = "1rem";
+    });
+
+    return () => {
+      cleanupFns.forEach(fn => fn());
+    };
+  }, [message.bodyMarkdown]);
 
   const opacityClass = (fromDashboard && (displayDeliveryStatus === "pending" || displayDeliveryStatus === "failed"))
     ? "opacity-60"
     : "opacity-100";
 
   return (
-    <div className={`flex ${fromDashboard ? "justify-end" : "justify-start"} ${opacityClass}`}>
+    <div ref={bubbleRef} role="listitem" className={`flex ${fromDashboard ? "justify-end" : "justify-start"} ${opacityClass}`}>
       <div className={`flex max-w-[760px] items-start gap-3 w-full ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
           <ChatAvatar
