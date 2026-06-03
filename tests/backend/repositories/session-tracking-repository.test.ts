@@ -172,11 +172,9 @@ describe("SessionTrackingRepository", () => {
   it("fetches recent activities", async () => {
     const repo = await createRepo();
     repo.createSession({ id: "s1", provider: "jules" });
-    repo.appendActivity("s1", { description: "1" });
-    await new Promise(resolve => setTimeout(resolve, 5));
-    repo.appendActivity("s1", { description: "2" });
-    await new Promise(resolve => setTimeout(resolve, 5));
-    repo.appendActivity("s1", { description: "3" });
+    repo.appendActivity("s1", { description: "1", createTime: "2026-06-03T11:00:00.000Z" });
+    repo.appendActivity("s1", { description: "2", createTime: "2026-06-03T11:00:01.000Z" });
+    repo.appendActivity("s1", { description: "3", createTime: "2026-06-03T11:00:02.000Z" });
     
     const recent = repo.fetchRecentActivities("s1", 2);
     expect(recent).toHaveLength(2);

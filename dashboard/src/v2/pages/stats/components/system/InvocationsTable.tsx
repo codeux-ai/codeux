@@ -20,6 +20,7 @@ import {
   CHIP_CLASS,
   getProviderIcon,
 } from "../StatsShared.js";
+import { InvocationMessagesPanel } from "./InvocationMessagesPanel.js";
 
 export interface InvocationsTableProps {
   invocations: ExecutionInvocationRecord[];
@@ -37,7 +38,11 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   expandedId,
   onRowExpand,
   loading,
-}) => {
+  }) => {
+  const expandedInvocation = expandedId === null
+    ? null
+    : invocations.find((invocation) => invocation.id === expandedId) ?? null;
+
   const handleSort = (key: SystemSortKey) => {
     if (sort.key === key) {
       onSortChange({ key, dir: sort.dir === "asc" ? "desc" : "asc" });
@@ -287,15 +292,13 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 </tr>
 
                 {/* Expanded Detail Row */}
-                {isExpanded && (
+                {isExpanded && expandedInvocation ? (
                   <tr key={`${invocation.id}-detail`}>
                     <td colSpan={11} className="px-6 pb-2">
-                      <div className="rounded-2xl border border-white/[0.05] bg-slate-950/60 p-4 mt-1 text-sm text-slate-400">
-                        Messages panel — wired in T06 ({invocation.id})
-                      </div>
+                      <InvocationMessagesPanel invocation={expandedInvocation} />
                     </td>
                   </tr>
-                )}
+                ) : null}
               </>
             );
           })}

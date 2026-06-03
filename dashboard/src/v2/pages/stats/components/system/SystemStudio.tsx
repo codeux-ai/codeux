@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useState } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 import {
   Activity,
   AlertTriangle,
@@ -13,6 +13,8 @@ import { formatDuration, formatTokens } from "../../stats-utils.js";
 import { PANEL_CLASS, SUBPANEL_CLASS, StudioHeader } from "../StatsShared.js";
 import { SystemFilterBar } from "./SystemFilterBar.js";
 import { InvocationsTable } from "./InvocationsTable.js";
+
+type SystemTab = "all" | "errors" | "system";
 
 function buildMetricCardTone(kind: "default" | "error" | "running"): {
   circleClassName: string;
@@ -59,8 +61,30 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
     refetch,
   } = useSystemViewData(projectId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<SystemTab>("all");
 
   void refetch;
+
+  const tabbedInvocations = useMemo(() => {
+    if (activeTab === "errors") {
+      return invocations.filter((invocation) => invocation.status === "failed" || invocation.status === "cancelled");
+    }
+
+    if (activeTab === "system") {
+      const systemMatches = invocations.filter((invocation) => {
+        const type = (invocation.type || "").toLowerCase();
+        return type.includes("system") || type.includes("message");
+      });
+
+      if (systemMatches.length > 0) {
+        return systemMatches;
+      }
+
+      return invocations.filter((invocation) => Boolean(invocation.lastErrorMessage));
+    }
+
+    return invocations;
+  }, [activeTab, invocations]);
 
   return (
     <section className="space-y-6">
@@ -135,6 +159,23 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         </div>
       </div>
 
+      <div className="flex gap-1 rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35 self-start">
+        {(["all", "errors", "system"] as SystemTab[]).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${
+              activeTab === tab
+                ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
+                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            }`}
+          >
+            {tab === "all" ? "All" : tab === "errors" ? "Errors" : "System Msgs"}
+          </button>
+        ))}
+      </div>
+
       <SystemFilterBar
         filters={filters}
         onFiltersChange={setFilters}
@@ -143,7 +184,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         availablePurposes={availablePurposes}
         availableProviders={availableProviders}
         totalCount={allInvocations.length}
-        filteredCount={invocations.length}
+        filteredCount={tabbedInvocations.length}
       />
 
       {error ? (
@@ -153,7 +194,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
       ) : null}
 
       <InvocationsTable
-        invocations={invocations}
+        invocations={tabbedInvocations}
         sort={sort}
         onSortChange={setSort}
         expandedId={expandedId}

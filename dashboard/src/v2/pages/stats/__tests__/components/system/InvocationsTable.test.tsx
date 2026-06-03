@@ -1,11 +1,18 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/preact";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import type { ExecutionInvocationRecord } from "../../../../../types.js";
+import { fetchInvocationMessages } from "../../../../../lib/invocation-api.js";
 import { InvocationsTable } from "../../../components/system/InvocationsTable.js";
 import type { SystemSort } from "../../../hooks/use-system-view-data.js";
+
+vi.mock("../../../../../lib/invocation-api.js", () => ({
+  fetchInvocationMessages: vi.fn(),
+}));
+
+const mockedFetchInvocationMessages = vi.mocked(fetchInvocationMessages);
 
 function createInvocation(overrides: Partial<ExecutionInvocationRecord> = {}): ExecutionInvocationRecord {
   return {
@@ -49,6 +56,10 @@ function createInvocation(overrides: Partial<ExecutionInvocationRecord> = {}): E
 }
 
 describe("InvocationsTable", () => {
+  beforeEach(() => {
+    mockedFetchInvocationMessages.mockReset();
+  });
+
   it("renders formatted tokens, status colors, and context chips", () => {
     const invocations = [
       createInvocation({
@@ -134,8 +145,9 @@ describe("InvocationsTable", () => {
     expect(onSortChange).toHaveBeenNthCalledWith(2, { key: "inputTokens", dir: "desc" });
   });
 
-  it("renders the expansion placeholder row", () => {
+  it("renders the expansion placeholder row", async () => {
     const onRowExpand = vi.fn();
+    mockedFetchInvocationMessages.mockResolvedValue([]);
 
     const { container } = render(
       <InvocationsTable
@@ -148,7 +160,10 @@ describe("InvocationsTable", () => {
     );
     const root = container as HTMLElement;
 
-    expect(within(root).getByText("Messages panel — wired in T06 (inv-expand)")).toBeTruthy();
+    expect(within(root).getByText("Loading messages")).toBeTruthy();
+    await waitFor(() => {
+      expect(within(root).getByText("No messages recorded for this invocation")).toBeTruthy();
+    });
 
     fireEvent.click(within(root).getByRole("button", { name: "Collapse invocation inv-expand" }));
     expect(onRowExpand).toHaveBeenCalledWith(null);

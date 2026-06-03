@@ -2,14 +2,25 @@
  * @vitest-environment jsdom
  */
 import { useState } from "preact/hooks";
-import { cleanup, fireEvent, render } from "@testing-library/preact";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/preact";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fetchInvocationMessages } from "../../../lib/invocation-api.js";
 import { InvocationsTable } from "../components/system/InvocationsTable.js";
 import type { SystemSort } from "../hooks/use-system-view-data.js";
 import type { ExecutionInvocationRecord } from "../../../types.js";
 
+vi.mock("../../../lib/invocation-api.js", () => ({
+  fetchInvocationMessages: vi.fn(),
+}));
+
+const mockedFetchInvocationMessages = vi.mocked(fetchInvocationMessages);
+
 afterEach(() => {
   cleanup();
+});
+
+beforeEach(() => {
+  mockedFetchInvocationMessages.mockReset();
 });
 
 const mockInvocations: ExecutionInvocationRecord[] = [
@@ -107,19 +118,21 @@ describe("InvocationsTable", () => {
     expect(onSortChange).toHaveBeenCalledWith({ key: "startedAt", dir: "asc" });
   });
 
-  it("handles row expansion", () => {
+  it("handles row expansion", async () => {
+    mockedFetchInvocationMessages.mockResolvedValue([]);
     const { getByText, queryByText, getByRole } = render(<Harness />);
-
-    expect(queryByText(/Messages panel/)).toBeNull();
 
     // The first 5 buttons are sort headers in the thead
     const expandButton = getByRole("button", { name: "Expand invocation inv-1" });
     fireEvent.click(expandButton);
-    expect(getByText(/Messages panel/)).toBeTruthy();
-    expect(getByText(/inv-1/)).toBeTruthy();
+    await waitFor(() => {
+      expect(getByText("Loading messages")).toBeTruthy();
+    });
 
     fireEvent.click(expandButton);
-    expect(queryByText(/Messages panel/)).toBeNull();
+    await waitFor(() => {
+      expect(queryByText("Loading messages")).toBeNull();
+    });
   });
 
   it("renders loading skeleton", () => {

@@ -4,18 +4,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import type { ExecutionInvocationRecord } from "../../../types.js";
-import { fetchProjectInvocations } from "../../../lib/invocation-api.js";
+import { fetchInvocationMessages, fetchProjectInvocations } from "../../../lib/invocation-api.js";
 import { SystemStudio } from "../components/system/SystemStudio.js";
 
 vi.mock("../../../lib/invocation-api.js", () => ({
   fetchProjectInvocations: vi.fn(),
+  fetchInvocationMessages: vi.fn(),
 }));
 
 const mockedFetchProjectInvocations = vi.mocked(fetchProjectInvocations);
+const mockedFetchInvocationMessages = vi.mocked(fetchInvocationMessages);
 
 afterEach(() => {
   cleanup();
   mockedFetchProjectInvocations.mockReset();
+  mockedFetchInvocationMessages.mockReset();
 });
 
 function createInvocation(overrides: Partial<ExecutionInvocationRecord>): ExecutionInvocationRecord {
@@ -61,6 +64,7 @@ function createInvocation(overrides: Partial<ExecutionInvocationRecord>): Execut
 
 describe("SystemStudio", () => {
   it("renders telemetry, responds to filtering, and toggles row expansion", async () => {
+    mockedFetchInvocationMessages.mockResolvedValue([]);
     mockedFetchProjectInvocations.mockResolvedValue([
       createInvocation({
         id: "inv-failed",
@@ -94,14 +98,35 @@ describe("SystemStudio", () => {
       expect(screen.getByText("Invocations & System Logs")).toBeTruthy();
     });
 
+    expect(screen.getByRole("button", { name: "All" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Errors" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "System Msgs" })).toBeTruthy();
     expect(container.textContent).toContain("1.3k");
     expect(container.textContent).toContain("9m 0s");
     expect(container.textContent).toContain("2 of 2");
     expect(screen.getByText("Rate limited")).toBeTruthy();
-    expect(screen.queryByText("Messages panel — wired in T06 (inv-failed)")).toBeNull();
+    expect(screen.queryByText("Loading messages")).toBeNull();
 
     expect(container.querySelectorAll(".text-red-300").length).toBeGreaterThan(0);
     expect(container.querySelectorAll(".text-blue-300").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Errors" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("1 of 2")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "System Msgs" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("1 of 2")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("2 of 2")).toBeTruthy();
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Running" }));
 
@@ -115,12 +140,15 @@ describe("SystemStudio", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Expand invocation inv-running" }));
 
-    expect(screen.getByText("Messages panel — wired in T06 (inv-running)")).toBeTruthy();
+    expect(screen.getByText("Loading messages")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText("No messages recorded for this invocation")).toBeTruthy();
+    });
     expect(container.querySelectorAll("tbody > tr").length).toBe(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Collapse invocation inv-running" }));
 
-    expect(screen.queryByText("Messages panel — wired in T06 (inv-running)")).toBeNull();
+    expect(screen.queryByText("No messages recorded for this invocation")).toBeNull();
     expect(container.querySelectorAll("tbody > tr").length).toBe(1);
   });
 
