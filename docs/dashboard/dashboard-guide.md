@@ -179,6 +179,7 @@ Legacy runtime:
 - Interactive dashboard controls use pointer cursors consistently: enabled buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays expose a pointer affordance, while disabled controls retain `not-allowed`.
 - V2 pages use the shared `PageContainer` atomic component for page-level layout. Its `2400px` max width matches the `/` overview dashboard and is the single source of truth for page container width across overview, project, sprint, task, live, memory, stats, settings, agents, chat, and browser routes.
 - Top-nav project selector persists the active project in sqlite
+- Source cells on the Projects page now use the same project-selection flow as the top-nav selector: Open selects the clicked project before routing to `/sprints`, and the settings wheel selects the project before routing to `/config`.
 - Top-nav sprint selector persists the active sprint for the selected project
 - Top-nav search sits in the left header cluster beside the brand, while the active task counter uses the same compact height as the project, sprint, and worker selectors
 - Live runtime pages now use the persisted top-nav sprint selection as the page scope, so the Live view follows the selected sprint from the header menu

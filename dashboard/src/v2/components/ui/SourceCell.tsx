@@ -1,8 +1,10 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useCallback } from "preact/hooks";
 import gsap from "gsap";
+import { useNavigate } from "@tanstack/react-router";
 import { FolderGit2, Activity, AlertTriangle, XCircle } from "lucide-preact";
 import type { Source } from "../../types.js";
+import { useProjectData } from "../../context/project-data.js";
 import { CellActions } from "./CellActions.js";
 
 const statusMap = {
@@ -20,6 +22,8 @@ interface SourceCellProps {
 
 export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven, animDelay = 0 }) => {
     const cellRef = useRef<HTMLDivElement>(null);
+    const navigate = useNavigate();
+    const { selectProject } = useProjectData();
     const anim = isEven ? 'animate-organic' : 'animate-organic-reverse';
     const state = statusMap[source.status] ?? statusMap.idle;
     const StatusIcon = state.icon;
@@ -45,6 +49,16 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             overwrite: true,
         });
     }, []);
+
+    const handleOpen = useCallback(async () => {
+        await selectProject(source.id);
+        await navigate({ to: "/sprints" });
+    }, [navigate, selectProject, source.id]);
+
+    const handleSettings = useCallback(async () => {
+        await selectProject(source.id);
+        await navigate({ to: "/config" });
+    }, [navigate, selectProject, source.id]);
 
     return (
         <div
@@ -101,7 +115,8 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
                 {/* Actions */}
                 <CellActions 
                     isRunning={source.status === 'running'} 
-                    to={`/projects?id=${source.id}`}
+                    onOpen={handleOpen}
+                    onSettings={handleSettings}
                 />
             </div>
         </div>
