@@ -8,6 +8,7 @@ import type {
 import type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
+  ExecutionInvocationStatus,
 } from "../../../src/contracts/invocation-types.js";
 import type {
   ConnectionInboxMessage,
@@ -143,6 +144,7 @@ export interface Task {
 export type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
+  ExecutionInvocationStatus,
   LocalDirectoryBrowserEntry,
   LocalDirectoryBrowserResponse,
   AgentAvatarConfig,

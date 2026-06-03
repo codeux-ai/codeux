@@ -31,7 +31,7 @@ function formatChipLabel(value: string): string {
     .join(" ");
 }
 
-function toggleValue(values: string[], value: string): string[] {
+function toggleValue<T extends string>(values: T[], value: T): T[] {
   return values.includes(value)
     ? values.filter((entry) => entry !== value)
     : [...values, value];
