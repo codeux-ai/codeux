@@ -2,6 +2,13 @@ import type { DatabaseAdapter } from "../db/database-adapter.js";
 import type { AppDbStorage } from "../app-db-storage.js";
 import type { ExecutionRuntimeEventSummaryRow } from "./execution-repository-types.js";
 
+// `status_sync` events are internal bookkeeping written by ProjectRuntimeRepository on every
+// status-signature change (they only carry `{ previousSignature, signature }` diagnostic strings).
+// Nothing in the dashboard or the human-intervention summary reads them, yet because they are
+// emitted so frequently they dominated the live snapshot payload (hundreds of KB → >1MB pushes
+// that froze the browser tab). Exclude them from the live runtime-event feed entirely. Other event
+// types are emitted on discrete lifecycle moments, so the active-sprint-run feed stays bounded by
+// real activity without an artificial cap (which would drop a parallel run's events).
 export function queryExecutionRuntimeEvents(
   db: DatabaseAdapter,
   storage: AppDbStorage,
@@ -46,6 +53,7 @@ export function queryExecutionRuntimeEvents(
       LEFT JOIN sprint_runs sr ON sr.id = tr.sprint_run_id
       LEFT JOIN mcp_connections c ON c.id = tr.connection_id
       WHERE tr.project_id = ?
+        AND tre.event_type != 'status_sync'
 
       UNION ALL
 
@@ -126,6 +134,7 @@ export function queryExecutionRuntimeEvents(
       WHERE tr.project_id = ?
         AND tr.sprint_run_id`,
       sqlSuffix: `
+        AND tre.event_type != 'status_sync'
       ORDER BY tre.created_at DESC, tre.id DESC`,
       items: expandedSprintRunIds,
       bindParamsBefore: [projectId],

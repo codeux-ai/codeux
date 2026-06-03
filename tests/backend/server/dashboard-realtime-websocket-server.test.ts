@@ -216,6 +216,30 @@ describe("DashboardRealtimeWebSocketServer", () => {
     expect(snapshotReqs).toHaveLength(0);
   });
 
+  it("forces snapshot_required when the client is ahead of the server (server restarted)", () => {
+    const { sendClientMessage, getWrittenJson } = setupClient();
+
+    // After a restart, the server's in-memory watermarks are gone and its sequence has
+    // reseeded to the (lower) max persisted replayable sequence. A client that previously
+    // saw sequence 200 reconnects; the server only knows up to 100.
+    realtimeService.getLatestSequenceForScopes.mockReturnValue(100);
+    realtimeService.getLatestSequence.mockReturnValue(100);
+    realtimeService.hasNonReplayableEventsSince.mockReturnValue(false);
+    realtimeService.replay.mockReturnValue([]);
+
+    sendClientMessage({
+      type: "set_subscriptions",
+      scopes: ["project:p1"],
+      lastSequence: 200,
+    });
+
+    const responses = getWrittenJson();
+    expect(responses).toContainEqual({
+      type: "snapshot_required",
+      reason: "non_replayable_event_missed",
+    });
+  });
+
   it("does not send snapshot_required when afterSequence = 0 (first connection)", () => {
     const { sendClientMessage, getWrittenJson } = setupClient();
 

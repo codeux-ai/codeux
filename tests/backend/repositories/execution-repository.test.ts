@@ -1012,6 +1012,53 @@ describe("ExecutionRepository", () => {
     });
   });
 
+  it("excludes internal status_sync events from the runtime timeline", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Status Sync Project",
+      sourceType: "local",
+      sourceRef: "/workspace/status-sync-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Status Sync Sprint", number: 9 });
+    const task = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Do the work" });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "codex",
+      state: "RUNNING",
+      startedAt: "2026-03-19T09:00:00.000Z",
+    });
+
+    executionRepository.appendTaskRunEvent(taskRun.id, "status_sync", "system", {
+      previousSignature: "{}",
+      signature: "{}",
+    }, { createdAt: "2026-03-19T09:02:00.000Z", sourceEventKey: "status-sync-1" });
+    executionRepository.appendTaskRunEvent(taskRun.id, "provider_activity", "agent", {
+      preview: "Working on the task",
+    }, { createdAt: "2026-03-19T09:01:00.000Z", sourceEventKey: "activity-1" });
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+
+    expect(snapshot.recentEvents.some((event) => event.eventType === "status_sync")).toBe(false);
+    expect(snapshot.recentEvents.some((event) => event.eventType === "provider_activity")).toBe(true);
+  });
+
   it("keeps full current sprint-run dispatch and event history for completed tasks", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

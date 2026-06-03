@@ -863,12 +863,11 @@ describe("dashboard project management API", () => {
     expect(executionSnapshot.sprintRuns).toEqual([]);
     expect(executionSnapshot.taskDispatches).toEqual([]);
     expect(executionSnapshot.connections).toEqual([]);
-    expect(executionSnapshot.recentEvents[0]).toMatchObject({
-      eventType: "status_sync",
-      taskKey: "T01",
-      taskTitle: "Wire selected project state",
-      sessionId: "session-api",
-    });
+    // `status_sync` is internal bookkeeping and is intentionally excluded from the live runtime
+    // feed (it dominated the snapshot payload and is never rendered).
+    expect(
+      executionSnapshot.recentEvents.find((event) => (event as { eventType?: string })?.eventType === "status_sync"),
+    ).toBeUndefined();
 
     const telemetryRun = executionRepository.createSprintRun({
       projectId: project.id,

@@ -105,58 +105,90 @@ export function parseDashboardRealtimeScope(scope: string): {
 export class DashboardRealtimeEventRepository {
   private readonly db: DatabaseAdapter;
 
+  // Sequence allocation and snapshot watermarks are tracked in memory rather than in
+  // SQLite. Non-replayable snapshot events (project.live.updated, overview.telemetry.updated,
+  // etc.) used to be INSERTed on every dashboard tick purely to bump a sequence/watermark —
+  // they are never returned by replay (which filters is_replayable = 1). That was ~99.6% of
+  // all rows and a relentless synchronous write load on the experimental node:sqlite
+  // connection. We now allocate sequences from an in-memory counter (seeded from the max
+  // persisted row) and only persist replayable events, which carry payloads worth replaying.
+  private nextSequence: number;
+  private readonly latestSequenceByScope = new Map<string, number>();
+  private readonly latestNonReplayableSequenceByScope = new Map<string, number>();
+
   constructor(storage: AppDbStorage = new AppDbStorage()) {
     this.db = storage.getDatabase();
+    this.nextSequence = this.readMaxPersistedSequence();
   }
 
   appendEvent(input: AppendDashboardRealtimeEventInput): DashboardRealtimeEvent {
     const emittedAt = input.emittedAt || new Date().toISOString();
     const replayable = input.replayable !== false;
-    const result = this.db.prepare(`
-      INSERT INTO dashboard_realtime_events (
-        scope_type,
-        scope_id,
-        event_type,
-        entity_type,
-        entity_id,
-        project_id,
-        sprint_id,
-        thread_id,
-        task_id,
-        dispatch_id,
-        sprint_run_id,
-        task_run_id,
-        connection_id,
-        correlation_id,
-        is_replayable,
-        payload_json,
-        created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      input.scopeType,
-      input.scopeId,
-      input.eventType,
-      input.entityType,
-      input.entityId,
-      input.projectId ?? null,
-      input.sprintId ?? null,
-      input.threadId ?? null,
-      input.taskId ?? null,
-      input.dispatchId ?? null,
-      input.sprintRunId ?? null,
-      input.taskRunId ?? null,
-      input.connectionId ?? null,
-      input.correlationId ?? null,
-      Number(replayable),
-      replayable && input.payload !== undefined ? JSON.stringify(input.payload) : null,
-      emittedAt,
-    );
+    const sequence = ++this.nextSequence;
+    const scope = buildScope(input.scopeType, input.scopeId);
 
-    return this.buildEvent(
-      Number((result as { lastInsertRowid?: number | bigint }).lastInsertRowid ?? 0),
-      input,
-      emittedAt,
-    );
+    this.latestSequenceByScope.set(scope, sequence);
+    if (!replayable) {
+      this.latestNonReplayableSequenceByScope.set(scope, sequence);
+    }
+
+    if (replayable) {
+      this.db.prepare(`
+        INSERT INTO dashboard_realtime_events (
+          sequence,
+          scope_type,
+          scope_id,
+          event_type,
+          entity_type,
+          entity_id,
+          project_id,
+          sprint_id,
+          thread_id,
+          task_id,
+          dispatch_id,
+          sprint_run_id,
+          task_run_id,
+          connection_id,
+          correlation_id,
+          is_replayable,
+          payload_json,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        sequence,
+        input.scopeType,
+        input.scopeId,
+        input.eventType,
+        input.entityType,
+        input.entityId,
+        input.projectId ?? null,
+        input.sprintId ?? null,
+        input.threadId ?? null,
+        input.taskId ?? null,
+        input.dispatchId ?? null,
+        input.sprintRunId ?? null,
+        input.taskRunId ?? null,
+        input.connectionId ?? null,
+        input.correlationId ?? null,
+        Number(replayable),
+        input.payload !== undefined ? JSON.stringify(input.payload) : null,
+        emittedAt,
+      );
+    }
+
+    return this.buildEvent(sequence, input, emittedAt);
+  }
+
+  private readMaxPersistedSequence(): number {
+    const row = this.db.prepare(`
+      SELECT MAX(sequence) AS max_sequence
+      FROM dashboard_realtime_events
+    `).get() as { max_sequence?: number | string | null } | undefined;
+
+    if (!row || row.max_sequence === null || row.max_sequence === undefined) {
+      return 0;
+    }
+    return toNumber(row.max_sequence);
   }
 
   private buildScopePredicates(count: number): string {
@@ -204,20 +236,32 @@ export class DashboardRealtimeEventRepository {
       return null;
     }
 
+    let latest = 0;
+    for (const parsed of parsedScopes) {
+      const scope = buildScope(parsed.scopeType, parsed.scopeId);
+      const inMemory = this.latestSequenceByScope.get(scope);
+      if (inMemory !== undefined && inMemory > latest) {
+        latest = inMemory;
+      }
+    }
+
+    // Persisted (replayable) events from before a restart may have a higher sequence than
+    // anything we've emitted this run, so fold in the persisted max for these scopes too.
     const predicates = this.buildScopePredicates(parsedScopes.length);
     const values = this.buildScopeValues(parsedScopes);
-
     const row = this.db.prepare(`
       SELECT MAX(sequence) AS max_sequence
       FROM dashboard_realtime_events
       WHERE ${predicates}
     `).get(...values) as { max_sequence?: number | string | null } | undefined;
-
-    if (!row || row.max_sequence === null || row.max_sequence === undefined) {
-      return null;
+    if (row && row.max_sequence !== null && row.max_sequence !== undefined) {
+      const persisted = toNumber(row.max_sequence);
+      if (persisted > latest) {
+        latest = persisted;
+      }
     }
 
-    return toNumber(row.max_sequence);
+    return latest > 0 ? latest : null;
   }
 
   hasNonReplayableEventsSince(scopes: string[], afterSequence: number): boolean {
@@ -226,35 +270,19 @@ export class DashboardRealtimeEventRepository {
       return false;
     }
 
-    const predicates = this.buildScopePredicates(parsedScopes.length);
-    const values: Array<string | number> = [
-      Math.max(0, afterSequence),
-      ...this.buildScopeValues(parsedScopes),
-    ];
-
-    const row = this.db.prepare(`
-      SELECT 1 AS has_match
-      FROM dashboard_realtime_events
-      WHERE sequence > ?
-        AND is_replayable = 0
-        AND (${predicates})
-      LIMIT 1
-    `).get(...values) as { has_match?: number | string } | undefined;
-
-    return row !== undefined;
+    const threshold = Math.max(0, afterSequence);
+    for (const parsed of parsedScopes) {
+      const scope = buildScope(parsed.scopeType, parsed.scopeId);
+      const latestNonReplayable = this.latestNonReplayableSequenceByScope.get(scope);
+      if (latestNonReplayable !== undefined && latestNonReplayable > threshold) {
+        return true;
+      }
+    }
+    return false;
   }
 
   getLatestSequence(): number | null {
-    const row = this.db.prepare(`
-      SELECT MAX(sequence) AS max_sequence
-      FROM dashboard_realtime_events
-    `).get() as { max_sequence?: number | string | null } | undefined;
-
-    if (!row || row.max_sequence === null || row.max_sequence === undefined) {
-      return null;
-    }
-
-    return toNumber(row.max_sequence);
+    return this.nextSequence > 0 ? this.nextSequence : null;
   }
 
   private mapRow(row: DashboardRealtimeEventRow): DashboardRealtimeEvent {
