@@ -1,4 +1,5 @@
 import type { McpToolToggle, ProviderConfigId } from "./app-types.js";
+import type { MemoryCategory } from "./memory-types.js";
 
 export type AgentSourceScope = "project" | "home" | "default";
 
@@ -38,6 +39,21 @@ export interface AgentAvatarConfig {
   visorColor?: string;
 }
 
+export interface AgentMemoryConfig {
+  /** Which memory tier(s) to inject. Default: "both" */
+  tier: "short_term" | "long_term" | "both";
+  /** Categories to include. Empty array means all categories. Default: [] */
+  categories: MemoryCategory[];
+  /** Global minimum strength threshold (0 = no minimum). Default: 0 */
+  minStrength: number;
+  /** Per-category minimum strength overrides. Keys not present fall back to minStrength. Default: {} */
+  minStrengthPerCategory: Partial<Record<MemoryCategory, number>>;
+  /** Max short-term memories to inject (0 = unlimited). Default: 0 */
+  maxShortTerm: number;
+  /** Max long-term memories to inject (0 = unlimited). Default: 0 */
+  maxLongTerm: number;
+}
+
 export interface AgentPresetRecord {
   id: string;
   projectId: string;
@@ -56,6 +72,7 @@ export interface AgentPresetRecord {
   model?: string | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
+  memoryConfig?: AgentMemoryConfig;
   /** Per-agent MCP access config. Undefined for agents that have never been configured. */
   mcpAccess?: AgentMcpAccessConfig;
   createdAt: string;
@@ -73,6 +90,7 @@ export interface CreateAgentPresetInput {
   model?: string | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
+  memoryConfig?: AgentMemoryConfig;
   mcpAccess?: AgentMcpAccessConfig;
 }
 
@@ -86,5 +104,6 @@ export interface UpdateAgentPresetInput {
   model?: string | null;
   memoryTemplateOverrideEnabled?: boolean;
   memoryTemplateMarkdown?: string;
+  memoryConfig?: AgentMemoryConfig;
   mcpAccess?: AgentMcpAccessConfig;
 }

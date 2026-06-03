@@ -37,16 +37,23 @@ describe("ProviderConcurrencyService", () => {
     });
 
     it("should wait and retry if limit is reached", async () => {
-      executionRepository.listRunningProviderInvocationUsages
-        .mockReturnValueOnce([{}, {}, {}]) // 3 running, limit 3
-        .mockReturnValueOnce([{}, {}]);    // 2 running, limit 3 (free slot)
+      vi.useFakeTimers();
+      try {
+        executionRepository.listRunningProviderInvocationUsages
+          .mockReturnValueOnce([{}, {}, {}]) // 3 running, limit 3
+          .mockReturnValueOnce([{}, {}]);    // 2 running, limit 3 (free slot)
 
-      const start = Date.now();
-      await service.waitForSlot("jules", 3);
-      const duration = Date.now() - start;
+        const start = Date.now();
+        const waitPromise = service.waitForSlot("jules", 3);
+        await vi.advanceTimersByTimeAsync(2000);
+        await waitPromise;
+        const duration = Date.now() - start;
 
-      expect(executionRepository.listRunningProviderInvocationUsages).toHaveBeenCalledTimes(2);
-      expect(duration).toBeGreaterThanOrEqual(1900); // 2 seconds sleep
+        expect(executionRepository.listRunningProviderInvocationUsages).toHaveBeenCalledTimes(2);
+        expect(duration).toBeGreaterThanOrEqual(1900); // 2 seconds sleep
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

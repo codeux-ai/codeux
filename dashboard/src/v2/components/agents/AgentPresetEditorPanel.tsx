@@ -18,9 +18,12 @@ import {
   Settings2,
   UserRound,
   Palette,
+  SlidersHorizontal,
 } from "lucide-preact";
 import type { AgentMcpAccessConfig, AgentPreset, CustomMcpServer } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
+import { DEFAULT_AGENT_MEMORY_CONFIG, type AgentMemoryConfig } from "../../memory-types.js";
+import { AgentMemoryConfigPanel } from "./AgentMemoryConfigPanel.js";
 import { AgentAvatarCustomizer } from "./AgentAvatarCustomizer.js";
 import { AgentAvatarStage } from "./AgentAvatarStage.js";
 import { AgentMcpManagePanel } from "./AgentMcpManageModal.js";
@@ -163,6 +166,41 @@ const SectionCard: FunctionComponent<{
   </section>
 );
 
+const formatMemoryStrength = (value: number): string => {
+  if (value === 0) return "0";
+  return value.toFixed(2).replace(/\.?0+$/, "");
+};
+
+const formatMemoryConfigSummary = (config: AgentMemoryConfig): string => {
+  const tierLabel =
+    config.tier === "both"
+      ? "Both tiers"
+      : config.tier === "short_term"
+        ? "Short term"
+        : "Long term";
+
+  const categoryLabel =
+    config.categories.length === 0
+      ? "All categories"
+      : `${config.categories.length} category${config.categories.length === 1 ? "" : "s"}`;
+
+  const parts = [tierLabel, categoryLabel];
+
+  if (config.minStrength > 0) {
+    parts.push(`min ${formatMemoryStrength(config.minStrength)}`);
+  }
+
+  if (config.maxShortTerm > 0) {
+    parts.push(`${config.maxShortTerm} short-term`);
+  }
+
+  if (config.maxLongTerm > 0) {
+    parts.push(`${config.maxLongTerm} long-term`);
+  }
+
+  return parts.join(" · ");
+};
+
 /* ─────────────────────────────────────────────────────────
  * Main editor
  * ──────────────────────────────────────────────────────── */
@@ -194,6 +232,11 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess())
   );
   const [mcpModalOpen, setMcpModalOpen] = useState(false);
+  const [memoryConfig, setMemoryConfig] = useState<AgentMemoryConfig>(
+    preset.memoryConfig ?? DEFAULT_AGENT_MEMORY_CONFIG
+  );
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const memoryButtonRef = useRef<HTMLButtonElement>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [discardOpen, setDiscardOpen] = useState(false);
   const [avatarExpression, setAvatarExpression] = useState<AgentAvatarExpression>("happy");
@@ -218,6 +261,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     setModel(preset.model || "");
     setAvatarConfig(preset.avatarConfig);
     setMcpAccess(normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess()));
+    setMemoryConfig(preset.memoryConfig ?? DEFAULT_AGENT_MEMORY_CONFIG);
+    setShowMemoryPanel(false);
     setTouched({});
   }, [preset.id]);
 
@@ -252,6 +297,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     if (model !== (preset.model || "")) return true;
     if (JSON.stringify(avatarConfig ?? {}) !== JSON.stringify(preset.avatarConfig ?? {})) return true;
     if (JSON.stringify(mcpAccess) !== JSON.stringify(normalizeAgentMcpAccess(preset.mcpAccess ?? defaultAgentMcpAccess()))) return true;
+    if (JSON.stringify(memoryConfig) !== JSON.stringify(preset.memoryConfig ?? DEFAULT_AGENT_MEMORY_CONFIG)) return true;
     return false;
   }, [
     name,
@@ -263,6 +309,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
     model,
     avatarConfig,
     mcpAccess,
+    memoryConfig,
     preset,
   ]);
 
@@ -283,6 +330,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       model: model.trim() || null,
       avatarConfig,
       mcpAccess,
+      memoryConfig,
     });
   };
 
@@ -323,6 +371,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
 
   const memoryIsDefault =
     memoryMarkdown.trim() === defaultMemoryInstruction.trim() && defaultMemoryInstruction.trim().length > 0;
+  const memoryConfigSummary = useMemo(() => formatMemoryConfigSummary(memoryConfig), [memoryConfig]);
 
   const instructionLength = instructionMarkdown.length;
   const instructionOver = instructionLength > INSTRUCTION_SOFT_MAX;
@@ -639,6 +688,61 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                     )}
                   </div>
                 )}
+
+                <div className="flex flex-col gap-3 pl-13">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                        Memory Injection Filters
+                      </div>
+                      <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        Control which memories are injected into this agent's prompts.
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <Popover
+                        isOpen={showMemoryPanel}
+                        onOpenChange={(open) => {
+                          if (!saving) {
+                            setShowMemoryPanel(open);
+                          }
+                        }}
+                        position="bottom"
+                        align="end"
+                        triggerRef={memoryButtonRef}
+                        className="w-[min(440px,92vw)] overflow-hidden p-0"
+                        content={
+                          <AgentMemoryConfigPanel
+                            value={memoryConfig}
+                            onChange={setMemoryConfig}
+                            onClose={() => setShowMemoryPanel(false)}
+                            disabled={saving}
+                          />
+                        }
+                      >
+                        <button
+                          ref={memoryButtonRef}
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (!saving) {
+                              setShowMemoryPanel((value) => !value);
+                            }
+                          }}
+                          disabled={saving}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white/60 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
+                        >
+                          <SlidersHorizontal className="h-3 w-3" strokeWidth={2.4} />
+                          Manage Memory
+                        </button>
+                      </Popover>
+                      <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-black/[0.06] bg-white/60 px-3 py-1.5 text-[10px] font-semibold normal-case tracking-normal text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+                        <BrainCircuit className="h-3 w-3 shrink-0" strokeWidth={2.4} />
+                        <span className="truncate">{memoryConfigSummary}</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </SectionCard>
 

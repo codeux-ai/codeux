@@ -27,6 +27,7 @@ Foundation fields:
 - `labels_json`
 - `provider_config_id`
 - `model`
+- `memory_config_json` stores `AgentMemoryConfig` as a JSON blob
 - `created_at`
 - `updated_at`
 
@@ -66,10 +67,16 @@ Foundation-supported fields:
 - instruction markdown
 - optional provider instance preference
 - optional model override
+- optional per-agent memory injection configuration
+
+The memory injection configuration is stored in sqlite as `memory_config_json` and parsed back into `AgentMemoryConfig` on reads, matching the existing JSON-column pattern used by `mcp_access_json`.
+The dashboard editor now initializes that config from the preset, exposes it through a dedicated `Manage Memory` popover, and persists the chosen filters alongside the rest of the preset payload.
 
 Agent labels are still stored in the data model for markdown sync and built-in preset conventions, but the dashboard no longer exposes custom label editing. The Agents page displays computed route-assignment tags from effective project settings instead, including tags for built-in fallback selections on Planning agent, Worker, Project manager, and Quality assurance agent.
 
 Provider and model preferences are intentionally nullable. They only take effect when a provider invocation route uses the `AGENT` strategy; otherwise the agent inherits the configured route, worker, or global defaults.
+
+At runtime, the CLI workflow now reads `AgentMemoryConfig` from the resolved worker agent and post-filters injected memories by configured tier, categories, strength thresholds, and max counts before composing the prompt. When the config is absent, the workflow keeps the default unrestricted memory injection path.
 
 This foundation gave Code UX a clean product base for:
 

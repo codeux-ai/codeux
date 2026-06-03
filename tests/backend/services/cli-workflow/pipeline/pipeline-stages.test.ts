@@ -178,6 +178,10 @@ const createMockContext = (): PipelineContext => {
         getTaskRun: vi.fn().mockReturnValue({ id: "tr-1", projectId: "p-1" }),
         appendTaskRunEvent: vi.fn(),
       } as any,
+      memoryService: {
+        listBySprintAndAgent: vi.fn(),
+        listLongTermByAgent: vi.fn(),
+      } as any,
       getDashboardSettings: vi.fn(),
       getWorkerInstruction: vi.fn(),
       getGithubToken: vi.fn(),
@@ -231,6 +235,87 @@ describe("executePrepareStage", () => {
 
     expect(result.providerPrompt).toContain("## LEARNINGS CAPTURE (Required)");
     expect(result.providerPrompt).toContain("Default Settings Instruction");
+  });
+
+  it("filters injected memories by configured tier, category, strength, and caps", async () => {
+    const ctx = createMockContext();
+    ctx.settings.memory = {
+      enabled: true,
+      autoCaptureSprint: false,
+      workerLearningsInstruction: "Default Settings Instruction",
+      maxLongTermPerProject: 50,
+      minLongTermRelevance: 0.7,
+      shortTermRetentionSprints: 3,
+    };
+    ctx.agentPresetId = "agent-1";
+    ctx.taskRunId = "run-1";
+    ctx.agentMemoryConfig = {
+      tier: "long_term",
+      categories: ["codebase"],
+      minStrength: 4,
+      minStrengthPerCategory: { codebase: 5 },
+      maxShortTerm: 0,
+      maxLongTerm: 1,
+    };
+    const memoryService = ctx.deps.memoryService as any;
+    memoryService.listBySprintAndAgent.mockReturnValue([
+      { category: "codebase", content: "short-term should not appear", strength: 10 },
+    ]);
+    memoryService.listLongTermByAgent.mockReturnValue([
+      { category: "patterns", content: "wrong category", strength: 10 },
+      { category: "codebase", content: "below category threshold", strength: 4 },
+      { category: "codebase", content: "kept long-term memory", strength: 6 },
+    ]);
+    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
+    vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
+    vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
+    (ctx.deps.executionRepository as any).getTaskRun.mockReturnValue({ id: "tr-1", projectId: "p-1", sprintId: "sprint-1" });
+
+    const result = await executePrepareStage(ctx);
+
+    expect(memoryService.listBySprintAndAgent).not.toHaveBeenCalled();
+    expect(memoryService.listLongTermByAgent).toHaveBeenCalledWith("p-1", "agent-1", 100);
+    expect(result.providerPrompt).toContain("## MEMORY CONTEXT");
+    expect(result.providerPrompt).toContain("### Long-Term Knowledge");
+    expect(result.providerPrompt).not.toContain("### Recent Sprint Learnings");
+    expect(result.providerPrompt).toContain("kept long-term memory");
+    expect(result.providerPrompt).not.toContain("wrong category");
+    expect(result.providerPrompt).not.toContain("below category threshold");
+    expect(result.providerPrompt).not.toContain("short-term should not appear");
+  });
+
+  it("injects both memory tiers when no agent memory config is present", async () => {
+    const ctx = createMockContext();
+    ctx.settings.memory = {
+      enabled: true,
+      autoCaptureSprint: false,
+      workerLearningsInstruction: "Default Settings Instruction",
+      maxLongTermPerProject: 50,
+      minLongTermRelevance: 0.7,
+      shortTermRetentionSprints: 3,
+    };
+    ctx.agentPresetId = "agent-1";
+    ctx.taskRunId = "run-1";
+    const memoryService = ctx.deps.memoryService as any;
+    memoryService.listBySprintAndAgent.mockReturnValue([
+      { category: "learning", content: "short-term memory", strength: 1 },
+    ]);
+    memoryService.listLongTermByAgent.mockReturnValue([
+      { category: "decision", content: "long-term memory", strength: 1 },
+    ]);
+    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
+    vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
+    vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
+    (ctx.deps.executionRepository as any).getTaskRun.mockReturnValue({ id: "tr-1", projectId: "p-1", sprintId: "sprint-1" });
+
+    const result = await executePrepareStage(ctx);
+
+    expect(memoryService.listBySprintAndAgent).toHaveBeenCalledWith("p-1", "sprint-1", "agent-1", 100);
+    expect(memoryService.listLongTermByAgent).toHaveBeenCalledWith("p-1", "agent-1", 100);
+    expect(result.providerPrompt).toContain("short-term memory");
+    expect(result.providerPrompt).toContain("long-term memory");
   });
 
   it("uses preset override memory learnings instruction when override is enabled and non-empty", async () => {

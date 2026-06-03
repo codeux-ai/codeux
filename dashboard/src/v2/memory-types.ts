@@ -13,6 +13,41 @@ export type MemoryCategory =
   | "error"
   | "learning";
 
+export interface AgentMemoryConfig {
+  /** Which memory tier(s) to inject. Default: "both" */
+  tier: "short_term" | "long_term" | "both";
+  /** Categories to include. Empty array means all categories. Default: [] */
+  categories: MemoryCategory[];
+  /** Global minimum strength threshold (0 = no minimum). Default: 0 */
+  minStrength: number;
+  /** Per-category minimum strength overrides. Keys not present fall back to minStrength. Default: {} */
+  minStrengthPerCategory: Partial<Record<MemoryCategory, number>>;
+  /** Max short-term memories to inject (0 = unlimited). Default: 0 */
+  maxShortTerm: number;
+  /** Max long-term memories to inject (0 = unlimited). Default: 0 */
+  maxLongTerm: number;
+}
+
+export const MEMORY_CATEGORIES: MemoryCategory[] = [
+  "architecture",
+  "codebase",
+  "context",
+  "preferences",
+  "patterns",
+  "decision",
+  "error",
+  "learning",
+];
+
+export const DEFAULT_AGENT_MEMORY_CONFIG: AgentMemoryConfig = {
+  tier: "both",
+  categories: [],
+  minStrength: 0,
+  minStrengthPerCategory: {},
+  maxShortTerm: 0,
+  maxLongTerm: 0,
+};
+
 export type EmbeddingModelId = "bge-small-en-v1.5" | "multilingual-e5-large";
 
 export interface MemorySource {
