@@ -735,6 +735,119 @@ describe("runSessionSyncStep", () => {
     expect(updateTaskMock).toHaveBeenCalledWith("rec-r", { status: "coding_completed" });
   });
 
+  it("does not downgrade a force-completed (settled) task when the remote session is ACTIVE", async () => {
+    const subtasks: Subtask[] = [
+      {
+        id: "task-completed",
+        title: "Task C",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        record_id: "rec-c",
+        is_merged: true,
+        worker_branch: "feature/branch",
+        pr_url: "https://example.com/pr/1",
+      },
+    ];
+
+    const updateTaskMock = vi.fn();
+    const deps = {
+      listSessions: vi.fn().mockResolvedValue({
+        sessions: [
+          {
+            id: "s-completed",
+            name: "sessions/s-completed",
+            title: "Sprint 1: [run:my-repo/s1/task-completed] [task-completed] Task C",
+            state: "ACTIVE",
+          },
+        ],
+      }),
+      resolveSessionName: (session: any) => session.name,
+      extractSessionId: (session: any) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      logger: { warn: vi.fn() },
+      executionRepository: {
+        getLatestTaskRun: vi.fn().mockReturnValue({ id: "run-id", startedAt: "2026-03-09T10:00:00.000Z" }),
+        updateTaskRun: vi.fn(),
+        getTaskDispatch: vi.fn(),
+        updateTaskDispatch: vi.fn(),
+        appendTaskRunEvent: vi.fn(),
+      },
+      sprintRunId: "sprint-run-1",
+      projectManagementRepository: {
+        updateTask: updateTaskMock,
+      },
+    };
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      deps as any,
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 1 }
+    );
+
+    expect(result.subtasks.find(t => t.id === "task-completed")?.status).toBe("COMPLETED");
+    expect(updateTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("downgrades an unsettled COMPLETED task to RUNNING when the remote session is ACTIVE", async () => {
+    const subtasks: Subtask[] = [
+      {
+        id: "task-completed",
+        title: "Task C",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        record_id: "rec-c",
+        is_merged: false,
+        worker_branch: "feature/branch",
+        pr_url: "https://example.com/pr/1",
+      },
+    ];
+
+    const updateTaskMock = vi.fn();
+    const deps = {
+      listSessions: vi.fn().mockResolvedValue({
+        sessions: [
+          {
+            id: "s-completed",
+            name: "sessions/s-completed",
+            title: "Sprint 1: [run:my-repo/s1/task-completed] [task-completed] Task C",
+            state: "ACTIVE",
+          },
+        ],
+      }),
+      resolveSessionName: (session: any) => session.name,
+      extractSessionId: (session: any) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      logger: { warn: vi.fn() },
+      executionRepository: {
+        getLatestTaskRun: vi.fn().mockReturnValue({ id: "run-id", startedAt: "2026-03-09T10:00:00.000Z" }),
+        updateTaskRun: vi.fn(),
+        getTaskDispatch: vi.fn(),
+        updateTaskDispatch: vi.fn(),
+        appendTaskRunEvent: vi.fn(),
+      },
+      sprintRunId: "sprint-run-1",
+      projectManagementRepository: {
+        updateTask: updateTaskMock,
+      },
+    };
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      deps as any,
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 1 }
+    );
+
+    expect(result.subtasks.find(t => t.id === "task-completed")?.status).toBe("RUNNING");
+  });
+
   it("holds a rate-limited task in QUOTA until the retry delay expires, then requeues it", async () => {
     const subtasks: Subtask[] = [
       {
