@@ -92,8 +92,8 @@ export const DropdownMenu = ({
   }, [isOpen]);
 
   useLayoutEffect(() => {
-    if (isOpen) updatePosition();
-  }, [isOpen, updatePosition]);
+    if (isOpen && isRendered) updatePosition();
+  }, [isOpen, isRendered, updatePosition]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
