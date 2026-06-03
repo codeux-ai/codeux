@@ -149,6 +149,7 @@ It focuses on:
 - the metric-series flyout groups series under labelled headers for Core, Purposes, Providers, and Git so related worker/provider series stay discoverable as the catalog grows
 - hourly windows keep one-hour hover buckets while rendering visible axis labels every three hours
 - alternate composition and reliability views with donut charts
+- reliability mode now ends with a provider breakdown grid that exposes token anatomy, invocation volume, active time, and telemetry source quality per provider
 - the Composition Studio now adds cache-efficiency insight, a token-flow bar, active-versus-wall-time comparison, and a per-provider activity ledger so the provider picture stays visible without switching tabs
 - task, sprint, provider, and purpose leaderboards
 - tabbed task and sprint telemetry sections integrated into the Analysis Studio, complete with search, recency, richer token breakdowns, and client-side sorting by date and usage dimensions

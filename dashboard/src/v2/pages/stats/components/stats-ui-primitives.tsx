@@ -8,13 +8,16 @@ import {
   ArrowUpRight,
   BarChart3,
   Brain,
+  Code2,
   Clock3,
   Database,
+  GitBranch,
   Layers3,
   PieChart,
   ShieldCheck,
   Sparkles,
   TimerReset,
+  Zap,
   Workflow,
   Bot,
   Terminal,
@@ -248,6 +251,9 @@ export function getProviderIcon(provider: string | null | undefined): { icon: Co
   if (p.includes("claude")) return { icon: Brain, bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400" };
   if (p.includes("codex")) return { icon: Terminal, bg: "bg-cyan-500/10", text: "text-cyan-600 dark:text-cyan-400" };
   if (p.includes("jules")) return { icon: Layers3, bg: "bg-signal-500/10", text: "text-signal-600 dark:text-signal-400" };
+  if (p.includes("qwen-code")) return { icon: Code2, bg: "bg-violet-500/10", text: "text-violet-600 dark:text-violet-400" };
+  if (p.includes("opencode")) return { icon: GitBranch, bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400" };
+  if (p.includes("antigravity")) return { icon: Zap, bg: "bg-orange-500/10", text: "text-orange-600 dark:text-orange-400" };
   return { icon: Bot, bg: "bg-slate-500/10", text: "text-slate-600 dark:text-slate-400" };
 }
 

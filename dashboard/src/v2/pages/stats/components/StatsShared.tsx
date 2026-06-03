@@ -27,6 +27,7 @@ import type {
   ExecutionUsageBucketSummary,
   ProjectExecutionStatsSnapshot,
   SegmentDefinition,
+  TokenUsageSource,
 } from "../../../types.js";
 import {
   formatTokens,
@@ -49,6 +50,49 @@ import { formatDay, formatHourTick, formatShortDate, toTimestamp, getAxisLabelSt
 import { buildPath, buildSmoothPath, buildAreaPath, buildSmoothAreaPath, buildPoints, polarToCartesian, buildDonutArcPath, buildDonutSlices } from "./stats-geometry.js";
 import { InteractiveUsageChart } from "./InteractiveUsageChart.js";
 export { InteractiveUsageChart };
+
+type ProviderTelemetryUsage = ExecutionStatsEntitySummary["usage"] & {
+  reportedInvocationCount?: number;
+  estimatedInvocationCount?: number;
+};
+
+type ProviderTelemetrySource = {
+  label: string;
+  tone: string;
+};
+
+function getProviderTelemetrySource(
+  providerUsage: ProviderTelemetryUsage,
+  tokenSources: Array<{ source: TokenUsageSource; count: number }>,
+): ProviderTelemetrySource {
+  const hasPerProviderQualitySignal =
+    typeof providerUsage.reportedInvocationCount === "number" ||
+    typeof providerUsage.estimatedInvocationCount === "number";
+
+  const aggregateSource = tokenSources.find((entry) => entry.source === "reported" && entry.count > 0)
+    ? "reported"
+    : tokenSources.find((entry) => entry.source === "estimated" && entry.count > 0)
+      ? "estimated"
+      : "unknown";
+
+  const source = hasPerProviderQualitySignal
+    ? providerUsage.reportedInvocationCount && providerUsage.reportedInvocationCount > 0
+      ? "reported"
+      : providerUsage.estimatedInvocationCount && providerUsage.estimatedInvocationCount > 0
+        ? "estimated"
+        : "unknown"
+    : aggregateSource;
+
+  if (source === "reported") {
+    return { label: "Reported", tone: "text-status-green dark:text-status-green" };
+  }
+
+  if (source === "estimated") {
+    return { label: "Estimated", tone: "text-amber-600 dark:text-amber-400" };
+  }
+
+  return { label: "Unknown", tone: "text-slate-500 dark:text-slate-400" };
+}
 
 export const TrendStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
@@ -344,6 +388,87 @@ export const ReliabilityStudio: FunctionComponent<{
           </div>
         </div>
       </div>
+    </div>
+    <div className="space-y-4">
+      <div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Provider Breakdown</div>
+        <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          Per-provider token anatomy, invocation volume, compute time, and telemetry reliability for the selected window.
+        </div>
+      </div>
+      {stats.providers.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-8 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+          No provider telemetry for this window.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {stats.providers
+            .slice()
+            .sort((a, b) => b.usage.totalTokens - a.usage.totalTokens)
+            .map((provider) => {
+              const { icon: Icon, bg, text } = getProviderIcon(provider.provider);
+              const providerUsage = provider.usage as ProviderTelemetryUsage;
+              const sourceQuality = getProviderTelemetrySource(providerUsage, stats.tokenSources);
+
+              return (
+                <div key={provider.id} className={`${PANEL_CLASS} p-5`}>
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className={`rounded-xl p-2 ${bg} ${text}`}>
+                        <Icon className="h-4 w-4" strokeWidth={2.1} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-base font-black text-slate-900 dark:text-white">{provider.label}</div>
+                        <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">{provider.secondaryLabel ?? ""}</div>
+                      </div>
+                    </div>
+                    <div className={`inline-flex items-center gap-2 self-start rounded-full px-3 py-1.5 text-right text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+                      <span className="text-base font-black normal-case tracking-tight text-slate-900 dark:text-white">
+                        {formatTokens(provider.usage.totalTokens)}
+                      </span>
+                      <span className="text-slate-400">tokens</span>
+                    </div>
+                  </div>
+                  <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div className={`${SUBPANEL_CLASS} p-4`}>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Invocations</div>
+                      <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{provider.usage.invocationCount.toLocaleString()}</div>
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">calls</div>
+                    </div>
+                    <div className={`${SUBPANEL_CLASS} p-4`}>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active Time</div>
+                      <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{formatDuration(provider.usage.activeTimeMs)}</div>
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">active</div>
+                    </div>
+                    <div className={`${SUBPANEL_CLASS} p-4`}>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Efficiency</div>
+                      <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">
+                        {provider.usage.invocationCount > 0
+                          ? `${formatTokens(Math.round(provider.usage.totalTokens / provider.usage.invocationCount))}/call`
+                          : "—"}
+                      </div>
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">avg tokens/call</div>
+                    </div>
+                  </div>
+                  <div className="mt-5">
+                    <TokenFlowBar
+                      input={provider.usage.inputTokens}
+                      cached={provider.usage.cachedInputTokens}
+                      output={provider.usage.outputTokens}
+                      reasoning={provider.usage.reasoningOutputTokens}
+                      total={provider.usage.totalTokens}
+                    />
+                  </div>
+                  <div className="mt-4 flex justify-end">
+                    <div className={`inline-flex items-center rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS} ${sourceQuality.tone}`}>
+                      {sourceQuality.label}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      )}
     </div>
   </section>
 );

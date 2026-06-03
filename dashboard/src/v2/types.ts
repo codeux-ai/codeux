@@ -92,6 +92,9 @@ import type {
   ScheduleTargetType,
   UpdateSchedulerEntryInput,
 } from "../../../src/contracts/scheduler-types.js";
+import type {
+  TokenUsageSource,
+} from "../../../src/contracts/execution-types.js";
 
 export interface SegmentDefinition {
   label: string;
@@ -186,6 +189,7 @@ export type {
   ExecutionUsageTotals,
   ExecutionUsageBucketSummary,
   ExecutionStatsEntitySummary,
+  TokenUsageSource,
   ExecutionConnectionSummary,
   ExecutionGitMetrics,
   ExecutionGitStatsBucketSummary,
