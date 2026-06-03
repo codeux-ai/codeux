@@ -87,6 +87,11 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
           y: reducedMotion ? 0 : MODAL_MOTION.feedback.yStart,
           opacity: 0,
           scale: reducedMotion ? 1 : MODAL_MOTION.feedback.scaleStart,
+          height: 0,
+          paddingTop: 0,
+          paddingBottom: 0,
+          marginTop: 0,
+          marginBottom: 0,
           duration: reducedMotion ? 0 : durations.fast,
           ease: GSAP_EASINGS.smooth,
           onComplete: () => setIsRendered(false)
@@ -114,6 +119,11 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
           y: reducedMotion ? 0 : 8,
           opacity: 0,
           scale: reducedMotion ? 1 : 0.97,
+          height: 0,
+          paddingTop: 0,
+          paddingBottom: 0,
+          marginTop: 0,
+          marginBottom: 0,
           duration: reducedMotion ? 0 : 0.25,
           ease: "power3.in",
           onComplete: () => onDismiss?.(),
@@ -136,7 +146,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       ref={containerRef}
       role="status"
       aria-live={ariaLive}
-      className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl border ${config.colors} ${className}`}
+      className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl border transition-colors duration-300 ${config.colors} ${className}`}
     >
       <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out]`} />
       <div className="flex-1 text-sm font-medium mt-0.5 relative">
@@ -149,7 +159,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
           <button
             type="button"
             onClick={retryAction}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             {retryLabel || "Retry"}
@@ -166,7 +176,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
               }
               onDismiss?.();
             }}
-            className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
             aria-label="Dismiss message"
           >
             <X className="w-4 h-4" />
@@ -176,7 +186,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       {(displayedStatus === "success" || displayedStatus === "warning") && autoDismiss !== false && !retryAction && (
         <div
           ref={progressRef}
-          className={`absolute bottom-0 left-0 h-1 opacity-20 ${config.progressColors}`}
+          className={`absolute bottom-0 left-0 h-1 opacity-20 transition-colors duration-300 ${config.progressColors}`}
         />
       )}
     </div>
