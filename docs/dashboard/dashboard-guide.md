@@ -195,6 +195,7 @@ Legacy runtime:
 - Top-nav project selector persists the active project in sqlite
 - Top-nav sprint selector persists the active sprint for the selected project
 - Top-nav search sits in the left header cluster beside the brand, while the active task counter uses the same compact height as the project, sprint, and worker selectors
+- The Live Sprint Clock card in the Sprint Stats deck now shows a six-tile grid with Finished, Avg Finish, Accumulated, Input, Output, and Cached values, and the token tiles reuse the shared compact formatter from the Stats page.
 - Live runtime pages now use the persisted top-nav sprint selection as the page scope, so the Live view follows the selected sprint from the header menu
 - That selection is view-only for the dashboard surface; it does not change which sprint run is actually executing in the backend
 - The Live page Git / CI / PR panel now uses compact status metric tiles plus state-specific iconography for PR and CI rows, including animated indicators for active CI states (`IN_PROGRESS`, `QUEUED`, `PENDING`, `QUOTA`) with reduced-motion fallback (`motion-reduce:animate-none`)
@@ -400,7 +401,7 @@ Legacy runtime:
 - `recentEvents` is now a unified runtime timeline spanning both `task_run_events` and `sprint_run_events`
 - The selected-project execution snapshot now keeps the full task-dispatch and task-run event history for the active or most recent sprint run, so completed tasks in Live view keep their runtime feed and stage timings visible even after later tasks start
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
-- The Live sidebar now renders `Attention Queue` as its own card under the shared execution timeline context, preserving claim/resolve/dismiss controls while keeping the execution runtime card focused on runs, dispatch, connections, and timeline data
+- The Live sidebar now renders `Live Connections`, `Attention Queue`, `Runtime Timeline`, and `Execution Runtime` as separate standalone cards under the shared execution timeline context, with the same card chrome and collapsible behavior while keeping the execution runtime card focused on runs and dispatches
 - The Live page now keeps the Git/CI/PR card in a dedicated `GitCIStatusPanel` component so the page shell stays focused on wiring runtime state, controls, and layout
 - Live task stats, filter counts, the active filtered task list, and per-card runtime payloads are memoized from the selected project's runtime snapshot so high-frequency realtime updates do not repeatedly recompute unchanged projections
 - Live task cards, the DAG, and timing summaries now render from the same projected task model:

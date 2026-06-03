@@ -243,6 +243,7 @@ Current dashboard behavior:
 - if the item is unassigned, claim falls back to the project's primary supervising worker, then overflow worker
 - resolved and dismissed items drop out of the active execution snapshot because the dashboard only shows `open` and `claimed` items
 - attention open/claim/resolve mutations now trigger a direct project execution realtime refresh, so the Live view updates immediately instead of waiting for adjacent execution events
+- the Live sidebar attention ledger now renders as a standalone card with shared dashboard chrome and an optional collapsible header, so the queue can live directly in the sidebar layout without an extra wrapper component
 
 ## Current Limitation
 

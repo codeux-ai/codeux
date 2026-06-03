@@ -21,11 +21,10 @@ import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
 import { getTaskProgressPhase, getLiveTaskProgressPhase } from "../lib/task-progress.js";
 import { pickLatestTaskDispatch, projectLiveTask, findActiveQuotaWait } from "./lib/live-task-runtime.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
-import { ExecutionTimelineProvider, useExecutionTimeline } from "../hooks/ExecutionTimelineContext.js";
+import { ExecutionTimelineProvider } from "../hooks/ExecutionTimelineContext.js";
 import { ExecutionTimeline } from "./components/ExecutionTimeline.js";
-import { ExecutionRuntimePanel } from "./components/live-session/ExecutionRuntimePanel.js";
-import { AttentionQueuePanel } from "./components/live-session/AttentionQueuePanel.js";
-import { LiveConnectionsCard } from "./components/live-session/LiveConnectionsCard.js";
+import { AttentionLedger } from "./components/AttentionLedger.js";
+import { ConnectionRuntimePanel, ExecutionRuntimePanel } from "./components/live-session/ExecutionRuntimePanel.js";
 import { StatsHeader } from "./components/StatsHeader.js";
 import { IdleRuntimeState } from "./components/ui/IdleRuntimeState.js";
 import { SkeletonPanel } from "./components/layout/SkeletonLoader.js";
@@ -52,34 +51,6 @@ import { getSprintStatusPresentation } from "./lib/sprint-status-presentation.js
 
 const SprintBoatRace = lazy(() => import("./components/SprintBoatRace.js").then(m => ({ default: m.SprintBoatRace })));
 const SprintDag = lazy(() => import("./components/SprintDag.js").then(m => ({ default: m.SprintDag })));
-
-const LiveConnectionsSidebarCard: FunctionComponent = () => {
-    const { execution } = useExecutionTimeline();
-    if (!execution) {
-        return null;
-    }
-    return <LiveConnectionsCard snapshot={execution} />;
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /* ─── Header View Type ──────────────────────────────────────────────────── */
@@ -599,9 +570,10 @@ export const LiveSessionPage: FunctionComponent = () => {
                         onDismissAttentionItem={handleDismissAttentionItem}
                         pendingActionIds={pendingActionIds}
                     >
-                        <LiveConnectionsSidebarCard />
+                        <ConnectionRuntimePanel />
                         <GitCIStatusPanel status={gitStatus} error={gitStatusError} />
-                        <AttentionQueuePanel />
+                        <AttentionLedger collapsible defaultOpen={hasSprintContext} />
+                        <ExecutionTimeline collapsible defaultOpen={hasSprintContext} />
                         <ExecutionRuntimePanel
                             collapsible
                             defaultOpen={hasSprintContext}

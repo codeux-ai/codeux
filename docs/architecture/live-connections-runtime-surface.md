@@ -65,14 +65,15 @@ This keeps live connection observability in the same payload as:
 
 ## Dashboard Behavior
 
-The v2 live experience now supports a dedicated sidebar-ready live-connections card that can replace the "Latest Activity" slot at the top of the sidebar without changing the runtime data contract.
+The v2 live experience now supports a dedicated sidebar-ready live-connections card that shares the execution timeline context and renders as a standalone card in the sidebar.
 
-The runtime panel still renders the embedded connection section for the full execution view, while the new card is self-contained for sidebar placement.
+The execution runtime card no longer embeds live connections, attention items, or the runtime timeline. Those surfaces now live as dedicated sidebar cards, which keeps the runtime panel focused on sprint runs and dispatches.
 
 It shows:
 
 - active vs offline connection state
 - listening vs worker role identity
+- manager/dashboard connection counts
 - transport and model metadata
 - worker machine metadata when available
 - pending inbox count

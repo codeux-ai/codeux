@@ -811,6 +811,48 @@ describe("LiveSessionPage Integration Isolation", () => {
             arch: "x64",
             localExecutionRuntime: "host",
           },
+          {
+            id: "conn-2",
+            role: "worker",
+            status: "online",
+            listenMode: false,
+            displayName: "Internal Worker",
+            transport: "streamable_http",
+            model: "gpt-5",
+            connectionKey: "worker-1",
+            lastHeartbeatAt: "2024-01-01T11:04:40Z",
+            pendingInboxCount: 0,
+            activeDispatchCount: 2,
+            threadCount: 4,
+            tasksRunCount: 6,
+            labels: ["worker"],
+            instruction: "Executes task dispatches for the selected project.",
+            machineName: "runner-b",
+            platform: "linux",
+            arch: "arm64",
+            localExecutionRuntime: "container",
+          },
+          {
+            id: "conn-3",
+            role: "project_manager",
+            status: "listening",
+            listenMode: true,
+            displayName: "Dashboard Manager",
+            transport: "websocket",
+            model: "gpt-5",
+            connectionKey: "manager-1",
+            lastHeartbeatAt: "2024-01-01T11:04:50Z",
+            pendingInboxCount: 2,
+            activeDispatchCount: 0,
+            threadCount: 1,
+            tasksRunCount: 3,
+            labels: ["dashboard"],
+            instruction: "Keeps the dashboard and operator view in sync.",
+            machineName: "dashboard",
+            platform: "linux",
+            arch: "x64",
+            localExecutionRuntime: "browser",
+          },
         ],
         attentionItems: [
           {
@@ -838,24 +880,35 @@ describe("LiveSessionPage Integration Isolation", () => {
 
     render(<LiveSessionPage />);
 
-    const liveConnections = screen.getAllByText("Live Connections").find((node) => node.closest("aside")) ?? null;
+    const liveConnections = screen.getByText("Live Connections");
     const gitCiPr = screen.getByText("Git / CI / PR");
     const attentionQueue = screen.getByText("Attention Queue");
+    const runtimeTimeline = screen.getByText("Runtime Timeline");
     const executionRuntime = screen.getByText("Execution Runtime");
 
-    expect(liveConnections).not.toBeNull();
+    expect(liveConnections).toBeInTheDocument();
     expect(gitCiPr).toBeInTheDocument();
     expect(attentionQueue).toBeInTheDocument();
+    expect(runtimeTimeline).toBeInTheDocument();
     expect(executionRuntime).toBeInTheDocument();
     expect(screen.getAllByText("Primary Listener").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Internal Worker").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Dashboard Manager").length).toBeGreaterThan(0);
     expect(screen.getByText("Review failing CI logs")).toBeInTheDocument();
+    expect(screen.getByText("active 3")).toBeInTheDocument();
+    expect(screen.getByText("listening 2")).toBeInTheDocument();
+    expect(screen.getByText("workers 1")).toBeInTheDocument();
+    expect(screen.getByText("manager 1")).toBeInTheDocument();
 
     expect(screen.queryByText("Latest Activity")).not.toBeInTheDocument();
     expect(screen.queryByText("Protocol")).not.toBeInTheDocument();
 
     expect(Boolean((liveConnections as HTMLElement).compareDocumentPosition(gitCiPr) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(Boolean(gitCiPr.compareDocumentPosition(attentionQueue) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(attentionQueue.compareDocumentPosition(executionRuntime) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(attentionQueue.compareDocumentPosition(runtimeTimeline) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(runtimeTimeline.compareDocumentPosition(executionRuntime) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+
+    expect(screen.getAllByText("Listening")).toHaveLength(2);
 
     const inProgressStatus = screen.getByText("IN_PROGRESS");
     expect(inProgressStatus).toBeInTheDocument();

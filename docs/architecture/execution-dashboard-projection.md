@@ -133,6 +133,7 @@ The v2 live page now renders an execution runtime panel showing:
 - queued and running worker dispatches
 - current lease owners
 - a DB-backed runtime timeline
+- Sprint Clock telemetry for finished, average-finished, accumulated stage time, and token totals, scoped to the relevant sprint run with dispatch usage preferred and sprint-run usage as fallback
 
 That makes multi-sprint and worker execution visible without reconstructing state from task markdown or process-local globals.
 
