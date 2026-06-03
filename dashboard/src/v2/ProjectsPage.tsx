@@ -584,7 +584,7 @@ export const ProjectsPage: FunctionComponent = () => {
                     </div>
 
                     {/* Header right */}
-                    <div className="flex flex-col items-end gap-4 shrink-0">
+                    <div className="flex items-end shrink-0">
                         {/* Status pills */}
                         <div className="flex items-center gap-2.5">
                             {runningCount > 0 && (
@@ -607,21 +607,6 @@ export const ProjectsPage: FunctionComponent = () => {
                                 {sources.length} Total
                             </div>
                         </div>
-
-                        {/* CTA */}
-                        <button
-                            onClick={() => setShowModal(true)}
-                            className="group flex items-center gap-2.5 px-6 py-3.5
-                                       bg-ember-500 hover:bg-ember-400
-                                       text-void-900 font-bold text-sm rounded-2xl
-                                       transition-colors duration-300
-                                       shadow-[0_4px_20px_rgba(255,184,0,0.25)]
-                                       hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)]
-                                       hover:-translate-y-px transition-[background-color,box-shadow,transform]"
-                        >
-                            <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" strokeWidth={2.5} />
-                            Add Project
-                        </button>
                     </div>
                 </div>
 
