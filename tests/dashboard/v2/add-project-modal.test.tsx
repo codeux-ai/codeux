@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 /** @jsx h */
 import { h } from "preact";
-import { render, screen, fireEvent, cleanup } from "@testing-library/preact";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { AddProjectModal } from "../../../dashboard/src/v2/components/ui/AddProjectModal.js";
@@ -70,6 +70,36 @@ describe("AddProjectModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /git url/i }));
 
     expect(dialogCard.style.minHeight).toBe("min(640px, calc(100vh - 2rem))");
+  });
+
+  it("preselects the new project flow and hides setup controls", () => {
+    render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} initialSourceType="new_project" />);
+
+    expect(screen.getByRole("button", { name: /new project/i })).toHaveClass("bg-ember-500");
+    expect(screen.getByRole("button", { name: /local repo/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /remote repo/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Initialize with Project Setup Agent/i)).not.toBeInTheDocument();
+  });
+
+  it("submits the new project local payload without setup fields", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} initialSourceType="new_project" />);
+
+    fireEvent.input(screen.getByLabelText("Project Name"), { target: { value: "Alpha" } });
+    fireEvent.input(screen.getByLabelText("Directory Path"), { target: { value: "/tmp/alpha" } });
+    await waitFor(() => expect(screen.getByLabelText("Project Name")).toHaveValue("Alpha"));
+    await waitFor(() => expect(screen.getByLabelText("Directory Path")).toHaveValue("/tmp/alpha"));
+    const form = screen.getByLabelText("Project Name").closest("form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(onAdd).toHaveBeenCalledWith({
+      name: "Alpha",
+      type: "new_project",
+      path: "/tmp/alpha",
+      initMode: "new-local",
+    });
   });
 
   it("browses into a directory and applies it to the local path input", async () => {

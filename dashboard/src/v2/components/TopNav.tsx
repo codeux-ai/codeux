@@ -9,7 +9,7 @@ import { BrandSection } from "./top-nav/BrandSection.js";
 import { GlobalSearch } from "./top-nav/GlobalSearch.js";
 import { TelemetryStats } from "./top-nav/TelemetryStats.js";
 
-import { AddProjectModal } from "./ui/AddProjectModal.js";
+import { AddProjectModal, type AddProjectModalSubmission } from "./ui/AddProjectModal.js";
 import { useProjectData } from "../context/project-data.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { formatSprintDisplay } from "../lib/format-sprint.js";
@@ -231,7 +231,19 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         return () => document.removeEventListener("mousedown", handler);
     }, []);
 
-    const handleCreateProject = async (project: { name: string; type: 'local' | 'git'; path: string; cloneDir?: string }) => {
+    const handleCreateProject = async (project: AddProjectModalSubmission) => {
+        if (project.type === 'new_project') {
+            await createProject({
+                name: project.name,
+                sourceType: project.initMode === 'new-local' ? 'local' : 'git',
+                sourceRef: project.path || project.name,
+                initMode: project.initMode,
+                remoteProvider: project.remoteProvider,
+                isPrivate: project.isPrivate,
+            });
+            return;
+        }
+
         await createProject({
             name: project.name,
             sourceType: project.type,

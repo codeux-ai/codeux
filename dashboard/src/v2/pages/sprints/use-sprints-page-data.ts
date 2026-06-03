@@ -9,6 +9,7 @@ import type {
   Task, 
   VirtualWorkerProvider
 } from "../../types.js";
+import type { AddProjectModalSubmission } from "../../components/ui/AddProjectModal.js";
 import type { SystemSettings } from "../../../types.js";
 import { fetchSystemSettings } from "../../lib/settings-api.js";
 import { getSystemIntegrationProviders } from "../../lib/settings-view-models.js";
@@ -71,12 +72,7 @@ const VIRTUAL_PROVIDER_LABELS: Record<string, string> = {
 };
 const DEFAULT_PLANNING_ETA_MS = 180000;
 
-type AddProjectDraft = {
-  name: string;
-  type: "local" | "git";
-  path: string;
-  cloneDir?: string;
-};
+type AddProjectDraft = AddProjectModalSubmission;
 
 const compareString = (left: string, right: string): number => (
   left.localeCompare(right, undefined, { sensitivity: "base" })
@@ -783,6 +779,18 @@ export function useSprintsPageData() {
   }, [selectedProject, reloadQuicksprintTemplates]);
 
   const handleAddProject = useCallback(async (project: AddProjectDraft): Promise<void> => {
+    if (project.type === "new_project") {
+      await createProject({
+        name: project.name,
+        sourceType: project.initMode === "new-local" ? "local" : "git",
+        sourceRef: project.path || project.name,
+        initMode: project.initMode,
+        remoteProvider: project.remoteProvider,
+        isPrivate: project.isPrivate,
+      });
+      return;
+    }
+
     await createProject({
       name: project.name,
       sourceType: project.type,
