@@ -151,7 +151,7 @@ export function bootDashboardRealtimeWebSocketServer(args: {
   realtimeService: DashboardRealtimeService;
   logger: Logger;
   shouldHandleRequest?: (req: IncomingMessage) => boolean;
-}): void {
+}): () => void {
   const clients = new Map<Socket, RealtimeClientState>();
 
   const unsubscribe = args.realtimeService.subscribe((event) => {
@@ -323,13 +323,22 @@ export function bootDashboardRealtimeWebSocketServer(args: {
     });
   };
 
-  args.server.on("upgrade", upgradeHandler);
-  args.server.on("close", () => {
+  const cleanup = () => {
     unsubscribe();
     args.server.off("upgrade", upgradeHandler);
+    args.server.off("close", serverCloseHandler);
     for (const client of clients.values()) {
       client.socket.destroy();
     }
     clients.clear();
-  });
+  };
+
+  const serverCloseHandler = () => {
+    cleanup();
+  };
+
+  args.server.on("upgrade", upgradeHandler);
+  args.server.on("close", serverCloseHandler);
+
+  return cleanup;
 }

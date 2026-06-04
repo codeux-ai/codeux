@@ -112,6 +112,14 @@ async function main() {
   });
   console.log('Initial metrics:', JSON.stringify(initialMetrics, null, 2));
 
+  const robustClick = async (locator) => {
+    try {
+      await locator.first().click({ force: true, timeout: 1500 });
+    } catch (err) {
+      await locator.first().evaluate((el) => el.click());
+    }
+  };
+
   console.log('\n--- 2. Page Navigation Benchmarking (Client-side) ---');
   const navigationTimes = {};
 
@@ -119,7 +127,7 @@ async function main() {
     const navStart = Date.now();
     const link = page.locator(`a[href="${route}"]:visible`);
     if (route !== '/' && (await link.count()) > 0) {
-      await link.first().click({ force: true });
+      await robustClick(link);
       await delay(1000); // 1s stabilization buffer for graphs, GSAP, etc.
       const duration = Date.now() - navStart;
       navigationTimes[route] = duration;
@@ -142,7 +150,7 @@ async function main() {
     for (const route of routes) {
       const link = page.locator(`a[href="${route}"]:visible`);
       if (route !== '/' && (await link.count()) > 0) {
-        await link.first().click({ force: true });
+        await robustClick(link);
         await delay(200); // Fast navigation delay
       } else {
         await page.goto(`${baseUrl}${route}`);
