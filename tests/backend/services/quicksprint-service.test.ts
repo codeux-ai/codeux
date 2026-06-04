@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import * as fs from "fs";
+import * as fs from "fs/promises";
 import * as path from "path";
 import { QuicksprintService } from "../../../src/services/quicksprint-service.js";
 import { BUILTIN_QUICKSPRINT_TEMPLATES } from "../../../src/domain/quicksprint/quicksprint-catalog.js";
 import type { CreateSprintInput, PlanSprintOptions, SprintRecord } from "../../../src/contracts/project-management-types.js";
 
-vi.mock("fs");
+vi.mock("fs/promises");
 vi.mock("crypto", () => ({
   randomUUID: () => "mocked-uuid-123",
 }));
@@ -21,11 +21,12 @@ describe("QuicksprintService", () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    // Default mock behavior for fs.existsSync to be true for dir
-    (fs.existsSync as any).mockReturnValue(true);
-
-    // Mock fs.statSync to return a default mtimeMs
-    (fs.statSync as any).mockReturnValue({ mtimeMs: 1000 });
+    (fs.mkdir as any).mockResolvedValue(undefined);
+    (fs.stat as any).mockResolvedValue({ mtimeMs: 1000 });
+    (fs.readdir as any).mockResolvedValue([]);
+    (fs.readFile as any).mockResolvedValue("");
+    (fs.writeFile as any).mockResolvedValue(undefined);
+    (fs.unlink as any).mockResolvedValue(undefined);
 
     createSprintMock = vi.fn().mockImplementation((pId, input) => ({
       id: "mocked-sprint-id",
@@ -39,25 +40,23 @@ describe("QuicksprintService", () => {
   });
 
   describe("listTemplates", () => {
-    it("should return built-in templates and custom templates if present", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-      (fs.readdirSync as any).mockReturnValue(["template1.json"]);
-      (fs.readFileSync as any).mockReturnValue(JSON.stringify({
+    it("should return built-in templates and custom templates if present", async () => {
+      (fs.readdir as any).mockResolvedValue(["template1.json"]);
+      (fs.readFile as any).mockResolvedValue(JSON.stringify({
         id: "qs-custom-template1",
         projectId,
         name: "Custom Template",
         isBuiltIn: false,
       }));
 
-      const templates = service.listTemplates(projectId);
+      const templates = await service.listTemplates(projectId);
       expect(templates.length).toBe(BUILTIN_QUICKSPRINT_TEMPLATES.length + 1);
       expect(templates.find(t => t.id === "qs-custom-template1")).toBeDefined();
     });
 
-    it("should return cached result if mtimeMs is unchanged", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-      (fs.readdirSync as any).mockReturnValue(["template1.json"]);
-      (fs.readFileSync as any).mockReturnValue(JSON.stringify({
+    it("should return cached result if mtimeMs is unchanged", async () => {
+      (fs.readdir as any).mockResolvedValue(["template1.json"]);
+      (fs.readFile as any).mockResolvedValue(JSON.stringify({
         id: "qs-custom-template1",
         projectId,
         name: "Custom Template",
@@ -65,56 +64,53 @@ describe("QuicksprintService", () => {
       }));
 
       // First call reads from disk
-      service.listTemplates(projectId);
-      expect(fs.readdirSync).toHaveBeenCalledTimes(1);
+      await service.listTemplates(projectId);
+      expect(fs.readdir).toHaveBeenCalledTimes(1);
 
       // Second call should return cached result
-      service.listTemplates(projectId);
-      expect(fs.readdirSync).toHaveBeenCalledTimes(1); // Not called again
+      await service.listTemplates(projectId);
+      expect(fs.readdir).toHaveBeenCalledTimes(1); // Not called again
 
       // Update mtimeMs, should read from disk again
-      (fs.statSync as any).mockReturnValue({ mtimeMs: 2000 });
-      service.listTemplates(projectId);
-      expect(fs.readdirSync).toHaveBeenCalledTimes(2);
+      (fs.stat as any).mockResolvedValue({ mtimeMs: 2000 });
+      await service.listTemplates(projectId);
+      expect(fs.readdir).toHaveBeenCalledTimes(2);
     });
 
-    it("should safely handle errors reading templates directory", () => {
-      (fs.statSync as any).mockImplementation(() => { throw new Error("Permission denied"); });
+    it("should safely handle errors reading templates directory", async () => {
+      (fs.stat as any).mockRejectedValue(new Error("Permission denied"));
 
-      const templates = service.listTemplates(projectId);
+      const templates = await service.listTemplates(projectId);
       expect(templates.length).toBe(BUILTIN_QUICKSPRINT_TEMPLATES.length);
     });
   });
 
   describe("getTemplate", () => {
-    it("should return a built-in template by id", () => {
-      const template = service.getTemplate(projectId, BUILTIN_QUICKSPRINT_TEMPLATES[0].id);
+    it("should return a built-in template by id", async () => {
+      const template = await service.getTemplate(projectId, BUILTIN_QUICKSPRINT_TEMPLATES[0].id);
       expect(template).toBeDefined();
       expect(template?.id).toBe(BUILTIN_QUICKSPRINT_TEMPLATES[0].id);
     });
 
-    it("should return a custom template by id", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-      (fs.readFileSync as any).mockReturnValue(JSON.stringify({
+    it("should return a custom template by id", async () => {
+      (fs.readFile as any).mockResolvedValue(JSON.stringify({
         id: "qs-custom-test",
         name: "Test",
       }));
 
-      const template = service.getTemplate(projectId, "qs-custom-test");
+      const template = await service.getTemplate(projectId, "qs-custom-test");
       expect(template?.name).toBe("Test");
     });
 
-    it("should return null if template not found", () => {
-      (fs.existsSync as any).mockReturnValue(false);
-      const template = service.getTemplate(projectId, "non-existent-id");
+    it("should return null if template not found", async () => {
+      (fs.readFile as any).mockRejectedValue(new Error("ENOENT"));
+      const template = await service.getTemplate(projectId, "non-existent-id");
       expect(template).toBeNull();
     });
   });
 
   describe("createCustomTemplate", () => {
-    it("should write a new template to disk and return it", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-
+    it("should write a new template to disk and return it", async () => {
       const input = {
         name: "My custom template",
         description: "Desc",
@@ -123,42 +119,40 @@ describe("QuicksprintService", () => {
         agentInstructionMarkdown: "Markdown here",
       };
 
-      const template = service.createCustomTemplate(projectId, input);
+      const template = await service.createCustomTemplate(projectId, input);
 
       expect(template.id).toBe("qs-custom-mocked-uuid-123");
       expect(template.name).toBe(input.name);
       expect(template.isBuiltIn).toBe(false);
 
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect(fs.writeFile).toHaveBeenCalledWith(
         path.join(`/mocked/base/dir/${projectId}/.quicksprints`, `${template.id}.json`),
         expect.any(String)
       );
     });
 
-    it("should invalidate the cache", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-      (fs.readdirSync as any).mockReturnValue(["template1.json"]);
-      (fs.readFileSync as any).mockReturnValue(JSON.stringify({
+    it("should invalidate the cache", async () => {
+      (fs.readdir as any).mockResolvedValue(["template1.json"]);
+      (fs.readFile as any).mockResolvedValue(JSON.stringify({
         id: "qs-custom-template1",
         projectId,
         name: "Custom Template",
         isBuiltIn: false,
       }));
 
-      service.listTemplates(projectId);
-      expect(fs.readdirSync).toHaveBeenCalledTimes(1);
+      await service.listTemplates(projectId);
+      expect(fs.readdir).toHaveBeenCalledTimes(1);
 
-      service.createCustomTemplate(projectId, { name: "Test", agentInstructionMarkdown: "Test" });
+      await service.createCustomTemplate(projectId, { name: "Test", agentInstructionMarkdown: "Test" });
 
-      service.listTemplates(projectId);
-      expect(fs.readdirSync).toHaveBeenCalledTimes(2);
+      await service.listTemplates(projectId);
+      expect(fs.readdir).toHaveBeenCalledTimes(2);
     });
   });
 
   describe("updateCustomTemplate", () => {
-    it("should update an existing custom template", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-      (fs.readFileSync as any).mockReturnValue(JSON.stringify({
+    it("should update an existing custom template", async () => {
+      (fs.readFile as any).mockResolvedValue(JSON.stringify({
         id: "qs-custom-123",
         name: "Old Name",
         description: "Old Desc",
@@ -168,84 +162,74 @@ describe("QuicksprintService", () => {
         name: "New Name",
       };
 
-      const template = service.updateCustomTemplate(projectId, "qs-custom-123", input);
+      const template = await service.updateCustomTemplate(projectId, "qs-custom-123", input);
 
       expect(template.name).toBe("New Name");
       expect(template.description).toBe("Old Desc");
-      expect(fs.writeFileSync).toHaveBeenCalled();
+      expect(fs.writeFile).toHaveBeenCalled();
     });
 
-    it("should invalidate the cache", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-      (fs.readdirSync as any).mockReturnValue(["template1.json"]);
-      (fs.readFileSync as any).mockReturnValue(JSON.stringify({
+    it("should invalidate the cache", async () => {
+      (fs.readdir as any).mockResolvedValue(["template1.json"]);
+      (fs.readFile as any).mockResolvedValue(JSON.stringify({
         id: "qs-custom-template1",
         projectId,
         name: "Custom Template",
         isBuiltIn: false,
       }));
 
-      service.listTemplates(projectId);
-      expect(fs.readdirSync).toHaveBeenCalledTimes(1);
+      await service.listTemplates(projectId);
+      expect(fs.readdir).toHaveBeenCalledTimes(1);
 
-      service.updateCustomTemplate(projectId, "qs-custom-template1", { name: "Test" });
+      await service.updateCustomTemplate(projectId, "qs-custom-template1", { name: "Test" });
 
-      service.listTemplates(projectId);
-      expect(fs.readdirSync).toHaveBeenCalledTimes(2);
+      await service.listTemplates(projectId);
+      expect(fs.readdir).toHaveBeenCalledTimes(2);
     });
 
-    it("should throw if trying to update a built-in template", () => {
-      expect(() => {
-        service.updateCustomTemplate(projectId, BUILTIN_QUICKSPRINT_TEMPLATES[0].id, { name: "test" });
-      }).toThrowError(/Cannot update built-in templates/);
+    it("should throw if trying to update a built-in template", async () => {
+      await expect(
+        service.updateCustomTemplate(projectId, BUILTIN_QUICKSPRINT_TEMPLATES[0].id, { name: "test" })
+      ).rejects.toThrowError(/Cannot update built-in templates/);
     });
 
-    it("should throw if custom template not found", () => {
-      (fs.existsSync as any).mockReturnValue(false); // Make getQuicksprintsDir happy somehow, actually getQuicksprintsDir creates if false but let's see.
-      // The updateCustomTemplate checks if the specific file exists.
+    it("should throw if custom template not found", async () => {
+      (fs.readFile as any).mockRejectedValue(new Error("ENOENT"));
 
-      // Let's mock existsSync carefully
-      (fs.existsSync as any).mockImplementation((pathStr: string) => {
-        if (pathStr.endsWith(".json")) return false; // File doesn't exist
-        return true; // Dir exists
-      });
-
-      expect(() => {
-        service.updateCustomTemplate(projectId, "qs-custom-123", { name: "test" });
-      }).toThrowError(/not found/);
+      await expect(
+        service.updateCustomTemplate(projectId, "qs-custom-123", { name: "test" })
+      ).rejects.toThrowError(/not found/);
     });
   });
 
   describe("deleteCustomTemplate", () => {
-    it("should unlink the file", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-      service.deleteCustomTemplate(projectId, "qs-custom-123");
-      expect(fs.unlinkSync).toHaveBeenCalled();
+    it("should unlink the file", async () => {
+      await service.deleteCustomTemplate(projectId, "qs-custom-123");
+      expect(fs.unlink).toHaveBeenCalled();
     });
 
-    it("should invalidate the cache", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-      (fs.readdirSync as any).mockReturnValue(["template1.json"]);
-      (fs.readFileSync as any).mockReturnValue(JSON.stringify({
+    it("should invalidate the cache", async () => {
+      (fs.readdir as any).mockResolvedValue(["template1.json"]);
+      (fs.readFile as any).mockResolvedValue(JSON.stringify({
         id: "qs-custom-template1",
         projectId,
         name: "Custom Template",
         isBuiltIn: false,
       }));
 
-      service.listTemplates(projectId);
-      expect(fs.readdirSync).toHaveBeenCalledTimes(1);
+      await service.listTemplates(projectId);
+      expect(fs.readdir).toHaveBeenCalledTimes(1);
 
-      service.deleteCustomTemplate(projectId, "qs-custom-123");
+      await service.deleteCustomTemplate(projectId, "qs-custom-123");
 
-      service.listTemplates(projectId);
-      expect(fs.readdirSync).toHaveBeenCalledTimes(2);
+      await service.listTemplates(projectId);
+      expect(fs.readdir).toHaveBeenCalledTimes(2);
     });
 
-    it("should throw if trying to delete a built-in template", () => {
-      expect(() => {
-        service.deleteCustomTemplate(projectId, BUILTIN_QUICKSPRINT_TEMPLATES[0].id);
-      }).toThrowError(/Cannot delete built-in templates/);
+    it("should throw if trying to delete a built-in template", async () => {
+      await expect(
+        service.deleteCustomTemplate(projectId, BUILTIN_QUICKSPRINT_TEMPLATES[0].id)
+      ).rejects.toThrowError(/Cannot delete built-in templates/);
     });
   });
 
@@ -275,7 +259,7 @@ describe("QuicksprintService", () => {
     });
 
     it("should throw if template does not exist", async () => {
-      (fs.existsSync as any).mockReturnValue(false);
+      (fs.readFile as any).mockRejectedValue(new Error("ENOENT"));
       await expect(
         service.executeQuicksprint(projectId, {
           templateId: "non-existent",
@@ -285,15 +269,11 @@ describe("QuicksprintService", () => {
       ).rejects.toThrowError(/not found/);
     });
   });
-  describe("Directory Creation", () => {
-    it("should create directory if it doesn't exist", () => {
-      (fs.existsSync as any).mockImplementation((pathStr: string) => {
-        if (pathStr.includes(".quicksprints")) return false;
-        return true;
-      });
 
-      service.listTemplates(projectId);
-      expect(fs.mkdirSync).toHaveBeenCalledWith(
+  describe("Directory Creation", () => {
+    it("should create directory if it doesn't exist", async () => {
+      await service.listTemplates(projectId);
+      expect(fs.mkdir).toHaveBeenCalledWith(
         path.join(`/mocked/base/dir/${projectId}`, ".quicksprints"),
         { recursive: true }
       );
@@ -301,25 +281,23 @@ describe("QuicksprintService", () => {
   });
 
   describe("Error branches during read", () => {
-    it("should ignore JSON parse errors in getTemplate", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-      (fs.readFileSync as any).mockReturnValue("invalid json");
+    it("should ignore JSON parse errors in getTemplate", async () => {
+      (fs.readFile as any).mockResolvedValue("invalid json");
 
-      const template = service.getTemplate(projectId, "qs-custom-invalid");
+      const template = await service.getTemplate(projectId, "qs-custom-invalid");
       expect(template).toBeNull();
     });
 
-    it("should ignore non-JSON files in listTemplates", () => {
-      (fs.existsSync as any).mockReturnValue(true);
-      (fs.readdirSync as any).mockReturnValue(["template1.json", "notjson.txt"]);
-      (fs.readFileSync as any).mockReturnValue(JSON.stringify({
+    it("should ignore non-JSON files in listTemplates", async () => {
+      (fs.readdir as any).mockResolvedValue(["template1.json", "notjson.txt"]);
+      (fs.readFile as any).mockResolvedValue(JSON.stringify({
         id: "qs-custom-template1",
         projectId,
         name: "Custom Template",
         isBuiltIn: false,
       }));
 
-      const templates = service.listTemplates(projectId);
+      const templates = await service.listTemplates(projectId);
       expect(templates.length).toBe(BUILTIN_QUICKSPRINT_TEMPLATES.length + 1);
     });
 
