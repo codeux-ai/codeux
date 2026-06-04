@@ -23,3 +23,10 @@ release/
 .antigravitycli*
 # Stray gitlink that recurs from running tools with HOME=~ inside the repo
 /~/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
