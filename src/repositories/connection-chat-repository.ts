@@ -122,8 +122,15 @@ export class ConnectionChatRepository {
     this.db = storage.getDatabase();
   }
 
-  listConnections(projectId: string): McpConnectionRecord[] {
+  listConnections(projectId: string, options?: { activeOnly?: boolean; limit?: number }): McpConnectionRecord[] {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
+    // The live dashboard snapshot only needs currently-relevant connections. A long-running
+    // project accumulates thousands of ephemeral, since-disconnected worker connections; returning
+    // them all balloons the realtime snapshot to multiple MB. `activeOnly`/`limit` bound it for the
+    // snapshot path while the connection-management REST endpoint keeps returning the full set.
+    const statusClause = options?.activeOnly ? `AND c.status NOT IN ('offline', 'stale')` : "";
+    const limit = options?.limit && options.limit > 0 ? Math.floor(options.limit) : null;
+    const limitClause = limit !== null ? `LIMIT ${limit}` : "";
     const rows = this.db.prepare(`
       WITH
       task_runs_stats AS (
@@ -182,7 +189,9 @@ export class ConnectionChatRepository {
         WHERE b.connection_id = c.id
           AND b.project_id = ?
       )
+      ${statusClause}
       ORDER BY COALESCE(c.last_heartbeat_at, c.updated_at) DESC, c.display_name ASC
+      ${limitClause}
     `).all(projectId, projectId, projectId, projectId, projectId, projectId) as unknown as ConnectionRow[];
 
     return this.sortConnections(this.inflateConnections(rows));

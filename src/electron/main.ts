@@ -22,6 +22,16 @@ if (isWindowsPackagedApp) {
   app.commandLine.appendSwitch("force-gpu-mem-available-mb", "512");
 }
 
+const isWsl = Boolean(process.env.WSL_DISTRO_NAME) || Boolean(process.env.WSL_INTEROP);
+
+if (isWsl) {
+  // Under WSLg the default X11 (Xwayland) path has no reliable vsync, so Chromium produces frames
+  // unbounded and the renderer/compositor busy-spin and peg the CPU. Preferring the native Wayland
+  // compositor (when present) restores proper frame pacing; "auto" falls back to X11 if Wayland is
+  // unavailable, so this is safe.
+  app.commandLine.appendSwitch("ozone-platform-hint", "auto");
+}
+
 if (process.env.WSL_DISTRO_NAME && process.env.CODE_UX_WSL_DISABLE_GPU === "1") {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch("disable-gpu");
@@ -134,11 +144,11 @@ function createMainWindow(url: string): BrowserWindow {
       nodeIntegration: false,
       sandbox: false,
       preload: preloadPath,
-      // Keep timers and requestAnimationFrame running when the window is blurred,
-      // occluded, or minimized. The dashboard coalesces realtime updates onto a rAF;
-      // with the default throttling those updates stall while the window is in the
-      // background, making the app appear frozen until it is refocused.
-      backgroundThrottling: false,
+      // Leave backgroundThrottling at its default (true): when the window is blurred/occluded,
+      // Chromium throttles rAF and timers, which is essential under software rendering (e.g. WSL,
+      // where there is no vsync) — without it, the animation loops busy-spin and peg the CPU even
+      // while the window is in the background. Realtime freshness while backgrounded is handled by
+      // the timer fallback in use-realtime-resource's coalescer, so updates are never stranded.
     },
   });
 

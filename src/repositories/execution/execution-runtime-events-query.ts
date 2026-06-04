@@ -6,9 +6,16 @@ import type { ExecutionRuntimeEventSummaryRow } from "./execution-repository-typ
 // status-signature change (they only carry `{ previousSignature, signature }` diagnostic strings).
 // Nothing in the dashboard or the human-intervention summary reads them, yet because they are
 // emitted so frequently they dominated the live snapshot payload (hundreds of KB → >1MB pushes
-// that froze the browser tab). Exclude them from the live runtime-event feed entirely. Other event
-// types are emitted on discrete lifecycle moments, so the active-sprint-run feed stays bounded by
-// real activity without an artificial cap (which would drop a parallel run's events).
+// that froze the browser tab). Exclude them from the live runtime-event feed entirely.
+//
+// The expanded-sprint-run feed is also capped: a single long or chatty sprint run can accumulate
+// thousands of task-run events, and pulling them all balloons the realtime snapshot to several MB,
+// which the renderer re-parses on every tick and freezes the app. The live feed only needs recent
+// activity (full history is available on demand elsewhere), so each active run contributes at most
+// `EXPANDED_EVENTS_PER_RUN_LIMIT` recent events and the merged feed is capped at `MAX_RUNTIME_EVENTS`.
+const EXPANDED_EVENTS_PER_RUN_LIMIT = 240;
+const MAX_RUNTIME_EVENTS = 300;
+
 export function queryExecutionRuntimeEvents(
   db: DatabaseAdapter,
   storage: AppDbStorage,
@@ -135,7 +142,8 @@ export function queryExecutionRuntimeEvents(
         AND tr.sprint_run_id`,
       sqlSuffix: `
         AND tre.event_type != 'status_sync'
-      ORDER BY tre.created_at DESC, tre.id DESC`,
+      ORDER BY tre.created_at DESC, tre.id DESC
+      LIMIT ${EXPANDED_EVENTS_PER_RUN_LIMIT}`,
       items: expandedSprintRunIds,
       bindParamsBefore: [projectId],
     })
@@ -145,7 +153,9 @@ export function queryExecutionRuntimeEvents(
   for (const row of [...expandedSprintTaskEvents, ...recentEvents]) {
     recentEventById.set(row.id, row);
   }
-  return [...recentEventById.values()].sort((left, right) => {
-    return right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id);
-  });
+  return [...recentEventById.values()]
+    .sort((left, right) => {
+      return right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id);
+    })
+    .slice(0, MAX_RUNTIME_EVENTS);
 }

@@ -96,7 +96,11 @@ const AppLayout = () => {
   const reducedMotion = appearanceSettings?.reducedMotion || "AUTO";
   const backgroundPattern = appearanceSettings?.backgroundPattern || "HEXAGONS";
   const backgroundImage = appearanceSettings?.backgroundImage;
-  const backgroundMode = appearanceSettings?.backgroundMode || "ANIMATED";
+  // On a low-power render profile (e.g. the desktop app under WSL, where the GPU is software-only
+  // and requestAnimationFrame has no vsync to pace it) the animated WebGL/canvas backgrounds
+  // busy-spin and peg the renderer, freezing the app. Force the static background there.
+  const lowPowerRenderer = typeof window !== "undefined" && window.codeUxDesktop?.renderProfile === "low-power";
+  const backgroundMode = lowPowerRenderer ? "STATIC" : (appearanceSettings?.backgroundMode || "ANIMATED");
   const animatedBackground = appearanceSettings?.animatedBackground || "deep-ocean";
   const staticBackgroundColor = appearanceSettings?.staticBackgroundColor || "#0d0f12";
   const zoomLevel = appearanceSettings?.zoomLevel ?? 1;
