@@ -142,7 +142,7 @@ export const getOnboardingRuntimeReadiness = async (settings: SystemSettings): P
     return cachedReadiness;
   }
 
-  const [dockerCli, dockerDaemon, gitCli, providerStatuses] = await Promise.all([
+  const [dockerCli, gitCli, providerStatuses] = await Promise.all([
     runCheck(
       "docker-cli",
       "Docker CLI",
@@ -150,14 +150,6 @@ export const getOnboardingRuntimeReadiness = async (settings: SystemSettings): P
       ["--version"],
       true,
       "Install Docker Desktop or Docker Engine, then make sure the `docker` command is available on PATH.",
-    ),
-    runCheck(
-      "docker-daemon",
-      "Docker daemon",
-      "docker",
-      ["info", "--format", "{{json .ServerVersion}}"],
-      true,
-      "Start Docker Desktop or the Docker Engine service, then retry once `docker ps` succeeds.",
     ),
     runCheck(
       "git-cli",
@@ -169,6 +161,28 @@ export const getOnboardingRuntimeReadiness = async (settings: SystemSettings): P
     ),
     getProviderCredentialStatuses(settings),
   ]);
+
+  let dockerDaemon: OnboardingDependencyCheck;
+  if (dockerCli.status === "ready") {
+    dockerDaemon = await runCheck(
+      "docker-daemon",
+      "Docker daemon",
+      "docker",
+      ["info", "--format", "{{json .ServerVersion}}"],
+      true,
+      "Start Docker Desktop or the Docker Engine service, then retry once `docker ps` succeeds.",
+    );
+  } else {
+    dockerDaemon = {
+      id: "docker-daemon",
+      label: "Docker daemon",
+      status: "missing",
+      required: true,
+      description: "Docker daemon is not available because Docker CLI is missing.",
+      resolution: "Start Docker Desktop or the Docker Engine service, then retry once `docker ps` succeeds.",
+      detail: "Docker CLI is missing or failed check. Skipping daemon connection test.",
+    };
+  }
 
   const dependencies = [dockerCli, dockerDaemon, gitCli];
   const requiredMissing = dependencies.some((dependency) => dependency.required && dependency.status === "missing");
