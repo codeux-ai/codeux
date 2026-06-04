@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { prefetchRoute } from "../../router/route-prefetch.js";
 import gsap from "gsap";
 import { Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, MessageCircle, ChevronLeft, ChevronRight, CalendarDays, FolderTree } from "lucide-preact";
 import { useProjectData } from "../../context/project-data.js";
@@ -166,6 +167,9 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                             key={item.label}
                             to={item.path}
                             onClick={isMobile ? onClose : undefined}
+                            onMouseEnter={() => prefetchRoute(item.path)}
+                            onPointerDown={() => prefetchRoute(item.path)}
+                            onFocus={() => prefetchRoute(item.path)}
                             aria-current={isActive ? "page" : undefined}
                             data-tour-id={`nav-${item.label.toLowerCase()}`}
                             className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-3 min-h-[44px] rounded-2xl transition-all duration-300 group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none`}
@@ -200,10 +204,13 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
             {/* Settings & Toggle */}
             <div className="relative z-10 flex flex-col">
-                <Link 
-                    to="/config" 
+                <Link
+                    to="/config"
                     onClick={isMobile ? onClose : undefined}
-                    aria-label="Settings" 
+                    onMouseEnter={() => prefetchRoute("/config")}
+                    onPointerDown={() => prefetchRoute("/config")}
+                    onFocus={() => prefetchRoute("/config")}
+                    aria-label="Settings"
                     data-tour-id="nav-config" 
                     className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-3 min-h-[44px] rounded-2xl transition-all duration-300 group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none`}
                 >

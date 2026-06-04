@@ -12,6 +12,7 @@ import { SprintStatsDeck, useLiveTaskTimingSummaries } from "./components/Sprint
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
+import { useProjectGitStatus } from "./hooks/use-project-git-status.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
 import { formatTime } from "../lib/time.js";
@@ -84,18 +85,22 @@ export const LiveSessionPage: FunctionComponent = () => {
     const {
         error,
         execution,
-        gitStatus,
-        gitStatusError,
         initialLoadComplete,
         transportState,
         isRecovering,
         snapshotUpdatedAt,
         refreshRuntimeStatus,
-        refreshGitStatus,
         selectedSprintId,
         status,
         tasksWithLiveActivities,
     } = useDashboardRuntimeData(selectedProjectId, !projectsLoading && !!selectedProjectId);
+    // Git/CI/PR status lives on its own dedicated channel — it is large/slow and only rendered here,
+    // so it no longer rides the shared live snapshot every page parses.
+    const {
+        data: gitStatus,
+        error: gitStatusError,
+        refresh: refreshGitStatus,
+    } = useProjectGitStatus(selectedProjectId, !projectsLoading && !!selectedProjectId);
     const realtimeProjectId = selectedProjectId || execution.projectId || status.project_id || null;
     const sprintScopeId = selectedSprintId || status.sprint_id || null;
     const { selectedSession } = usePreviewSessions({

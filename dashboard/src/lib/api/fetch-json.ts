@@ -1,5 +1,8 @@
 export const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(path, init);
+  const response = await fetch(path, {
+    ...init,
+    cache: init?.cache ?? "no-store",
+  });
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
     const errorMessage = typeof errorBody?.error === "string" ? errorBody.error : `Request failed: ${path}`;

@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useEffect, useState, useLayoutEffect, useCallback } from "preact/hooks";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { prefetchRoute } from "../router/route-prefetch.js";
 import { MessageCircle, Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, CalendarDays, FolderTree } from "lucide-preact";
 import gsap from "gsap";
 import { useProjectData } from "../context/project-data.js";
@@ -195,6 +196,9 @@ export const KineticDock: FunctionComponent = () => {
                 key={item.label}
                 to={item.path}
                 ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
+                onMouseEnter={() => prefetchRoute(item.path)}
+                onPointerDown={() => prefetchRoute(item.path)}
+                onFocus={() => prefetchRoute(item.path)}
                 data-tour-id={`nav-${item.label.toLowerCase()}`}
                 className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] rounded-[1.4rem] transition-colors duration-300 decoration-none"
             >

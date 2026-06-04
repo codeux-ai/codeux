@@ -209,6 +209,10 @@ export class SettingsRepository {
     return { onboardingCompletedAt: null };
   }
 
+  close(): void {
+    this.storage.close();
+  }
+
   private migrateLegacySettingsIfNeeded(): void {
     if (this.storage.readSystemPayload()) {
       return;

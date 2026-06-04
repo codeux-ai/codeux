@@ -3,6 +3,7 @@ import type {
   DashboardRealtimeScopeType,
   DashboardStatus,
   ExecutionDashboardSnapshot,
+  GitTrackingStatus,
   OverviewTelemetrySnapshot,
 } from "../contracts/app-types.js";
 import type { ProjectCollectionResponse } from "../contracts/project-management-types.js";
@@ -19,6 +20,12 @@ export interface DashboardRealtimeSnapshotLoaders {
   getProjectExecutionSnapshot: (projectId: string) => MaybePromise<ExecutionDashboardSnapshot>;
   getProjectStatusSnapshot: (projectId: string) => MaybePromise<DashboardStatus>;
   getProjectLiveSnapshot: (projectId: string) => MaybePromise<import("../contracts/app-types.js").ProjectLiveDashboardSnapshot>;
+  /**
+   * Git/CI/PR status for a project. Published on the dedicated, slow-cadence `project.git.updated`
+   * channel (consumed only by the Live page) so the large, slow git payload never rides the hot
+   * `project.live.updated` ticks. Optional so existing loader wirings/tests stay valid.
+   */
+  getProjectGitStatus?: (projectId: string) => MaybePromise<GitTrackingStatus | null>;
   getOverviewTelemetrySnapshot: () => MaybePromise<OverviewTelemetrySnapshot>;
 }
 
@@ -34,6 +41,7 @@ type DashboardRealtimeListener = (event: DashboardRealtimeEvent) => void;
 
 const DEFAULT_FLUSH_DELAY_MS = 75;
 const PROJECT_LIVE_MIN_INTERVAL_MS = 100;
+const PROJECT_GIT_MIN_INTERVAL_MS = 5_000;
 const PROJECT_EXECUTION_MIN_INTERVAL_MS = 300;
 const PROJECT_RUNTIME_STATUS_MIN_INTERVAL_MS = 250;
 const PROJECT_STRUCTURE_MIN_INTERVAL_MS = 250;
@@ -43,10 +51,12 @@ const OVERVIEW_MIN_INTERVAL_MS = 1_000;
 export class DashboardRealtimeService implements DashboardRealtimeMutationNotifier {
   private readonly listeners = new Set<DashboardRealtimeListener>();
   private readonly pendingProjectLiveIds = new Set<string>();
+  private readonly pendingProjectGitIds = new Set<string>();
   private readonly pendingProjectIds = new Set<string>();
   private readonly pendingProjectStatusIds = new Set<string>();
   private readonly pendingProjectStructureIds = new Set<string>();
   private readonly projectLivePublishedAt = new Map<string, number>();
+  private readonly projectGitPublishedAt = new Map<string, number>();
   private readonly projectExecutionPublishedAt = new Map<string, number>();
   private readonly projectRuntimeStatusPublishedAt = new Map<string, number>();
   private readonly projectStructurePublishedAt = new Map<string, number>();
@@ -179,6 +189,21 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     this.scheduleFlush();
   }
 
+  /**
+   * Schedule a publish of the project's git/CI/PR status on the dedicated `project.git.updated`
+   * channel. Kept separate from the live tick so the slow, large git payload is throttled hard
+   * and only reaches the Live page (which subscribes to this event), and only when it changes.
+   */
+  scheduleProjectGitRefresh(projectId: string): void {
+    const normalizedProjectId = String(projectId || "").trim();
+    if (!normalizedProjectId) {
+      return;
+    }
+
+    this.pendingProjectGitIds.add(normalizedProjectId);
+    this.scheduleFlush();
+  }
+
   scheduleOverviewRefresh(): void {
     this.pendingOverview = true;
     this.scheduleFlush();
@@ -221,6 +246,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     const loaders = this.snapshotLoaders;
     if (!loaders) {
       this.pendingProjectLiveIds.clear();
+      this.pendingProjectGitIds.clear();
       this.pendingProjectIds.clear();
       this.pendingProjectStatusIds.clear();
       this.pendingProjectStructureIds.clear();
@@ -232,12 +258,14 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     const now = Date.now();
     let nextDelayMs: number | null = null;
     const projectLiveIds = [...this.pendingProjectLiveIds];
+    const projectGitIds = [...this.pendingProjectGitIds];
     const projectIds = [...this.pendingProjectIds];
     const projectStatusIds = [...this.pendingProjectStatusIds];
     const projectStructureIds = [...this.pendingProjectStructureIds];
     const shouldPublishProjects = this.pendingProjects;
     const shouldPublishOverview = this.pendingOverview;
     this.pendingProjectLiveIds.clear();
+    this.pendingProjectGitIds.clear();
     this.pendingProjectIds.clear();
     this.pendingProjectStatusIds.clear();
     this.pendingProjectStructureIds.clear();
@@ -325,6 +353,53 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
             this.projectLivePublishedAt.set(projectId, now);
           } catch (error) {
             this.logger.error("Failed to publish project live realtime snapshot", {
+              projectId,
+              error,
+            });
+          }
+        })()
+      );
+    }
+
+    for (const projectId of projectGitIds) {
+      const loadGit = loaders.getProjectGitStatus;
+      if (!loadGit) {
+        break;
+      }
+      const lastPublishedAt = this.projectGitPublishedAt.get(projectId) ?? 0;
+      const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_GIT_MIN_INTERVAL_MS, now);
+      if (waitMs > 0) {
+        this.pendingProjectGitIds.add(projectId);
+        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
+        continue;
+      }
+
+      publishTasks.push(
+        (async () => {
+          try {
+            const gitStatus = await Promise.resolve(loadGit(projectId));
+            const fingerprint = this.getFingerprint(gitStatus);
+            const cacheKey = `project:${projectId}:project.git.updated`;
+
+            if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
+              this.projectGitPublishedAt.set(projectId, now);
+              return;
+            }
+
+            this.publishRawEvent({
+              scopeType: "project",
+              scopeId: projectId,
+              eventType: "project.git.updated",
+              entityType: "project_git",
+              entityId: projectId,
+              projectId,
+              payload: gitStatus,
+              replayable: false,
+            });
+            this.lastPayloadFingerprints.set(cacheKey, fingerprint);
+            this.projectGitPublishedAt.set(projectId, now);
+          } catch (error) {
+            this.logger.error("Failed to publish project git realtime snapshot", {
               projectId,
               error,
             });

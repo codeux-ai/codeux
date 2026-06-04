@@ -96,7 +96,11 @@ const AppLayout = () => {
   const reducedMotion = appearanceSettings?.reducedMotion || "AUTO";
   const backgroundPattern = appearanceSettings?.backgroundPattern || "HEXAGONS";
   const backgroundImage = appearanceSettings?.backgroundImage;
-  const backgroundMode = appearanceSettings?.backgroundMode || "ANIMATED";
+  // On a low-power render profile (e.g. the desktop app under WSL, where the GPU is software-only
+  // and requestAnimationFrame has no vsync to pace it) the animated WebGL/canvas backgrounds
+  // busy-spin and peg the renderer, freezing the app. Force the static background there.
+  const lowPowerRenderer = typeof window !== "undefined" && window.codeUxDesktop?.renderProfile === "low-power";
+  const backgroundMode = lowPowerRenderer ? "STATIC" : (appearanceSettings?.backgroundMode || "ANIMATED");
   const animatedBackground = appearanceSettings?.animatedBackground || "deep-ocean";
   const staticBackgroundColor = appearanceSettings?.staticBackgroundColor || "#0d0f12";
   const zoomLevel = appearanceSettings?.zoomLevel ?? 1;
@@ -346,7 +350,9 @@ const notFoundRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, schedulerRoute, configRoute, memoryRoute, browserRoute, fileBrowserRoute, liveRoute, notFoundRoute]);
-const router = createRouter({ routeTree });
+// `defaultPreload: "intent"` warms route matching on hover/focus; the page chunks themselves are
+// prefetched explicitly by the nav components via prefetchRoute() since they are Preact-lazy.
+const router = createRouter({ routeTree, defaultPreload: "intent", defaultPreloadDelay: 50 });
 
 // 4. Entry
 const Root = () => <RouterProvider router={router} />;

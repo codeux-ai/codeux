@@ -276,6 +276,13 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
       return;
     }
 
+    const purpose = inferPurpose({ ...(bindings || {}), ...(metadata || {}) }, message);
+    const willWriteToConsole = shouldLogToConsole(level, purpose);
+    const willWriteToFile = Boolean(logFileStream);
+    if (!willWriteToConsole && !willWriteToFile) {
+      return;
+    }
+
     const correlationId = getCorrelationId();
     const normalizedBindings = normalizeMetadata(bindings);
     const normalizedMetadata = normalizeMetadata(metadata);
@@ -286,7 +293,6 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
         }
       : undefined;
 
-    const purpose = inferPurpose({ ...(bindings || {}), ...(metadata || {}) }, message);
     const record: StructuredLogRecord = {
       timestamp: new Date().toISOString(),
       level,

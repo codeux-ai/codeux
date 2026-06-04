@@ -17,7 +17,7 @@ describe("fetchJson", () => {
 
     const result = await fetchJson("/api/test");
     expect(result).toEqual(mockData);
-    expect(fetch).toHaveBeenCalledWith("/api/test", undefined);
+    expect(fetch).toHaveBeenCalledWith("/api/test", { cache: "no-store" });
   });
 
   it("should handle empty response body", async () => {
@@ -74,6 +74,18 @@ describe("fetchJson", () => {
     } as any);
 
     await fetchJson("/api/abort", { signal: controller.signal });
-    expect(fetch).toHaveBeenCalledWith("/api/abort", { signal: controller.signal });
+    expect(fetch).toHaveBeenCalledWith("/api/abort", { signal: controller.signal, cache: "no-store" });
+  });
+
+  it("preserves an explicit cache policy", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => "{}",
+    } as any);
+
+    await fetchJson("/api/cache", { cache: "reload" });
+    expect(fetch).toHaveBeenCalledWith("/api/cache", { cache: "reload" });
   });
 });

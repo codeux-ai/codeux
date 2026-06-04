@@ -114,6 +114,10 @@ vi.mock("../../../dashboard/src/hooks/use-dashboard-runtime-data.js", () => ({
   }),
 }));
 
+vi.mock("../../../dashboard/src/v2/hooks/use-project-git-status.js", () => ({
+  useProjectGitStatus: () => ({ data: null, loading: false, error: null, refresh: refreshGitStatusMock }),
+}));
+
 vi.mock("../../../dashboard/src/v2/hooks/use-live-session-actions.js", () => ({
   useLiveSessionActions: () => ({
     rerunningIds: new Set<string>(),

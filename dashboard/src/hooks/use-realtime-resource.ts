@@ -125,15 +125,21 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
   const fetchIdRef = useRef<number>(0);
   const activeSilentFetchPromiseRef = useRef<Promise<void> | null>(null);
 
-const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal?: AbortSignal }): Promise<void> => {
+  const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal?: AbortSignal }): Promise<void> => {
     // Determine if we show a foreground loading spinner.
     // Only show on the very first fetch if not suppressed.
     // Subsequent polls/realtime refreshes update data silently.
     const isForeground = !refreshOptions?.silent && !hasLoadedRef.current;
+    const shouldDedupeSilentFetch = refreshOptions?.silent && !refreshOptions?.signal;
 
-    // Dedupe silent fetches
-    if (refreshOptions?.silent && !refreshOptions?.signal && activeSilentFetchPromiseRef.current) {
+    // Dedupe silent fetches. Any non-deduped fetch supersedes an older silent
+    // request, so clear the old promise up front; otherwise a later silent
+    // invalidation can get stuck returning an already-aborted request forever.
+    if (shouldDedupeSilentFetch && activeSilentFetchPromiseRef.current) {
       return activeSilentFetchPromiseRef.current;
+    }
+    if (!shouldDedupeSilentFetch) {
+      activeSilentFetchPromiseRef.current = null;
     }
 
     if (abortControllerRef.current) {
@@ -200,7 +206,7 @@ const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal
       }
     })();
 
-    if (refreshOptions?.silent && !refreshOptions?.signal) {
+    if (shouldDedupeSilentFetch) {
       activeSilentFetchPromiseRef.current = fetchPromise;
     }
 
@@ -258,9 +264,19 @@ const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal
   // rAF collapses a burst into a single render while always converging on the newest snapshot.
   const pendingDirectPayloadRef = useRef<{ value: T } | null>(null);
   const directUpdateFrameRef = useRef<number | null>(null);
+  const directUpdateTimeoutRef = useRef<number | null>(null);
 
   const flushDirectUpdate = useCallback(() => {
+    if (typeof window !== "undefined") {
+      if (directUpdateFrameRef.current !== null) {
+        window.cancelAnimationFrame(directUpdateFrameRef.current);
+      }
+      if (directUpdateTimeoutRef.current !== null) {
+        window.clearTimeout(directUpdateTimeoutRef.current);
+      }
+    }
     directUpdateFrameRef.current = null;
+    directUpdateTimeoutRef.current = null;
     const pending = pendingDirectPayloadRef.current;
     if (!pending) {
       return;
@@ -279,21 +295,34 @@ const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal
 
   const scheduleDirectUpdate = useCallback((payload: T) => {
     pendingDirectPayloadRef.current = { value: payload };
-    if (directUpdateFrameRef.current !== null) {
-      return;
-    }
     if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
       flushDirectUpdate();
       return;
     }
-    directUpdateFrameRef.current = window.requestAnimationFrame(() => flushDirectUpdate());
+    if (directUpdateFrameRef.current === null) {
+      directUpdateFrameRef.current = window.requestAnimationFrame(() => flushDirectUpdate());
+    }
+    // rAF is paused entirely when the window/tab is occluded, backgrounded, or minimized
+    // (Electron throttles it aggressively), which would strand the latest payload until the
+    // window is refocused — the app appears frozen. A timeout fallback guarantees the buffered
+    // update still lands within a bounded delay even when no frame is ever painted.
+    if (directUpdateTimeoutRef.current === null) {
+      directUpdateTimeoutRef.current = window.setTimeout(() => flushDirectUpdate(), 250);
+    }
   }, [flushDirectUpdate]);
 
   useEffect(() => {
     return () => {
-      if (directUpdateFrameRef.current !== null && typeof window !== "undefined") {
+      if (typeof window === "undefined") {
+        return;
+      }
+      if (directUpdateFrameRef.current !== null) {
         window.cancelAnimationFrame(directUpdateFrameRef.current);
         directUpdateFrameRef.current = null;
+      }
+      if (directUpdateTimeoutRef.current !== null) {
+        window.clearTimeout(directUpdateTimeoutRef.current);
+        directUpdateTimeoutRef.current = null;
       }
     };
   }, []);

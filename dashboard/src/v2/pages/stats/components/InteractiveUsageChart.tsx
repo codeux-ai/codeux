@@ -242,16 +242,26 @@ export const InteractiveUsageChart: FunctionComponent<{
     const cards = Array.from(panelRef.current.querySelectorAll<HTMLElement>("[data-chart-card]"));
 
     const timeline = gsap.timeline();
-    gsap.set(areas, { opacity: 0 });
-    gsap.set(pointsNodes, { opacity: 0, scale: 0.35, transformOrigin: "center center" });
+    if (areas.length > 0) {
+      gsap.set(areas, { opacity: 0 });
+    }
+    if (pointsNodes.length > 0) {
+      gsap.set(pointsNodes, { opacity: 0, scale: 0.35, transformOrigin: "center center" });
+    }
     paths.forEach((path) => {
       const length = path.getTotalLength();
       gsap.set(path, { strokeDasharray: `${length} ${length}`, strokeDashoffset: length });
       timeline.to(path, { strokeDashoffset: 0, duration: 1.05, ease: "power3.out", clearProps: "strokeDashoffset,strokeDasharray" }, 0);
     });
-    timeline.to(areas, { opacity: (_index, target) => Number((target as SVGPathElement).dataset.areaOpacity || "0.3"), duration: 0.7, stagger: 0.08, ease: "power2.out" }, 0.18);
-    timeline.to(pointsNodes, { opacity: 1, scale: 1, duration: 0.38, stagger: 0.012, ease: "back.out(1.8)" }, 0.3);
-    timeline.fromTo(cards, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.55, stagger: 0.05, ease: "power3.out" }, 0.18);
+    if (areas.length > 0) {
+      timeline.to(areas, { opacity: (_index, target) => Number((target as SVGPathElement).dataset.areaOpacity || "0.3"), duration: 0.7, stagger: 0.08, ease: "power2.out" }, 0.18);
+    }
+    if (pointsNodes.length > 0) {
+      timeline.to(pointsNodes, { opacity: 1, scale: 1, duration: 0.38, stagger: 0.012, ease: "back.out(1.8)" }, 0.3);
+    }
+    if (cards.length > 0) {
+      timeline.fromTo(cards, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.55, stagger: 0.05, ease: "power3.out" }, 0.18);
+    }
 
     return () => timeline.kill();
   }, [enabledSeries, visibleBuckets.length, stats.range.from, stats.range.to]);

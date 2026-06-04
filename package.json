@@ -32,6 +32,7 @@
     "electron:dist:linux": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --config electron-builder.config.cjs --linux",
     "electron:dist:mac": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --config electron-builder.config.cjs --mac",
     "electron:dist:win": "pnpm run build && pnpm run electron:prepare-deps && electron-builder --config electron-builder.config.cjs --win",
+    "electron:benchmark:runtime": "node scripts/benchmark-electron-runtime.mjs",
     "electron:benchmark:win": "node scripts/benchmark-electron-windows.mjs",
     "electron:install-deps": "electron-builder install-app-deps",
     "test": "vitest run",

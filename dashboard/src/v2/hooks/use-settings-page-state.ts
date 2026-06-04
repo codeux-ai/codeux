@@ -228,7 +228,7 @@ export const useSettingsPageState = (
 
       if (selectedProjectId) {
         const [effectiveProject, projectAgentPresets] = await Promise.all([
-          fetchProjectEffectiveSettings(selectedProjectId),
+          fetchProjectEffectiveSettings(selectedProjectId, { cache: "reload" }),
           fetchAgentPresets(selectedProjectId).catch(() => []),
         ]);
         const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
@@ -313,9 +313,12 @@ export const useSettingsPageState = (
       : false
   ), [projectSettings, savedProjectSettings]);
 
-  useEffect(() => {
-    isDirtyRef.current = systemDirty || projectDirty;
-  }, [systemDirty, projectDirty]);
+  // Keep the dirty flag in sync synchronously rather than in a post-commit effect.
+  // `loadSettings` reads `isDirtyRef.current` to decide whether to preserve in-progress
+  // edits; with an effect, a background reload landing in the one-render gap after the
+  // user's first keystroke would still read `false`, overwrite the edit with server state,
+  // and leave the Save button greyed out. Assigning during render closes that gap.
+  isDirtyRef.current = systemDirty || projectDirty;
 
   const editableSettings = activeScope === "system" ? systemSettings?.defaults ?? null : projectSettings;
   const activeCategoryConfig = categories.find((category) => category.id === activeCategory) ?? categories[0]!;
@@ -412,7 +415,7 @@ export const useSettingsPageState = (
         setSavedSystemSettings(cloneSystemSettings(saved));
 
         if (selectedProject) {
-          const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id);
+          const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id, { cache: "reload" });
           const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
           setProjectSettings(cloneProjectSettings(nextProject));
           setSavedProjectSettings(cloneProjectSettings(nextProject));
@@ -430,7 +433,7 @@ export const useSettingsPageState = (
       setSavingProject(true);
       try {
         await saveProjectSettings(selectedProject.id, projectSettings);
-        const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id);
+        const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id, { cache: "reload" });
         const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
         setProjectSettings(cloneProjectSettings(nextProject));
         setSavedProjectSettings(cloneProjectSettings(nextProject));
@@ -470,7 +473,7 @@ export const useSettingsPageState = (
     setResettingProject(true);
     try {
       await resetProjectSettings(selectedProject.id);
-      const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id);
+      const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id, { cache: "reload" });
       const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
       setProjectSettings(cloneProjectSettings(nextProject));
       setSavedProjectSettings(cloneProjectSettings(nextProject));

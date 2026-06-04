@@ -155,7 +155,9 @@ export class DashboardSnapshotCache {
     const baseSnapshot = this.deps.executionRepository.getProjectExecutionSnapshot(projectId);
     const snapshot = {
       ...baseSnapshot,
-      connections: mapExecutionConnections(this.deps.connectionChatRepository.listConnections(projectId)),
+      connections: mapExecutionConnections(
+        this.deps.connectionChatRepository.listConnections(projectId, { activeOnly: true, limit: 100 }),
+      ),
       ...assignedWorkers,
       attentionItems: mapAttentionItems(
         this.deps.projectAttentionRepository.listProjectAttentionItems(projectId, {

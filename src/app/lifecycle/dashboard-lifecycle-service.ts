@@ -267,7 +267,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
       getGitStatus: deps.getGitStatus,
       logger: deps.logger.child({ component: "project-live-snapshot" })
-    }, projectIdHint),
+    }, projectIdHint, { includeGit: false }),
+    getProjectGitStatus: () => deps.getGitStatus(),
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
   });
 
@@ -305,7 +306,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
       getGitStatus: deps.getGitStatus,
       logger: deps.logger.child({ component: "project-live-snapshot" })
-    }, projectIdHint),
+    }, projectIdHint, { includeGit: false }),
     getExecutionSnapshot: () => {
       const projectId = deps.projectManagementRepository.getSelectedProjectId();
       return projectId
@@ -514,7 +515,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     replaceSprintLinkedIssues: (sprintId, projectId, issues) => deps.sprintIssueService.replaceLinkedIssues(sprintId, projectId, issues),
     listConnections: (projectId) => deps.connectionChatRepository.listConnections(projectId),
     updateConnection: (connectionId, input) => deps.connectionChatRepository.updateConnection(connectionId, input),
-    listAgentPresets: async (projectId) => await deps.agentPresetSyncService.listAgentPresets(projectId),
+    listAgentPresets: async (projectId) => await deps.agentPresetSyncService.listAgentPresetsForDashboard(projectId),
     createAgentPreset: async (projectId, input) => await deps.agentPresetSyncService.createAgentPreset(projectId, input),
     updateAgentPreset: async (agentPresetId, input) => await deps.agentPresetSyncService.updateAgentPreset(agentPresetId, input),
     deleteAgentPreset: async (agentPresetId) => await deps.agentPresetSyncService.deleteAgentPreset(agentPresetId),

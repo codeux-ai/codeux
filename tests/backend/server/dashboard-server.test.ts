@@ -418,6 +418,9 @@ describe("setupDashboardServer", () => {
 
     const res = await fetch(`http://127.0.0.1:${handle.port}/api/git-status`);
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toContain("no-store");
+    expect(res.headers.get("pragma")).toBe("no-cache");
+    expect(res.headers.get("expires")).toBe("0");
     const body = await res.json();
     expect(body).toEqual({ branch: "main" });
   });

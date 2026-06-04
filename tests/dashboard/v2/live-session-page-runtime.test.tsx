@@ -22,6 +22,7 @@ expect.extend(matchers);
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
+import { useProjectGitStatus } from "../../../dashboard/src/v2/hooks/use-project-git-status.js";
 
 
 
@@ -48,6 +49,9 @@ vi.mock("gsap", () => ({
 
 vi.mock("../../../dashboard/src/hooks/use-dashboard-runtime-data.js");
 vi.mock("../../../dashboard/src/v2/context/project-data.js");
+vi.mock("../../../dashboard/src/v2/hooks/use-project-git-status.js", () => ({
+  useProjectGitStatus: vi.fn(() => ({ data: null, loading: false, error: null, refresh: vi.fn() })),
+}));
 vi.mock("../../../dashboard/src/v2/hooks/use-preview-sessions.js", () => ({
   usePreviewSessions: () => ({ selectedSession: null }),
 }));
@@ -724,9 +728,7 @@ describe("LiveSessionPage Integration Isolation", () => {
   });
 
   it("renders the redesigned sidebar composition with active CI and stable card order", () => {
-    vi.mocked(useDashboardRuntimeData).mockReturnValue({
-      error: null,
-      gitStatus: {
+    const activeGitStatus = {
         mode: "REMOTE",
         available: true,
         repositoryRoot: "/repo",
@@ -771,7 +773,16 @@ describe("LiveSessionPage Integration Isolation", () => {
           },
         ],
         mergedPullRequests: [],
-      },
+    };
+    vi.mocked(useProjectGitStatus).mockReturnValue({
+      data: activeGitStatus as any,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      gitStatus: null,
       gitStatusError: null,
       initialLoadComplete: true,
       transportState: "connected",

@@ -234,4 +234,37 @@ describe("useRealtimeResource", () => {
 
     expect(fetchResource).toHaveBeenCalledTimes(2);
   });
+
+  it("allows future silent fetches after a foreground fetch supersedes a silent fetch", async () => {
+    let resolveInitial: any;
+    const initialPromise = new Promise((resolve) => resolveInitial = resolve);
+    const fetchResource = vi.fn().mockReturnValue(initialPromise);
+
+    const { getByTestId } = render(h(TestComponent, { initialData: { id: "1" }, fetchResource }));
+
+    resolveInitial({ id: "1" });
+    await new Promise(r => setTimeout(r, 10));
+    vi.mocked(fetchResource).mockClear();
+
+    const neverResolvingSilent = new Promise(() => {});
+    let resolveForeground: any;
+    const foregroundPromise = new Promise((resolve) => resolveForeground = resolve);
+
+    fetchResource
+      .mockReturnValueOnce(neverResolvingSilent)
+      .mockReturnValueOnce(foregroundPromise)
+      .mockResolvedValueOnce({ id: "silent-after-foreground" });
+
+    getByTestId("refetch-silent").click();
+    expect(fetchResource).toHaveBeenCalledTimes(1);
+
+    getByTestId("refetch").click();
+    expect(fetchResource).toHaveBeenCalledTimes(2);
+
+    resolveForeground({ id: "foreground" });
+    await new Promise(r => setTimeout(r, 10));
+
+    getByTestId("refetch-silent").click();
+    expect(fetchResource).toHaveBeenCalledTimes(3);
+  });
 });

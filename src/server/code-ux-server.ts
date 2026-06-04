@@ -389,6 +389,8 @@ export class CodeUxServer {
       }
 
       this.dashboardRealtimeService.scheduleProjectLiveRefresh(projectId);
+      // Refresh git/CI/PR status on its own dedicated, throttled channel (Live page only).
+      this.dashboardRealtimeService.scheduleProjectGitRefresh(projectId);
     };
 
     const initialTimer = setTimeout(refreshLiveSnapshot, 0);

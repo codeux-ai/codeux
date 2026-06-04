@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } from "electron";
 import * as fs from "fs";
 import Module from "module";
 import * as path from "path";
@@ -14,12 +14,34 @@ let mainWindow: BrowserWindow | null = null;
 let server: { run(): Promise<void>; close(): Promise<void>; getDashboardRuntimePort(): number } | null = null;
 let dashboardOrigin: string | null = null;
 let isQuitting = false;
+let dashboardSessionConfigured = false;
+
+const dashboardApiUrlFilter = {
+  urls: [
+    "http://127.0.0.1:*/*",
+    "http://localhost:*/*",
+  ],
+};
 
 const isWindowsPackagedApp = process.platform === "win32" && app.isPackaged;
 
 if (isWindowsPackagedApp) {
-  app.commandLine.appendSwitch("max-active-webgl-contexts", "4");
+  // Keep Windows packaged builds near Chromium's default WebGL headroom. The
+  // dashboard can legitimately have a persistent animated background plus
+  // route-scoped avatar/chart canvases during navigation, and a cap of 4 makes
+  // still-GC-pending contexts compete with active surfaces in long sessions.
+  app.commandLine.appendSwitch("max-active-webgl-contexts", "16");
   app.commandLine.appendSwitch("force-gpu-mem-available-mb", "512");
+}
+
+const isWsl = Boolean(process.env.WSL_DISTRO_NAME) || Boolean(process.env.WSL_INTEROP);
+
+if (isWsl) {
+  // Under WSLg the default X11 (Xwayland) path has no reliable vsync, so Chromium produces frames
+  // unbounded and the renderer/compositor busy-spin and peg the CPU. Preferring the native Wayland
+  // compositor (when present) restores proper frame pacing; "auto" falls back to X11 if Wayland is
+  // unavailable, so this is safe.
+  app.commandLine.appendSwitch("ozone-platform-hint", "auto");
 }
 
 if (process.env.WSL_DISTRO_NAME && process.env.CODE_UX_WSL_DISABLE_GPU === "1") {
@@ -44,6 +66,68 @@ function isSafeInternalUrl(rawUrl: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isDashboardRuntimeDataUrl(rawUrl: string): boolean {
+  if (!dashboardOrigin) {
+    return false;
+  }
+
+  try {
+    const url = new URL(rawUrl);
+    const dashboardUrl = new URL(dashboardOrigin);
+    const isDashboardHost = url.hostname === dashboardUrl.hostname
+      || (dashboardUrl.hostname === "127.0.0.1" && url.hostname === "localhost");
+    const isDashboardPort = url.protocol === dashboardUrl.protocol && url.port === dashboardUrl.port;
+    const isRuntimePath = url.pathname.startsWith("/api/")
+      || url.pathname === "/health"
+      || url.pathname === "/ready";
+    return isDashboardHost && isDashboardPort && isRuntimePath;
+  } catch {
+    return false;
+  }
+}
+
+async function configureDashboardNetworkSession(): Promise<void> {
+  if (dashboardSessionConfigured) {
+    return;
+  }
+  dashboardSessionConfigured = true;
+
+  const desktopSession = session.defaultSession;
+  await desktopSession.clearCache().catch(() => undefined);
+
+  desktopSession.webRequest.onBeforeSendHeaders(dashboardApiUrlFilter, (details, callback) => {
+    if (!isDashboardRuntimeDataUrl(details.url)) {
+      callback({});
+      return;
+    }
+
+    callback({
+      requestHeaders: {
+        ...details.requestHeaders,
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    });
+  });
+
+  desktopSession.webRequest.onHeadersReceived(dashboardApiUrlFilter, (details, callback) => {
+    if (!isDashboardRuntimeDataUrl(details.url)) {
+      callback({});
+      return;
+    }
+
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Cache-Control": ["no-store, no-cache, must-revalidate, proxy-revalidate"],
+        Pragma: ["no-cache"],
+        Expires: ["0"],
+        "Surrogate-Control": ["no-store"],
+      },
+    });
+  });
 }
 
 function openExternalUrl(rawUrl: string): void {
@@ -134,6 +218,11 @@ function createMainWindow(url: string): BrowserWindow {
       nodeIntegration: false,
       sandbox: false,
       preload: preloadPath,
+      // Leave backgroundThrottling at its default (true): when the window is blurred/occluded,
+      // Chromium throttles rAF and timers, which is essential under software rendering (e.g. WSL,
+      // where there is no vsync) — without it, the animation loops busy-spin and peg the CPU even
+      // while the window is in the background. Realtime freshness while backgrounded is handled by
+      // the timer fallback in use-realtime-resource's coalescer, so updates are never stranded.
     },
   });
 
@@ -217,6 +306,7 @@ async function startServer(): Promise<string> {
 
   const port = server.getDashboardRuntimePort();
   dashboardOrigin = `http://127.0.0.1:${port}`;
+  await configureDashboardNetworkSession();
   return dashboardOrigin;
 }
 

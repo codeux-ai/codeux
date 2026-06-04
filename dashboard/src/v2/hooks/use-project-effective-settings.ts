@@ -5,11 +5,9 @@ import { useRealtimeResource } from "../../hooks/use-realtime-resource.js";
 import { isEqualEffectiveSettings, stabilizeEffectiveSettings } from "../lib/resource-equality.js";
 
 const effectiveSettingsCache = new Map<string, EffectiveSettingsResponse>();
-const effectiveSettingsInflightRequests = new Map<string, Promise<EffectiveSettingsResponse>>();
 
 export const clearEffectiveSettingsCacheForTests = (): void => {
   effectiveSettingsCache.clear();
-  effectiveSettingsInflightRequests.clear();
 };
 
 export function useProjectEffectiveSettings(projectId: string | null): {
@@ -35,14 +33,7 @@ export function useProjectEffectiveSettings(projectId: string | null): {
     if (!projectId) {
       return null;
     }
-    let request = effectiveSettingsInflightRequests.get(projectId);
-    if (!request) {
-      request = fetchProjectEffectiveSettings(projectId, { signal }).finally(() => {
-        effectiveSettingsInflightRequests.delete(projectId);
-      });
-      effectiveSettingsInflightRequests.set(projectId, request);
-    }
-    const nextSettings = await request;
+    const nextSettings = await fetchProjectEffectiveSettings(projectId, { signal });
     const cached = effectiveSettingsCache.get(projectId) || null;
     const stabilized = stabilizeEffectiveSettings(cached, nextSettings) || nextSettings;
     effectiveSettingsCache.set(projectId, stabilized);
@@ -78,7 +69,6 @@ export function useProjectEffectiveSettings(projectId: string | null): {
       } else {
         effectiveSettingsCache.delete(projectId);
       }
-      effectiveSettingsInflightRequests.delete(projectId);
       void refetch({ silent: true });
     };
 

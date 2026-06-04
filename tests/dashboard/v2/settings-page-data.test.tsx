@@ -211,7 +211,7 @@ describe("SettingsPage data interactions", () => {
     fireEvent.click(projectScopeBtns[0]);
 
     await waitFor(() => {
-      expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1");
+      expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1", { cache: "reload" });
     });
 
     // Pick an input that is immediately available, such as the settings search field
@@ -255,7 +255,7 @@ describe("SettingsPage data interactions", () => {
     fireEvent.click(projectScopeBtns[0]);
 
     await waitFor(() => {
-      expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1");
+      expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1", { cache: "reload" });
     });
 
     fireEvent.click(screen.getAllByRole("button", { name: "Mutate setting" })[0]!);
@@ -283,7 +283,7 @@ describe("SettingsPage data interactions", () => {
     fireEvent.click(projectScopeBtn);
 
     await waitFor(() => {
-      expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1");
+      expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1", { cache: "reload" });
     });
   });
 
@@ -309,7 +309,7 @@ describe("SettingsPage data interactions", () => {
     });
 
     await waitFor(() => {
-      expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1");
+      expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1", { cache: "reload" });
       expect(fetchAgentPresets).toHaveBeenCalledWith("proj-1");
     });
 

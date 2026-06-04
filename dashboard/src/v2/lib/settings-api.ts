@@ -10,6 +10,12 @@ let systemSettingsInflightRequest: Promise<SystemSettings> | null = null;
 const effectiveSettingsCache = new Map<string, EffectiveSettingsResponse>();
 const effectiveSettingsInflightRequests = new Map<string, Promise<EffectiveSettingsResponse>>();
 
+export const clearSettingsApiCacheForTests = (): void => {
+  systemSettingsCache = null;
+  systemSettingsInflightRequest = null;
+  clearEffectiveSettingsRequests();
+};
+
 const clearEffectiveSettingsRequests = (projectId?: string): void => {
   if (projectId) {
     effectiveSettingsCache.delete(projectId);
@@ -61,12 +67,23 @@ export const fetchProjectEffectiveSettings = async (
   projectId: string,
   init?: RequestInit
 ): Promise<EffectiveSettingsResponse> => {
-  if (!init?.signal && effectiveSettingsCache.has(projectId)) {
+  const url = `/api/projects/${encodeURIComponent(projectId)}/settings/effective`;
+  const bypassCache = init?.cache === "reload";
+  if (!init?.signal && !bypassCache && effectiveSettingsCache.has(projectId)) {
     return effectiveSettingsCache.get(projectId)!;
   }
+
+  if (init?.signal || bypassCache) {
+    const settings = await fetchJson<EffectiveSettingsResponse>(url, init);
+    if (!init?.signal?.aborted) {
+      effectiveSettingsCache.set(projectId, settings);
+    }
+    return settings;
+  }
+
   let request = effectiveSettingsInflightRequests.get(projectId);
   if (!request) {
-    request = fetchJson<EffectiveSettingsResponse>(`/api/projects/${encodeURIComponent(projectId)}/settings/effective`, init).then((settings) => {
+    request = fetchJson<EffectiveSettingsResponse>(url, init).then((settings) => {
       effectiveSettingsCache.set(projectId, settings);
       return settings;
     }).finally(() => {

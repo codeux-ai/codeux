@@ -67,7 +67,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
     const fetchContainers = async () => {
         try {
             setLoading(true);
-            const response = await fetch("/api/docker/containers");
+            const response = await fetch("/api/docker/containers", { cache: "no-store" });
             const readinessResponse = await fetchOnboardingReadiness().catch(() => null);
             if (!response.ok) {
                 throw new Error("Failed to fetch containers");

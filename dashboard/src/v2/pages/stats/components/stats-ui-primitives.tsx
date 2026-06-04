@@ -349,10 +349,27 @@ export const DonutCard: FunctionComponent<{
     const items = Array.from(cardRef.current.querySelectorAll("[data-donut-item]"));
     const sliceNodes = Array.from(cardRef.current.querySelectorAll("[data-donut-slice]"));
     const timeline = gsap.timeline();
-    timeline
-      .fromTo(wheelRef.current, { opacity: 0, scale: 0.84, rotate: -14 }, { opacity: 1, scale: 1, rotate: 0, duration: 0.85, ease: "power4.out" })
-      .fromTo(sliceNodes, { opacity: 0, scale: 0.86, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.42, stagger: 0.05, ease: "power3.out" }, "-=0.52")
-      .fromTo(items, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45, stagger: 0.05, ease: "power3.out" }, "-=0.3");
+    timeline.fromTo(
+      wheelRef.current,
+      { opacity: 0, scale: 0.84, rotate: -14 },
+      { opacity: 1, scale: 1, rotate: 0, duration: 0.85, ease: "power4.out" },
+    );
+    if (sliceNodes.length > 0) {
+      timeline.fromTo(
+        sliceNodes,
+        { opacity: 0, scale: 0.86, transformOrigin: "50% 50%" },
+        { opacity: 1, scale: 1, duration: 0.42, stagger: 0.05, ease: "power3.out" },
+        "-=0.52",
+      );
+    }
+    if (items.length > 0) {
+      timeline.fromTo(
+        items,
+        { opacity: 0, y: 16 },
+        { opacity: 1, y: 0, duration: 0.45, stagger: 0.05, ease: "power3.out" },
+        "-=0.3",
+      );
+    }
     return () => timeline.kill();
   }, [segments.length]);
 

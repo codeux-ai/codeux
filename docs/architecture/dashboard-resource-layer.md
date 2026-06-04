@@ -25,6 +25,10 @@ Data fetching is governed by a unified resource layer rather than ad-hoc `useEff
 - Sprints only show as `"running"` if their latest sprint run status is `"queued"` or `"running"`. If a sprint run is completed, failed, cancelled, or does not exist, the effective sprint status falls back to `"idle"`.
 - Header telemetry metrics (`TelemetryStats`) filter task counts to only include running and queued tasks belonging to actively running sprints.
 - Cache invalidation is coordinated through realtime websocket events.
+- Silent websocket/poll refreshes are deduplicated per resource, but a foreground refresh that supersedes an in-flight silent refresh must clear that silent dedupe handle. This prevents navigation or manual refresh from leaving future silent invalidations attached to an already-aborted request.
+- Dashboard API reads are non-cacheable at the HTTP boundary. The shared frontend JSON helper sends `cache: "no-store"` by default, and backend `/api/*`, `/health`, and `/ready` responses carry no-store headers so browser and Electron sessions always request live runtime data.
+- Project effective-settings reads that carry an abort signal are intentionally not globally deduplicated. Settings, Agents, and layout chrome can mount and unmount around the same project at different times, and sharing an abortable request lets one route teardown reject another route's active read. Explicit settings reloads use `cache: "reload"` after save/reset so the page reflects persisted settings instead of a warmed effective-settings payload.
+- Dashboard agent preset listing returns existing SQLite presets immediately and schedules markdown/source synchronization in a throttled background task. First-time projects with no presets still await the initial sync so default agents are seeded, while internal planning/MCP callers continue to use the strict `listAgentPresets` path that awaits sync and source decoration.
 
 ## Resource Keys and Cache Invalidation
 

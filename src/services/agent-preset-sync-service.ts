@@ -42,11 +42,29 @@ const BASE_AGENT_IDS: Record<string, string> = {
 };
 
 export class AgentPresetSyncService {
+  private static readonly DASHBOARD_BACKGROUND_SYNC_INTERVAL_MS = 30_000;
+  private readonly projectSyncPromises = new Map<string, Promise<void>>();
+  private readonly dashboardBackgroundSyncState = new Map<string, {
+    lastStartedAt: number;
+    promise: Promise<void> | null;
+  }>();
+
   constructor(private readonly deps: AgentPresetSyncServiceDeps) {}
 
   async listAgentPresets(projectId: string): Promise<AgentPresetRecord[]> {
     await this.syncProjectAgents(projectId);
     return await this.decorateProjectAgentPresets(projectId);
+  }
+
+  async listAgentPresetsForDashboard(projectId: string): Promise<AgentPresetRecord[]> {
+    const existingPresets = this.deps.agentPresetRepository.listAgentPresets(projectId);
+    if (existingPresets.length === 0) {
+      await this.syncProjectAgents(projectId);
+      return await this.decorateProjectAgentPresets(projectId);
+    }
+
+    this.scheduleDashboardBackgroundSync(projectId);
+    return this.sortAgentPresets(existingPresets);
   }
 
   async createAgentPreset(projectId: string, input: {
@@ -171,6 +189,22 @@ export class AgentPresetSyncService {
   }
 
   async syncProjectAgents(projectId: string): Promise<void> {
+    const existingSync = this.projectSyncPromises.get(projectId);
+    if (existingSync) {
+      return await existingSync;
+    }
+
+    const syncPromise = this.syncProjectAgentsNow(projectId)
+      .finally(() => {
+        if (this.projectSyncPromises.get(projectId) === syncPromise) {
+          this.projectSyncPromises.delete(projectId);
+        }
+      });
+    this.projectSyncPromises.set(projectId, syncPromise);
+    return await syncPromise;
+  }
+
+  private async syncProjectAgentsNow(projectId: string): Promise<void> {
     const project = this.requireProject(projectId);
     const existingPresets = this.deps.agentPresetRepository.listAgentPresets(projectId);
     const presetsById = new Map(existingPresets.map((preset) => [preset.id, preset]));
@@ -362,7 +396,11 @@ export class AgentPresetSyncService {
     for (const preset of presets) {
       decorated.push(await this.decorateAgentPreset(preset));
     }
-    return decorated.sort((left, right) => {
+    return this.sortAgentPresets(decorated);
+  }
+
+  private sortAgentPresets(presets: AgentPresetRecord[]): AgentPresetRecord[] {
+    return [...presets].sort((left, right) => {
       if (left.syncStatus !== right.syncStatus) {
         const rank = (status: AgentPresetRecord["syncStatus"]): number => {
           switch (status) {
@@ -379,6 +417,39 @@ export class AgentPresetSyncService {
         return rank(left.syncStatus) - rank(right.syncStatus);
       }
       return right.updatedAt.localeCompare(left.updatedAt);
+    });
+  }
+
+  private scheduleDashboardBackgroundSync(projectId: string): void {
+    const now = Date.now();
+    const state = this.dashboardBackgroundSyncState.get(projectId);
+    if (state?.promise) {
+      return;
+    }
+    if (state && now - state.lastStartedAt < AgentPresetSyncService.DASHBOARD_BACKGROUND_SYNC_INTERVAL_MS) {
+      return;
+    }
+
+    const promise = this.syncProjectAgents(projectId)
+      .catch((error) => {
+        this.deps.logger?.warn("Background agent preset sync failed", {
+          projectId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      })
+      .finally(() => {
+        const latest = this.dashboardBackgroundSyncState.get(projectId);
+        if (latest?.promise === promise) {
+          this.dashboardBackgroundSyncState.set(projectId, {
+            lastStartedAt: latest.lastStartedAt,
+            promise: null,
+          });
+        }
+      });
+
+    this.dashboardBackgroundSyncState.set(projectId, {
+      lastStartedAt: now,
+      promise,
     });
   }
 
