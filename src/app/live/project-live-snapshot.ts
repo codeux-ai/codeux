@@ -36,7 +36,13 @@ export interface ProjectLiveSnapshotDeps {
 export async function getProjectLiveSnapshot(
   deps: ProjectLiveSnapshotDeps,
   projectIdHint?: string | null,
+  options?: { includeGit?: boolean },
 ): Promise<ProjectLiveDashboardSnapshot> {
+  // Git/CI/PR tracking is slow (REMOTE mode shells out to `gh`) and large (it can balloon the
+  // snapshot to several MB). It is only rendered on the Live page, which now sources it from a
+  // dedicated channel (`project.git.updated` / `/api/git-status`). The realtime live tick and the
+  // shared `/api/live` payload build with `includeGit: false` so the hot path stays small.
+  const includeGit = options?.includeGit !== false;
   const startedAt = Date.now();
   const projectId = typeof projectIdHint === "string" && projectIdHint.trim().length > 0
     ? projectIdHint.trim()
@@ -76,12 +82,14 @@ export async function getProjectLiveSnapshot(
   const selectedSprintId = listSprintsResult.selectedSprintId ?? null;
 
   const tGit = Date.now();
-  const gitStatusPromise = deps.getGitStatus()
-    .then((result) => ({ result, error: null }))
-    .catch((error) => ({
-      result: null,
-      error: error instanceof Error ? error.message : "Unable to load git/ci/pr tracking.",
-    }));
+  const gitStatusPromise: Promise<{ result: GitTrackingStatus | null; error: string | null }> = includeGit
+    ? deps.getGitStatus()
+        .then((result) => ({ result, error: null }))
+        .catch((error) => ({
+          result: null,
+          error: error instanceof Error ? error.message : "Unable to load git/ci/pr tracking.",
+        }))
+    : Promise.resolve({ result: null, error: null });
 
   const tRuntime = Date.now();
   const status = deps.projectRuntimeRepository.getProjectStatus(projectId, selectedSprintId);

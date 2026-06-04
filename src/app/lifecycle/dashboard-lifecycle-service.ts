@@ -267,7 +267,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
       getGitStatus: deps.getGitStatus,
       logger: deps.logger.child({ component: "project-live-snapshot" })
-    }, projectIdHint),
+    }, projectIdHint, { includeGit: false }),
+    getProjectGitStatus: () => deps.getGitStatus(),
     getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
   });
 
@@ -305,7 +306,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
       getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
       getGitStatus: deps.getGitStatus,
       logger: deps.logger.child({ component: "project-live-snapshot" })
-    }, projectIdHint),
+    }, projectIdHint, { includeGit: false }),
     getExecutionSnapshot: () => {
       const projectId = deps.projectManagementRepository.getSelectedProjectId();
       return projectId
