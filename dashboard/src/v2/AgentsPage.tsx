@@ -156,11 +156,15 @@ export const AgentsPage: FunctionComponent = () => {
 
   useLayoutEffect(() => {
     if (!contentRef.current) return;
-    gsap.fromTo(
-      Array.from(contentRef.current.children),
-      { opacity: 0, y: 28 },
-      { opacity: 1, y: 0, duration: 0.75, stagger: 0.08, ease: "power4.out" }
-    );
+    const el = contentRef.current;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        Array.from(el.children),
+        { opacity: 0, y: 28 },
+        { opacity: 1, y: 0, duration: 0.75, stagger: 0.08, ease: "power4.out" }
+      );
+    });
+    return () => ctx.revert();
   }, []);
 
   const handleCreate = async (): Promise<void> => {

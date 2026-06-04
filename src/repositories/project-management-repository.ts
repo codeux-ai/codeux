@@ -233,7 +233,7 @@ export class ProjectManagementRepository {
       return created;
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, projectName: input.name });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -282,7 +282,7 @@ export class ProjectManagementRepository {
       return updated;
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, projectId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -298,7 +298,7 @@ export class ProjectManagementRepository {
       this.publishProjectsRefresh();
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, projectId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -366,7 +366,7 @@ export class ProjectManagementRepository {
       return created;
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, projectId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -411,7 +411,7 @@ export class ProjectManagementRepository {
       return updated;
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, sprintId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -452,7 +452,7 @@ export class ProjectManagementRepository {
       this.publishProjectStructureRefresh(sprint.projectId);
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, sprintId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -633,7 +633,7 @@ export class ProjectManagementRepository {
       return created;
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, projectId, sprintId: input.sprintId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -732,7 +732,7 @@ export class ProjectManagementRepository {
       return updated;
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, taskId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -746,7 +746,7 @@ export class ProjectManagementRepository {
       this.publishProjectStructureRefresh(task.projectId);
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, taskId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -760,7 +760,7 @@ export class ProjectManagementRepository {
       this.publishProjectStructureRefresh(sprint.projectId);
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, sprintId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -810,7 +810,7 @@ export class ProjectManagementRepository {
       return sprintId;
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, projectId, sprintId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
@@ -854,7 +854,7 @@ export class ProjectManagementRepository {
       return projectId;
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
-      if (error instanceof Error && error.message.includes('depend')) throw new ValidationError(error.message);
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
       this.logger.error("Operation failed", { error, projectId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }

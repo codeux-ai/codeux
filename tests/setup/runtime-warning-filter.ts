@@ -110,3 +110,28 @@ const installCanvasContextPolyfill = (): void => {
 };
 
 installCanvasContextPolyfill();
+
+// In DOM test environments (happy-dom/jsdom) component effects frequently fire
+// real `fetch` calls against relative `/api/...` paths. Those resolve against the
+// environment's default origin (http://localhost:3000) and hit the network: in
+// Node they log `ECONNREFUSED` noise, and under happy-dom they stay pending until
+// the window teardown aborts them, surfacing `AbortError` traces after otherwise
+// green suites. Install a default stub that short-circuits unmocked requests with
+// a benign 503 Response — no socket, nothing pending at teardown. Tests that
+// exercise fetch override this via vi.stubGlobal/vi.spyOn, so they are unaffected.
+const installDefaultFetchGuard = (): void => {
+  const target = globalThis as typeof globalThis & { window?: unknown; Response?: typeof Response };
+  if (typeof target.window === "undefined" || typeof target.Response === "undefined") {
+    return;
+  }
+
+  target.fetch = (async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : String((input as Request).url ?? input);
+    return new target.Response!(
+      JSON.stringify({ error: "network access is disabled in unit tests", url }),
+      { status: 503, statusText: "Service Unavailable", headers: { "Content-Type": "application/json" } },
+    );
+  }) as typeof fetch;
+};
+
+installDefaultFetchGuard();

@@ -14,6 +14,9 @@ interface TableRow {
 const APP_DB_PATH = getHomeCodeUxPath("app.db");
 
 export function resolveAppDbPath(dbPath?: string): string {
+  if (process.env.VITEST_IN_MEMORY_DB === "true") {
+    return ":memory:";
+  }
   if (dbPath && dbPath.trim().length > 0) {
     return dbPath;
   }
@@ -29,7 +32,9 @@ export class AppDbStorage {
 
   constructor(dbPath?: string) {
     this.dbPath = resolveAppDbPath(dbPath);
-    fs.mkdirSync(path.dirname(this.dbPath), { recursive: true });
+    if (this.dbPath !== ":memory:") {
+      fs.mkdirSync(path.dirname(this.dbPath), { recursive: true });
+    }
     this.db = new SqliteDatabaseAdapter(this.dbPath);
     this.db.exec(APP_DB_SCHEMA_TABLES);
     runMigrations(this.db);

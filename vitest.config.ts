@@ -1,5 +1,7 @@
 import { defineConfig } from "vitest/config";
 
+process.env.VITEST_IN_MEMORY_DB = "true";
+
 export default defineConfig({
   cacheDir: ".cache/vitest",
   test: {

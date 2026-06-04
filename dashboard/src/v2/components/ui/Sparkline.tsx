@@ -8,6 +8,10 @@ import gsap from "gsap";
  * On hover (detected via closest `.group`): replays from the start and adds a glow.
  */
 export const Sparkline: FunctionComponent<{ points: number[]; color: string }> = ({ points, color }) => {
+    if (!points || points.length === 0) {
+        return null;
+    }
+
     const pathRef = useRef<SVGPathElement>(null);
     const svgRef  = useRef<SVGSVGElement>(null);
 
@@ -43,6 +47,11 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
     // Recompute the path contract whenever the rendered line changes.
     useLayoutEffect(() => {
         applyDrawState(true);
+        return () => {
+            if (pathRef.current) {
+                gsap.killTweensOf(pathRef.current);
+            }
+        };
     }, [pathD]);
 
     // Hover: replay from the start + glow the whole SVG
@@ -76,6 +85,8 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
         return () => {
             group.removeEventListener('mouseenter', onEnter);
             group.removeEventListener('mouseleave', onLeave);
+            if (pathRef.current) gsap.killTweensOf(pathRef.current);
+            if (svgRef.current) gsap.killTweensOf(svgRef.current);
         };
     }, [color]);
 

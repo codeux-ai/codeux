@@ -12,7 +12,7 @@ import {
 } from "./execution/execution-invocations-query.js";
 import { randomUUID } from "crypto";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
-import { ConcurrencyConflictError, EntityNotFoundError, RepositoryError } from "./repository-utils.js";
+import { ConcurrencyConflictError, EntityNotFoundError, RepositoryError, ValidationError } from "./repository-utils.js";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { toNumber, parsePayloadJson } from "./repository-utils.js";
@@ -345,6 +345,9 @@ export class ExecutionRepository {
       return record;
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && (error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) {
+        throw new ValidationError(error.message);
+      }
       this.logger.error("Operation failed", { error, projectId: input.projectId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }

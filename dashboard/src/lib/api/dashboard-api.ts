@@ -21,32 +21,71 @@ export const fetchExecutionSnapshot = async (): Promise<ExecutionDashboardSnapsh
   return fetchJson<ExecutionDashboardSnapshot>("/api/execution");
 };
 
+const livePayloadCache = new Map<string, RuntimeDashboardPayload>();
+const livePayloadInflight = new Map<string, Promise<RuntimeDashboardPayload>>();
+
+export const clearLivePayloadCacheForTests = (): void => {
+  livePayloadCache.clear();
+  livePayloadInflight.clear();
+  overviewTelemetryInflight = null;
+  onboardingReadinessInflight = null;
+};
+
+export const getCachedLivePayload = (projectId?: string | null): RuntimeDashboardPayload | null => {
+  const key = projectId?.trim() || "default";
+  return livePayloadCache.get(key) || null;
+};
+
 export const fetchRuntimeDashboardPayload = async (projectId?: string | null): Promise<RuntimeDashboardPayload> => {
   return fetchLivePayload(projectId);
 };
 
 /** Single HTTP call returning both status + execution — used for fast initial load. */
 export const fetchLivePayload = async (projectId?: string | null): Promise<RuntimeDashboardPayload> => {
-  const query = typeof projectId === "string" && projectId.trim().length > 0
-    ? `?projectId=${encodeURIComponent(projectId.trim())}`
-    : "";
-  return fetchJson<RuntimeDashboardPayload>(`/api/live${query}`);
+  const key = projectId?.trim() || "default";
+  let request = livePayloadInflight.get(key);
+  if (!request) {
+    const query = typeof projectId === "string" && projectId.trim().length > 0
+      ? `?projectId=${encodeURIComponent(projectId.trim())}`
+      : "";
+    request = fetchJson<RuntimeDashboardPayload>(`/api/live${query}`).finally(() => {
+      livePayloadInflight.delete(key);
+    });
+    livePayloadInflight.set(key, request);
+  }
+  const resolved = await request;
+  livePayloadCache.set(key, resolved);
+  return resolved;
 };
 
 export const fetchLiveActivities = async (): Promise<import("../../types.js").LiveActivitiesResponse> => {
   return fetchJson<import("../../types.js").LiveActivitiesResponse>("/api/live-activities");
 };
 
+let overviewTelemetryInflight: Promise<OverviewTelemetrySnapshot> | null = null;
+
 export const fetchOverviewTelemetry = async (): Promise<OverviewTelemetrySnapshot> => {
-  return fetchJson<OverviewTelemetrySnapshot>("/api/telemetry/overview");
+  if (!overviewTelemetryInflight) {
+    overviewTelemetryInflight = fetchJson<OverviewTelemetrySnapshot>("/api/telemetry/overview").finally(() => {
+      overviewTelemetryInflight = null;
+    });
+  }
+  return overviewTelemetryInflight;
 };
 
 export const fetchGitTrackingStatus = async (): Promise<GitTrackingStatus> => {
   return fetchJson<GitTrackingStatus>("/api/git-status");
 };
 
+let onboardingReadinessInflight: Promise<OnboardingRuntimeReadiness> | null = null;
+
 export const fetchOnboardingReadiness = async (): Promise<OnboardingRuntimeReadiness> => {
-  return fetchJson<OnboardingRuntimeReadiness>("/api/onboarding/readiness");
+  if (!onboardingReadinessInflight) {
+    onboardingReadinessInflight = fetchJson<OnboardingRuntimeReadiness>("/api/onboarding/readiness").finally(() => {
+      onboardingReadinessInflight = null;
+    });
+  }
+  return onboardingReadinessInflight;
 };
 
 

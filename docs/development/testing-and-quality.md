@@ -38,25 +38,19 @@ pnpm run test:backend:coverage
 pnpm run ci
 ```
 
+- Run Playwright E2E browser tests
+```bash
+pnpm exec playwright test
+```
+
 GitHub Actions optimization notes:
-- the hosted CI workflow now uses a single `verify` job on the self-hosted runner so checkout, dependency installation, and cache restoration only happen once per run
-- the hosted CI workflow installs dependencies with `pnpm` and runs the same ordered validation path as the local `pnpm run ci` script, then finishes with `pnpm run audit`
-- the hosted CI workflow cancels superseded runs for the same branch or PR
-- CI avoids a second plain `vitest` pass because backend coverage already executes the backend suite while enforcing thresholds
-- dashboard tests still run as a separate Vitest invocation because coverage thresholds target `src/**/*.ts`, not the dashboard bundle under `dashboard/`
-- dependency installation uses `pnpm install --frozen-lockfile --ignore-scripts` with the pnpm store cached by `actions/setup-node`
-- Vite, Vitest, and TypeScript incremental metadata now write into repo-local `.cache/` directories so GitHub Actions can restore them across workflow runs and the `build` step can reuse prior typecheck work
-- the shared Vitest setup defaults `LOG_LEVEL` to `error` during tests and installs lightweight canvas stubs so dashboard-heavy suites avoid noisy server logs and repeated DOM warnings
-- the shared Vitest setup also redirects `HOME`/XDG paths into a temp directory for each test worker so backend repositories that default to `~/.code-ux/*` cannot wipe or mutate a developer's live local settings during `pnpm test`
-- prefer `happy-dom` for simple dashboard component and hook tests; reserve `jsdom` for cases that need stricter browser behavior
-- backend server tests that need a real listener should bind with `port: 0` and reuse `handle.port` instead of reserving a throwaway port first
-- if a backend route suite does not need host routing or upgrade handling, configure the Express app in-process and drive it with `supertest` instead of booting a real TCP listener
-- watch-loop and polling-heavy tests should inject a no-op sleep helper instead of paying the full runtime interval during CI
-- SQLite-backed backend fixtures should close their `AppDbStorage` handles before deleting temp directories so backend coverage runs do not keep file handles alive under CI load
-- wall-clock performance assertions in normal Vitest suites should use broad regression thresholds; keep tight micro-benchmarks out of required CI because self-hosted runner load can add timing jitter
-- split heavy dashboard page tests from their child-component tests so simple component coverage can run under `happy-dom` without importing the full page shell
-- for dashboard page-shell tests, mock chart-heavy or animation-heavy visual subtrees when the assertion only cares about page wiring, headings, scope switching, or save flows
-- onboarding page tests should mock `DeepOceanBackground` when assertions target onboarding defaults/settings state; this avoids lazy `three` imports resolving after Vitest environment teardown in CI
+- The CI pipeline is split into three parallel, concurrent jobs: `Typecheck & Lint`, `Unit & Integration Tests`, and `Playwright E2E Tests` for maximum speed and fast feedback.
+- Restores and saves Vite, Vitest, and TypeScript compiler increment caches across runs.
+- Caches Playwright browser binaries (`~/.cache/ms-playwright`) to avoid downloading browsers on every run, dramatically reducing E2E setup time.
+- Uses `fullyParallel` execution in `playwright.config.ts` on CI to harness all available CPU cores.
+- Seamlessly integrates browser-level E2E tests for WebGL visual rendering, failure fallbacks, and mobile/desktop responsive layout breakpoints, removing mock-heavy DOM stubs from Unit tests.
+- Uses the GitHub Actions reporter to publish Playwright test failures inline on pull request checks.
+- Cancels superseded runs for the same branch or PR to conserve resources.
 
 - Build backend and dashboard
 ```bash

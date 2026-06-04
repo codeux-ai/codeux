@@ -415,75 +415,80 @@ export const TasksPage: FunctionComponent = () => {
   }, [loading]);
 
   useLayoutEffect(() => {
-    if (headerRef.current) {
-      gsap.fromTo(Array.from(headerRef.current.children), { opacity: 0, y: 40 }, { opacity: 1, y: 0, stagger: 0.1, duration: 0.9, ease: "power4.out", delay: 0.05 });
-    }
+    if (!headerRef.current) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(Array.from(headerRef.current!.children), { opacity: 0, y: 40 }, { opacity: 1, y: 0, stagger: 0.1, duration: 0.9, ease: "power4.out", delay: 0.05 });
+    });
+    return () => ctx.revert();
   }, []);
 
   useLayoutEffect(() => {
-    if (boardRef.current && !loading && !showSkeletons) {
-      const taskCards = Array.from(boardRef.current.querySelectorAll(".task-card-entry"));
-      if (taskCards.length > 0) {
-        if (reducedMotion) {
-          gsap.set(taskCards, { opacity: 1, y: 0, scale: 1 });
-        } else {
-          gsap.fromTo(taskCards, { opacity: 0, y: 15, scale: 0.98 }, {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            stagger: 0.05,
-            duration: 0.6,
-            ease: "power2.out",
-            delay: 0.05,
-          });
-        }
+    if (!boardRef.current || loading || showSkeletons) return;
+    const taskCards = Array.from(boardRef.current.querySelectorAll(".task-card-entry"));
+    if (taskCards.length === 0) return;
+    const ctx = gsap.context(() => {
+      if (reducedMotion) {
+        gsap.set(taskCards, { opacity: 1, y: 0, scale: 1 });
+      } else {
+        gsap.fromTo(taskCards, { opacity: 0, y: 15, scale: 0.98 }, {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          stagger: 0.05,
+          duration: 0.6,
+          ease: "power2.out",
+          delay: 0.05,
+        });
       }
-    }
+    });
+    return () => ctx.revert();
   }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId, loading, showSkeletons, reducedMotion]);
 
   useLayoutEffect(() => {
-    if (resolvedTaskId && boardRef.current) {
-      const el = boardRef.current.querySelector(`[data-task-id="${resolvedTaskId}"] .kanban-card`) as HTMLDivElement;
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (!resolvedTaskId || !boardRef.current) return;
+    const el = boardRef.current.querySelector(`[data-task-id="${resolvedTaskId}"] .kanban-card`) as HTMLDivElement;
+    if (!el) return;
 
-        const flashEl = document.createElement("div");
-        flashEl.style.position = "absolute";
-        flashEl.style.inset = "0";
-        flashEl.style.backgroundColor = "rgba(0, 224, 160, 0.2)";
-        flashEl.style.borderRadius = "1.75rem";
-        flashEl.style.pointerEvents = "none";
-        flashEl.style.zIndex = "50";
-        el.appendChild(flashEl);
+    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
-        gsap.to(flashEl, {
-          opacity: 0,
+    const flashEl = document.createElement("div");
+    flashEl.style.position = "absolute";
+    flashEl.style.inset = "0";
+    flashEl.style.backgroundColor = "rgba(0, 224, 160, 0.2)";
+    flashEl.style.borderRadius = "1.75rem";
+    flashEl.style.pointerEvents = "none";
+    flashEl.style.zIndex = "50";
+    el.appendChild(flashEl);
+
+    const ctx = gsap.context(() => {
+      gsap.to(flashEl, {
+        opacity: 0,
+        duration: 0.4,
+        ease: "power2.out",
+        onComplete: () => flashEl.remove()
+      });
+
+      gsap.fromTo(el,
+        {
+          opacity: 0.6,
+          borderWidth: "2px",
+          borderColor: "rgba(148, 163, 184, 0.5)",
+          borderStyle: "dashed"
+        },
+        {
+          opacity: 1,
+          borderWidth: "1px",
+          borderColor: "rgba(0,0,0,0.06)", // Fallback, clearProps will remove it
+          borderStyle: "solid",
           duration: 0.4,
           ease: "power2.out",
-          onComplete: () => flashEl.remove()
-        });
+          clearProps: "opacity,borderWidth,borderStyle,borderColor"
+        }
+      );
+    });
 
-        gsap.fromTo(el,
-          {
-            opacity: 0.6,
-            borderWidth: "2px",
-            borderColor: "rgba(148, 163, 184, 0.5)",
-            borderStyle: "dashed"
-          },
-          {
-            opacity: 1,
-            borderWidth: "1px",
-            borderColor: "rgba(0,0,0,0.06)", // Fallback, clearProps will remove it
-            borderStyle: "solid",
-            duration: 0.4,
-            ease: "power2.out",
-            clearProps: "opacity,borderWidth,borderStyle,borderColor"
-          }
-        );
-
-        setResolvedTaskId(null);
-      }
-    }
+    setResolvedTaskId(null);
+    return () => ctx.revert();
   }, [resolvedTaskId, tasks]);
 
   const allTasks = useMemo(() => [...optimisticTasks, ...tasks], [optimisticTasks, tasks]);

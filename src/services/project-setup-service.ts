@@ -383,7 +383,7 @@ export class ProjectSetupService {
     if (options.quicksprints && this.deps.quicksprintService) {
       for (const template of payload.quicksprints || []) {
         if (!template.name?.trim() || !template.agentInstructionMarkdown?.trim()) continue;
-        const created = this.deps.quicksprintService.createCustomTemplate(projectId, {
+        const created = await this.deps.quicksprintService.createCustomTemplate(projectId, {
           name: template.name.trim(),
           description: template.description?.trim() || "Project-specific quicksprint template.",
           icon: template.icon?.trim() || "Sparkles",

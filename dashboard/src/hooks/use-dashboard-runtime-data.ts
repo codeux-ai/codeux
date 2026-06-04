@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "preact/hooks";
 import { isDeepEqual } from "../v2/lib/resource-equality.js";
 import { computeStats, processDashboardTasks } from "../lib/status.js";
-import { fetchLivePayload } from "../lib/api/dashboard-api.js";
+import { fetchLivePayload, getCachedLivePayload } from "../lib/api/dashboard-api.js";
 import type {
   DashboardStatus,
   ExecutionDashboardSnapshot,
@@ -90,10 +90,11 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null, ena
 
   const activeProjectId = projectIdHint || fetchedProjectId;
 
-  const initialData = useMemo(() => ({
+  const cachedData = getCachedLivePayload(projectIdHint);
+  const initialData = useMemo(() => cachedData || {
     ...EMPTY_LIVE_SNAPSHOT,
     projectId: projectIdHint,
-  }), [projectIdHint]);
+  }, [projectIdHint, cachedData]);
 
   const {
     data: finalSnapshot,
@@ -111,7 +112,7 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null, ena
       eventType: "project.live.updated",
       updateDirectlyFromEvent: true,
     } : undefined,
-    isAlreadyLoaded: !enabled,
+    isAlreadyLoaded: !enabled || !!cachedData,
   });
 
   const { tasksWithLiveActivities, stats } = useMemo(() => {

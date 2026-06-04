@@ -3,12 +3,12 @@
  */
 import { h } from "preact";
 import { render, cleanup, waitFor } from "@testing-library/preact";
-import { useProjectStats } from "../../../dashboard/src/v2/hooks/use-project-stats.js";
+import { useProjectStats, clearStatsCacheForTests } from "../../../dashboard/src/v2/hooks/use-project-stats.js";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 // Mock the realtime client
 let mockRealtimeCallback: ((message: any) => void) | null = null;
-vi.mock("../../../dashboard/src/v2/lib/realtime/dashboard-realtime-client.js", () => ({
+vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js", () => ({
   subscribeToDashboardRealtime: vi.fn((scopes, callback, _transportCallback) => {
     mockRealtimeCallback = callback;
     return vi.fn();
@@ -63,6 +63,7 @@ function TestComponent({ projectId, query, pollIntervalMs = 30000, onStats }: { 
 describe("useProjectStats cancellation", () => {
   beforeEach(() => {
     cleanup();
+    clearStatsCacheForTests();
     vi.clearAllMocks();
     mockRealtimeCallback = null;
     vi.useRealTimers();

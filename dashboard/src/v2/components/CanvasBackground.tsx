@@ -17,6 +17,9 @@ export const CanvasBackground: FunctionComponent = () => {
                 duration: 22,
                 ease: "sine.inOut"
             });
+            return () => {
+                tl.kill();
+            };
         }
     }, []);
 

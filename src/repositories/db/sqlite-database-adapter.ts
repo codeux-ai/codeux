@@ -12,7 +12,9 @@ export class SqliteDatabaseAdapter implements DatabaseAdapter {
   private readonly MAX_CACHE_SIZE = 500;
 
   constructor(dbPath: string) {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    if (dbPath !== ":memory:") {
+      fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    }
     this.db = openSqliteDatabase(dbPath);
   }
 

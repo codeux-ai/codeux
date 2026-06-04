@@ -84,6 +84,14 @@ const ProjectCard: FunctionComponent<{
         });
     };
 
+    useEffect(() => {
+        return () => {
+            if (cardRef.current) {
+                gsap.killTweensOf(cardRef.current);
+            }
+        };
+    }, []);
+
     return (
         <div
             ref={cardRef}
@@ -367,34 +375,37 @@ export const ProjectsPage: FunctionComponent = () => {
     }, [loading]);
 
     useLayoutEffect(() => {
-        if (mainRef.current) {
+        if (!mainRef.current) return;
+        const ctx = gsap.context(() => {
             gsap.fromTo(
-                mainRef.current.children,
+                mainRef.current!.children,
                 { opacity: 0, y: 40 },
                 { opacity: 1, y: 0, stagger: 0.1, duration: 0.9, ease: "power4.out", delay: 0.1 },
             );
-        }
+        });
+        return () => ctx.revert();
     }, []);
 
     useLayoutEffect(() => {
-        if (gridRef.current && !loading && !showSkeletons) {
-            const projectCards = Array.from(gridRef.current.querySelectorAll(".project-card-entry"));
-            if (projectCards.length > 0) {
-                gsap.fromTo(
-                    projectCards,
-                    { opacity: 0, y: 15, scale: 0.98 },
-                    {
-                        opacity: 1,
-                        y: 0,
-                        scale: 1,
-                        stagger: { amount: 0.2, from: "start" },
-                        duration: 0.6,
-                        ease: "power2.out",
-                        delay: 0.05,
-                    }
-                );
-            }
-        }
+        if (!gridRef.current || loading || showSkeletons) return;
+        const projectCards = Array.from(gridRef.current.querySelectorAll(".project-card-entry"));
+        if (projectCards.length === 0) return;
+        const ctx = gsap.context(() => {
+            gsap.fromTo(
+                projectCards,
+                { opacity: 0, y: 15, scale: 0.98 },
+                {
+                    opacity: 1,
+                    y: 0,
+                    scale: 1,
+                    stagger: { amount: 0.2, from: "start" },
+                    duration: 0.6,
+                    ease: "power2.out",
+                    delay: 0.05,
+                }
+            );
+        });
+        return () => ctx.revert();
     }, [loading, showSkeletons, activeFilter]);
 
     const openInvocation = (invocationId: string) => {

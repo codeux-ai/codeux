@@ -196,6 +196,12 @@ export const MemoryPage: FunctionComponent = () => {
             }, 0.15 + Math.min(i, 20) * 0.03);
         });
         s.entranceDone = true;
+
+        return () => {
+            tl.kill();
+            gsap.killTweensOf(s.cam);
+            s.graph.nodes.forEach(node => gsap.killTweensOf(node));
+        };
     }, [graphData]);
 
 /* ── Canvas setup & render loop ───────────────────────────────────── */
@@ -518,12 +524,15 @@ export const MemoryPage: FunctionComponent = () => {
         }
         startNeuralFire();
 
+        let headerCtx: any;
         if (headerRef.current) {
-            gsap.fromTo(
-                Array.from(headerRef.current.children),
-                { opacity: 0, y: 40 },
-                { opacity: 1, y: 0, stagger: 0.08, duration: 0.9, ease: "power4.out", delay: 0.05 },
-            );
+            headerCtx = gsap.context(() => {
+                gsap.fromTo(
+                    Array.from(headerRef.current!.children),
+                    { opacity: 0, y: 40 },
+                    { opacity: 1, y: 0, stagger: 0.08, duration: 0.9, ease: "power4.out", delay: 0.05 },
+                );
+            });
         }
 
         return () => {
@@ -534,6 +543,9 @@ export const MemoryPage: FunctionComponent = () => {
             canvas.removeEventListener("mousedown", onDown);
             canvas.removeEventListener("mouseup", onUp);
             canvas.removeEventListener("wheel", onWheel);
+            if (headerCtx) headerCtx.revert();
+            gsap.killTweensOf(s.cam);
+            s.graph.nodes.forEach(node => gsap.killTweensOf(node));
         };
     }, []);
 

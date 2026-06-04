@@ -297,6 +297,9 @@ export const GuidedDashboardTour: FunctionComponent = () => {
       if (linePathRef.current) {
         gsap.killTweensOf(linePathRef.current);
       }
+      animatedElements.forEach((el) => {
+        if (el) gsap.killTweensOf(el);
+      });
     };
   }, [activeIndex, open, reducedMotion, targetReady]);
 

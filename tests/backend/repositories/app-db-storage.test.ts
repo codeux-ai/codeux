@@ -1,3 +1,5 @@
+process.env.VITEST_IN_MEMORY_DB = "false";
+
 import { afterEach, describe, expect, it } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";

@@ -64,19 +64,25 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
         }
 
         const currentCount = attentionItems.length;
+        let ctx: any;
         if (currentCount > prevCountRef.current) {
             // New items were added, animate them
             const newElements = Array.from(listRef.current.children).filter(el => !el.hasAttribute('data-entered'));
 
             if (newElements.length > 0) {
-                gsap.fromTo(newElements,
-                    { opacity: 0, x: -10 },
-                    { opacity: 1, x: 0, duration: 0.25, stagger: 0.04, ease: "power2.out" }
-                );
+                ctx = gsap.context(() => {
+                    gsap.fromTo(newElements,
+                        { opacity: 0, x: -10 },
+                        { opacity: 1, x: 0, duration: 0.25, stagger: 0.04, ease: "power2.out" }
+                    );
+                });
                 newElements.forEach(el => el.setAttribute('data-entered', 'true'));
             }
         }
         prevCountRef.current = currentCount;
+        return () => {
+            if (ctx) ctx.revert();
+        };
     }, [attentionItems, attentionItems.length, reducedMotion]);
 
     if (!snapshot) return null;

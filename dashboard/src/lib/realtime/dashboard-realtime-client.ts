@@ -30,6 +30,18 @@ class DashboardRealtimeClient {
   private transportState: TransportState = "disconnected";
   private disconnectTimer: number | null = null;
 
+  constructor() {
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("online", () => {
+        if (this.subscriptions.size > 0) {
+          this.reconnectAttempt = 0;
+          this.clearReconnectTimer();
+          this.ensureConnected();
+        }
+      });
+    }
+  }
+
   subscribe(scopes: string[], listener: RealtimeListener, transportListener?: TransportStateListener): () => void {
     const subscriptionId = this.nextSubscriptionId++;
     this.subscriptions.set(subscriptionId, {

@@ -151,7 +151,7 @@ export function bootDashboardRealtimeWebSocketServer(args: {
   realtimeService: DashboardRealtimeService;
   logger: Logger;
   shouldHandleRequest?: (req: IncomingMessage) => boolean;
-}): void {
+}): () => void {
   const clients = new Map<Socket, RealtimeClientState>();
 
   const unsubscribe = args.realtimeService.subscribe((event) => {
@@ -319,17 +319,35 @@ export function bootDashboardRealtimeWebSocketServer(args: {
     });
     socket.on("error", (error) => {
       clients.delete(socket);
+      // A client closing its tab/connection abruptly surfaces here as a reset or
+      // broken pipe. That's a normal disconnect, not a server fault, so keep it
+      // out of the warning stream (it would otherwise spam a full stack trace
+      // for every page teardown). Genuinely unexpected errors still warn.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ECONNRESET" || code === "EPIPE" || code === "ECONNABORTED" || code === "ETIMEDOUT") {
+        args.logger.debug("Dashboard realtime websocket client disconnected", { code });
+        return;
+      }
       args.logger.warn("Dashboard realtime websocket client error", { error });
     });
   };
 
-  args.server.on("upgrade", upgradeHandler);
-  args.server.on("close", () => {
+  const cleanup = () => {
     unsubscribe();
     args.server.off("upgrade", upgradeHandler);
+    args.server.off("close", serverCloseHandler);
     for (const client of clients.values()) {
       client.socket.destroy();
     }
     clients.clear();
-  });
+  };
+
+  const serverCloseHandler = () => {
+    cleanup();
+  };
+
+  args.server.on("upgrade", upgradeHandler);
+  args.server.on("close", serverCloseHandler);
+
+  return cleanup;
 }
