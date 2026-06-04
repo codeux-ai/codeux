@@ -1,6 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useMemo } from "preact/hooks";
-import gsap from "gsap";
+import { useMemo } from "preact/hooks";
 import { Sparkline } from "./ui/Sparkline.js";
 import { StatsCard } from "../pages/stats/components/StatsCard.js";
 import { SkeletonCard } from "./layout/SkeletonLoader.js";
@@ -8,18 +7,7 @@ import { computeOverviewStats } from "../lib/overview-stats.js";
 import { formatTokens } from "../pages/stats/stats-utils.js";
 
 export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import("../hooks/use-overview-page-data.js").useOverviewPageData> }> = ({ pageData }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
     const { projects, selectedProject, sprints, tasks, stats: statsSnapshot, isLoading } = pageData;
-
-    useLayoutEffect(() => {
-        if (containerRef.current) {
-            gsap.fromTo(
-                containerRef.current.children,
-                { y: 24, opacity: 0, scale: 0.97 },
-                { y: 0, opacity: 1, scale: 1, duration: 0.9, stagger: 0.12, ease: "power3.out", delay: 0.15 }
-            );
-        }
-    }, []);
 
     const stats = useMemo(() => computeOverviewStats(projects, sprints, tasks, statsSnapshot), [projects, sprints, tasks, statsSnapshot]);
 
@@ -35,7 +23,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
     }
 
     return (
-        <div ref={containerRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
 
             {/* Card 1: Total Tokens */}
             <StatsCard
