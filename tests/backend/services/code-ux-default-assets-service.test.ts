@@ -1,32 +1,25 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../src/services/code-ux-default-assets-service.js";
 
 const tempDirs: string[] = [];
-const originalHome = process.env.HOME;
-const originalEnableInstallInTests = process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS;
 
 afterEach(async () => {
-  process.env.HOME = originalHome;
-  if (originalEnableInstallInTests === undefined) {
-    delete process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS;
-  } else {
-    process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS = originalEnableInstallInTests;
-  }
+  vi.unstubAllEnvs();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
 describe("Code UX default assets service", () => {
   it("installs missing base agents and container setup into the user directory without overwriting existing files", async () => {
-    process.env.CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS = "1";
+    vi.stubEnv("CODE_UX_ENABLE_DEFAULT_ASSET_INSTALL_IN_TESTS", "1");
 
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-default-assets-"));
     tempDirs.push(dir);
     const projectRoot = path.join(dir, "app");
     const homeDir = path.join(dir, "home");
-    process.env.HOME = homeDir;
+    vi.stubEnv("HOME", homeDir);
 
     await fs.mkdir(path.join(projectRoot, ".code-ux", "agents"), { recursive: true });
     await fs.mkdir(path.join(projectRoot, ".code-ux", "container"), { recursive: true });
