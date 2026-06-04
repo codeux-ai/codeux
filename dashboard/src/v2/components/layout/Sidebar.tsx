@@ -75,7 +75,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         gsap.to(indicatorLineRef.current, {
             y: relativeOffset,
             duration,
-            ease: "power3.out",
+            ease: "power2.out",
         });
     };
 
@@ -197,7 +197,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                     xmlns="http://www.w3.org/2000/svg"
                 >
                     <path
-                        d="M0 0C4.41828 0 8 3.58172 8 8V32C8 36.4183 4.41828 40 0 40V0Z"
+                        d="M 0 0 C 8 10, 8 30, 0 40"
                         className="fill-signal-500"
                     />
                 </svg>
@@ -222,7 +222,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                             <item.icon aria-hidden="true" className={`relative z-10 w-4 h-4 transition-all duration-300 shrink-0 ${isActive ? 'text-signal-600 dark:text-signal-400 drop-shadow-[0_0_8px_rgba(0,224,160,0.5)]' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:translate-x-1'}`} strokeWidth={isActive ? 2 : 1.5} />
 
                             <div className={`relative z-10 overflow-hidden transition-all duration-500 ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'opacity-100'}`}>
-                                <span className={`font-medium text-sm tracking-wide transition-all duration-300 whitespace-nowrap ${isActive ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:opacity-80'}`}>
+                                <span className={`font-medium text-sm tracking-wide transition-all duration-300 whitespace-nowrap ${isActive ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0'}`}>
                                     {item.label}
                                 </span>
                             </div>

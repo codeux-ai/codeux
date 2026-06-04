@@ -46,8 +46,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [initialDelay] = useState(() => {
-    const recentIndex = allMessages.length - foundIndex;
-    return recentIndex <= 5 ? (5 - recentIndex) * 0.08 : 0;
+    return foundIndex >= 0 ? foundIndex * 0.08 : 0;
   });
 
   useEffect(() => {
@@ -113,10 +112,17 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
         const text = codeElement.innerText;
         navigator.clipboard.writeText(text).then(() => {
           const badge = document.createElement("span");
-          badge.className = "text-signal-400 absolute right-full mr-2";
+          badge.className = "text-signal-400 absolute right-full mr-2 pointer-events-none";
           badge.textContent = "Copied!";
           copyBtn.style.position = "relative";
+          copyBtn.style.overflow = "visible";
           copyBtn.appendChild(badge);
+
+          gsap.fromTo(badge,
+            { opacity: 0, y: 5 },
+            { opacity: 1, y: 0, duration: 0.2, ease: "power2.out" }
+          );
+
           gsap.to(badge, { opacity: 0, duration: 0.3, delay: 1.5, onComplete: () => {
             badge.remove();
           }});
@@ -137,21 +143,21 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
         if (isCollapsed) {
           pre.style.overflow = "hidden";
           gsap.fromTo(pre,
-            { maxHeight: originalHeight, opacity: 1 },
-            { maxHeight: 0, opacity: 0, duration: 0.3, ease: "power2.inOut" }
+            { height: originalHeight, opacity: 1 },
+            { height: 0, opacity: 0, duration: 0.3, ease: "power2.inOut" }
           );
           toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>`;
         } else {
           gsap.fromTo(pre,
-            { maxHeight: 0, opacity: 0 },
+            { height: 0, opacity: 0 },
             {
-              maxHeight: originalHeight,
+              height: originalHeight,
               opacity: 1,
               duration: 0.3,
               ease: "power2.inOut",
               onComplete: () => {
                 pre.style.overflow = "auto";
-                pre.style.maxHeight = "none";
+                pre.style.height = "auto";
               }
             }
           );
