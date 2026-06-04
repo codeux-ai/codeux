@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { completeOnboarding, ensureProjectExists } from './helpers/prepare-app';
+import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
 async function ensureProjectSelected(page) {
   const projectButton = page.locator('[data-tour-id="project-selector"]');
@@ -16,7 +16,7 @@ async function ensureProjectSelected(page) {
 test.describe('Sprint Ledger Responsive Layout E2E Tests', () => {
   test.beforeEach(async ({ request }) => {
     await completeOnboarding(request);
-    await ensureProjectExists(request);
+    await ensureSelectedProject(request);
   });
 
   test('adapts layout and displays correct labels on mobile vs desktop', async ({ page }) => {

@@ -1,9 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { completeOnboarding } from './helpers/prepare-app';
+import { completeOnboarding, ensureSelectedProject } from './helpers/prepare-app';
 
 test.describe('AgentAvatarScene E2E Tests', () => {
   test.beforeEach(async ({ request }) => {
     await completeOnboarding(request);
+    // Agents are project-scoped; the create button is disabled without a
+    // selected project, so seed one before the page loads.
+    await ensureSelectedProject(request);
   });
 
   test('should render the WebGL canvas when WebGL is supported', async ({ page }) => {
