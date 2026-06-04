@@ -64,7 +64,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [touched, setTouched] = useState({ sprintId: false, title: false });
-  const [shakeFields, setShakeFields] = useState({ sprintId: false, title: false });
+  const shakeTargets = useRef<(HTMLDivElement | null)[]>([]);
   const [dependencySearchQuery, setDependencySearchQuery] = useState("");
 
   const initialTriggerRef = useRef<HTMLElement | null>(null);
@@ -144,13 +144,22 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     event.preventDefault();
     if (Object.keys(validationErrors).length > 0) {
       setTouched({ sprintId: true, title: true });
-      setShakeFields({
-        sprintId: !!validationErrors.sprintId,
-        title: !!validationErrors.title,
+
+      const targets = shakeTargets.current.filter((el, idx) => {
+        if (!el) return false;
+        if (idx === 0 && validationErrors.sprintId) return true;
+        if (idx === 1 && validationErrors.title) return true;
+        return false;
       });
-      setTimeout(() => {
-        setShakeFields({ sprintId: false, title: false });
-      }, 400);
+
+      if (targets.length > 0 && !reducedMotion) {
+        gsap.fromTo(targets,
+          { x: -4 },
+          { x: 4, duration: 0.1, yoyo: true, repeat: 3, ease: "linear", onComplete: () => {
+            gsap.set(targets, { x: 0 });
+          }}
+        );
+      }
       return;
     }
 
@@ -243,7 +252,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
           <form ref={fieldsRef} onSubmit={handleSubmit} className="flex flex-col gap-6">
             <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} autoDismiss={feedback.autoDismiss} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className={`group/field modal-animate-in relative ${shakeFields.sprintId && !reducedMotion ? "animate-shake" : ""}`}>
+              <div ref={el => { shakeTargets.current[0] = el as HTMLDivElement; }} className="group/field modal-animate-in relative">
                 <label htmlFor="add-task-sprint" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint</label>
                 <select
                   id="add-task-sprint"
@@ -267,7 +276,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 </div>
               </div>
 
-              <div className={`group/field modal-animate-in relative ${shakeFields.title && !reducedMotion ? "animate-shake" : ""}`}>
+              <div ref={el => { shakeTargets.current[1] = el as HTMLDivElement; }} className="group/field modal-animate-in relative">
                 <label htmlFor="add-task-title" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Title</label>
                 <input
                   id="add-task-title"

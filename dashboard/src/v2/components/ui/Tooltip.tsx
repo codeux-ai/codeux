@@ -90,13 +90,13 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
 
             gsap.fromTo(
                 tooltipRef.current,
-                { opacity: 0, scale: 0.95 },
+                { opacity: 0, scale: 0 },
                 { opacity: 1, scale: 1, duration: durations.fast, ease: GSAP_EASINGS.spring, overwrite: "auto" }
             );
         } else if (isRendered) {
             gsap.to(tooltipRef.current, {
                 opacity: 0,
-                scale: 0.95,
+                scale: 0,
                 duration: durations.fast,
                 ease: GSAP_EASINGS.smooth,
                 overwrite: "auto",

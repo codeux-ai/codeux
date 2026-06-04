@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
+import gsap from "gsap";
 import {
   Calendar,
   CheckCircle2,
@@ -15,7 +16,7 @@ import {
   Square,
   XCircle,
 } from "lucide-preact";
-import { useState } from "preact/hooks";
+import { useState, useRef, useLayoutEffect } from "preact/hooks";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { LinkedIssueTag } from "../sprint/LinkedIssueTag.js";
@@ -174,6 +175,21 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const badgeLabel = attentionOverride?.label ?? STATUS_LABELS[sprint.status];
   const isActionStripExpanded = isPointerExpanded || isFocusExpanded || menuOpen;
   const hiddenActionTabIndex = isActionStripExpanded ? 0 : -1;
+  const detailRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!detailRef.current) return;
+    if (isActionStripExpanded) {
+      gsap.fromTo(detailRef.current,
+        { height: 0, opacity: 0, y: -4 },
+        { height: "auto", opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }
+      );
+    } else {
+      gsap.to(detailRef.current,
+        { height: 0, opacity: 0, y: -4, duration: 0.3, ease: "power2.in" }
+      );
+    }
+  }, [isActionStripExpanded]);
   const quickActionBaseClass = "inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/80 px-3 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white";
 
   return (
@@ -335,10 +351,10 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       <tr className="block lg:table-row">
         <TableCell colSpan={9} className="!border-t-0 !border-b-0 !px-4 !py-0 lg:!border-y-0">
           <div
+            ref={detailRef}
             aria-hidden={!isActionStripExpanded}
-            className={`overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              isActionStripExpanded ? "max-h-[14rem] translate-y-0 opacity-100" : "max-h-0 -translate-y-1 opacity-0"
-            }`}
+            className="overflow-hidden"
+            style={{ height: 0, opacity: 0 }}
           >
             <div
               aria-busy={isRowPending || isAnyBulkPending}
@@ -355,6 +371,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                   href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
                   tabIndex={hiddenActionTabIndex}
                   aria-hidden={!isActionStripExpanded}
+                  style={{ opacity: isActionStripExpanded ? 1 : 0, transition: 'opacity 0.2s ease-in-out' }}
                   className={quickActionBaseClass}
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
@@ -417,6 +434,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                   type="button"
                   tabIndex={hiddenActionTabIndex}
                   aria-hidden={!isActionStripExpanded}
+                  style={{ opacity: isActionStripExpanded ? 1 : 0, transition: 'opacity 0.2s ease-in-out' }}
                   onClick={() => onDelete()}
                   className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-status-red/20 bg-status-red/8 px-3 text-xs font-bold text-status-red transition-colors hover:bg-status-red/12 focus-visible:ring-2 focus-visible:ring-status-red/30 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -428,9 +446,10 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                     type="button"
                     tabIndex={hiddenActionTabIndex}
                     aria-hidden={!isActionStripExpanded}
-                    onClick={(event) => onOpenRowMenu(event as MouseEvent, sprint.id)}
-                    disabled={isRowPending || isAnyBulkPending}
-                    className={`${quickActionBaseClass} disabled:cursor-not-allowed disabled:opacity-50`}
+                  style={{ opacity: isActionStripExpanded ? 1 : 0, transition: 'opacity 0.2s ease-in-out' }}
+                  onClick={(event) => onOpenRowMenu(event as MouseEvent, sprint.id)}
+                  disabled={isRowPending || isAnyBulkPending}
+                  className={`${quickActionBaseClass} disabled:cursor-not-allowed disabled:opacity-50`}
                     title="Open sprint actions"
                     aria-haspopup="menu"
                   >
@@ -471,10 +490,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                       type="button"
                       tabIndex={hiddenActionTabIndex}
                       aria-hidden={!isActionStripExpanded}
-                      disabled={isRowPending}
-                      aria-haspopup="menu"
-                      aria-expanded={menuOpen}
-                      className={`${quickActionBaseClass} disabled:cursor-not-allowed disabled:opacity-50`}
+                  style={{ opacity: isActionStripExpanded ? 1 : 0, transition: 'opacity 0.2s ease-in-out' }}
+                  disabled={isRowPending}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  className={`${quickActionBaseClass} disabled:cursor-not-allowed disabled:opacity-50`}
                       title="Open sprint actions"
                     >
                       {isRowPending ? (
