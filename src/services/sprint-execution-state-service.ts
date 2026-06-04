@@ -37,7 +37,17 @@ export class SprintExecutionStateService {
     const defaultBranch = settings.git.defaultBranch || "main";
     const featureBranch = args.feature_branch?.trim()
       || sprint.featureBranch?.trim()
-      || formatSprintBranch(settings.git.sprintBranchScheme, { number: sprintNumber, slug: sprint.slug || "", name: sprint.name || "", createdAt: sprint.createdAt || new Date().toISOString(), tasksCount: sprint.tasksCount || 0 });
+      || formatSprintBranch(settings.git.sprintBranchScheme, {
+        sprint_key_prefix: settings.git.sprintKeyPrefix,
+        sprint_number: sprintNumber,
+        sprint_name: sprint.name || "",
+        sprint_id: sprint.slug || "",
+        planning_agent: settings.agents.routing.planning.agentPresetId || "default",
+        agent_routing: settings.agents.routing.taskCoding.mode,
+        worker_agent: settings.agents.routing.taskCoding.agentPresetId || "default",
+        worker_provider: settings.workers.virtualWorkerProvider,
+        worker_model: settings.workers.model,
+      });
 
     return {
       project,

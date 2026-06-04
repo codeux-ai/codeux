@@ -50,11 +50,13 @@ describe("branch-name-generator", () => {
       planning_agent: "plan-agent-123",
       agent_routing: "routing-456",
       worker_agent: "worker-789",
+      worker_provider: "google",
+      worker_model: "gemini-1.5-pro",
     };
 
-    it("formats all 7 canonical tokens", () => {
-      const scheme = "{sprint_key_prefix}/{sprint_number}/{sprint_name}/{sprint_id}/{planning_agent}/{agent_routing}/{worker_agent}";
-      const expected = "PROJ/1/initial-setup/PROJ-1/plan-agent-123/routing-456/worker-789";
+    it("formats all 9 canonical tokens", () => {
+      const scheme = "{sprint_key_prefix}/{sprint_number}/{sprint_name}/{sprint_id}/{planning_agent}/{agent_routing}/{worker_agent}/{worker_provider}/{worker_model}";
+      const expected = "PROJ/1/initial-setup/PROJ-1/plan-agent-123/routing-456/worker-789/google/gemini-15-pro";
       expect(formatSprintBranch(scheme, mockMetadata)).toBe(expected);
     });
 

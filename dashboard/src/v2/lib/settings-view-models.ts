@@ -908,6 +908,8 @@ export const BRANCH_NAME_TOKEN_LABELS: Record<BranchNameToken, string> = {
   planning_agent: "Planning Agent",
   agent_routing: "Agent Routing",
   worker_agent: "Worker Agent",
+  worker_provider: "Worker Provider",
+  worker_model: "Worker Model",
 };
 
 export const getCanonicalBranchNameToken = (tokenOrScheme: string): BranchNameToken => {

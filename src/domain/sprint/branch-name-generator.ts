@@ -55,10 +55,12 @@ const resolveTokenValue = (token: string, metadata: BranchNameMetadata | SprintB
     // Full metadata provided (BranchNameMetadata)
     const m = metadata as BranchNameMetadata;
     const value = m[canonical as keyof BranchNameMetadata];
-    // Special handling for sprint_name to sanitize it
-    if (canonical === "sprint_name") {
-      return sanitizeBranchName(String(value || ""));
+    
+    // Sanitize values that could contain branch-unsafe characters
+    if (typeof value === "string" && canonical !== "sprint_id" && canonical !== "sprint_key_prefix") {
+      return sanitizeBranchName(value);
     }
+    
     return String(value || "");
   } else {
     // Legacy SprintBranchMetadata provided
@@ -71,6 +73,8 @@ const resolveTokenValue = (token: string, metadata: BranchNameMetadata | SprintB
       case "planning_agent": return "";
       case "agent_routing": return "";
       case "worker_agent": return "";
+      case "worker_provider": return "";
+      case "worker_model": return "";
       default: return `{${token}}`;
     }
   }

@@ -1006,11 +1006,15 @@ export class SprintFileBrowserService {
     const settings = this.resolveSettings(projectId, sprintId);
     const sprintNumber = typeof sprint.number === "number" ? sprint.number : 0;
     return formatSprintBranch(settings.git.sprintBranchScheme, {
-      number: sprintNumber,
-      slug: sprint.slug || String(sprintNumber),
-      name: sprint.name || "",
-      createdAt: sprint.createdAt || new Date().toISOString(),
-      tasksCount: sprint.tasksCount || 0,
+      sprint_key_prefix: settings.git.sprintKeyPrefix,
+      sprint_number: sprintNumber,
+      sprint_id: sprint.slug || String(sprintNumber),
+      sprint_name: sprint.name || "",
+      planning_agent: settings.agents.routing.planning.agentPresetId || "default",
+      agent_routing: settings.agents.routing.taskCoding.mode,
+      worker_agent: settings.agents.routing.taskCoding.agentPresetId || "default",
+      worker_provider: settings.workers.virtualWorkerProvider,
+      worker_model: settings.workers.model,
     });
   }
 

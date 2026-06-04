@@ -1,5 +1,4 @@
 import { randomUUID } from "crypto";
-import { formatSprintBranch } from "../domain/sprint/branch-name-generator.js";
 import type { DashboardSettings, DashboardSettingsScope } from "../contracts/app-types.js";
 import type { WorkerTaskDispatchClaim, TaskRunState } from "../contracts/execution-types.js";
 import type { McpConnectionRecord } from "../contracts/connection-chat-types.js";

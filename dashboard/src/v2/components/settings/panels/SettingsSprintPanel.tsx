@@ -106,6 +106,8 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
             { key: "{planning_agent}", desc: "Planning Agent" },
             { key: "{agent_routing}", desc: "Agent Routing" },
             { key: "{worker_agent}", desc: "Worker Agent" },
+            { key: "{worker_provider}", desc: "Worker Provider" },
+            { key: "{worker_model}", desc: "Worker Model" },
           ]} />}
         >
           <BranchNameSchemeEditor
