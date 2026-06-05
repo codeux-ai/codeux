@@ -298,7 +298,6 @@ export class SprintPreviewService {
         const containerStartScript = [
           `mkdir -p "${containerWorkspacePath}"`,
           `tar -xf /tmp/workspace.tar -C "${containerWorkspacePath}"`,
-          `rm -f /tmp/workspace.tar`,
           `exec bash /tmp/preview-start.sh`,
         ].join(" && ");
 
