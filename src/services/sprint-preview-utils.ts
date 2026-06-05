@@ -14,7 +14,7 @@ interface PackageJsonLike {
   scripts?: Record<string, string>;
 }
 
-const PREVIEW_SCRIPT_NAMES = ["dev", "preview", "start", "serve"] as const;
+const PREVIEW_SCRIPT_NAMES = ["preview", "start", "serve"] as const;
 const STATIC_DIR_CANDIDATES = ["dist", "build", "out", "public"] as const;
 
 const commandExistsSnippet = (command: string): string => `if ! command -v ${command} >/dev/null 2>&1; then npm install -g ${command}; fi`;
@@ -278,11 +278,6 @@ function buildRunCommand(
   const runner = getRunCommandFactory(packageManager);
   const availableScript = PREVIEW_SCRIPT_NAMES.find((name) => typeof scripts[name] === "string" && scripts[name].trim().length > 0);
 
-  if (availableScript === "dev") {
-    const devArgs = ["--host", "0.0.0.0", "--port", "\"$SPRINT_PREVIEW_PORT\""];
-    return `HOST=0.0.0.0 PORT="$SPRINT_PREVIEW_PORT" DASHBOARD_HOST=0.0.0.0 DASHBOARD_PORT="$SPRINT_PREVIEW_PORT" ${runner("dev", devArgs)}`;
-  }
-
   if (availableScript === "preview") {
     const previewArgs = ["--host", "0.0.0.0", "--port", "\"$SPRINT_PREVIEW_PORT\""];
     return `HOST=0.0.0.0 PORT="$SPRINT_PREVIEW_PORT" DASHBOARD_HOST=0.0.0.0 DASHBOARD_PORT="$SPRINT_PREVIEW_PORT" ${runner("preview", previewArgs)}`;
@@ -310,7 +305,7 @@ function buildRunCommand(
 async function readPackageJson(repoPath: string): Promise<PackageJsonLike | null> {
   try {
     const raw = await fs.readFile(path.join(repoPath, "package.json"), "utf8");
-    const parsed = JSON.parse(raw) as PackageJsonLike;
+    const parsed = JSON.parse(raw.replace(/^\uFEFF/, "")) as PackageJsonLike;
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;

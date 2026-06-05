@@ -45,7 +45,7 @@ const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   "../../.code-ux/container/setup.sh",
 );
 const CONTAINER_PREVIEW_PROXY_PORT = 39000;
-const PREVIEW_READINESS_TIMEOUT_MS = 120_000;
+const PREVIEW_READINESS_TIMEOUT_MS = 300_000;
 const PREVIEW_LOG_TAIL_LINES = 200;
 const PREVIEW_LOG_DRIVER = "local";
 const ORPHANED_SETUP_CONTAINER_COMMAND = "bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh";
@@ -78,6 +78,7 @@ interface DockerContainerSummary {
   id: string;
   name: string | null;
   status: string | null;
+  hostPort?: number | null;
   labels: Record<string, string>;
 }
 
@@ -135,6 +136,8 @@ export class SprintPreviewService {
 
       await this.enforceMaxConcurrentContainers(projectId, settings.maxConcurrentContainers, existing?.id || null);
 
+      const hostPort = existing?.hostPort || await this.findFreePort(settings);
+
       const session = existing || this.deps.sprintPreviewRepository.createSession({
         projectId,
         sprintId,
@@ -152,7 +155,7 @@ export class SprintPreviewService {
 
       const sessionBasePatch = {
         status: "starting" as const,
-        hostPort: null,
+        hostPort,
         containerAppPort: settings.containerAppPort,
         startupScriptPath: preparedScript.scriptPath,
         startupMode: preparedScript.mode,
@@ -179,8 +182,6 @@ export class SprintPreviewService {
           await this.removeContainerIfPresent(existing?.containerId || existing?.containerName || containerName, project.baseDir);
         }
         await this.removeContainerIfPresent(containerName, project.baseDir);
-
-        const hostPort = await this.findFreePort(settings);
         await fs.mkdir(runtimeHome, { recursive: true });
         await fs.mkdir(runtimeNpmPrefix, { recursive: true });
         await fs.mkdir(runtimeNpmCache, { recursive: true });
@@ -221,8 +222,6 @@ export class SprintPreviewService {
         });
         const shouldRunSetupScriptAtRuntime = false;
 
-        const projectRuntimeSource = this.mapDockerSourcePathForDaemon(projectRuntimeRoot, project.baseDir);
-        const startupScriptSource = this.mapDockerSourcePathForDaemon(startupRuntimePath, project.baseDir);
         const workflowSettings = effectiveSettings.cliWorkflow;
         const credentialMounts = await new DockerCredentialMountBuilder().build(workflowSettings, project.baseDir, () => undefined);
         const bootstrapScript = new DockerBootstrapBuilder().build({
@@ -232,9 +231,22 @@ export class SprintPreviewService {
           runSetupScript: shouldRunSetupScriptAtRuntime,
         });
 
+        const userSpec = await this.resolveDockerUserSpec(workspacePath);
+        const volumeName = `code-ux-preview-volume-${sprintId}`;
+        if (userSpec) {
+          await runCommandStrict("docker", [
+            "run",
+            "--rm",
+            "-v", `${volumeName}:/volume-data`,
+            "alpine:3.20",
+            "sh",
+            "-c",
+            `chown -R ${userSpec} /volume-data && chmod 777 /volume-data`
+          ], project.baseDir).catch(() => undefined);
+        }
+
         const dockerArgs = [
-          "run",
-          "-d",
+          "create",
           "--name", containerName,
           "--log-driver", PREVIEW_LOG_DRIVER,
           "-p", `127.0.0.1:${hostPort}:${CONTAINER_PREVIEW_PROXY_PORT}`,
@@ -244,8 +256,7 @@ export class SprintPreviewService {
           "--label", `code-ux.sprint-id=${sprintId}`,
           "--label", `code-ux.session-id=${session.id}`,
           "--label", `code-ux.host-port=${hostPort}`,
-          "--mount", toDockerMountArg({ source: projectRuntimeSource, destination: CONTAINER_PREVIEW_RUNTIME_ROOT, readonly: false }),
-          "--mount", toDockerMountArg({ source: startupScriptSource, destination: startupMountPath, readonly: true }),
+          "--mount", toDockerMountArg({ type: "volume", source: volumeName, destination: CONTAINER_PREVIEW_RUNTIME_ROOT, readonly: false }),
           "-e", `HOME=${containerRuntimeHome}`,
           "-e", "HOST=0.0.0.0",
           "-e", `PORT=${settings.containerAppPort}`,
@@ -260,7 +271,6 @@ export class SprintPreviewService {
           "-e", `SPRINT_PREVIEW_RUN_COMMAND=${preparedScript.runCommand || ""}`,
         ];
 
-        const userSpec = await this.resolveDockerUserSpec(workspacePath);
         if (userSpec) {
           dockerArgs.push("--user", userSpec);
         }
@@ -285,7 +295,22 @@ export class SprintPreviewService {
           }));
         }
 
-        dockerArgs.push(resolvedImage.image, "bash", "-c", bootstrapScript, "preview-runner", "bash", startupMountPath);
+        const containerStartScript = [
+          `mkdir -p "${containerWorkspacePath}"`,
+          `tar -xf /tmp/workspace.tar -C "${containerWorkspacePath}"`,
+          `exec bash /tmp/preview-start.sh`,
+        ].join(" && ");
+
+        dockerArgs.push(
+          resolvedImage.image,
+          "bash",
+          "-c",
+          bootstrapScript,
+          "preview-runner",
+          "bash",
+          "-c",
+          containerStartScript,
+        );
 
         const startResult = await runCommandStrict("docker", dockerArgs, project.baseDir);
         const containerId = startResult.stdout.trim();
@@ -293,9 +318,15 @@ export class SprintPreviewService {
           throw new Error("Docker preview container did not return a container id.");
         }
 
+        const archivePath = `${workspacePath}.tar`;
+        await runCommandStrict("docker", ["cp", archivePath, `${containerName}:/tmp/workspace.tar`], project.baseDir);
+        await runCommandStrict("docker", ["cp", startupRuntimePath, `${containerName}:/tmp/preview-start.sh`], project.baseDir);
+        await fs.rm(archivePath, { force: true }).catch(() => undefined);
+
+        await runCommandStrict("docker", ["start", containerName], project.baseDir);
+
         const updated = this.deps.sprintPreviewRepository.updateSession(session.id, {
           ...sessionBasePatch,
-          hostPort,
           containerId,
           containerName,
           lastBuildAt: new Date().toISOString(),
@@ -363,7 +394,7 @@ export class SprintPreviewService {
     const session = await this.requireSession(sessionId);
     return await this.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
       const containerRef = session.containerId || session.containerName || this.buildContainerName(session.projectId, session.sprintId);
-      await this.removeContainerIfPresent(containerRef, session.worktreePath || process.cwd());
+      await this.removeContainerIfPresent(containerRef, process.cwd());
       return this.deps.sprintPreviewRepository.updateSession(sessionId, {
         status: "stopped",
         containerId: null,
@@ -379,7 +410,8 @@ export class SprintPreviewService {
     const session = await this.requireSession(sessionId);
     await this.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
       const containerRef = session.containerId || session.containerName || this.buildContainerName(session.projectId, session.sprintId);
-      await this.removeContainerIfPresent(containerRef, session.worktreePath || process.cwd());
+      await this.removeContainerIfPresent(containerRef, process.cwd());
+      await runCommandStrict("docker", ["volume", "rm", `code-ux-preview-volume-${session.sprintId}`], process.cwd()).catch(() => undefined);
       this.deps.sprintPreviewRepository.deleteSession(sessionId);
     });
   }
@@ -395,7 +427,7 @@ export class SprintPreviewService {
         logs: await this.readContainerLogs(
           refreshed.containerId || refreshed.containerName || refreshed.id,
           tail,
-          refreshed.worktreePath || process.cwd(),
+          process.cwd(),
         ),
       };
     } catch (error) {
@@ -617,15 +649,18 @@ export class SprintPreviewService {
       });
     }
 
-    const adoptedSession = session.containerId === container.id && session.containerName === container.name
+    const hostPort = session.hostPort || container.hostPort || null;
+
+    const adoptedSession = session.containerId === container.id && session.containerName === container.name && session.hostPort === hostPort
       ? session
       : this.deps.sprintPreviewRepository.updateSession(session.id, {
         containerId: container.id,
         containerName: container.name,
+        hostPort,
       });
 
     if (container.status !== "running") {
-      const logs = await this.readContainerLogs(container.id, PREVIEW_LOG_TAIL_LINES, adoptedSession.worktreePath || process.cwd()).catch(() => "");
+      const logs = await this.readContainerLogs(container.id, PREVIEW_LOG_TAIL_LINES, process.cwd()).catch(() => "");
       const lastError = this.extractPreviewError(logs) || adoptedSession.lastError || `Preview container is ${container.status}.`;
       return this.deps.sprintPreviewRepository.updateSession(adoptedSession.id, {
         status: "error",
@@ -753,7 +788,7 @@ export class SprintPreviewService {
           "-a",
           "--filter", "label=code-ux.preview=true",
           "--format",
-          "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Label \"code-ux.project-id\"}}\t{{.Label \"code-ux.sprint-id\"}}\t{{.Label \"code-ux.session-id\"}}",
+          "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Label \"code-ux.project-id\"}}\t{{.Label \"code-ux.sprint-id\"}}\t{{.Label \"code-ux.session-id\"}}\t{{.Label \"code-ux.host-port\"}}",
         ],
         cwd,
       );
@@ -762,11 +797,13 @@ export class SprintPreviewService {
         .map((line) => line.trim())
         .filter(Boolean)
         .map((line) => {
-          const [id, name, rawStatus, projectId, sprintId, sessionId] = line.split("\t");
+          const [id, name, rawStatus, projectId, sprintId, sessionId, hostPortStr] = line.split("\t");
+          const parsedPort = hostPortStr ? parseInt(hostPortStr, 10) : NaN;
           return {
             id,
             name: name || null,
             status: this.normalizeDockerState(rawStatus),
+            hostPort: !isNaN(parsedPort) ? parsedPort : null,
             labels: {
               "code-ux.project-id": projectId || "",
               "code-ux.sprint-id": sprintId || "",
@@ -780,7 +817,7 @@ export class SprintPreviewService {
   }
 
   private async findManagedContainerForSession(session: SprintPreviewSession): Promise<DockerContainerSummary | null> {
-    const containers = await this.listPreviewContainers(session.worktreePath || process.cwd());
+    const containers = await this.listPreviewContainers(process.cwd());
     const bySession = containers.find((container) => container.labels["code-ux.session-id"] === session.id);
     if (bySession) {
       return bySession;
@@ -967,55 +1004,7 @@ export class SprintPreviewService {
     };
   }
 
-  private async safeRmWorkspace(workspacePath: string, repoPath: string): Promise<void> {
-    try {
-      await this.rmWorkspaceWithRetries(workspacePath);
-      return;
-    } catch (error: any) {
-      const code = error?.code;
-      const recoverableOnWindows = process.platform === "win32"
-        && (code === "EPERM" || code === "EACCES" || code === "EBUSY" || code === "ENOTEMPTY");
-      if (!recoverableOnWindows) {
-        throw error;
-      }
 
-      // On Windows, Docker Desktop releases its file handles to the bind-mounted
-      // workspace lazily after `docker rm -f`, so host-side deletion of a populated
-      // node_modules tree can keep failing with EPERM even after retries. Delete the
-      // tree from inside a throwaway Linux container, which removes the files through
-      // the daemon and bypasses the lingering host-side locks.
-      try {
-        const parentDir = path.dirname(workspacePath);
-        const workspaceName = path.basename(workspacePath);
-        const source = this.mapDockerSourcePathForDaemon(parentDir, repoPath);
-
-        await runCommandStrict("docker", [
-          "run",
-          "--rm",
-          "--mount",
-          toDockerMountArg({ source, destination: "/clean-target", readonly: false }),
-          "alpine:3.20",
-          "rm",
-          "-rf",
-          `/clean-target/${workspaceName}`,
-        ], repoPath);
-      } catch (dockerError) {
-        this.deps.logger?.warn("Container-assisted preview workspace cleanup failed; retrying host removal", {
-          workspacePath,
-          error: dockerError instanceof Error ? dockerError.message : String(dockerError),
-        });
-      }
-
-      // Whether or not the helper container removed the tree, do a final retried host
-      // removal. With `force: true` this is a no-op when the directory is already gone,
-      // and otherwise surfaces a clean error if something still holds the workspace.
-      await this.rmWorkspaceWithRetries(workspacePath);
-    }
-  }
-
-  private async rmWorkspaceWithRetries(workspacePath: string): Promise<void> {
-    await fs.rm(workspacePath, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
-  }
 
   private async materializePreviewWorkspace(
     repoPath: string,
@@ -1032,44 +1021,11 @@ export class SprintPreviewService {
     const exportRef = await this.resolvePreviewExportRef(repoPath, featureBranch);
     const archivePath = `${workspacePath}.tar`;
 
-    await this.safeRmWorkspace(workspacePath, repoPath);
-    await fs.mkdir(workspacePath, { recursive: true });
+    await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
+    await fs.mkdir(path.dirname(archivePath), { recursive: true });
     await fs.rm(archivePath, { force: true }).catch(() => undefined);
 
-    try {
-      await runCommandStrict("git", ["archive", "--format=tar", "-o", archivePath, exportRef], repoPath);
-      await this.extractPreviewArchive(repoPath, workspacePath, archivePath);
-    } finally {
-      await fs.rm(archivePath, { force: true }).catch(() => undefined);
-    }
-  }
-
-  private async extractPreviewArchive(repoPath: string, workspacePath: string, archivePath: string): Promise<void> {
-    const archiveRoot = path.dirname(workspacePath);
-    const archiveFileName = path.basename(archivePath);
-    const workspaceName = path.basename(workspacePath);
-    const source = this.mapDockerSourcePathForDaemon(archiveRoot, repoPath);
-    const userSpec = await this.resolveDockerUserSpec(workspacePath);
-
-    const dockerArgs = [
-      "run",
-      "--rm",
-      "--mount",
-      toDockerMountArg({ source, destination: "/preview-extract", readonly: false }),
-    ];
-    if (userSpec) {
-      dockerArgs.push("--user", userSpec);
-    }
-    dockerArgs.push(
-      "alpine:3.20",
-      "tar",
-      "-xf",
-      pathPosix.join("/preview-extract", archiveFileName),
-      "-C",
-      pathPosix.join("/preview-extract", workspaceName),
-    );
-
-    await runCommandStrict("docker", dockerArgs, repoPath);
+    await runCommandStrict("git", ["archive", "--format=tar", "-o", archivePath, exportRef], repoPath);
   }
 
   private async ensurePreviewBranchExists(

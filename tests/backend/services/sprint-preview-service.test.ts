@@ -6,6 +6,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import { spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { SprintPreviewService } from "../../../src/services/sprint-preview-service.js";
+import { getDockerUserSpec } from "../../../src/services/cli-docker-utils.js";
 
 const execFile = promisify(execFileCallback);
 const tempDirs: string[] = [];
@@ -75,6 +76,16 @@ describeIfDocker("SprintPreviewService workspace export", () => {
     });
 
     await (service as any).materializePreviewWorkspace(projectPath, workspacePath, "feature/sprint-51", "main");
+    await fs.mkdir(workspacePath, { recursive: true });
+    await run("docker", [
+      "run",
+      "--rm",
+      "--user", getDockerUserSpec(),
+      "-v", `${path.dirname(workspacePath)}:/data`,
+      "alpine:3.20",
+      "tar", "-xf", `/data/${path.basename(workspacePath)}.tar`, "-C", `/data/${path.basename(workspacePath)}`
+    ]);
+    await fs.rm(`${workspacePath}.tar`, { force: true }).catch(() => undefined);
 
     const marker = await fs.readFile(path.join(workspacePath, "src", "preview-marker.txt"), "utf8");
     expect(marker.replace(/\r\n/g, "\n")).toBe("remote-only branch\n");
@@ -123,9 +134,17 @@ describeIfDocker("SprintPreviewService workspace export", () => {
       settingsRepository: {} as any,
     });
 
-    // We shouldn't need to manually check out or fetch inside projectPath in tests,
-    // as materializePreviewWorkspace is expected to fetch origin if available.
     await (service as any).materializePreviewWorkspace(projectPath, workspacePath, "feature/sprint-52", "main");
+    await fs.mkdir(workspacePath, { recursive: true });
+    await run("docker", [
+      "run",
+      "--rm",
+      "--user", getDockerUserSpec(),
+      "-v", `${path.dirname(workspacePath)}:/data`,
+      "alpine:3.20",
+      "tar", "-xf", `/data/${path.basename(workspacePath)}.tar`, "-C", `/data/${path.basename(workspacePath)}`
+    ]);
+    await fs.rm(`${workspacePath}.tar`, { force: true }).catch(() => undefined);
 
     const stale = await fs.readFile(path.join(workspacePath, "src", "stale.txt"), "utf8");
     expect(stale.replace(/\r\n/g, "\n")).toBe("latest remote branch\n");

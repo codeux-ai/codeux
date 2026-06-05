@@ -115,7 +115,7 @@ describe("SprintFileBrowserService", () => {
       if (cmd === "docker" && args[0] === "ps") {
         return ok(args.includes("--format") ? containerTsv : "");
       }
-      if (cmd === "docker" && args[0] === "run" && args.includes("-d")) {
+      if (cmd === "docker" && args[0] === "create") {
         return ok("cid123\n");
       }
       return ok();
@@ -131,12 +131,16 @@ describe("SprintFileBrowserService", () => {
     expect(session.status).toBe("running");
     expect(session.featureBranch).toBe("feature/test");
 
-    const runCalls = runCommandStrict.mock.calls.filter(([cmd, args]) => cmd === "docker" && (args as string[]).includes("-d"));
-    expect(runCalls.length).toBe(1);
-    const dockerRunArgs = runCalls[0][1] as string[];
+    const createCalls = runCommandStrict.mock.calls.filter(([cmd, args]) => cmd === "docker" && (args as string[])[0] === "create");
+    expect(createCalls.length).toBe(1);
+    const dockerRunArgs = createCalls[0][1] as string[];
     expect(dockerRunArgs).toContain("--label");
     expect(dockerRunArgs).toContain("code-ux.file-browser=true");
     expect(dockerRunArgs).toContain("tail");
+
+    expect(runCommandStrict.mock.calls.some(([cmd, args]) => cmd === "docker" && (args as string[])[0] === "cp")).toBe(true);
+    expect(runCommandStrict.mock.calls.some(([cmd, args]) => cmd === "docker" && (args as string[])[0] === "start")).toBe(true);
+    expect(runCommandStrict.mock.calls.some(([cmd, args]) => cmd === "docker" && (args as string[])[0] === "exec")).toBe(true);
   });
 
   it("removes other file browser containers to enforce a single global instance", async () => {
@@ -154,7 +158,7 @@ describe("SprintFileBrowserService", () => {
         }
         return ok("");
       }
-      if (cmd === "docker" && args[0] === "run" && args.includes("-d")) {
+      if (cmd === "docker" && args[0] === "create") {
         return ok("cid123\n");
       }
       return ok();
@@ -373,7 +377,7 @@ describe("SprintFileBrowserService", () => {
       if (cmd === "docker" && args[0] === "ps") {
         return ok(args.includes("--format") ? containerTsv : "");
       }
-      if (cmd === "docker" && args[0] === "run" && args.includes("-d")) {
+      if (cmd === "docker" && args[0] === "create") {
         return ok("cid123\n");
       }
       return ok();
@@ -387,7 +391,7 @@ describe("SprintFileBrowserService", () => {
     await service.reconcileSessions();
 
     const rebuilt = runCommandStrict.mock.calls.some(
-      ([cmd, args]) => cmd === "docker" && (args as string[])[0] === "run" && (args as string[]).includes("-d"),
+      ([cmd, args]) => cmd === "docker" && (args as string[])[0] === "create",
     );
     expect(rebuilt).toBe(true);
     const refreshed = fileBrowserRepository.getSession(session.id);

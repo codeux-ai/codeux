@@ -70,6 +70,38 @@ describe("sprint-preview-utils", () => {
     expect(detection.runCommand).toContain("DASHBOARD_PORT=\"$SPRINT_PREVIEW_PORT\"");
   });
 
+  it("parses UTF-8 BOM package.json files and prefers preview over dev", async () => {
+    const repoDir = await createTempRepo();
+    await fs.writeFile(path.join(repoDir, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", "utf8");
+    await fs.writeFile(path.join(repoDir, "package.json"), `\uFEFF${JSON.stringify({
+      scripts: {
+        build: "vite build",
+        dev: "vite dev",
+        preview: "vite preview",
+      },
+    })}`, "utf8");
+
+    const detection = await detectSprintPreviewCommands(repoDir);
+
+    expect(detection.packageManager).toBe("pnpm");
+    expect(detection.buildCommand).toBe("pnpm build");
+    expect(detection.runCommand).toContain("pnpm preview -- --host 0.0.0.0 --port \"$SPRINT_PREVIEW_PORT\"");
+    expect(detection.runCommand).not.toContain("pnpm dev");
+  });
+
+  it("does not use a dev script as an automatic preview fallback", async () => {
+    const repoDir = await createTempRepo();
+    await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({
+      scripts: {
+        dev: "vite dev",
+      },
+    }), "utf8");
+
+    const detection = await detectSprintPreviewCommands(repoDir);
+
+    expect(detection.runCommand).toBeNull();
+  });
+
   it("falls back to serving built static output when no runtime script exists", async () => {
     const repoDir = await createTempRepo();
     await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({

@@ -140,6 +140,7 @@ Startup hygiene:
 - Code UX also removes orphaned unlabeled setup-helper containers that were created by older inline setup-image preview flows
 - persisted preview sessions are reset back to `stopped` during that startup cleanup so stale containers do not survive process restarts
 - any legacy repo-local preview worktree directories under `.code-ux/worktrees/preview-*` are removed on startup so older preview implementations stop polluting the repository checkout
+- **Windows Workspace Deletion**: On Windows host environments, deeply nested `node_modules` folders from package managers like `pnpm` can exceed the `MAX_PATH` limitation, causing Node's recursive `fs.rm` to hang or loop indefinitely without throwing. To ensure robust cleanup, both `SprintPreviewService` and `SprintFileBrowserService` leverage a throwaway `alpine` Docker container to perform `rm -rf` over the bind-mounted workspace directory *first*, before performing a fallback host-side recursive removal.
 
 ## Dashboard Surface
 

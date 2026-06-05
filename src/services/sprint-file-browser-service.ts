@@ -147,26 +147,36 @@ export class SprintFileBrowserService {
           },
         );
 
-        const workspaceSource = this.mapDockerSourcePathForDaemon(workspacePath, project.baseDir);
+        const volumeName = `code-ux-file-browser-volume-${sprintId}`;
+        await runCommandStrict("docker", ["volume", "rm", "-f", volumeName], project.baseDir).catch(() => undefined);
+
+        const archivePath = `${workspacePath}.tar`;
         const dockerArgs = [
-          "run",
-          "-d",
+          "create",
           "--name", containerName,
           "--label", FILE_BROWSER_LABEL,
           "--label", `code-ux.project-id=${projectId}`,
           "--label", `code-ux.sprint-id=${sprintId}`,
           "--label", `code-ux.session-id=${session.id}`,
           "--workdir", CONTAINER_WORKSPACE_PATH,
-          "--mount", toDockerMountArg({ source: workspaceSource, destination: CONTAINER_WORKSPACE_PATH, readonly: true }),
+          "--mount", toDockerMountArg({ type: "volume", source: volumeName, destination: CONTAINER_WORKSPACE_PATH, readonly: false }),
           FILE_BROWSER_IMAGE,
           "tail", "-f", "/dev/null",
         ];
 
-        const startResult = await runCommandStrict("docker", dockerArgs, project.baseDir);
-        const containerId = startResult.stdout.trim();
+        const createResult = await runCommandStrict("docker", dockerArgs, project.baseDir);
+        const containerId = createResult.stdout.trim();
         if (!containerId) {
           throw new Error("Docker file browser container did not return a container id.");
         }
+
+        await runCommandStrict("docker", ["cp", archivePath, `${containerName}:/tmp/workspace.tar`], project.baseDir);
+        await fs.rm(archivePath, { force: true }).catch(() => undefined);
+
+        await runCommandStrict("docker", ["start", containerName], project.baseDir);
+
+        const extractCmd = `tar -xf /tmp/workspace.tar -C ${CONTAINER_WORKSPACE_PATH} && rm -f /tmp/workspace.tar`;
+        await runCommandStrict("docker", ["exec", containerName, "sh", "-c", extractCmd], project.baseDir);
 
         const updated = this.deps.sprintFileBrowserRepository.updateSession(session.id, {
           ...basePatch,
@@ -200,7 +210,7 @@ export class SprintFileBrowserService {
     const session = await this.requireSession(sessionId);
     return await this.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
       const containerRef = session.containerId || session.containerName || this.buildContainerName(session.projectId, session.sprintId);
-      await this.removeContainerIfPresent(containerRef, session.workspacePath || process.cwd());
+      await this.removeContainerIfPresent(containerRef, process.cwd());
       return this.deps.sprintFileBrowserRepository.updateSession(sessionId, {
         status: "stopped",
         containerId: null,
@@ -215,7 +225,8 @@ export class SprintFileBrowserService {
     const session = await this.requireSession(sessionId);
     await this.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
       const containerRef = session.containerId || session.containerName || this.buildContainerName(session.projectId, session.sprintId);
-      await this.removeContainerIfPresent(containerRef, session.workspacePath || process.cwd());
+      await this.removeContainerIfPresent(containerRef, process.cwd());
+      await runCommandStrict("docker", ["volume", "rm", `code-ux-file-browser-volume-${session.sprintId}`], process.cwd()).catch(() => undefined);
       this.deps.sprintFileBrowserRepository.deleteSession(sessionId);
     });
   }
@@ -224,7 +235,7 @@ export class SprintFileBrowserService {
     const session = await this.requireRunningSession(sessionId);
     const script = this.buildTreeScript();
     const result = await commandRunner.run("docker", ["exec", session.containerId!, "sh", "-c", script], {
-      cwd: session.workspacePath || process.cwd(),
+      cwd: process.cwd(),
     });
     if (!result.ok) {
       throw new Error(result.stderr.trim() || "Failed to read file tree from container.");
@@ -238,7 +249,7 @@ export class SprintFileBrowserService {
     const containerPath = pathPosix.join(CONTAINER_WORKSPACE_PATH, relPath);
     const script = `head -c ${MAX_FILE_BYTES + 1} -- ${this.shellQuote(containerPath)}`;
     const result = await commandRunner.run("docker", ["exec", session.containerId!, "sh", "-c", script], {
-      cwd: session.workspacePath || process.cwd(),
+      cwd: process.cwd(),
       trimOutput: false,
     });
     if (!result.ok) {
@@ -700,57 +711,24 @@ export class SprintFileBrowserService {
     workspacePath: string,
     featureBranch: string,
     defaultBranch: string,
-    syncLatestFromOrigin: boolean,
-    gitAuthOptions: GitHttpAuthOptions,
+    syncLatestFromOrigin = true,
+    gitAuthOptions?: GitHttpAuthOptions,
   ): Promise<void> {
     if (syncLatestFromOrigin) {
-      await fetchOriginIfAvailable(repoPath, gitAuthOptions).catch(() => undefined);
+      await fetchOriginIfAvailable(repoPath, gitAuthOptions);
     }
-    await this.ensureBranchExists(repoPath, featureBranch, defaultBranch, gitAuthOptions);
+    await this.ensureBranchExists(repoPath, featureBranch, defaultBranch, gitAuthOptions || {});
     const exportRef = await this.resolveExistingRef(repoPath, featureBranch);
     if (!exportRef) {
       throw new Error(`Cannot export file browser workspace: branch ${featureBranch} does not exist locally or on origin.`);
     }
     const archivePath = `${workspacePath}.tar`;
 
-    await fs.rm(workspacePath, { recursive: true, force: true });
-    await fs.mkdir(workspacePath, { recursive: true });
+    await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
+    await fs.mkdir(path.dirname(archivePath), { recursive: true });
     await fs.rm(archivePath, { force: true }).catch(() => undefined);
 
-    try {
-      await runCommandStrict("git", ["archive", "--format=tar", "-o", archivePath, exportRef], repoPath);
-      await this.extractArchive(repoPath, workspacePath, archivePath);
-    } finally {
-      await fs.rm(archivePath, { force: true }).catch(() => undefined);
-    }
-  }
-
-  private async extractArchive(repoPath: string, workspacePath: string, archivePath: string): Promise<void> {
-    const archiveRoot = path.dirname(workspacePath);
-    const archiveFileName = path.basename(archivePath);
-    const workspaceName = path.basename(workspacePath);
-    const source = this.mapDockerSourcePathForDaemon(archiveRoot, repoPath);
-    const userSpec = await this.resolveDockerUserSpec(workspacePath);
-
-    const dockerArgs = [
-      "run",
-      "--rm",
-      "--mount",
-      toDockerMountArg({ source, destination: "/file-browser-extract", readonly: false }),
-    ];
-    if (userSpec) {
-      dockerArgs.push("--user", userSpec);
-    }
-    dockerArgs.push(
-      FILE_BROWSER_IMAGE,
-      "tar",
-      "-xf",
-      pathPosix.join("/file-browser-extract", archiveFileName),
-      "-C",
-      pathPosix.join("/file-browser-extract", workspaceName),
-    );
-
-    await runCommandStrict("docker", dockerArgs, repoPath);
+    await runCommandStrict("git", ["archive", "--format=tar", "-o", archivePath, exportRef], repoPath);
   }
 
   private async ensureBranchExists(
@@ -871,7 +849,7 @@ export class SprintFileBrowserService {
   }
 
   private async findManagedContainerForSession(session: FileBrowserSession): Promise<DockerContainerSummary | null> {
-    const containers = await this.listFileBrowserContainers(session.workspacePath || process.cwd());
+    const containers = await this.listFileBrowserContainers(process.cwd());
     const bySession = containers.find((container) => container.labels["code-ux.session-id"] === session.id);
     if (bySession) {
       return bySession;
@@ -1044,4 +1022,5 @@ export class SprintFileBrowserService {
     const sanitize = (value: string) => value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").slice(0, 22);
     return `code-ux-filebrowser-${sanitize(projectId)}-${sanitize(sprintId)}`.slice(0, 63);
   }
+
 }
