@@ -231,6 +231,20 @@ export class SprintPreviewService {
           runSetupScript: shouldRunSetupScriptAtRuntime,
         });
 
+        const userSpec = await this.resolveDockerUserSpec(workspacePath);
+        const volumeName = `code-ux-preview-volume-${sprintId}`;
+        if (userSpec) {
+          await runCommandStrict("docker", [
+            "run",
+            "--rm",
+            "-v", `${volumeName}:/volume-data`,
+            "alpine:3.20",
+            "sh",
+            "-c",
+            `chown -R ${userSpec} /volume-data && chmod 777 /volume-data`
+          ], project.baseDir).catch(() => undefined);
+        }
+
         const dockerArgs = [
           "create",
           "--name", containerName,
@@ -242,7 +256,7 @@ export class SprintPreviewService {
           "--label", `code-ux.sprint-id=${sprintId}`,
           "--label", `code-ux.session-id=${session.id}`,
           "--label", `code-ux.host-port=${hostPort}`,
-          "--mount", toDockerMountArg({ type: "volume", source: `code-ux-preview-volume-${sprintId}`, destination: CONTAINER_PREVIEW_RUNTIME_ROOT, readonly: false }),
+          "--mount", toDockerMountArg({ type: "volume", source: volumeName, destination: CONTAINER_PREVIEW_RUNTIME_ROOT, readonly: false }),
           "-e", `HOME=${containerRuntimeHome}`,
           "-e", "HOST=0.0.0.0",
           "-e", `PORT=${settings.containerAppPort}`,
@@ -257,7 +271,6 @@ export class SprintPreviewService {
           "-e", `SPRINT_PREVIEW_RUN_COMMAND=${preparedScript.runCommand || ""}`,
         ];
 
-        const userSpec = await this.resolveDockerUserSpec(workspacePath);
         if (userSpec) {
           dockerArgs.push("--user", userSpec);
         }
