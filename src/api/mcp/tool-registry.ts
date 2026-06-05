@@ -1,5 +1,5 @@
 import type { ToolName as ContractToolName } from "../../contracts/mcp-tool-definitions.js";
-import type { ManageCodeUxArgs, ManageProjectsArgs, ManageSprintsArgs, ManageTasksArgs, ManageAgentsArgs, ManageMemoryArgs, ManageSettingsArgs, ManagePreviewArgs, ManageTelemetryArgs } from "../../contracts/internal-management-types.js";
+import type { ManageCodeUxArgs, ManageProjectsArgs, ManageSprintsArgs, ManageTasksArgs, ManageAgentsArgs, ManageMemoryArgs, ManageSettingsArgs, ManagePreviewArgs, ManageTelemetryArgs, SearchKnowledgeArgs } from "../../contracts/internal-management-types.js";
 
 export interface McpToolArgsByName {
   manage_code_ux: ManageCodeUxArgs;
@@ -11,6 +11,7 @@ export interface McpToolArgsByName {
   manage_settings: ManageSettingsArgs;
   manage_preview: ManagePreviewArgs;
   manage_telemetry: ManageTelemetryArgs;
+  search_knowledge: SearchKnowledgeArgs;
 }
 
 export type McpToolName = keyof McpToolArgsByName;

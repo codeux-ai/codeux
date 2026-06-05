@@ -6,7 +6,7 @@ import type { Logger } from "../shared/logging/logger.js";
 
 const DEFAULT_AGENT_FILES = [
   "planning_agent.md",
-  "project_manager.md",
+  "iris.md",
   "quality_assurance_agent.md",
   "worker.md",
 ] as const;

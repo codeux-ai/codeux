@@ -23,6 +23,7 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
+import type { KnowledgeService } from "./knowledge-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 import type { ResolvedProviderRoute } from "./provider-routing.js";
 
@@ -50,6 +51,7 @@ interface WorkerInboxReplyServiceDependencies {
   getGithubToken: () => string | undefined;
   providerRunner: IProviderRunner;
   providerConcurrencyService: ProviderConcurrencyService;
+  knowledgeService: KnowledgeService;
   logger?: Logger;
 }
 
@@ -94,14 +96,15 @@ export class WorkerInboxReplyService {
     if (input.mode !== "compact_thread") {
       const settings = this.deps.getDashboardSettings({ projectId: input.projectId });
       const dashboardReplyAgentPresetId = settings.agents?.routing?.dashboardReply?.agentPresetId ?? null;
-      const dashboardReplyAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
-        ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(input.projectId, dashboardReplyAgentPresetId)
+      const dashboardReplyAgent = typeof this.deps.agentPresetSyncService.resolveDashboardReplyAgent === "function"
+        ? await this.deps.agentPresetSyncService.resolveDashboardReplyAgent(input.projectId, dashboardReplyAgentPresetId)
         : await this.deps.agentPresetSyncService.getWorkerAgent(input.projectId);
       agentProvider = {
         providerConfigId: dashboardReplyAgent.providerConfigId,
         model: dashboardReplyAgent.model,
       };
       const workerInstructions = dashboardReplyAgent.instructionMarkdown.trim();
+      const knowledgeManifest = this.deps.knowledgeService?.buildManifestMarkdownForAgent(dashboardReplyAgent.id) ?? null;
       rawPrompt = buildChatReplayPrompt({
         projectId: input.projectId,
         repoPath: project.baseDir,
@@ -112,6 +115,7 @@ export class WorkerInboxReplyService {
         bodyMarkdown: input.bodyMarkdown,
         workerInstructions,
         isDashboardReply: true,
+        knowledgeManifest,
       });
     }
     const route = this.resolveProviderRoute("dashboard_reply", input.bodyMarkdown, agentProvider);
@@ -267,11 +271,13 @@ export class WorkerInboxReplyService {
     const projectManagerInstructions = clarificationAgent
       .instructionMarkdown
       .trim();
+    const knowledgeManifest = this.deps.knowledgeService?.buildManifestMarkdownForAgent(clarificationAgent.id) ?? null;
 
     const clarificationRequest = this.getLatestClarificationRequest(args.task);
 
     const fullContextPrompt = [
       projectManagerInstructions ? `## PROJECT MANAGER INSTRUCTIONS\n\n${projectManagerInstructions}` : "",
+      knowledgeManifest ? `## KNOWLEDGE BASE\n\n${knowledgeManifest}` : "",
       "## CLARIFICATION TASK",
       "Answer Jules' clarification request for the current task using the sprint context below.",
       "",

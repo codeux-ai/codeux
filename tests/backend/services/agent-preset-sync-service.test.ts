@@ -175,7 +175,7 @@ describe("AgentPresetSyncService", () => {
 
     await fs.mkdir(path.join(projectRoot, ".code-ux", "agents"), { recursive: true });
     await fs.mkdir(path.join(projectRoot, ".code-ux", "container"), { recursive: true });
-    for (const fileName of ["planning_agent.md", "project_manager.md", "quality_assurance_agent.md", "worker.md"]) {
+    for (const fileName of ["planning_agent.md", "iris.md", "quality_assurance_agent.md", "worker.md"]) {
       await fs.writeFile(
         path.join(projectRoot, ".code-ux", "agents", fileName),
         `default ${fileName}\n`,
@@ -203,8 +203,8 @@ describe("AgentPresetSyncService", () => {
 
     const initial = await syncService.listAgentPresets(project.id);
     expect(initial.map((preset) => preset.name).sort()).toEqual([
+      "Iris",
       "Planning agent",
-      "Project manager",
       "Quality assurance agent",
       "Worker",
     ]);
@@ -220,14 +220,14 @@ describe("AgentPresetSyncService", () => {
     await expect(fs.stat(path.join(homeDir, ".code-ux", "agents", "worker.md"))).rejects.toThrow();
   });
 
-  it("normalizes project_manager sources and resolves the Project manager agent", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-manager-agent-"));
+  it("normalizes iris sources and resolves the Iris project manager agent", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-iris-agent-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
     await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".code-ux", "agents", "project_manager.md"),
+      path.join(repoPath, ".code-ux", "agents", "iris.md"),
       "Answer Jules clarification requests.\n",
       "utf8",
     );
@@ -250,13 +250,13 @@ describe("AgentPresetSyncService", () => {
     });
 
     const presets = await syncService.listAgentPresets(project.id);
-    expect(presets.find((preset) => preset.name === "Project manager")).toMatchObject({
+    expect(presets.find((preset) => preset.name === "Iris")).toMatchObject({
       sourceScope: "project",
       syncStatus: "synced",
     });
 
     const resolved = await syncService.getProjectManagerAgent(project.id);
-    expect(resolved.name).toBe("Project manager");
+    expect(resolved.name).toBe("Iris");
     expect(resolved.instructionMarkdown).toContain("Answer Jules clarification requests.");
   });
 

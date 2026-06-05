@@ -117,6 +117,7 @@ export function createSprintDependencies(
     getGithubToken: () => context.getEffectiveGithubToken(),
     providerRunner: coreDeps.providerRunner,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
+    knowledgeService: coreDeps.knowledgeService,
     logger: logger.child({ component: "worker-inbox-reply-service" }),
   });
 

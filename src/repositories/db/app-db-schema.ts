@@ -455,6 +455,55 @@ CREATE TABLE IF NOT EXISTS embedding_models (
         updated_at TEXT NOT NULL
       );
 
+CREATE TABLE IF NOT EXISTS knowledge_documents (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        source_ref TEXT,
+        mime_type TEXT,
+        byte_size INTEGER NOT NULL DEFAULT 0,
+        char_count INTEGER NOT NULL DEFAULT 0,
+        token_count INTEGER NOT NULL DEFAULT 0,
+        summary TEXT NOT NULL DEFAULT '',
+        content_text TEXT NOT NULL DEFAULT '',
+        content_hash TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        embedding_model TEXT,
+        chunk_count INTEGER NOT NULL DEFAULT 0,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        token_count INTEGER NOT NULL DEFAULT 0,
+        heading TEXT,
+        embedding_model TEXT,
+        embedding_dimension INTEGER,
+        embedding_blob BLOB,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
+CREATE TABLE IF NOT EXISTS agent_knowledge_subscriptions (
+        agent_preset_id TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (agent_preset_id, document_id),
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE CASCADE,
+        FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+
 CREATE TABLE IF NOT EXISTS execution_invocations (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,

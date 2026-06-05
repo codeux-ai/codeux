@@ -8,8 +8,11 @@ import type {
   ManageMemoryArgs,
   ManageSettingsArgs,
   ManagePreviewArgs,
-  ManageTelemetryArgs
+  ManageTelemetryArgs,
+  SearchKnowledgeArgs
 } from "../contracts/internal-management-types.js";
+import type { KnowledgeService } from "../services/knowledge-service.js";
+import { getCurrentMcpAgentId } from "../server/mcp-agent-context.js";
 import type { SprintPreviewService } from "../services/sprint-preview-service.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { DashboardSettings } from "../contracts/app-types.js";
@@ -47,6 +50,7 @@ export interface ManagementToolHandlerDeps {
   memoryService: MemoryService;
   memoryPromotionService: MemoryPromotionService;
   embeddingModelManager: EmbeddingModelManager;
+  knowledgeService: KnowledgeService;
   planningAgentService: PlanningAgentService;
   projectSetupService?: ProjectSetupService;
   sprintIssueService: SprintIssueService;
@@ -217,6 +221,38 @@ export class ManagementToolHandler {
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       return this.formatError("telemetry", args.action, error);
+    }
+  }
+
+  async handleSearchKnowledge(args: SearchKnowledgeArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
+    try {
+      const agentId = getCurrentMcpAgentId();
+      if (!agentId) {
+        return { content: [{ type: "text", text: "No knowledge base is attached to this session." }] };
+      }
+      const query = typeof args.query === "string" ? args.query.trim() : "";
+      if (!query) {
+        return { content: [{ type: "text", text: "Provide a non-empty query to search your knowledge base." }] };
+      }
+      const limit = typeof args.limit === "number" && args.limit > 0 ? Math.min(Math.floor(args.limit), 20) : 5;
+      const results = await this.deps.knowledgeService.searchForAgent(agentId, query, limit);
+
+      if (results.length === 0) {
+        return { content: [{ type: "text", text: `No relevant passages found in your knowledge base for: "${query}".` }] };
+      }
+
+      const formatted = results
+        .map((result, index) => {
+          const location = result.heading ? `${result.documentTitle} › ${result.heading}` : result.documentTitle;
+          const score = `${Math.round(result.similarity * 100)}% match`;
+          return `### [${index + 1}] ${location} (${score})\n${result.content.trim()}`;
+        })
+        .join("\n\n");
+
+      const header = `Found ${results.length} relevant passage${results.length === 1 ? "" : "s"} for "${query}". Cite the document title when you use this.`;
+      return { content: [{ type: "text", text: `${header}\n\n${formatted}` }] };
+    } catch (error) {
+      return this.formatError("knowledge", "search", error);
     }
   }
 }

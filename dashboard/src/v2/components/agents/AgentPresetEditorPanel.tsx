@@ -19,11 +19,13 @@ import {
   UserRound,
   Palette,
   SlidersHorizontal,
+  Library,
 } from "lucide-preact";
 import type { AgentMcpAccessConfig, AgentPreset, CustomMcpServer } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
 import { DEFAULT_AGENT_MEMORY_CONFIG, type AgentMemoryConfig } from "../../memory-types.js";
 import { AgentMemoryConfigPanel } from "./AgentMemoryConfigPanel.js";
+import { AgentKnowledgePanel } from "./AgentKnowledgePanel.js";
 import { AgentAvatarCustomizer } from "./AgentAvatarCustomizer.js";
 import { AgentAvatarStage } from "./AgentAvatarStage.js";
 import { AgentMcpManagePanel } from "./AgentMcpManageModal.js";
@@ -745,6 +747,15 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                 </div>
               </div>
             </SectionCard>
+
+          {/* Knowledge subscriptions */}
+          <SectionCard icon={Library} eyebrow="Grounding" title="Knowledge Base">
+            <p className="-mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+              Subscribe this agent to documents from the shared library. Subscribed docs appear in the
+              agent's manifest, and it retrieves passages on demand via <code className="rounded bg-black/[0.05] px-1 py-0.5 font-mono text-[11px] dark:bg-white/[0.06]">search_knowledge</code>.
+            </p>
+            <AgentKnowledgePanel agentPresetId={preset.id} projectId={preset.projectId} disabled={saving} />
+          </SectionCard>
 
           {/* Row 3 — routing + connected tools */}
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

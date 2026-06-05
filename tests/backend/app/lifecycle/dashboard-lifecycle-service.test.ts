@@ -10,6 +10,9 @@ vi.mock("../../../../src/shared/logging/logger.js");
 vi.mock("../../../../src/server/memory-routes.js", () => ({
   registerMemoryRoutes: vi.fn(),
 }));
+vi.mock("../../../../src/server/knowledge-routes.js", () => ({
+  registerKnowledgeRoutes: vi.fn(),
+}));
 
 describe("dashboard-lifecycle-service", () => {
   let mockDeps: BootDashboardDeps;

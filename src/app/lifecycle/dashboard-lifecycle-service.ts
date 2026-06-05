@@ -1,5 +1,6 @@
 import { setupDashboardServer, type DashboardServerHandle } from "../../server/dashboard-server.js";
 import { registerMemoryRoutes } from "../../server/memory-routes.js";
+import { registerKnowledgeRoutes } from "../../server/knowledge-routes.js";
 import { InstructionFileService } from "../../services/instruction-file-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { createLogger } from "../../shared/logging/logger.js";
@@ -51,6 +52,7 @@ import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { ProjectSetupService } from "../../services/project-setup-service.js";
 import type { SchedulerService } from "../../services/scheduler-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
+import type { KnowledgeService } from "../../services/knowledge-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
 import type { EmbeddingService } from "../../services/embedding-service.js";
@@ -130,6 +132,7 @@ export interface BootDashboardDeps {
   embeddingModelManager: EmbeddingModelManager;
   embeddingService: EmbeddingService;
   memoryRepository: MemoryRepository;
+  knowledgeService: KnowledgeService;
 }
 
 export function reinitializeLogger(deps: { projectRoot: string, runtimeContext: RuntimeContext }): Logger {
@@ -281,6 +284,12 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     embeddingService: deps.embeddingService,
     memoryRepository: deps.memoryRepository,
     settingsRepository: deps.settingsRepository,
+  });
+
+  registerKnowledgeRoutes(deps.app, {
+    knowledgeService: deps.knowledgeService,
+    agentPresetRepository: deps.agentPresetRepository,
+    projectManagementRepository: deps.projectManagementRepository,
   });
 
   // Auto-restore previously active embedding model (fire-and-forget)

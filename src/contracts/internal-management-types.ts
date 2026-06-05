@@ -111,6 +111,12 @@ export interface ManageTelemetryArgs {
   type?: string;
 }
 
+export interface SearchKnowledgeArgs {
+  query: string;
+  limit?: number;
+  minSimilarity?: number;
+}
+
 export interface ManagementResponseEnvelope {
   approvalRequired?: boolean;
   approvalMessage?: string;

@@ -16,6 +16,7 @@ import {
   normalizeProviderReply,
 } from "./chat-reply-prompt.js";
 import type { ChatManagementActionService } from "./chat-management-action-service.js";
+import type { KnowledgeService } from "./knowledge-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
 import { getCorrelationId } from "../shared/logging/correlation-id.js";
@@ -31,6 +32,7 @@ interface ChatThreadRuntimeServiceDependencies {
   projectManagementRepository: ProjectManagementRepository;
   providerRunner: IProviderRunner;
   chatManagementActionService: ChatManagementActionService;
+  knowledgeService: KnowledgeService;
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   getMcpApprovalTracker?: () => McpApprovalTracker;
   logger?: Logger;
@@ -82,8 +84,8 @@ export class ChatThreadRuntimeService {
       status: "PENDING",
     };
 
-    const dashboardReplyAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
-      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
+    const dashboardReplyAgent = typeof this.deps.agentPresetSyncService.resolveDashboardReplyAgent === "function"
+      ? await this.deps.agentPresetSyncService.resolveDashboardReplyAgent(
         thread.projectId,
         settings.agents?.routing?.dashboardReply?.agentPresetId ?? null,
       ).catch(() => null)
@@ -329,8 +331,8 @@ export class ChatThreadRuntimeService {
 
     const allMessages = this.deps.connectionChatRepository.listMessages(thread.id);
 
-    const respondingAgent = typeof this.deps.agentPresetSyncService.resolveTargetedCodingAgent === "function"
-      ? await this.deps.agentPresetSyncService.resolveTargetedCodingAgent(
+    const respondingAgent = typeof this.deps.agentPresetSyncService.resolveDashboardReplyAgent === "function"
+      ? await this.deps.agentPresetSyncService.resolveDashboardReplyAgent(
         projectId,
         dashboardSettings.agents?.routing?.dashboardReply?.agentPresetId ?? null,
       )
@@ -338,6 +340,7 @@ export class ChatThreadRuntimeService {
 
     if (replayRequired) {
       const workerInstructions = respondingAgent.instructionMarkdown.trim();
+      const knowledgeManifest = this.deps.knowledgeService?.buildManifestMarkdownForAgent(respondingAgent.id) ?? null;
       promptContent = buildChatReplayPrompt({
         projectId,
         repoPath: project.baseDir,
@@ -347,6 +350,7 @@ export class ChatThreadRuntimeService {
         workerInstructions,
         isDashboardReply: false,
         mcpAvailable,
+        knowledgeManifest,
       });
     } else {
       promptContent = buildChatContinuationPrompt(latestMessage, pendingAction, mcpAvailable);

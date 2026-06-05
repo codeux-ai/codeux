@@ -1,11 +1,16 @@
 import type { FunctionComponent } from "preact";
-import { useState, useLayoutEffect, useMemo, useRef } from "preact/hooks";
+import { useState, useLayoutEffect, useMemo, useRef, useEffect } from "preact/hooks";
 import gsap from "gsap";
 import {
   Edit2, FileUp, Trash2, RefreshCw, AlertTriangle,
   ChevronDown, ChevronUp, Cpu, Route, Plug, Server, FileText,
-  BrainCircuit, FolderGit2,
+  BrainCircuit, FolderGit2, Library,
 } from "lucide-preact";
+import {
+  fetchAgentKnowledgeSubscriptions,
+  fetchKnowledgeDocuments,
+  type KnowledgeDocument,
+} from "../../lib/knowledge-api.js";
 import type { AgentPreset, CustomMcpServer } from "../../types.js";
 import type { AgentProviderOption } from "./AgentPresetEditorPanel.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
@@ -78,6 +83,45 @@ const StatTile: FunctionComponent<{
     </div>
   </div>
 );
+
+/* ── Knowledge subscriptions summary (read-only) ── */
+const AgentKnowledgeSummary: FunctionComponent<{ preset: AgentPreset }> = ({ preset }) => {
+  const [docs, setDocs] = useState<KnowledgeDocument[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDocs(null);
+    Promise.all([
+      fetchAgentKnowledgeSubscriptions(preset.id).catch(() => [] as string[]),
+      fetchKnowledgeDocuments(preset.projectId).catch(() => [] as KnowledgeDocument[]),
+    ]).then(([subscribedIds, allDocs]) => {
+      if (cancelled) return;
+      const ids = new Set(subscribedIds);
+      setDocs(allDocs.filter((doc) => ids.has(doc.id)));
+    });
+    return () => { cancelled = true; };
+  }, [preset.id, preset.projectId]);
+
+  if (!docs || docs.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <SectionHeader icon={Library} title={`Knowledge Base · ${docs.length}`} />
+      <div className="flex flex-wrap items-center gap-2">
+        {docs.map((doc) => (
+          <span
+            key={doc.id}
+            title={doc.summary || doc.title}
+            className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-2.5 py-1 text-[11px] font-bold text-signal-700 dark:text-signal-200"
+          >
+            <FileText className="h-3 w-3" strokeWidth={2.4} />
+            <span className="max-w-[200px] truncate">{doc.title}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 /* ── Section header ── */
 const SectionHeader: FunctionComponent<{
@@ -282,6 +326,9 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             )}
           </div>
         </div>
+
+        {/* Knowledge subscriptions */}
+        <AgentKnowledgeSummary preset={preset} />
 
         {/* System Instructions */}
         <div className="flex flex-col gap-2">

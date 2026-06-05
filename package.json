@@ -61,8 +61,11 @@
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "js-tiktoken": "^1.0.21",
+    "mammoth": "^1.12.0",
+    "multer": "^2.1.1",
     "onnxruntime-node": "^1.24.3",
-    "p-limit": "^7.3.0"
+    "p-limit": "^7.3.0",
+    "pdf-parse": "^2.4.5"
   },
   "devDependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -77,6 +80,7 @@
     "@testing-library/preact": "^3.2.4",
     "@testing-library/user-event": "^14.6.1",
     "@types/express": "^5.0.6",
+    "@types/multer": "^2.1.0",
     "@types/node": "^25.3.2",
     "@types/supertest": "^7.2.0",
     "@types/three": "^0.183.1",

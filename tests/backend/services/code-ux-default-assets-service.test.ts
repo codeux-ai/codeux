@@ -25,7 +25,7 @@ describe("Code UX default assets service", () => {
     await fs.mkdir(path.join(projectRoot, ".code-ux", "agents"), { recursive: true });
     await fs.mkdir(path.join(projectRoot, ".code-ux", "container"), { recursive: true });
 
-    for (const fileName of ["planning_agent.md", "project_manager.md", "quality_assurance_agent.md", "worker.md"]) {
+    for (const fileName of ["planning_agent.md", "iris.md", "quality_assurance_agent.md", "worker.md"]) {
       await fs.writeFile(
         path.join(projectRoot, ".code-ux", "agents", fileName),
         `default ${fileName}\n`,
@@ -43,8 +43,8 @@ describe("Code UX default assets service", () => {
     expect(result.installed.map((asset) =>
       path.relative(path.join(homeDir, ".code-ux"), asset.targetPath).replace(/\\/g, "/")
     ).sort()).toEqual([
+      "agents/iris.md",
       "agents/planning_agent.md",
-      "agents/project_manager.md",
       "agents/quality_assurance_agent.md",
       "container/setup.sh",
     ]);

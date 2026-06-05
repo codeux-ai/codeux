@@ -123,6 +123,7 @@ export function buildChatReplayPrompt(args: {
   workerInstructions: string;
   isDashboardReply?: boolean;
   mcpAvailable?: boolean;
+  knowledgeManifest?: string | null;
 }): string {
   const compactionSummary = getCompactionSummary(args.thread.runtimeState);
   const pendingAction = args.thread.runtimeState?.pendingManagementAction;
@@ -165,6 +166,10 @@ export function buildChatReplayPrompt(args: {
     "The user's latest message may be an approval (e.g., 'yes', 'confirm') or rejection.",
   ].join("\n") : "";
 
+  const knowledgeSection = args.knowledgeManifest && args.knowledgeManifest.trim()
+    ? `## KNOWLEDGE BASE\n\n${args.knowledgeManifest.trim()}`
+    : "";
+
   return [
     args.workerInstructions ? `## WORKER INSTRUCTIONS\n\n${args.workerInstructions}` : "",
     "## ROLE",
@@ -175,6 +180,8 @@ export function buildChatReplayPrompt(args: {
     `Repo Path: ${args.repoPath}`,
     `Thread ID: ${args.thread.id}`,
     args.threadTitle || args.thread.title ? `Thread Title: ${args.threadTitle || args.thread.title}` : "",
+    "",
+    knowledgeSection,
     "",
     pendingActionContext,
     "",

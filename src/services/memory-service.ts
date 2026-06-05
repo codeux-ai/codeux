@@ -14,6 +14,7 @@ import type { Logger } from "../shared/logging/logger.js";
 import { readFile, unlink } from "fs/promises";
 import { join } from "path";
 import { LEARNINGS_FILENAME, type ParsedMemoryEntry } from "../contracts/memory-types.js";
+import { cosineSimilarity, bufferToFloat32, float32ToBuffer } from "./embedding-vector-utils.js";
 
 const VALID_CATEGORIES = new Set<MemoryCategory>([
   "architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning",
@@ -45,37 +46,6 @@ export function parseLearningsMarkdown(raw: string): ParsedMemoryEntry[] {
   }
 
   return entries;
-}
-
-function cosineSimilarity(a: Float32Array, b: Float32Array): number {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom > 0 ? dot / denom : 0;
-}
-
-function bufferToFloat32(buf: Buffer | Uint8Array, dimension: number): Float32Array {
-  // node:sqlite returns BLOBs as Uint8Array, not Buffer
-  const bytes = buf instanceof Buffer ? buf : Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
-  const arr = new Float32Array(dimension);
-  for (let i = 0; i < dimension; i++) {
-    arr[i] = bytes.readFloatLE(i * 4);
-  }
-  return arr;
-}
-
-function float32ToBuffer(arr: Float32Array): Buffer {
-  const buf = Buffer.alloc(arr.length * 4);
-  for (let i = 0; i < arr.length; i++) {
-    buf.writeFloatLE(arr[i], i * 4);
-  }
-  return buf;
 }
 
 export interface ReembedProgress {

@@ -161,6 +161,21 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "search_knowledge",
+    runtimeRoles: ["project_manager"],
+    category: "agents_memory",
+    description: "Search your attached knowledge base. Returns the most relevant passages from the documents subscribed to you. Use a focused natural-language query to pull exact content before answering, instead of guessing. Scope is your own subscriptions — no project id needed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Natural-language search query describing what you need to find." },
+        limit: { type: "number", description: "Maximum number of passages to return (default 5)." },
+        minSimilarity: { type: "number", description: "Optional minimum cosine similarity threshold (0-1)." },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "manage_settings",
     runtimeRoles: ["project_manager"],
     category: "platform",

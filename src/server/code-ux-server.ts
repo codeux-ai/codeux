@@ -160,6 +160,7 @@ export class CodeUxServer {
   private embeddingModelManager: import("../services/embedding-model-manager.js").EmbeddingModelManager;
   private embeddingService: import("../services/embedding-service.js").EmbeddingService;
   private memoryRepository: import("../repositories/memory-repository.js").MemoryRepository;
+  private knowledgeService: import("../services/knowledge-service.js").KnowledgeService;
   private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
   private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
@@ -240,6 +241,7 @@ export class CodeUxServer {
     this.embeddingModelManager = deps.embeddingModelManager;
     this.embeddingService = deps.embeddingService;
     this.memoryRepository = deps.memoryRepository;
+    this.knowledgeService = deps.knowledgeService;
 
     this.configureMcpServer(this.server, this.appConfig.runtimeRole);
 
@@ -981,6 +983,7 @@ export class CodeUxServer {
         projectAttentionRepository: this.projectAttentionRepository,
         agentPresetRepository: this.agentPresetRepository,
         agentPresetSyncService: this.agentPresetSyncService,
+        knowledgeService: this.knowledgeService,
         sprintMarkdownService: this.sprintMarkdownService,
         sprintIssueService: this.sprintIssueService,
         activityCacheService: this.activityCacheService,

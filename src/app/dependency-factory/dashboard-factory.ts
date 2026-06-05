@@ -77,6 +77,7 @@ export function createDashboardDependencies(
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
     embeddingModelManager: coreDeps.embeddingModelManager,
+    knowledgeService: coreDeps.knowledgeService,
     planningAgentService: {} as any, // Will link below
     projectSetupService: undefined,
     sprintIssueService: coreDeps.sprintIssueService,
@@ -113,6 +114,7 @@ export function createDashboardDependencies(
     projectManagementRepository,
     providerRunner,
     chatManagementActionService,
+    knowledgeService: coreDeps.knowledgeService,
     getMcpConnectionInfo: context.getMcpConnectionInfo,
     getMcpApprovalTracker: context.getMcpApprovalTracker,
     logger: logger.child({ component: "chat-thread-runtime-service" }),

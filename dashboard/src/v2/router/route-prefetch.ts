@@ -19,6 +19,7 @@ const componentImporters: Record<string, ModuleImporter> = {
   "/scheduler": () => import("../SchedulerPage.js"),
   "/config": () => import("../SettingsPage.js"),
   "/memory": () => import("../MemoryPage.js"),
+  "/knowledge": () => import("../KnowledgePage.js"),
   "/browser": () => import("../BrowserPage.js"),
   "/files": () => import("../FileBrowserPage.js"),
 };

@@ -242,5 +242,66 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureUniqueIndex(db, "idx_guardrail_ledger_task_purpose", "guardrail_ledger", "task_id, purpose");
   ensureIndex(db, "idx_guardrail_ledger_project", "guardrail_ledger", "project_id, task_id");
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS knowledge_documents (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      source_type TEXT NOT NULL,
+      source_ref TEXT,
+      mime_type TEXT,
+      byte_size INTEGER NOT NULL DEFAULT 0,
+      char_count INTEGER NOT NULL DEFAULT 0,
+      token_count INTEGER NOT NULL DEFAULT 0,
+      summary TEXT NOT NULL DEFAULT '',
+      content_text TEXT NOT NULL DEFAULT '',
+      content_hash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      embedding_model TEXT,
+      chunk_count INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_knowledge_documents_project", "knowledge_documents", "project_id, updated_at DESC");
+  ensureIndex(db, "idx_knowledge_documents_hash", "knowledge_documents", "project_id, content_hash");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS knowledge_chunks (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      token_count INTEGER NOT NULL DEFAULT 0,
+      heading TEXT,
+      embedding_model TEXT,
+      embedding_dimension INTEGER,
+      embedding_blob BLOB,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_knowledge_chunks_document", "knowledge_chunks", "document_id, chunk_index");
+  ensureIndex(db, "idx_knowledge_chunks_project_model", "knowledge_chunks", "project_id, embedding_model");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_knowledge_subscriptions (
+      agent_preset_id TEXT NOT NULL,
+      document_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (agent_preset_id, document_id),
+      FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE CASCADE,
+      FOREIGN KEY (document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+  ensureIndex(db, "idx_agent_knowledge_subs_agent", "agent_knowledge_subscriptions", "agent_preset_id");
+  ensureIndex(db, "idx_agent_knowledge_subs_document", "agent_knowledge_subscriptions", "document_id");
+
   backfillEstimatedDockerCliUsage(db);
 }
