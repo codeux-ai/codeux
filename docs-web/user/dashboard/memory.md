@@ -81,6 +81,8 @@ The right sidebar lists available embedding models. Each card shows:
 - Vector dimensionality.
 - Whether it is currently active.
 
+The local embedding runtime supports both BGE-style WordPiece tokenizers and XLM-R/SentencePiece Unigram tokenizers such as `multilingual-e5-large`.
+
 Actions per model:
 
 - **Download** — Pulls model weights to local cache.
