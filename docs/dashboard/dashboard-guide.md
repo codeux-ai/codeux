@@ -479,6 +479,7 @@ Runtime scoping:
 - the selected project also scopes Agents and Chat data
 - dashboard runtime state is projected through sqlite task-run records instead of being served only from one in-memory global payload
 - Memory embedding map uses a bounded nearest-neighbor algorithm and caps results at 1000 items to guarantee dashboard responsiveness for large projects
+- Local embedding models support Hugging Face `tokenizer.json` files using WordPiece/BPE vocab records and SentencePiece Unigram vocab arrays, including XLM-R-style multilingual E5 special tokens.
 
 ### Settings view
 - The active backend model is now scoped as `system -> project -> sprint`
