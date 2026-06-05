@@ -96,7 +96,7 @@ Docker-backed execution provides:
 - Short-lived execution containers that are cleaned up after runs instead of becoming permanent agent environments.
 - Isolated merge-conflict repair and CI autofix flows.
 - Startup cleanup for stale containers, workspaces, and preview sessions.
-
+ 
 Host execution is available for provider CLIs when speed or local tooling access is more important than isolation.
 
 ### Security by deterministic isolation
