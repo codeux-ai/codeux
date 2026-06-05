@@ -16,7 +16,7 @@ export function deriveGitCloneRepoName(sourceRef: string): string {
     .trim()
     .replace(/\/+$/, "")
     .replace(/\.git$/i, "");
-  const segment = cleaned.split(/[/:]/).filter(Boolean).pop() || cleaned;
+  const segment = cleaned.split(/[\\/:]/).filter(Boolean).pop() || cleaned;
   const safe = segment
     .trim()
     .replace(/[^a-zA-Z0-9._-]+/g, "-")

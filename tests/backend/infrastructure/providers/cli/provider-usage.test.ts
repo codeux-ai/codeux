@@ -11,15 +11,18 @@ import {
 
 const tempDirs: string[] = [];
 const originalHome = process.env.HOME;
+const originalUserProfile = process.env.USERPROFILE;
 
 afterEach(async () => {
   process.env.HOME = originalHome;
+  process.env.USERPROFILE = originalUserProfile;
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
 describe("collectProviderUsageTelemetry", () => {
   beforeEach(() => {
     process.env.HOME = originalHome;
+    process.env.USERPROFILE = originalUserProfile;
   });
 
   it("parses provider-reported Gemini token usage", async () => {
@@ -471,9 +474,10 @@ describe("collectProviderUsageTelemetry", () => {
     const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "claude-usage-home-"));
     tempDirs.push(fakeHome);
     process.env.HOME = fakeHome;
+    process.env.USERPROFILE = fakeHome;
 
     const cwd = "/workspace/repo";
-    const slug = cwd.replaceAll(path.sep, "-");
+    const slug = cwd.replace(/[/\\:]/g, "-");
     const sessionId = "f060b6ff-b942-4d7f-a5d3-d6ad8af102f8";
     const sessionDir = path.join(fakeHome, ".claude", "projects", slug);
     await fs.mkdir(sessionDir, { recursive: true });

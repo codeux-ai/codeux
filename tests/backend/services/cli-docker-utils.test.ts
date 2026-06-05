@@ -17,7 +17,7 @@ describe("cli-docker-utils", () => {
         expect(resolveConfiguredPath("/repo", "  ")).toBe("");
         expect(resolveConfiguredPath("/repo", "~")).toBe(os.homedir());
         expect(resolveConfiguredPath("/repo", "~/test")).toBe(path.join(os.homedir(), "test"));
-        expect(resolveConfiguredPath("/repo", "/absolute")).toBe("/absolute");
+        expect(resolveConfiguredPath("/repo", "/absolute")).toBe(path.resolve("/absolute"));
         expect(resolveConfiguredPath("/repo", "relative")).toBe(path.resolve("/repo", "relative"));
     });
 

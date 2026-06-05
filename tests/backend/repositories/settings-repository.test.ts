@@ -388,6 +388,7 @@ describe("SettingsRepository", () => {
     expect(migrated.defaults.git.defaultBranch).toBe("develop");
     expect(repo.getDefaultDashboardSettings().git.githubToken).toBe("legacy-gh");
     expect(db.prepare("SELECT payload FROM app_settings WHERE id = 1").get()).toBeUndefined();
+    db.close();
   });
 
   it("resolves effective settings through a scoped resolver, caching lookups", async () => {

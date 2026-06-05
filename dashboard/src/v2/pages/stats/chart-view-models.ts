@@ -3,7 +3,7 @@ import type {
   ProjectExecutionStatsChartSeries,
   ProjectExecutionStatsSnapshot
 } from '../../../types.js';
-import { formatDuration, formatTokens, sumUsage } from './stats-utils.js';
+import { formatDuration, formatTokens, NUMBER_FORMATTER, sumUsage } from './stats-utils.js';
 import {
   buildPoints,
   buildSmoothPath,
@@ -58,7 +58,7 @@ export function normalizeChartSeries(
     const formatter = series.formatter === 'duration'
       ? formatDuration
       : series.formatter === 'number'
-        ? (val: number) => val.toLocaleString()
+        ? (val: number) => NUMBER_FORMATTER.format(val)
         : formatTokens;
 
     const values = visibleBuckets.map((_, bucketIdx) => series.data[viewStart + bucketIdx] || 0);

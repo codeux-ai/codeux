@@ -34,6 +34,8 @@ export const EMPTY_USAGE: ExecutionUsageTotals = {
   unsupportedInvocationCount: 0,
 };
 
+export const NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
+
 export function formatTokens(value: number): string {
   if (value >= 1_000_000) {
     return `${(value / 1_000_000).toFixed(2)}M`;
@@ -41,7 +43,7 @@ export function formatTokens(value: number): string {
   if (value >= 1_000) {
     return `${(value / 1_000).toFixed(1)}k`;
   }
-  return value.toLocaleString();
+  return NUMBER_FORMATTER.format(value);
 }
 
 export function formatDuration(value: number): string {
@@ -62,11 +64,12 @@ export function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
 }
 
-export const DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
+export const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   hour: "2-digit",
   minute: "2-digit",
+  timeZone: "UTC",
 });
 
 export function formatDateTime(value: string | null): string {

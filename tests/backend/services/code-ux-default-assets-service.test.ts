@@ -20,6 +20,7 @@ describe("Code UX default assets service", () => {
     const projectRoot = path.join(dir, "app");
     const homeDir = path.join(dir, "home");
     vi.stubEnv("HOME", homeDir);
+    vi.stubEnv("USERPROFILE", homeDir);
 
     await fs.mkdir(path.join(projectRoot, ".code-ux", "agents"), { recursive: true });
     await fs.mkdir(path.join(projectRoot, ".code-ux", "container"), { recursive: true });
@@ -39,7 +40,9 @@ describe("Code UX default assets service", () => {
     const result = await ensureDefaultCodeUxAssetsInstalled({ projectRoot });
 
     expect(result.sourceDir).toBe(path.join(projectRoot, ".code-ux"));
-    expect(result.installed.map((asset) => path.relative(path.join(homeDir, ".code-ux"), asset.targetPath)).sort()).toEqual([
+    expect(result.installed.map((asset) =>
+      path.relative(path.join(homeDir, ".code-ux"), asset.targetPath).replace(/\\/g, "/")
+    ).sort()).toEqual([
       "agents/planning_agent.md",
       "agents/project_manager.md",
       "agents/quality_assurance_agent.md",

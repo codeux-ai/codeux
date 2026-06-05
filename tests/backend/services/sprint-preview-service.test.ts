@@ -76,8 +76,8 @@ describeIfDocker("SprintPreviewService workspace export", () => {
 
     await (service as any).materializePreviewWorkspace(projectPath, workspacePath, "feature/sprint-51", "main");
 
-    await expect(fs.readFile(path.join(workspacePath, "src", "preview-marker.txt"), "utf8"))
-      .resolves.toBe("remote-only branch\n");
+    const marker = await fs.readFile(path.join(workspacePath, "src", "preview-marker.txt"), "utf8");
+    expect(marker.replace(/\r\n/g, "\n")).toBe("remote-only branch\n");
     await expect(fs.access(path.join(workspacePath, ".git"))).rejects.toThrow();
   });
 
@@ -127,8 +127,8 @@ describeIfDocker("SprintPreviewService workspace export", () => {
     // as materializePreviewWorkspace is expected to fetch origin if available.
     await (service as any).materializePreviewWorkspace(projectPath, workspacePath, "feature/sprint-52", "main");
 
-    await expect(fs.readFile(path.join(workspacePath, "src", "stale.txt"), "utf8"))
-      .resolves.toBe("latest remote branch\n");
+    const stale = await fs.readFile(path.join(workspacePath, "src", "stale.txt"), "utf8");
+    expect(stale.replace(/\r\n/g, "\n")).toBe("latest remote branch\n");
     await expect(fs.access(path.join(workspacePath, ".git"))).rejects.toThrow();
   });
 });

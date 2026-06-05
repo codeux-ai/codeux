@@ -9,6 +9,8 @@ async function runGit(repoPath: string, args: string[]): Promise<string> {
   return (await runCommandStrict("git", args, repoPath)).stdout;
 }
 
+const normalizePath = (value: string): string => path.normalize(value.trim());
+
 describe("project git clone service", () => {
   const cleanupPaths: string[] = [];
 
@@ -43,10 +45,10 @@ describe("project git clone service", () => {
     });
 
     expect(prepared.cloneDir).toBe(cloneRoot);
-    expect(await runGit(path.join(cloneRoot, "origin"), ["rev-parse", "--show-toplevel"]))
-      .toBe(path.join(cloneRoot, "origin"));
-    expect(await fs.readFile(path.join(cloneRoot, "origin", "README.md"), "utf8"))
-      .toBe("# Test\n");
+    expect(normalizePath(await runGit(path.join(cloneRoot, "origin"), ["rev-parse", "--show-toplevel"])))
+      .toBe(path.normalize(path.join(cloneRoot, "origin")));
+    const readme = await fs.readFile(path.join(cloneRoot, "origin", "README.md"), "utf8");
+    expect(readme.replace(/\r\n/g, "\n")).toBe("# Test\n");
   });
 
   it("rejects an existing non-empty target that is not an exact Git checkout root", async () => {

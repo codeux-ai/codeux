@@ -76,7 +76,7 @@ describe("DockerSetupImageCache", () => {
     expect(runStreamingCommand).toHaveBeenNthCalledWith(
       2,
       "docker",
-      expect.arrayContaining(["build", "-t", result.image, expect.stringContaining("/mapped/runtime/setup-image-cache/")]),
+      expect.arrayContaining(["build", "-t", result.image, expect.stringMatching(/[\\/]mapped[\\/]runtime[\\/]setup-image-cache[\\/]/)]),
       "/repo",
       process.env,
       expect.objectContaining({

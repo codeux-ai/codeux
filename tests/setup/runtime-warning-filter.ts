@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { vi } from "vitest";
 
 const originalEmitWarning = process.emitWarning.bind(process);
 const originalLogLevel = process.env.LOG_LEVEL;
@@ -28,6 +29,36 @@ process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
 }) as typeof process.emitWarning;
 
 process.env.LOG_LEVEL = originalLogLevel ?? "error";
+
+const isWindowsTempLockError = (error: unknown, targetPath: unknown): boolean => {
+  if (process.platform !== "win32" || !error || typeof error !== "object") {
+    return false;
+  }
+  const code = "code" in error ? String((error as { code?: unknown }).code || "") : "";
+  if (code !== "EBUSY" && code !== "EPERM") {
+    return false;
+  }
+  const resolvedTarget = path.resolve(String(targetPath));
+  const resolvedTemp = path.resolve(os.tmpdir());
+  return resolvedTarget === resolvedTemp || resolvedTarget.startsWith(`${resolvedTemp}${path.sep}`);
+};
+
+vi.doMock("fs/promises", async () => {
+  const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+  return {
+    ...actual,
+    rm: async (...args: Parameters<typeof actual.rm>) => {
+      try {
+        return await actual.rm(...args);
+      } catch (error) {
+        if (isWindowsTempLockError(error, args[0])) {
+          return undefined;
+        }
+        throw error;
+      }
+    },
+  };
+});
 
 const installAnimationFramePolyfill = (): void => {
   const target = globalThis as typeof globalThis & {

@@ -8,6 +8,8 @@ import os from "os";
 vi.mock("fs/promises");
 vi.mock("os");
 
+const normalizeSeparators = (value: unknown): string => String(value).replace(/\\/g, "/");
+
 describe("settings-lifecycle-service", () => {
   let mockDeps: BootSettingsDeps;
   let originalEnv: NodeJS.ProcessEnv;
@@ -84,17 +86,19 @@ describe("settings-lifecycle-service", () => {
       const mockSettings2 = { maxFailures: 15, someOtherSetting: "value2" };
 
       vi.mocked(fs.access).mockImplementation(async (filePath) => {
-        if (filePath.toString().includes("project-root") || filePath.toString().includes("home/user")) {
+        const normalizedPath = normalizeSeparators(filePath);
+        if (normalizedPath.includes("project-root") || normalizedPath.includes("home/user")) {
           return Promise.resolve();
         }
         return Promise.reject(new Error("File not found"));
       });
 
       vi.mocked(fs.readFile).mockImplementation(async (filePath) => {
-        if (filePath.toString().includes("home/user")) {
+        const normalizedPath = normalizeSeparators(filePath);
+        if (normalizedPath.includes("home/user")) {
           return JSON.stringify(mockSettings1);
         }
-        if (filePath.toString().includes("project-root")) {
+        if (normalizedPath.includes("project-root")) {
           return JSON.stringify(mockSettings2);
         }
         return "{}";
@@ -109,7 +113,7 @@ describe("settings-lifecycle-service", () => {
 
       expect(mockDeps.logger.info).toHaveBeenCalledWith(
         "Loaded settings",
-        expect.objectContaining({ settingsPath: expect.stringContaining("home/user") })
+        expect.objectContaining({ settingsPath: expect.stringMatching(/[\\/]home[\\/]user/) })
       );
       expect(mockDeps.logger.info).toHaveBeenCalledWith(
         "Loaded settings",

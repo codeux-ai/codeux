@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import os from "os";
 import fs from "fs";
+import type { PathLike } from "fs";
 import * as path from "path";
 import { loadExternalSettingsHints } from "../../../src/config/external-settings.js";
 
@@ -11,6 +12,7 @@ describe("external-settings", () => {
   const MOCK_PROJECT_ROOT = "/mock/project";
   const MOCK_HOME = "/mock/home";
   const MOCK_CWD = "/mock/cwd";
+  const normalizeSeparators = (value: PathLike): string => String(value).replace(/\\/g, "/");
 
   beforeEach(() => {
     vi.spyOn(process, "cwd").mockReturnValue(MOCK_CWD);
@@ -39,8 +41,8 @@ describe("external-settings", () => {
       geminiApiKey: "json-gemini-key",
     };
 
-    vi.spyOn(fs, "existsSync").mockImplementation((p: string) => {
-        return p.includes(".code-ux/settings.json");
+    vi.spyOn(fs, "existsSync").mockImplementation((p: PathLike) => {
+        return normalizeSeparators(p).includes(".code-ux/settings.json");
     });
     vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(mockSettings));
 
@@ -93,8 +95,8 @@ describe("external-settings", () => {
       GITHUB_TOKEN: "json-github-caps"
     };
 
-    vi.spyOn(fs, "existsSync").mockImplementation((p: string) => {
-        return p.includes(".code-ux/settings.json");
+    vi.spyOn(fs, "existsSync").mockImplementation((p: PathLike) => {
+        return normalizeSeparators(p).includes(".code-ux/settings.json");
     });
     vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(mockSettings));
 

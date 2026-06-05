@@ -5,9 +5,16 @@ import type {
 } from "../../../types.js";
 import type { LedgerSortKey } from "./stats-ui-primitives.js";
 
-export const DAY_FORMATTER = new Intl.DateTimeFormat(undefined, {
+export const DAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
+  timeZone: "UTC",
+});
+
+const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
 });
 
 export function formatDay(_value: string): string {
@@ -31,7 +38,7 @@ export function formatShortDate(value: string): string {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return `${date.toLocaleString(undefined, { month: "short" })} ${date.getDate()}`;
+  return SHORT_DATE_FORMATTER.format(date);
 }
 
 export function toTimestamp(value: string | null): number {

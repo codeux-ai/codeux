@@ -64,7 +64,7 @@ export const resolveUserPath = (basePath: string, input: string): string => {
     return "";
   }
   if (path.isAbsolute(expanded)) {
-    return expanded;
+    return path.resolve(expanded);
   }
   return path.resolve(basePath, expanded);
 };

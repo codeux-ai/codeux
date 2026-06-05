@@ -96,6 +96,18 @@ pnpm run typecheck:dashboard
 3. Add tests for behavioral changes.
 4. Validate both server and dashboard build.
 
+## Cross-Platform Test Expectations
+
+Tests are expected to pass on Windows, macOS, and Linux. Keep fixtures and assertions portable:
+
+- Use Node-powered subprocess fixtures instead of shell-specific commands such as `sh`, `sleep`, or POSIX-only `echo` behavior.
+- Normalize path separators in assertions when the app behavior is not explicitly testing native path rendering.
+- Normalize Git working-tree text fixtures for CRLF when assertions only care about logical file contents.
+- Stub both `HOME` and `USERPROFILE` when tests need to control `os.homedir()` across platforms.
+- Pin date, time, and number formatting to an explicit locale and time zone for UI text that is asserted in tests.
+- Close SQLite databases before cleanup when possible. Windows can briefly hold SQLite sidecar files open during teardown, so the Vitest setup tolerates transient temp-directory `EBUSY` and `EPERM` removal errors without weakening application lifecycle cleanup.
+- When PowerShell execution policy blocks package-manager scripts, run commands through `pnpm.cmd` on Windows.
+
 ## Safe Refactor Pattern
 
 1. Add or update tests first for expected behavior.

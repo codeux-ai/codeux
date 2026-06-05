@@ -56,6 +56,6 @@ describe("WorkspaceManager", () => {
     const workspaceHead = (await git(worktreePath, ["rev-parse", "HEAD"])).stdout.trim();
     const workspaceContent = await fs.readFile(path.join(worktreePath, "file.txt"), "utf8");
     expect(workspaceHead).toBe(remoteWorkerHead);
-    expect(workspaceContent).toBe("worker\n");
+    expect(workspaceContent.replace(/\r\n/g, "\n")).toBe("worker\n");
   });
 });

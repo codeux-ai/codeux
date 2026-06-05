@@ -168,7 +168,8 @@ export class InstructionFileService {
     for (const candidate of candidates) {
       const stat = await this.statFile(candidate);
       if (stat.exists) {
-        return { absolutePath: candidate, relativePath: path.relative(baseDir, candidate), ...stat };
+        const actualPath = await this.resolveExistingPathCase(baseDir, candidate);
+        return { absolutePath: actualPath, relativePath: path.relative(baseDir, actualPath), ...stat };
       }
     }
     const canonical = candidates[0];
@@ -179,6 +180,29 @@ export class InstructionFileService {
       size: 0,
       updatedAt: null,
     };
+  }
+
+  private async resolveExistingPathCase(baseDir: string, absolutePath: string): Promise<string> {
+    const relative = path.relative(baseDir, absolutePath);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+      return absolutePath;
+    }
+
+    let current = baseDir;
+    for (const segment of relative.split(path.sep)) {
+      if (!segment) {
+        continue;
+      }
+      try {
+        const entries = await fs.readdir(current);
+        const exact = entries.find((entry) => entry === segment);
+        const caseInsensitive = exact ?? entries.find((entry) => entry.toLowerCase() === segment.toLowerCase());
+        current = path.join(current, caseInsensitive ?? segment);
+      } catch {
+        return absolutePath;
+      }
+    }
+    return current;
   }
 
   private async statFile(absolutePath: string): Promise<{ exists: boolean; size: number; updatedAt: string | null }> {

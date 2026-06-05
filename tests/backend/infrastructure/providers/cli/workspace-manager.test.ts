@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
+import * as path from "path";
 import { WorkspaceManager } from "../../../../../src/infrastructure/providers/cli/workspace-manager.js";
 
 vi.mock("fs/promises");
@@ -30,7 +31,7 @@ describe("WorkspaceManager", () => {
 
   it("builds host worktree paths when host execution mode is selected", () => {
     const result = manager.buildWorktreePath("/repo/project", "session-1", "HOST");
-    expect(result).toBe("/repo/project/.worktrees/session-1");
+    expect(result).toBe(path.join(path.resolve("/repo/project"), ".worktrees", "session-1"));
   });
 
   it("resolves a resumable workspace when the Docker volume exists", async () => {
@@ -47,7 +48,7 @@ describe("WorkspaceManager", () => {
 
     const result = await manager.resolveResumeWorktreePath("/repo/project", "session-1", "HOST");
 
-    expect(result).toBe("/repo/project/.worktrees/session-1");
+    expect(result).toBe(path.join(path.resolve("/repo/project"), ".worktrees", "session-1"));
   });
 
   it("resolves current branch for a host workspace", async () => {
@@ -125,7 +126,8 @@ describe("WorkspaceManager", () => {
       expect.arrayContaining(["volume", "create", "--label", "code-ux.workspace=true"]),
       expect.any(String),
     );
-    expect(runCommandStrict).toHaveBeenCalledWith("git", ["bundle", "create", "/tmp/code-ux-bundle-123/repo.bundle", "--all"], "/repo/project");
+    const bundlePath = path.join("/tmp/code-ux-bundle-123", "repo.bundle");
+    expect(runCommandStrict).toHaveBeenCalledWith("git", ["bundle", "create", bundlePath, "--all"], "/repo/project");
     const bootstrapCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
       call[0] === "docker" && call[1].includes("--entrypoint") && call[1].includes("sh")
     );
@@ -139,7 +141,7 @@ describe("WorkspaceManager", () => {
       "-lc",
     ]));
     expect(bootstrapCall?.[4]).toEqual(expect.objectContaining({
-      stdinFile: "/tmp/code-ux-bundle-123/repo.bundle",
+      stdinFile: bundlePath,
     }));
     const bootstrapCommand = String(bootstrapCall?.[1]?.at(-1) || "");
     expect(bootstrapCommand).toContain("git init /workspace");
@@ -367,10 +369,11 @@ describe("WorkspaceManager", () => {
     const pullCalls = vi.mocked(runCommandStrict).mock.calls.filter((call) =>
       call[0] === "docker" && call[1][0] === "pull"
     );
+    const dockerConfigDir = "/tmp/code-ux-docker-config-123";
     expect(pullCalls).toHaveLength(2);
-    expect(pullCalls[1]?.[3]?.DOCKER_CONFIG).toBe("/tmp/code-ux-docker-config-123");
+    expect(pullCalls[1]?.[3]?.DOCKER_CONFIG).toBe(dockerConfigDir);
     expect(fs.writeFile).toHaveBeenCalledWith(
-      "/tmp/code-ux-docker-config-123/config.json",
+      path.join(dockerConfigDir, "config.json"),
       "{}\n",
       "utf8",
     );

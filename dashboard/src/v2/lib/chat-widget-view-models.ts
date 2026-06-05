@@ -30,6 +30,7 @@ export interface WorkingBubbleState {
 
 const BOOTSTRAP_BRANCH_FATAL_LINE_PATTERN =
   /^fatal:\s+your current branch 'code-ux-bootstrap-[^']+' does not have any commits yet\s*$/i;
+const TOKEN_COUNT_FORMATTER = new Intl.NumberFormat("en-US");
 
 export const sanitizeInvocationOutputText = (value: string): string => {
   if (!value) {
@@ -197,7 +198,7 @@ export function formatStatusContext(
  */
 export function formatTokenCount(tokens: number | null | undefined): string {
   if (tokens === undefined || tokens === null) return "0";
-  return tokens.toLocaleString();
+  return TOKEN_COUNT_FORMATTER.format(tokens);
 }
 
 /**

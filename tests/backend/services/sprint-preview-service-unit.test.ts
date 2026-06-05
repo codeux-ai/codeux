@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+import * as path from "path";
 import type { SprintPreviewSession } from "../../../src/contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
@@ -535,7 +536,11 @@ describe("SprintPreviewService unit tests", () => {
 
       const result = await service.saveScript("proj-1", "sprint-1", "#!/bin/bash\nsaved content");
       expect(fsMod.writeFile).toHaveBeenCalled();
-      expect(fsMod.chmod).toHaveBeenCalled();
+      if (process.platform === "win32") {
+        expect(fsMod.chmod).not.toHaveBeenCalled();
+      } else {
+        expect(fsMod.chmod).toHaveBeenCalled();
+      }
       expect(result.exists).toBe(true);
     });
   });
@@ -1388,7 +1393,7 @@ describe("SprintPreviewService unit tests", () => {
     it("returns normalized path by default", () => {
       const service = new SprintPreviewService(deps as any);
       const result = (service as any).mapDockerSourcePathForDaemon("/some/path", "/repo");
-      expect(result).toBe("/some/path");
+      expect(result).toBe(path.resolve("/some/path"));
     });
   });
 

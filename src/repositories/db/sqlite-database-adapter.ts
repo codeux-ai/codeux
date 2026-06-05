@@ -5,17 +5,24 @@ import { openSqliteDatabase } from "../sqlite-connection.js";
 import * as fs from "fs";
 import * as path from "path";
 
+const SQLITE_TEST_CLOSE_SYMBOL = Symbol.for("code-ux.sqlite.closeOpenTestDatabases");
+
 export class SqliteDatabaseAdapter implements DatabaseAdapter {
   public readonly dialect: SqlDialect = SqliteDialect;
+  private static readonly openTestAdapters = new Set<SqliteDatabaseAdapter>();
   private readonly db: DatabaseSync;
   private readonly cachedStatements = new Map<string, StatementSync>();
   private readonly MAX_CACHE_SIZE = 500;
+  private closed = false;
 
   constructor(dbPath: string) {
     if (dbPath !== ":memory:") {
       fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     }
     this.db = openSqliteDatabase(dbPath);
+    if (process.env.VITEST) {
+      SqliteDatabaseAdapter.openTestAdapters.add(this);
+    }
   }
 
   prepare(sql: string): PreparedStatement {
@@ -55,7 +62,13 @@ export class SqliteDatabaseAdapter implements DatabaseAdapter {
   }
 
   close(): void {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+    this.cachedStatements.clear();
     this.db.close();
+    SqliteDatabaseAdapter.openTestAdapters.delete(this);
   }
 
   /**
@@ -64,4 +77,17 @@ export class SqliteDatabaseAdapter implements DatabaseAdapter {
   getRawDatabase(): DatabaseSync {
     return this.db;
   }
+
+  static closeOpenTestDatabases(): void {
+    for (const adapter of [...SqliteDatabaseAdapter.openTestAdapters]) {
+      adapter.close();
+    }
+  }
+}
+
+if (process.env.VITEST) {
+  const globalWithSqliteClose = globalThis as Record<symbol, (() => void) | undefined>;
+  globalWithSqliteClose[SQLITE_TEST_CLOSE_SYMBOL] = () => {
+    SqliteDatabaseAdapter.closeOpenTestDatabases();
+  };
 }

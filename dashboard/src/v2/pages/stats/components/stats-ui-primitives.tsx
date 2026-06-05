@@ -36,6 +36,7 @@ import {
   formatDuration,
   formatPercent,
   formatDateTime,
+  NUMBER_FORMATTER,
   sumUsage,
   createSeries,
   getPurposeConfig,
@@ -89,7 +90,7 @@ export const CHART_SERIES: ChartSeriesDefinition[] = [
     label: "Invocations",
     accentHex: "#0EA5E9",
     accessor: (bucket) => bucket.usage.invocationCount,
-    formatter: (value) => value.toLocaleString(),
+    formatter: (value) => NUMBER_FORMATTER.format(value),
     signalLabel: "Volume",
   },
 ];

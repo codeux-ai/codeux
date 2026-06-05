@@ -14,6 +14,8 @@ import type { IProviderRunner, ProviderRunResult } from "../../../src/infrastruc
 
 const tempDirs: string[] = [];
 
+const normalizeSeparators = (value: string): string => value.replace(/\\/g, "/");
+
 const usageTelemetry = {
   transcriptText: "",
   inputTokens: 0,
@@ -171,7 +173,8 @@ describe("ProjectSetupService", () => {
     expect(result.summary).toContain("Vite app");
     expect(result.createdAgentIds.length).toBeGreaterThanOrEqual(1);
     expect(result.createdQuicksprintTemplateIds).toHaveLength(1);
-    expect(result.writtenFiles).toEqual(expect.arrayContaining([
+    const writtenFiles = result.writtenFiles.map(normalizeSeparators);
+    expect(writtenFiles).toEqual(expect.arrayContaining([
       ".code-ux/browser/start-preview.sh",
       ".github/workflows/code-ux-basic-checks.yml",
     ]));
