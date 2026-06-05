@@ -38,6 +38,7 @@ interface AgentSourceFile {
 const BASE_AGENT_IDS: Record<string, string> = {
   "worker": "1",
   "planning agent": "2",
+  "project manager": "3",
   "iris": "3",
   "quality assurance agent": "4",
   "project setup agent": "5",
@@ -357,12 +358,12 @@ export class AgentPresetSyncService {
   }
 
   async getProjectManagerAgent(projectId: string): Promise<AgentPresetRecord> {
-    return await this.getRequiredAgent(projectId, "Iris", "iris.md");
+    return await this.getRequiredAgent(projectId, "Project manager", "project_manager.md");
   }
 
   /**
    * Resolve the agent that should answer dashboard chat. Honors the configured dashboardReply
-   * routing override, otherwise defaults to the project manager (Iris) rather than the Worker.
+   * routing override, otherwise defaults to the project manager rather than the Worker.
    */
   async resolveDashboardReplyAgent(projectId: string, agentPresetId?: string | null): Promise<AgentPresetRecord> {
     await this.syncProjectAgents(projectId);
@@ -592,7 +593,7 @@ export class AgentPresetSyncService {
     if (normalizedName === "project setup agent") {
       return ["planning", "setup"];
     }
-    if (normalizedName === "iris") {
+    if (normalizedName === "project manager" || normalizedName === "iris") {
       return ["manager", "chat"];
     }
     return [];
@@ -623,8 +624,8 @@ export class AgentPresetSyncService {
       return;
     }
 
-    const projectManager = this.deps.agentPresetRepository.findAgentPresetByName(projectId, "Iris")
-      || this.deps.agentPresetRepository.findAgentPresetByName(projectId, "Project manager");
+    const projectManager = this.deps.agentPresetRepository.findAgentPresetByName(projectId, "Project manager")
+      || this.deps.agentPresetRepository.findAgentPresetByName(projectId, "Iris");
     if (!projectManager) {
       return;
     }
@@ -723,7 +724,7 @@ export class AgentPresetSyncService {
     }
 
     if (this.normalizeName(normalized) === "iris") {
-      return "Iris";
+      return "Project manager";
     }
 
     if (this.normalizeName(normalized) === "project manager") {

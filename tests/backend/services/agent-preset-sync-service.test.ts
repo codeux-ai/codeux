@@ -186,7 +186,7 @@ describe("AgentPresetSyncService", () => {
 
     await fs.mkdir(path.join(projectRoot, ".code-ux", "agents"), { recursive: true });
     await fs.mkdir(path.join(projectRoot, ".code-ux", "container"), { recursive: true });
-    for (const fileName of ["planning_agent.md", "iris.md", "quality_assurance_agent.md", "worker.md"]) {
+    for (const fileName of ["planning_agent.md", "project_manager.md", "quality_assurance_agent.md", "worker.md"]) {
       await fs.writeFile(
         path.join(projectRoot, ".code-ux", "agents", fileName),
         `default ${fileName}\n`,
@@ -214,8 +214,8 @@ describe("AgentPresetSyncService", () => {
 
     const initial = await syncService.listAgentPresets(project.id);
     expect(initial.map((preset) => preset.name).sort()).toEqual([
-      "Iris",
       "Planning agent",
+      "Project manager",
       "Quality assurance agent",
       "Worker",
     ]);
@@ -231,14 +231,14 @@ describe("AgentPresetSyncService", () => {
     await expect(fs.stat(path.join(homeDir, ".code-ux", "agents", "worker.md"))).rejects.toThrow();
   });
 
-  it("normalizes iris sources and resolves the Iris project manager agent", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-iris-agent-"));
+  it("normalizes project manager sources and resolves the project manager agent", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-manager-agent-"));
     tempDirs.push(dir);
 
     const repoPath = path.join(dir, "repo");
     await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".code-ux", "agents", "iris.md"),
+      path.join(repoPath, ".code-ux", "agents", "project_manager.md"),
       "Answer Jules clarification requests.\n",
       "utf8",
     );
@@ -261,18 +261,18 @@ describe("AgentPresetSyncService", () => {
     });
 
     const presets = await syncService.listAgentPresets(project.id);
-    expect(presets.find((preset) => preset.name === "Iris")).toMatchObject({
+    expect(presets.find((preset) => preset.name === "Project manager")).toMatchObject({
       sourceScope: "project",
       syncStatus: "synced",
     });
 
     const resolved = await syncService.getProjectManagerAgent(project.id);
-    expect(resolved.name).toBe("Iris");
+    expect(resolved.name).toBe("Project manager");
     expect(resolved.instructionMarkdown).toContain("Answer Jules clarification requests.");
   });
 
-  it("seeds Code UX internal docs as a default Iris knowledge subscription once", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-iris-internal-docs-"));
+  it("seeds Code UX internal docs as a default Project manager knowledge subscription once", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-project-manager-internal-docs-"));
     tempDirs.push(dir);
 
     const projectRoot = path.join(dir, "app");
@@ -280,7 +280,7 @@ describe("AgentPresetSyncService", () => {
     await fs.mkdir(path.join(projectRoot, "docs"), { recursive: true });
     await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
     await fs.writeFile(path.join(projectRoot, "docs", "index.md"), "# Code UX\n\nInternal docs.", "utf8");
-    await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "iris.md"), "Manage the project.\n", "utf8");
+    await fs.writeFile(path.join(repoPath, ".code-ux", "agents", "project_manager.md"), "Manage the project.\n", "utf8");
 
     const storage = createAppStorage(path.join(dir, "app.db"));
     const projectRepository = new ProjectManagementRepository(storage);
@@ -302,22 +302,22 @@ describe("AgentPresetSyncService", () => {
     });
 
     const project = projectRepository.createProject({
-      name: "Iris Internal Docs",
+      name: "Project manager Internal Docs",
       sourceType: "local",
       sourceRef: repoPath,
     });
 
     const presets = await syncService.listAgentPresets(project.id);
-    const iris = presets.find((preset) => preset.name === "Iris");
-    expect(iris).toBeTruthy();
+    const projectManager = presets.find((preset) => preset.name === "Project manager");
+    expect(projectManager).toBeTruthy();
     const docs = knowledgeService.listDocuments(project.id);
     expect(docs).toHaveLength(1);
     expect(docs[0]).toMatchObject({ title: "codeux/internaldocs", sourceRef: "codeux/internaldocs" });
-    expect(knowledgeService.listSubscriptions(iris!.id)).toEqual([docs[0]!.id]);
+    expect(knowledgeService.listSubscriptions(projectManager!.id)).toEqual([docs[0]!.id]);
 
-    knowledgeService.setSubscriptions(iris!.id, project.id, []);
+    knowledgeService.setSubscriptions(projectManager!.id, project.id, []);
     await syncService.syncProjectAgents(project.id);
-    expect(knowledgeService.listSubscriptions(iris!.id)).toEqual([]);
+    expect(knowledgeService.listSubscriptions(projectManager!.id)).toEqual([]);
   });
 
   it("repairs stale DB content when source metadata already matches", async () => {

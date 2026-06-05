@@ -155,10 +155,18 @@ describe("dashboard-server quicksprint routes", () => {
   });
 
   it("POST /api/projects/:projectId/quicksprints/execute", async () => {
-    const res = await request(app).post("/api/projects/p1/quicksprints/execute").send({ templateId: "t1" });
+    const input = { templateId: "t1", taskCount: 3, submitMode: "plan_only" };
+    const res = await request(app).post("/api/projects/p1/quicksprints/execute").send(input);
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ id: "s1" });
-    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", { templateId: "t1" }, expect.any(AbortSignal));
+    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", input, expect.any(AbortSignal));
+  });
+
+  it("POST /api/projects/:projectId/quicksprints/execute rejects missing JSON payload before service access", async () => {
+    const res = await request(app).post("/api/projects/p1/quicksprints/execute");
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "Missing or empty required field: templateId" });
+    expect(quicksprintService.executeQuicksprint).not.toHaveBeenCalled();
   });
 
   it("Handles missing quicksprintService", async () => {
@@ -263,7 +271,11 @@ describe("dashboard-server quicksprint routes", () => {
       expect(res5.status).toBe(400);
 
       quicksprintService.executeQuicksprint.mockImplementation(() => { throw new Error("Oops"); });
-      const res6 = await request(app).post("/api/projects/p1/quicksprints/execute").send({});
+      const res6 = await request(app).post("/api/projects/p1/quicksprints/execute").send({
+        templateId: "t1",
+        taskCount: 3,
+        submitMode: "plan_only",
+      });
       expect(res6.status).toBe(400);
   });
 });

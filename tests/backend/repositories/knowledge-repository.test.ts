@@ -92,7 +92,7 @@ describe("KnowledgeRepository", () => {
   });
 
   it("manages agent subscriptions and validates project ownership", () => {
-    const agent = agents.createAgentPreset(projectId, { name: "Iris" });
+    const agent = agents.createAgentPreset(projectId, { name: "Project manager" });
     const docA = createDoc("A", "a", "hash-a");
     const docB = createDoc("B", "b", "hash-b");
 
@@ -106,7 +106,7 @@ describe("KnowledgeRepository", () => {
   });
 
   it("cascades chunk + subscription deletes when a document is removed", () => {
-    const agent = agents.createAgentPreset(projectId, { name: "Iris" });
+    const agent = agents.createAgentPreset(projectId, { name: "Project manager" });
     const doc = createDoc("Doc", "text", "hash-c");
     knowledge.replaceChunks(doc.id, projectId, [
       { chunkIndex: 0, content: "x", tokenCount: 1, heading: null, embeddingModel: "bge-small-en-v1.5", embeddingDimension: 1, embeddingBlob: float32Buffer([1]) },

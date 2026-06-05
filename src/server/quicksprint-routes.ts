@@ -7,6 +7,42 @@ import type {
   UpdateQuicksprintTemplateInput,
 } from "../contracts/quicksprint-types.js";
 
+function parseQuicksprintExecutionInput(body: unknown): QuicksprintExecutionInput {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+
+  const input = body as Record<string, unknown>;
+  const templateId = typeof input.templateId === "string" ? input.templateId.trim() : "";
+  if (!templateId) {
+    throw new Error("Missing or empty required field: templateId");
+  }
+
+  const taskCount = typeof input.taskCount === "number" && Number.isFinite(input.taskCount)
+    ? Math.floor(input.taskCount)
+    : undefined;
+  if (taskCount === undefined || taskCount <= 0) {
+    throw new Error("Missing or invalid required field: taskCount");
+  }
+
+  if (input.submitMode !== "plan_only" && input.submitMode !== "plan_and_start") {
+    throw new Error("Invalid submitMode. Must be 'plan_only' or 'plan_and_start'.");
+  }
+
+  return {
+    templateId,
+    taskCount,
+    submitMode: input.submitMode,
+    routeOverride: typeof input.routeOverride === "string" ? input.routeOverride : undefined,
+    modelOverride: typeof input.modelOverride === "string" ? input.modelOverride : undefined,
+    agentPresetId: typeof input.agentPresetId === "string" ? input.agentPresetId : undefined,
+    additionalPrompt: typeof input.additionalPrompt === "string" ? input.additionalPrompt : undefined,
+    planningOverrides: input.planningOverrides && typeof input.planningOverrides === "object"
+      ? input.planningOverrides as QuicksprintExecutionInput["planningOverrides"]
+      : undefined,
+  };
+}
+
 export function registerQuicksprintRoutes(router: Express, deps: DashboardDependencies): void {
   router.get("/api/projects/:projectId/quicksprints/templates", asyncRoute(async (req, res) => {
     const projectId = requireTrimmedString(req.params.projectId, "projectId");
@@ -73,7 +109,7 @@ export function registerQuicksprintRoutes(router: Express, deps: DashboardDepend
     }
     const ac = new AbortController();
     res.on("close", () => { if (!res.writableFinished) ac.abort(); });
-    const sprint = await deps.quicksprintService.executeQuicksprint(projectId, req.body as QuicksprintExecutionInput, ac.signal);
+    const sprint = await deps.quicksprintService.executeQuicksprint(projectId, parseQuicksprintExecutionInput(req.body), ac.signal);
     res.status(201).json(sprint);
   }));
 }

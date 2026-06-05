@@ -9,7 +9,7 @@ Code UX can run as an installable Electron desktop app while preserving the exis
 - The desktop window loads the resolved dashboard URL, usually `http://127.0.0.1:4444`.
 - If the requested dashboard port is busy, the backend keeps the existing retry behavior and the Electron window opens the actual runtime port.
 - MCP stdio is disabled in the Electron runtime with `CODE_UX_DISABLE_MCP_STDIO=1` so the GUI process does not attach to desktop process stdio.
-- Mutable dashboard runtime traffic (`/api/*`, `/health`, and `/ready`) is treated as non-cacheable in both the backend response headers and the Electron session. The desktop app clears the Electron HTTP cache on startup and injects no-cache request/response headers for loopback runtime data so stale Chromium cache entries cannot make settings, project, agent, or runtime pages appear frozen after navigation.
+- Mutable dashboard runtime traffic (`/api/*`, `/health`, and `/ready`) is treated as non-cacheable in both the backend response headers and the Electron session. The desktop app clears the Electron HTTP cache on startup, injects no-cache request headers only for runtime `GET`/`HEAD` reads, and injects no-store response headers for all loopback runtime data so stale Chromium cache entries cannot make settings, project, agent, or runtime pages appear frozen after navigation without interfering with JSON upload bodies.
 - Windows packaged builds keep the active WebGL context cap at 16 so the persistent shell canvas, avatar canvases, and route-scoped chart canvases have enough headroom during long navigation sessions while old Chromium contexts are waiting for garbage collection.
 - External links are opened through the host operating system. In-app dashboard and sprint-preview URLs remain inside the Electron app.
 
@@ -55,6 +55,8 @@ The release output is written to `release/electron/`.
 
 Electron package builds run `pnpm run electron:prepare-deps` before Electron Builder. That script creates a production-only, hoisted runtime dependency tree in `.cache/electron-runtime/node_modules`, prunes non-runtime package files, generates deterministic PNG/ICO/BMP desktop artwork, and Electron Builder copies it to `resources/node_modules` so ASAR-packaged builds can resolve pnpm transitive dependencies at runtime.
 
+Electron Builder also copies the bundled `.code-ux` runtime defaults to `resources/.code-ux-defaults`. Keep that resource filter aligned with the default asset seeding contract in `src/services/code-ux-default-assets-service.ts`; the packaged app depends on `planning_agent.md`, `project_manager.md`, `quality_assurance_agent.md`, `worker.md`, and `container/setup.sh` being present because it cannot fall back to the workspace `.code-ux` directory after installation.
+
 The runtime dependency tree is fingerprinted from production dependencies and the lockfile. If the fingerprint matches a previous run, `electron:prepare-deps` reuses the existing tree instead of deleting and reinstalling it.
 
 Dashboard-only libraries belong in `devDependencies` because Vite bundles them into `dashboard/dist/`; keeping them out of production dependencies prevents Electron packages from copying unused source packages into `resources/node_modules`.
@@ -98,6 +100,7 @@ The release workflow caches pnpm downloads, TypeScript/Vite caches, Electron dow
 - User-home dependent desktop behavior must consider both `HOME` and `USERPROFILE`; Windows Electron sessions resolve home directories through the native profile environment.
 - Dashboard date, time, and token/count formatting that is rendered in English UI is pinned to explicit `en-US`/UTC formatting where deterministic display matters, preventing host locale differences from changing the desktop surface or CI snapshots.
 - Dashboard API calls: the frontend uses relative `/api/*` calls, so it follows the Electron-loaded loopback origin and does not hardcode `localhost`. Shared JSON fetches default to `cache: "no-store"` and the server sends no-store headers for runtime API responses.
+- Dashboard JSON mutations are parsed on runtime API routes even if a packaged Chromium request arrives with a missing or downgraded JSON `Content-Type` header. Multipart knowledge uploads and preview proxy bodies are excluded from that fallback so route-specific body handling remains intact.
 - Sprint previews: preview iframes use same-port `preview-<session>.localhost` origins and the backend routes those hosts to loopback preview containers. Electron keeps those preview URLs internal.
 - External links: `target="_blank"` and navigation to non-dashboard HTTP(S) or mailto URLs open in the user's default browser/mail client instead of replacing the desktop shell.
 - Native modules: Electron Builder is configured to unpack `.node` files and `onnxruntime-node` assets from ASAR so native bindings remain loadable after packaging.

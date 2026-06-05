@@ -109,7 +109,7 @@ describe("KnowledgeService", () => {
   it("scopes searchForAgent to the agent's subscriptions", async () => {
     const alphaDoc = await ingestReady("Alpha", "alpha alpha beta");
     const gammaDoc = await ingestReady("Gamma", "gamma delta");
-    const agent = agents.createAgentPreset(projectId, { name: "Iris" });
+    const agent = agents.createAgentPreset(projectId, { name: "Project manager" });
 
     service.setSubscriptions(agent.id, projectId, [gammaDoc.id]);
 
@@ -125,7 +125,7 @@ describe("KnowledgeService", () => {
 
   it("builds a manifest only from ready subscribed documents", async () => {
     const ready = await ingestReady("Ready Doc", "alpha beta");
-    const agent = agents.createAgentPreset(projectId, { name: "Iris" });
+    const agent = agents.createAgentPreset(projectId, { name: "Project manager" });
     service.setSubscriptions(agent.id, projectId, [ready.id]);
 
     const manifest = service.buildManifestForAgent(agent.id);

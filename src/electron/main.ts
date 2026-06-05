@@ -3,6 +3,7 @@ import * as fs from "fs";
 import Module from "module";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { isDashboardRuntimeDataUrl, shouldAddRuntimeNoCacheRequestHeaders } from "./dashboard-network-policy.js";
 import { createDebouncedSaver, loadWindowState, saveWindowState } from "./window-state.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,26 +69,6 @@ function isSafeInternalUrl(rawUrl: string): boolean {
   }
 }
 
-function isDashboardRuntimeDataUrl(rawUrl: string): boolean {
-  if (!dashboardOrigin) {
-    return false;
-  }
-
-  try {
-    const url = new URL(rawUrl);
-    const dashboardUrl = new URL(dashboardOrigin);
-    const isDashboardHost = url.hostname === dashboardUrl.hostname
-      || (dashboardUrl.hostname === "127.0.0.1" && url.hostname === "localhost");
-    const isDashboardPort = url.protocol === dashboardUrl.protocol && url.port === dashboardUrl.port;
-    const isRuntimePath = url.pathname.startsWith("/api/")
-      || url.pathname === "/health"
-      || url.pathname === "/ready";
-    return isDashboardHost && isDashboardPort && isRuntimePath;
-  } catch {
-    return false;
-  }
-}
-
 async function configureDashboardNetworkSession(): Promise<void> {
   if (dashboardSessionConfigured) {
     return;
@@ -98,7 +79,10 @@ async function configureDashboardNetworkSession(): Promise<void> {
   await desktopSession.clearCache().catch(() => undefined);
 
   desktopSession.webRequest.onBeforeSendHeaders(dashboardApiUrlFilter, (details, callback) => {
-    if (!isDashboardRuntimeDataUrl(details.url)) {
+    if (
+      !isDashboardRuntimeDataUrl(details.url, dashboardOrigin)
+      || !shouldAddRuntimeNoCacheRequestHeaders(details.method)
+    ) {
       callback({});
       return;
     }
@@ -113,7 +97,7 @@ async function configureDashboardNetworkSession(): Promise<void> {
   });
 
   desktopSession.webRequest.onHeadersReceived(dashboardApiUrlFilter, (details, callback) => {
-    if (!isDashboardRuntimeDataUrl(details.url)) {
+    if (!isDashboardRuntimeDataUrl(details.url, dashboardOrigin)) {
       callback({});
       return;
     }

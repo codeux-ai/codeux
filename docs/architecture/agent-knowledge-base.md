@@ -26,7 +26,7 @@ Every project can receive a grouped Code UX internal documentation entry:
 - source reference: `codeux/internaldocs`
 - content: all markdown files under the running Code UX checkout's `docs/` directory, grouped into one knowledge document
 
-When the built-in Iris project-manager preset is first synced for a project, Code UX selects `codeux/internaldocs` for Iris by default. This seed is one-time only. If a user unselects the document later, subsequent agent syncs do not reselect it.
+When the built-in `Project manager` preset is first synced for a project, Code UX selects `codeux/internaldocs` for that preset by default. This seed is one-time only. If a user unselects the document later, subsequent agent syncs do not reselect it.
 
 The repository includes precomputed BGE Small embeddings for the grouped docs at:
 

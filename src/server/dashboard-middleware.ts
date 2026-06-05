@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import * as fs from "fs";
 import * as path from "path";
+import type { IncomingMessage } from "http";
 import type { Logger } from "../shared/logging/logger.js";
 import { correlationIdMiddleware } from "../shared/logging/correlation-id.js";
 import { createPreviewHostMiddleware } from "./preview-host-middleware.js";
@@ -47,8 +48,38 @@ export const applyDashboardPreRouteMiddleware = (
   // Settings payloads can embed a base64 background-image data URL, which the
   // dashboard warns about past ~5MB. base64 inflates bytes by ~33%, so allow
   // generous headroom to keep appearance saves from failing with HTTP 413.
-  app.use(express.json({ limit: "25mb" }));
+  app.use(express.json({ limit: "25mb", type: shouldParseDashboardJsonBody }));
 };
+
+export function shouldParseDashboardJsonBody(req: IncomingMessage): boolean {
+  const pathname = getRequestPathname(req);
+  const isRuntimeDataPath = pathname.startsWith("/api/")
+    || pathname === "/health"
+    || pathname === "/ready";
+  if (!isRuntimeDataPath) {
+    return false;
+  }
+  if (pathname.startsWith("/api/browser/sessions/") && pathname.includes("/proxy")) {
+    return false;
+  }
+
+  const contentType = String(req.headers["content-type"] || "").toLowerCase();
+  if (contentType.startsWith("multipart/form-data")
+    || contentType.startsWith("application/x-www-form-urlencoded")
+    || contentType.startsWith("application/octet-stream")) {
+    return false;
+  }
+
+  return true;
+}
+
+function getRequestPathname(req: IncomingMessage): string {
+  try {
+    return new URL(req.url || "/", "http://localhost").pathname;
+  } catch {
+    return "/";
+  }
+}
 
 export const applyDashboardPostRouteMiddleware = (
   app: Express,
