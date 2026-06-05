@@ -147,6 +147,9 @@ export class SprintFileBrowserService {
           },
         );
 
+        const volumeName = `code-ux-file-browser-volume-${sprintId}`;
+        await runCommandStrict("docker", ["volume", "rm", "-f", volumeName], project.baseDir).catch(() => undefined);
+
         const archivePath = `${workspacePath}.tar`;
         const dockerArgs = [
           "create",
@@ -156,7 +159,7 @@ export class SprintFileBrowserService {
           "--label", `code-ux.sprint-id=${sprintId}`,
           "--label", `code-ux.session-id=${session.id}`,
           "--workdir", CONTAINER_WORKSPACE_PATH,
-          "--mount", toDockerMountArg({ type: "volume", source: `code-ux-file-browser-volume-${sprintId}`, destination: CONTAINER_WORKSPACE_PATH, readonly: false }),
+          "--mount", toDockerMountArg({ type: "volume", source: volumeName, destination: CONTAINER_WORKSPACE_PATH, readonly: false }),
           FILE_BROWSER_IMAGE,
           "tail", "-f", "/dev/null",
         ];
@@ -172,7 +175,7 @@ export class SprintFileBrowserService {
 
         await runCommandStrict("docker", ["start", containerName], project.baseDir);
 
-        const extractCmd = `rm -rf ${CONTAINER_WORKSPACE_PATH}/* && tar -xf /tmp/workspace.tar -C ${CONTAINER_WORKSPACE_PATH} && rm -f /tmp/workspace.tar`;
+        const extractCmd = `tar -xf /tmp/workspace.tar -C ${CONTAINER_WORKSPACE_PATH} && rm -f /tmp/workspace.tar`;
         await runCommandStrict("docker", ["exec", containerName, "sh", "-c", extractCmd], project.baseDir);
 
         const updated = this.deps.sprintFileBrowserRepository.updateSession(session.id, {
@@ -721,8 +724,8 @@ export class SprintFileBrowserService {
     }
     const archivePath = `${workspacePath}.tar`;
 
-    await this.safeRmWorkspace(workspacePath, repoPath);
-    await fs.mkdir(workspacePath, { recursive: true });
+    await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
+    await fs.mkdir(path.dirname(archivePath), { recursive: true });
     await fs.rm(archivePath, { force: true }).catch(() => undefined);
 
     await runCommandStrict("git", ["archive", "--format=tar", "-o", archivePath, exportRef], repoPath);
@@ -1020,70 +1023,4 @@ export class SprintFileBrowserService {
     return `code-ux-filebrowser-${sanitize(projectId)}-${sanitize(sprintId)}`.slice(0, 63);
   }
 
-  private async containerAssistedCleanupWithRetries(workspacePath: string, repoPath: string): Promise<boolean> {
-    const parentDir = path.dirname(workspacePath);
-    const workspaceName = path.basename(workspacePath);
-    const source = this.mapDockerSourcePathForDaemon(parentDir, repoPath);
-    const maxRetries = 5;
-    const retryDelay = 250;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        await runCommandStrict("docker", [
-          "run",
-          "--rm",
-          "--mount",
-          toDockerMountArg({ source, destination: "/clean-target", readonly: false }),
-          "alpine:3.20",
-          "rm",
-          "-rf",
-          `/clean-target/${workspaceName}`,
-        ], repoPath);
-        return true;
-      } catch (error) {
-        if (attempt === maxRetries) {
-          this.deps.logger?.warn("Container-assisted preview workspace cleanup failed after all retries", {
-            workspacePath,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
-        }
-      }
-    }
-    return false;
-  }
-
-  private async safeRmWorkspace(workspacePath: string, repoPath: string): Promise<void> {
-    let exists = false;
-    try {
-      await fs.access(workspacePath);
-      exists = true;
-    } catch {
-      // Directory doesn't exist
-    }
-
-    if (exists && process.platform === "win32") {
-      await this.containerAssistedCleanupWithRetries(workspacePath, repoPath);
-    }
-
-    try {
-      await this.rmWorkspaceWithRetries(workspacePath);
-      return;
-    } catch (error: any) {
-      const code = error?.code;
-      const recoverableOnWindows = process.platform === "win32"
-        && (code === "EPERM" || code === "EACCES" || code === "EBUSY" || code === "ENOTEMPTY");
-      if (!recoverableOnWindows) {
-        throw error;
-      }
-
-      await this.containerAssistedCleanupWithRetries(workspacePath, repoPath);
-      await this.rmWorkspaceWithRetries(workspacePath);
-    }
-  }
-
-  private async rmWorkspaceWithRetries(workspacePath: string): Promise<void> {
-    await fs.rm(workspacePath, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
-  }
 }

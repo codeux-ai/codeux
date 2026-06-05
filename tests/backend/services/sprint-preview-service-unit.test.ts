@@ -384,52 +384,6 @@ describe("SprintPreviewService unit tests", () => {
     });
   });
 
-  describe("safeRmWorkspace (Windows EPERM handling)", () => {
-    const originalPlatform = process.platform;
-
-    afterEach(() => {
-      Object.defineProperty(process, "platform", { value: originalPlatform });
-    });
-
-    it("retries host removal and falls back to a helper container on Windows EPERM", async () => {
-      Object.defineProperty(process, "platform", { value: "win32" });
-      const eperm = Object.assign(
-        new Error("EPERM: operation not permitted, unlink 'workspace\\node_modules\\eslint'"),
-        { code: "EPERM" },
-      );
-      vi.mocked(fs.rm)
-        .mockRejectedValueOnce(eperm) // primary retried host removal
-        .mockResolvedValueOnce(undefined); // final host removal after container-assisted cleanup
-
-      const service = new SprintPreviewService(deps as any);
-      await (service as any).safeRmWorkspace("/runtime/preview/sprint-1/workspace", "/repo");
-
-      const cleanupCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
-        call[0] === "docker"
-        && call[1].includes("alpine:3.20")
-        && call[1].includes("rm")
-        && call[1].includes("-rf"),
-      );
-      expect(cleanupCall?.[1]).toEqual(expect.arrayContaining(["/clean-target/workspace"]));
-      // Primary attempt + final attempt after the helper container ran.
-      expect(vi.mocked(fs.rm)).toHaveBeenCalledTimes(2);
-    });
-
-    it("rethrows non-Windows removal failures without launching a helper container", async () => {
-      Object.defineProperty(process, "platform", { value: "linux" });
-      const eperm = Object.assign(new Error("EPERM"), { code: "EPERM" });
-      vi.mocked(fs.rm).mockRejectedValueOnce(eperm);
-
-      const service = new SprintPreviewService(deps as any);
-      await expect((service as any).safeRmWorkspace("/runtime/preview/sprint-1/workspace", "/repo"))
-        .rejects.toThrow("EPERM");
-
-      const cleanupCall = vi.mocked(runCommandStrict).mock.calls.find((call) =>
-        call[0] === "docker" && call[1].includes("/clean-target/workspace"),
-      );
-      expect(cleanupCall).toBeUndefined();
-    });
-  });
 
   describe("getLogs", () => {
     it("returns empty logs when no container exists", async () => {

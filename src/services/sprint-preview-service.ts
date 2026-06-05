@@ -1004,72 +1004,7 @@ export class SprintPreviewService {
     };
   }
 
-  private async containerAssistedCleanupWithRetries(workspacePath: string, repoPath: string): Promise<boolean> {
-    const parentDir = path.dirname(workspacePath);
-    const workspaceName = path.basename(workspacePath);
-    const source = this.mapDockerSourcePathForDaemon(parentDir, repoPath);
-    const maxRetries = 5;
-    const retryDelay = 250;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        await runCommandStrict("docker", [
-          "run",
-          "--rm",
-          "--mount",
-          toDockerMountArg({ source, destination: "/clean-target", readonly: false }),
-          "alpine:3.20",
-          "rm",
-          "-rf",
-          `/clean-target/${workspaceName}`,
-        ], repoPath);
-        return true;
-      } catch (error) {
-        if (attempt === maxRetries) {
-          this.deps.logger?.warn("Container-assisted preview workspace cleanup failed after all retries", {
-            workspacePath,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
-        }
-      }
-    }
-    return false;
-  }
-
-  private async safeRmWorkspace(workspacePath: string, repoPath: string): Promise<void> {
-    let exists = false;
-    try {
-      await fs.access(workspacePath);
-      exists = true;
-    } catch {
-      // Directory doesn't exist
-    }
-
-    if (exists && process.platform === "win32") {
-      await this.containerAssistedCleanupWithRetries(workspacePath, repoPath);
-    }
-
-    try {
-      await this.rmWorkspaceWithRetries(workspacePath);
-      return;
-    } catch (error: any) {
-      const code = error?.code;
-      const recoverableOnWindows = process.platform === "win32"
-        && (code === "EPERM" || code === "EACCES" || code === "EBUSY" || code === "ENOTEMPTY");
-      if (!recoverableOnWindows) {
-        throw error;
-      }
-
-      await this.containerAssistedCleanupWithRetries(workspacePath, repoPath);
-      await this.rmWorkspaceWithRetries(workspacePath);
-    }
-  }
-
-  private async rmWorkspaceWithRetries(workspacePath: string): Promise<void> {
-    await fs.rm(workspacePath, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
-  }
 
   private async materializePreviewWorkspace(
     repoPath: string,
@@ -1086,8 +1021,8 @@ export class SprintPreviewService {
     const exportRef = await this.resolvePreviewExportRef(repoPath, featureBranch);
     const archivePath = `${workspacePath}.tar`;
 
-    await this.safeRmWorkspace(workspacePath, repoPath);
-    await fs.mkdir(workspacePath, { recursive: true });
+    await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
+    await fs.mkdir(path.dirname(archivePath), { recursive: true });
     await fs.rm(archivePath, { force: true }).catch(() => undefined);
 
     await runCommandStrict("git", ["archive", "--format=tar", "-o", archivePath, exportRef], repoPath);

@@ -75,6 +75,7 @@ describeIfDocker("SprintPreviewService workspace export", () => {
     });
 
     await (service as any).materializePreviewWorkspace(projectPath, workspacePath, "feature/sprint-51", "main");
+    await fs.mkdir(workspacePath, { recursive: true });
     await run("docker", [
       "run",
       "--rm",
@@ -132,6 +133,7 @@ describeIfDocker("SprintPreviewService workspace export", () => {
     });
 
     await (service as any).materializePreviewWorkspace(projectPath, workspacePath, "feature/sprint-52", "main");
+    await fs.mkdir(workspacePath, { recursive: true });
     await run("docker", [
       "run",
       "--rm",
