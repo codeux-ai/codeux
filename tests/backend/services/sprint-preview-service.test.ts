@@ -75,7 +75,13 @@ describeIfDocker("SprintPreviewService workspace export", () => {
     });
 
     await (service as any).materializePreviewWorkspace(projectPath, workspacePath, "feature/sprint-51", "main");
-    await run("tar", ["-xf", `${workspacePath}.tar`, "-C", workspacePath], projectPath);
+    await run("docker", [
+      "run",
+      "--rm",
+      "-v", `${path.dirname(workspacePath)}:/data`,
+      "alpine:3.20",
+      "tar", "-xf", `/data/${path.basename(workspacePath)}.tar`, "-C", `/data/${path.basename(workspacePath)}`
+    ]);
     await fs.rm(`${workspacePath}.tar`, { force: true }).catch(() => undefined);
 
     const marker = await fs.readFile(path.join(workspacePath, "src", "preview-marker.txt"), "utf8");
@@ -125,10 +131,14 @@ describeIfDocker("SprintPreviewService workspace export", () => {
       settingsRepository: {} as any,
     });
 
-    // We shouldn't need to manually check out or fetch inside projectPath in tests,
-    // as materializePreviewWorkspace is expected to fetch origin if available.
     await (service as any).materializePreviewWorkspace(projectPath, workspacePath, "feature/sprint-52", "main");
-    await run("tar", ["-xf", `${workspacePath}.tar`, "-C", workspacePath], projectPath);
+    await run("docker", [
+      "run",
+      "--rm",
+      "-v", `${path.dirname(workspacePath)}:/data`,
+      "alpine:3.20",
+      "tar", "-xf", `/data/${path.basename(workspacePath)}.tar`, "-C", `/data/${path.basename(workspacePath)}`
+    ]);
     await fs.rm(`${workspacePath}.tar`, { force: true }).catch(() => undefined);
 
     const stale = await fs.readFile(path.join(workspacePath, "src", "stale.txt"), "utf8");
