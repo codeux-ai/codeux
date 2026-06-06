@@ -335,6 +335,7 @@ export const createSystemProviderDraft = (
   provider: providerId,
   name,
   apiKey: "",
+  authType: "apiKey",
   mountAuth: false,
   authPath: providerId === "gemini"
     ? "~/.gemini"
@@ -348,7 +349,7 @@ export const createSystemProviderDraft = (
             ? "~/.local/share/opencode"
             : "",
   ...(providerId === "qwen-code" ? {
-    qwenAuthMode: "LOCAL_AUTH" as const,
+    qwenAuthMode: "MODEL_PROVIDER" as const,
     qwenRegion: "international" as const,
     qwenBaseUrl: "http://127.0.0.1:11434/v1",
     qwenEnvKey: "OLLAMA_API_KEY",
@@ -357,7 +358,7 @@ export const createSystemProviderDraft = (
     qwenAdditionalModelProviders: [],
   } : {}),
   ...(providerId === "opencode" ? {
-    openCodeAuthMode: "LOCAL_AUTH" as const,
+    openCodeAuthMode: "ENV_KEY" as const,
     openCodeProviderId: "ollama",
     openCodeModelId: "glm-4.7-flash",
     openCodeBaseUrl: "http://127.0.0.1:11434/v1",
@@ -555,6 +556,7 @@ export const getSystemIntegrationProviders = (
       provider: providerId,
       name: getProviderTypeLabel(providerId),
       apiKey,
+      authType: "apiKey",
       mountAuth: false,
       authPath: providerId === "gemini"
         ? "~/.gemini"
@@ -570,7 +572,7 @@ export const getSystemIntegrationProviders = (
                   ? "~/.antigravity"
                   : "",
       ...(providerId === "qwen-code" ? {
-        qwenAuthMode: "LOCAL_AUTH" as const,
+        qwenAuthMode: "MODEL_PROVIDER" as const,
         qwenRegion: "international" as const,
         qwenBaseUrl: "http://127.0.0.1:11434/v1",
         qwenEnvKey: "OLLAMA_API_KEY",
@@ -579,7 +581,7 @@ export const getSystemIntegrationProviders = (
         qwenAdditionalModelProviders: [],
       } : {}),
       ...(providerId === "opencode" ? {
-        openCodeAuthMode: "LOCAL_AUTH" as const,
+        openCodeAuthMode: "ENV_KEY" as const,
         openCodeProviderId: "ollama",
         openCodeModelId: "glm-4.7-flash",
         openCodeBaseUrl: "http://127.0.0.1:11434/v1",

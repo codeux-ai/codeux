@@ -206,14 +206,9 @@ export const ProviderInstanceCard: FunctionComponent<{
           )}
 
           {currentAuthType === "localAuth" && (
-            <>
-              <Row label="Mount Qwen auth" description="Copy local Qwen OAuth/cache files into Docker for browser-authenticated Qwen Code runs.">
-                <Toggle value={provider.mountAuth} onChange={() => onUpdate({ mountAuth: !provider.mountAuth })} />
-              </Row>
-              <Row label="Qwen auth path" description="Usually `~/.qwen`; contains settings.json, .env, and cached OAuth state.">
-                <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} disabled={!provider.mountAuth} mono />
-              </Row>
-            </>
+            <Row label="Qwen auth path" description="Usually `~/.qwen`; contains settings.json, .env, and cached OAuth state.">
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+            </Row>
           )}
 
           <Row label="Generated settings preview" description="Masked Qwen settings.json fragment produced for Docker runtime." last={isLast}>
@@ -275,14 +270,9 @@ export const ProviderInstanceCard: FunctionComponent<{
           )}
 
           {currentAuthType === "localAuth" && (
-            <>
-              <Row label="Mount OpenCode auth" description="Copy OpenCode auth.json and related local auth state into Docker.">
-                <Toggle value={provider.mountAuth} onChange={() => onUpdate({ mountAuth: !provider.mountAuth })} />
-              </Row>
-              <Row label="OpenCode auth path" description="Usually `~/.local/share/opencode`; contains auth.json created by `/connect` or `opencode auth login`.">
-                <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} disabled={!provider.mountAuth} mono />
-              </Row>
-            </>
+            <Row label="OpenCode auth path" description="Usually `~/.local/share/opencode`; contains auth.json created by `/connect` or `opencode auth login`.">
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+            </Row>
           )}
 
           <Row label="Generated config preview" description="Masked OpenCode config materialized from OPENCODE_CONFIG_CONTENT for host and Docker runs." last={isLast}>
@@ -297,14 +287,9 @@ export const ProviderInstanceCard: FunctionComponent<{
       {(provider.provider === "claude-code" || provider.provider === "codex") && currentAuthType !== "dashboardAuth" && (
         <>
           {currentAuthType === "localAuth" && (
-            <>
-              <Row label="Mount local auth" description={`Use a copied host auth directory for ${getProviderTypeLabel(provider.provider)} instead of, or alongside, an API key.`}>
-                <Toggle value={provider.mountAuth} onChange={() => onUpdate({ mountAuth: !provider.mountAuth })} />
-              </Row>
-              <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance.">
-                <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} disabled={!provider.mountAuth} mono />
-              </Row>
-            </>
+            <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance.">
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+            </Row>
           )}
           <Row
             label={provider.provider === "claude-code" ? "Anthropic base URL" : "OpenAI base URL"}
@@ -332,14 +317,9 @@ export const ProviderInstanceCard: FunctionComponent<{
 
       {/* Standard Local Auth Option for Generic CLI Providers */}
       {provider.provider !== "jules" && provider.provider !== "qwen-code" && provider.provider !== "opencode" && provider.provider !== "claude-code" && provider.provider !== "codex" && currentAuthType === "localAuth" && (
-        <>
-          <Row label="Mount local auth" description={`Use a copied host auth directory for ${getProviderTypeLabel(provider.provider)} instead of, or alongside, an API key.`}>
-            <Toggle value={provider.mountAuth} onChange={() => onUpdate({ mountAuth: !provider.mountAuth })} />
-          </Row>
-          <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance." last={isLast}>
-            <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} disabled={!provider.mountAuth} mono />
-          </Row>
-        </>
+        <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance." last={isLast}>
+          <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+        </Row>
       )}
 
       {provider.provider === "jules" && (
