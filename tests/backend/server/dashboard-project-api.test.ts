@@ -912,7 +912,7 @@ describe("dashboard project management API", () => {
       provider: "codex",
       state: "completed",
       sessionId: "stats-session-1",
-      startedAt: new Date(Date.now() - 120_000).toISOString(),
+      startedAt: new Date(Date.now() - 125_000).toISOString(),
       finishedAt: new Date(Date.now() - 30_000).toISOString(),
       durationMs: 90_000,
     });
@@ -927,7 +927,7 @@ describe("dashboard project management API", () => {
       provider: "codex",
       purpose: "task_coding",
       model: "gpt-5.3-codex",
-      startedAt: new Date(Date.now() - 120_000).toISOString(),
+      startedAt: new Date(Date.now() - 125_000).toISOString(),
       promptChars: 128,
     });
     executionRepository.updateProviderInvocationUsage(invocation.id, {

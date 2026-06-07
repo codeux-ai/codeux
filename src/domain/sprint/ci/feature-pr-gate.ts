@@ -25,7 +25,7 @@ import type {
 } from "../../../contracts/app-types.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
 import type { WorkerCiFixPayload } from "./feature-pr/ci-autofix-policy.js";
-import { evaluatePreCiGateTransition, isCompletedTaskAwaitingMerge, isTaskCodeComplete } from "../task-merge-state.js";
+import { evaluatePreCiGateTransition, isCompletedTaskAwaitingMerge, isTaskCodeComplete, taskHasMergeEvidence } from "../task-merge-state.js";
 import type { TaskQaMergeGateStatus } from "../../../services/quality-assurance-service.js";
 
 export interface CiGateContext {
@@ -59,18 +59,80 @@ export class FeaturePrGateService {
   async evaluateCiGate(subtasks: Subtask[], context: CiGateContext): Promise<CiGateResult> {
     const updatedSubtasks = [...subtasks];
     const tasksToPersist: Subtask[] = [];
-    const transitionResults = updatedSubtasks.map((task) => ({
-      task,
-      previousStatus: task.status,
-      previousMergeIndicator: task.merge_indicator,
-      transition: evaluatePreCiGateTransition(task),
-    }));
+
+    // Pre-calculate and cache PR, merged PR, and execution state for each task, catching thrown errors per task.
+    interface TaskCiInfo {
+      pr: any;
+      mergedPr: any;
+      hasPr: boolean;
+      isExecutionCompleted: boolean;
+      error?: any;
+    }
+    const taskCiInfoMap = new Map<string, TaskCiInfo>();
+
+    for (const task of updatedSubtasks) {
+      let pr: any = undefined;
+      let mergedPr: any = undefined;
+      let hasPr = false;
+      let error: any = undefined;
+      try {
+        if (context.gitStatus) {
+          pr = matchPrForTask(task, context.gitStatus);
+          mergedPr = matchMergedPrForTask(task, context.gitStatus);
+        }
+        hasPr = !!pr || !!mergedPr || !!task.pr_url;
+      } catch (err: any) {
+        error = err;
+        hasPr = taskHasMergeEvidence(task);
+      }
+
+      const taskRun = context.executionRepository && context.sprintRunId && task.record_id
+        ? context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId)
+        : null;
+      const isExecutionCompleted = task.session_state === "COMPLETED" || taskRun?.state === "COMPLETED";
+
+      taskCiInfoMap.set(task.id, { pr, mergedPr, hasPr, isExecutionCompleted, error });
+    }
+
+    const transitionResults = updatedSubtasks.map((task) => {
+      const info = taskCiInfoMap.get(task.id)!;
+      if (info.error) {
+        context.logger?.error(`Error processing task ${task.id}:`, { error: info.error });
+      }
+      const qaGate = context.evaluateTaskQaGate?.(task);
+      return {
+        task,
+        previousStatus: task.status,
+        previousMergeIndicator: task.merge_indicator,
+        transition: evaluatePreCiGateTransition(task, {
+          githubMode: context.githubMode,
+          qaMergeAllowed: qaGate?.mergeAllowed,
+          hasPr: info.hasPr,
+          isExecutionCompleted: info.isExecutionCompleted,
+        }),
+      };
+    });
 
     for (const { task, previousStatus, previousMergeIndicator, transition } of transitionResults) {
       task.status = transition.status;
       task.merge_indicator = transition.merge_indicator;
       task.intervention_owner = transition.intervention_owner;
       task.intervention_hint = transition.intervention_hint;
+
+      // Handle task completion without a PR in REMOTE mode:
+      // if it completed, has no PR, is in REMOTE mode, and not already merged,
+      // mark it as merged so it settles immediately.
+      const info = taskCiInfoMap.get(task.id)!;
+      if (
+        task.status === "COMPLETED" &&
+        context.githubMode === "REMOTE" &&
+        info.isExecutionCompleted &&
+        !info.hasPr &&
+        !task.is_merged
+      ) {
+        task.is_merged = true;
+        task.merge_indicator = "MERGED";
+      }
 
       if (task.record_id && (task.status !== previousStatus || task.merge_indicator !== previousMergeIndicator)) {
         tasksToPersist.push(task);
@@ -88,7 +150,14 @@ export class FeaturePrGateService {
     }
 
     if (context.githubMode === "LOCAL") {
-      const completedAwaitingMerge = updatedSubtasks.filter((task) => isCompletedTaskAwaitingMerge(task));
+      const completedAwaitingMerge = updatedSubtasks.filter((task) => {
+        const info = taskCiInfoMap.get(task.id)!;
+        return isCompletedTaskAwaitingMerge(task, {
+          githubMode: context.githubMode,
+          hasPr: info.hasPr,
+          isExecutionCompleted: info.isExecutionCompleted,
+        });
+      });
       if (completedAwaitingMerge.length > 0) {
         let reportText = "";
         for (const task of completedAwaitingMerge) {
@@ -155,7 +224,14 @@ export class FeaturePrGateService {
       return { subtasks: updatedSubtasks, reportText: "" };
     }
 
-    const completedAwaitingMerge = updatedSubtasks.filter((task) => isCompletedTaskAwaitingMerge(task));
+    const completedAwaitingMerge = updatedSubtasks.filter((task) => {
+      const info = taskCiInfoMap.get(task.id)!;
+      return isCompletedTaskAwaitingMerge(task, {
+        githubMode: context.githubMode,
+        hasPr: info.hasPr,
+        isExecutionCompleted: info.isExecutionCompleted,
+      }) || task.merge_indicator === "QA_PENDING";
+    });
     if (completedAwaitingMerge.length === 0) {
       return { subtasks: updatedSubtasks, reportText: "" };
     }
@@ -165,12 +241,16 @@ export class FeaturePrGateService {
     }
 
     const processResults = await Promise.all(
-      completedAwaitingMerge.map((task) =>
-        this.processTask(task, context).catch((err) => {
+      completedAwaitingMerge.map((task) => {
+        const info = taskCiInfoMap.get(task.id)!;
+        if (info.error) {
+          return Promise.resolve({ reportText: "", events: [], attentionItem: undefined });
+        }
+        return this.processTask(task, context, info.pr, info.mergedPr).catch((err) => {
           context.logger?.error(`Error processing task ${task.id}:`, { error: err });
           return { reportText: "", events: [], attentionItem: undefined };
-        })
-      )
+        });
+      })
     );
 
     let reportText = "";
@@ -200,7 +280,9 @@ export class FeaturePrGateService {
 
   private async processTask(
     task: Subtask,
-    context: CiGateContext
+    context: CiGateContext,
+    cachedPr: any,
+    cachedMergedPr: any
   ): Promise<{
     reportText: string;
     events: Array<{ state: string; payload: Record<string, unknown> }>;
@@ -210,10 +292,9 @@ export class FeaturePrGateService {
     const events: Array<{ state: string; payload: Record<string, unknown> }> = [];
     let attentionItem: WorkerCiFixPayload | undefined = undefined;
 
-      const workerBranch = typeof task.worker_branch === "string" ? task.worker_branch : null;
-      // At this point, gitStatus is known to be available and non-null because of the check before the loop.
-      const pr = matchPrForTask(task, context.gitStatus as GitTrackingStatus);
-      const mergedPr = matchMergedPrForTask(task, context.gitStatus as GitTrackingStatus);
+    const workerBranch = typeof task.worker_branch === "string" ? task.worker_branch : null;
+    const pr = cachedPr;
+    const mergedPr = cachedMergedPr;
 
       // Jules sessions don't include workerBranch in their API output, so task_runs.worker_branch
       // can be null even when the PR exists. Backfill it the first time gitStatus surfaces the PR's
@@ -244,6 +325,36 @@ export class FeaturePrGateService {
       }
 
       if (!pr) {
+        const taskRun = context.executionRepository && context.sprintRunId && task.record_id
+          ? context.executionRepository.getLatestTaskRun(task.record_id, context.sprintRunId)
+          : null;
+        const isExecutionCompleted = task.session_state === "COMPLETED" || taskRun?.state === "COMPLETED";
+
+        if (isExecutionCompleted) {
+          const qaGate = context.evaluateTaskQaGate?.(task);
+          if (qaGate && !qaGate.mergeAllowed) {
+            task.status = "CODING_COMPLETED";
+            task.merge_indicator = "QA_PENDING";
+            events.push({ state: "qa_blocked", payload: {
+              reason: qaGate.reason,
+              summary: qaGate.summary,
+              qaRunId: qaGate.latestRun?.id || null,
+              runsUsed: qaGate.runsUsed,
+              maxRuns: qaGate.maxRuns,
+              prNumber: null,
+              prUrl: null,
+            } });
+            reportText += buildQaBlockedText(task.id, qaGate);
+            return { reportText, events, attentionItem };
+          }
+
+          task.status = "COMPLETED";
+          task.is_merged = true;
+          task.merge_indicator = "MERGED";
+          await this.persistMergedTask(task, context);
+          return { reportText, events, attentionItem };
+        }
+
         task.status = "RUNNING";
         task.merge_indicator = "CI";
         events.push({ state: "waiting_for_pr", payload: {

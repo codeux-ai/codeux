@@ -211,6 +211,7 @@ export class WatchLoopRunner {
         workerEscalatedMergeConflictTasks,
         activeProjectAttentionItems,
         sprintRunId,
+        githubMode,
       });
 
       allFinished = evaluatedAllFinished;
@@ -425,7 +426,7 @@ export class WatchLoopRunner {
       report += await this.deps.renderInstruction("watchNoMoreActions", {}, repoPath);
     }
 
-    if (subtasks.length > 0 && subtasks.every((task) => isCompletedTaskSettled(task))) {
+    if (subtasks.length > 0 && subtasks.every((task) => isCompletedTaskSettled(task, { githubMode }))) {
       try {
         if (this.deps.qualityAssuranceService) {
           const qaOutcome = await this.deps.qualityAssuranceService.reviewSprintCompletion({
@@ -534,7 +535,7 @@ export class WatchLoopRunner {
           sprintNumber: scopedExecutionContext.sprintNumber,
         });
 
-        if (decision && !(githubMode === "LOCAL" && subtasks.every(task => isCompletedTaskSettled(task) && task.is_merged))) {
+        if (decision && !(githubMode === "LOCAL" && subtasks.every(task => isCompletedTaskSettled(task, { githubMode }) && task.is_merged))) {
           report += completionGuidance;
           report += mergeFeedback.text;
 

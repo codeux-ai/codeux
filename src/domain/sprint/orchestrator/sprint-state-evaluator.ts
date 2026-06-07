@@ -38,8 +38,9 @@ export function evaluateSprintRunState(params: {
   workerEscalatedMergeConflictTasks: Subtask[];
   activeProjectAttentionItems: ProjectAttentionItemRecord[];
   sprintRunId: string;
+  githubMode?: "REMOTE" | "LOCAL";
 }) {
-  const { subtasks, manualMergeTasks, workerEscalatedMergeConflictTasks, activeProjectAttentionItems, sprintRunId } = params;
+  const { subtasks, manualMergeTasks, workerEscalatedMergeConflictTasks, activeProjectAttentionItems, sprintRunId, githubMode } = params;
 
   const { tasksByStatus, statusCounts } = partitionSubtasksByStatus(subtasks);
 
@@ -54,7 +55,7 @@ export function evaluateSprintRunState(params: {
 
   let settledCount = 0;
   for (const task of subtasks) {
-    if (isCompletedTaskSettled(task)) {
+    if (isCompletedTaskSettled(task, { githubMode })) {
       settledCount++;
     }
   }

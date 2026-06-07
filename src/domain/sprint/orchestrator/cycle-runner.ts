@@ -130,6 +130,7 @@ export class CycleRunner {
           maxQuotaRetriesWithoutTimer: dashboardSettings.cliWorkflow.maxQuotaRetriesWithoutTimer,
           maxRateLimitRetries: dashboardSettings.cliWorkflow.maxRateLimitRetries,
           retryOnRateLimit: dashboardSettings.cliWorkflow.retryOnRateLimit,
+          githubMode: args.githubMode,
         },
       );
       subtasks = syncResult.subtasks;
@@ -139,6 +140,7 @@ export class CycleRunner {
       subtasks = runStatusDerivationStep(subtasks, {
         retryFailed: args.retryFailed,
         isActionRequiredState: this.deps.isActionRequiredState,
+        githubMode: args.githubMode,
       });
       await this.captureTaskCompletionMemories(subtasks, cycleEntryStates, args, dashboardSettings);
       await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
@@ -289,6 +291,7 @@ export class CycleRunner {
         subtasks = runStatusDerivationStep(subtasks, {
           retryFailed: args.retryFailed,
           isActionRequiredState: this.deps.isActionRequiredState,
+          githubMode: args.githubMode,
         });
       }
 
