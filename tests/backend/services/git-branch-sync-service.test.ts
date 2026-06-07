@@ -256,4 +256,23 @@ describe("git branch sync service", () => {
     expect(runner).not.toHaveBeenCalledWith("git", ["merge", "--ff-only", "origin/feature/sprint-1"], "/repo");
     expect(runner).not.toHaveBeenCalledWith("git", ["branch", "-f", "feature/sprint-1", "origin/feature/sprint-1"], "/repo");
   });
+
+  it("rewrites a checked-out branch that has only untracked files", async () => {
+    const runner = vi.fn()
+      .mockResolvedValueOnce({ stdout: "git@github.com:owner/repo.git\n", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "local-sha\n", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "remote-sha\n", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "feature/sprint-1\n", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 });
+
+    await syncRemoteBranchIfAvailable("/repo", "feature/sprint-1", runner);
+
+    expect(runner).toHaveBeenCalledWith("git", ["status", "--porcelain", "-uno"], "/repo");
+    expect(runner).toHaveBeenCalledWith("git", ["merge", "--ff-only", "origin/feature/sprint-1"], "/repo");
+  });
 });

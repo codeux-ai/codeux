@@ -166,7 +166,7 @@ export async function syncRemoteBranchIfAvailable(
 
   const currentBranch = (await runGit(runner, ["branch", "--show-current"], repoPath)).stdout.trim();
   if (currentBranch === branchName) {
-    const status = (await runGit(runner, ["status", "--porcelain"], repoPath)).stdout.trim();
+    const status = (await runGit(runner, ["status", "--porcelain", "-uno"], repoPath)).stdout.trim();
     if (status.length > 0) {
       return true;
     }
