@@ -62,7 +62,7 @@ export const buildQwenSettingsPreview = (
   model: string,
   dockerExecutionEnabled: boolean,
 ): string => {
-  const authMode = provider.qwenAuthMode || "LOCAL_AUTH";
+  const authMode = provider.qwenAuthMode || "MODEL_PROVIDER";
   const envKey = authMode === "ALIBABA_CODING_PLAN"
     ? "BAILIAN_CODING_PLAN_API_KEY"
     : provider.qwenEnvKey || "OLLAMA_API_KEY";
@@ -112,7 +112,7 @@ export const buildOpenCodeConfigPreview = (
   model: string,
   dockerExecutionEnabled: boolean,
 ): string => {
-  const authMode = provider.openCodeAuthMode || "LOCAL_AUTH";
+  const authMode = provider.openCodeAuthMode || "ENV_KEY";
   const modelParts = splitOpenCodeModel(model);
   const providerId = provider.openCodeProviderId || modelParts.providerId;
   const modelId = provider.openCodeModelId || modelParts.modelId;
