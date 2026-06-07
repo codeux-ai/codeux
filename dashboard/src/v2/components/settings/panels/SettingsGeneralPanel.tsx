@@ -4,7 +4,7 @@ import { ActionButton, NoticePanel } from "../SettingsSurface.js";
 import { NumberInput, Row, Toggle, TextInput, PillChoiceGroup } from "../SettingsFormFields.js";
 import type { ProjectSettings } from "../../../../../../src/contracts/settings-scope-types.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
-import { Bot, Cog, FolderOpen, Sparkles } from "lucide-preact";
+import { Bot, Cog, Database, FolderOpen, Sparkles } from "lucide-preact";
 import { openOnboarding } from "../../../lib/onboarding-control.js";
 
 
@@ -234,6 +234,49 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
                   { value: "standard", label: "Standard", hint: "Important runtime activity." },
                   { value: "full", label: "Full", hint: "Includes HTTP requests." },
                 ]}
+              />
+            </Row>
+          </SectionCard>
+
+          <SectionCard title="Database Settings" watermark="DBM" icon={<Database strokeWidth={2.4} />}>
+            <Row label="Automatic pruning" description="Automatically prune completed task runs, VM activities, attention items, and realtime events on startup.">
+              <Toggle
+                value={systemSettings?.runtime.dbPruningEnabled ?? true}
+                onChange={() => updateSystem((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    dbPruningEnabled: !current.runtime.dbPruningEnabled,
+                  },
+                }))}
+              />
+            </Row>
+            {(systemSettings?.runtime.dbPruningEnabled ?? true) && (
+              <Row label="Log retention period (days)" description="Keep execution logs and session histories for this many days.">
+                <NumberInput
+                  value={systemSettings?.runtime.dbRetentionDays ?? 14}
+                  onChange={(value) => updateSystem((current) => ({
+                    ...current,
+                    runtime: {
+                      ...current.runtime,
+                      dbRetentionDays: value,
+                    },
+                  }))}
+                  min={1}
+                  max={365}
+                />
+              </Row>
+            )}
+            <Row label="Automatic vacuum on startup" description="Reclaim fragmented SQLite page storage space and shrink DB files on disk after pruning." last>
+              <Toggle
+                value={systemSettings?.runtime.dbAutoVacuumOnStartup ?? true}
+                onChange={() => updateSystem((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    dbAutoVacuumOnStartup: !current.runtime.dbAutoVacuumOnStartup,
+                  },
+                }))}
               />
             </Row>
           </SectionCard>

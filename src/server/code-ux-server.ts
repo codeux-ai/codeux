@@ -45,6 +45,7 @@ import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
 import { DockerAssetPruneService } from "../services/docker-asset-prune-service.js";
+import { DatabaseMaintenanceService } from "../services/database-maintenance-service.js";
 import { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../services/planning-agent-service.js";
@@ -963,6 +964,17 @@ export class CodeUxServer {
       ).cleanupOnStartup();
     } catch (error) {
       this.logger.error("Failed to prune stale Docker assets on startup", { error });
+    }
+
+    try {
+      await new DatabaseMaintenanceService({
+        appDbStorage: this.appDbStorage,
+        sessionTracking: this.sessionTracking,
+        settingsRepository: this.settingsRepository,
+        logger: this.logger.child({ component: "database-maintenance-service" }),
+      }).runMaintenance();
+    } catch (error) {
+      this.logger.error("Failed to run database maintenance on startup", { error });
     }
 
     if (this.isDashboardEnabled()) {

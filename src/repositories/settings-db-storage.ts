@@ -164,6 +164,10 @@ export class SettingsDbStorage {
     `).run(new Date().toISOString());
   }
 
+  getDatabase(): DatabaseAdapter {
+    return this.db;
+  }
+
   close(): void {
     this.db.close();
   }

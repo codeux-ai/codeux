@@ -165,6 +165,9 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
   enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
   consoleLogLevel: DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel,
+  dbAutoVacuumOnStartup: DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup,
+  dbPruningEnabled: DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled,
+  dbRetentionDays: DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays,
   appearance: { ...DEFAULT_DASHBOARD_SETTINGS.appearance },
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   automationInterventions: {
@@ -234,6 +237,9 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const dashboardPort = readPort(input.dashboardPort, DEFAULT_DASHBOARD_SETTINGS.dashboardPort);
   const enableDebugLogFile = readBoolean(input.enableDebugLogFile, DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile);
   const consoleLogLevel = input.consoleLogLevel === "full" ? "full" : DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel;
+  const dbAutoVacuumOnStartup = readBoolean(input.dbAutoVacuumOnStartup, DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup);
+  const dbPruningEnabled = readBoolean(input.dbPruningEnabled, DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled);
+  const dbRetentionDays = typeof input.dbRetentionDays === "number" ? input.dbRetentionDays : DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays;
 
   const appearanceInput = (input.appearance && typeof input.appearance === "object"
     ? input.appearance
@@ -405,6 +411,9 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     dashboardPort,
     enableDebugLogFile,
     consoleLogLevel,
+    dbAutoVacuumOnStartup,
+    dbPruningEnabled,
+    dbRetentionDays,
     appearance,
     automationLevel: validAutomationLevel,
     automationInterventions,

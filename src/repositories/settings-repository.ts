@@ -8,6 +8,7 @@ import type {
   SystemSettings,
 } from "../contracts/settings-scope-types.js";
 import { SettingsDbStorage } from "./settings-db-storage.js";
+import { DatabaseAdapter } from "./db/database-adapter.js";
 import { executeChunkedInQuery } from "./repository-utils.js";
 import {
   buildDefaultProjectSettings,
@@ -207,6 +208,10 @@ export class SettingsRepository {
   resetOnboardingState(): OnboardingStateRecord {
     this.storage.clearOnboardingCompletedAt();
     return { onboardingCompletedAt: null };
+  }
+
+  getDatabase(): DatabaseAdapter {
+    return this.storage.getDatabase();
   }
 
   close(): void {

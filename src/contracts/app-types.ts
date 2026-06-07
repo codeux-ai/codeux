@@ -887,6 +887,9 @@ export interface DashboardSettings {
   dashboardPort: number;
   enableDebugLogFile: boolean;
   consoleLogLevel: ConsoleLogLevel;
+  dbAutoVacuumOnStartup: boolean;
+  dbPruningEnabled: boolean;
+  dbRetentionDays: number;
   appearance: AppearanceSettings;
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;

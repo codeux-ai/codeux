@@ -675,6 +675,18 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
     issues.push({ path: "consoleLogLevel", message: `Expected one of: ${CONSOLE_LOG_LEVELS.join(", ")}` });
   }
 
+  if (typeof payload.dbAutoVacuumOnStartup !== "boolean") {
+    issues.push({ path: "dbAutoVacuumOnStartup", message: "Expected a boolean" });
+  }
+
+  if (typeof payload.dbPruningEnabled !== "boolean") {
+    issues.push({ path: "dbPruningEnabled", message: "Expected a boolean" });
+  }
+
+  if (typeof payload.dbRetentionDays !== "number") {
+    issues.push({ path: "dbRetentionDays", message: "Expected a number" });
+  }
+
   const validAutomationLevels: AutomationLevel[] = ["FULL", "SEMI_AUTO", "ALWAYS_ASK"];
   if (typeof payload.automationLevel !== "string" || !validAutomationLevels.includes(payload.automationLevel as AutomationLevel)) {
     issues.push({ path: "automationLevel", message: `Expected one of: ${validAutomationLevels.join(", ")}` });

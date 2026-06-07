@@ -121,6 +121,10 @@ export class SessionTrackingRepository {
     `);
   }
 
+  getDatabase(): DatabaseAdapter {
+    return this.db;
+  }
+
   createSession(input: CreateTrackedSessionInput): JulesSession {
     const now = new Date().toISOString();
     this.db.prepare(`

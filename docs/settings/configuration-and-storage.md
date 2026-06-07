@@ -74,6 +74,7 @@ Runtime resolution:
 - Docker provider runs stage provider argv in a temporary host file mounted at `/opt/code-ux/provider-argv.sh`; only the provider command name remains in the host `docker run` argv. This avoids Windows command-line length failures when prompts include large task context.
 - Packaged Windows Electron uses an opaque BrowserWindow and Chromium GPU memory hints to mitigate tile-memory pressure. All animated backgrounds render at full fidelity; WebGL backgrounds use `powerPreference: "low-power"` and 0.5× render scale, and all background layers apply CSS `contain: strict` to limit compositor tile scope.
 - On startup, Code UX prunes stale Code UX Docker workspace volumes and cached setup-script images so finished, failed, unrecoverable, and outdated Docker assets do not accumulate across restarts.
+- On startup, Code UX also performs automated database maintenance, pruning old completed task runs (and their cascaded child tables), VM activities, attention items, and realtime events according to the configured retention policy, followed by a `VACUUM` operation on database files to reclaim disk space.
 - restart recovery also treats interrupted Docker sessions without a live backing container as failed, so abandoned workspaces are reclaimed instead of waiting forever for a callback that cannot arrive.
 - startup recovery now also requeues task-level CLI follow-up runs that were left in `in_progress` after QA/repair `Fix` work lost its backing container, so the orchestrator can start the container again instead of leaving the sprint stuck after a server restart.
 - When Code UX has to create a missing feature branch, it prefers `origin/<defaultBranch>` over the local `<defaultBranch>` ref when the remote-tracking base branch exists.
@@ -88,6 +89,9 @@ Runtime resolution:
   - `dashboardPort`
   - `enableDebugLogFile`
   - `consoleLogLevel` (`standard` by default; `full` also prints routine dashboard HTTP request logs)
+  - `dbAutoVacuumOnStartup` (default `true`; executes SQL `VACUUM` on startup to reclaim disk space)
+  - `dbPruningEnabled` (default `true`; enables automatic startup pruning of old data)
+  - `dbRetentionDays` (default `14`; retention threshold in days for completed runs and logs)
 - `integrations`
   - `julesApiKey`
   - `geminiApiKey`

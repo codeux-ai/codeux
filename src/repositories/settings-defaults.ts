@@ -369,6 +369,9 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   dashboardPort: 4444,
   enableDebugLogFile: false,
   consoleLogLevel: "standard",
+  dbAutoVacuumOnStartup: true,
+  dbPruningEnabled: true,
+  dbRetentionDays: 14,
   appearance: {
     navigationMode: "DOCK",
     theme: "SYSTEM",

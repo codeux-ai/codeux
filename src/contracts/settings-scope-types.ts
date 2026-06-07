@@ -89,6 +89,9 @@ export interface SystemRuntimeSettings {
   enableDebugLogFile: boolean;
   consoleLogLevel: ConsoleLogLevel;
   lastActiveScope?: "system" | "project";
+  dbAutoVacuumOnStartup: boolean;
+  dbPruningEnabled: boolean;
+  dbRetentionDays: number;
 }
 
 export interface SystemProviderCredentialSettings {

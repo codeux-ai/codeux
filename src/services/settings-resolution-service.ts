@@ -485,6 +485,9 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
       enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
       consoleLogLevel: DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel,
       lastActiveScope: "system",
+      dbAutoVacuumOnStartup: DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup,
+      dbPruningEnabled: DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled,
+      dbRetentionDays: DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays,
     },
     integrations: {
       providers: buildDefaultIntegrationProviders(externalHints),
@@ -638,6 +641,15 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
     ? "full"
     : defaults.runtime.consoleLogLevel;
   const lastActiveScope = runtime.lastActiveScope === "project" ? "project" : "system";
+  const dbAutoVacuumOnStartup = typeof runtime.dbAutoVacuumOnStartup === "boolean"
+    ? runtime.dbAutoVacuumOnStartup
+    : defaults.runtime.dbAutoVacuumOnStartup;
+  const dbPruningEnabled = typeof runtime.dbPruningEnabled === "boolean"
+    ? runtime.dbPruningEnabled
+    : defaults.runtime.dbPruningEnabled;
+  const dbRetentionDays = typeof runtime.dbRetentionDays === "number"
+    ? runtime.dbRetentionDays
+    : defaults.runtime.dbRetentionDays;
 
   const systemGithubToken = typeof integrationInput.githubToken === "string"
     ? integrationInput.githubToken
@@ -670,6 +682,9 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
       enableDebugLogFile,
       consoleLogLevel,
       lastActiveScope,
+      dbAutoVacuumOnStartup,
+      dbPruningEnabled,
+      dbRetentionDays,
     },
     integrations: {
       providers: integrations,
@@ -752,6 +767,9 @@ export function resolveDashboardSettings(args: {
     dashboardPort: args.systemSettings.runtime.dashboardPort,
     enableDebugLogFile: args.systemSettings.runtime.enableDebugLogFile,
     consoleLogLevel: args.systemSettings.runtime.consoleLogLevel,
+    dbAutoVacuumOnStartup: args.systemSettings.runtime.dbAutoVacuumOnStartup,
+    dbPruningEnabled: args.systemSettings.runtime.dbPruningEnabled,
+    dbRetentionDays: args.systemSettings.runtime.dbRetentionDays,
     appearance: { ...sprintSettings.appearance },
     automationLevel: sprintSettings.automationLevel,
     automationInterventions: { ...sprintSettings.automationInterventions },

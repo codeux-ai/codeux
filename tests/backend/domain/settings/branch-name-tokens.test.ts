@@ -10,6 +10,9 @@ function makeBasePayload() {
     dashboardPort: 4444,
     enableDebugLogFile: false,
     consoleLogLevel: "standard",
+    dbAutoVacuumOnStartup: true,
+    dbPruningEnabled: true,
+    dbRetentionDays: 14,
     automationLevel: "SEMI_AUTO",
     automationInterventions: {
       autoApprovePlan: true,
