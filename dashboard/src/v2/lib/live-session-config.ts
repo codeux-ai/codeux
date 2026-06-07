@@ -24,6 +24,7 @@ export const getTaskCfg = (status?: string) => TASK_STATUS_CFG[(status as TaskSt
 
 export const MERGE_INDICATOR_CFG: Record<string, { label: string; text: string; bg: string; border: string }> = {
     CI:            { label: "CI",            text: "text-signal-400",     bg: "bg-signal-500/8",      border: "border-signal-500/15" },
+    QA_PENDING:    { label: "QA Pending",    text: "text-status-amber",   bg: "bg-status-amber/8",    border: "border-status-amber/15" },
     AUTOMERGE:     { label: "Automerge",     text: "text-ember-400",      bg: "bg-ember-500/8",       border: "border-ember-500/15" },
     MERGED:        { label: "Merged",        text: "text-status-green",   bg: "bg-status-green/8",    border: "border-status-green/15" },
     MERGE_BLOCKED: { label: "Merge Blocked", text: "text-status-amber",   bg: "bg-status-amber/8",    border: "border-status-amber/15" },
@@ -49,6 +50,7 @@ export const EMPTY_RUNTIME_STATS = {
     completed: 0,
     failed: 0,
     ci: 0,
+    qa: 0,
     automerge: 0,
     merged: 0,
     mergeBlocked: 0,

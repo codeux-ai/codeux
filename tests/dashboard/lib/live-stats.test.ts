@@ -1049,7 +1049,7 @@ describe("live stats timing model", () => {
 
   it("omits 'queued' from STATS_DECK_VISIBLE_STAGES while it remains in timing totals", () => {
     expect(STATS_DECK_VISIBLE_STAGES).not.toContain("queued");
-    expect(STATS_DECK_VISIBLE_STAGES).toEqual(["coding", "ci", "autofix", "merge"]);
+    expect(STATS_DECK_VISIBLE_STAGES).toEqual(["coding", "ci", "qa", "autofix", "merge"]);
 
     const tasks = [makeTask({ id: "T01", title: "Queued", status: "RUNNING" })];
     const dispatches = [

@@ -13,6 +13,9 @@ export interface SprintStatusPresentationInput {
   humanInterventionReason?: string | null;
   humanInterventionInstructions?: string | null;
   humanInterventionOwnerType?: string | null;
+  attentionType?: string | null;
+  completion?: number;
+  latestReviewStatus?: string | null;
 }
 
 export interface SprintStatusPresentation {

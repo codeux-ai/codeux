@@ -350,6 +350,7 @@ export const runSessionSyncStep = async (
     maxQuotaRetriesWithoutTimer?: number;
     retryOnRateLimit?: boolean;
     maxRateLimitRetries?: number;
+    githubMode?: "REMOTE" | "LOCAL";
   },
 ): Promise<{ subtasks: Subtask[]; sessions: JulesSession[] }> => {
   const sessionsResponse = await deps.listSessions();
@@ -460,7 +461,7 @@ export const runSessionSyncStep = async (
       sessionName ? activitiesMap.get(sessionName) : undefined,
     );
 
-    if (task.status === "COMPLETED" && isCompletedTaskSettled(task)) {
+    if (task.status === "COMPLETED" && isCompletedTaskSettled(task, { githubMode: context.githubMode })) {
       continue;
     }
 

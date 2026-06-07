@@ -20,7 +20,9 @@ export const CP = {
     CODING_COMPLETED:  0.48,
     COMP_TARGET: 0.56,
     CI:         0.62,
-    CI_TARGET:  0.72,
+    CI_TARGET:  0.68,
+    QA:         0.72,
+    QA_TARGET:  0.76,
     AUTOMERGE:  0.78,
     AM_TARGET:  0.90,
     COMPLETED:  0.96,
@@ -56,6 +58,7 @@ export const getProgressTarget = (task: Subtask): ProgressTarget => {
             const mi = task.merge_indicator;
             if (mi === "AUTOMERGE")      return { confirmed: CP.AUTOMERGE, target: CP.AM_TARGET, stopped: false };
             if (mi === "CI")             return { confirmed: CP.CI, target: CP.CI_TARGET, stopped: false };
+            if (mi === "QA_PENDING")     return { confirmed: CP.QA, target: CP.QA_TARGET, stopped: false };
             if (mi === "MERGE_BLOCKED")  return { confirmed: CP.CODING_COMPLETED, target: CP.CODING_COMPLETED, stopped: true };
             if (mi === "MERGE_CONFLICT") return { confirmed: CP.CODING_COMPLETED, target: CP.CODING_COMPLETED, stopped: true };
             return { confirmed: CP.CODING_COMPLETED, target: CP.COMP_TARGET, stopped: false };

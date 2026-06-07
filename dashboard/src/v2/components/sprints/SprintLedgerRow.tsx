@@ -137,6 +137,9 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     humanInterventionReason: humanIntervention?.reason ?? null,
     humanInterventionInstructions: humanIntervention?.instructions ?? null,
     humanInterventionOwnerType: humanIntervention?.ownerType ?? null,
+    attentionType: humanIntervention?.attentionType ?? null,
+    completion: sprint.completion,
+    latestReviewStatus: sprint.latestReview?.status ?? null,
   });
   const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
 
@@ -161,8 +164,20 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const attentionOverride = humanIntervention?.attentionType
     ? ATTENTION_BADGE_OVERRIDES[humanIntervention.attentionType]
     : undefined;
-  const badgeTone = attentionOverride?.tone ?? STATUS_BADGE_TONES[sprint.status];
-  const badgeLabel = attentionOverride?.label ?? STATUS_LABELS[sprint.status];
+
+  let badgeLabel = statusPresentation.statusLabel;
+  let badgeTone = STATUS_BADGE_TONES[sprint.status] || "border-slate-300/35 bg-slate-900/[0.04] text-slate-600 dark:border-white/15 dark:bg-white/[0.07] dark:text-slate-300";
+
+  if (badgeLabel === "QA") {
+    badgeTone = "border-status-amber/25 bg-status-amber/10 text-status-amber";
+  } else if (badgeLabel === "Merge") {
+    badgeTone = "border-purple-500/25 bg-purple-500/10 text-purple-600 dark:text-purple-300";
+  } else if (badgeLabel === "Merge Conflict") {
+    badgeTone = "border-status-red/25 bg-status-red/10 text-status-red";
+  } else if (attentionOverride) {
+    badgeLabel = attentionOverride.label;
+    badgeTone = attentionOverride.tone;
+  }
 
   return (
     <TableRow

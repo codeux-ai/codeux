@@ -18,6 +18,7 @@ describe("dashboard status helpers", () => {
       completed: 1,
       failed: 1,
       ci: 1,
+      qa: 0,
       automerge: 1,
       merged: 1,
       mergeBlocked: 1,

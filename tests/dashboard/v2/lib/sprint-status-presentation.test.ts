@@ -57,4 +57,52 @@ describe("getSprintStatusPresentation", () => {
     expect(result.title).toBe("Sprint Mystery State");
     expect(result.showHumanInterventionBadge).toBe(false);
   });
+
+  it("maps running sprint with 100% completion or merge_required attention to Merge state", () => {
+    const result1 = getSprintStatusPresentation({
+      state: "running",
+      completion: 100,
+    });
+    expect(result1.statusLabel).toBe("Merge");
+    expect(result1.title).toBe("Attempting Base Branch Merge");
+
+    const result2 = getSprintStatusPresentation({
+      state: "paused",
+      attentionType: "merge_required",
+    });
+    expect(result2.statusLabel).toBe("Merge");
+    expect(result2.title).toBe("Attempting Base Branch Merge");
+  });
+
+  it("maps sprint with active review status to QA state", () => {
+    const result = getSprintStatusPresentation({
+      state: "running",
+      latestReviewStatus: "running",
+    });
+    expect(result.statusLabel).toBe("QA");
+    expect(result.title).toBe("Sprint in QA Gate");
+  });
+
+  it("maps merge conflict attention or block to Merge Conflict state", () => {
+    const result1 = getSprintStatusPresentation({
+      state: "paused",
+      attentionType: "merge_conflict",
+    });
+    expect(result1.statusLabel).toBe("Merge Conflict");
+    expect(result1.showHumanInterventionBadge).toBe(true);
+
+    const result2 = getSprintStatusPresentation({
+      state: "paused",
+      pauseReason: "main_merge_blocked",
+    });
+    expect(result2.statusLabel).toBe("Merge Conflict");
+    expect(result2.showHumanInterventionBadge).toBe(true);
+  });
+
+  it("maps idle state to Draft", () => {
+    const result = getSprintStatusPresentation({
+      state: "idle",
+    });
+    expect(result.statusLabel).toBe("Draft");
+  });
 });

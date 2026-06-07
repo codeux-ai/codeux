@@ -227,6 +227,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             completed: visibleTasksWithLiveActivities.filter((task) => task.status === "COMPLETED").length,
             failed: visibleTasksWithLiveActivities.filter((task) => task.status === "FAILED").length,
             ci: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "CI").length,
+            qa: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "QA_PENDING").length,
             automerge: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "AUTOMERGE").length,
             merged: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "MERGED" || task.is_merged).length,
             mergeBlocked: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "MERGE_BLOCKED").length,

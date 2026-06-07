@@ -51,10 +51,58 @@ export function getSprintStatusPresentation(input: SprintStatusPresentationInput
   const rawState = (input.state || "").toString().trim().toLowerCase();
   const state = rawState || "unknown";
   const pauseSource = resolvePauseSource(input);
+
+  // 1. Merge Conflict Check (Base branch merge conflict)
+  if (
+    input.attentionType === "merge_conflict" ||
+    input.pauseReason === "main_merge_blocked" ||
+    (state === "paused" && input.attentionType === "merge_conflict")
+  ) {
+    return {
+      statusLabel: "Merge Conflict",
+      title: coalesceText(input.humanInterventionTitle, "Merge Conflict exists in base branch") || "Merge Conflict exists in base branch",
+      reason: coalesceText(input.humanInterventionReason, "A merge conflict exists into the base branch.") || "A merge conflict exists into the base branch.",
+      detail: coalesceText(input.humanInterventionInstructions, "Resolve the merge conflicts in the base branch to complete the sprint.") || "Resolve the merge conflicts in the base branch to complete the sprint.",
+      showHumanInterventionBadge: true,
+      pauseSource,
+      isManualPause: false,
+      isSystemStop: true,
+    };
+  }
+
+  // 2. QA Gate Check
+  if (input.latestReviewStatus === "running") {
+    return {
+      statusLabel: "QA",
+      title: "Sprint in QA Gate",
+      reason: "The sprint is undergoing automated and/or manual QA checks.",
+      detail: "Awaiting QA approval before merge into the base branch.",
+      showHumanInterventionBadge: false,
+      pauseSource,
+      isManualPause: false,
+      isSystemStop: false,
+    };
+  }
+
+  // 3. Base Branch Merge (Attempting Merge) Check
+  const isAttemptingMerge = (state === "running" && input.completion === 100) || input.attentionType === "merge_required";
+  if (isAttemptingMerge) {
+    return {
+      statusLabel: "Merge",
+      title: "Attempting Base Branch Merge",
+      reason: "Sprint has completed all execution tasks and is merging into the base branch.",
+      detail: "Final verification and integration into the base branch are in progress.",
+      showHumanInterventionBadge: false,
+      pauseSource,
+      isManualPause: false,
+      isSystemStop: false,
+    };
+  }
+
   const isManualPause = state === "paused" && pauseSource === "manual";
   const isSystemStop = state === "paused" && (pauseSource === "system" || pauseSource === "worker");
 
-  const fallbackLabel = state === "unknown" ? "Unknown" : toReadableStatus(state);
+  const fallbackLabel = state === "unknown" ? "Unknown" : state === "idle" ? "Draft" : toReadableStatus(state);
 
   if (isManualPause) {
     return {

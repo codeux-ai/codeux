@@ -75,6 +75,13 @@ const STAGE_META: Record<LiveTaskStageKey, {
     tone: "text-ember-500",
     chip: "border-ember-500/15 bg-ember-500/8 dark:bg-ember-500/10",
   },
+  qa: {
+    label: "QA Gate",
+    shortLabel: "QA",
+    accent: "#D97706",
+    tone: "text-status-amber",
+    chip: "border-status-amber/15 bg-status-amber/8 dark:bg-status-amber/10",
+  },
   autofix: {
     label: "Autofix",
     shortLabel: "Fix",
@@ -195,8 +202,8 @@ const SummaryPill: FunctionComponent<Node> = ({ label, value, icon: Icon, accent
   </div>
 );
 
-const CounterTile: FunctionComponent<Node> = ({ label, value, icon: Icon, accent }) => (
-  <div className="rounded-[1.75rem] border border-black/[0.05] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
+const CounterTile: FunctionComponent<Node & { className?: string }> = ({ label, value, icon: Icon, accent, className }) => (
+  <div className={`rounded-[1.75rem] border border-black/[0.05] bg-white/68 p-7 shadow-sm backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35 ${className || ""}`}>
     <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
       <Icon className="h-3.5 w-3.5" strokeWidth={1.9} />
       <span>{label}</span>
@@ -337,7 +344,7 @@ export const SprintStatsDeck: FunctionComponent<{
 }> = ({ hasSprintContext, stats, tasks, sprintTiming }) => {
   const totalTrackedStageSeconds = LIVE_TASK_STAGE_ORDER.reduce((sum, stage) => sum + sprintTiming.stageTotals[stage], 0);
   const completionRate = tasks.length > 0 ? (stats.completed / tasks.length) * 100 : 0;
-  const mergePressure = stats.ci + stats.mergeBlocked + stats.mergeConflicts;
+  const mergePressure = stats.ci + stats.qa + stats.mergeBlocked + stats.mergeConflicts;
 
   if (!hasSprintContext) {
     return (
@@ -477,9 +484,10 @@ export const SprintStatsDeck: FunctionComponent<{
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <CounterTile label="CI Lane" value={stats.ci} icon={GitPullRequest} accent="text-ember-500" />
+                  <CounterTile label="QA Gate" value={stats.qa} icon={Timer} accent="text-status-amber" />
                   <CounterTile label="Automerge" value={stats.automerge} icon={Sparkles} accent="text-status-green" />
                   <CounterTile label="Merged" value={stats.merged} icon={CheckCircle2} accent="text-status-green" />
-                  <CounterTile label="Blocked" value={stats.mergeBlocked + stats.mergeConflicts} icon={WandSparkles} accent="text-status-amber" />
+                  <CounterTile label="Blocked" value={stats.mergeBlocked + stats.mergeConflicts} icon={WandSparkles} accent="text-status-amber" className="col-span-2" />
                 </div>
               </div>
             </div>
@@ -495,7 +503,7 @@ export const SprintStatsDeck: FunctionComponent<{
                 Split from runtime milestones
               </div>
             </div>
-            <div className="grid gap-3 xl:grid-cols-4">
+            <div className="grid gap-3 xl:grid-cols-5">
               {STATS_DECK_VISIBLE_STAGES.map((stage) => (
                 <StageBand
                   key={stage}

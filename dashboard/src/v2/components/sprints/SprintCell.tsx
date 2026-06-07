@@ -116,25 +116,46 @@ export const SprintCell: FunctionComponent<SprintCellProps> = ({
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const state = statusMap[sprint.status];
-
-  const attentionOverride = (sprint.status === "running" || sprint.status === "paused") && humanIntervention?.attentionType
-    ? ATTENTION_OVERRIDE_MAP[humanIntervention.attentionType]
-    : undefined;
-
-  const effectiveLabel = attentionOverride?.label ?? state.label;
-  const effectiveTextTone = attentionOverride?.text ?? state.text;
-  const effectiveAccentHex = attentionOverride?.accentHex ?? state.accentHex;
-
-  const StatusIcon = state.icon;
-  const isCompleted = sprint.status === "completed";
-  const isRunning = sprint.status === "running";
   const statusPresentation = getSprintStatusPresentation({
     state: sprint.status,
     humanInterventionTitle: humanIntervention?.title ?? null,
     humanInterventionReason: humanIntervention?.reason ?? null,
     humanInterventionInstructions: humanIntervention?.instructions ?? null,
     humanInterventionOwnerType: humanIntervention?.ownerType ?? null,
+    attentionType: humanIntervention?.attentionType ?? null,
+    completion: sprint.completion,
+    latestReviewStatus: sprint.latestReview?.status ?? null,
   });
+
+  const attentionOverride = (sprint.status === "running" || sprint.status === "paused") && humanIntervention?.attentionType
+    ? ATTENTION_OVERRIDE_MAP[humanIntervention.attentionType]
+    : undefined;
+
+  let effectiveLabel = statusPresentation.statusLabel;
+  let effectiveTextTone = state.text;
+  let effectiveAccentHex = state.accentHex;
+  let StatusIcon = state.icon;
+
+  if (effectiveLabel === "QA") {
+    effectiveTextTone = "text-status-amber";
+    effectiveAccentHex = "#F59E0B";
+    StatusIcon = Activity;
+  } else if (effectiveLabel === "Merge") {
+    effectiveTextTone = "text-purple-600 dark:text-purple-400";
+    effectiveAccentHex = "#A855F7";
+    StatusIcon = Activity;
+  } else if (effectiveLabel === "Merge Conflict") {
+    effectiveTextTone = "text-status-red";
+    effectiveAccentHex = "#E3000F";
+    StatusIcon = AlertTriangle;
+  } else if (attentionOverride) {
+    effectiveLabel = attentionOverride.label;
+    effectiveTextTone = attentionOverride.text;
+    effectiveAccentHex = attentionOverride.accentHex;
+  }
+
+  const isCompleted = sprint.status === "completed";
+  const isRunning = sprint.status === "running";
   const showInterventionBadge = Boolean(humanIntervention) && statusPresentation.showHumanInterventionBadge;
   const animationClass = isCompleted ? "" : isEven ? "animate-organic" : "animate-organic-reverse";
   const interventionPulseStyle = reducedMotion
