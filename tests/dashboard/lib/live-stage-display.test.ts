@@ -24,6 +24,10 @@ describe("live stage display", () => {
     expect(getLiveStageLabel("merge")).toBe("Merge");
   });
 
+  it("maps qa stage to QA Gate label", () => {
+    expect(getLiveStageLabel("qa")).toBe("QA Gate");
+  });
+
   it("returns compact label for ci via short label helper", () => {
     expect(getLiveStageShortLabel("ci")).toBe("CI");
   });
@@ -32,8 +36,8 @@ describe("live stage display", () => {
     expect(STATS_DECK_VISIBLE_STAGES).not.toContain("queued");
   });
 
-  it("stats deck visible stages are exactly Coding, CI / Review, Autofix, Merge in order", () => {
-    expect(STATS_DECK_VISIBLE_STAGES).toEqual(["coding", "ci", "autofix", "merge"]);
+  it("stats deck visible stages are exactly Coding, CI / Review, QA, Autofix, Merge in order", () => {
+    expect(STATS_DECK_VISIBLE_STAGES).toEqual(["coding", "ci", "qa", "autofix", "merge"]);
   });
 
   it("all stats deck visible stages have full labels defined", () => {

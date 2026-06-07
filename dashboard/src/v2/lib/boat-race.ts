@@ -13,6 +13,7 @@ const BOAT_RACE_CHECKPOINTS: readonly BoatRaceCheckpoint[] = [
   { progress: 0.25, label: "CODING", color: "#00E0A0" },
   { progress: 0.48, label: "CODE DONE", color: "#0F9FA8" },
   { progress: 0.62, label: "CI", color: "#5dade2" },
+  { progress: 0.72, label: "QA", color: "#D97706" },
   { progress: 0.78, label: "MERGE", color: "#FFB800" },
   { progress: 0.96, label: "COMPLETED", color: "#00AB84" },
 ];

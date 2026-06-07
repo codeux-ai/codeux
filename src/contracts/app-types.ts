@@ -569,6 +569,7 @@ export interface DashboardStats {
   completed: number;
   failed: number;
   ci: number;
+  qa: number;
   automerge: number;
   merged: number;
   mergeBlocked: number;

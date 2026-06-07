@@ -16,7 +16,7 @@ import {
   pickLatestTaskDispatch,
 } from "./live-task-runtime.js";
 
-export const LIVE_TASK_STAGE_ORDER = ["queued", "coding", "ci", "autofix", "merge"] as const;
+export const LIVE_TASK_STAGE_ORDER = ["queued", "coding", "ci", "qa", "autofix", "merge"] as const;
 
 /**
  * Dedicated stage order for the Live Session stats deck.
@@ -25,6 +25,7 @@ export const LIVE_TASK_STAGE_ORDER = ["queued", "coding", "ci", "autofix", "merg
 export const STATS_DECK_VISIBLE_STAGES: ReadonlyArray<LiveTaskStageKey> = [
   "coding",
   "ci",
+  "qa",
   "autofix",
   "merge",
 ];
@@ -91,6 +92,7 @@ const ZERO_STAGE_TOTALS = (): Record<LiveTaskStageKey, number> => ({
   queued: 0,
   coding: 0,
   ci: 0,
+  qa: 0,
   autofix: 0,
   merge: 0,
 });
@@ -203,6 +205,9 @@ function resolveCiGateStage(event: ExecutionRuntimeEventSummary): StageSignal {
   }
   if (hasFailedChecks) {
     return { stage: "autofix" };
+  }
+  if (state === "qa_blocked") {
+    return { stage: "qa" };
   }
   if (
     state === "waiting_for_pr"
@@ -534,7 +539,7 @@ export function buildLiveTaskTimingSummary(args: {
     }
   }
 
-  const recalculatedTotalSeconds = LIVE_TASK_STAGE_ORDER.reduce((acc, stage) => acc + stageTotals[stage], 0);
+  const recalculatedTotalSeconds = LIVE_TASK_STAGE_ORDER.reduce((acc, stage) => acc + (stageTotals[stage] || 0), 0);
 
   return {
     taskId: args.task.record_id || args.task.id,

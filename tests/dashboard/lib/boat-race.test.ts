@@ -55,6 +55,7 @@ describe("boat race task identity", () => {
       "CODING",
       "CODE DONE",
       "CI",
+      "QA",
       "MERGE",
       "COMPLETED",
     ]);

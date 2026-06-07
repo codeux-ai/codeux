@@ -264,12 +264,14 @@ export const ShipBadge: FunctionComponent<{
                     <circle r={7} fill={
                         mergeIndicator === "MERGED" ? "#00AB84"
                         : mergeIndicator === "CI" ? "#5dade2"
+                        : mergeIndicator === "QA_PENDING" ? "#D97706"
                         : mergeIndicator === "MERGE_CONFLICT" ? "#E3000F"
                         : "#F59E0B"
                     } opacity={0.85} />
                     <text y={0.5} textAnchor="middle" fill="white" fontSize={5.2} fontWeight="bold" fontFamily="monospace"
                         dominantBaseline="middle">
                         {mergeIndicator === "MERGED" ? "M" : mergeIndicator === "CI" ? "CI"
+                        : mergeIndicator === "QA_PENDING" ? "QA"
                         : mergeIndicator === "MERGE_CONFLICT" ? "!" : "AM"}
                     </text>
                 </g>

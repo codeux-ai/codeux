@@ -32,6 +32,7 @@ export const getStyle = (task: Subtask): StatusStyle => {
             const mi = task.merge_indicator;
             if (mi === "AUTOMERGE")      return { color: "#FFB800", label: "Automerge",  dim: false };
             if (mi === "CI")             return { color: "#5dade2", label: "CI",         dim: false };
+            if (mi === "QA_PENDING")     return { color: "#D97706", label: "QA Pending", dim: false };
             if (mi === "MERGE_BLOCKED")  return { color: "#F59E0B", label: "Blocked",    dim: false };
             if (mi === "MERGE_CONFLICT") return { color: "#E3000F", label: "Conflict",   dim: false };
             return { color: "#0F9FA8", label: "Coding Done", dim: false };

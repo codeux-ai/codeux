@@ -12,6 +12,7 @@ export const STAGE_LABELS: Record<LiveTaskStageKey, string> = {
   queued: "Queued",
   coding: "Coding",
   ci: "CI / Review",
+  qa: "QA Gate",
   autofix: "Autofix",
   merge: "Merge",
 };
@@ -23,6 +24,7 @@ export const STAGE_SHORT_LABELS: Record<LiveTaskStageKey, string> = {
   queued: "Queue",
   coding: "Code",
   ci: "CI",
+  qa: "QA",
   autofix: "Fix",
   merge: "Merge",
 };

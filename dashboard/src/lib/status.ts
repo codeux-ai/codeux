@@ -18,6 +18,7 @@ export const processDashboardTasks = (
     completed: 0,
     failed: 0,
     ci: 0,
+    qa: 0,
     automerge: 0,
     merged: 0,
     mergeBlocked: 0,
@@ -35,6 +36,7 @@ export const processDashboardTasks = (
     else if (phase === "FAILED") stats.failed += 1;
 
     if (task.merge_indicator === "CI") stats.ci += 1;
+    else if (task.merge_indicator === "QA_PENDING") stats.qa += 1;
     else if (task.merge_indicator === "AUTOMERGE") stats.automerge += 1;
     else if (task.merge_indicator === "MERGE_BLOCKED") stats.mergeBlocked += 1;
     else if (task.merge_indicator === "MERGE_CONFLICT") stats.mergeConflicts += 1;

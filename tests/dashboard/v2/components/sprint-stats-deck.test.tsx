@@ -11,11 +11,13 @@ expect.extend(matchers);
 
 describe("SprintStatsDeck", () => {
   const mockStats: DashboardStats = {
+    total: 10,
     running: 1,
     codingCompleted: 2,
     completed: 3,
     failed: 0,
     ci: 4,
+    qa: 0,
     automerge: 5,
     merged: 6,
     mergeBlocked: 2,
@@ -38,6 +40,7 @@ describe("SprintStatsDeck", () => {
       queued: 0,
       coding: 0,
       ci: 0,
+      qa: 0,
       autofix: 0,
       merge: 0,
     },
@@ -45,6 +48,7 @@ describe("SprintStatsDeck", () => {
       queued: 0,
       coding: 0,
       ci: 0,
+      qa: 0,
       autofix: 0,
       merge: 0,
     },
