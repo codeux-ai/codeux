@@ -711,7 +711,7 @@ export class VirtualWorkerService {
         workerBranch: sourceBranch,
         patchText,
         commitMessage: `fix(merge): resolve ${targetBranch} into ${sourceBranch}`,
-        parentRefs: [`origin/${targetBranch}`],
+        parentRefs: settings.git.githubMode === "LOCAL" ? [targetBranch] : [`origin/${targetBranch}`],
         gitAuth,
         gitIdentity: effectiveWorkflowSettings.containerMountGitConfig
           ? undefined
@@ -719,13 +719,14 @@ export class VirtualWorkerService {
             name: effectiveWorkflowSettings.containerGitUserName,
             email: effectiveWorkflowSettings.containerGitUserEmail,
           },
+        githubMode: settings.git.githubMode,
       });
       let hasUnpushed = applyResult.hasChanges;
       let hasAhead = applyResult.hasChanges;
       if (!applyResult.hasChanges) {
         hasUnpushed = await this.prService.hasUnpushedCommits(repoPath, sourceBranch, targetBranch);
         hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(repoPath, sourceBranch, targetBranch);
-        if (hasUnpushed) {
+        if (hasUnpushed && settings.git.githubMode !== "LOCAL") {
           const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth);
           await runCommandStrict(
             "git",
@@ -984,13 +985,14 @@ export class VirtualWorkerService {
             name: effectiveWorkflowSettings.containerGitUserName,
             email: effectiveWorkflowSettings.containerGitUserEmail,
           },
+        githubMode: settings.git.githubMode,
       });
       let hasUnpushed = applyResult.hasChanges;
       let hasAhead = applyResult.hasChanges;
       if (!applyResult.hasChanges) {
         hasUnpushed = await this.prService.hasUnpushedCommits(repoPath, branchName, compareBaseBranch);
         hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(repoPath, branchName, compareBaseBranch);
-        if (hasUnpushed) {
+        if (hasUnpushed && settings.git.githubMode !== "LOCAL") {
           const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth);
           await runCommandStrict(
             "git",

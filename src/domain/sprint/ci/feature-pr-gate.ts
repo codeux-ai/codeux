@@ -1,5 +1,6 @@
 import { evaluateMergeReadiness } from "./feature-pr/merge-readiness-policy.js";
 import type { GuardrailService } from "../../../services/guardrail-service.js";
+import { runCommandStrict } from "../../../services/cli-process-runner.js";
 import { matchMergedPrForTask, matchPrForTask } from "./feature-pr/pr-matcher.js";
 import { attemptAutoMerge } from "./feature-pr/automerge-policy.js";
 import { evaluateInProgressState } from "./feature-pr/in-progress-policy.js";
@@ -84,6 +85,66 @@ export class FeaturePrGateService {
           })
         )
       );
+    }
+
+    if (context.githubMode === "LOCAL") {
+      const completedAwaitingMerge = updatedSubtasks.filter((task) => isCompletedTaskAwaitingMerge(task));
+      if (completedAwaitingMerge.length > 0) {
+        let reportText = "";
+        for (const task of completedAwaitingMerge) {
+          const workerBranch = typeof task.worker_branch === "string" ? task.worker_branch : null;
+          if (!workerBranch) continue;
+
+          // Check if there is QA gate blocking us
+          const qaGate = context.evaluateTaskQaGate?.(task);
+          if (qaGate && !qaGate.mergeAllowed) {
+            task.status = "CODING_COMPLETED";
+            task.merge_indicator = "QA_PENDING";
+            await context.persistMergedTask(task);
+            reportText += buildQaBlockedText(task.id, qaGate);
+            continue;
+          }
+
+          try {
+            context.logger?.info(`LOCAL Mode: Merging worker branch ${workerBranch} into feature branch ${context.featureBranch}`);
+            // 1. Ensure we are on the feature branch
+            await runCommandStrict("git", ["checkout", context.featureBranch], context.repoPath);
+            // 2. Perform the merge
+            await runCommandStrict(
+              "git",
+              ["merge", "--no-ff", "-m", `Merge branch '${workerBranch}' into ${context.featureBranch}`, workerBranch],
+              context.repoPath
+            );
+
+            // Merge succeeded!
+            task.status = "COMPLETED";
+            task.is_merged = true;
+            task.merge_indicator = "MERGED";
+            task.intervention_owner = undefined;
+            task.intervention_hint = undefined;
+            await context.persistMergedTask(task);
+
+            reportText += `- ✅ **Merged locally:** Task \`${task.id}\` — branch \`${workerBranch}\` merged into \`${context.featureBranch}\`.\n`;
+          } catch (err: any) {
+            context.logger?.error(`LOCAL Mode: Failed to merge worker branch ${workerBranch} into ${context.featureBranch}`, err);
+            try {
+              await runCommandStrict("git", ["merge", "--abort"], context.repoPath);
+            } catch (abortErr) {
+              // Ignore abort error
+            }
+
+            task.status = "CODING_COMPLETED";
+            task.merge_indicator = "MERGE_CONFLICT";
+            task.intervention_owner = "HUMAN";
+            task.intervention_hint = `Merge conflict merging ${workerBranch} into ${context.featureBranch}. Resolve it locally.`;
+            await context.persistMergedTask(task);
+
+            reportText += `- ⚠️ **Merge Conflict locally:** Task \`${task.id}\` — Conflict merging \`${workerBranch}\` into \`${context.featureBranch}\`.\n`;
+          }
+        }
+        return { subtasks: updatedSubtasks, reportText };
+      }
+      return { subtasks: updatedSubtasks, reportText: "" };
     }
 
     if (

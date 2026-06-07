@@ -1,5 +1,6 @@
 import { runCompletionStep } from "../../../sprint/steps/completion-step.js";
 import type { SprintAgentArgs } from "../../../sprint/sprint-types.js";
+import { runCommandStrict } from "../../../services/cli-process-runner.js";
 import { determineNextState, WatchLoopState } from "./watch-loop-state-machine.js";
 import type { Subtask,
   AutomationInterventionsSettings,
@@ -556,6 +557,80 @@ export class WatchLoopRunner {
           }
 
           return { status: decision.status, report };
+        }
+
+        if (githubMode === "LOCAL") {
+          try {
+            this.deps.logger.info(`LOCAL Mode: Merging feature branch ${defaultFeatureBranch} into default branch ${defaultBranch}`);
+            await runCommandStrict("git", ["checkout", defaultBranch], repoPath);
+            await runCommandStrict(
+              "git",
+              ["merge", "--no-ff", "-m", `Merge branch '${defaultFeatureBranch}' into ${defaultBranch}`, defaultFeatureBranch],
+              repoPath
+            );
+            report += `- ✅ **Merged locally:** Sprint feature branch \`${defaultFeatureBranch}\` merged into default branch \`${defaultBranch}\`.\n`;
+            resolveMainMergeConflictAttentionItems(
+              this.deps.projectAttentionService,
+              scopedExecutionContext.project.id,
+              sprintRunId,
+            );
+          } catch (err: any) {
+            this.deps.logger.error(`LOCAL Mode: Failed to merge feature branch ${defaultFeatureBranch} into ${defaultBranch}`, err);
+            try {
+              await runCommandStrict("git", ["merge", "--abort"], repoPath);
+            } catch (abortErr) {}
+
+            const isWorkerOwned = ciIntelligence.resolveMainMergeConflicts;
+            if (activeMainMergeAttentionItems.length === 0) {
+              this.deps.projectAttentionService.openItems([buildTaskAttentionPayload({
+                projectId: scopedExecutionContext.project.id,
+                sprintId: scopedExecutionContext.sprint.id,
+                sprintRunId,
+                attentionType: "merge_conflict",
+                severity: "high",
+                ownerType: isWorkerOwned ? "worker" : "human",
+                title: `Main merge conflict for ${scopedExecutionContext.sprint.name}`,
+                summaryMarkdown: isWorkerOwned
+                  ? `LOCAL Mode: Merge conflict merging feature branch \`${defaultFeatureBranch}\` into default branch \`${defaultBranch}\`. Virtual worker will attempt to resolve it automatically.`
+                  : `LOCAL Mode: Merge conflict merging feature branch \`${defaultFeatureBranch}\` into default branch \`${defaultBranch}\`. Resolve it locally.\n\nError: ${err.message || String(err)}`,
+                payload: {
+                  repoPath,
+                  workingDirectoryHint: `cd ${repoPath}`,
+                  featureBranch: defaultFeatureBranch,
+                  defaultBranch,
+                  mergeStage: "main",
+                  conflictingBranches: {
+                    source: defaultFeatureBranch,
+                    target: defaultBranch,
+                  },
+                  sprintNumber: scopedExecutionContext.sprintNumber,
+                  sprintName: scopedExecutionContext.sprint.name,
+                  featureBranchTaskContexts: selectMergedTaskContexts(subtasks, { limit: 8 }),
+                },
+              })]);
+            }
+
+            transitionSprintRun(
+              this.deps.executionRepository,
+              sprintRunId,
+              "paused",
+              "sprint_paused",
+              {
+                reason: "main_merge_blocked",
+                message: isWorkerOwned
+                  ? `Local merge conflict merging ${defaultFeatureBranch} into ${defaultBranch}. Virtual worker is resolving conflicts automatically.`
+                  : `Local merge conflict merging ${defaultFeatureBranch} into ${defaultBranch}. Resolve conflicts locally.`,
+              },
+              `sprint-paused:${sprintRunId}:local-main-merge-blocked`
+            );
+
+            return {
+              status: "exit",
+              report: report + (isWorkerOwned
+                ? `- ⏳ **Local Merge Conflict:** Failed to merge \`${defaultFeatureBranch}\` into \`${defaultBranch}\`. Virtual worker is resolving conflicts automatically.\n`
+                : `- ⚠️ **Local Merge Conflict:** Failed to merge \`${defaultFeatureBranch}\` into \`${defaultBranch}\`. Resolve conflicts locally.\n`),
+            };
+          }
         }
         this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);
         transitionSprintRun(

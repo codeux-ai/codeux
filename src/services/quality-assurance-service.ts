@@ -1318,6 +1318,7 @@ export class QualityAssuranceService {
           name: workflowSettings.containerGitUserName,
           email: workflowSettings.containerGitUserEmail,
         },
+      githubMode: settings.git.githubMode,
     });
 
     let hasUnpushed = applyResult.hasChanges;
@@ -1325,7 +1326,7 @@ export class QualityAssuranceService {
     if (!applyResult.hasChanges) {
       hasUnpushed = await this.prService.hasUnpushedCommits(args.repoPath, workerBranch, args.featureBranch);
       hasAhead = await this.prService.hasWorkerBranchCommitsAgainstFeature(args.repoPath, workerBranch, args.featureBranch);
-      if (hasUnpushed) {
+      if (hasUnpushed && settings.git.githubMode !== "LOCAL") {
         const pushEnv = await buildGitHttpAuthEnvForRepoWithFallbacks(args.repoPath, gitAuth);
         await runCommandStrict(
           "git",
@@ -1338,7 +1339,7 @@ export class QualityAssuranceService {
 
     let prUrl = args.task.pr_url || args.taskRun?.prUrl || null;
     if (hasUnpushed || hasAhead) {
-      if (settings.git.autoCreatePr) {
+      if (settings.git.autoCreatePr && settings.git.githubMode !== "LOCAL") {
         const sprint = args.task.sprint_id ? this.deps.projectManagementRepository.getSprint(args.task.sprint_id) : null;
         prUrl = (await this.prService.resolveOrCreateFeaturePr(
           {

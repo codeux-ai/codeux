@@ -122,9 +122,10 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
           />
         </Row>
 
-        <Row label="Auto-create PRs" description="Open pull requests automatically for remote git workflows." badge={getFieldBadge("git.autoCreatePr")}>
+        <Row label="Auto-create PRs" description={editableSettings.git.githubMode === "LOCAL" ? "Open pull requests automatically for remote git workflows. (Disabled in Local mode)" : "Open pull requests automatically for remote git workflows."} badge={getFieldBadge("git.autoCreatePr")}>
           <Toggle
-            value={editableSettings.git.autoCreatePr}
+            value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.git.autoCreatePr}
+            disabled={editableSettings.git.githubMode === "LOCAL"}
             onChange={() => updateEditableSettings((current) => ({
               ...current,
               git: {
@@ -134,9 +135,10 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
             }))}
           />
         </Row>
-        <Row label="Auto-close linked issues" description="Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete." badge={getFieldBadge("git.autoCloseLinkedIssues")} last>
+        <Row label="Auto-close linked issues" description={editableSettings.git.githubMode === "LOCAL" ? "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete. (Disabled in Local mode)" : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} badge={getFieldBadge("git.autoCloseLinkedIssues")} last>
           <Toggle
-            value={editableSettings.git.autoCloseLinkedIssues}
+            value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.git.autoCloseLinkedIssues}
+            disabled={editableSettings.git.githubMode === "LOCAL"}
             onChange={() => updateEditableSettings((current) => ({
               ...current,
               git: {
@@ -148,104 +150,116 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
         </Row>
       </SectionCard>
 
-        <SectionCard title="Merge Gates & Autofix" watermark="CI" badge={getBadge("ciIntelligence")} icon={<GitMerge strokeWidth={2.4} />}>
-          <Row label="Resolve comments before main merge" description="Require review comments to be resolved before finishing the main merge." badge={getFieldBadge("ciIntelligence.resolveAllCommentsBeforeMainMerge")}>
-            <Toggle
-              value={editableSettings.ciIntelligence.resolveAllCommentsBeforeMainMerge}
-              onChange={() => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  resolveAllCommentsBeforeMainMerge: !current.ciIntelligence.resolveAllCommentsBeforeMainMerge,
-                },
-              }))}
-            />
-          </Row>
-          <Row label="Resolve main merge conflicts" description="Escalate `feature -> main` merge conflicts to the virtual worker with sprint context." badge={getFieldBadge("ciIntelligence.resolveMainMergeConflicts")}>
-            <Toggle
-              value={editableSettings.ciIntelligence.resolveMainMergeConflicts}
-              onChange={() => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  resolveMainMergeConflicts: !current.ciIntelligence.resolveMainMergeConflicts,
-                },
-              }))}
-            />
-          </Row>
-          <Row label="Resolve comments before feature merge" description="Do not auto-merge a feature branch until review comments are closed." badge={getFieldBadge("ciIntelligence.resolveAllCommentsBeforeFeatureMerge")}>
-            <Toggle
-              value={editableSettings.ciIntelligence.resolveAllCommentsBeforeFeatureMerge}
-              onChange={() => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  resolveAllCommentsBeforeFeatureMerge: !current.ciIntelligence.resolveAllCommentsBeforeFeatureMerge,
-                },
-              }))}
-            />
-          </Row>
-          <Row label="Resolve feature merge conflicts" description="Escalate feature-branch merge conflicts to the virtual worker with full branch and task context." badge={getFieldBadge("ciIntelligence.resolveMergeConflicts")}>
-            <Toggle
-              value={editableSettings.ciIntelligence.resolveMergeConflicts}
-              onChange={() => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  resolveMergeConflicts: !current.ciIntelligence.resolveMergeConflicts,
-                },
-              }))}
-            />
-          </Row>
-          <Row label="Jules CI autofix" description="Allow Jules to attempt CI autofixes before escalating to a worker." badge={getFieldBadge("ciIntelligence.waitForJulesCiAutofix")}>
-            <Toggle
-              value={editableSettings.ciIntelligence.waitForJulesCiAutofix}
-              onChange={() => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  waitForJulesCiAutofix: !current.ciIntelligence.waitForJulesCiAutofix,
-                },
-              }))}
-            />
-          </Row>
-          <Row label="Feature PR auto-merge mode" description="Controls whether feature PRs stay at PR creation, auto-merge when green, auto-merge immediately when allowed, or stay off." badge={getFieldBadge("ciIntelligence.featurePrAutoMergeMode")}>
-            <PillChoiceGroup
-              value={editableSettings.ciIntelligence.featurePrAutoMergeMode}
-              onChange={(value) => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  featurePrAutoMergeMode: value as ProjectSettings["ciIntelligence"]["featurePrAutoMergeMode"],
-                },
-              }))}
-              options={[
-                { value: "OFF", label: "Off", hint: "Never auto-merge." },
-                { value: "CREATE_PR", label: "Create PR", hint: "Open a PR without auto-merging it." },
-                { value: "WHEN_GREEN", label: "When green", hint: "Merge only after checks pass." },
-                { value: "ALWAYS", label: "Always", hint: "Merge as soon as policy allows." },
-              ]}
-            />
-          </Row>
-          <Row label="Main branch auto-merge mode" description="Controls whether the final main-branch PR stays off, is only created, auto-merges when green, or auto-merges immediately when allowed." badge={getFieldBadge("ciIntelligence.mainBranchAutoMergeMode")} last>
-            <PillChoiceGroup
-              value={editableSettings.ciIntelligence.mainBranchAutoMergeMode}
-              onChange={(value) => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  mainBranchAutoMergeMode: value as ProjectSettings["ciIntelligence"]["mainBranchAutoMergeMode"],
-                },
-              }))}
-              options={[
-                { value: "OFF", label: "Off", hint: "Never auto-merge." },
-                { value: "CREATE_PR", label: "Create PR", hint: "Open the PR without auto-merging it." },
-                { value: "WHEN_GREEN", label: "When green", hint: "Merge only after checks pass." },
-                { value: "ALWAYS", label: "Always", hint: "Merge as soon as policy allows." },
-              ]}
-            />
-          </Row>
-        </SectionCard>
+      <SectionCard
+        title={editableSettings.git.githubMode === "LOCAL" ? "Merge Gates & Autofix (Unavailable in Local Mode)" : "Merge Gates & Autofix"}
+        watermark="CI"
+        badge={editableSettings.git.githubMode === "LOCAL" ? "Disabled in Local Mode" : getBadge("ciIntelligence")}
+        icon={<GitMerge strokeWidth={2.4} />}
+      >
+        <Row label="Resolve comments before main merge" description="Require review comments to be resolved before finishing the main merge." badge={getFieldBadge("ciIntelligence.resolveAllCommentsBeforeMainMerge")}>
+          <Toggle
+            value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.ciIntelligence.resolveAllCommentsBeforeMainMerge}
+            disabled={editableSettings.git.githubMode === "LOCAL"}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              ciIntelligence: {
+                ...current.ciIntelligence,
+                resolveAllCommentsBeforeMainMerge: !current.ciIntelligence.resolveAllCommentsBeforeMainMerge,
+              },
+            }))}
+          />
+        </Row>
+        <Row label="Resolve main merge conflicts" description="Escalate `feature -> main` merge conflicts to the virtual worker with sprint context." badge={getFieldBadge("ciIntelligence.resolveMainMergeConflicts")}>
+          <Toggle
+            value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.ciIntelligence.resolveMainMergeConflicts}
+            disabled={editableSettings.git.githubMode === "LOCAL"}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              ciIntelligence: {
+                ...current.ciIntelligence,
+                resolveMainMergeConflicts: !current.ciIntelligence.resolveMainMergeConflicts,
+              },
+            }))}
+          />
+        </Row>
+        <Row label="Resolve comments before feature merge" description="Do not auto-merge a feature branch until review comments are closed." badge={getFieldBadge("ciIntelligence.resolveAllCommentsBeforeFeatureMerge")}>
+          <Toggle
+            value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.ciIntelligence.resolveAllCommentsBeforeFeatureMerge}
+            disabled={editableSettings.git.githubMode === "LOCAL"}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              ciIntelligence: {
+                ...current.ciIntelligence,
+                resolveAllCommentsBeforeFeatureMerge: !current.ciIntelligence.resolveAllCommentsBeforeFeatureMerge,
+              },
+            }))}
+          />
+        </Row>
+        <Row label="Resolve feature merge conflicts" description="Escalate feature-branch merge conflicts to the virtual worker with full branch and task context." badge={getFieldBadge("ciIntelligence.resolveMergeConflicts")}>
+          <Toggle
+            value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.ciIntelligence.resolveMergeConflicts}
+            disabled={editableSettings.git.githubMode === "LOCAL"}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              ciIntelligence: {
+                ...current.ciIntelligence,
+                resolveMergeConflicts: !current.ciIntelligence.resolveMergeConflicts,
+              },
+            }))}
+          />
+        </Row>
+        <Row label="Jules CI autofix" description="Allow Jules to attempt CI autofixes before escalating to a worker." badge={getFieldBadge("ciIntelligence.waitForJulesCiAutofix")}>
+          <Toggle
+            value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.ciIntelligence.waitForJulesCiAutofix}
+            disabled={editableSettings.git.githubMode === "LOCAL"}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              ciIntelligence: {
+                ...current.ciIntelligence,
+                waitForJulesCiAutofix: !current.ciIntelligence.waitForJulesCiAutofix,
+              },
+            }))}
+          />
+        </Row>
+        <Row label="Feature PR auto-merge mode" description="Controls whether feature PRs stay at PR creation, auto-merge when green, auto-merge immediately when allowed, or stay off." badge={getFieldBadge("ciIntelligence.featurePrAutoMergeMode")}>
+          <PillChoiceGroup
+            value={editableSettings.git.githubMode === "LOCAL" ? "OFF" : editableSettings.ciIntelligence.featurePrAutoMergeMode}
+            disabled={editableSettings.git.githubMode === "LOCAL"}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              ciIntelligence: {
+                ...current.ciIntelligence,
+                featurePrAutoMergeMode: value as ProjectSettings["ciIntelligence"]["featurePrAutoMergeMode"],
+              },
+            }))}
+            options={[
+              { value: "OFF", label: "Off", hint: "Never auto-merge." },
+              { value: "CREATE_PR", label: "Create PR", hint: "Open a PR without auto-merging it." },
+              { value: "WHEN_GREEN", label: "When green", hint: "Merge only after checks pass." },
+              { value: "ALWAYS", label: "Always", hint: "Merge as soon as policy allows." },
+            ]}
+          />
+        </Row>
+        <Row label="Main branch auto-merge mode" description="Controls whether the final main-branch PR stays off, is only created, auto-merges when green, or auto-merges immediately when allowed." badge={getFieldBadge("ciIntelligence.mainBranchAutoMergeMode")} last>
+          <PillChoiceGroup
+            value={editableSettings.git.githubMode === "LOCAL" ? "OFF" : editableSettings.ciIntelligence.mainBranchAutoMergeMode}
+            disabled={editableSettings.git.githubMode === "LOCAL"}
+            onChange={(value) => updateEditableSettings((current) => ({
+              ...current,
+              ciIntelligence: {
+                ...current.ciIntelligence,
+                mainBranchAutoMergeMode: value as ProjectSettings["ciIntelligence"]["mainBranchAutoMergeMode"],
+              },
+            }))}
+            options={[
+              { value: "OFF", label: "Off", hint: "Never auto-merge." },
+              { value: "CREATE_PR", label: "Create PR", hint: "Open the PR without auto-merging it." },
+              { value: "WHEN_GREEN", label: "When green", hint: "Merge only after checks pass." },
+              { value: "ALWAYS", label: "Always", hint: "Merge as soon as policy allows." },
+            ]}
+          />
+        </Row>
+      </SectionCard>
 
         <SectionCard title="Guardrails" watermark="CAP" badge={getBadge("guardrails")} icon={<ShieldAlert strokeWidth={2.4} />}>
           <Row label="Guardrails enabled" description="Cap how many times each agent job type runs per task to stop runaway loops. Counts persist per task across restarts." badge={getFieldBadge("guardrails.enabled")}>

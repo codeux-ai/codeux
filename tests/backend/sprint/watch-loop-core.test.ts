@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { WatchLoopRunner } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
+
+vi.mock("../../../src/services/cli-process-runner.js", () => ({
+  runCommandStrict: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }),
+  runStreamingCommand: vi.fn(),
+}));
 import { evaluateSprintRunState } from "../../../src/domain/sprint/orchestrator/sprint-state-evaluator.js";
 import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "../../../src/domain/sprint/orchestrator/watch-loop-policies.js";
 import { buildMockSettings } from "../../builders/settings-builder.js";

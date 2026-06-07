@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { runCommandStrict } from "../../../../../src/services/cli-process-runner.js";
 import { FeaturePrGateService, CiGateContext } from "../../../../../src/domain/sprint/ci/feature-pr-gate.js";
+
+vi.mock("../../../../../src/services/cli-process-runner.js", () => ({
+  runCommandStrict: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }),
+  runStreamingCommand: vi.fn(),
+}));
 import * as prMatcher from "../../../../../src/domain/sprint/ci/feature-pr/pr-matcher.js";
 import type { Subtask, GitTrackingStatus } from "../../../../../src/contracts/app-types.js";
 
@@ -529,6 +535,25 @@ jobs:
     expect(result.subtasks[0].merge_indicator).toBe("MERGED");
     expect(context.persistMergedTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T1", is_merged: true }));
     expect(result.reportText).toContain("Feature PR Merged");
+  });
+
+  it("merges worker branch locally in LOCAL mode", async () => {
+    context.githubMode = "LOCAL";
+    subtasks[0].status = "CODING_COMPLETED";
+    subtasks[0].worker_branch = "feat/T1";
+    subtasks[0].is_merged = false;
+
+    vi.mocked(runCommandStrict).mockResolvedValue({ stdout: "", stderr: "" } as any);
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].is_merged).toBe(true);
+    expect(result.subtasks[0].merge_indicator).toBe("MERGED");
+    expect(context.persistMergedTask).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "T1", is_merged: true, status: "COMPLETED" })
+    );
+    expect(result.reportText).toContain("Merged locally");
   });
 });
 

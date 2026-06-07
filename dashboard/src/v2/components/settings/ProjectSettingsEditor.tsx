@@ -146,9 +146,10 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           </Row>
 
         </div>
-        <Row label="Auto-create PRs" description="Open pull requests automatically for remote git workflows." badge={getBadge("git.autoCreatePr")}>
+        <Row label="Auto-create PRs" description={settings.git.githubMode === "LOCAL" ? "Open pull requests automatically for remote git workflows. (Disabled in Local mode)" : "Open pull requests automatically for remote git workflows."} badge={getBadge("git.autoCreatePr")}>
           <Toggle
-            value={settings.git.autoCreatePr}
+            value={settings.git.githubMode === "LOCAL" ? false : settings.git.autoCreatePr}
+            disabled={settings.git.githubMode === "LOCAL"}
             onChange={(value) => update({
               git: {
                 ...settings.git,
@@ -157,9 +158,10 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             })}
           />
         </Row>
-        <Row label="Auto-close linked issues" description="Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete." badge={getBadge("git.autoCloseLinkedIssues")}>
+        <Row label="Auto-close linked issues" description={settings.git.githubMode === "LOCAL" ? "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete. (Disabled in Local mode)" : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} badge={getBadge("git.autoCloseLinkedIssues")}>
           <Toggle
-            value={settings.git.autoCloseLinkedIssues}
+            value={settings.git.githubMode === "LOCAL" ? false : settings.git.autoCloseLinkedIssues}
+            disabled={settings.git.githubMode === "LOCAL"}
             onChange={(value) => update({
               git: {
                 ...settings.git,
@@ -171,9 +173,9 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title="CI Intelligence"
-        description="Controls how aggressively the sprint loop waits on checks, comments, and autofix behavior."
-        badge={ciSource ? sourceLabel(ciSource) : undefined}
+        title={settings.git.githubMode === "LOCAL" ? "CI Intelligence (Unavailable in Local Mode)" : "CI Intelligence"}
+        description={settings.git.githubMode === "LOCAL" ? "Controls how aggressively the sprint loop waits on checks, comments, and autofix behavior. (Disabled in Local mode)" : "Controls how aggressively the sprint loop waits on checks, comments, and autofix behavior."}
+        badge={settings.git.githubMode === "LOCAL" ? "Disabled in Local Mode" : (ciSource ? sourceLabel(ciSource) : undefined)}
       >
         {[
           ["enabled", "Enable CI intelligence", "Turn CI and PR gate reasoning on for this scope."],
@@ -186,7 +188,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         ].map(([field, label, description]) => (
           <Row key={field} label={label} description={description} badge={getBadge(`ciIntelligence.${field}`)}>
             <Toggle
-              value={settings.ciIntelligence[field as keyof ProjectSettings["ciIntelligence"]] as boolean}
+              value={settings.git.githubMode === "LOCAL" ? false : (settings.ciIntelligence[field as keyof ProjectSettings["ciIntelligence"]] as boolean)}
+              disabled={settings.git.githubMode === "LOCAL"}
               onChange={(value) => update({
                 ciIntelligence: {
                   ...settings.ciIntelligence,
@@ -202,6 +205,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               value={settings.ciIntelligence.julesCiAutofixMaxRetries}
               min={0}
               max={20}
+              disabled={settings.git.githubMode === "LOCAL"}
               onChange={(value) => update({
                 ciIntelligence: {
                   ...settings.ciIntelligence,
@@ -212,7 +216,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           </Row>
           <Row label="Feature PR auto-merge" description="Policy for leaving feature work at PR creation or merging after checks and comments are satisfied." badge={getBadge("ciIntelligence.featurePrAutoMergeMode")}>
             <SelectInput
-              value={settings.ciIntelligence.featurePrAutoMergeMode}
+              value={settings.git.githubMode === "LOCAL" ? "OFF" : settings.ciIntelligence.featurePrAutoMergeMode}
+              disabled={settings.git.githubMode === "LOCAL"}
               onChange={(value) => update({
                 ciIntelligence: {
                   ...settings.ciIntelligence,
@@ -229,7 +234,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           </Row>
           <Row label="Main branch auto-merge" description="Policy for leaving the final main PR at creation or merging it after checks and comments are satisfied." badge={getBadge("ciIntelligence.mainBranchAutoMergeMode")}>
             <SelectInput
-              value={settings.ciIntelligence.mainBranchAutoMergeMode}
+              value={settings.git.githubMode === "LOCAL" ? "OFF" : settings.ciIntelligence.mainBranchAutoMergeMode}
+              disabled={settings.git.githubMode === "LOCAL"}
               onChange={(value) => update({
                 ciIntelligence: {
                   ...settings.ciIntelligence,

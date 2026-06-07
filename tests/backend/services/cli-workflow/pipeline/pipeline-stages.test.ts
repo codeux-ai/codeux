@@ -502,6 +502,8 @@ describe("executeGitFinalizeStage", () => {
       patchText: "",
       commitMessage: `feat(task ${ctx.task.id}): implement via ${ctx.provider}`,
       gitAuth: { githubToken: "token", gitlabToken: undefined },
+      gitIdentity: undefined,
+      githubMode: "LOCAL",
     });
     expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED" });
   });
@@ -538,6 +540,7 @@ describe("executeGitFinalizeStage", () => {
 
   it("pushes an existing local worker-branch commit when the provider committed directly in the workspace", async () => {
     const ctx = createMockContext();
+    ctx.settings.git.githubMode = "REMOTE";
 
     vi.mocked(ctx.prService.hasUnpushedCommits).mockResolvedValue(true);
     vi.mocked(ctx.prService.hasWorkerBranchCommitsAgainstFeature).mockResolvedValue(true);
