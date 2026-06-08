@@ -22,5 +22,21 @@ describe("sanitizeInvocationOutputText", () => {
 
     expect(sanitizeInvocationOutputText(input)).toBe(["line before", "fatal: not a git repository", "line after"].join("\n"));
   });
-});
 
+  it("removes Qwen legacy OpenAI logging warnings", () => {
+    const input = [
+      "Hello",
+      "Warning: Legacy setting 'enableOpenAILogging' will be ignored in /workspace/.code-ux-home/.qwen/settings.json. Please use 'model.enableOpenAILogging' instead.",
+      "world",
+    ].join("\n");
+
+    expect(sanitizeInvocationOutputText(input)).toBe("Hello\nworld");
+  });
+
+  it("removes repeated inline Qwen legacy OpenAI logging warnings", () => {
+    const warning = "Warning: Legacy setting 'enableOpenAILogging' will be ignored in /workspace/.code-ux-home/.qwen/settings.json. Please use 'model.enableOpenAILogging' instead.";
+    const input = `The first message was hello. ${warning} ${warning} ${warning}`;
+
+    expect(sanitizeInvocationOutputText(input)).toBe("The first message was hello.");
+  });
+});

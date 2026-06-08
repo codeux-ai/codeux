@@ -147,7 +147,8 @@ export interface ProviderRunInput {
   signal?: AbortSignal;
   onActivity: (desc: string, originator?: string) => void;
   /** Pass a previous nativeSessionId to continue an existing CLI session.
-   *  Claude Code: reuses --session-id. Gemini: adds --resume. Codex: uses exec resume --last. */
+   *  Claude Code: reuses --session-id. Gemini: adds --resume. Codex: uses exec resume --last.
+   *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
   continueSessionId?: string | null;
   /** MCP server connection info for injecting management tools into the CLI provider. */
   mcpConnection?: McpConnectionInfo | null;
@@ -164,11 +165,14 @@ export class ProviderRunner implements IProviderRunner {
   constructor(private readonly dockerRunner: IDockerRunner) { }
 
   async runProvider(input: ProviderRunInput): Promise<ProviderRunResult> {
+    const preserveQwenSessionWorkspace = this.shouldPreserveQwenSessionWorkspace(input);
     const prepared = input.workflowSettings.executionMode === "DOCKER"
       ? await this.dockerRunner.ensureWorkspace({
         cwd: input.cwd,
         repoPath: input.repoPath,
         sessionId: input.workspaceSessionId || input.sessionId,
+        preserve: preserveQwenSessionWorkspace,
+        reuseExisting: preserveQwenSessionWorkspace,
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
@@ -191,11 +195,14 @@ export class ProviderRunner implements IProviderRunner {
   }
 
   async runProviderForText(input: ProviderRunInput): Promise<ProviderRunResult & { text: string }> {
+    const preserveQwenSessionWorkspace = this.shouldPreserveQwenSessionWorkspace(input);
     const prepared = input.workflowSettings.executionMode === "DOCKER"
       ? await this.dockerRunner.ensureWorkspace({
         cwd: input.cwd,
         repoPath: input.repoPath,
         sessionId: input.workspaceSessionId || input.sessionId,
+        preserve: preserveQwenSessionWorkspace,
+        reuseExisting: preserveQwenSessionWorkspace,
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
@@ -235,6 +242,12 @@ export class ProviderRunner implements IProviderRunner {
     return input.workflowSettings.executionMode === "DOCKER"
       ? pathPosix.join("/workspace", `provider-last-message-${input.sessionId}.txt`)
       : path.join(os.tmpdir(), `provider-last-message-${input.sessionId}.txt`);
+  }
+
+  private shouldPreserveQwenSessionWorkspace(input: ProviderRunInput): boolean {
+    return input.provider === "qwen-code"
+      && input.workflowSettings.executionMode === "DOCKER"
+      && !input.cwd.startsWith("docker-volume://");
   }
 
   private async cleanupCodexOutputPath(
@@ -310,7 +323,9 @@ export class ProviderRunner implements IProviderRunner {
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input, qwenProcessLogDir, gitlabToken);
     const nativeSessionId = provider === "opencode"
       ? isOpenCodeNativeSessionId(input.continueSessionId) ? input.continueSessionId! : null
-      : input.continueSessionId || (provider === "claude-code" || provider === "qwen-code" ? randomUUID() : null);
+      : provider === "qwen-code"
+        ? null
+      : input.continueSessionId || (provider === "claude-code" ? randomUUID() : null);
 
     const applicableCustomServers = enabledCustomServersFor(input.customMcpServers, provider);
     const hasMcpConfig = !!input.mcpConnection || applicableCustomServers.length > 0;
@@ -875,10 +890,8 @@ export class ProviderRunner implements IProviderRunner {
     if (provider === "qwen-code") {
       const authType = qwenAuthMode === "LOCAL_AUTH" ? "qwen-oauth" : (qwenProtocol || "openai");
       const args = ["--auth-type", authType, "--yolo"];
-      if (continueSession && nativeSessionId) {
-        args.push("--resume", nativeSessionId);
-      } else if (nativeSessionId) {
-        args.push("--session-id", nativeSessionId);
+      if (continueSession) {
+        args.push("--continue");
       }
       if (model && model !== "default") {
         args.push("--model", model);
@@ -1121,7 +1134,6 @@ export class ProviderRunner implements IProviderRunner {
         },
       },
       model: modelConfig,
-      enableOpenAILogging: true,
     };
     // Redirect OpenAI request/response logs out of the worktree (default is
     // `<cwd>/logs/openai`). Set at both nesting levels for schema-version safety.
@@ -1335,6 +1347,7 @@ export class ProviderRunner implements IProviderRunner {
         } catch {
           // ignore parse errors and preserve existing settings
         }
+        delete existing.enableOpenAILogging;
       }
       const mcpServers: Record<string, unknown> = { ...(existing.mcpServers as Record<string, unknown> || {}) };
       if (conn) {

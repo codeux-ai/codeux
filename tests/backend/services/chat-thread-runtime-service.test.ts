@@ -115,6 +115,7 @@ describe("ChatThreadRuntimeService", () => {
       expect.objectContaining({
         provider: "claude-code",
         sessionId: "existing-session",
+        continueSessionId: "existing-session",
       })
     );
   });
@@ -154,6 +155,7 @@ describe("ChatThreadRuntimeService", () => {
         model: "openai/gpt-5",
         apiKey: "opencode-key",
         sessionId: "t1",
+        continueSessionId: null,
       })
     );
     expect(deps.connectionChatRepository.updateThread).toHaveBeenCalledWith("t1", expect.objectContaining({

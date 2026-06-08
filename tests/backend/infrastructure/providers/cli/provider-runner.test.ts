@@ -53,6 +53,8 @@ describe("ProviderRunner", () => {
       cwd: "/repo",
       repoPath: "/repo",
       sessionId: "workspace-1",
+      preserve: false,
+      reuseExisting: false,
     });
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       cwd: "docker-volume://workspace-1",
@@ -211,7 +213,7 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "qwen",
-      args: ["--auth-type", "openai", "--yolo", "--session-id", expect.any(String), "--model", "qwen3-coder-plus", "-p", "ship it"],
+      args: ["--auth-type", "openai", "--yolo", "--model", "qwen3-coder-plus", "-p", "ship it"],
       providerEnv: expect.objectContaining({
         BAILIAN_CODING_PLAN_API_KEY: "sk-sp-test",
         OPENAI_BASE_URL: "https://coding-intl.dashscope.aliyuncs.com/v1",
@@ -251,7 +253,7 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "qwen",
-      args: ["--auth-type", "openai", "--yolo", "--session-id", expect.any(String), "--model", "glm-4.7-flash", "-p", "hello"],
+      args: ["--auth-type", "openai", "--yolo", "--model", "glm-4.7-flash", "-p", "hello"],
       providerEnv: expect.objectContaining({
         OLLAMA_API_KEY: "sk-qwen-test",
         OPENAI_BASE_URL: "http://host.docker.internal:11434/v1",
@@ -260,7 +262,9 @@ describe("ProviderRunner", () => {
       }),
     }));
     const env = dockerRunner.runProviderInDocker.mock.calls[0][0].providerEnv;
-    expect(JSON.parse(env.QWEN_SETTINGS_CONTENT)).toMatchObject({
+    const qwenSettings = JSON.parse(env.QWEN_SETTINGS_CONTENT);
+    expect(qwenSettings.enableOpenAILogging).toBeUndefined();
+    expect(qwenSettings).toMatchObject({
       modelProviders: {
         openai: [
           {
@@ -278,6 +282,55 @@ describe("ProviderRunner", () => {
           httpUrl: "http://host.docker.internal:4445/mcp",
         },
       },
+    });
+  });
+
+  it("continues Qwen Code with project-scoped --continue instead of a Code UX session id", async () => {
+    const result = await runner.runProvider({
+      provider: "qwen-code",
+      prompt: "fix the JSON",
+      cwd: "/repo",
+      model: "qwen3-coder-plus",
+      apiKey: "sk-qwen-test",
+      qwenAuthMode: "ALIBABA_CODING_PLAN",
+      qwenRegion: "international",
+      qwenProtocol: "openai",
+      sessionId: "planning-qwen-code-logical",
+      continueSessionId: "planning-qwen-code-logical",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
+      command: "qwen",
+      args: ["--auth-type", "openai", "--yolo", "--continue", "--model", "qwen3-coder-plus", "-p", "fix the JSON"],
+    }));
+    expect(result.nativeSessionId).toBeNull();
+  });
+
+  it("preserves and reuses Docker-created Qwen workspaces so saved sessions survive short-lived containers", async () => {
+    await runner.runProvider({
+      provider: "qwen-code",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "qwen3-coder-plus",
+      apiKey: "sk-qwen-test",
+      qwenAuthMode: "ALIBABA_CODING_PLAN",
+      qwenRegion: "international",
+      qwenProtocol: "openai",
+      sessionId: "chat-thread-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(dockerRunner.ensureWorkspace).toHaveBeenCalledWith({
+      cwd: "/repo",
+      repoPath: "/repo",
+      sessionId: "chat-thread-1",
+      preserve: true,
+      reuseExisting: true,
     });
   });
 
