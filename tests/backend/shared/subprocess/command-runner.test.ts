@@ -136,4 +136,80 @@ describe("CommandRunner", () => {
     const result = await runner.runStrict(node, ["-e", "console.log('ok')"]);
     expect(result.stdout).toBe("ok");
   });
+
+  it("rewrites git commands to the helper container when containerized git is enabled", () => {
+    const tempRoot = path.join(os.tmpdir(), "code-ux-command-runner-repo");
+    const result = (runner as unknown as {
+      resolveCommand: (command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) => { command: string; args: string[] };
+    }).resolveCommand("git", ["status", "--porcelain"], { cwd: tempRoot });
+
+    expect(result.command).toBe("git");
+
+    const previous = process.env.CODE_UX_CONTAINERIZED_GIT;
+    process.env.CODE_UX_CONTAINERIZED_GIT = "1";
+    try {
+      const containerized = (runner as unknown as {
+        resolveCommand: (command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) => { command: string; args: string[] };
+      }).resolveCommand("git", ["status", "--porcelain"], { cwd: tempRoot });
+
+      expect(containerized.command).toBe("docker");
+      expect(containerized.args).toEqual(expect.arrayContaining([
+        "run",
+        "--rm",
+        "--entrypoint",
+        "git",
+        "alpine/git",
+        "status",
+        "--porcelain",
+      ]));
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CODE_UX_CONTAINERIZED_GIT;
+      } else {
+        process.env.CODE_UX_CONTAINERIZED_GIT = previous;
+      }
+    }
+  });
+
+  it("maps helper-container workspace paths in stdout back to the host cwd", () => {
+    const mapped = (runner as unknown as {
+      mapContainerStdoutToHost: (stdout: string, cwd: string) => string;
+    }).mapContainerStdoutToHost("/workspace\n/workspace/src/index.ts\nrelative.txt\n", "/home/pierre/project");
+
+    expect(mapped).toBe("/home/pierre/project\n/home/pierre/project/src/index.ts\nrelative.txt\n");
+  });
+
+  it("mounts absolute Git env paths for helper-container commands", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-git-env-mount-"));
+    const repoDir = path.join(tempDir, "repo");
+    const indexDir = path.join(tempDir, "index");
+    await fs.mkdir(repoDir);
+    await fs.mkdir(indexDir);
+
+    const previous = process.env.CODE_UX_CONTAINERIZED_GIT;
+    process.env.CODE_UX_CONTAINERIZED_GIT = "1";
+    try {
+      const containerized = (runner as unknown as {
+        resolveCommand: (command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) => { command: string; args: string[] };
+      }).resolveCommand("git", ["read-tree", "HEAD"], {
+        cwd: repoDir,
+        env: {
+          ...process.env,
+          GIT_INDEX_FILE: path.join(indexDir, "workspace.index"),
+        },
+      });
+
+      expect(containerized.args).toEqual(expect.arrayContaining([
+        "--mount",
+        `type=bind,source=${indexDir},target=${indexDir}`,
+      ]));
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CODE_UX_CONTAINERIZED_GIT;
+      } else {
+        process.env.CODE_UX_CONTAINERIZED_GIT = previous;
+      }
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

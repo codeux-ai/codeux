@@ -1,5 +1,4 @@
 import { type Express } from "express";
-import { spawnSync } from "child_process";
 import { type DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute } from "./route-utils.js";
 
@@ -17,40 +16,28 @@ export function registerGitProviderRoutes(router: Express, deps: DashboardDepend
 }
 
 /**
- * Checks if GitHub and GitLab are currently authenticated.
- * 
- * GitHub:
- * 1. Check if settings has a non-empty githubToken.
- * 2. If not, run `gh auth status`.
- * 
- * GitLab:
- * 1. Run `glab auth status`.
+ * Checks whether token-backed GitHub/GitLab integration is configured.
+ * Runtime Git provider operations use host APIs when tokens are present, so this
+ * route deliberately avoids probing local `gh`/`glab` binaries.
  */
 async function checkGitProviders(deps: DashboardDependencies): Promise<{ github: boolean; gitlab: boolean }> {
-  let github = false;
-  let gitlab = false;
-
-  // GitHub check
   try {
     const settings = deps.getSystemSettings();
-    const token = settings.defaults?.git?.githubToken;
-    if (typeof token === "string" && token.trim().length > 0) {
-      github = true;
-    } else {
-      const ghStatus = spawnSync("gh", ["auth", "status"], { stdio: "pipe" });
-      github = ghStatus.status === 0;
-    }
+    const githubToken = settings.defaults?.git?.githubToken
+      || settings.integrations?.githubToken
+      || process.env.GH_TOKEN
+      || process.env.GITHUB_TOKEN
+      || "";
+    const gitlabToken = settings.defaults?.git?.gitlabToken
+      || settings.integrations?.gitlabToken
+      || process.env.GITLAB_TOKEN
+      || process.env.GLAB_TOKEN
+      || "";
+    return {
+      github: githubToken.trim().length > 0,
+      gitlab: gitlabToken.trim().length > 0,
+    };
   } catch {
-    github = false;
+    return { github: false, gitlab: false };
   }
-
-  // GitLab check
-  try {
-    const glabStatus = spawnSync("glab", ["auth", "status"], { stdio: "pipe" });
-    gitlab = glabStatus.status === 0;
-  } catch {
-    gitlab = false;
-  }
-
-  return { github, gitlab };
 }

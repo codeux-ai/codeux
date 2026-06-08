@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
+import { runCommandStrict } from "../../services/cli-process-runner.js";
 
 /**
  * Initializes a new local git repository at the specified path.
@@ -12,23 +12,21 @@ export async function initLocalRepo(dirPath: string, defaultBranch = "main"): Pr
   try {
     fs.mkdirSync(dirPath, { recursive: true });
 
-    const execOptions = { cwd: dirPath, stdio: "pipe" as const };
-
     // 1. Initialize the repository
     try {
-      execFileSync("git", ["init", `--initial-branch=${defaultBranch}`], execOptions);
+      await runCommandStrict("git", ["init", `--initial-branch=${defaultBranch}`], dirPath);
     } catch (error) {
       // Fallback for git versions < 2.28 which do not support --initial-branch
-      execFileSync("git", ["init"], execOptions);
-      execFileSync("git", ["checkout", "-b", defaultBranch], execOptions);
+      await runCommandStrict("git", ["init"], dirPath);
+      await runCommandStrict("git", ["checkout", "-b", defaultBranch], dirPath);
     }
 
     // 2. Configure local user for this repository only
-    execFileSync("git", ["config", "user.email", "code-ux@local"], execOptions);
-    execFileSync("git", ["config", "user.name", "Code UX"], execOptions);
+    await runCommandStrict("git", ["config", "user.email", "code-ux@local"], dirPath);
+    await runCommandStrict("git", ["config", "user.name", "Code UX"], dirPath);
 
     // 3. Create initial empty commit
-    execFileSync("git", ["commit", "--allow-empty", "-m", "Initial commit"], execOptions);
+    await runCommandStrict("git", ["commit", "--allow-empty", "-m", "Initial commit"], dirPath);
   } catch (cause: any) {
     throw new Error(`Failed to initialize local repo at ${dirPath}: ${cause.message}`);
   }

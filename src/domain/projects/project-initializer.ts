@@ -7,6 +7,7 @@ export async function initializeProject(
   deps: {
     createProject: (i: CreateProjectInput) => ProjectSummary | Promise<ProjectSummary>;
     getGithubToken: () => string;
+    getGitlabToken?: () => string;
   }
 ): Promise<ProjectSummary> {
   const mode = input.initMode ?? "existing";
@@ -32,6 +33,7 @@ export async function initializeProject(
         repoName: input.sourceRef,
         isPrivate: input.isPrivate ?? true,
         cloneParentDir,
+        hostToken: deps.getGitlabToken?.() ?? "",
       });
     }
     return deps.createProject({

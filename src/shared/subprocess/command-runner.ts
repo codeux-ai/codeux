@@ -1,5 +1,7 @@
 import { spawn } from "child_process";
 import { createReadStream } from "fs";
+import * as fs from "fs";
+import * as path from "path";
 
 export interface CommandResult {
   ok: boolean;
@@ -20,9 +22,17 @@ export interface CommandOptions {
   maxStderrChars?: number;
 }
 
+interface ResolvedCommand {
+  command: string;
+  args: string[];
+  containerHostCwd?: string;
+}
+
 export class CommandRunner {
   private static readonly DEFAULT_MAX_STDERR_CHARS = 4096;
   private static readonly MAX_COMMAND_DISPLAY_CHARS = 2000;
+  private static readonly GIT_HELPER_IMAGE = "alpine/git";
+  private static readonly CONTAINER_REPO_ROOT = "/workspace";
 
   /**
    * Runs a command and returns a Promise that resolves with the execution result.
@@ -32,6 +42,7 @@ export class CommandRunner {
     args: string[],
     options: CommandOptions = {}
   ): Promise<CommandResult> {
+    const resolvedCommand = this.resolveCommand(command, args, options);
     const {
       cwd,
       env = process.env,
@@ -45,7 +56,7 @@ export class CommandRunner {
     } = options;
 
     return new Promise((resolve) => {
-      const child = spawn(command, args, {
+      const child = spawn(resolvedCommand.command, resolvedCommand.args, {
         cwd,
         env,
         stdio: [stdinFile ? "pipe" : "ignore", "pipe", "pipe"],
@@ -86,10 +97,14 @@ export class CommandRunner {
           ? `...${finalStderr.slice(-maxStderrChars)}`
           : finalStderr;
 
+        const normalizedStdout = resolvedCommand.containerHostCwd
+          ? this.mapContainerStdoutToHost(stdout, resolvedCommand.containerHostCwd)
+          : stdout;
+
         resolve({
           ok,
           code,
-          stdout: trimOutput ? stdout.trim() : stdout,
+          stdout: trimOutput ? normalizedStdout.trim() : normalizedStdout,
           stderr: clippedStderr,
         });
       };
@@ -225,6 +240,145 @@ export class CommandRunner {
       return rendered;
     }
     return `${rendered.slice(0, CommandRunner.MAX_COMMAND_DISPLAY_CHARS)}... [truncated ${rendered.length - CommandRunner.MAX_COMMAND_DISPLAY_CHARS} chars]`;
+  }
+
+  private resolveCommand(command: string, args: string[], options: CommandOptions): ResolvedCommand {
+    if (command !== "git" || !this.shouldRunGitInContainer(options)) {
+      return { command, args };
+    }
+
+    const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
+    const env = options.env ?? process.env;
+    const mounts = this.buildGitContainerMountArgs(cwd, args, env);
+    const envArgs = this.buildGitContainerEnvArgs(env);
+    const userArgs = this.buildContainerUserArgs();
+
+    return {
+      command: "docker",
+      containerHostCwd: cwd,
+      args: [
+        "run",
+        "--rm",
+        "-i",
+        "--workdir",
+        CommandRunner.CONTAINER_REPO_ROOT,
+        "--mount",
+        `type=bind,source=${cwd},target=${CommandRunner.CONTAINER_REPO_ROOT}`,
+        ...mounts,
+        ...userArgs,
+        "-e",
+        `HOME=${CommandRunner.CONTAINER_REPO_ROOT}/.code-ux-home`,
+        ...envArgs,
+        "--entrypoint",
+        "git",
+        CommandRunner.GIT_HELPER_IMAGE,
+        ...this.rewriteGitArgsForContainer(cwd, args),
+      ],
+    };
+  }
+
+  private shouldRunGitInContainer(options: CommandOptions): boolean {
+    if (process.env.NODE_ENV === "test") {
+      return process.env.CODE_UX_CONTAINERIZED_GIT === "1";
+    }
+    if (process.env.CODE_UX_CONTAINERIZED_GIT === "0" || process.env.CODE_UX_GIT_CONTAINER_MODE === "host") {
+      return false;
+    }
+    return Boolean(options.cwd);
+  }
+
+  private buildContainerUserArgs(): string[] {
+    const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
+    const getGid = (process as NodeJS.Process & { getgid?: () => number }).getgid;
+    if (!getUid || !getGid) {
+      return [];
+    }
+    const uid = getUid();
+    const gid = getGid();
+    return uid === 0 ? [] : ["--user", `${uid}:${gid}`];
+  }
+
+  private buildGitContainerEnvArgs(env: NodeJS.ProcessEnv): string[] {
+    const args: string[] = [];
+    const forwardedPrefixes = ["GIT_", "GITHUB_", "GITLAB_"];
+    const forwardedKeys = new Set(["GH_TOKEN", "GLAB_TOKEN", "SSH_ASKPASS", "GCM_INTERACTIVE"]);
+    for (const [key, value] of Object.entries(env)) {
+      if (typeof value !== "string" || value.length === 0) {
+        continue;
+      }
+      if (!forwardedKeys.has(key) && !forwardedPrefixes.some((prefix) => key.startsWith(prefix))) {
+        continue;
+      }
+      args.push("-e", `${key}=${value}`);
+    }
+    return args;
+  }
+
+  private buildGitContainerMountArgs(cwd: string, args: string[], env: NodeJS.ProcessEnv = process.env): string[] {
+    const mounts: string[] = [];
+    const seen = new Set<string>([cwd]);
+    const addMountForPath = (candidate: string | undefined) => {
+      if (!candidate || !path.isAbsolute(candidate) || this.isPathWithin(cwd, candidate)) {
+        return;
+      }
+      const mountPath = fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()
+        ? candidate
+        : path.dirname(candidate);
+      if (seen.has(mountPath) || !fs.existsSync(mountPath)) {
+        return;
+      }
+      seen.add(mountPath);
+      mounts.push("--mount", `type=bind,source=${mountPath},target=${mountPath}`);
+    };
+    for (const arg of args) {
+      addMountForPath(arg);
+    }
+    for (const key of ["GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_COMMON_DIR", "GIT_DIR", "GIT_WORK_TREE"]) {
+      addMountForPath(env[key]);
+    }
+    for (const candidate of (env.GIT_ALTERNATE_OBJECT_DIRECTORIES || "").split(path.delimiter)) {
+      addMountForPath(candidate);
+    }
+    return mounts;
+  }
+
+  private rewriteGitArgsForContainer(cwd: string, args: string[]): string[] {
+    return args.map((arg) => {
+      if (!path.isAbsolute(arg) || !this.isPathWithin(cwd, arg)) {
+        return arg;
+      }
+      const relative = path.relative(cwd, arg);
+      return relative.length === 0
+        ? CommandRunner.CONTAINER_REPO_ROOT
+        : path.posix.join(CommandRunner.CONTAINER_REPO_ROOT, ...relative.split(path.sep));
+    });
+  }
+
+  private mapContainerStdoutToHost(stdout: string, cwd: string): string {
+    return stdout
+      .split("\n")
+      .map((line) => this.mapContainerPathLineToHost(line, cwd))
+      .join("\n");
+  }
+
+  private mapContainerPathLineToHost(line: string, cwd: string): string {
+    const hasCarriageReturn = line.endsWith("\r");
+    const cleanLine = hasCarriageReturn ? line.slice(0, -1) : line;
+    if (cleanLine === CommandRunner.CONTAINER_REPO_ROOT) {
+      return `${cwd}${hasCarriageReturn ? "\r" : ""}`;
+    }
+    const prefix = `${CommandRunner.CONTAINER_REPO_ROOT}/`;
+    if (!cleanLine.startsWith(prefix)) {
+      return line;
+    }
+    const relative = cleanLine.slice(prefix.length);
+    return `${path.join(cwd, ...relative.split("/"))}${hasCarriageReturn ? "\r" : ""}`;
+  }
+
+  private isPathWithin(basePath: string, targetPath: string): boolean {
+    const base = path.resolve(basePath);
+    const target = path.resolve(targetPath);
+    return target === base || target.startsWith(`${base}${path.sep}`);
   }
 }
 

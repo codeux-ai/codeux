@@ -22,7 +22,7 @@ export async function executePrFinalizeStage(ctx: PipelineContext): Promise<{ pr
       }
     );
     if (!prUrl) {
-      throw new Error(`Feature PR creation completed without a PR URL for ${ctx.workerBranch}. Check Git host CLI availability and authentication.`);
+      throw new Error(`Feature PR creation completed without a PR URL for ${ctx.workerBranch}. Check Git host token availability and authentication.`);
     }
   }
 

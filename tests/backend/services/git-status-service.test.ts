@@ -237,6 +237,44 @@ describe("GitStatusService", () => {
     expect(status.warnings[0]).toContain("not a git repository");
   });
 
+  it("uses token-backed API mode without requiring local gh", async () => {
+    const apiFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/user")) {
+        return new Response(JSON.stringify({ login: "codeux" }), { status: 200 });
+      }
+      if (url.includes("/pulls?state=open")) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (url.includes("/actions/runs")) {
+        return new Response(JSON.stringify({ workflow_runs: [] }), { status: 200 });
+      }
+      if (url.includes("/pulls?state=closed")) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", apiFetch);
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === "gh") return { ok: false, stdout: "", stderr: "spawn gh ENOENT" };
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (cmd === "git" && args[0] === "remote" && args[1] === "get-url") return { ok: true, stdout: "https://github.com/owner/repo.git\n" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\thttps://github.com/owner/repo.git (fetch)\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      return { ok: true, stdout: "" };
+    });
+
+    const apiService = new GitStatusService("/repo", runner, true);
+    const status = await apiService.getStatus("REMOTE", { githubToken: "ghp_token" });
+
+    expect(status.available).toBe(true);
+    expect(runner).not.toHaveBeenCalledWith("gh", expect.any(Array), expect.any(Object));
+    expect(status.warnings).not.toContain("GitHub CLI (gh) is not available. Remote mode cannot fetch PR/CI status.");
+    vi.unstubAllGlobals();
+  });
+
   it("handles REMOTE status with PRs and CI runs", async () => {
     runner.mockImplementation(async (cmd: string, args: string[]) => {
       if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };

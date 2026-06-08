@@ -1,10 +1,16 @@
 import { CommandResult } from "../../shared/subprocess/command-runner.js";
 import { GitProvider } from "./repository-host-resolver.js";
 import { CommandRunner } from "./git-status-query-client.js";
+import { createHash } from "crypto";
 
 // ─── Shared helpers for API implementations ──────────────────────────────────
 
 const API_TIMEOUT_MS = 30_000;
+const API_GET_CACHE_TTL_MS = 15_000;
+const API_MIN_INTERVAL_MS = 150;
+let lastApiRequestAt = 0;
+let apiQueue: Promise<void> = Promise.resolve();
+const apiGetCache = new Map<string, { timestamp: number; promise: Promise<{ ok: boolean; status: number; text: string }> }>();
 
 function apiOk(stdout: string): CommandResult {
   return { ok: true, code: 0, stdout, stderr: "" };
@@ -14,10 +20,51 @@ function apiFail(stderr: string, code = 1): CommandResult {
   return { ok: false, code, stdout: "", stderr };
 }
 
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForApiSlot(): Promise<void> {
+  const previous = apiQueue;
+  let release!: () => void;
+  apiQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  const delay = Math.max(0, API_MIN_INTERVAL_MS - (Date.now() - lastApiRequestAt));
+  if (delay > 0) {
+    await sleep(delay);
+  }
+  lastApiRequestAt = Date.now();
+  release();
+}
+
 async function apiFetch(url: string, init: RequestInit): Promise<{ ok: boolean; status: number; text: string }> {
+  await waitForApiSlot();
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(API_TIMEOUT_MS) });
   const text = await res.text();
   return { ok: res.ok, status: res.status, text };
+}
+
+async function cachedApiGet(url: string, init: RequestInit): Promise<{ ok: boolean; status: number; text: string }> {
+  if (process.env.NODE_ENV === "test") {
+    return apiFetch(url, init);
+  }
+  const auth = init.headers && typeof init.headers === "object" && !Array.isArray(init.headers)
+    ? String((init.headers as Record<string, string>).Authorization ?? (init.headers as Record<string, string>)["PRIVATE-TOKEN"] ?? "")
+    : "";
+  const authHash = auth ? createHash("sha256").update(auth).digest("hex").slice(0, 16) : "";
+  const key = `${url}|${authHash}`;
+  const cached = apiGetCache.get(key);
+  if (cached && Date.now() - cached.timestamp < API_GET_CACHE_TTL_MS) {
+    return cached.promise;
+  }
+  const promise = apiFetch(url, init);
+  apiGetCache.set(key, { timestamp: Date.now(), promise });
+  try {
+    return await promise;
+  } catch (error) {
+    apiGetCache.delete(key);
+    throw error;
+  }
 }
 
 function githubMergeableState(state: string | null | undefined): string {
@@ -126,7 +173,7 @@ export class GithubApiHostCli implements GitHostCli {
   private async get(path: string, token?: string): Promise<{ ok: boolean; status: number; text: string } | null> {
     if (!token) return null;
     try {
-      return await apiFetch(`${this.base}${path}`, { headers: this.ghHeaders(token) });
+      return await cachedApiGet(`${this.base}${path}`, { headers: this.ghHeaders(token) });
     } catch {
       return null;
     }
@@ -199,78 +246,25 @@ export class GithubApiHostCli implements GitHostCli {
     let rawPrs: Record<string, unknown>[];
     try { rawPrs = JSON.parse(res.text) as Record<string, unknown>[]; }
     catch { return apiFail("Failed to parse GitHub PR list response."); }
-    const enriched = await this.enrichPrs(rawPrs, hostToken);
-    return apiOk(JSON.stringify(enriched));
-  }
-
-  private async enrichPrs(rawPrs: Record<string, unknown>[], token: string): Promise<unknown[]> {
-    const CONCURRENCY = 5;
-    const results: unknown[] = new Array(rawPrs.length);
-    let idx = 0;
-
-    const worker = async () => {
-      while (idx < rawPrs.length) {
-        const i = idx++;
-        const pr = rawPrs[i];
-        const prNum = pr.number as number;
-        const head = pr.head as Record<string, unknown> | undefined;
-        const base = pr.base as Record<string, unknown> | undefined;
-        const sha = typeof head?.sha === "string" ? head.sha : null;
-
-        const [checksRes, reviewsRes] = await Promise.all([
-          sha
-            ? this.get(`/repos/${this.owner}/${this.repo}/commits/${sha}/check-runs?per_page=100`, token)
-            : Promise.resolve(null),
-          this.get(`/repos/${this.owner}/${this.repo}/pulls/${prNum}/reviews`, token),
-        ]);
-
-        const statusCheckRollup: unknown[] = [];
-        if (checksRes?.ok) {
-          try {
-            const data = JSON.parse(checksRes.text) as Record<string, unknown>;
-            const runs = Array.isArray(data.check_runs) ? data.check_runs as Record<string, unknown>[] : [];
-            for (const run of runs) {
-              statusCheckRollup.push({ name: run.name ?? "check", status: run.status ?? "UNKNOWN", conclusion: run.conclusion ?? null });
-            }
-          } catch { /* leave empty */ }
-        }
-
-        let reviewDecision: string | null = null;
-        if (reviewsRes?.ok) {
-          try {
-            const reviews = JSON.parse(reviewsRes.text) as Array<Record<string, unknown>>;
-            const latestByUser = new Map<string, string>();
-            for (const r of reviews) {
-              const login = (r.user as Record<string, unknown> | undefined)?.login;
-              if (typeof login === "string" && typeof r.state === "string" && r.state !== "DISMISSED") {
-                latestByUser.set(login, r.state);
-              }
-            }
-            const states = Array.from(latestByUser.values());
-            if (states.some((s) => s === "CHANGES_REQUESTED")) reviewDecision = "CHANGES_REQUESTED";
-            else if (states.length > 0 && states.every((s) => s === "APPROVED")) reviewDecision = "APPROVED";
-          } catch { /* leave null */ }
-        }
-
-        results[i] = {
-          number: prNum,
-          title: pr.title ?? "Untitled PR",
-          url: pr.html_url ?? "",
-          state: typeof pr.state === "string" ? pr.state.toUpperCase() : "OPEN",
-          isDraft: pr.draft === true,
-          headRefName: typeof head?.ref === "string" ? head.ref : null,
-          baseRefName: typeof base?.ref === "string" ? base.ref : null,
-          mergeStateStatus: githubMergeableState(typeof pr.mergeable_state === "string" ? pr.mergeable_state : null),
-          reviewDecision,
-          updatedAt: pr.updated_at ?? null,
-          comments: ((pr.comments as number | undefined) ?? 0) + ((pr.review_comments as number | undefined) ?? 0),
-          statusCheckRollup,
-        };
-      }
-    };
-
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, rawPrs.length) }, () => worker()));
-    return results;
+    const mapped = rawPrs.map((pr) => {
+      const head = pr.head as Record<string, unknown> | undefined;
+      const base = pr.base as Record<string, unknown> | undefined;
+      return {
+        number: pr.number,
+        title: pr.title ?? "Untitled PR",
+        url: pr.html_url ?? "",
+        state: typeof pr.state === "string" ? pr.state.toUpperCase() : "OPEN",
+        isDraft: pr.draft === true,
+        headRefName: typeof head?.ref === "string" ? head.ref : null,
+        baseRefName: typeof base?.ref === "string" ? base.ref : null,
+        mergeStateStatus: githubMergeableState(typeof pr.mergeable_state === "string" ? pr.mergeable_state : null),
+        reviewDecision: null,
+        updatedAt: pr.updated_at ?? null,
+        comments: ((pr.comments as number | undefined) ?? 0) + ((pr.review_comments as number | undefined) ?? 0),
+        statusCheckRollup: [],
+      };
+    });
+    return apiOk(JSON.stringify(mapped));
   }
 
   async prListOpenMatching(baseBranch: string, headBranch: string, hostToken?: string): Promise<CommandResult> {
@@ -587,11 +581,14 @@ export class GitlabApiHostCli implements GitHostCli {
         ...this.glHeaders(token),
         ...(body ? { "Content-Type": "application/json" } : {}),
       };
-      return await apiFetch(`${this.base}${path}`, {
+      const request = {
         method,
         headers,
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      });
+      };
+      return method === "GET"
+        ? await cachedApiGet(`${this.base}${path}`, request)
+        : await apiFetch(`${this.base}${path}`, request);
     } catch {
       return null;
     }

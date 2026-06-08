@@ -170,15 +170,7 @@ describe("GithubApiHostCli", () => {
           review_comments: 1,
         },
       ];
-      const checkRuns = { check_runs: [{ name: "CI", status: "completed", conclusion: "success" }] };
-      const reviews = [{ user: { login: "alice" }, state: "APPROVED" }];
-
-      // Fetch sequence: prList → check-runs for PR 10 → reviews for PR 10
-      mockFetch([
-        { ok: true, body: prList },
-        { ok: true, body: checkRuns },
-        { ok: true, body: reviews },
-      ]);
+      mockFetch([{ ok: true, body: prList }]);
 
       const res = await cli.prListOpen("tok");
       expect(res.ok).toBe(true);
@@ -194,39 +186,31 @@ describe("GithubApiHostCli", () => {
         headRefName: "feature-branch",
         baseRefName: "main",
         mergeStateStatus: "CLEAN",
-        reviewDecision: "APPROVED",
+        reviewDecision: null,
         comments: 3,
-        statusCheckRollup: [{ name: "CI", status: "completed", conclusion: "success" }],
+        statusCheckRollup: [],
       });
     });
 
-    it("sets reviewDecision to CHANGES_REQUESTED when any reviewer requested changes", async () => {
+    it("keeps reviewDecision null without per-PR review enrichment", async () => {
       const prList = [{ number: 1, title: "PR", html_url: "https://g.c/p/1", state: "open", draft: false,
         head: { ref: "f", sha: "s1" }, base: { ref: "main" }, mergeable_state: "blocked",
         updated_at: "2024-01-01T00:00:00Z", comments: 0, review_comments: 0 }];
-      const reviews = [
-        { user: { login: "alice" }, state: "APPROVED" },
-        { user: { login: "bob" }, state: "CHANGES_REQUESTED" },
-      ];
 
-      mockFetch([{ ok: true, body: prList }, { ok: true, body: [] }, { ok: true, body: reviews }]);
+      mockFetch([{ ok: true, body: prList }]);
 
       const res = await cli.prListOpen("tok");
       const parsed = JSON.parse(res.stdout);
-      expect(parsed[0].reviewDecision).toBe("CHANGES_REQUESTED");
+      expect(parsed[0].reviewDecision).toBeNull();
       expect(parsed[0].mergeStateStatus).toBe("BLOCKED");
     });
 
-    it("leaves statusCheckRollup empty and reviewDecision null when sub-requests fail", async () => {
+    it("leaves statusCheckRollup empty and reviewDecision null", async () => {
       const prList = [{ number: 2, title: "PR", html_url: "https://g.c/p/2", state: "open", draft: false,
         head: { ref: "f", sha: "s2" }, base: { ref: "main" }, mergeable_state: "clean",
         updated_at: "2024-01-01T00:00:00Z", comments: 0, review_comments: 0 }];
 
-      mockFetch([
-        { ok: true, body: prList },
-        { ok: false, status: 500, body: { message: "error" } },
-        { ok: false, status: 500, body: { message: "error" } },
-      ]);
+      mockFetch([{ ok: true, body: prList }]);
 
       const res = await cli.prListOpen("tok");
       expect(res.ok).toBe(true);

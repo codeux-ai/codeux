@@ -82,12 +82,12 @@ export class PrService implements IPrService {
       const createResult = await client.ghPrCreate(args.featureBranch, args.workerBranch, prTitle, bodyLines.join("\n"), effectiveToken);
 
       if (!createResult.ok) {
-        throw new Error(createResult.stderr || createResult.stdout || "git host CLI returned a non-zero exit code");
+        throw new Error(createResult.stderr || createResult.stdout || "git host backend returned a non-zero exit code");
       }
 
       const prUrl = createResult.stdout.trim().split("\n").find((line) => line.startsWith("http"));
       if (!prUrl) {
-        throw new Error("git host CLI did not return a pull request URL");
+        throw new Error("git host backend did not return a pull request URL");
       }
       return prUrl;
     } catch (error) {

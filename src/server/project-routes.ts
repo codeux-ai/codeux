@@ -21,6 +21,13 @@ export function registerProjectRoutes(router: Express, deps: DashboardDependenci
             return "";
           }
         },
+        getGitlabToken: () => {
+          try {
+            return deps.getSystemSettings().integrations.gitlabToken ?? "";
+          } catch {
+            return "";
+          }
+        },
       });
 
       const input = req.body as CreateProjectInput;

@@ -147,7 +147,7 @@ describe("PrService", () => {
             const service = new PrService();
             await expect(service.resolveOrCreateFeaturePr(defaultArgs, "/path"))
                 .rejects
-                .toThrow("git host CLI did not return a pull request URL");
+                .toThrow("git host backend did not return a pull request URL");
         });
     });
 

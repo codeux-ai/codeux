@@ -609,7 +609,7 @@ Effect:
 - Feature PRs already in GitHub `DIRTY` merge state are surfaced as merge conflicts before any CI wait, so branch-protection deadlocks do not leave the task stuck in perpetual pending-check state.
 - If a matched feature PR has no checks, Code UX now consults local workflow definitions and only keeps waiting when a `pull_request` or `pull_request_target` workflow actually applies to that PR base branch; otherwise the task skips CI waiting and proceeds to merge readiness/review gating.
 - CI Runs in `Feature PR CI` tracking include recent runs from PR head branches targeting the feature implementation branch (plus feature branch runs), sorted newest-first; the panel shows the latest 5.
-- Failed CI runs in tracking are enriched with failed job details and failed-job log excerpts (bounded) from GitHub Actions `gh run view` data.
+- Failed CI runs in tracking are enriched with failed job details and failed-job log excerpts (bounded) from Git host API/CLI data.
 - Main merge stage (`feature -> main`) now emits live CI/review gate feedback with failed check names and ready-to-run `gh` commands.
 - Main merge into default branch now stays active until an enabled auto-merge flow actually settles; it no longer marks the sprint complete just because all task PRs are done.
 
@@ -635,7 +635,7 @@ Use case:
 `src/services/git-status-service.ts` behavior:
 - Git/CI tracking uses the active sprint repository path (`repo_path`) from the latest sprint status update, not the MCP server repository root.
 - In `LOCAL` mode, PR/CI tracking is disabled.
-- In `REMOTE` mode, requires `gh` and auth.
+- In `REMOTE` mode, configured GitHub/GitLab tokens use host APIs and do not require local `gh`/`glab` binaries. Without a matching token, PR/CI tracking is unavailable unless a diagnostic CLI fallback is explicitly in use.
 - Warnings include common conflict/CI trigger issues.
 - Tracking scope is dynamic and shown in panel metadata:
   - `Feature PR CI` while sprint tasks are actively running and `featurePrAutoMergeMode = WHEN_GREEN`.

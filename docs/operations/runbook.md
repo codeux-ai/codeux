@@ -58,11 +58,12 @@ Checks:
 
 ### 2. No PR/CI data in remote mode
 Checks:
-- `gh --version`
-- `gh auth status`
 - Token availability in settings/env
+- `/api/git-providers/available` reports token-backed provider availability only. It does not require or probe local `gh`/`glab` binaries.
 - If a CLI task pushed code but cannot create a PR, the run now fails instead of completing as "without PR" while auto-create PRs are enabled. When a GitHub/GitLab token is configured, Code UX creates and finds PRs/MRs through the host API and does not require `gh` or `glab` on the machine.
-- If no GitHub/GitLab token is configured, PR creation falls back to the local host CLI (`gh`/`glab`), so Windows packaged builds need that CLI on the server process `PATH` and authenticated.
+- If no GitHub/GitLab token is configured, remote PR/CI/issue automation is unavailable until the matching token is configured. Code UX no longer falls back to local `gh`/`glab` for dashboard provider availability, new remote repository creation, PR/MR status, or GitHub issue import/close flows.
+- Git subprocesses launched by the backend run through the `alpine/git` helper container by default, with Git-specific auth/config environment forwarded into the container. Set `CODE_UX_GIT_CONTAINER_MODE=host` or `CODE_UX_CONTAINERIZED_GIT=0` only for targeted diagnostics.
+- Git host API reads are throttled and cached briefly to avoid rate-limit bursts when multiple sprints poll PR/CI state at the same time. Failed-run job/log enrichment is still limited, so Git/CI panels may trail live task state under heavy activity.
 - "Workflow completed without PR" is only expected when `git.autoCreatePr` is disabled for the resolved system/project/sprint settings.
 
 ### 3. API-backed tools return key setup instructions
@@ -75,8 +76,8 @@ Checks:
 ### 3a. Jules task stays at "Started jules dispatch"
 Checks:
 - Inspect the latest task run. If it has `dispatch_started` but no `session_created`, the provider session has not been created yet.
-- Check for a long-running `git fetch` child of `node dist/index.js`; Jules dispatch refreshes `origin` before calling the Jules API in remote git mode.
-- HTTPS remotes should fail fast when credentials are missing. Code UX disables interactive Git credential prompts and bounds branch-preflight/fetch checks so orchestration settles instead of waiting indefinitely on a local credential helper. CLI-backed task dispatch still requires a remote refresh before branch preparation; when the starting branch is known, Code UX fetches that branch's remote-tracking ref instead of every branch on `origin`. Slow GitHub/GitLab smart HTTP connections can still take longer than 30 seconds, so the default fetch timeout is 120 seconds. Set `CODE_UX_GIT_FETCH_TIMEOUT_MS` higher when the network or remote regularly needs more time.
+- Check for a long-running `docker run ... alpine/git fetch` child of `node dist/index.js`; Jules dispatch refreshes `origin` before calling the Jules API in remote git mode.
+- HTTPS remotes should fail fast when credentials are missing. Code UX disables interactive Git credential prompts and bounds branch-preflight/fetch checks so orchestration settles instead of waiting indefinitely on a local credential helper. CLI-backed task dispatch still requires a remote refresh before branch preparation; when the starting branch is known, Code UX fetches that branch's remote-tracking ref instead of every branch on `origin`. Slow GitHub/GitLab smart HTTP connections can still take longer than 30 seconds, so the default fetch timeout is 120 seconds. Set `CODE_UX_GIT_FETCH_TIMEOUT_MS` higher when the network or remote regularly needs more time. Backend Git commands run inside the helper container unless host mode is explicitly enabled for diagnostics.
 - For Jules dispatch, that local refresh is best-effort and a refresh failure should be logged without blocking Jules session creation.
 - After a restart, active Jules dispatches that never reached `session_created` are treated as interrupted pre-session dispatches and moved back to a retryable task state. Jules dispatches with a persisted session remain attached for normal sprint recovery.
 - If the dispatch fails with an auth error, fix the dashboard GitHub token or remote URL, then rerun the task.
@@ -114,7 +115,7 @@ Checks:
   - Codex uses per-session container home directories under that runtime root to prevent stale state from previous Codex runs.
   - Runtime cleanup prunes stale `home-codex-*` session homes and stale shared runtime temp directories automatically once those sessions are no longer active.
 - Docker provider launches mount provider arguments through a generated argv file instead of passing the full prompt through the host `docker run` command line. Packaged Windows Electron builds that fail with `spawn ENAMETOOLONG` during provider launch are using an older build or a non-provider launch path that still embeds a large payload in command arguments.
-- Snapshot workspace bootstrap pulls public helper images such as `alpine/git` automatically. If Docker reports a broken host credential helper while pulling a public helper image, Code UX retries that helper pull with an isolated empty Docker client config; provider/container images still use the normal Docker configuration.
+- Backend Git commands and snapshot workspace bootstrap use public helper images such as `alpine/git`. Snapshot bootstrap verifies or pulls these helpers automatically, and if Docker reports a broken host credential helper while pulling a public helper image, Code UX retries that helper pull with an isolated empty Docker client config; provider/container images still use the normal Docker configuration.
 - Snapshot workspace bootstrap streams the temporary Git bundle directly into `docker run` stdin. Packaged Windows Electron builds should not route `C:\...AppData\Local\Temp\code-ux-bundle-*` paths through `bash -lc`; seeing `cat: 'C:\...\repo.bundle': No such file or directory` indicates an older build.
 - Packaged Windows Electron runs use an opaque desktop window to avoid Chromium tile-memory exhaustion (`tile_manager.cc:1012 WARNING: tile memory limits exceeded`). All animated backgrounds, patterns, and images render normally. Performance mitigations are applied at the WebGL layer (0.5× render scale, `powerPreference: "low-power"`, `contain: strict` on background layers, Chromium `--force-gpu-mem-available-mb` flag).
 - If a Git URL project reports "No file changes produced" even though the provider edited files, verify the project `baseDir` is an exact Git checkout root. New Git URL projects are cloned to `~/.code-ux/projects/<repo-name>` by default; older relative paths nested under the Code UX repo should be re-added or updated to the real clone path.

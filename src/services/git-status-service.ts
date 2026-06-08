@@ -223,12 +223,20 @@ export class GitStatusService {
     return { runs: enrichedRuns, warnings };
   }
 
-  async getStatus(mode: "REMOTE" | "LOCAL", tokens: GitHostTokens = {}, trackingRequest?: GitTrackingRequest, cacheTtlMs?: number): Promise<GitTrackingStatus> {
+  private normalizeTokens(tokens: GitHostTokens | string | null | undefined): GitHostTokens {
+    if (typeof tokens === "string") {
+      return { githubToken: tokens, gitlabToken: tokens };
+    }
+    return tokens ?? {};
+  }
+
+  async getStatus(mode: "REMOTE" | "LOCAL", tokens: GitHostTokens | string = {}, trackingRequest?: GitTrackingRequest, cacheTtlMs?: number): Promise<GitTrackingStatus> {
+    const normalizedTokens = this.normalizeTokens(tokens);
     const cacheKey = JSON.stringify({
       repoPath: this.repoPath,
       mode,
-      githubToken: tokens.githubToken?.trim() || undefined,
-      gitlabToken: tokens.gitlabToken?.trim() || undefined,
+      githubToken: normalizedTokens.githubToken?.trim() || undefined,
+      gitlabToken: normalizedTokens.gitlabToken?.trim() || undefined,
       trackingRequest,
     });
 
@@ -280,7 +288,7 @@ export class GitStatusService {
     }
 
     if (mode === "REMOTE") {
-      const resolved = await this.resolveProviderAndToken(tokens);
+      const resolved = await this.resolveProviderAndToken(normalizedTokens);
       effectiveToken = resolved.token;
     }
 
@@ -303,8 +311,12 @@ export class GitStatusService {
       };
     }
 
-    const ghVersion = await this.queryClient.ghVersion(effectiveToken);
-    if (!ghVersion.ok) {
+    const backendStatus = await this.queryClient.ghVersion(effectiveToken);
+    if (!backendStatus.ok) {
+      const hostName = effectiveToken && this.preferApi ? "Git host API" : "Git host CLI";
+      const warning = effectiveToken && this.preferApi
+        ? `${hostName} is unavailable or the configured token is invalid. Remote mode cannot fetch PR/CI status.`
+        : `${hostName} is unavailable. Configure a GitHub/GitLab token for PR/CI status.`;
       return {
         mode,
         available: false,
@@ -316,14 +328,16 @@ export class GitStatusService {
         ciRuns: [],
         mergedPullRequests: [],
         tracking,
-        warnings: ["GitHub CLI (gh) is not available. Remote mode cannot fetch PR/CI status."],
+        warnings: [warning],
         lastUpdated: now,
       };
     }
 
-    const authStatus = await this.queryClient.ghAuthStatus(effectiveToken);
-    if (!authStatus.ok) {
-      warnings.push("GitHub CLI is not authenticated. Remote tracking may be unavailable.");
+    if (!(effectiveToken && this.preferApi)) {
+      const authStatus = await this.queryClient.ghAuthStatus(effectiveToken);
+      if (!authStatus.ok) {
+        warnings.push("Git host CLI is not authenticated. Remote tracking may be unavailable.");
+      }
     }
 
     const [prs, ciRuns, merged] = await Promise.all([
@@ -379,8 +393,8 @@ export class GitStatusService {
     return fetchPromise;
   }
 
-  async mergePullRequest(prNumber: number, tokens: GitHostTokens = {}): Promise<AutoMergeFeaturePrResult> {
-    const { token: effectiveToken } = await this.resolveProviderAndToken(tokens);
+  async mergePullRequest(prNumber: number, tokens: GitHostTokens | string = {}): Promise<AutoMergeFeaturePrResult> {
+    const { token: effectiveToken } = await this.resolveProviderAndToken(this.normalizeTokens(tokens));
     const result = await this.queryClient.ghPrMerge(prNumber, effectiveToken);
     if (!result.ok) {
       const message = result.stderr.trim() || result.stdout.trim() || "Failed to merge PR via gh CLI.";
@@ -429,8 +443,8 @@ export class GitStatusService {
     headBranch: string;
     title: string;
     body: string;
-  }, tokens: GitHostTokens = {}): Promise<ResolvePullRequestResult | null> {
-    const { token: effectiveToken } = await this.resolveProviderAndToken(tokens);
+  }, tokens: GitHostTokens | string = {}): Promise<ResolvePullRequestResult | null> {
+    const { token: effectiveToken } = await this.resolveProviderAndToken(this.normalizeTokens(tokens));
 
     const existing = await this.findMatchingOpenPr(args.baseBranch, args.headBranch, effectiveToken);
     if (existing) {

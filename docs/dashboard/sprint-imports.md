@@ -52,7 +52,7 @@ Issue import uses the saved integration tokens:
 - GitHub: system/project effective `git.githubToken`, usually configured in Settings -> Integrations.
 - GitLab: system/project effective `git.gitlabToken`, also available through `GITLAB_TOKEN` / `GLAB_TOKEN` host hints.
 
-When the GitHub token is empty, the server falls back to local `gh` CLI authentication for search, issue context loading, and auto-close (`gh issue list` / `gh issue view` / `gh issue close`). This uses the dashboard host environment's GitHub auth; Docker auth-copy mount settings help worker containers, but the dashboard import itself needs either a saved token or a working local `gh auth login`.
+When the GitHub token is empty, GitHub issue search, issue context loading, and auto-close fail with a token-required error. Code UX does not fall back to local `gh` CLI authentication for dashboard issue workflows; Docker auth-copy mount settings help worker containers, but dashboard import and close operations need saved GitHub/GitLab tokens.
 
 ## Jira Issue Import
 

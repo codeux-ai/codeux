@@ -31,24 +31,8 @@ afterEach(() => {
 });
 
 describe("SprintIssueService", () => {
-  it("falls back to local gh auth when GitHub token is empty", async () => {
-    const runCommand = vi.fn(async () => ({
-      ok: true,
-      stderr: "",
-      stdout: JSON.stringify([
-        {
-          number: 42,
-          title: "Improve import UX",
-          url: "https://github.com/acme/widgets/issues/42",
-          state: "OPEN",
-          body: "Make importing issues easier.",
-          updatedAt: "2026-05-17T00:00:00.000Z",
-          labels: [{ name: "ux" }],
-          assignees: [{ login: "pierre" }],
-        },
-      ]),
-    }));
-
+  it("requires a GitHub token when searching GitHub issues", async () => {
+    const runCommand = vi.fn();
     const service = new SprintIssueService({
       projectManagementRepository: {
         getProject: () => project,
@@ -63,32 +47,12 @@ describe("SprintIssueService", () => {
       runCommand,
     });
 
-    const issues = await service.searchIssues(project.id, {
+    await expect(service.searchIssues(project.id, {
       provider: "github",
       search: "import",
       labels: ["ux"],
-    });
-
-    expect(runCommand).toHaveBeenCalledWith("gh", expect.arrayContaining([
-      "issue",
-      "list",
-      "--repo",
-      "acme/widgets",
-      "--search",
-      "import",
-      "--label",
-      "ux",
-    ]));
-    expect(issues).toEqual([
-      expect.objectContaining({
-        provider: "github",
-        repository: "acme/widgets",
-        issueNumber: 42,
-        title: "Improve import UX",
-        labels: ["ux"],
-        assignees: ["pierre"],
-      }),
-    ]);
+    })).rejects.toThrow("GitHub token is not configured.");
+    expect(runCommand).not.toHaveBeenCalled();
   });
 
   it("loads full GitHub issue prompt context with comments when requested", async () => {
@@ -199,32 +163,8 @@ describe("SprintIssueService", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("loads GitHub prompt context through gh issue view when no token is configured", async () => {
-    const runCommand = vi.fn(async () => ({
-      ok: true,
-      stderr: "",
-      stdout: JSON.stringify({
-        number: 42,
-        title: "Improve import UX",
-        url: "https://github.com/acme/widgets/issues/42",
-        state: "OPEN",
-        body: "Full issue body",
-        createdAt: "2026-05-16T10:00:00.000Z",
-        updatedAt: "2026-05-17T10:00:00.000Z",
-        author: { login: "alice" },
-        labels: [{ name: "ux" }],
-        assignees: [{ login: "pierre" }],
-        comments: [
-          {
-            body: "CLI comment",
-            url: "https://github.com/acme/widgets/issues/42#issuecomment-1",
-            createdAt: "2026-05-17T11:00:00.000Z",
-            author: { login: "bob" },
-          },
-        ],
-      }),
-    }));
-
+  it("requires a GitHub token for GitHub issue prompt context", async () => {
+    const runCommand = vi.fn();
     const service = new SprintIssueService({
       projectManagementRepository: {
         getProject: () => project,
@@ -239,7 +179,7 @@ describe("SprintIssueService", () => {
       runCommand,
     });
 
-    const contexts = await service.getIssuePromptContexts(project.id, [{
+    await expect(service.getIssuePromptContexts(project.id, [{
       provider: "github",
       hostDomain: "github.com",
       repository: "acme/widgets",
@@ -247,18 +187,8 @@ describe("SprintIssueService", () => {
       title: "Improve import UX",
       url: "https://github.com/acme/widgets/issues/42",
       includeConversation: true,
-    }]);
-
-    expect(runCommand).toHaveBeenCalledWith("gh", expect.arrayContaining([
-      "issue",
-      "view",
-      "42",
-      "--repo",
-      "acme/widgets",
-      "--comments",
-    ]));
-    expect(contexts[0]?.issueBodyMarkdown).toBe("Full issue body");
-    expect(contexts[0]?.issueConversationMarkdown).toContain("CLI comment");
+    }])).rejects.toThrow("GitHub token is not configured.");
+    expect(runCommand).not.toHaveBeenCalled();
   });
 
   it("loads Jira issue prompt context with comments when requested", async () => {
@@ -319,7 +249,7 @@ describe("SprintIssueService", () => {
     }));
   });
 
-  it("falls back to local gh auth when auto-closing linked GitHub issues", async () => {
+  it("records an error instead of using local gh when auto-closing GitHub issues without a token", async () => {
     const linkedIssue: SprintLinkedIssueRecord = {
       id: "issue-1",
       projectId: project.id,
@@ -361,17 +291,12 @@ describe("SprintIssueService", () => {
 
     const result = await service.closeLinkedIssues(project.id, "sprint-1");
 
-    expect(runCommand).toHaveBeenCalledWith("gh", [
-      "issue",
-      "close",
-      "42",
-      "--repo",
-      "acme/widgets",
-    ]);
+    expect(runCommand).not.toHaveBeenCalled();
     expect(updateSprintLinkedIssueCloseState).toHaveBeenCalledWith("issue-1", expect.objectContaining({
-      closeState: "closed",
-      issueState: "closed",
+      closeState: "close_failed",
+      closeError: "GitHub token is not configured.",
     }));
-    expect(result.closed).toBe(1);
+    expect(result.closed).toBe(0);
+    expect(result.failed).toBe(1);
   });
 });
