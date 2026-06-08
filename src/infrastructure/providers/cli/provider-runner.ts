@@ -146,6 +146,7 @@ export interface ProviderRunInput {
   gitlabToken?: string;
   signal?: AbortSignal;
   onActivity: (desc: string, originator?: string) => void;
+  onTelemetry?: (telemetry: ProviderUsageTelemetry) => void;
   /** Pass a previous nativeSessionId to continue an existing CLI session.
    *  Claude Code: reuses --session-id. Gemini: adds --resume. Codex: uses exec resume --last.
    *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
@@ -297,12 +298,13 @@ export class ProviderRunner implements IProviderRunner {
     gitlabToken?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
+    onTelemetry?: (telemetry: ProviderUsageTelemetry) => void;
     codexOutputPath?: string | null;
     continueSessionId?: string | null;
     mcpConnection?: McpConnectionInfo | null;
     customMcpServers?: CustomMcpServer[];
   }): Promise<ProviderRunResult> {
-    const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, gitlabToken, signal, onActivity } = input;
+    const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, gitlabToken, signal, onActivity, onTelemetry } = input;
     const startedMs = Date.now();
     const runModel = this.resolveRunModel(provider, model, input);
     // Resolve where qwen-code should write its OpenAI request/response logs, as seen
@@ -367,18 +369,29 @@ export class ProviderRunner implements IProviderRunner {
       await this.resetQwenOpenAiLogDir(cwd, workflowSettings.executionMode, sessionId);
     }
 
+    let accumulatedStdout = "";
+    let accumulatedStderr = "";
+    const trackingOnActivity = (desc: string, originator?: string) => {
+      if (originator === "agent") {
+        accumulatedStdout += desc + "\n";
+      } else if (originator === "provider") {
+        accumulatedStderr += desc + "\n";
+      }
+      onActivity(desc, originator);
+    };
+
     const runCmd = async () => {
       if (workflowSettings.executionMode === "DOCKER") {
         const result = await this.dockerRunner.runProviderInDocker({
           command, args, cwd, providerEnv, sessionId,
-          providerLabel: provider, workflowSettings, repoPath, signal, onActivity,
+          providerLabel: provider, workflowSettings, repoPath, signal, onActivity: trackingOnActivity,
           providerMountAuth,
           providerAuthPath,
           mcpConnection: input.mcpConnection,
           customMcpServers: input.customMcpServers,
         });
         if (!result.ok && isDockerWorkspaceMountError(result)) {
-          try { await fs.access(cwd); onActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`); } catch { /* ignore */ }
+          try { await fs.access(cwd); trackingOnActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`, "provider"); } catch { /* ignore */ }
         }
         return result;
       }
@@ -388,17 +401,84 @@ export class ProviderRunner implements IProviderRunner {
           if (this.shouldSuppressStructuredStdout(provider, line)) {
             return;
           }
-          onActivity(line, "agent");
+          trackingOnActivity(line, "agent");
         },
-        onStderrLine: (line) => onActivity(`[${provider}] ${line}`, "provider"),
+        onStderrLine: (line) => trackingOnActivity(`[${provider}] ${line}`, "provider"),
       });
     };
 
     let tempDbPath: string | null = null;
+    let watcherTempDbPath: string | null = null;
+    let activeWatcher = true;
+    let watcherPromise: Promise<void> | null = null;
+
+    if (input.onTelemetry) {
+      const watcherLoop = async () => {
+        // Small initial delay to let the process spin up and start writing logs
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        while (activeWatcher && !signal?.aborted) {
+          try {
+            let claudeSessionJsonl: string | null = null;
+            let codexSessionJson: string | null = null;
+            let qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null = null;
+            let antigravityTranscriptJsonl: string | null = null;
+            let resolvedNativeSessionId = nativeSessionId;
+
+            if (provider === "claude-code" && nativeSessionId) {
+              claudeSessionJsonl = await this.readClaudeSessionJsonl(cwd, nativeSessionId, workflowSettings.executionMode);
+            } else if (provider === "codex") {
+              codexSessionJson = await this.readCodexLatestSessionJson(cwd, workflowSettings.executionMode);
+            } else if (provider === "qwen-code") {
+              qwenLog = await this.readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs);
+            } else if (provider === "antigravity") {
+              if (!resolvedNativeSessionId && antigravityLogPath) {
+                resolvedNativeSessionId = await this.parseAntigravityConversationId(cwd, antigravityLogPath, workflowSettings.executionMode);
+              }
+              if (resolvedNativeSessionId) {
+                antigravityTranscriptJsonl = await this.readAntigravityTranscript(cwd, resolvedNativeSessionId, workflowSettings.executionMode);
+                if (!watcherTempDbPath) {
+                  const safeSession = resolvedNativeSessionId.replace(/[^A-Za-z0-9_-]/g, "_");
+                  watcherTempDbPath = path.join(os.tmpdir(), `agy-temp-watcher-${safeSession}-${randomUUID()}.db`);
+                }
+                await this.resolveAntigravityDatabase(cwd, resolvedNativeSessionId, workflowSettings.executionMode, watcherTempDbPath);
+              }
+            }
+
+            const telemetry = await collectProviderUsageTelemetry({
+              provider,
+              model: runModel,
+              prompt,
+              cwd,
+              stdout: accumulatedStdout,
+              stderr: accumulatedStderr,
+              capturedText: "",
+              nativeSessionId: resolvedNativeSessionId || nativeSessionId,
+              claudeSessionJsonl,
+              codexSessionJson,
+              qwenReportedUsage: qwenLog?.usage ?? null,
+              qwenConversation: qwenLog?.conversation ?? null,
+              startTimeMs: startedMs,
+              executionMode: workflowSettings.executionMode,
+              antigravitySessionDbPath: watcherTempDbPath,
+              antigravityTranscriptJsonl,
+            });
+
+            if (input.onTelemetry) {
+              input.onTelemetry(telemetry);
+            }
+          } catch (err) {
+            // Swallow background watcher errors
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+      };
+      watcherPromise = watcherLoop();
+    }
+
     try {
       let result = await runCmd();
       if (!result.ok && provider === "codex" && this.isTransientCodexTransportError(result)) {
-        onActivity("Codex transport disconnected. Retrying once automatically...");
+        trackingOnActivity("Codex transport disconnected. Retrying once automatically...");
         await new Promise(r => setTimeout(r, 1500));
         result = await runCmd();
       }
@@ -418,7 +498,7 @@ export class ProviderRunner implements IProviderRunner {
             const reason = resultHasSilentQuotaSignal(provider, result)
               ? "Quota limit reached"
               : "Provider reported an error";
-            onActivity(`[${provider}] ${reason}; provider stopped before completing the task.`, "provider");
+            trackingOnActivity(`[${provider}] ${reason}; provider stopped before completing the task.`, "provider");
             result = { ...result, ok: false };
           }
         }
@@ -477,6 +557,13 @@ export class ProviderRunner implements IProviderRunner {
         nativeSessionId: usageTelemetry.nativeSessionId || resolvedNativeSessionId || nativeSessionId,
       };
     } finally {
+      activeWatcher = false;
+      if (watcherPromise) {
+        await watcherPromise.catch(() => undefined);
+      }
+      if (watcherTempDbPath) {
+        await fs.rm(watcherTempDbPath, { force: true }).catch(() => undefined);
+      }
       if (tempDbPath) {
         await fs.rm(tempDbPath, { force: true }).catch(() => undefined);
       }
