@@ -58,11 +58,21 @@ function readStatus(value: unknown): ScheduleStatus | undefined {
     : undefined;
 }
 
-function readPositiveInteger(value: unknown, fallback: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fallback;
+function parsePositiveInteger(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(1, Math.floor(value));
   }
-  return Math.max(1, Math.floor(value));
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return Math.max(1, Math.floor(parsed));
+    }
+  }
+  return undefined;
+}
+
+function readPositiveInteger(payload: Record<string, unknown>, key: string, fallback: number): number {
+  return parsePositiveInteger(payload[key]) ?? fallback;
 }
 
 function readSubmitMode(value: unknown): ScheduleQuicksprintTarget["submitMode"] {
@@ -91,7 +101,7 @@ function normalizeQuicksprintTarget(payload: Record<string, unknown>): ScheduleQ
   }
   const target: ScheduleQuicksprintTarget = {
     templateId,
-    taskCount: readPositiveInteger(source.taskCount, 5),
+    taskCount: readPositiveInteger(source, "taskCount", 5),
     submitMode: readSubmitMode(source.submitMode),
   };
   const additionalPrompt = readString(source, "additionalPrompt");

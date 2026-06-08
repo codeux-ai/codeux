@@ -95,4 +95,20 @@ describe("QuicksprintActions", () => {
     });
     expect(result.result).toEqual({ status: "success", sprint: { id: "s1" } });
   });
+
+  it("accepts string taskCount values for quicksprint execution", async () => {
+    vi.mocked(quicksprintService.executeQuicksprint).mockResolvedValue({ id: "s1" } as any);
+
+    await actions.handleQuicksprintAction(makeArgs("execute", {
+      projectId: "p1",
+      templateId: "builtin-maintenance",
+      taskCount: "6",
+    }));
+
+    expect(quicksprintService.executeQuicksprint).toHaveBeenCalledWith("p1", {
+      templateId: "builtin-maintenance",
+      taskCount: 6,
+      submitMode: "plan_only",
+    });
+  });
 });

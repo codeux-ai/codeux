@@ -167,12 +167,14 @@ For quicksprint calls:
 - `manage_quicksprints` supports `list_templates`, `get_template`, `create_template`, `update_template`, `delete_template`, `execute`, and `start`.
 - `start` is an MCP-friendly alias for execution with `submitMode: "plan_and_start"`.
 - `execute` defaults to `submitMode: "plan_only"` when no submit mode is supplied.
+- `taskCount` is the canonical task-number field for execution. MCP accepts it as a number or numeric string.
 - `delete_template` requires approval confirmation and only applies to custom templates; built-in templates remain protected by the quicksprint service.
 
 For scheduler calls:
 - `manage_scheduler` supports `list`, `create`, `schedule_sprint`, `schedule_quicksprint`, `schedule_chat`, `update`, `delete`, and `run_due`.
 - Generic `create` requires `targetType: "sprint" | "quicksprint" | "chat"`.
 - The `schedule_*` aliases infer the target type and accept flattened target fields.
+- Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
 - Scheduled chat messages use `bodyMarkdown`, optional `threadId`, optional `connectionId`, and optional `title`. When due, the scheduler posts through the same chat runtime used by dashboard conversations.
 - `delete` requires approval confirmation.
 

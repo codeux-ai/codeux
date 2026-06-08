@@ -18,12 +18,21 @@ function readRequiredString(payload: Record<string, unknown>, key: string): stri
   return value;
 }
 
-function readPositiveInteger(payload: Record<string, unknown>, key: string, fallback: number): number {
-  const value = payload[key];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fallback;
+function parsePositiveInteger(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(1, Math.floor(value));
   }
-  return Math.max(1, Math.floor(value));
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return Math.max(1, Math.floor(parsed));
+    }
+  }
+  return undefined;
+}
+
+function readPositiveInteger(payload: Record<string, unknown>, key: string, fallback: number): number {
+  return parsePositiveInteger(payload[key]) ?? fallback;
 }
 
 function readSubmitMode(value: unknown, fallback: QuicksprintExecutionInput["submitMode"]): QuicksprintExecutionInput["submitMode"] {
@@ -42,8 +51,8 @@ function normalizeCreateTemplateInput(payload: Record<string, unknown>): CreateQ
   const agentPresetId = readString(payload, "agentPresetId");
 
   if (categoryColor) input.categoryColor = categoryColor;
-  if (typeof payload.defaultTaskCount === "number" && Number.isFinite(payload.defaultTaskCount)) {
-    input.defaultTaskCount = Math.max(1, Math.floor(payload.defaultTaskCount));
+  if ("defaultTaskCount" in payload) {
+    input.defaultTaskCount = readPositiveInteger(payload, "defaultTaskCount", 5);
   }
   if (agentPresetId) input.agentPresetId = agentPresetId;
   return input;
@@ -60,8 +69,9 @@ function normalizeUpdateTemplateInput(payload: Record<string, unknown>): UpdateQ
       }
     }
   }
-  if (typeof payload.defaultTaskCount === "number" && Number.isFinite(payload.defaultTaskCount)) {
-    input.defaultTaskCount = Math.max(1, Math.floor(payload.defaultTaskCount));
+  const defaultTaskCount = readPositiveInteger(payload, "defaultTaskCount", 0);
+  if (defaultTaskCount > 0) {
+    input.defaultTaskCount = defaultTaskCount;
   }
   return input;
 }

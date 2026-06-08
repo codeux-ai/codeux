@@ -86,7 +86,7 @@ Task create/update fields include `title`, `name`, `promptMarkdown`, `descriptio
 | `execute` | – | `projectId`, `templateId` | Create and plan a quicksprint. Optional `taskCount`, `submitMode`, `modelOverride`, `planningOverrides`, `agentPresetId`, `additionalPrompt`. Defaults to `submitMode: "plan_only"`. |
 | `start` | – | `projectId`, `templateId` | MCP-friendly alias for executing with default `submitMode: "plan_and_start"`. |
 
-`taskCount` defaults to `5` when omitted. `submitMode` accepts `plan_only` or `plan_and_start`.
+`taskCount` defaults to `5` when omitted. MCP accepts `taskCount` as a number or numeric string. `submitMode` accepts `plan_only` or `plan_and_start`.
 
 ---
 

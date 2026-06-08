@@ -92,6 +92,27 @@ describe("SchedulerActions", () => {
     });
   });
 
+  it("schedules quicksprints with string taskCount values", async () => {
+    vi.mocked(schedulerService.createEntry).mockReturnValue({ id: "entry-1" } as any);
+
+    await actions.handleSchedulerAction(makeArgs("schedule_quicksprint", {
+      projectId: "p1",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      templateId: "qs-maintenance",
+      taskCount: "9",
+    }));
+
+    expect(schedulerService.createEntry).toHaveBeenCalledWith("p1", {
+      targetType: "quicksprint",
+      scheduledFor: "2026-06-09T12:00:00.000Z",
+      quicksprintTarget: {
+        templateId: "qs-maintenance",
+        taskCount: 9,
+        submitMode: "plan_and_start",
+      },
+    });
+  });
+
   it("updates chat target fields", async () => {
     vi.mocked(schedulerService.updateEntry).mockReturnValue({ id: "entry-1", chatTarget: { bodyMarkdown: "new" } } as any);
 

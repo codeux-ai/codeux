@@ -76,8 +76,8 @@ export interface ManageQuicksprintsArgs {
   category?: string;
   categoryColor?: string;
   agentInstructionMarkdown?: string;
-  defaultTaskCount?: number;
-  taskCount?: number;
+  defaultTaskCount?: number | string;
+  taskCount?: number | string;
   submitMode?: "plan_only" | "plan_and_start";
   routeOverride?: string;
   modelOverride?: string;
@@ -104,7 +104,7 @@ export interface ManageSchedulerArgs {
   chatTarget?: Record<string, unknown>;
   sprintId?: string;
   templateId?: string;
-  taskCount?: number;
+  taskCount?: number | string;
   submitMode?: "plan_only" | "plan_and_start";
   additionalPrompt?: string;
   agentPresetId?: string;
