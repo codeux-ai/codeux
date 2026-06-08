@@ -11,6 +11,15 @@
     --accent-hover: #006644;
     --radius-ui: 8px;
 
+    /* Tailwind Typography Overrides - replaces default blue with semantic grays */
+    --tw-prose-links: var(--text-secondary);
+    --tw-prose-quotes: var(--text-secondary);
+    --tw-prose-bold: var(--text-primary);
+    --tw-prose-counters: var(--text-secondary);
+    --tw-prose-bullets: var(--text-secondary);
+    --tw-prose-th-borders: var(--color-border-muted);
+    --tw-prose-td-borders: var(--color-border-muted);
+
     --v2-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
     --v2-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
     --v2-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
