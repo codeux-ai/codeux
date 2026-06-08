@@ -43,6 +43,8 @@ export interface IDockerRunner {
     cwd: string;
     repoPath: string;
     sessionId: string;
+    preserve?: boolean;
+    reuseExisting?: boolean;
   }): Promise<{ cwd: string; cleanup: () => Promise<void> }>;
   runProviderInDocker(args: {
     command: string;
@@ -75,6 +77,8 @@ export class DockerRunner implements IDockerRunner {
     cwd: string;
     repoPath: string;
     sessionId: string;
+    preserve?: boolean;
+    reuseExisting?: boolean;
   }): Promise<{ cwd: string; cleanup: () => Promise<void> }> {
     if (args.cwd.startsWith("docker-volume://")) {
       return {
@@ -83,10 +87,15 @@ export class DockerRunner implements IDockerRunner {
       };
     }
 
-    const workspaceRef = await this.workspaceManager.createSnapshotWorkspace(args.repoPath, args.sessionId);
+    const workspaceRef = args.reuseExisting
+      ? await this.workspaceManager.createOrReuseSnapshotWorkspace(args.repoPath, args.sessionId)
+      : await this.workspaceManager.createSnapshotWorkspace(args.repoPath, args.sessionId);
     return {
       cwd: workspaceRef,
       cleanup: async () => {
+        if (args.preserve) {
+          return;
+        }
         await this.workspaceManager.removeWorktree(args.repoPath, workspaceRef).catch(() => undefined);
       },
     };

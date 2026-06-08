@@ -42,6 +42,7 @@ export interface IWorkspaceManager {
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   createSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
+  createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
   resolveCurrentBranch(worktreePath: string): Promise<string | null>;
   prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string, gitAuth?: GitHttpAuthOptions): Promise<{ worktreePath: string; resumed: boolean }>;
@@ -148,6 +149,18 @@ export class WorkspaceManager implements IWorkspaceManager {
     await this.assertExactGitWorktreeRoot(repoPath);
     const workspaceRef = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "DOCKER");
     await this.removeWorktree(repoPath, workspaceRef).catch(() => undefined);
+    await this.createVolume(workspaceRef);
+    await this.seedWorkspaceFromBundle(repoPath, workspaceRef);
+    await this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout);
+    return workspaceRef;
+  }
+
+  async createOrReuseSnapshotWorkspace(repoPath: string, sessionId: string, checkout?: SnapshotCheckout): Promise<string> {
+    await this.assertExactGitWorktreeRoot(repoPath);
+    const workspaceRef = this.buildWorktreePath(repoPath, `${sessionId}-snapshot`, "DOCKER");
+    if (await this.workspaceExists(workspaceRef)) {
+      return workspaceRef;
+    }
     await this.createVolume(workspaceRef);
     await this.seedWorkspaceFromBundle(repoPath, workspaceRef);
     await this.checkoutSnapshotBranch(repoPath, workspaceRef, checkout);

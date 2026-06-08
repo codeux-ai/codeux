@@ -159,6 +159,7 @@ export interface ProcessManagementActionArgs {
   customBaseUrl?: string;
   customModel?: string;
   sessionId: string;
+  continueSessionId?: string | null;
   settings: DashboardSettings;
   prompt: string;
   repoPath: string;
@@ -281,6 +282,7 @@ export class ChatManagementActionService {
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
         sessionId: args.sessionId,
+        continueSessionId: args.continueSessionId,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
         invocationId: execInvocationId,
@@ -381,6 +383,7 @@ export class ChatManagementActionService {
         customBaseUrl: args.customBaseUrl,
         customModel: args.customModel,
         sessionId: args.sessionId,
+        continueSessionId: args.continueSessionId,
         workflowSettings: args.settings.cliWorkflow,
         repoPath: args.repoPath,
         settings: args.settings,

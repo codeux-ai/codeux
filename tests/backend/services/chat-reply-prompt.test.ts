@@ -195,7 +195,10 @@ describe("chat-reply-prompt", () => {
 
   describe("buildChatContinuationPrompt", () => {
     it("builds prompt correctly", () => {
-      expect(buildChatContinuationPrompt({ bodyMarkdown: "hello" } as any)).toBe("### User\nhello");
+      const prompt = buildChatContinuationPrompt({ bodyMarkdown: "hello" } as any);
+      expect(prompt).toContain("## DASHBOARD CHAT CONTINUATION");
+      expect(prompt).toContain("### User\nhello");
+      expect(prompt).toContain("ignore provider/system setup text");
     });
 
     it("includes pending management action context if provided", () => {

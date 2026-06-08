@@ -81,6 +81,26 @@ describe("DockerRunner", () => {
     expect(removeWorktree).toHaveBeenCalledWith("/repo/project", "docker-volume://snapshot-1");
   });
 
+  it("can reuse and preserve a Docker snapshot workspace for provider session state", async () => {
+    const createOrReuseSnapshotWorkspace = vi.spyOn<any, any>(Object.getPrototypeOf((runner as any).workspaceManager), "createOrReuseSnapshotWorkspace")
+      .mockResolvedValue("docker-volume://qwen-session-1");
+    const removeWorktree = vi.spyOn<any, any>(Object.getPrototypeOf((runner as any).workspaceManager), "removeWorktree")
+      .mockResolvedValue(undefined);
+
+    const result = await runner.ensureWorkspace({
+      cwd: "/repo/project",
+      repoPath: "/repo/project",
+      sessionId: "chat-thread-1",
+      preserve: true,
+      reuseExisting: true,
+    });
+
+    expect(createOrReuseSnapshotWorkspace).toHaveBeenCalledWith("/repo/project", "chat-thread-1");
+    expect(result.cwd).toBe("docker-volume://qwen-session-1");
+    await result.cleanup();
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
   it("runs providers inside isolated Docker volumes", async () => {
     await runner.runProviderInDocker({
       command: "gemini",

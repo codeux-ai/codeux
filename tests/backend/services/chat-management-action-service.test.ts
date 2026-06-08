@@ -254,6 +254,7 @@ describe("ChatManagementActionService", () => {
         providerMountAuth: true,
         providerAuthPath: "~/.gemini",
         sessionId: "sess1",
+        continueSessionId: "sess1",
         settings: mockSettings,
         prompt: "List sprints",
         repoPath: "/tmp/test-repo",
@@ -275,6 +276,7 @@ describe("ChatManagementActionService", () => {
           provider: "gemini",
           providerMountAuth: true,
           providerAuthPath: "~/.gemini",
+          continueSessionId: "sess1",
         })
       );
 
@@ -331,6 +333,33 @@ describe("ChatManagementActionService", () => {
       expect(result.replyMarkdown).toBe("Fallback reply");
       expect(structuredProviderResponseService.executeAndParse).toHaveBeenCalled();
       expect(providerExecutionService.executeProvider).not.toHaveBeenCalled();
+    });
+
+    it("forwards continueSessionId in JSON parsing mode", async () => {
+      structuredProviderResponseService.executeAndParse.mockResolvedValue({
+        parsed: { replyMarkdown: "Continued reply", action: null },
+        nativeSessionId: null,
+        bodyMarkdown: "",
+      });
+
+      await service.processManagementAction({
+        projectId: "proj1",
+        provider: "qwen-code",
+        model: "qwen3-coder-plus",
+        apiKey: "test-key",
+        sessionId: "thread-1",
+        continueSessionId: "thread-1",
+        settings: mockSettings,
+        prompt: "Continue",
+        repoPath: "/tmp/test-repo",
+        mcpConnection: null,
+      });
+
+      expect(structuredProviderResponseService.executeAndParse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          continueSessionId: "thread-1",
+        })
+      );
     });
   });
 });

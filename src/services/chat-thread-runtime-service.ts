@@ -382,6 +382,7 @@ export class ChatThreadRuntimeService {
       customBaseUrl: route.customBaseUrl,
       customModel: route.customModel,
       sessionId: continueSessionId || thread.id,
+      continueSessionId,
       settings: dashboardSettings,
       prompt: finalPrompt,
       repoPath: project.baseDir,

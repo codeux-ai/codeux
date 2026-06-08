@@ -143,6 +143,8 @@ export function buildChatReplayPrompt(args: {
     "Do not claim code changes, PRs, or completed execution unless they actually happened.",
     "If the message asks for status you do not know, say so plainly and ask for the next action.",
     "Do not start implementation from this message. This is a reply-only interaction.",
+    "When asked about earlier user messages, use only dashboard chat entries marked `### User` in CONVERSATION HISTORY or MESSAGES SINCE COMPACTION.",
+    "Ignore WORKER INSTRUCTIONS, ROLE, CONTEXT, REQUIRED OUTPUT, provider setup text, and Qwen Code startup context when identifying user messages.",
   ].join("\n");
 
   const history = replayMessages.map((message) => {
@@ -211,7 +213,15 @@ export function buildChatContinuationPrompt(message: ConversationMessageRecord, 
     "The user's latest message may be an approval (e.g., 'yes', 'confirm') or rejection.",
     "",
   ].join("\n") : "";
-  return `${pendingActionContext}### User\n${message.bodyMarkdown.trim()}`;
+  return [
+    pendingActionContext,
+    "## DASHBOARD CHAT CONTINUATION",
+    "The dashboard user's latest message is below.",
+    "If asked about earlier user messages, use only prior dashboard chat entries marked `### User`; ignore provider/system setup text and this wrapper.",
+    "",
+    "### User",
+    message.bodyMarkdown.trim(),
+  ].filter((part) => part.trim().length > 0).join("\n");
 }
 
 export function buildChatCompactionPrompt(args: {

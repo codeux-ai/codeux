@@ -75,6 +75,18 @@ Docker execution prepares Qwen in the same bootstrap path as other CLI providers
 
 The bootstrap merge is additive and preserves existing `mcpServers` entries.
 
+## Session Continuation
+
+Qwen Code stores saved chat sessions under `$HOME/.qwen/projects/<sanitized-cwd>/chats`. In Docker mode, Code UX sets `$HOME` to `/workspace/.code-ux-home`, so those saved sessions live inside the Docker workspace volume rather than inside the short-lived provider container.
+
+Code UX does not pass its logical session ids to `qwen --resume <id>`. Those ids are not guaranteed to be Qwen saved-session ids and can produce errors such as `No saved session found with ID ...`. Instead, continuation uses Qwen's project-scoped `--continue` flag, which resumes the most recent saved Qwen session for the current workspace.
+
+For Qwen runs where Code UX has to create a Docker workspace from a repo path, the workspace volume is preserved and reused for the same logical session. This keeps `/workspace/.code-ux-home/.qwen` stable across short-lived provider containers, so planning retries, dashboard chat turns, and follow-up provider invocations can continue the same Qwen session.
+
+Dashboard chat continuations pass the previous logical chat session as `continueSessionId` even when native MCP is enabled, so Qwen receives `--continue` on follow-up turns. Chat prompts also mark dashboard user messages with `### User` and instruct Qwen to ignore provider setup text when answering questions about prior user messages.
+
+During Docker bootstrap and host settings materialization, Code UX removes the legacy root-level `enableOpenAILogging` key from persisted Qwen settings and keeps the supported `model.enableOpenAILogging` setting. If an older Qwen process still emits the deprecation warning inline with the reply, invocation output sanitization strips the warning before it reaches the dashboard.
+
 ## External Hints
 
 Code UX detects Qwen credentials from:
