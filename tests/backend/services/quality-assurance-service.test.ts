@@ -1727,4 +1727,178 @@ describe("QualityAssuranceService", () => {
       vi.useRealTimers();
     }
   });
+
+  it("resolves the correct provider settings and computed feature branch prefix for QA follow-up runs", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-followup-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 42",
+      number: 42,
+      goal: "Implement qwen support",
+      status: "running",
+      featureBranch: null, // Test dynamically resolved branch name
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Coding task",
+      promptMarkdown: "Implement task.",
+      status: "completed",
+      isIndependent: true,
+    });
+
+    const subtask: Subtask = {
+      record_id: task.id,
+      project_id: project.id,
+      sprint_id: sprint.id,
+      id: "T1",
+      title: "Coding task",
+      prompt: "Implement task.",
+      depends_on: [],
+      is_independent: true,
+      status: "COMPLETED",
+      provider: "qwen",
+      session_id: "session-123",
+      worker_branch: "worker-branch-t1",
+    };
+
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      provider: "qwen",
+      mode: "docker_cli",
+      state: "RUNNING",
+      sessionId: "session-123",
+    });
+
+    const structuredAgentRequestService = {
+      executeRequest: vi.fn(async () => {
+        return {
+          parsed: {
+            verdict: "changes_requested",
+            summary: "Needs fixes.",
+            findings: ["Issue A"],
+            fixInstructions: "Add error handling.",
+            targetTaskKey: "T1",
+            shouldHavePr: true,
+            followUpTasks: [],
+            raw: {},
+          },
+          sessionId: "qa-session-123",
+          invocationId: "xi_123",
+          nativeSessionId: "native-123",
+          bodyMarkdown: JSON.stringify({
+            verdict: "changes_requested",
+            summary: "Needs fixes.",
+            fixInstructions: "Add error handling.",
+          }),
+        };
+      }),
+    };
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {
+        updateSession: vi.fn(),
+        appendActivity: vi.fn(),
+      } as any,
+      qaReviewRepository,
+      taskService: {
+        resolveInvocationProvider: () => ({
+          provider: "qwen",
+          providerConfigId: "qwen-local",
+          providers: {
+            "qwen-local": { provider: "qwen", model: "qwen-local-model", apiKey: "local-key", thinkingMode: "MEDIUM" },
+            "qwen-primary": { provider: "qwen", model: "qwen-primary-model", apiKey: "primary-key", thinkingMode: "HIGH" },
+          },
+          enabledProviders: ["qwen-local", "qwen-primary"],
+        }),
+        resolveProviderConfigIdForProvider: (route: any, provider: any) => {
+          return "qwen-local";
+        },
+      } as any,
+      agentPresetSyncService: {
+        resolveTargetedQualityAssuranceAgent: async () => {
+          const preset = agentPresetRepository.createAgentPreset(project.id, {
+            name: "QA Agent",
+            presetId: "QA-1",
+            instructionMarkdown: "Review this.",
+          });
+          return { id: preset.id, name: preset.name, instructionMarkdown: preset.instructionMarkdown };
+        },
+        resolveTargetedCodingAgent: async () => null,
+        getOptionalWorkerAgentForRepoPath: async () => undefined,
+      } as any,
+      providerRunner: {} as any,
+      structuredAgentRequestService: structuredAgentRequestService as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        git: {
+          ...DEFAULT_DASHBOARD_SETTINGS.git,
+          featureBranchPrefix: "feature/",
+          defaultBranch: "main",
+        },
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    vi.spyOn((service as any).workspaceManager, "createSnapshotWorkspace").mockResolvedValue("docker-volume://qa-snapshot");
+    vi.spyOn((service as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
+    vi.spyOn((service as any).workspaceManager, "resolveResumeWorktreePath").mockResolvedValue(null);
+    vi.spyOn((service as any).workspaceManager, "resolveCurrentBranch").mockResolvedValue("worker-branch-t1");
+    vi.spyOn((service as any), "syncRemoteBranchesIfNeeded").mockResolvedValue(undefined);
+    vi.spyOn((service as any), "syncExistingCliFollowUpWorkspace").mockResolvedValue(undefined);
+    vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("Guidance");
+    vi.spyOn((service as any), "runWorkspaceCommand").mockResolvedValue({ stdout: "abc123\n", stderr: "" });
+    vi.spyOn((service as any).workspaceManager, "runWorkspaceCommand").mockResolvedValue({ stdout: "", stderr: "" });
+    const prepareWorktreeSpy = vi.spyOn((service as any).workspaceManager, "prepareWorktree").mockResolvedValue(undefined);
+
+    const executeProviderSpy = vi.spyOn((service as any).providerExecutionService, "executeProvider").mockResolvedValue({
+      ok: true,
+      stdout: "Done",
+      stderr: "",
+    });
+
+    const outcome = await service.reviewCompletedTask({
+      projectId: project.id,
+      sprintId: sprint.id,
+      repoPath: dir,
+      task: subtask,
+      subtasks: [subtask],
+    });
+
+    expect(outcome.reviewed).toBe(true);
+    expect(prepareWorktreeSpy).toHaveBeenCalled();
+    const prepareArgs = prepareWorktreeSpy.mock.calls[0];
+    expect(prepareArgs[3]).toBe("feature/sprint-42");
+
+    expect(executeProviderSpy).toHaveBeenCalled();
+    const callArgs = executeProviderSpy.mock.calls[0][0];
+
+    // Assert correct provider settings resolution (qwen-local instead of falling back to qwen primary)
+    expect(callArgs.model).toBe("qwen-local-model");
+    expect(callArgs.apiKey).toBe("local-key");
+  });
 });

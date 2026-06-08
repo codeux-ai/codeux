@@ -20,7 +20,7 @@ const buildDeps = () => {
     listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
     updateLastStatus: vi.fn(),
     completedSprints: new Set<string>(),
-    projectManagementRepository: { updateTask: vi.fn(), getTasksByIds: vi.fn().mockReturnValue([]) },
+    projectManagementRepository: { updateTask: vi.fn(), getTasksByIds: vi.fn().mockReturnValue([]), updateSprint: vi.fn() },
     executionRepository: { updateSprintRun: vi.fn() },
     sprintExecutionStateService: {
       resolveContext: vi.fn((args: any) => ({

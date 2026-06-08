@@ -35,7 +35,7 @@ export interface TaskAgentSessionArgs {
 export class TaskService {
   constructor(private readonly deps: TaskServiceDependencies) {}
 
-  private resolveProviderConfigIdForProvider(
+  resolveProviderConfigIdForProvider(
     route: ResolvedProviderRoute,
     provider: ProviderId,
   ): string {

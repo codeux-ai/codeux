@@ -518,13 +518,22 @@ export class SprintOrchestrator {
       // Record the fork point the first time the branch is created. This is the stable
       // checkpoint the file browser diffs against, and it must be captured now — once the
       // sprint merges back, the fork point can no longer be recovered from the branch refs.
+      const updateFields: import("../contracts/project-management-types.js").UpdateSprintInput = {};
       if (branchPreparation?.baseCommitSha && !executionContext.sprint.baseCommitSha) {
+        updateFields.baseCommitSha = branchPreparation.baseCommitSha;
+      }
+      if (!executionContext.sprint.featureBranch) {
+        updateFields.featureBranch = defaultFeatureBranch;
+        executionContext.sprint.featureBranch = defaultFeatureBranch;
+      }
+
+      if (Object.keys(updateFields).length > 0) {
         try {
-          this.deps.projectManagementRepository.updateSprint(executionContext.sprint.id, {
-            baseCommitSha: branchPreparation.baseCommitSha,
-          });
+          if (typeof this.deps.projectManagementRepository.updateSprint === "function") {
+            this.deps.projectManagementRepository.updateSprint(executionContext.sprint.id, updateFields);
+          }
         } catch (error) {
-          this.deps.logger.warn("Failed to record sprint base commit SHA during branch preflight.", {
+          this.deps.logger?.warn("Failed to record sprint metadata during branch preflight.", {
             projectId: executionContext.project.id,
             sprintId: executionContext.sprint.id,
             featureBranch: defaultFeatureBranch,
