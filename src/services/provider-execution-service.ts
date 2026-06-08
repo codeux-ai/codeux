@@ -7,7 +7,7 @@ import type { ProviderInvocationPurpose } from "../contracts/execution-types.js"
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import type { CliProviderId, IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
-import type { ParsedConversationTurn } from "../infrastructure/providers/cli/provider-usage.js";
+import type { ParsedConversationTurn, ProviderUsageTelemetry } from "../infrastructure/providers/cli/provider-usage.js";
 import type { AppendExecutionInvocationMessageInput } from "../contracts/invocation-types.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
@@ -298,6 +298,53 @@ export class ProviderExecutionService {
             });
           }
         },
+        onTelemetry: (telemetry: ProviderUsageTelemetry) => {
+          if (invocation && this.deps.executionRepository) {
+            const durationMs = Date.now() - startedMs;
+            this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+              status: "running",
+              model: args.model,
+              nativeSessionId: telemetry.nativeSessionId || undefined,
+              durationMs,
+              transcriptChars: telemetry.transcriptText.length,
+              inputTokens: telemetry.inputTokens,
+              cachedInputTokens: telemetry.cachedInputTokens,
+              outputTokens: telemetry.outputTokens,
+              reasoningOutputTokens: telemetry.reasoningOutputTokens,
+              totalTokens: telemetry.totalTokens,
+              usageSource: telemetry.usageSource,
+              rawUsageJson: telemetry.rawUsageJson || undefined,
+            });
+          }
+
+          if (execInvocationId && this.deps.executionRepository) {
+            if (args.trackAssistantInInvocation !== false) {
+              if (!args.expectTextOutput && telemetry.conversation && telemetry.conversation.length > 0) {
+                this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
+                for (const turn of telemetry.conversation) {
+                  this.deps.executionRepository.appendExecutionInvocationMessage(
+                    execInvocationId,
+                    conversationTurnToMessage(turn, args.provider, args.model),
+                  );
+                }
+              } else {
+                this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
+                if (args.trackPromptInInvocation !== false) {
+                  this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
+                    role: "user",
+                    contentMarkdown: p,
+                  });
+                }
+                if (telemetry.transcriptText) {
+                  this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
+                    role: "assistant",
+                    contentMarkdown: sanitizeInvocationOutputText(telemetry.transcriptText),
+                  });
+                }
+              }
+            }
+          }
+        },
       };
 
       const result = await (async (): Promise<ProviderRunResult> => {
@@ -306,6 +353,15 @@ export class ProviderExecutionService {
             ? await this.deps.providerRunner.runProviderForText(runnerOpts)
             : await this.deps.providerRunner.runProvider(runnerOpts);
         } catch (error) {
+          if (invocation && this.deps.executionRepository) {
+            const finishedAt = new Date().toISOString();
+            const durationMs = Date.now() - startedMs;
+            this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+              status: "failed",
+              finishedAt,
+              durationMs,
+            });
+          }
           this.deps.logger?.error("Provider invocation crashed", {
             logPurpose: "invocation",
             invocationId: execInvocationId,
