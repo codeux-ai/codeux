@@ -146,8 +146,31 @@ export class WorkspaceArtifactService {
     gitAuth?: GitHttpAuthOptions;
     gitIdentity?: GitCommitIdentity;
     githubMode?: "REMOTE" | "LOCAL";
+    /**
+     * When true, a merge commit is recorded even if the resolved tree is identical to
+     * the base tree, as long as a parent ref is not yet an ancestor of the base. This is
+     * required for merge-conflict resolution: a conflict resolved by keeping the source
+     * side produces an empty diff, but the branch must still record the target branch as
+     * a parent so the upstream PR stops reporting the conflict.
+     */
+    forceMergeCommit?: boolean;
   }): Promise<AppliedWorkspacePatchResult> {
-    if (!args.patchText.trim()) {
+    const hasPatch = args.patchText.trim().length > 0;
+    const parentRefs = args.parentRefs ?? [];
+
+    // Determine whether a merge commit must be recorded even without a tree change:
+    // when at least one parent ref is not yet contained in the base branch.
+    let mergeParentsNeedRecording = false;
+    if (args.forceMergeCommit && parentRefs.length > 0) {
+      for (const parentRef of parentRefs) {
+        if (!(await this.isAncestor(args.repoPath, parentRef, args.baseRef))) {
+          mergeParentsNeedRecording = true;
+          break;
+        }
+      }
+    }
+
+    if (!hasPatch && !mergeParentsNeedRecording) {
       return { hasChanges: false };
     }
 
@@ -164,12 +187,14 @@ export class WorkspaceArtifactService {
       };
 
       await runCommandStrict("git", ["read-tree", args.baseRef], args.repoPath, indexEnv);
-      await runCommandStrict("git", ["apply", "--cached", "--binary", patchPath], args.repoPath, indexEnv);
+      if (hasPatch) {
+        await runCommandStrict("git", ["apply", "--cached", "--binary", patchPath], args.repoPath, indexEnv);
+      }
 
       const treeSha = (await runCommandStrict("git", ["write-tree"], args.repoPath, indexEnv)).stdout.trim();
       const baseTree = (await runCommandStrict("git", ["rev-parse", `${args.baseRef}^{tree}`], args.repoPath)).stdout.trim();
 
-      if (!treeSha || treeSha === baseTree) {
+      if ((!treeSha || treeSha === baseTree) && !mergeParentsNeedRecording) {
         return { hasChanges: false };
       }
 
@@ -230,6 +255,15 @@ export class WorkspaceArtifactService {
       };
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  private async isAncestor(repoPath: string, ancestorRef: string, descendantRef: string): Promise<boolean> {
+    try {
+      await runCommandStrict("git", ["merge-base", "--is-ancestor", ancestorRef, descendantRef], repoPath);
+      return true;
+    } catch {
+      return false;
     }
   }
 }

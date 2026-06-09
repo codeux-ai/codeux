@@ -230,6 +230,125 @@ describe("WorkspaceArtifactService", () => {
     expect(parents).toEqual([baseRef, targetRef]);
   });
 
+  it("records and pushes a merge commit when the conflict is resolved by keeping the source side (empty diff)", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
+    cleanupPaths.push(tempRoot);
+
+    const originPath = path.join(tempRoot, "origin.git");
+    const hostRepoPath = path.join(tempRoot, "host-repo");
+
+    await runCommandStrict("git", ["init", "--bare", originPath], tempRoot);
+    await runCommandStrict("git", ["clone", originPath, hostRepoPath], tempRoot);
+
+    await runGit(hostRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
+    await runGit(hostRepoPath, ["checkout", "-b", "main"]);
+    await fs.writeFile(path.join(hostRepoPath, "test.md"), "Original\n", "utf8");
+    await runGit(hostRepoPath, ["add", "test.md"]);
+    await runGit(hostRepoPath, ["commit", "-m", "base"]);
+    await runGit(hostRepoPath, ["push", "-u", "origin", "main"]);
+    const baseMain = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    // Target branch changes the same line ("Conflict Value C").
+    await runGit(hostRepoPath, ["checkout", "-b", "target", baseMain]);
+    await fs.writeFile(path.join(hostRepoPath, "test.md"), "Conflict Value C\n", "utf8");
+    await runGit(hostRepoPath, ["add", "test.md"]);
+    await runGit(hostRepoPath, ["commit", "-m", "target change"]);
+    await runGit(hostRepoPath, ["push", "-u", "origin", "target"]);
+    const targetRef = (await runGit(hostRepoPath, ["rev-parse", "origin/target"])).trim();
+
+    // Source (worker) branch changes the same line ("Conflict Value B").
+    await runGit(hostRepoPath, ["checkout", "-b", "worker/test", baseMain]);
+    await fs.writeFile(path.join(hostRepoPath, "test.md"), "Conflict Value B\n", "utf8");
+    await runGit(hostRepoPath, ["add", "test.md"]);
+    await runGit(hostRepoPath, ["commit", "-m", "worker change"]);
+    await runGit(hostRepoPath, ["push", "-u", "origin", "worker/test"]);
+    const baseRef = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    // Sanity: the target is not yet contained in the source branch.
+    await expect(
+      runGit(hostRepoPath, ["merge-base", "--is-ancestor", "origin/target", "refs/heads/worker/test"]),
+    ).rejects.toThrow();
+
+    const service = new WorkspaceArtifactService({} as IWorkspaceManager);
+
+    // The worker resolved the conflict by keeping the source side, so the resolved tree is
+    // identical to the source tip and the exported patch is empty.
+    const result = await service.applyPatchToBranch({
+      repoPath: hostRepoPath,
+      baseRef,
+      workerBranch: "worker/test",
+      patchText: "",
+      commitMessage: "fix(merge): resolve target into worker",
+      parentRefs: ["origin/target"],
+      forceMergeCommit: true,
+      githubMode: "REMOTE",
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect(result.commitSha).toBeTruthy();
+
+    // The new commit is a real merge commit recording the target as a parent.
+    const parents = (await runGit(hostRepoPath, ["show", "-s", "--format=%P", result.commitSha!])).trim().split(" ");
+    expect(parents).toEqual([baseRef, targetRef]);
+
+    // The source side is preserved.
+    expect(await runGit(hostRepoPath, ["show", "refs/heads/worker/test:test.md"], { trimOutput: false }))
+      .toBe("Conflict Value B\n");
+
+    // The target is now contained in the source branch locally and on the remote, so the
+    // upstream PR will stop reporting the conflict.
+    await runGit(hostRepoPath, ["merge-base", "--is-ancestor", "origin/target", "refs/heads/worker/test"]);
+    await runGit(hostRepoPath, ["fetch", "origin"]);
+    await runGit(hostRepoPath, ["merge-base", "--is-ancestor", "origin/target", "origin/worker/test"]);
+  });
+
+  it("does not create a redundant merge commit when the target is already contained in the source", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
+    cleanupPaths.push(tempRoot);
+
+    const originPath = path.join(tempRoot, "origin.git");
+    const hostRepoPath = path.join(tempRoot, "host-repo");
+
+    await runCommandStrict("git", ["init", "--bare", originPath], tempRoot);
+    await runCommandStrict("git", ["clone", originPath, hostRepoPath], tempRoot);
+
+    await runGit(hostRepoPath, ["config", "user.name", "Code UX Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "code-ux@example.com"]);
+    await runGit(hostRepoPath, ["checkout", "-b", "main"]);
+    await fs.writeFile(path.join(hostRepoPath, "test.md"), "Original\n", "utf8");
+    await runGit(hostRepoPath, ["add", "test.md"]);
+    await runGit(hostRepoPath, ["commit", "-m", "base"]);
+    await runGit(hostRepoPath, ["push", "-u", "origin", "main"]);
+    const baseMain = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    await runGit(hostRepoPath, ["checkout", "-b", "target", baseMain]);
+    await fs.writeFile(path.join(hostRepoPath, "other.txt"), "target\n", "utf8");
+    await runGit(hostRepoPath, ["add", "other.txt"]);
+    await runGit(hostRepoPath, ["commit", "-m", "target change"]);
+    await runGit(hostRepoPath, ["push", "-u", "origin", "target"]);
+
+    // Worker branch already merged the target in.
+    await runGit(hostRepoPath, ["checkout", "-b", "worker/test", baseMain]);
+    await runGit(hostRepoPath, ["merge", "--no-edit", "origin/target"]);
+    const baseRef = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    const service = new WorkspaceArtifactService({} as IWorkspaceManager);
+    const result = await service.applyPatchToBranch({
+      repoPath: hostRepoPath,
+      baseRef,
+      workerBranch: "worker/test",
+      patchText: "",
+      commitMessage: "fix(merge): resolve target into worker",
+      parentRefs: ["origin/target"],
+      forceMergeCommit: true,
+      githubMode: "REMOTE",
+    });
+
+    expect(result.hasChanges).toBe(false);
+    expect((await runGit(hostRepoPath, ["rev-parse", "refs/heads/worker/test"])).trim()).toBe(baseRef);
+  });
+
   it("uses the configured git identity for host-side commit-tree materialization", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
     cleanupPaths.push(tempRoot);

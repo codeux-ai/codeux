@@ -219,6 +219,51 @@ describe("GithubApiHostCli", () => {
       expect(parsed[0].reviewDecision).toBeNull();
     });
 
+    it("enriches merge state from the single-PR endpoint when the list omits mergeable_state", async () => {
+      // Real GitHub list responses do not include mergeable_state; it is only computed on a
+      // single-PR fetch. Without enrichment the conflict (DIRTY) would be reported as UNKNOWN.
+      const prList = [{
+        number: 10,
+        title: "Conflicted PR",
+        html_url: "https://github.com/owner/repo/pull/10",
+        state: "open",
+        draft: false,
+        head: { ref: "feature-branch", sha: "abc123" },
+        base: { ref: "main" },
+        updated_at: "2024-01-01T00:00:00Z",
+        comments: 0,
+        review_comments: 0,
+      }];
+      mockFetch([
+        { ok: true, body: prList },
+        { ok: true, body: { number: 10, mergeable_state: "dirty" } },
+      ]);
+
+      const res = await cli.prListOpen("tok");
+      expect(res.ok).toBe(true);
+      const parsed = JSON.parse(res.stdout);
+      expect(parsed[0].mergeStateStatus).toBe("DIRTY");
+      // One list call + one per-PR enrichment call.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1][0]).toContain("/repos/owner/repo/pulls/10");
+    });
+
+    it("falls back to UNKNOWN when per-PR enrichment fails", async () => {
+      const prList = [{
+        number: 11, title: "PR", html_url: "https://g.c/p/11", state: "open", draft: false,
+        head: { ref: "f", sha: "s" }, base: { ref: "main" }, updated_at: "2024-01-01T00:00:00Z",
+        comments: 0, review_comments: 0,
+      }];
+      mockFetch([
+        { ok: true, body: prList },
+        { ok: false, status: 500, body: { message: "boom" } },
+      ]);
+
+      const res = await cli.prListOpen("tok");
+      const parsed = JSON.parse(res.stdout);
+      expect(parsed[0].mergeStateStatus).toBe("UNKNOWN");
+    });
+
     it("returns error without token", async () => {
       const res = await cli.prListOpen();
       expect(res.ok).toBe(false);

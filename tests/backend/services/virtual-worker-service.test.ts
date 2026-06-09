@@ -961,6 +961,42 @@ describe("VirtualWorkerService", () => {
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
   });
 
+  it("skips a redundant container run when the conflict is already resolved on the remote", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:already-resolved",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge Conflict",
+      summaryMarkdown: "Resolve it",
+      payload: { repoPath: "/test", conflictingBranches: { source: "src", target: "tgt" } },
+    });
+
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(true);
+    const prepareWorktree = vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree");
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(prepareWorktree).not.toHaveBeenCalled();
+    const resolved = projectAttentionService.getItem(item.id);
+    expect(resolved?.status).toBe("resolved");
+    expect(resolved?.payload?.alreadyResolved).toBe(true);
+  });
+
   it("routes merge preparation through the workspace runner for docker-volume workspaces", async () => {
     const { virtualWorkerService, sessionTracking } = await setupServiceWithProject();
 

@@ -259,6 +259,24 @@ describe("FeaturePrGateService", () => {
     );
   });
 
+  it("clears a stale MERGE_CONFLICT indicator once the PR is no longer DIRTY", async () => {
+    context.ciIntelligence.featurePrAutoMergeMode = "OFF" as any;
+    subtasks[0].status = "CODING_COMPLETED";
+    subtasks[0].merge_indicator = "MERGE_CONFLICT";
+    context.gitStatus.openPullRequests[0].mergeStateStatus = "CLEAN";
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].merge_indicator).not.toBe("MERGE_CONFLICT");
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "merge_conflict_cleared", prNumber: 101 }),
+      expect.any(Object),
+    );
+  });
+
   it("keeps task in RUNNING with CI indicator if checks are pending", async () => {
     context.gitStatus.openPullRequests[0].checks = [
       { name: "build", status: "in_progress", conclusion: null }

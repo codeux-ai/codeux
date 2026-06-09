@@ -386,6 +386,20 @@ export class FeaturePrGateService {
         return { reportText, events, attentionItem };
       }
 
+      // The PR is no longer reporting a merge conflict. Clear any stale MERGE_CONFLICT
+      // indicator so the task can settle normally — otherwise the indicator stays sticky
+      // (see normalizeTaskMergeIndicator) and the conflict-resolution loop never ends even
+      // though the conflict is already resolved.
+      if (task.merge_indicator === "MERGE_CONFLICT" && pr.mergeStateStatus && pr.mergeStateStatus !== "UNKNOWN") {
+        task.merge_indicator = undefined;
+        await this.persistMergedTask(task, context);
+        events.push({ state: "merge_conflict_cleared", payload: {
+          prNumber: pr.number,
+          prUrl: pr.url,
+          mergeStateStatus: pr.mergeStateStatus,
+        } });
+      }
+
       const ciSupport = waitForFeatureCi && checks.length === 0
         ? await detectPullRequestCiSupport(context.repoPath, pr.baseRefName || context.featureBranch)
         : null;
@@ -482,11 +496,9 @@ export class FeaturePrGateService {
           return { reportText, events, attentionItem };
         }
 
-        task.merge_indicator = task.is_merged
-          ? "MERGED"
-          : task.merge_indicator === "MERGE_CONFLICT"
-            ? "MERGE_CONFLICT"
-            : undefined;
+        // The PR reached merge-ready, so any earlier conflict is resolved — never keep a
+        // stale MERGE_CONFLICT indicator here.
+        task.merge_indicator = task.is_merged ? "MERGED" : undefined;
         events.push({ state: "ready_for_merge", payload: {
           prNumber: pr.number,
           prUrl: pr.url,

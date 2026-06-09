@@ -246,9 +246,19 @@ export class GithubApiHostCli implements GitHostCli {
     let rawPrs: Record<string, unknown>[];
     try { rawPrs = JSON.parse(res.text) as Record<string, unknown>[]; }
     catch { return apiFail("Failed to parse GitHub PR list response."); }
+
+    // GitHub's pull-request LIST endpoint never populates `mergeable`/`mergeable_state` —
+    // mergeability is only computed (lazily) when a single PR is fetched. Without enriching
+    // here every PR reports UNKNOWN, so merge conflicts are never detected and conflicted
+    // tasks silently fall through to "merge required" instead of conflict resolution.
+    const mergeStateByNumber = await this.fetchGithubMergeStates(rawPrs, hostToken);
+
     const mapped = rawPrs.map((pr) => {
       const head = pr.head as Record<string, unknown> | undefined;
       const base = pr.base as Record<string, unknown> | undefined;
+      const number = typeof pr.number === "number" ? pr.number : null;
+      const enrichedState = number !== null ? mergeStateByNumber.get(number) : undefined;
+      const mergeableState = enrichedState ?? (typeof pr.mergeable_state === "string" ? pr.mergeable_state : null);
       return {
         number: pr.number,
         title: pr.title ?? "Untitled PR",
@@ -257,7 +267,7 @@ export class GithubApiHostCli implements GitHostCli {
         isDraft: pr.draft === true,
         headRefName: typeof head?.ref === "string" ? head.ref : null,
         baseRefName: typeof base?.ref === "string" ? base.ref : null,
-        mergeStateStatus: githubMergeableState(typeof pr.mergeable_state === "string" ? pr.mergeable_state : null),
+        mergeStateStatus: githubMergeableState(mergeableState),
         reviewDecision: null,
         updatedAt: pr.updated_at ?? null,
         comments: ((pr.comments as number | undefined) ?? 0) + ((pr.review_comments as number | undefined) ?? 0),
@@ -265,6 +275,41 @@ export class GithubApiHostCli implements GitHostCli {
       };
     });
     return apiOk(JSON.stringify(mapped));
+  }
+
+  /**
+   * Fetch the computed `mergeable_state` for each open PR via the single-PR endpoint.
+   * The first read after a push can return `unknown` while GitHub computes mergeability in
+   * the background; the next polling cycle then sees the settled value. Requests are batched
+   * to bound concurrency and cached by the shared GET cache so this stays cheap.
+   */
+  private async fetchGithubMergeStates(
+    prs: Record<string, unknown>[],
+    hostToken: string,
+  ): Promise<Map<number, string | null>> {
+    const numbers = prs
+      .map((pr) => (typeof pr.number === "number" ? pr.number : null))
+      .filter((n): n is number => n !== null)
+      .slice(0, 30);
+    const out = new Map<number, string | null>();
+    const CONCURRENCY = 6;
+    for (let i = 0; i < numbers.length; i += CONCURRENCY) {
+      const batch = numbers.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(batch.map(async (number) => {
+        const detail = await this.get(`/repos/${this.owner}/${this.repo}/pulls/${number}`, hostToken);
+        if (!detail?.ok) return [number, null] as const;
+        try {
+          const parsed = JSON.parse(detail.text) as Record<string, unknown>;
+          return [number, typeof parsed.mergeable_state === "string" ? parsed.mergeable_state : null] as const;
+        } catch {
+          return [number, null] as const;
+        }
+      }));
+      for (const [number, state] of results) {
+        out.set(number, state);
+      }
+    }
+    return out;
   }
 
   async prListOpenMatching(baseBranch: string, headBranch: string, hostToken?: string): Promise<CommandResult> {
