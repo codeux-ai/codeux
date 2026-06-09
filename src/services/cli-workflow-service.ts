@@ -351,6 +351,10 @@ export class CliWorkflowService {
           state: "COMPLETED",
           finishedAt,
           dispatchStatus: "completed",
+          // The task produced nothing to merge — do not record a phantom worker
+          // branch, otherwise the orchestrator treats it as merge evidence and
+          // falsely advances/merges the task.
+          workerBranch: null,
         });
         this.appendExecutionEvent(args, "cli_workflow_completed", {
           provider: args.provider,
@@ -586,7 +590,8 @@ export class CliWorkflowService {
       state: "COMPLETED" | "FAILED" | "QUOTA" | "BLOCKED";
       finishedAt: string;
       prUrl?: string;
-      workerBranch?: string;
+      /** `null` explicitly clears the worker branch (e.g. no-changes runs). */
+      workerBranch?: string | null;
       dispatchStatus: NonNullable<UpdateTaskDispatchInput["status"]>;
       errorMessage?: string;
     },

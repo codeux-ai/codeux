@@ -341,6 +341,12 @@ describe("CliWorkflowService unpushed commit detection", () => {
       expect.any(Object),
       expect.any(Object)
     );
+    // A no-changes run must NOT record a phantom worker branch — otherwise the
+    // orchestrator treats it as merge evidence and falsely advances the task.
+    expect(executionRepository.updateTaskRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ state: "COMPLETED", workerBranch: null }),
+    );
     // ensure no stats are emitted
     expect(executionRepository.appendTaskRunEvent).not.toHaveBeenCalledWith(
       "run-1",

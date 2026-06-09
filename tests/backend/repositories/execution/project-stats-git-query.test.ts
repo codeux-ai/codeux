@@ -153,4 +153,56 @@ describe("queryProjectGitStats", () => {
     expect(result.totals.prCount).toBe(1);
     expect(result.totals.mergedCount).toBe(1);
   });
+
+  it("collapses re-opened merge-conflict attention items into episodes instead of counting every poll", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-git-stats-conflict-"));
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const db = storage.db;
+
+    const projectId = randomUUID();
+    db.prepare("INSERT INTO projects (id, slug, name, base_dir, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?)").run(projectId, "conflict-slug", "Conflict Project", "2024-03-01T00:00:00Z", "2024-03-01T00:00:00Z");
+
+    const sprintId = randomUUID();
+    db.prepare("INSERT INTO sprints (id, project_id, name, slug, status, created_at, updated_at) VALUES (?, ?, ?, 'slug', ?, ?, ?)").run(sprintId, projectId, "S3", "open", "2024-03-01T00:00:00Z", "2024-03-01T00:00:00Z");
+
+    const sprintRunId = randomUUID();
+    db.prepare("INSERT INTO sprint_runs (id, project_id, sprint_id, status, trigger_type, created_at, updated_at, executor_mode) VALUES (?, ?, ?, ?, 'manual', ?, ?, ?)").run(sprintRunId, projectId, sprintId, "completed", "2024-03-01T00:00:00Z", "2024-03-01T00:00:00Z", "autonomous");
+
+    const taskId = randomUUID();
+    db.prepare("INSERT INTO tasks (id, project_id, sprint_id, title, is_merged, status, task_key, prompt_markdown, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)").run(taskId, projectId, sprintId, "T1", 0, "open", "KEY-1", "2024-03-01T00:00:00Z", "2024-03-01T00:00:00Z");
+
+    // One ongoing conflict re-detected every 30s for several minutes (polling churn),
+    // then a genuinely separate conflict more than 5 minutes later.
+    const insertConflict = (openedAt: string) => {
+      db.prepare(
+        "INSERT INTO project_attention_items (id, project_id, sprint_id, task_id, sprint_run_id, attention_type, severity, owner_type, status, title, summary_markdown, opened_at, updated_at) VALUES (?, ?, ?, ?, ?, 'merge_conflict', 'high', 'worker', 'resolved', 'Merge conflict for T1', '', ?, ?)",
+      ).run(randomUUID(), projectId, sprintId, taskId, sprintRunId, openedAt, openedAt);
+    };
+    for (let i = 0; i < 10; i++) {
+      const openedAt = new Date(Date.parse("2024-03-01T10:00:00Z") + i * 30_000).toISOString();
+      insertConflict(openedAt);
+    }
+    // Separate episode ~10 minutes after the first one started.
+    insertConflict("2024-03-01T10:10:00Z");
+
+    const rangeStartIso = "2024-03-01T00:00:00Z";
+    const rangeEndIso = "2024-03-02T00:00:00Z";
+    const bucketSizeMs = 3600 * 1000;
+    const firstBucketStartMs = new Date("2024-03-01T00:00:00Z").getTime();
+    const buckets = [];
+    for (let i = 0; i < 24; i++) {
+      const startMs = firstBucketStartMs + i * bucketSizeMs;
+      buckets.push({
+        bucketStart: new Date(startMs).toISOString(),
+        bucketEnd: new Date(startMs + bucketSizeMs).toISOString(),
+        label: "Hour " + i,
+      });
+    }
+
+    const result = queryProjectGitStats(db, projectId, rangeStartIso, rangeEndIso, buckets as any, bucketSizeMs, firstBucketStartMs);
+
+    // 11 raw rows collapse to 2 genuine conflict episodes.
+    expect(result.totals.mergeConflictCount).toBe(2);
+    expect(result.taskUsage.get(taskId)?.mergeConflictCount).toBe(2);
+  });
 });

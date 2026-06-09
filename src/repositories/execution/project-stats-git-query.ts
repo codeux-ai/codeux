@@ -152,21 +152,44 @@ export function queryProjectGitStats(
     sprintMetrics.mergedCount += mergedCount;
   }
 
-  // Process merge conflicts
+  // Process merge conflicts.
+  //
+  // A single unresolved conflict is re-detected on every watch-loop cycle, so its
+  // attention item is repeatedly resolved and re-opened. Counting raw rows therefore
+  // inflates the conflict metric into the thousands for what is really one conflict.
+  // Collapse re-opens that happen within MERGE_CONFLICT_EPISODE_GAP_SECONDS of the
+  // previous conflict for the same task/sprint into a single episode, so the metric
+  // reflects genuine conflict occurrences rather than polling churn.
+  const MERGE_CONFLICT_EPISODE_GAP_SECONDS = 300;
   const mergeConflictAggregations = db.prepare(`
+    WITH conflicts AS (
+      SELECT
+        id,
+        task_id,
+        opened_at,
+        COALESCE(sprint_run_id, sprint_id) as sprint_key,
+        (CAST(strftime('%s', opened_at) AS REAL) * 1000 - ?) / ? as raw_bucket_index,
+        LAG(opened_at) OVER (
+          PARTITION BY task_id, COALESCE(sprint_run_id, sprint_id)
+          ORDER BY opened_at
+        ) as prev_opened_at
+      FROM project_attention_items
+      WHERE project_id = ?
+        AND attention_type = 'merge_conflict'
+        AND opened_at >= ?
+        AND opened_at < ?
+        AND task_id IS NOT NULL
+    )
     SELECT
       task_id,
-      COALESCE(sprint_run_id, sprint_id) as sprint_key,
-      (CAST(strftime('%s', opened_at) AS REAL) * 1000 - ?) / ? as raw_bucket_index,
+      sprint_key,
+      raw_bucket_index,
       COUNT(id) as conflict_count
-    FROM project_attention_items
-    WHERE project_id = ?
-      AND attention_type = 'merge_conflict'
-      AND opened_at >= ?
-      AND opened_at < ?
-      AND task_id IS NOT NULL
-    GROUP BY task_id, COALESCE(sprint_run_id, sprint_id), raw_bucket_index
-  `).all(firstBucketStartMs, bucketSizeMs, projectId, rangeStartIso, rangeEndIso) as Array<{
+    FROM conflicts
+    WHERE prev_opened_at IS NULL
+      OR (CAST(strftime('%s', opened_at) AS REAL) - CAST(strftime('%s', prev_opened_at) AS REAL)) > ?
+    GROUP BY task_id, sprint_key, raw_bucket_index
+  `).all(firstBucketStartMs, bucketSizeMs, projectId, rangeStartIso, rangeEndIso, MERGE_CONFLICT_EPISODE_GAP_SECONDS) as Array<{
     task_id: string;
     sprint_key: string;
     raw_bucket_index: number | null;

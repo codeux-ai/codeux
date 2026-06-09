@@ -202,8 +202,10 @@ it("isolates runtime task states and execution metadata to the correct sprint sc
     expect(result[0]?.status).toBe("PENDING");
     expect(result[0]?.session_id).toBeUndefined();
 
-    // The sprint 2 task SHOULD pick up the sprint 2 runtime state
+    // The sprint 2 task SHOULD pick up the sprint 2 runtime state. The dispatch
+    // is still RUNNING (taskRunState RUNNING), so the live phase stays RUNNING —
+    // a finished-but-still-running dispatch is no longer assumed COMPLETED.
     expect(result[1]?.sprint_id).toBe("sprint-2");
-    expect(result[1]?.status).toBe("CODING_COMPLETED");
+    expect(result[1]?.status).toBe("RUNNING");
     expect(result[1]?.session_id).toBe("session-2");
   });

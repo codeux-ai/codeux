@@ -594,6 +594,40 @@ export class VirtualWorkerService {
     }
     const sourceBranch = sourceBranchRaw.trim();
     const targetBranch = this.readRequiredString(conflictingBranches?.target ?? payload.featureBranch, "targetBranch");
+    const gitAuth: GitHttpAuthOptions = {
+      githubToken: settings.git.githubToken,
+      gitlabToken: settings.git.gitlabToken,
+    };
+
+    // A previous cycle may already have pushed the resolution; GitHub lags in recomputing PR
+    // mergeability, so the conflict keeps being re-detected. If the target is already merged
+    // into the source branch on the remote, skip the (expensive) container run and just clear
+    // the attention item — re-dispatching here would only spin up a no-op worker.
+    if (settings.git.githubMode !== "LOCAL"
+      && await this.isMergeConflictResolvedOnRemote(repoPath, sourceBranch, targetBranch, gitAuth)) {
+      if (item.taskId) {
+        this.deps.guardrailService?.record(guardrailScope, item.taskId, "merge_conflict");
+      }
+      this.deps.projectAttentionService.resolveItem(item.id, {
+        status: "resolved",
+        reason: "virtual_worker_merge_conflict_already_resolved",
+        resolutionSummaryMarkdown: [
+          item.summaryMarkdown.trim(),
+          "",
+          `The merge conflict was already resolved on the remote: \`origin/${targetBranch}\` is contained in \`origin/${sourceBranch}\`. Waiting for the upstream PR to refresh its mergeability.`,
+        ].join("\n"),
+        workerEndpointId,
+        payloadPatch: {
+          handledBy: "virtual_worker",
+          provider,
+          sourceBranch,
+          targetBranch,
+          alreadyResolved: true,
+        },
+      });
+      return;
+    }
+
     const sessionId = `virtual-merge-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);
     const title = item.title;
@@ -623,10 +657,6 @@ export class VirtualWorkerService {
     });
 
     let cleanedUp = false;
-    const gitAuth: GitHttpAuthOptions = {
-      githubToken: settings.git.githubToken,
-      gitlabToken: settings.git.gitlabToken,
-    };
     try {
       const effectiveWorkflowSettings = await this.resolveVirtualWorkerWorkflowSettings({
         workflowSettings,
@@ -712,6 +742,10 @@ export class VirtualWorkerService {
         patchText,
         commitMessage: `fix(merge): resolve ${targetBranch} into ${sourceBranch}`,
         parentRefs: settings.git.githubMode === "LOCAL" ? [targetBranch] : [`origin/${targetBranch}`],
+        // A conflict resolved by keeping the source side leaves the tree unchanged but
+        // still needs a merge commit recording the target as a parent, otherwise the PR
+        // keeps reporting the conflict and the resolution loops forever.
+        forceMergeCommit: true,
         gitAuth,
         gitIdentity: effectiveWorkflowSettings.containerMountGitConfig
           ? undefined
@@ -1242,6 +1276,26 @@ export class VirtualWorkerService {
 
     if (!result.ok) {
       throw new Error(result.stderr || result.stdout || "Provider failed without output.");
+    }
+  }
+
+  private async isMergeConflictResolvedOnRemote(
+    repoPath: string,
+    sourceBranch: string,
+    targetBranch: string,
+    gitAuth: GitHttpAuthOptions,
+  ): Promise<boolean> {
+    try {
+      const env = await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, gitAuth);
+      await runCommandStrict("git", ["fetch", "origin", sourceBranch, targetBranch], repoPath, env ?? process.env);
+      await runCommandStrict(
+        "git",
+        ["merge-base", "--is-ancestor", `origin/${targetBranch}`, `origin/${sourceBranch}`],
+        repoPath,
+      );
+      return true;
+    } catch {
+      return false;
     }
   }
 

@@ -44,3 +44,22 @@ export function applyPendingTaskRuntimeReset(
   Object.assign(task, reset);
   return task;
 }
+
+/**
+ * Clears the merge projection on an in-memory task that is re-entering the
+ * coding stage (QA follow-up, retry). A task that is coding again must not carry
+ * a stale CI / QA / MERGED indicator or a merged flag. The worker branch / PR
+ * are preserved so a continued run can keep building on the same branch.
+ */
+export function clearMergeProjectionForRerun(task: Subtask): void {
+  task.merge_indicator = undefined;
+  task.is_merged = false;
+  task.intervention_owner = undefined;
+  task.intervention_hint = undefined;
+}
+
+/** The persisted equivalent of {@link clearMergeProjectionForRerun}. */
+export const MERGE_PROJECTION_RESET = {
+  isMerged: false,
+  mergeIndicator: null,
+} as const;

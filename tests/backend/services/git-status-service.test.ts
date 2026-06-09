@@ -230,6 +230,38 @@ describe("GitStatusService", () => {
     expect(status.branch).toBe("main");
   });
 
+  it("shares repo-level git plumbing across callers instead of spawning a batch per call", async () => {
+    // The repo plumbing cache is bypassed under NODE_ENV=test; flip it on to assert the
+    // consolidation that prevents per-sprint container spin-ups in production.
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    GitStatusService.invalidateCache();
+    try {
+      const calls: string[][] = [];
+      const sharedRunner = vi.fn(async (cmd: string, args: string[]) => {
+        calls.push([cmd, ...args]);
+        if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+        if (args.includes("--show-toplevel")) return { ok: true, stdout: "/shared-repo\n" };
+        if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+        if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+        if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+        return { ok: true, stdout: "[]" };
+      });
+
+      // Two callers (e.g. two sprints) on the same repo.
+      const svcA = new GitStatusService("/shared-repo", sharedRunner as any);
+      const svcB = new GitStatusService("/shared-repo", sharedRunner as any);
+      await svcA.getStatus("LOCAL");
+      await svcB.getStatus("LOCAL");
+
+      const insideCalls = calls.filter((c) => c.includes("--is-inside-work-tree"));
+      expect(insideCalls).toHaveLength(1);
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+      GitStatusService.invalidateCache();
+    }
+  });
+
   it("returns unavailable if not inside git worktree", async () => {
     runner.mockResolvedValue({ ok: false, stdout: "false\n", stderr: "not a git repo" });
     const status = await service.getStatus("REMOTE");

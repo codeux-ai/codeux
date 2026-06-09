@@ -40,6 +40,15 @@ export interface ResolvePullRequestResult {
   prUrl: string | null;
 }
 
+interface RepoPlumbing {
+  isRepository: boolean;
+  repositoryRoot: string | null;
+  branch: string | null;
+  hasRemote: boolean;
+  dirty: boolean;
+  remoteUrl: string | null;
+}
+
 const FAILED_RUN_DETAILS_LIMIT = 3;
 const FAILED_JOBS_PER_RUN_LIMIT = 3;
 
@@ -61,15 +70,27 @@ export class GitStatusService {
    * repos only ever receive the GitHub token and GitLab repos only the GitLab
    * token, so cross-host token contamination cannot happen.
    */
-  private async resolveProviderAndToken(tokens: GitHostTokens): Promise<{ provider: GitProvider; token?: string }> {
-    const remoteUrlRes = await this.queryClient.gitRemoteUrl("origin");
-    const remoteUrl = remoteUrlRes.ok ? remoteUrlRes.stdout.trim() : null;
+  private async resolveProviderAndToken(tokens: GitHostTokens, cachedRemoteUrl?: string | null): Promise<{ provider: GitProvider; token?: string }> {
+    // Reuse the origin URL already read by the cached repo plumbing when available; otherwise
+    // (callers without plumbing context) fall back to a direct lookup.
+    let remoteUrl = cachedRemoteUrl ?? null;
+    if (cachedRemoteUrl === undefined) {
+      const remoteUrlRes = await this.queryClient.gitRemoteUrl("origin");
+      remoteUrl = remoteUrlRes.ok ? remoteUrlRes.stdout.trim() : null;
+    }
     const { provider, hostDomain, repoTarget } = resolveRepositoryHost(remoteUrl);
     const token = selectHostToken(provider, tokens);
     this.queryClient.setProvider(provider, hostDomain, repoTarget, this.preferApi && !!token);
     return { provider, token };
   }
   private static statusCache = new Map<string, { timestamp: number; promise: Promise<GitTrackingStatus> }>();
+
+  // Local git plumbing (rev-parse / branch / remote / status) is repository-level and does not
+  // depend on the PR/CI tracking request, so it is cached per repoPath and shared across every
+  // sprint/dashboard caller. This stops the same project from spinning up a fresh batch of
+  // `alpine/git` containers on every watch-loop cycle for each feature branch.
+  private static readonly REPO_PLUMBING_CACHE_MS = 10_000;
+  private static repoPlumbingCache = new Map<string, { timestamp: number; promise: Promise<RepoPlumbing> }>();
 
   public static invalidateCache(repoPath?: string): void {
     if (repoPath) {
@@ -78,9 +99,63 @@ export class GitStatusService {
           GitStatusService.statusCache.delete(key);
         }
       }
+      GitStatusService.repoPlumbingCache.delete(repoPath);
     } else {
       GitStatusService.statusCache.clear();
+      GitStatusService.repoPlumbingCache.clear();
     }
+  }
+
+  /**
+   * Run (and cache for {@link REPO_PLUMBING_CACHE_MS}) the repository-level git plumbing. Folds
+   * `is-inside-work-tree`/`show-toplevel` into one git call and is shared across all callers for
+   * the same repoPath so concurrent sprints reuse a single batch of git operations.
+   */
+  private async getRepoPlumbing(): Promise<RepoPlumbing> {
+    if (process.env.NODE_ENV === "test") {
+      return this.fetchRepoPlumbing();
+    }
+    const key = this.repoPath;
+    const cached = GitStatusService.repoPlumbingCache.get(key);
+    if (cached && Date.now() - cached.timestamp < GitStatusService.REPO_PLUMBING_CACHE_MS) {
+      return cached.promise;
+    }
+    const promise = this.fetchRepoPlumbing();
+    GitStatusService.repoPlumbingCache.set(key, { timestamp: Date.now(), promise });
+    try {
+      return await promise;
+    } catch (error) {
+      GitStatusService.repoPlumbingCache.delete(key);
+      throw error;
+    }
+  }
+
+  private async fetchRepoPlumbing(): Promise<RepoPlumbing> {
+    const insideResult = await this.queryClient.gitRevParseIsInsideWorkTree();
+    const isInsideWorkTree = insideResult.ok && (insideResult.stdout ?? "").trim() === "true";
+    if (!isInsideWorkTree) {
+      return { isRepository: false, repositoryRoot: null, branch: null, hasRemote: false, dirty: false, remoteUrl: null };
+    }
+
+    // These remaining queries are independent and read-only, so run them concurrently rather
+    // than spinning up the helper containers one after another. The origin URL is fetched here
+    // too so provider/host resolution reuses it instead of issuing its own per-call git command.
+    const [rootResult, branchResult, remoteResult, dirtyResult, remoteUrlResult] = await Promise.all([
+      this.queryClient.gitRevParseShowToplevel(),
+      this.queryClient.gitBranchShowCurrent(),
+      this.queryClient.gitRemote(),
+      this.queryClient.gitStatusPorcelain(),
+      this.queryClient.gitRemoteUrl("origin"),
+    ]);
+
+    return {
+      isRepository: true,
+      repositoryRoot: rootResult.ok ? (rootResult.stdout ?? "").trim() : null,
+      branch: branchResult.ok ? (branchResult.stdout ?? "").trim() || null : null,
+      hasRemote: remoteResult.ok && (remoteResult.stdout ?? "").trim().length > 0,
+      dirty: dirtyResult.ok && (dirtyResult.stdout ?? "").trim().length > 0,
+      remoteUrl: remoteUrlResult.ok ? (remoteUrlResult.stdout ?? "").trim() || null : null,
+    };
   }
 
   private queryClient: GitStatusQueryClient;
@@ -255,8 +330,8 @@ export class GitStatusService {
     // local git plumbing calls do not require a host token.
     let effectiveToken: string | undefined;
 
-    const gitRepoCheck = await this.queryClient.gitRevParseIsInsideWorkTree(effectiveToken);
-    if (!gitRepoCheck.ok || gitRepoCheck.stdout.trim() !== "true") {
+    const plumbing = await this.getRepoPlumbing();
+    if (!plumbing.isRepository) {
       return {
         mode,
         available: false,
@@ -273,22 +348,14 @@ export class GitStatusService {
       };
     }
 
-    const rootResult = await this.queryClient.gitRevParseShowToplevel(effectiveToken);
-    const branchResult = await this.queryClient.gitBranchShowCurrent(effectiveToken);
-    const remoteResult = await this.queryClient.gitRemote(effectiveToken);
-    const dirtyResult = await this.queryClient.gitStatusPorcelain(effectiveToken);
-
-    const repositoryRoot = rootResult.ok ? rootResult.stdout.trim() : null;
-    const branch = branchResult.ok ? branchResult.stdout.trim() || null : null;
-    const hasRemote = remoteResult.ok && remoteResult.stdout.trim().length > 0;
-    const dirty = dirtyResult.ok && dirtyResult.stdout.trim().length > 0;
+    const { repositoryRoot, branch, hasRemote, dirty } = plumbing;
 
     if (!hasRemote && mode === "REMOTE") {
       warnings.push("Remote mode is selected but no git remote is configured.");
     }
 
     if (mode === "REMOTE") {
-      const resolved = await this.resolveProviderAndToken(normalizedTokens);
+      const resolved = await this.resolveProviderAndToken(normalizedTokens, plumbing.remoteUrl);
       effectiveToken = resolved.token;
     }
 

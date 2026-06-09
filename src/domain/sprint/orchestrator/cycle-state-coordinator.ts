@@ -347,7 +347,10 @@ export function hasMergeStateChanges(previous: Map<string, TaskStateSnapshot>, s
 
 export function resolveCiStatusCacheTtlMs(watchLoopIntervalSeconds: number | undefined): number {
   const watchLoopIntervalMs = Math.max(1, Number(watchLoopIntervalSeconds || 0)) * 1000;
-  return Math.min(15_000, Math.max(3_000, watchLoopIntervalMs));
+  // Floor at 10s so a project's git/CI status is refreshed at most every ~10s regardless of how
+  // tight the watch-loop interval is. This keeps git operations (and the containers backing them)
+  // consolidated per project instead of spinning up on every short cycle.
+  return Math.min(15_000, Math.max(10_000, watchLoopIntervalMs));
 }
 
 export function hasActiveCiFixAttentionAttempt(

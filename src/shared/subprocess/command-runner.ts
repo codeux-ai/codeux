@@ -2,6 +2,11 @@ import { spawn } from "child_process";
 import { createReadStream } from "fs";
 import * as fs from "fs";
 import * as path from "path";
+import { createHash } from "crypto";
+import {
+  DockerHelperContainerPool,
+  HELPER_LABEL,
+} from "../../infrastructure/providers/cli/docker-helper-pool.js";
 
 export interface CommandResult {
   ok: boolean;
@@ -28,11 +33,69 @@ interface ResolvedCommand {
   containerHostCwd?: string;
 }
 
+const GIT_HELPER_IMAGE = "alpine/git";
+const CONTAINER_REPO_ROOT = "/workspace";
+
+/**
+ * Lazily-created, process-wide pool of persistent `alpine/git` helper containers — one per
+ * (repo working directory, uid:gid). Read/write git commands that only need the working tree
+ * mounted are run via `docker exec` into the warm container instead of a throwaway
+ * `docker run --rm` per command, which previously produced constant container churn during
+ * polling (status, fetch, branch sync, …). Created lazily so the module import cycle with
+ * cli-process-runner resolves before first use.
+ */
+let gitHelperPool: DockerHelperContainerPool | null = null;
+function getGitHelperPool(): DockerHelperContainerPool {
+  if (!gitHelperPool) {
+    gitHelperPool = new DockerHelperContainerPool({
+      nameFor: (key) => `code-ux-git-helper-${createHash("sha1").update(key).digest("hex").slice(0, 24)}`,
+      buildCreateArgs: (key, name) => {
+        const parsed = JSON.parse(key) as { cwd: string; uid?: number; gid?: number };
+        const userArgs = parsed.uid !== undefined && parsed.gid !== undefined && parsed.uid !== 0
+          ? ["--user", `${parsed.uid}:${parsed.gid}`]
+          : [];
+        return [
+          "run",
+          "-d",
+          "--name",
+          name,
+          "--label",
+          `${HELPER_LABEL}=git`,
+          "--workdir",
+          CONTAINER_REPO_ROOT,
+          "--mount",
+          `type=bind,source=${parsed.cwd},target=${CONTAINER_REPO_ROOT}`,
+          ...userArgs,
+          "-e",
+          `HOME=${CONTAINER_REPO_ROOT}/.code-ux-home`,
+          "--entrypoint",
+          "sh",
+          GIT_HELPER_IMAGE,
+          "-c",
+          "tail -f /dev/null",
+        ];
+      },
+    });
+  }
+  return gitHelperPool;
+}
+
+/** Removes the persistent git helper container bound to a working directory (call before deleting it). */
+export async function releaseGitHelperForCwd(cwd: string): Promise<void> {
+  if (!gitHelperPool) {
+    return;
+  }
+  const resolved = path.resolve(cwd);
+  const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
+  const getGid = (process as NodeJS.Process & { getgid?: () => number }).getgid;
+  const uid = getUid ? getUid() : undefined;
+  const gid = getGid ? getGid() : undefined;
+  await gitHelperPool.release(JSON.stringify({ cwd: resolved, uid, gid })).catch(() => undefined);
+}
+
 export class CommandRunner {
   private static readonly DEFAULT_MAX_STDERR_CHARS = 4096;
   private static readonly MAX_COMMAND_DISPLAY_CHARS = 2000;
-  private static readonly GIT_HELPER_IMAGE = "alpine/git";
-  private static readonly CONTAINER_REPO_ROOT = "/workspace";
 
   /**
    * Runs a command and returns a Promise that resolves with the execution result.
@@ -42,7 +105,69 @@ export class CommandRunner {
     args: string[],
     options: CommandOptions = {}
   ): Promise<CommandResult> {
+    // Poolable git commands (containerized, only the working tree mounted, no stdin) are
+    // executed inside a persistent helper container instead of a throwaway `docker run --rm`.
+    if (command === "git" && this.shouldRunGitInContainer(options) && !options.stdinFile) {
+      const cwd = path.resolve(options.cwd ?? process.cwd());
+      const env = options.env ?? process.env;
+      if (this.buildGitContainerMountArgs(cwd, args, env).length === 0) {
+        return this.runPooledGitCommand(cwd, args, env, options);
+      }
+    }
+
     const resolvedCommand = this.resolveCommand(command, args, options);
+    return this.spawnProcess(resolvedCommand, options);
+  }
+
+  private async runPooledGitCommand(
+    cwd: string,
+    args: string[],
+    env: NodeJS.ProcessEnv,
+    options: CommandOptions,
+  ): Promise<CommandResult> {
+    const pool = getGitHelperPool();
+    const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
+    const getGid = (process as NodeJS.Process & { getgid?: () => number }).getgid;
+    const poolKey = JSON.stringify({
+      cwd,
+      uid: getUid ? getUid() : undefined,
+      gid: getGid ? getGid() : undefined,
+    });
+    const execPrefix = ["exec", ...this.buildGitContainerEnvArgs(env)];
+    const execCommand = ["git", ...this.rewriteGitArgsForContainer(cwd, args)];
+
+    const runViaExec = async (): Promise<CommandResult> => {
+      const containerId = await pool.ensure(poolKey);
+      pool.touch(poolKey);
+      return this.spawnProcess(
+        { command: "docker", args: [...execPrefix, containerId, ...execCommand], containerHostCwd: cwd },
+        options,
+      );
+    };
+
+    let result: CommandResult;
+    try {
+      result = await runViaExec();
+    } catch {
+      // Could not start/reach the helper — fall back to a one-shot run --rm so the op still works.
+      return this.spawnProcess(this.resolveCommand("git", args, options), options);
+    }
+
+    if (!result.ok && pool.isContainerGone(result)) {
+      pool.invalidate(poolKey);
+      try {
+        result = await runViaExec();
+      } catch {
+        return this.spawnProcess(this.resolveCommand("git", args, options), options);
+      }
+    }
+    return result;
+  }
+
+  private spawnProcess(
+    resolvedCommand: ResolvedCommand,
+    options: CommandOptions = {},
+  ): Promise<CommandResult> {
     const {
       cwd,
       env = process.env,
@@ -261,17 +386,17 @@ export class CommandRunner {
         "--rm",
         "-i",
         "--workdir",
-        CommandRunner.CONTAINER_REPO_ROOT,
+        CONTAINER_REPO_ROOT,
         "--mount",
-        `type=bind,source=${cwd},target=${CommandRunner.CONTAINER_REPO_ROOT}`,
+        `type=bind,source=${cwd},target=${CONTAINER_REPO_ROOT}`,
         ...mounts,
         ...userArgs,
         "-e",
-        `HOME=${CommandRunner.CONTAINER_REPO_ROOT}/.code-ux-home`,
+        `HOME=${CONTAINER_REPO_ROOT}/.code-ux-home`,
         ...envArgs,
         "--entrypoint",
         "git",
-        CommandRunner.GIT_HELPER_IMAGE,
+        GIT_HELPER_IMAGE,
         ...this.rewriteGitArgsForContainer(cwd, args),
       ],
     };
@@ -349,8 +474,8 @@ export class CommandRunner {
       }
       const relative = path.relative(cwd, arg);
       return relative.length === 0
-        ? CommandRunner.CONTAINER_REPO_ROOT
-        : path.posix.join(CommandRunner.CONTAINER_REPO_ROOT, ...relative.split(path.sep));
+        ? CONTAINER_REPO_ROOT
+        : path.posix.join(CONTAINER_REPO_ROOT, ...relative.split(path.sep));
     });
   }
 
@@ -364,10 +489,10 @@ export class CommandRunner {
   private mapContainerPathLineToHost(line: string, cwd: string): string {
     const hasCarriageReturn = line.endsWith("\r");
     const cleanLine = hasCarriageReturn ? line.slice(0, -1) : line;
-    if (cleanLine === CommandRunner.CONTAINER_REPO_ROOT) {
+    if (cleanLine === CONTAINER_REPO_ROOT) {
       return `${cwd}${hasCarriageReturn ? "\r" : ""}`;
     }
-    const prefix = `${CommandRunner.CONTAINER_REPO_ROOT}/`;
+    const prefix = `${CONTAINER_REPO_ROOT}/`;
     if (!cleanLine.startsWith(prefix)) {
       return line;
     }

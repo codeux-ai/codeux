@@ -16,7 +16,12 @@ function taskHasMergeEvidence(task: Pick<Subtask, "worker_branch" | "pr_url">): 
 }
 
 function isMergeSettled(task: Pick<Subtask, "is_merged" | "merge_indicator">): boolean {
-  return Boolean(task.is_merged) || task.merge_indicator === "MERGED" || task.merge_indicator === "AUTOMERGE";
+  return (
+    Boolean(task.is_merged) ||
+    task.merge_indicator === "MERGED" ||
+    task.merge_indicator === "AUTOMERGE" ||
+    task.merge_indicator === "PR_ONLY"
+  );
 }
 
 function resolveTaskProgressPhase(
@@ -134,7 +139,10 @@ function resolveTerminalExecutionPhase(
       case "QUOTA":
         return "QUOTA";
       default:
-        return "COMPLETED";
+        // A finished dispatch with no clear terminal run state should not be
+        // assumed COMPLETED — fall back to the task's own status/merge stage so
+        // we never invent a completion that did not happen.
+        return null;
     }
   }
 

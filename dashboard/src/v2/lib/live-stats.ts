@@ -252,9 +252,20 @@ function resolveEventStage(
     case "action_required_auto_replied":
     case "action_required_auto_resumed":
       return { stage: "coding" };
-    case "protocol_merge_required":
     case "cli_pr_finalized":
+      // Finalizing the PR is the tail of coding, not CI. Mapping it to "ci" used
+      // to mislabel the post-coding wait (before QA/real CI starts) as CI. The
+      // real CI stage is signaled by ci_gate_status events.
+      return { stage: "coding" };
+    case "protocol_merge_required":
       return { stage: "ci" };
+    case "qa_review_started":
+    case "qa_review_passed":
+    case "qa_review_changes_requested":
+    case "qa_review_failed":
+      // The QA review runs after coding completes and can take minutes — surface
+      // it as its own stage so the live view advances coding → QA and times it.
+      return { stage: "qa" };
     case "ci_gate_status":
       return resolveCiGateStage(event);
     case "cli_git_no_changes":

@@ -21,6 +21,7 @@ import { DockerBootstrapBuilder } from "./docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.js";
 import { DockerSetupImageCache } from "./docker-setup-image-cache.js";
 import { WorkspaceManager } from "./workspace-manager.js";
+import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
 import {
@@ -72,6 +73,7 @@ export interface IDockerRunner {
 export class DockerRunner implements IDockerRunner {
   private readonly dockerHintLoggedSessions = new Set<string>();
   private readonly workspaceManager = new WorkspaceManager();
+  private readonly volumeHelperPool: WorkspaceVolumeHelperPool = workspaceVolumeHelperPool;
 
   async ensureWorkspace(args: {
     cwd: string;
@@ -261,28 +263,7 @@ export class DockerRunner implements IDockerRunner {
   async readWorkspaceFile(cwd: string, targetPath: string): Promise<string | null> {
     const workspace = this.resolveWorkspace(cwd);
     try {
-      const result = await runStreamingCommand(
-        "docker",
-        [
-          "run",
-          "--rm",
-          "-i",
-          "--workdir",
-          CONTAINER_WORKSPACE_ROOT,
-          "--mount",
-          toDockerMountArg({
-            source: workspace.volumeName,
-            destination: CONTAINER_WORKSPACE_ROOT,
-            readonly: false,
-            type: "volume",
-          }),
-          "alpine:3.20",
-          "cat",
-          targetPath,
-        ],
-        process.cwd(),
-        process.env,
-      );
+      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["cat", targetPath]);
       return result.ok ? result.stdout : null;
     } catch {
       return null;
@@ -292,28 +273,7 @@ export class DockerRunner implements IDockerRunner {
   async readWorkspaceFileBase64(cwd: string, targetPath: string): Promise<string | null> {
     const workspace = this.resolveWorkspace(cwd);
     try {
-      const result = await runStreamingCommand(
-        "docker",
-        [
-          "run",
-          "--rm",
-          "-i",
-          "--workdir",
-          CONTAINER_WORKSPACE_ROOT,
-          "--mount",
-          toDockerMountArg({
-            source: workspace.volumeName,
-            destination: CONTAINER_WORKSPACE_ROOT,
-            readonly: true,
-            type: "volume",
-          }),
-          "alpine:3.20",
-          "base64",
-          targetPath,
-        ],
-        process.cwd(),
-        process.env,
-      );
+      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["base64", targetPath]);
       return result.ok ? result.stdout : null;
     } catch {
       return null;
@@ -324,29 +284,7 @@ export class DockerRunner implements IDockerRunner {
     const workspace = this.resolveWorkspace(cwd);
     try {
       const script = `f=$(ls -1t "${dirPath}"/${glob} 2>/dev/null | head -1); [ -n "$f" ] && cat "$f"`;
-      const result = await runStreamingCommand(
-        "docker",
-        [
-          "run",
-          "--rm",
-          "-i",
-          "--workdir",
-          CONTAINER_WORKSPACE_ROOT,
-          "--mount",
-          toDockerMountArg({
-            source: workspace.volumeName,
-            destination: CONTAINER_WORKSPACE_ROOT,
-            readonly: false,
-            type: "volume",
-          }),
-          "alpine:3.20",
-          "sh",
-          "-c",
-          script,
-        ],
-        process.cwd(),
-        process.env,
-      );
+      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["sh", "-c", script]);
       return result.ok && result.stdout.trim() ? result.stdout : null;
     } catch {
       return null;
@@ -364,29 +302,7 @@ export class DockerRunner implements IDockerRunner {
     const workspace = this.resolveWorkspace(cwd);
     try {
       const script = `first=1; printf '['; for f in "${dirPath}"/*.json; do [ -e "$f" ] || continue; [ "$first" -eq 1 ] || printf ','; cat "$f"; first=0; done; printf ']'`;
-      const result = await runStreamingCommand(
-        "docker",
-        [
-          "run",
-          "--rm",
-          "-i",
-          "--workdir",
-          CONTAINER_WORKSPACE_ROOT,
-          "--mount",
-          toDockerMountArg({
-            source: workspace.volumeName,
-            destination: CONTAINER_WORKSPACE_ROOT,
-            readonly: true,
-            type: "volume",
-          }),
-          "alpine:3.20",
-          "sh",
-          "-c",
-          script,
-        ],
-        process.cwd(),
-        process.env,
-      );
+      const result = await this.volumeHelperPool.exec(workspace.volumeName, ["sh", "-c", script]);
       if (!result.ok) return null;
       const trimmed = result.stdout.trim();
       return trimmed && trimmed !== "[]" ? trimmed : null;
@@ -399,29 +315,7 @@ export class DockerRunner implements IDockerRunner {
   async removeWorkspaceDir(cwd: string, dirPath: string): Promise<void> {
     const workspace = this.resolveWorkspace(cwd);
     try {
-      await runStreamingCommand(
-        "docker",
-        [
-          "run",
-          "--rm",
-          "-i",
-          "--workdir",
-          CONTAINER_WORKSPACE_ROOT,
-          "--mount",
-          toDockerMountArg({
-            source: workspace.volumeName,
-            destination: CONTAINER_WORKSPACE_ROOT,
-            readonly: false,
-            type: "volume",
-          }),
-          "alpine:3.20",
-          "rm",
-          "-rf",
-          dirPath,
-        ],
-        process.cwd(),
-        process.env,
-      );
+      await this.volumeHelperPool.exec(workspace.volumeName, ["rm", "-rf", dirPath]);
     } catch {
       // best-effort cleanup
     }

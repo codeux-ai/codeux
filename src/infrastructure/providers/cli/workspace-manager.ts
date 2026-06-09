@@ -7,6 +7,8 @@ import { sanitizeToken } from "../../../services/cli-workflow-utils.js";
 import { CliWorkflowSettings } from "../../../contracts/app-types.js";
 import { CommandResult, runCommandStrict } from "../../../services/cli-process-runner.js";
 import { extractPathHints } from "../../../services/cli-workflow-text-utils.js";
+import { workspaceVolumeHelperPool } from "./workspace-volume-helper.js";
+import { releaseGitHelperForCwd } from "../../../shared/subprocess/command-runner.js";
 import {
   buildGitHttpAuthEnvForRepoWithFallbacks,
   buildNonInteractiveGitEnv,
@@ -398,10 +400,16 @@ export class WorkspaceManager implements IWorkspaceManager {
       if (!await this.isCodeUxManagedVolume(volumeName)) {
         return;
       }
+      // Tear down the persistent read helper first; it holds the volume mounted and would
+      // otherwise block its removal.
+      await workspaceVolumeHelperPool.releaseVolume(volumeName).catch(() => undefined);
       await runCommandStrict("docker", ["volume", "rm", "-f", volumeName], process.cwd()).catch(() => undefined);
       return;
     }
 
+    // Release the persistent git helper bound to the worktree before deleting it, so its bind
+    // mount does not keep the directory busy.
+    await releaseGitHelperForCwd(worktreePath).catch(() => undefined);
     await runCommandStrict("git", ["worktree", "remove", "--force", worktreePath], repoPath).catch(() => undefined);
     await fs.rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
     await runCommandStrict("git", ["worktree", "prune"], repoPath).catch(() => undefined);

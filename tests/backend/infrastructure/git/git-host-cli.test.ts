@@ -153,24 +153,24 @@ describe("GithubApiHostCli", () => {
     });
   });
 
+  function graphqlPrs(open: any[], merged: any[] = []) {
+    return { data: { repository: { open: { nodes: open }, merged: { nodes: merged } } } };
+  }
+
   describe("prListOpen", () => {
-    it("maps GitHub REST response to gh-compatible shape", async () => {
-      const prList = [
-        {
-          number: 10,
-          title: "My PR",
-          html_url: "https://github.com/owner/repo/pull/10",
-          state: "open",
-          draft: false,
-          head: { ref: "feature-branch", sha: "abc123" },
-          base: { ref: "main" },
-          mergeable_state: "clean",
-          updated_at: "2024-01-01T00:00:00Z",
-          comments: 2,
-          review_comments: 1,
-        },
-      ];
-      mockFetch([{ ok: true, body: prList }]);
+    it("maps the GraphQL response to the gh-compatible shape in a single call", async () => {
+      mockFetch([{ ok: true, body: graphqlPrs([{
+        number: 10,
+        title: "My PR",
+        url: "https://github.com/owner/repo/pull/10",
+        isDraft: false,
+        headRefName: "feature-branch",
+        baseRefName: "main",
+        mergeStateStatus: "CLEAN",
+        reviewDecision: "APPROVED",
+        updatedAt: "2024-01-01T00:00:00Z",
+        comments: { totalCount: 3 },
+      }]) }]);
 
       const res = await cli.prListOpen("tok");
       expect(res.ok).toBe(true);
@@ -186,37 +186,48 @@ describe("GithubApiHostCli", () => {
         headRefName: "feature-branch",
         baseRefName: "main",
         mergeStateStatus: "CLEAN",
-        reviewDecision: null,
+        reviewDecision: "APPROVED",
         comments: 3,
         statusCheckRollup: [],
       });
+
+      // A single GraphQL POST — no per-PR enrichment calls.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][0]).toContain("/graphql");
+      expect((fetchMock.mock.calls[0][1] as any).method).toBe("POST");
     });
 
-    it("keeps reviewDecision null without per-PR review enrichment", async () => {
-      const prList = [{ number: 1, title: "PR", html_url: "https://g.c/p/1", state: "open", draft: false,
-        head: { ref: "f", sha: "s1" }, base: { ref: "main" }, mergeable_state: "blocked",
-        updated_at: "2024-01-01T00:00:00Z", comments: 0, review_comments: 0 }];
-
-      mockFetch([{ ok: true, body: prList }]);
+    it("reports the computed mergeStateStatus (DIRTY) from GraphQL", async () => {
+      mockFetch([{ ok: true, body: graphqlPrs([{
+        number: 10, title: "Conflicted", url: "u", isDraft: false,
+        headRefName: "f", baseRefName: "main", mergeStateStatus: "DIRTY",
+        reviewDecision: null, updatedAt: "2024-01-01T00:00:00Z", comments: { totalCount: 0 },
+      }]) }]);
 
       const res = await cli.prListOpen("tok");
       const parsed = JSON.parse(res.stdout);
-      expect(parsed[0].reviewDecision).toBeNull();
-      expect(parsed[0].mergeStateStatus).toBe("BLOCKED");
+      expect(parsed[0].mergeStateStatus).toBe("DIRTY");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    it("leaves statusCheckRollup empty and reviewDecision null", async () => {
-      const prList = [{ number: 2, title: "PR", html_url: "https://g.c/p/2", state: "open", draft: false,
-        head: { ref: "f", sha: "s2" }, base: { ref: "main" }, mergeable_state: "clean",
-        updated_at: "2024-01-01T00:00:00Z", comments: 0, review_comments: 0 }];
-
-      mockFetch([{ ok: true, body: prList }]);
+    it("falls back to the REST list endpoint when GraphQL is unavailable", async () => {
+      const restList = [{
+        number: 11, title: "PR", html_url: "https://g.c/p/11", state: "open", draft: false,
+        head: { ref: "f", sha: "s" }, base: { ref: "main" }, mergeable_state: "clean",
+        updated_at: "2024-01-01T00:00:00Z", comments: 0, review_comments: 0,
+      }];
+      mockFetch([
+        { ok: false, status: 500, body: { message: "graphql down" } },
+        { ok: true, body: restList },
+      ]);
 
       const res = await cli.prListOpen("tok");
       expect(res.ok).toBe(true);
       const parsed = JSON.parse(res.stdout);
-      expect(parsed[0].statusCheckRollup).toEqual([]);
-      expect(parsed[0].reviewDecision).toBeNull();
+      expect(parsed[0].number).toBe(11);
+      expect(parsed[0].mergeStateStatus).toBe("CLEAN");
+      // Second call is the REST fallback list endpoint.
+      expect(fetchMock.mock.calls[1][0]).toContain("/repos/owner/repo/pulls?state=open");
     });
 
     it("returns error without token", async () => {
@@ -284,14 +295,11 @@ describe("GithubApiHostCli", () => {
   });
 
   describe("prListMerged", () => {
-    it("filters out non-merged closed PRs and maps fields", async () => {
-      const prs = [
-        { number: 7, title: "Merged", html_url: "https://g.c/p/7", merged_at: "2024-01-01T00:00:00Z",
-          head: { ref: "feat" }, base: { ref: "main" }, merged_by: { login: "alice" } },
-        { number: 8, title: "Closed not merged", html_url: "https://g.c/p/8", merged_at: null,
-          head: { ref: "other" }, base: { ref: "main" }, merged_by: null },
-      ];
-      mockFetch([{ ok: true, body: prs }]);
+    it("returns merged PRs from the shared GraphQL query", async () => {
+      mockFetch([{ ok: true, body: graphqlPrs([], [
+        { number: 7, title: "Merged", url: "https://g.c/p/7", mergedAt: "2024-01-01T00:00:00Z",
+          headRefName: "feat", baseRefName: "main", mergedBy: { login: "alice" } },
+      ]) }]);
 
       const res = await cli.prListMerged("tok");
       const parsed = JSON.parse(res.stdout);
@@ -303,6 +311,25 @@ describe("GithubApiHostCli", () => {
         mergedAt: "2024-01-01T00:00:00Z",
         mergedBy: { login: "alice" },
       });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][0]).toContain("/graphql");
+    });
+
+    it("falls back to the REST closed-PR list when GraphQL is unavailable", async () => {
+      mockFetch([
+        { ok: false, status: 500, body: { message: "graphql down" } },
+        { ok: true, body: [
+          { number: 7, title: "Merged", html_url: "https://g.c/p/7", merged_at: "2024-01-01T00:00:00Z",
+            head: { ref: "feat" }, base: { ref: "main" }, merged_by: { login: "alice" } },
+          { number: 8, title: "Closed not merged", html_url: "https://g.c/p/8", merged_at: null,
+            head: { ref: "other" }, base: { ref: "main" }, merged_by: null },
+        ] },
+      ]);
+
+      const res = await cli.prListMerged("tok");
+      const parsed = JSON.parse(res.stdout);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].number).toBe(7);
     });
   });
 

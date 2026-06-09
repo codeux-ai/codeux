@@ -9,6 +9,7 @@ export interface DockerAssetPruneResult {
   prunedWorkspaceVolumes: string[];
   prunedSetupImages: string[];
   prunedLoginContainers: string[];
+  prunedHelperContainers?: string[];
   prunedTempCredentialsDirs?: string[];
 }
 
@@ -29,6 +30,9 @@ export class DockerAssetPruneService {
         .map((session) => session.id),
     );
 
+    // Remove helper containers before workspace volumes: a surviving helper keeps its volume
+    // mounted, which would otherwise block the volume removal below.
+    const prunedHelperContainers = await this.pruneOrphanedHelperContainers();
     const prunedWorkspaceVolumes = await this.pruneWorkspaceVolumes(activeSessionIds);
     const prunedSetupImages = await this.pruneSetupImages();
     const prunedLoginContainers = await this.pruneOrphanedLoginContainers();
@@ -38,12 +42,14 @@ export class DockerAssetPruneService {
       prunedWorkspaceVolumes.length > 0 ||
       prunedSetupImages.length > 0 ||
       prunedLoginContainers.length > 0 ||
+      prunedHelperContainers.length > 0 ||
       prunedTempCredentialsDirs.length > 0
     ) {
       this.logger?.info("Pruned stale Docker and credential assets on startup", {
         prunedWorkspaceVolumes: prunedWorkspaceVolumes.length,
         prunedSetupImages: prunedSetupImages.length,
         prunedLoginContainers: prunedLoginContainers.length,
+        prunedHelperContainers: prunedHelperContainers.length,
         prunedTempCredentialsDirs: prunedTempCredentialsDirs.length,
       });
     }
@@ -52,6 +58,7 @@ export class DockerAssetPruneService {
       prunedWorkspaceVolumes,
       prunedSetupImages,
       prunedLoginContainers,
+      prunedHelperContainers,
       prunedTempCredentialsDirs,
     };
   }
@@ -109,6 +116,30 @@ export class DockerAssetPruneService {
 
   private async pruneOrphanedLoginContainers(): Promise<string[]> {
     const result = await this.runDocker(["ps", "-aq", "--filter", "label=code-ux.login=true"]);
+    if (!result) {
+      return [];
+    }
+
+    const containerIds = result.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    const pruned: string[] = [];
+
+    for (const containerId of containerIds) {
+      const removed = await this.runDocker(["rm", "-f", containerId]);
+      if (removed?.ok) {
+        pruned.push(containerId);
+      }
+    }
+
+    return pruned;
+  }
+
+  private async pruneOrphanedHelperContainers(): Promise<string[]> {
+    // Persistent git/file helper containers (`code-ux.helper`) from a previous process are
+    // recreated on demand, so any survivors at startup are safe to remove.
+    const result = await this.runDocker(["ps", "-aq", "--filter", "label=code-ux.helper"]);
     if (!result) {
       return [];
     }
