@@ -252,8 +252,12 @@ function resolveEventStage(
     case "action_required_auto_replied":
     case "action_required_auto_resumed":
       return { stage: "coding" };
-    case "protocol_merge_required":
     case "cli_pr_finalized":
+      // Finalizing the PR is the tail of coding, not CI. Mapping it to "ci" used
+      // to mislabel the post-coding wait (before QA/real CI starts) as CI. The
+      // real CI stage is signaled by ci_gate_status events.
+      return { stage: "coding" };
+    case "protocol_merge_required":
       return { stage: "ci" };
     case "qa_review_started":
     case "qa_review_passed":

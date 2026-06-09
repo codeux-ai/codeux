@@ -324,8 +324,10 @@ describe("live stats timing model", () => {
     });
 
     expect(summary.totalSeconds).toBe(720);
-    expect(summary.stageTotals.coding).toBe(300);
-    expect(summary.stageTotals.ci).toBe(180);
+    // cli_pr_finalized is the tail of coding (not CI), so the post-coding wait
+    // before the first ci_gate event counts as coding; CI begins at waiting_checks.
+    expect(summary.stageTotals.coding).toBe(360);
+    expect(summary.stageTotals.ci).toBe(120);
     expect(summary.stageTotals.autofix).toBe(180);
     expect(summary.stageTotals.merge).toBe(60);
     expect(summary.activeStage).toBeNull();
@@ -374,8 +376,8 @@ describe("live stats timing model", () => {
       nowIso: "2026-03-19T10:15:00.000Z",
     });
 
-    expect(summary.stageTotals.coding).toBe(300); // 10:00 → 10:05
-    expect(summary.stageTotals.ci).toBe(60); // 10:05 → 10:06 (pr finalized → qa started)
+    expect(summary.stageTotals.coding).toBe(360); // 10:00 → 10:06 (pr finalize is tail of coding)
+    expect(summary.stageTotals.ci).toBe(0); // no real CI gate events
     expect(summary.stageTotals.qa).toBe(240); // 10:06 → 10:10 (qa review window)
     expect(summary.stageTotals.merge).toBe(60); // 10:10 → 10:11
     expect(summary.activeStage).toBeNull();
@@ -504,9 +506,9 @@ describe("live stats timing model", () => {
     });
 
     expect(summary.totalSeconds).toBe(720);
-    expect(summary.stageTotals.coding).toBe(300);
+    expect(summary.stageTotals.coding).toBe(360);
     expect(summary.stageTotals.merge).toBe(360);
-    expect(summary.stageTotals.ci).toBe(60);
+    expect(summary.stageTotals.ci).toBe(0);
     expect(summary.activeStage).toBeNull();
   });
 
@@ -599,8 +601,8 @@ describe("live stats timing model", () => {
 
     expect(summary.endedAt).toBe("2026-03-19T10:07:00.000Z");
     expect(summary.totalSeconds).toBe(420);
-    expect(summary.stageTotals.coding).toBe(300);
-    expect(summary.stageTotals.ci).toBe(60);
+    expect(summary.stageTotals.coding).toBe(360);
+    expect(summary.stageTotals.ci).toBe(0);
     expect(summary.stageTotals.merge).toBe(60);
     expect(summary.activeStage).toBeNull();
   });
@@ -1136,8 +1138,8 @@ describe("live stats timing model", () => {
     expect(summary.completedTaskCount).toBe(1);
     expect(summary.averageCompletedTaskSeconds).toBe(300);
     expect(summary.activeStageCounts.ci).toBe(1);
-    expect(summary.stageTotals.coding).toBe(480);
-    expect(summary.stageTotals.ci).toBe(120);
+    expect(summary.stageTotals.coding).toBe(540);
+    expect(summary.stageTotals.ci).toBe(60);
     expect(summary.longestTask?.totalSeconds).toBe(300);
   });
 

@@ -263,12 +263,15 @@ export class QualityAssuranceService {
 
     // Signal that the task has entered the QA stage so the live view advances
     // from coding-completed → QA and starts timing the review immediately
-    // (the review itself can take minutes).
+    // (the review itself can take minutes). Persisting the QA_PENDING indicator
+    // makes the stage tag, boat race and stats reflect QA for the whole review,
+    // not just the event-derived stage timeline.
     this.appendTaskEvent(taskRun, "qa_review_started", {
       triggerType,
       qaReviewRunId: run.id,
       runIndex: existingRuns + 1,
     });
+    this.setTaskQaPending(args.task, true);
 
     try {
       const review = await this.runReview({
@@ -305,6 +308,9 @@ export class QualityAssuranceService {
           findings: review.findings,
           qaReviewRunId: run.id,
         });
+        // QA cleared — drop the QA_PENDING indicator so the merge gate can
+        // recompute the task's resting stage (CI / automerge / completed).
+        this.setTaskQaPending(args.task, false);
         await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
         return {
           reviewed: true,
@@ -391,6 +397,9 @@ export class QualityAssuranceService {
         error_code: qaError.code,
         qaReviewRunId: run.id,
       });
+      // Drop the QA_PENDING indicator; the merge gate re-derives the blocked
+      // state from the failed run on the next cycle.
+      this.setTaskQaPending(args.task, false);
       this.deps.logger?.warn("Task QA review failed", {
         projectId: args.projectId,
         sprintId: args.sprintId,
@@ -1140,6 +1149,21 @@ export class QualityAssuranceService {
       return;
     }
     this.deps.executionRepository.appendTaskRunEvent(taskRun.id, eventType, "system", payload);
+  }
+
+  /**
+   * Marks (or clears) a task as awaiting QA so the live tag, boat race and stats
+   * reflect the QA stage while a review is in flight. Updates the in-memory task
+   * (used by the merge gate later in the same cycle) and persists the indicator.
+   */
+  private setTaskQaPending(task: Subtask, pending: boolean): void {
+    const indicator = pending ? "QA_PENDING" : undefined;
+    task.merge_indicator = indicator;
+    if (task.record_id) {
+      this.deps.projectManagementRepository.updateTask(task.record_id, {
+        mergeIndicator: indicator ?? null,
+      });
+    }
   }
 
   private async requestFixesForTask(args: {

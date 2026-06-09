@@ -760,6 +760,7 @@ describe("QualityAssuranceService", () => {
       status: "completed",
       isIndependent: true,
     });
+    const updateTaskSpy = vi.spyOn(projectRepository, "updateTask");
 
     const mockProviderRunner = {
       runProviderForText: vi.fn(),
@@ -847,6 +848,10 @@ describe("QualityAssuranceService", () => {
     expect(outcome.reviewed).toBe(true);
     expect(outcome.reportText).toContain("Looks good now");
     expect(mockProviderRunner.runProvider).toHaveBeenCalledTimes(2);
+    // The task is flagged QA_PENDING while the review runs (so the live tag /
+    // boat race / stats show QA) and cleared once QA passes.
+    expect(updateTaskSpy).toHaveBeenCalledWith(task.id, { mergeIndicator: "QA_PENDING" });
+    expect(updateTaskSpy).toHaveBeenCalledWith(task.id, { mergeIndicator: null });
   });
 
   it("retries when the provider returns JSON missing required fields", async () => {
