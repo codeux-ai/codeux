@@ -255,6 +255,13 @@ function resolveEventStage(
     case "protocol_merge_required":
     case "cli_pr_finalized":
       return { stage: "ci" };
+    case "qa_review_started":
+    case "qa_review_passed":
+    case "qa_review_changes_requested":
+    case "qa_review_failed":
+      // The QA review runs after coding completes and can take minutes — surface
+      // it as its own stage so the live view advances coding → QA and times it.
+      return { stage: "qa" };
     case "ci_gate_status":
       return resolveCiGateStage(event);
     case "cli_git_no_changes":

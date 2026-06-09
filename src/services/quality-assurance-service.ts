@@ -261,6 +261,15 @@ export class QualityAssuranceService {
     // Record the QA invocation against the per-task guardrail ledger.
     this.deps.guardrailService.record(scope, taskId, "qa_review");
 
+    // Signal that the task has entered the QA stage so the live view advances
+    // from coding-completed → QA and starts timing the review immediately
+    // (the review itself can take minutes).
+    this.appendTaskEvent(taskRun, "qa_review_started", {
+      triggerType,
+      qaReviewRunId: run.id,
+      runIndex: existingRuns + 1,
+    });
+
     try {
       const review = await this.runReview({
         triggerType,

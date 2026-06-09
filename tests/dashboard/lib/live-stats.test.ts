@@ -331,6 +331,100 @@ describe("live stats timing model", () => {
     expect(summary.activeStage).toBeNull();
   });
 
+  it("advances coding → QA and times the QA review from its own events", () => {
+    const task = makeTask({
+      id: "T02Q",
+      title: "QA reviewed work",
+      record_id: "task-record-2q",
+      status: "COMPLETED",
+      worker_branch: "feature/t02q",
+      pr_url: "https://example.com/pr/2q",
+      merge_indicator: "MERGED",
+      is_merged: true,
+    });
+    const dispatch = makeDispatch({
+      id: "dispatch-2q",
+      taskId: "task-record-2q",
+      taskKey: "T02Q",
+      taskTitle: "QA reviewed work",
+      startedAt: "2026-03-19T10:00:00.000Z",
+      finishedAt: "2026-03-19T10:05:00.000Z",
+      workerBranch: "feature/t02q",
+      prUrl: "https://example.com/pr/2q",
+    });
+    const baseEvent = {
+      dispatchId: "dispatch-2q",
+      taskRunId: "dispatch-2q-task-run",
+      taskId: "task-record-2q",
+      taskKey: "T02Q",
+    };
+    const events = [
+      makeEvent({ ...baseEvent, id: "q-a", eventType: "dispatch_started", createdAt: "2026-03-19T10:00:00.000Z" }),
+      makeEvent({ ...baseEvent, id: "q-b", eventType: "cli_pr_finalized", createdAt: "2026-03-19T10:05:00.000Z" }),
+      makeEvent({ ...baseEvent, id: "q-c", eventType: "qa_review_started", createdAt: "2026-03-19T10:06:00.000Z" }),
+      makeEvent({ ...baseEvent, id: "q-d", eventType: "qa_review_passed", createdAt: "2026-03-19T10:09:00.000Z" }),
+      makeEvent({ ...baseEvent, id: "q-e", eventType: "ci_gate_status", createdAt: "2026-03-19T10:10:00.000Z", payload: { state: "ready_for_merge" } }),
+      makeEvent({ ...baseEvent, id: "q-f", eventType: "ci_gate_status", createdAt: "2026-03-19T10:11:00.000Z", payload: { state: "merge_confirmed" } }),
+    ];
+
+    const summary = buildLiveTaskTimingSummary({
+      task,
+      dispatches: [dispatch],
+      events,
+      nowIso: "2026-03-19T10:15:00.000Z",
+    });
+
+    expect(summary.stageTotals.coding).toBe(300); // 10:00 → 10:05
+    expect(summary.stageTotals.ci).toBe(60); // 10:05 → 10:06 (pr finalized → qa started)
+    expect(summary.stageTotals.qa).toBe(240); // 10:06 → 10:10 (qa review window)
+    expect(summary.stageTotals.merge).toBe(60); // 10:10 → 10:11
+    expect(summary.activeStage).toBeNull();
+  });
+
+  it("keeps the QA stage active (timing live) while a review is still running", () => {
+    const task = makeTask({
+      id: "T02QL",
+      title: "QA in progress",
+      record_id: "task-record-2ql",
+      status: "CODING_COMPLETED",
+      worker_branch: "feature/t02ql",
+      pr_url: "https://example.com/pr/2ql",
+    });
+    const dispatch = makeDispatch({
+      id: "dispatch-2ql",
+      taskId: "task-record-2ql",
+      taskKey: "T02QL",
+      taskTitle: "QA in progress",
+      status: "completed",
+      taskRunState: "COMPLETED",
+      startedAt: "2026-03-19T10:00:00.000Z",
+      finishedAt: "2026-03-19T10:05:00.000Z",
+      workerBranch: "feature/t02ql",
+      prUrl: "https://example.com/pr/2ql",
+    });
+    const baseEvent = {
+      dispatchId: "dispatch-2ql",
+      taskRunId: "dispatch-2ql-task-run",
+      taskId: "task-record-2ql",
+      taskKey: "T02QL",
+    };
+    const events = [
+      makeEvent({ ...baseEvent, id: "ql-a", eventType: "dispatch_started", createdAt: "2026-03-19T10:00:00.000Z" }),
+      makeEvent({ ...baseEvent, id: "ql-b", eventType: "cli_pr_finalized", createdAt: "2026-03-19T10:05:00.000Z" }),
+      makeEvent({ ...baseEvent, id: "ql-c", eventType: "qa_review_started", createdAt: "2026-03-19T10:06:00.000Z" }),
+    ];
+
+    const summary = buildLiveTaskTimingSummary({
+      task,
+      dispatches: [dispatch],
+      events,
+      nowIso: "2026-03-19T10:09:00.000Z",
+    });
+
+    expect(summary.activeStage).toBe("qa");
+    expect(summary.stageTotals.qa).toBe(180); // 10:06 → now (10:09)
+  });
+
   it("tracks post-coding merge conflict handling under merge instead of coding", () => {
     const task = makeTask({
       id: "T02M",
