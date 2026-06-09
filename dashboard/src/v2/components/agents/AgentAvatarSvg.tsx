@@ -1,22 +1,30 @@
 /**
  * AgentAvatarSvg — Logo-faithful 2D robot avatar.
  *
- * This is a literal SVG translation of the Code UX brand mark: black rounded
- * tile, white face shell with side ear caps, dark inset face containing
- * smile-arc eyes, jade antenna stem with two diagonal tilt lines, and a
- * forehead jewel. All of the base paths below are copied verbatim from the
- * production logo so the silhouette is pixel-identical to the brand.
+ * A literal SVG rendition of the Code UX brand mark: white face shell with
+ * speech-bubble tail and side ear caps, dark inset screen containing the
+ * smile-arc eyes, and the jade antenna stem with two diagonal tilt lines.
+ * All base paths come verbatim from the production logo via
+ * lib/agent-avatar-logo.ts — the same module the 3D renderer extrudes — so
+ * both surfaces stay pixel/proportion-identical to the brand.
  *
  * Variants overlay or transform those paths instead of replacing them, so
  * every variation still reads as the same brand mark:
- *   • CHASSIS — silhouette tweaks (corner radius, aspect)
- *   • EYES    — swap the smile arcs for visor / single lens / pixel
- *   • ANTENNA — swap the pill+lines for bunny ears / beacon / none
- *   • ACCENT  — recolor jade elements (eyes, jewel, antenna)
- *   • AURA    — optional ambient flourish behind the tile
+ *   • CHASSIS — non-uniform scale of the inner bot (shared scale table)
+ *   • EYES    — swap the smile arcs for visor / single lens / pixel / heart
+ *   • ANTENNA — swap the pill+lines for bunny ears / beacon / signal / none
+ *   • ACCENT  — recolor jade elements (eyes, antenna, glints)
+ *   • AURA    — optional ambient flourish behind the bot
  *
- * Expressions morph the eye arcs (smile / frown / squint / wide) and the
- * forehead jewel intensity so the bot's mood reads at a glance.
+ * Expressions morph the eye arcs (smile / frown / squint / wide) so the
+ * bot's mood reads at a glance.
+ *
+ * IMPORTANT: this file renders through plain `preact` (not preact/compat),
+ * which sets SVG attributes verbatim — React-style camelCase presentation
+ * attributes (stopColor, strokeWidth, clipPath, …) are silently ignored by
+ * the browser. Always use the real SVG names: stop-color, stroke-width,
+ * clip-path, pointer-events, … (native camelCase like attributeName,
+ * repeatCount, stdDeviation stays camelCase).
  */
 import { h } from "preact";
 import { useMemo } from "preact/hooks";
@@ -29,6 +37,20 @@ import {
   isLightBase,
   type AgentAvatarExpression,
 } from "../../lib/agent-avatar.js";
+import {
+  PATH_FACE_SHELL,
+  PATH_EAR_LEFT,
+  PATH_EAR_RIGHT,
+  PATH_ANTENNA_PILL,
+  PATH_ANTENNA_TILT_LEFT,
+  PATH_ANTENNA_TILT_RIGHT,
+  PATH_INSET_FACE,
+  PATH_BEZEL_SLIVER,
+  PATH_EYE_LEFT_SMILE,
+  PATH_EYE_RIGHT_SMILE,
+  LOGO_ANCHORS,
+  getChassisScale,
+} from "../../lib/agent-avatar-logo.js";
 
 interface AgentAvatarSvgProps {
   config?: AgentAvatarConfig;
@@ -42,66 +64,17 @@ interface AgentAvatarSvgProps {
 let agentAvatarSvgInstanceCounter = 0;
 
 /* ════════════════════════════════════════════════════════════════════════
- *  Logo path bank — verbatim from the production brand mark.
- *  viewBox is 0 0 1254 1254. Anchor centers (used by expression overlays):
- *
- *  EYE_L    (510, 690)   — left smile-eye center
- *  EYE_R    (750, 690)   — right smile-eye center
- *  JEWEL    (628, 400)   — forehead jewel center
- *  ANTENNA  (628, 280)   — top of the antenna pill
- *  FACE_CTR (628, 695)   — center of the dark inset face
+ *  Logo path bank + anchors — shared with the 3D renderer via
+ *  lib/agent-avatar-logo.ts so both surfaces stay proportion-identical.
+ *  viewBox is 0 0 1254 1254.
  * ════════════════════════════════════════════════════════════════════════ */
-const PATH_OUTER_TILE = "M817 1255C544.667 1255 272.833 1255 1 1255C1 837 1 419 1 1C419 1 837 1 1255 1C1255 419 1255 837 1255 1255C1109.167 1255 963.333 1255 817 1255M822.578 883.039C859.251 865.239 886.895 837.821 907.229 802.856C946.722 734.944 948.514 629.974 884.722 558.045C858.516 528.496 826.539 508.1 788.109 498.099C766.585 492.498 744.666 491.961 722.628 492.144C701.633 492.318 680.636 492.241 659.641 492.158C650.133 492.12 644.092 485.917 644.058 476.465C644.034 469.966 644.351 463.45 643.968 456.975C643.73 452.939 645.096 451.31 648.878 449.904C672.334 441.182 686.785 412.884 680.405 388.788C673.244 361.742 647.998 344.279 621.877 348.303C597.057 352.127 579.161 370.065 575.986 394.3C572.85 418.236 585.672 440.251 608.81 450.287C611.441 451.428 612.093 452.845 612.025 455.495C611.854 462.155 611.996 468.824 611.996 475.489C611.994 486.404 606.362 492.129 595.437 492.151C571.609 492.199 547.779 492.314 523.952 492.147C505.677 492.019 487.722 494.015 470.098 498.906C408.425 516.022 364.953 554.383 338.191 612.123C323.337 644.172 318.998 678.113 320.705 713.062C323.267 765.483 343.809 809.633 381.853 845.693C386.547 850.142 387.34 853.645 384.395 859.405C376.678 874.497 368.94 889.578 361.147 904.631C358.977 908.822 357.321 913.018 360.952 917.129C364.546 921.197 368.766 920.327 373.294 918.53C395.719 909.632 418.253 901.007 440.646 892.028C446.214 889.796 451.37 889.515 457.097 891.35C474.31 896.866 491.987 900.165 510.096 900.189C590.413 900.296 670.731 900.378 751.048 900.175C775.876 900.113 799.496 894.089 822.578 883.039M285.848 785.679C292.41 786.93 298.972 788.181 306.682 789.651C305.348 785.234 304.586 782.561 303.736 779.918C298.34 763.137 295.604 745.96 295.702 728.311C295.801 710.488 295.816 692.662 295.681 674.839C295.558 658.72 297.816 642.973 302.329 627.524C303.618 623.111 304.887 618.692 306.404 613.453C301.921 613.821 298.08 613.752 294.405 614.5C263.757 620.735 242.113 647.361 242.043 678.738C242.011 693.064 242.562 707.415 241.911 721.711C240.644 749.543 258.606 776.127 285.848 785.679M1005.189 646.31C992.589 625.178 965.308 609.527 949.667 614.602C950.117 616.167 950.509 617.765 951.032 619.32C957.302 637.961 960.166 657.096 959.911 676.772C959.678 694.751 960.122 712.741 959.709 730.713C959.492 740.16 958.647 749.677 957.049 758.985C955.375 768.74 952.46 778.283 949.916 788.613C951.874 788.613 953.806 788.72 955.724 788.597C983.87 786.792 1010.685 761.454 1012.784 733.378C1014.06 716.318 1013.423 699.117 1013.705 681.98C1013.908 669.612 1011.602 657.847 1005.189 646.31M640.821 279.5C640.809 272.683 640.844 265.865 640.773 259.049C640.683 250.348 635.372 244.457 627.786 244.53C619.934 244.605 614.917 250.184 614.885 259.077C614.829 274.374 614.828 289.672 614.873 304.969C614.898 313.454 620.058 318.899 627.805 318.8C635.657 318.699 640.829 313.259 640.865 304.942C640.901 296.795 640.842 288.647 640.821 279.5M755.056 301.361C748.167 296.322 741.764 296.511 735.787 302.363C726.156 311.793 716.668 321.369 707.198 330.961C701.353 336.882 701.055 344.803 706.295 350.114C712.048 355.947 720.095 355.921 726.27 349.863C735.773 340.542 745.226 331.168 754.6 321.717C761.169 315.093 761.377 309.16 755.056 301.361M522.663 303.812C522.315 303.455 521.974 303.09 521.616 302.743C515.296 296.622 506.511 296.292 501.2 301.973C495.616 307.946 496.348 315.789 502.915 322.228C512.171 331.306 521.314 340.498 530.541 349.606C536.809 355.792 544.695 356.002 550.413 350.212C555.909 344.647 555.68 336.934 549.608 330.766C540.862 321.883 531.988 313.127 522.663 303.812Z";
-
-const PATH_FACE_SHELL = "M822.226 883.169C799.496 894.089 775.876 900.113 751.048 900.175C670.731 900.378 590.413 900.296 510.096 900.189C491.987 900.165 474.31 896.866 457.097 891.35C451.37 889.515 446.214 889.796 440.646 892.028C418.253 901.007 395.719 909.632 373.294 918.53C368.766 920.327 364.546 921.197 360.952 917.129C357.321 913.018 358.977 908.822 361.147 904.631C368.94 889.578 376.678 874.497 384.395 859.405C387.34 853.645 386.547 850.142 381.853 845.693C343.809 809.633 323.267 765.483 320.705 713.062C318.998 678.113 323.337 644.172 338.191 612.123C364.953 554.383 408.425 516.022 470.098 498.906C487.722 494.015 505.677 492.019 523.952 492.147C547.779 492.314 571.609 492.199 595.437 492.151C606.362 492.129 611.994 486.404 611.996 475.489C611.996 468.824 611.854 462.155 612.025 455.495C612.093 452.845 611.441 451.428 608.81 450.287C585.672 440.251 572.85 418.236 575.986 394.3C579.161 370.065 597.057 352.127 621.877 348.303C647.998 344.279 673.244 361.742 680.405 388.788C686.785 412.884 672.334 441.182 648.878 449.904C645.096 451.31 643.73 452.939 643.968 456.975C644.351 463.45 644.034 469.966 644.058 476.465C644.092 485.917 650.133 492.12 659.641 492.158C680.636 492.241 701.633 492.318 722.628 492.144C744.666 491.961 766.585 492.498 788.109 498.099C826.539 508.1 858.516 528.496 884.722 558.045C948.514 629.974 946.722 734.944 907.229 802.856C886.895 837.821 859.251 865.239 822.226 883.169Z";
-
-const PATH_EAR_LEFT = "M285.489 785.522C258.606 776.127 240.644 749.543 241.911 721.711C242.562 707.415 242.011 693.064 242.043 678.738C242.113 647.361 263.757 620.735 294.405 614.5C298.08 613.752 301.921 613.821 306.404 613.453C304.887 618.692 303.618 623.111 302.329 627.524C297.816 642.973 295.558 658.72 295.681 674.839C295.816 692.662 295.801 710.488 295.702 728.311C295.604 745.96 298.34 763.137 303.736 779.918C304.586 782.561 305.348 785.234 306.682 789.651C298.972 788.181 292.41 786.93 285.489 785.522Z";
-
-const PATH_EAR_RIGHT = "M1005.39 646.62C1011.602 657.847 1013.908 669.612 1013.705 681.98C1013.423 699.117 1014.06 716.318 1012.784 733.378C1010.685 761.454 983.87 786.792 955.724 788.597C953.806 788.72 951.874 788.613 949.916 788.613C952.46 778.283 955.375 768.74 957.049 758.985C958.647 749.677 959.492 740.16 959.709 730.713C960.122 712.741 959.678 694.751 959.911 676.772C960.166 657.096 957.302 637.961 951.032 619.32C950.509 617.765 950.117 616.167 949.667 614.602C965.308 609.527 992.589 625.178 1005.39 646.62Z";
-
-const PATH_ANTENNA_PILL = "M640.823 280C640.842 288.647 640.901 296.795 640.865 304.942C640.829 313.259 635.657 318.699 627.805 318.8C620.058 318.899 614.898 313.454 614.873 304.969C614.828 289.672 614.829 274.374 614.885 259.077C614.917 250.184 619.934 244.605 627.786 244.53C635.372 244.457 640.683 250.348 640.773 259.049C640.844 265.865 640.809 272.683 640.823 280Z";
-
-const PATH_ANTENNA_TILT_RIGHT = "M755.315 301.629C761.377 309.16 761.169 315.093 754.6 321.717C745.226 331.168 735.773 340.542 726.27 349.863C720.095 355.921 712.048 355.947 706.295 350.114C701.055 344.803 701.353 336.882 707.198 330.961C716.668 321.369 726.156 311.793 735.787 302.363C741.764 296.511 748.167 296.322 755.315 301.629Z";
-
-const PATH_ANTENNA_TILT_LEFT = "M522.916 304.064C531.988 313.127 540.862 321.883 549.608 330.766C555.68 336.934 555.909 344.647 550.413 350.212C544.695 356.002 536.809 355.792 530.541 349.606C521.314 340.498 512.171 331.306 502.915 322.228C496.348 315.789 495.616 307.946 501.2 301.973C506.511 296.292 515.296 296.622 521.616 302.743C521.974 303.09 522.315 303.455 522.916 304.064Z";
-
-const PATH_INSET_FACE = "M737.238 539.907C763.445 539.452 787.836 546.29 809.88 560.074C867.204 595.918 892.392 648.475 888.456 715.38C884.547 781.841 834.894 838.559 767.307 850.362C757.839 852.015 748.093 852.727 738.473 852.753C665.822 852.952 593.142 854.134 520.528 852.493C457.598 851.07 409.282 822.226 381.12 764.979C361.113 724.31 361.95 681.699 378.902 640.018C400.041 588.043 438.119 554.943 493.233 542.464C501.134 540.675 509.411 540.547 517.649 540.121C519.668 541.064 521.551 541.946 523.436 541.948C593.15 542.018 662.865 542.006 732.58 542C734.075 542 735.577 541.981 737.057 541.808C737.189 541.792 737.181 540.57 737.238 539.907Z";
 
 /* Forehead jewel was removed at user request — the brand smile-arc bot now
    has no forehead dot. The path is intentionally not exported. */
 
-const PATH_BEZEL_SLIVER = "M736.958 539.833C737.181 540.57 737.189 541.792 737.057 541.808C735.577 541.981 734.075 542 732.58 542C662.865 542.006 593.15 542.018 523.436 541.948C521.551 541.946 519.668 541.064 518.125 540.246C522.617 539.771 526.767 539.534 530.917 539.533C598.01 539.522 665.102 539.539 732.195 539.561C733.689 539.562 735.184 539.69 736.958 539.833Z";
-
-const PATH_EYE_LEFT_SMILE = "M478.761 660.729C516.002 639.795 561.684 660.246 569.452 700.996C571.626 712.406 563.155 720.513 552.522 717.22C547.187 715.568 545.298 711.49 544.225 706.42C540.3 687.867 523.091 676.104 504.427 679.002C489.634 681.299 478.695 691.785 475.767 706.476C474.132 714.68 467.978 719.217 460.424 717.788C452.948 716.373 448.755 709.694 450.36 701.522C453.815 683.918 463.128 670.332 478.761 660.729Z";
-
-const PATH_EYE_RIGHT_SMILE = "M804.095 712.988C800.066 717.639 795.349 718.882 789.879 717.215C784.715 715.641 782.065 711.913 781.043 706.751C777.612 689.423 764.423 678.608 746.78 678.585C730.124 678.563 715.53 690.535 712.169 706.98C710.236 716.438 701.606 720.707 693.257 716.334C687.989 713.576 685.691 707.909 687.257 700.813C690.615 685.597 698.291 673.175 710.999 663.875C747.076 637.471 798.925 657.966 806.066 701.701C806.633 705.17 804.942 709.007 804.095 712.988Z";
-
 /* Anchor centers used by expression overlays */
-const EYE_L = { x: 510, y: 690 };
-const EYE_R = { x: 750, y: 690 };
-/* ════════════════════════════════════════════════════════════════════════
- *  Chassis variants — tweak the outer-tile path or scale the inner bot to
- *  give each variant a distinct silhouette while preserving the logo DNA.
- *
- *  We do this by drawing the outer tile as a *separate* rounded-rect (so
- *  variants can adjust corner radius / aspect) and the inner bot at fixed
- *  proportions so the antenna/face geometry never deforms.
- * ════════════════════════════════════════════════════════════════════════ */
-type ChassisSpec = {
-  cornerRadius: number;
-  scaleX: number;
-  scaleY: number;
-};
-const CHASSIS_SPECS: Record<string, ChassisSpec> = {
-  classic: { cornerRadius: 200, scaleX: 1.0,  scaleY: 1.0 },
-  square:  { cornerRadius: 90,  scaleX: 1.0,  scaleY: 1.0 },
-  tall:    { cornerRadius: 200, scaleX: 0.88, scaleY: 1.0 },
-  pebble:  { cornerRadius: 320, scaleX: 1.0,  scaleY: 0.92 },
-  soft:    { cornerRadius: 460, scaleX: 1.0,  scaleY: 1.0 },  // squircle / extra-soft
-};
-function getChassisSpec(id: string | undefined): ChassisSpec {
-  return CHASSIS_SPECS[id ?? "classic"] ?? CHASSIS_SPECS.classic;
-}
+const EYE_L = LOGO_ANCHORS.eyeL;
+const EYE_R = LOGO_ANCHORS.eyeR;
 
 /* ════════════════════════════════════════════════════════════════════════
  *  Eye renderers — the canonical smile and three brand-aligned variants.
@@ -286,8 +259,8 @@ function renderEyes(
   if (eyesId === "heart") {
     const s = squint ? 0.5 : wide ? 1.35 : 1.0;
     const heartPath = (cx: number, cy: number) => {
-      const w = 38 * s;
-      const h = 36 * s;
+      const w = 50 * s;
+      const h = 48 * s;
       return `M ${cx} ${cy + h * 0.5}
               C ${cx - w} ${cy} ${cx - w} ${cy - h * 0.6} ${cx - w * 0.4} ${cy - h * 0.6}
               C ${cx - w * 0.15} ${cy - h * 0.6} ${cx} ${cy - h * 0.3} ${cx} ${cy - h * 0.05}
@@ -319,7 +292,7 @@ function renderEyes(
     const r = squint ? 26 : wide ? 78 : 56;
     return (
       <g>
-        <circle cx={cx} cy={cy} r={r + 18} fill="none" stroke={accent} strokeWidth="6" opacity="0.4">
+        <circle cx={cx} cy={cy} r={r + 18} fill="none" stroke={accent} stroke-width="6" opacity="0.4">
           <animate attributeName="r" values={`${r + 18};${r + 30};${r + 18}`} dur="2.4s" repeatCount="indefinite" />
           <animate attributeName="opacity" values="0.4;0.15;0.4" dur="2.4s" repeatCount="indefinite" />
         </circle>
@@ -473,7 +446,7 @@ function renderAntenna(
           <animate attributeName="opacity" values="1;0.55;1" dur="1.6s" repeatCount="indefinite" />
         </circle>
         <circle cx="620" cy="153" r="9" fill={jadeBright} opacity="0.9" />
-        <circle cx="628" cy="160" r="48" fill="none" stroke={accent} strokeWidth="6" opacity="0.4">
+        <circle cx="628" cy="160" r="48" fill="none" stroke={accent} stroke-width="6" opacity="0.4">
           <animate attributeName="r" values="48;72;48" dur="1.8s" repeatCount="indefinite" />
           <animate attributeName="opacity" values="0.4;0;0.4" dur="1.8s" repeatCount="indefinite" />
         </circle>
@@ -489,8 +462,8 @@ function renderAntenna(
         d={`M ${628 - rx} 320 A ${rx} ${ry} 0 0 1 ${628 + rx} 320`}
         fill="none"
         stroke={accent}
-        strokeWidth="14"
-        strokeLinecap="round"
+        stroke-width="14"
+        stroke-linecap="round"
         opacity="0"
       >
         <animate attributeName="opacity" values="0;0.95;0" dur={dur} repeatCount="indefinite" begin={begin} />
@@ -536,11 +509,11 @@ function renderAura(wingsId: string | undefined, accent: string, jadeBright: str
     return (
       <g>
         {/* Outer broad halo */}
-        <ellipse cx="628" cy="200" rx="520" ry="80" fill="none" stroke={accent} strokeWidth="10" opacity="0.55">
+        <ellipse cx="628" cy="200" rx="520" ry="80" fill="none" stroke={accent} stroke-width="10" opacity="0.55">
           <animate attributeName="opacity" values="0.55;0.25;0.55" dur="3.6s" repeatCount="indefinite" />
         </ellipse>
         {/* Inner crisp halo */}
-        <ellipse cx="628" cy="190" rx="420" ry="56" fill="none" stroke={jadeBright} strokeWidth="6" opacity="0.7">
+        <ellipse cx="628" cy="190" rx="420" ry="56" fill="none" stroke={jadeBright} stroke-width="6" opacity="0.7">
           <animate attributeName="opacity" values="0.7;0.4;0.7" dur="3.6s" repeatCount="indefinite" begin="0.4s" />
         </ellipse>
         {/* Slow rotation suggested by 3 tiny floating accent dots on the ring */}
@@ -568,7 +541,7 @@ function renderAura(wingsId: string | undefined, accent: string, jadeBright: str
         rx="220"
         fill="none"
         stroke={accent}
-        strokeWidth={sw}
+        stroke-width={sw}
         opacity="0"
         transform={`rotate(${rot} 627 627)`}
       >
@@ -691,27 +664,27 @@ function renderHeadphones(
           d={`M ${EAR_L.x + 20} 560 Q 627 360 ${EAR_R.x - 20} 560`}
           fill="none"
           stroke={shellHex}
-          strokeWidth="22"
-          strokeLinecap="round"
+          stroke-width="22"
+          stroke-linecap="round"
         />
         <path
           d={`M ${EAR_L.x + 20} 560 Q 627 360 ${EAR_R.x - 20} 560`}
           fill="none"
           stroke="rgba(0,0,0,0.15)"
-          strokeWidth="6"
-          strokeLinecap="round"
+          stroke-width="6"
+          stroke-linecap="round"
           opacity="0.5"
         />
         {/* Left cup */}
         <circle cx={EAR_L.x} cy={EAR_L.y} r="98" fill="#1a1a22" />
-        <circle cx={EAR_L.x} cy={EAR_L.y} r="98" fill="none" stroke={shellHex} strokeWidth="6" opacity="0.6" />
+        <circle cx={EAR_L.x} cy={EAR_L.y} r="98" fill="none" stroke={shellHex} stroke-width="6" opacity="0.6" />
         <circle cx={EAR_L.x} cy={EAR_L.y} r="58" fill={accent}>
           <animate attributeName="opacity" values="1;0.6;1" dur="2.4s" repeatCount="indefinite" />
         </circle>
         <circle cx={EAR_L.x - 16} cy={EAR_L.y - 16} r="14" fill={jadeBright} opacity="0.85" />
         {/* Right cup */}
         <circle cx={EAR_R.x} cy={EAR_R.y} r="98" fill="#1a1a22" />
-        <circle cx={EAR_R.x} cy={EAR_R.y} r="98" fill="none" stroke={shellHex} strokeWidth="6" opacity="0.6" />
+        <circle cx={EAR_R.x} cy={EAR_R.y} r="98" fill="none" stroke={shellHex} stroke-width="6" opacity="0.6" />
         <circle cx={EAR_R.x} cy={EAR_R.y} r="58" fill={accent}>
           <animate attributeName="opacity" values="1;0.6;1" dur="2.4s" repeatCount="indefinite" begin="0.4s" />
         </circle>
@@ -729,13 +702,13 @@ function renderHeadphones(
         </circle>
         <circle cx={EAR_L.x - 30 - 8} cy={EAR_L.y - 8} r="10" fill={jadeBright} opacity="0.85" />
         {/* Tiny audio cable hint */}
-        <path d={`M ${EAR_L.x - 30} ${EAR_L.y + 30} Q ${EAR_L.x - 60} ${EAR_L.y + 120} ${EAR_L.x - 30} ${EAR_L.y + 200}`} fill="none" stroke={accent} strokeWidth="6" opacity="0.55" />
+        <path d={`M ${EAR_L.x - 30} ${EAR_L.y + 30} Q ${EAR_L.x - 60} ${EAR_L.y + 120} ${EAR_L.x - 30} ${EAR_L.y + 200}`} fill="none" stroke={accent} stroke-width="6" opacity="0.55" />
 
         <circle cx={EAR_R.x + 30} cy={EAR_R.y} r="34" fill={accent}>
           <animate attributeName="opacity" values="1;0.65;1" dur="2.8s" repeatCount="indefinite" begin="0.5s" />
         </circle>
         <circle cx={EAR_R.x + 30 - 8} cy={EAR_R.y - 8} r="10" fill={jadeBright} opacity="0.85" />
-        <path d={`M ${EAR_R.x + 30} ${EAR_R.y + 30} Q ${EAR_R.x + 60} ${EAR_R.y + 120} ${EAR_R.x + 30} ${EAR_R.y + 200}`} fill="none" stroke={accent} strokeWidth="6" opacity="0.55" />
+        <path d={`M ${EAR_R.x + 30} ${EAR_R.y + 30} Q ${EAR_R.x + 60} ${EAR_R.y + 120} ${EAR_R.x + 30} ${EAR_R.y + 200}`} fill="none" stroke={accent} stroke-width="6" opacity="0.55" />
       </g>
     );
   }
@@ -744,11 +717,11 @@ function renderHeadphones(
   if (headphonesId === "loop") {
     return (
       <g>
-        <ellipse cx={EAR_L.x} cy={EAR_L.y} rx="60" ry="86" fill="none" stroke={accent} strokeWidth="14" />
+        <ellipse cx={EAR_L.x} cy={EAR_L.y} rx="60" ry="86" fill="none" stroke={accent} stroke-width="14" />
         <ellipse cx={EAR_L.x} cy={EAR_L.y} rx="36" ry="56" fill={accent} opacity="0.35">
           <animate attributeName="opacity" values="0.35;0.7;0.35" dur="2.4s" repeatCount="indefinite" />
         </ellipse>
-        <ellipse cx={EAR_R.x} cy={EAR_R.y} rx="60" ry="86" fill="none" stroke={accent} strokeWidth="14" />
+        <ellipse cx={EAR_R.x} cy={EAR_R.y} rx="60" ry="86" fill="none" stroke={accent} stroke-width="14" />
         <ellipse cx={EAR_R.x} cy={EAR_R.y} rx="36" ry="56" fill={accent} opacity="0.35">
           <animate attributeName="opacity" values="0.35;0.7;0.35" dur="2.4s" repeatCount="indefinite" begin="0.6s" />
         </ellipse>
@@ -771,9 +744,9 @@ function renderHeadphones(
     return (
       <g>
         <path d={finL} fill={accent} />
-        <path d={finL} fill="none" stroke={jadeBright} strokeWidth="4" opacity="0.6" />
+        <path d={finL} fill="none" stroke={jadeBright} stroke-width="4" opacity="0.6" />
         <path d={finR} fill={accent} />
-        <path d={finR} fill="none" stroke={jadeBright} strokeWidth="4" opacity="0.6" />
+        <path d={finR} fill="none" stroke={jadeBright} stroke-width="4" opacity="0.6" />
       </g>
     );
   }
@@ -792,7 +765,7 @@ export function AgentAvatarSvg({
   static: isStatic = false,
 }: AgentAvatarSvgProps) {
   const accent = getAccentHex(config?.accent);
-  const chassisSpec = getChassisSpec(config?.chassis);
+  const chassisSpec = getChassisScale(config?.chassis);
   const eyesId = config?.eyes ?? "smile";
   const antennaId = config?.antenna ?? "jewel";
   const wingsId = config?.wings ?? "none";
@@ -806,7 +779,12 @@ export function AgentAvatarSvg({
   const insetHex = getInsetHex(config?.baseColor, config?.visorColor);
   // Bezel: a slightly darker line on light chassis, slightly lighter on dark.
   const bezelHex = light ? darken(shellHex, 0.55) : lighten(shellHex, 0.45);
-  const jadeBright = BRAND_COLORS.jadeBright;
+  // Bright accent for glints/highlights — tracks the chosen accent instead
+  // of staying brand-jade so amber/coral/violet bots get matching sparkle.
+  // For the default jade accent this lands on the brand jadeBright tone.
+  const jadeBright = config?.accent && config.accent !== "jade"
+    ? lighten(accent, 0.55)
+    : BRAND_COLORS.jadeBright;
 
   const innerScale = `translate(627 627) scale(${chassisSpec.scaleX} ${chassisSpec.scaleY}) translate(-627 -627)`;
   const svgId = useMemo(() => {
@@ -818,6 +796,11 @@ export function AgentAvatarSvg({
   const auraGlowId = `${svgId}-aura-glow`;
   const botShadowId = `${svgId}-bot-shadow`;
   const orbitPathId = `${svgId}-orbit-path`;
+  const sheenGradId = `${svgId}-sheen-grad`;
+  const screenShadeGradId = `${svgId}-screen-shade`;
+  const eyeGlowGradId = `${svgId}-eye-glow`;
+  const clipShellId = `${svgId}-clip-shell`;
+  const clipInsetId = `${svgId}-clip-inset`;
 
   return (
     <svg
@@ -831,17 +814,17 @@ export function AgentAvatarSvg({
     >
       <defs>
         <radialGradient id={shellGradientId} cx="50%" cy="32%" r="75%">
-          <stop offset="0%" stopColor={lighten(shellHex, 0.06)} />
-          <stop offset="55%" stopColor={shellHex} />
-          <stop offset="100%" stopColor={darken(shellHex, 0.08)} />
+          <stop offset="0%" stop-color={lighten(shellHex, 0.06)} />
+          <stop offset="55%" stop-color={shellHex} />
+          <stop offset="100%" stop-color={darken(shellHex, 0.08)} />
         </radialGradient>
         <radialGradient id={insetGradientId} cx="50%" cy="30%" r="75%">
-          <stop offset="0%" stopColor={lighten(insetHex, 0.12)} />
-          <stop offset="100%" stopColor={insetHex} />
+          <stop offset="0%" stop-color={lighten(insetHex, 0.12)} />
+          <stop offset="100%" stop-color={insetHex} />
         </radialGradient>
         <radialGradient id={auraGlowId} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={accent} stopOpacity="0.55" />
-          <stop offset="100%" stopColor={accent} stopOpacity="0" />
+          <stop offset="0%" stop-color={accent} stop-opacity="0.55" />
+          <stop offset="100%" stop-color={accent} stop-opacity="0" />
         </radialGradient>
         <filter id={botShadowId} x="-12%" y="-12%" width="124%" height="124%">
           <feGaussianBlur in="SourceAlpha" stdDeviation="18" />
@@ -849,6 +832,25 @@ export function AgentAvatarSvg({
           <feComponentTransfer><feFuncA type="linear" slope={light ? "0.18" : "0.42"} /></feComponentTransfer>
           <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
+        {/* Diagonal glass sheen — sweeps across the upper shell */}
+        <linearGradient id={sheenGradId} x1="0%" y1="0%" x2="78%" y2="92%">
+          <stop offset="0%" stop-color="#FFFFFF" stop-opacity={light ? 0.5 : 0.3} />
+          <stop offset="32%" stop-color="#FFFFFF" stop-opacity={light ? 0.12 : 0.08} />
+          <stop offset="48%" stop-color="#FFFFFF" stop-opacity="0" />
+        </linearGradient>
+        {/* Inner shadow at the top of the screen — gives the inset depth */}
+        <linearGradient id={screenShadeGradId} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#000000" stop-opacity="0.42" />
+          <stop offset="26%" stop-color="#000000" stop-opacity="0" />
+          <stop offset="84%" stop-color="#FFFFFF" stop-opacity="0" />
+          <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.07" />
+        </linearGradient>
+        {/* Screen-light glow behind the eyes */}
+        <radialGradient id={eyeGlowGradId} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color={accent} stop-opacity="0.4" />
+          <stop offset="100%" stop-color={accent} stop-opacity="0" />
+        </radialGradient>
+        <clipPath id={clipInsetId}><path d={PATH_INSET_FACE} /></clipPath>
       </defs>
 
       {/* Ambient aura — sits behind the tile */}
@@ -885,15 +887,26 @@ export function AgentAvatarSvg({
             d={PATH_FACE_SHELL}
             fill="none"
             stroke={light ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.25)"}
-            strokeWidth="3"
+            stroke-width="3"
             opacity="0.7"
           />
+
+          {/* Diagonal glass sheen sweeping over the ceramic shell */}
+          <path d={PATH_FACE_SHELL} fill={`url(#${sheenGradId})`} pointer-events="none" />
 
           {/* Headphones — layered over the ear-cap area (skipped for "bumper") */}
           {renderHeadphones(headphonesId, accent, jadeBright, shellHex)}
 
           {/* Dark inset face — the screen */}
           <path d={PATH_INSET_FACE} fill={`url(#${insetGradientId})`} />
+
+          {/* Screen depth — inner shadow at the top, faint lift at the bottom */}
+          <path d={PATH_INSET_FACE} fill={`url(#${screenShadeGradId})`} pointer-events="none" />
+
+          {/* Screen-light glow washing out from behind the eyes */}
+          <g clip-path={`url(#${clipInsetId})`}>
+            <ellipse cx={630} cy={700} rx="255" ry="115" fill={`url(#${eyeGlowGradId})`} pointer-events="none" />
+          </g>
 
           {/* Bezel sliver — the dark line above the inset */}
           <path d={PATH_BEZEL_SLIVER} fill={bezelHex} />
@@ -902,7 +915,7 @@ export function AgentAvatarSvg({
           {renderEyes(eyesId, expression, accent, jadeBright)}
 
           {/* Inner glow inside the inset face — pulses subtly */}
-          <ellipse cx={627} cy={700} rx="220" ry="120" fill={`url(#${auraGlowId})`} opacity="0.18" pointerEvents="none">
+          <ellipse cx={627} cy={700} rx="220" ry="120" fill={`url(#${auraGlowId})`} opacity="0.18" pointer-events="none">
             <animate attributeName="opacity" values="0.18;0.08;0.18" dur="3s" repeatCount="indefinite" />
           </ellipse>
         </g>
