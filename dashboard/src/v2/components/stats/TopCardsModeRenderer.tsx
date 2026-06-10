@@ -7,7 +7,8 @@ import { formatTokens, formatDuration, createSeries } from "../../pages/stats/st
 import { StatsMetricCard } from "./StatsMetricCard.js";
 import { STATS_COLORS } from "../../lib/stats/color-tokens.js";
 import type { StatsVisualMode } from "../../pages/stats/components/stats-ui-primitives.js";
-import { buildMetricSeries, extractProviderSeries } from "../../lib/stats/series-builders.js";
+import { buildMetricSeries, extractProviderSeries, extractModelSeries } from "../../lib/stats/series-builders.js";
+import { buildModelHighlights, formatSuccessRate } from "../../pages/stats/model-insights.js";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -173,6 +174,61 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     );
   };
 
+  const renderModelsMode = () => {
+    const models = stats.models || [];
+    const topModel = models.length > 0 ? models[0]! : null;
+    const highlights = buildModelHighlights(models);
+    const cacheDenominator = stats.usage.inputTokens + stats.usage.cachedInputTokens;
+    const cacheHitRate = cacheDenominator > 0 ? (stats.usage.cachedInputTokens / cacheDenominator) * 100 : 0;
+    const totalFinished = (stats.statusCounts?.completed || 0) + (stats.statusCounts?.failed || 0) + (stats.statusCounts?.cancelled || 0);
+    const successRate = totalFinished > 0 ? (stats.statusCounts!.completed / totalFinished) : null;
+
+    return (
+      <>
+        <StatsMetricCard
+          label="Active Models"
+          value={String(models.length)}
+          detail="Distinct models that produced telemetry in this window"
+          accentHex="#8B5CF6"
+          sparkline={[]}
+          signalLabel="Models"
+        />
+        <StatsMetricCard
+          label="Top Model"
+          value={topModel ? topModel.label : "None"}
+          detail={topModel ? `Leading model by volume: ${formatTokens(topModel.usage.totalTokens)} tokens` : "No model telemetry yet"}
+          accentHex="#00E0A0"
+          sparkline={topModel ? extractModelSeries(stats, topModel.id) : []}
+          signalLabel="Models"
+        />
+        <StatsMetricCard
+          label="Success Rate"
+          value={formatSuccessRate(successRate)}
+          detail="Completed share of all finished invocations in this window"
+          accentHex="#10B981"
+          sparkline={[]}
+          signalLabel="Reliability"
+        />
+        <StatsMetricCard
+          label="Median Latency"
+          value={stats.duration && stats.duration.sampleCount > 0 ? formatDuration(stats.duration.p50Ms) : "—"}
+          detail={stats.duration && stats.duration.sampleCount > 0 ? `p95 ${formatDuration(stats.duration.p95Ms)} across ${stats.duration.sampleCount.toLocaleString()} calls` : "No finished invocations yet"}
+          accentHex="#0EA5E9"
+          sparkline={[]}
+          signalLabel="Latency"
+        />
+        <StatsMetricCard
+          label="Cache Hit Rate"
+          value={`${cacheHitRate.toFixed(1)}%`}
+          detail={highlights.bestCache ? `Best: ${highlights.bestCache.model.label} at ${highlights.bestCache.value}` : "Cached input share of all prompt tokens"}
+          accentHex="#FFB800"
+          sparkline={[]}
+          signalLabel="Efficiency"
+        />
+      </>
+    );
+  };
+
   const renderLedgersMode = () => {
     return (
       <>
@@ -226,6 +282,8 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     cardsContent = renderTrendMode();
   } else if (mode === "composition") {
     cardsContent = renderCompositionMode();
+  } else if (mode === "models") {
+    cardsContent = renderModelsMode();
   } else if (mode === "reliability") {
     cardsContent = renderReliabilityMode();
   } else if (mode === "ledgers") {

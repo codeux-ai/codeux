@@ -1,12 +1,12 @@
 import type { FunctionComponent } from "preact";
-import { BarChart3 } from "lucide-preact";
+import { Activity, BarChart3, Clock3, Cpu, ShieldCheck, Zap } from "lucide-preact";
 import type {
   Source,
   ProjectExecutionStatsSnapshot,
   ProjectStatsQuery,
   ProjectStatsWindow,
 } from "../../../types.js";
-import { formatDateTime } from "../stats-utils.js";
+import { formatDateTime, formatDuration, formatTokens } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   CHIP_CLASS,
@@ -14,6 +14,22 @@ import {
   ViewToggle,
   type StatsVisualMode,
 } from "./StatsShared.js";
+
+const HeroKpi: FunctionComponent<{
+  icon: typeof Zap;
+  label: string;
+  value: string;
+}> = ({ icon: Icon, label, value }) => (
+  <div className="flex items-center gap-3 rounded-2xl border border-black/[0.05] bg-white/68 px-4 py-3 backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
+    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-signal-500/10 text-signal-600 dark:text-signal-400">
+      <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+    </div>
+    <div className="min-w-0">
+      <div className="truncate text-base font-black leading-tight text-slate-900 dark:text-white">{value}</div>
+      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</div>
+    </div>
+  </div>
+);
 
 const WINDOW_PRESETS = ["1h", "24h", "7d", "30d", "all"] as const;
 
@@ -44,6 +60,11 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   visualMode,
   setVisualMode,
 }) => {
+  const usage = stats?.usage;
+  const finishedCount = stats?.statusCounts
+    ? stats.statusCounts.completed + stats.statusCounts.failed + stats.statusCounts.cancelled
+    : 0;
+
   return (
     <section className={`${PANEL_CLASS} rounded-[2.5rem] p-8 md:p-10`}>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
@@ -75,6 +96,19 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
               </div>
             ) : null}
           </div>
+          {usage ? (
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <HeroKpi icon={Zap} label="Tokens" value={formatTokens(usage.totalTokens)} />
+              <HeroKpi icon={Activity} label="Invocations" value={usage.invocationCount.toLocaleString()} />
+              <HeroKpi icon={Clock3} label="Active Time" value={formatDuration(usage.activeTimeMs)} />
+              <HeroKpi
+                icon={ShieldCheck}
+                label="Success Rate"
+                value={finishedCount > 0 ? `${Math.round((stats!.statusCounts!.completed / finishedCount) * 100)}%` : "—"}
+              />
+              <HeroKpi icon={Cpu} label="Models" value={String(stats?.models?.length ?? 0)} />
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-col items-start gap-4 xl:items-end xl:justify-end">
           <div className={`inline-flex flex-wrap p-1 ${CHIP_CLASS}`}>

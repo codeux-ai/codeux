@@ -64,35 +64,35 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     switch (status) {
       case "running":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-blue-500/40 bg-blue-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-blue-500/40 bg-blue-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300`}>
             <Loader2 className="h-3 w-3 animate-spin" />
             Running
           </div>
         );
       case "completed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300`}>
             <CheckCircle2 className="h-3 w-3" />
             Completed
           </div>
         );
       case "failed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-red-500/40 bg-red-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-red-500/40 bg-red-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-300`}>
             <XCircle className="h-3 w-3" />
             Failed
           </div>
         );
       case "cancelled":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-slate-500/40 bg-slate-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-slate-500/40 bg-slate-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300`}>
             <MinusCircle className="h-3 w-3" />
             Cancelled
           </div>
         );
       case "paused":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300`}>
             <PauseCircle className="h-3 w-3" />
             Paused
           </div>
@@ -128,13 +128,13 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-y-2">
-        <thead className="sticky top-0 z-10 bg-[#0E0C0A]/80 backdrop-blur-md">
+        <thead className="sticky top-0 z-10 bg-white/80 backdrop-blur-md dark:bg-[#0E0C0A]/80">
           <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
             <th className="pb-2 pl-6">
               <button
                 type="button"
                 onClick={() => handleSort("startedAt")}
-                className="flex items-center hover:text-white"
+                className="flex items-center hover:text-slate-900 dark:hover:text-white"
               >
                 Time {renderSortIcon("startedAt")}
               </button>
@@ -146,7 +146,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("inputTokens")}
-                className="flex items-center hover:text-white"
+                className="flex items-center hover:text-slate-900 dark:hover:text-white"
               >
                 In {renderSortIcon("inputTokens")}
               </button>
@@ -155,7 +155,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("outputTokens")}
-                className="flex items-center hover:text-white"
+                className="flex items-center hover:text-slate-900 dark:hover:text-white"
               >
                 Out {renderSortIcon("outputTokens")}
               </button>
@@ -165,7 +165,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("totalTokens")}
-                className="flex items-center hover:text-white"
+                className="flex items-center hover:text-slate-900 dark:hover:text-white"
               >
                 Total {renderSortIcon("totalTokens")}
               </button>
@@ -174,7 +174,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <button
                 type="button"
                 onClick={() => handleSort("durationMs")}
-                className="flex items-center hover:text-white"
+                className="flex items-center hover:text-slate-900 dark:hover:text-white"
               >
                 Duration {renderSortIcon("durationMs")}
               </button>
@@ -213,7 +213,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         </div>
 
                         {/* Model */}
-                        <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                        <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
                           <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
                             <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
                           </div>
@@ -221,27 +221,27 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         </div>
 
                         {/* In Tokens */}
-                        <div className="text-[11px] text-blue-400">
+                        <div className="text-[11px] text-blue-600 dark:text-blue-400">
                           {formatTokens(invocation.inputTokens ?? 0)}
                         </div>
 
                         {/* Out Tokens */}
-                        <div className="text-[11px] text-emerald-400">
+                        <div className="text-[11px] text-emerald-600 dark:text-emerald-400">
                           {formatTokens(invocation.outputTokens ?? 0)}
                         </div>
 
                         {/* Cached Tokens */}
-                        <div className="text-[11px] text-purple-400">
+                        <div className="text-[11px] text-purple-600 dark:text-purple-400">
                           {formatTokens(invocation.cachedInputTokens ?? 0)}
                         </div>
 
                         {/* Total Tokens */}
-                        <div className="text-[11px] font-bold text-white">
+                        <div className="text-[11px] font-bold text-slate-900 dark:text-white">
                           {formatTokens(invocation.totalTokens ?? 0)}
                         </div>
 
                         {/* Duration */}
-                        <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-300" : "text-blue-400"}`}>
+                        <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-blue-600 dark:text-blue-400"}`}>
                           {duration}
                         </div>
 
@@ -269,7 +269,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                             type="button"
                             onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
                             aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                            className={`rounded-full p-2 transition-colors hover:bg-white/5 ${
+                            className={`rounded-full p-2 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/5 ${
                               isExpanded ? "text-signal-500" : "text-slate-400"
                             }`}
                           >
@@ -282,7 +282,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                     {/* Error Sub-row inside main card if failed */}
                     {invocation.status === "failed" && (invocation.lastErrorMessage || invocation.errorMessage) && (
                       <div className="mt-[-8px] px-6 pb-4">
-                        <div className="flex items-center gap-1.5 text-[11px] text-red-400">
+                        <div className="flex items-center gap-1.5 text-[11px] text-red-600 dark:text-red-400">
                           <AlertTriangle className="h-3 w-3 flex-shrink-0" />
                           <span>{invocation.lastErrorMessage || invocation.errorMessage}</span>
                         </div>

@@ -13,6 +13,10 @@ export function extractProviderSeries(stats: ProjectExecutionStatsSnapshot | nul
   return extractChartSeries(stats, `provider_${providerId}`);
 }
 
+export function extractModelSeries(stats: ProjectExecutionStatsSnapshot | null, modelId: string): number[] {
+  return extractChartSeries(stats, `model_${modelId}`);
+}
+
 export function buildMetricSeries(stats: ProjectExecutionStatsSnapshot | null) {
   return {
     taskCodingTokens: extractChartSeries(stats, "purpose_invocations_task_coding"),

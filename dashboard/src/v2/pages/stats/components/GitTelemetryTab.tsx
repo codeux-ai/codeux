@@ -1,14 +1,14 @@
 import type { FunctionComponent } from "preact";
 import { useMemo, useState } from "preact/hooks";
-import { GitCommit, GitMerge, GitPullRequest, FileEdit, PlusSquare, MinusSquare } from "lucide-preact";
+import { GitMerge, GitPullRequest, FileEdit, Flag, ListTodo, PlusSquare, MinusSquare, Search } from "lucide-preact";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type { ExecutionGitStatsEntitySummary, ExecutionGitStatsSummary } from "../../../types.js";
+import { formatPercent } from "../stats-utils.js";
 import {
   CHIP_CLASS,
   INPUT_CLASS,
   LEDGER_ROW_MODERN_CLASS,
   PANEL_CLASS,
-  SUBPANEL_CLASS,
   SignalMetricCard,
   SortButton,
   TokenChip,
@@ -34,6 +34,7 @@ export const GitTelemetryLedger: FunctionComponent<{
 }) => {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<GitLedgerSortKey>(defaultSortKey);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -47,6 +48,7 @@ export const GitTelemetryLedger: FunctionComponent<{
         return haystack.includes(normalizedQuery);
       });
 
+    const directionFactor = sortDir === "desc" ? 1 : -1;
     return [...base].sort((left, right) => {
       let leftValue: number | string = 0;
       let rightValue: number | string = 0;
@@ -59,11 +61,32 @@ export const GitTelemetryLedger: FunctionComponent<{
       else if (sortKey === "name") { leftValue = left.label; rightValue = right.label; }
 
       if (typeof leftValue === "string" && typeof rightValue === "string") {
-        return leftValue.localeCompare(rightValue);
+        // First click on a text sort reads A→Z; toggling flips it.
+        return leftValue.localeCompare(rightValue) * (sortDir === "desc" ? 1 : -1);
       }
-      return Number(rightValue) - Number(leftValue);
+      return (Number(rightValue) - Number(leftValue)) * directionFactor;
     });
-  }, [items, query, sortKey]);
+  }, [items, query, sortKey, sortDir]);
+
+  const totals = useMemo(() => {
+    let churn = 0;
+    let leaderChurn = 0;
+    for (const item of filteredItems) {
+      const itemChurn = item.metrics.insertions + item.metrics.deletions;
+      churn += itemChurn;
+      leaderChurn = Math.max(leaderChurn, itemChurn);
+    }
+    return { churn, leaderChurn };
+  }, [filteredItems]);
+
+  const handleSort = (key: GitLedgerSortKey) => {
+    if (sortKey === key) {
+      setSortDir((current) => (current === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
 
   const {
     visibleItems,
@@ -88,13 +111,16 @@ export const GitTelemetryLedger: FunctionComponent<{
         </div>
 
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-          <input
-            type="text"
-            value={query}
-            onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
-            placeholder={`Search ${kindLabel}`}
-            className={INPUT_CLASS}
-          />
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
+            <input
+              type="text"
+              value={query}
+              onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
+              placeholder={`Search ${kindLabel}`}
+              className={`${INPUT_CLASS} w-full pl-10`}
+            />
+          </div>
           <div className="flex flex-wrap gap-2">
             {([
               ["insertions", "Insertions"],
@@ -108,7 +134,8 @@ export const GitTelemetryLedger: FunctionComponent<{
                 key={value}
                 label={label}
                 active={sortKey === value}
-                onClick={() => setSortKey(value)}
+                direction={sortKey === value ? sortDir : null}
+                onClick={() => handleSort(value)}
               />
             ))}
           </div>
@@ -122,53 +149,82 @@ export const GitTelemetryLedger: FunctionComponent<{
           <div ref={scrollContainerRef} className="max-h-[42rem] overflow-y-auto pr-2 dashboard-scrollbar">
             <div className="space-y-3">
               {visibleItems.map((item, index) => {
+                const itemChurn = item.metrics.insertions + item.metrics.deletions;
+                const shareOfTotal = totals.churn > 0 ? (itemChurn / totals.churn) * 100 : 0;
+                const shareOfLeader = totals.leaderChurn > 0 ? (itemChurn / totals.leaderChurn) * 100 : 0;
+
                 return (
-                  <div key={item.id} className={LEDGER_ROW_MODERN_CLASS}>
-                    <div className="flex flex-col gap-6">
+                  <div key={item.id} className={`${LEDGER_ROW_MODERN_CLASS} !p-5`}>
+                    <div className="flex flex-col gap-4">
                       <div className="flex items-start justify-between gap-4">
-                        <div className="flex min-w-0 items-start gap-4">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[1.25rem] border border-black/[0.06] bg-white/75 text-sm font-black text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/75 text-xs font-black text-slate-900 shadow-[0_6px_16px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white">
                             {index + 1}
                           </div>
                           <div className="min-w-0">
                             <div className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white">{item.label}</div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2">
-                              {item.secondaryLabel ? (
+                            {item.secondaryLabel ? (
+                              <div className="mt-1.5 flex flex-wrap items-center gap-2">
                                 <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
                                   {item.secondaryLabel}
                                 </span>
-                              ) : null}
-                            </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="hidden shrink-0 grid-cols-3 gap-6 text-right lg:grid">
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Churn</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{itemChurn.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">PRs</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.prCount.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merged</div>
+                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.mergedCount.toLocaleString()}</div>
                           </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-6">
+                      <div className="grid grid-cols-3 gap-4 lg:hidden">
                         <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Total Churn</div>
-                          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{(item.metrics.insertions + item.metrics.deletions).toLocaleString()}</div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Churn</div>
+                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{itemChurn.toLocaleString()}</div>
                         </div>
                         <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">PRs Opened</div>
-                          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.prCount.toLocaleString()}</div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">PRs</div>
+                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.prCount.toLocaleString()}</div>
                         </div>
                         <div>
                           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merged</div>
-                          <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.mergedCount.toLocaleString()}</div>
+                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{item.metrics.mergedCount.toLocaleString()}</div>
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-3">
-                        <ChurnFlowBar 
+                      <div className="flex flex-col gap-2.5">
+                        <ChurnFlowBar
                           insertions={item.metrics.insertions}
                           deletions={item.metrics.deletions}
                         />
-                        <div className="flex flex-wrap gap-2">
-                          <TokenChip icon={PlusSquare} label="Insertions" value={`+${item.metrics.insertions.toLocaleString()}`} tone="border-emerald-500/16 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400" />
-                          <TokenChip icon={MinusSquare} label="Deletions" value={`-${item.metrics.deletions.toLocaleString()}`} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
-                          <TokenChip icon={FileEdit} label="Files" value={item.metrics.filesChanged.toLocaleString()} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
-                          <TokenChip icon={GitPullRequest} label="PRs" value={item.metrics.prCount.toLocaleString()} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
-                          <TokenChip icon={GitMerge} label="Merged" value={item.metrics.mergedCount.toLocaleString()} tone="border-indigo-500/16 bg-indigo-500/8 text-indigo-600 dark:text-indigo-400" />
+                        <div className="h-1 rounded-full bg-black/[0.04] dark:bg-white/[0.05]">
+                          <div
+                            className="h-1 rounded-full bg-emerald-500/60 transition-all duration-500"
+                            style={{ width: `${Math.min(100, Math.max(shareOfLeader > 0 ? 3 : 0, shareOfLeader))}%` }}
+                          />
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-wrap gap-2">
+                            <TokenChip icon={PlusSquare} label="Insertions" value={`+${item.metrics.insertions.toLocaleString()}`} tone="border-emerald-500/16 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400" />
+                            <TokenChip icon={MinusSquare} label="Deletions" value={`-${item.metrics.deletions.toLocaleString()}`} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
+                            <TokenChip icon={FileEdit} label="Files" value={item.metrics.filesChanged.toLocaleString()} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
+                            <TokenChip icon={GitPullRequest} label="PRs" value={item.metrics.prCount.toLocaleString()} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
+                            <TokenChip icon={GitMerge} label="Merged" value={item.metrics.mergedCount.toLocaleString()} tone="border-indigo-500/16 bg-indigo-500/8 text-indigo-600 dark:text-indigo-400" />
+                          </div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                            {formatPercent(shareOfTotal)} of churn
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -214,6 +270,11 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
     );
   }
 
+  const leaderboardTabs = [
+    { id: "tasks" as const, label: "Task Leaderboard", icon: ListTodo },
+    { id: "sprints" as const, label: "Sprint Leaderboard", icon: Flag },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -246,29 +307,27 @@ export const GitTelemetryTab: FunctionComponent<{ gitStats: ExecutionGitStatsSum
         />
       </section>
 
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => setActiveTab("tasks")}
-          className={`px-4 py-2 text-sm font-bold transition-colors ${
-            activeTab === "tasks"
-              ? "text-slate-900 dark:text-white"
-              : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-          }`}
-        >
-          Task Leaderboard
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("sprints")}
-          className={`px-4 py-2 text-sm font-bold transition-colors ${
-            activeTab === "sprints"
-              ? "text-slate-900 dark:text-white"
-              : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-          }`}
-        >
-          Sprint Leaderboard
-        </button>
+      <div className="flex gap-1 self-start rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35">
+        {leaderboardTabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              aria-pressed={isActive}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${
+                isActive
+                  ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
+                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       <div>

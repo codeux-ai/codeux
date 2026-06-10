@@ -40,6 +40,7 @@ import {
 } from "../stats-utils.js";
 import { useStatsPageData } from "../use-stats-page-data.js";
 import type { UsageChartState } from "../use-usage-chart-state.js";
+import { computeWindowDelta, formatDeltaPercent, type TrendDelta } from "../trend-insights.js";
 
 export * from "./stats-geometry.js";
 export * from "./stats-formatters.js";
@@ -94,6 +95,41 @@ function getProviderTelemetrySource(
   return { label: "Unknown", tone: "text-slate-500 dark:text-slate-400" };
 }
 
+const TrendKpiTile: FunctionComponent<{
+  label: string;
+  value: string;
+  delta?: TrendDelta;
+  detail?: string;
+}> = ({ label, value, delta, detail }) => {
+  const deltaLabel = delta ? formatDeltaPercent(delta) : null;
+  const showDelta = delta && deltaLabel && deltaLabel !== "—";
+  const deltaTone = !delta || delta.direction === "flat"
+    ? "text-slate-400 dark:text-slate-500"
+    : delta.direction === "up"
+      ? "text-status-green"
+      : "text-rose-500 dark:text-rose-400";
+
+  return (
+    <div className={`${SUBPANEL_CLASS} p-4`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{label}</div>
+        {showDelta ? (
+          <div className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] ${deltaTone}`}>
+            {delta!.direction === "up" ? (
+              <ArrowUpRight className="h-3 w-3" strokeWidth={2.6} />
+            ) : delta!.direction === "down" ? (
+              <ArrowDownRight className="h-3 w-3" strokeWidth={2.6} />
+            ) : null}
+            {deltaLabel}
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{value}</div>
+      {detail ? <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{detail}</div> : null}
+    </div>
+  );
+};
+
 export const TrendStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
   loading: boolean;
@@ -108,29 +144,55 @@ export const TrendStudio: FunctionComponent<{
   refresh,
   planningUsage: _planningUsage,
   chartState,
-}) => (
+}) => {
+  const buckets = stats.buckets || [];
+  const tokenDelta = computeWindowDelta(buckets, (bucket) => bucket.usage?.totalTokens || 0);
+  const invocationDelta = computeWindowDelta(buckets, (bucket) => bucket.usage?.invocationCount || 0);
+  const activeTimeDelta = computeWindowDelta(buckets, (bucket) => bucket.usage?.activeTimeMs || 0);
+  const cacheDenominator = stats.usage.inputTokens + stats.usage.cachedInputTokens;
+  const statusCounts = stats.statusCounts;
+  const finishedCount = statusCounts
+    ? statusCounts.completed + statusCounts.failed + statusCounts.cancelled
+    : 0;
+
+  return (
   <section className="space-y-6">
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-      <div className={`${SUBPANEL_CLASS} p-4`}>
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Total Tokens</div>
-        <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatTokens(stats.usage.totalTokens)}</div>
-      </div>
-      <div className={`${SUBPANEL_CLASS} p-4`}>
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Invocations</div>
-        <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.invocationCount.toLocaleString()}</div>
-      </div>
-      <div className={`${SUBPANEL_CLASS} p-4`}>
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Active Time</div>
-        <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatDuration(stats.usage.activeTimeMs)}</div>
-      </div>
-      <div className={`${SUBPANEL_CLASS} p-4`}>
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Cache Hit Rate</div>
-        <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">
-          {stats.usage.inputTokens + stats.usage.cachedInputTokens > 0
-            ? formatPercent((stats.usage.cachedInputTokens / (stats.usage.inputTokens + stats.usage.cachedInputTokens)) * 100)
-            : "—"}
-        </div>
-      </div>
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+      <TrendKpiTile
+        label="Total Tokens"
+        value={formatTokens(stats.usage.totalTokens)}
+        delta={tokenDelta}
+        detail="vs first half of window"
+      />
+      <TrendKpiTile
+        label="Invocations"
+        value={stats.usage.invocationCount.toLocaleString()}
+        delta={invocationDelta}
+        detail="vs first half of window"
+      />
+      <TrendKpiTile
+        label="Active Time"
+        value={formatDuration(stats.usage.activeTimeMs)}
+        delta={activeTimeDelta}
+        detail="vs first half of window"
+      />
+      <TrendKpiTile
+        label="Cache Hit Rate"
+        value={cacheDenominator > 0
+          ? formatPercent((stats.usage.cachedInputTokens / cacheDenominator) * 100)
+          : "—"}
+        detail={`${formatTokens(stats.usage.cachedInputTokens)} cached`}
+      />
+      <TrendKpiTile
+        label="Median Latency"
+        value={stats.duration && stats.duration.sampleCount > 0 ? formatDuration(stats.duration.p50Ms) : "—"}
+        detail={stats.duration && stats.duration.sampleCount > 0 ? `p95 ${formatDuration(stats.duration.p95Ms)}` : "no samples"}
+      />
+      <TrendKpiTile
+        label="Success Rate"
+        value={finishedCount > 0 ? formatPercent((statusCounts!.completed / finishedCount) * 100) : "—"}
+        detail={finishedCount > 0 ? `${statusCounts!.failed} failed of ${finishedCount}` : "nothing finished yet"}
+      />
     </div>
     <div className="flex flex-wrap gap-3">
       <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
@@ -160,7 +222,8 @@ export const TrendStudio: FunctionComponent<{
       </div>
     </div>
   </section>
-);
+  );
+};
 
 export const CompositionStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
@@ -274,10 +337,17 @@ export const CompositionStudio: FunctionComponent<{
           <div className="space-y-4">
             {providers.map((provider) => {
               const { icon: Icon, bg, text } = getProviderIcon(provider.provider);
+              const providerCacheDenominator = provider.usage.inputTokens + provider.usage.cachedInputTokens;
+              const providerCacheRate = providerCacheDenominator > 0
+                ? Math.round((provider.usage.cachedInputTokens / providerCacheDenominator) * 100)
+                : null;
+              const providerTokensPerCall = provider.usage.invocationCount > 0
+                ? Math.round(provider.usage.totalTokens / provider.usage.invocationCount)
+                : null;
 
               return (
                 <div key={provider.id} className={LEDGER_ROW_MODERN_CLASS}>
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,auto))] lg:items-start">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(5,minmax(0,auto))] lg:items-start">
                     <div className="flex min-w-0 items-start gap-4">
                       <div className={`rounded-xl p-2 ${bg} ${text}`}>
                         <Icon className="h-4 w-4" strokeWidth={2.1} />
@@ -298,6 +368,14 @@ export const CompositionStudio: FunctionComponent<{
                     <div className="text-right">
                       <div className="text-lg font-black text-slate-900 dark:text-white">{formatDuration(provider.usage.activeTimeMs)}</div>
                       <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">active</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-black text-slate-900 dark:text-white">{providerCacheRate !== null ? `${providerCacheRate}%` : "—"}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">cache hit</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-black text-slate-900 dark:text-white">{providerTokensPerCall !== null ? formatTokens(providerTokensPerCall) : "—"}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">tok / call</div>
                     </div>
                   </div>
                   <div className="mt-4">
@@ -409,6 +487,11 @@ export const ReliabilityStudio: FunctionComponent<{
               const { icon: Icon, bg, text } = getProviderIcon(provider.provider);
               const providerUsage = provider.usage as ProviderTelemetryUsage;
               const sourceQuality = getProviderTelemetrySource(providerUsage, stats.tokenSources);
+              const providerModels = (stats.models || []).filter((model) => model.provider === provider.id);
+              const latencySamples = providerModels.reduce((sum, model) => sum + model.duration.sampleCount, 0);
+              const avgLatencyMs = latencySamples > 0
+                ? providerModels.reduce((sum, model) => sum + model.duration.avgMs * model.duration.sampleCount, 0) / latencySamples
+                : null;
 
               return (
                 <div key={provider.id} className={`${PANEL_CLASS} p-5`}>
@@ -429,7 +512,7 @@ export const ReliabilityStudio: FunctionComponent<{
                       <span className="text-slate-400">tokens</span>
                     </div>
                   </div>
-                  <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
                     <div className={`${SUBPANEL_CLASS} p-4`}>
                       <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Invocations</div>
                       <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">{provider.usage.invocationCount.toLocaleString()}</div>
@@ -448,6 +531,15 @@ export const ReliabilityStudio: FunctionComponent<{
                           : "—"}
                       </div>
                       <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">avg tokens/call</div>
+                    </div>
+                    <div className={`${SUBPANEL_CLASS} p-4`}>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Avg Latency</div>
+                      <div className="mt-2 text-lg font-black text-slate-900 dark:text-white">
+                        {avgLatencyMs !== null ? formatDuration(avgLatencyMs) : "—"}
+                      </div>
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                        {latencySamples > 0 ? `${latencySamples.toLocaleString()} samples` : "no samples"}
+                      </div>
                     </div>
                   </div>
                   <div className="mt-5">

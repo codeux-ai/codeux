@@ -13,6 +13,18 @@ import {
 } from "../../contracts/app-types.js";
 import { toNumber } from "./execution-utils.js";
 import { StatsEntityMetadata, ProjectStatsQueryDependencies } from "./execution-stats-types.js";
+import {
+  addStatusCount,
+  buildModelStatsKey,
+  buildModelStatsLabel,
+  computeDurationStats,
+  computeSuccessRate,
+  createEmptyStatusCounts,
+} from "./model-stats.js";
+import {
+  ExecutionInvocationStatusCounts,
+  ExecutionModelStatsSummary,
+} from "../../contracts/app-types.js";
 
 export function queryProjectStatsSnapshot(
   db: Database,
@@ -99,6 +111,11 @@ export function queryProjectStatsSnapshot(
   const sprintLastActivity = new Map<string, string>();
   const providerLastActivity = new Map<string, string>();
   const purposeLastActivity = new Map<string, string>();
+  const modelUsage = new Map<string, ExecutionUsageTotals>();
+  const modelMeta = new Map<string, { provider: string; model: string | null }>();
+  const modelStatusCounts = new Map<string, ExecutionInvocationStatusCounts>();
+  const modelLastActivity = new Map<string, string>();
+  const statusCounts = createEmptyStatusCounts();
 
   const bucketQuery = buckets.length > 0 ? `
     CAST((julianday(started_at) - julianday(?)) * 86400000 / ? AS INTEGER) as bucketIndex,
@@ -114,11 +131,13 @@ export function queryProjectStatsSnapshot(
       provider,
       purpose,
       usage_source,
+      model,
+      status,
       MAX(COALESCE(finished_at, started_at)) as lastActivityAt,
       ${usageFields}
     FROM provider_invocations
     WHERE project_id = ? AND started_at >= ? AND started_at < ?
-    GROUP BY bucketIndex, task_id, sprint_key, provider, purpose, usage_source
+    GROUP BY bucketIndex, task_id, sprint_key, provider, purpose, usage_source, model, status
   `).all(...bucketParams, projectId, rangeStartIso, rangeEndIso) as any[];
 
   for (const row of mainAggs) {
@@ -162,6 +181,20 @@ export function queryProjectStatsSnapshot(
       tokenSourceCounts.set(row.usage_source, (tokenSourceCounts.get(row.usage_source) || 0) + row.invocationCount);
     }
 
+    // Model + status aggregations
+    const modelKey = buildModelStatsKey(row.provider, row.model);
+    if (!modelMeta.has(modelKey)) {
+      modelMeta.set(modelKey, { provider: row.provider || "unknown", model: row.model || null });
+    }
+    const mU = modelUsage.get(modelKey) || createEmptyUsageTotals();
+    mergeAggregatedUsage(mU, u);
+    modelUsage.set(modelKey, mU);
+    deps.updateLastActivity(modelLastActivity, modelKey, row.lastActivityAt);
+    const mCounts = modelStatusCounts.get(modelKey) || createEmptyStatusCounts();
+    addStatusCount(mCounts, row.status, u.invocationCount);
+    modelStatusCounts.set(modelKey, mCounts);
+    addStatusCount(statusCounts, row.status, u.invocationCount);
+
     // Buckets
     if (buckets.length > 0 && row.bucketIndex >= 0 && row.bucketIndex < buckets.length) {
       const bucket = buckets[row.bucketIndex];
@@ -169,7 +202,28 @@ export function queryProjectStatsSnapshot(
       bucket.providerTokens.set(row.provider, (bucket.providerTokens.get(row.provider) || 0) + u.totalTokens);
       bucket.purposeTime.set(row.purpose, (bucket.purposeTime.get(row.purpose) || 0) + u.activeTimeMs);
       bucket.purposeInvocations.set(row.purpose, (bucket.purposeInvocations.get(row.purpose) || 0) + u.invocationCount);
+      bucket.modelTokens.set(modelKey, (bucket.modelTokens.get(modelKey) || 0) + u.totalTokens);
     }
+  }
+
+  // Duration distribution per model (percentiles need raw samples, not SUM aggregates)
+  const durationRows = db.prepare(`
+    SELECT provider, model, duration_ms as durationMs
+    FROM provider_invocations
+    WHERE project_id = ? AND started_at >= ? AND started_at < ?
+      AND duration_ms IS NOT NULL AND duration_ms > 0
+  `).all(projectId, rangeStartIso, rangeEndIso) as Array<{ provider: string | null; model: string | null; durationMs: number | string }>;
+
+  const allDurations: number[] = [];
+  const modelDurations = new Map<string, number[]>();
+  for (const row of durationRows) {
+    const durationMs = toNumber(row.durationMs);
+    if (durationMs <= 0) continue;
+    allDurations.push(durationMs);
+    const key = buildModelStatsKey(row.provider, row.model);
+    const samples = modelDurations.get(key) || [];
+    samples.push(durationMs);
+    modelDurations.set(key, samples);
   }
 
   for (const [taskId, wallTime] of wallTimeByTaskId) {
@@ -217,10 +271,25 @@ export function queryProjectStatsSnapshot(
     { id: "git_files_changed", label: "Files Changed", grouping: "git", defaultEnabled: true, data: gitBuckets.map((b) => b.metrics.filesChanged), color: '#3B82F6', signalLabel: 'Modified', formatter: 'number' },
     { id: "git_prs", label: "Pull Requests", grouping: "git", defaultEnabled: false, data: gitBuckets.map((b) => b.metrics.prCount), color: '#8B5CF6', signalLabel: 'Merged', formatter: 'number' },
     { id: "git_merges", label: "Commits", grouping: "git", defaultEnabled: false, data: gitBuckets.map((b) => b.metrics.mergedCount), color: '#F59E0B', signalLabel: 'History', formatter: 'number' },
+    { id: "core_cache_hit", label: "Cache Hit Rate", grouping: "details", defaultEnabled: false, data: buckets.map((b) => {
+      const denominator = b.usage.inputTokens + b.usage.cachedInputTokens;
+      return denominator > 0 ? Math.round((b.usage.cachedInputTokens / denominator) * 1000) / 10 : 0;
+    }), formatter: 'percent' },
     ...Array.from(providerUsage.keys()).map((providerId) => ({
       id: `provider_${providerId}`, label: `${providerId} Tokens`, grouping: "providers", defaultEnabled: false,
       data: buckets.map((b) => b.providerTokens.get(providerId) || 0), formatter: 'tokens' as const
     })),
+    ...Array.from(modelUsage.keys()).map((modelKey) => {
+      const meta = modelMeta.get(modelKey);
+      return {
+        id: `model_${modelKey}`,
+        label: `${buildModelStatsLabel(meta?.provider, meta?.model)} Tokens`,
+        grouping: "models",
+        defaultEnabled: false,
+        data: buckets.map((b) => b.modelTokens.get(modelKey) || 0),
+        formatter: 'tokens' as const,
+      };
+    }),
     ...Array.from(purposeUsage.keys()).map((purposeId) => ({
       id: `purpose_time_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Time`, grouping: "purposes_time", defaultEnabled: false,
       data: buckets.map((b) => b.purposeTime.get(purposeId) || 0), formatter: 'duration' as const
@@ -280,6 +349,23 @@ export function queryProjectStatsSnapshot(
     tasks: mapEntityUsage(taskUsage, taskLastActivity, (id) => taskMeta.get(id)),
     providers: mapEntityUsage(providerUsage, providerLastActivity),
     purposes: mapEntityUsage(purposeUsage, purposeLastActivity),
+    models: Array.from(modelUsage.entries()).map(([key, modelTotals]): ExecutionModelStatsSummary => {
+      const meta = modelMeta.get(key);
+      const counts = modelStatusCounts.get(key) || createEmptyStatusCounts();
+      return {
+        id: key,
+        provider: meta?.provider || "unknown",
+        model: meta?.model || null,
+        label: buildModelStatsLabel(meta?.provider, meta?.model),
+        usage: modelTotals,
+        statusCounts: counts,
+        successRate: computeSuccessRate(counts),
+        duration: computeDurationStats(modelDurations.get(key) || []),
+        lastActivityAt: modelLastActivity.get(key) || null,
+      };
+    }).sort((a, b) => b.usage.totalTokens - a.usage.totalTokens),
+    statusCounts,
+    duration: computeDurationStats(allDurations),
     tokenSources: Array.from(tokenSourceCounts.entries()).map(([source, count]) => ({ source: source as any, count })).sort((a, b) => b.count - a.count),
     chartSeries,
   };

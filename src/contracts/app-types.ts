@@ -378,6 +378,34 @@ export interface ExecutionUsageTotals {
   unsupportedInvocationCount: number;
 }
 
+export interface ExecutionInvocationStatusCounts {
+  completed: number;
+  failed: number;
+  cancelled: number;
+  running: number;
+  paused: number;
+}
+
+export interface ExecutionDurationStats {
+  sampleCount: number;
+  avgMs: number;
+  p50Ms: number;
+  p95Ms: number;
+  maxMs: number;
+}
+
+export interface ExecutionModelStatsSummary {
+  id: string;
+  provider: string;
+  model: string | null;
+  label: string;
+  usage: ExecutionUsageTotals;
+  statusCounts: ExecutionInvocationStatusCounts;
+  successRate: number | null;
+  duration: ExecutionDurationStats;
+  lastActivityAt: string | null;
+}
+
 export interface ExecutionGitMetrics {
   insertions: number;
   deletions: number;
@@ -454,7 +482,7 @@ export interface ProjectExecutionStatsChartSeries {
   data: number[];
   color?: string;
   signalLabel?: string;
-  formatter?: 'tokens' | 'duration' | 'number';
+  formatter?: 'tokens' | 'duration' | 'number' | 'percent';
 }
 
 export interface ProjectExecutionStatsSnapshot {
@@ -477,6 +505,9 @@ export interface ProjectExecutionStatsSnapshot {
   tasks: ExecutionStatsEntitySummary[];
   providers: ExecutionStatsEntitySummary[];
   purposes: ExecutionStatsEntitySummary[];
+  models: ExecutionModelStatsSummary[];
+  statusCounts: ExecutionInvocationStatusCounts;
+  duration: ExecutionDurationStats;
   tokenSources: Array<{
     source: TokenUsageSource;
     count: number;

@@ -4,12 +4,15 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 import gsap from "gsap";
 import {
   Activity,
+  ArrowDown,
   ArrowDownRight,
+  ArrowUp,
   ArrowUpRight,
   BarChart3,
   Brain,
   Code2,
   Clock3,
+  Cpu,
   Database,
   GitBranch,
   Layers3,
@@ -43,7 +46,7 @@ import {
 } from "../stats-utils.js";
 
 import type { DonutSliceGeometry, ChartPoint } from "./stats-geometry.js";
-export type StatsVisualMode = "trend" | "composition" | "reliability" | "ledgers" | "system";
+export type StatsVisualMode = "trend" | "composition" | "models" | "reliability" | "ledgers" | "system";
 export type ChartSeriesId = "tokens" | "active" | "invocations";
 export type LedgerSortKey = "last" | "tokens" | "active" | "input" | "output" | "name";
 
@@ -171,6 +174,7 @@ export const ViewToggle: FunctionComponent<{
   const modes: Array<{ id: StatsVisualMode; label: string; icon: any }> = [
     { id: "trend", label: "Trend", icon: BarChart3 },
     { id: "composition", label: "Composition", icon: PieChart },
+    { id: "models", label: "Models", icon: Cpu },
     { id: "reliability", label: "Providers", icon: ShieldCheck },
     { id: "ledgers", label: "Ledgers", icon: Layers3 },
     { id: "system", label: "System", icon: Terminal },
@@ -532,17 +536,24 @@ export const StudioHeader: FunctionComponent<{
 export const SortButton: FunctionComponent<{
   label: string;
   active: boolean;
+  direction?: "asc" | "desc" | null;
   onClick: () => void;
-}> = ({ label, active, onClick }) => (
+}> = ({ label, active, direction = null, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] transition-all ${
+    aria-pressed={active}
+    className={`inline-flex items-center gap-1 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] transition-all ${
       active
         ? "bg-slate-900 text-white shadow-[0_12px_24px_rgba(15,23,42,0.12)] dark:bg-white dark:text-void-900"
         : `${CHIP_CLASS} text-slate-500 dark:text-slate-300`
     }`}
   >
     {label}
+    {active && direction ? (
+      direction === "desc"
+        ? <ArrowDown className="h-3 w-3" strokeWidth={2.6} />
+        : <ArrowUp className="h-3 w-3" strokeWidth={2.6} />
+    ) : null}
   </button>
 );

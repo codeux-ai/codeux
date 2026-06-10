@@ -1637,6 +1637,26 @@ describe("ExecutionRepository", () => {
       { source: "reported", count: 1 },
       { source: "estimated", count: 1 },
     ]));
+    expect(statsSnapshot.models).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "codex::gpt-5.3-codex",
+        provider: "codex",
+        model: "gpt-5.3-codex",
+        label: "gpt-5.3-codex",
+        successRate: 1,
+        statusCounts: expect.objectContaining({ completed: 1, failed: 0 }),
+        duration: expect.objectContaining({ sampleCount: 1, p50Ms: 180_000, p95Ms: 180_000 }),
+        usage: expect.objectContaining({ totalTokens: 810 }),
+      }),
+      expect.objectContaining({
+        id: "claude-code::claude-sonnet-4-6",
+        model: "claude-sonnet-4-6",
+        duration: expect.objectContaining({ sampleCount: 1, p50Ms: 240_000 }),
+        usage: expect.objectContaining({ totalTokens: 400 }),
+      }),
+    ]));
+    expect(statsSnapshot.statusCounts).toMatchObject({ completed: 2, failed: 0, cancelled: 0, running: 0 });
+    expect(statsSnapshot.duration).toMatchObject({ sampleCount: 2, avgMs: 210_000, p50Ms: 180_000, p95Ms: 240_000, maxMs: 240_000 });
     expect(statsSnapshot.buckets).toHaveLength(24);
     expect(statsSnapshot.chartSeries).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "core_total_tokens", grouping: "totals" }),

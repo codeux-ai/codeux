@@ -11,6 +11,7 @@ export interface InternalStatsBucket extends ExecutionUsageBucketSummary {
   providerTokens: Map<string, number>;
   purposeTime: Map<string, number>;
   purposeInvocations: Map<string, number>;
+  modelTokens: Map<string, number>;
 }
 
 export function createEmptyUsageTotals(): ExecutionUsageTotals {
@@ -50,6 +51,7 @@ export function createUsageBuckets(
       providerTokens: new Map<string, number>(),
       purposeTime: new Map<string, number>(),
       purposeInvocations: new Map<string, number>(),
+      modelTokens: new Map<string, number>(),
     });
   }
   return buckets;

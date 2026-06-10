@@ -116,9 +116,9 @@ describe("InvocationsTable", () => {
     expect(textContent).toContain("running");
 
     const runningRow = within(root).getByText("running").closest("tr");
-    expect(runningRow?.querySelector("div.text-blue-400")).toBeTruthy();
+    expect(runningRow?.querySelector("div.text-blue-600")).toBeTruthy();
     const failedRow = within(root).getByText("Latest failure").closest("tr");
-    expect(failedRow?.querySelector("div.text-red-400")).toBeTruthy();
+    expect(failedRow?.querySelector("div.text-red-600")).toBeTruthy();
 
     const modelCell = within(root).getByText("claude-sonnet-4");
     expect(within((modelCell.closest("td") as HTMLElement) ?? root).getByText("claude-sonnet-4")).toBeTruthy();

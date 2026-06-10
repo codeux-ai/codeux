@@ -19,12 +19,18 @@ export interface SystemSummaryMetrics {
   totalInvocations: number;
   runningCount: number;
   failedCount: number;
+  completedCount: number;
+  cancelledCount: number;
+  pausedCount: number;
   errorRate: number;
+  successRate: number | null;
   totalTokens: number;
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCachedTokens: number;
+  cacheHitRate: number | null;
   avgDurationMs: number;
+  p95DurationMs: number;
 }
 
 const EMPTY_FILTERS: SystemFilters = {
@@ -182,19 +188,27 @@ export function useSystemViewData(projectId: string) {
     const totalInvocations = filteredInvocations.length;
     let runningCount = 0;
     let failedCount = 0;
+    let completedCount = 0;
+    let cancelledCount = 0;
+    let pausedCount = 0;
     let totalTokens = 0;
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
     let totalCachedTokens = 0;
     let durationTotal = 0;
-    let finishedCount = 0;
+    const durations: number[] = [];
 
     for (const record of filteredInvocations) {
       if (record.status === "running") {
         runningCount += 1;
-      }
-      if (record.status === "failed") {
+      } else if (record.status === "failed") {
         failedCount += 1;
+      } else if (record.status === "completed") {
+        completedCount += 1;
+      } else if (record.status === "cancelled") {
+        cancelledCount += 1;
+      } else if (record.status === "paused") {
+        pausedCount += 1;
       }
 
       totalTokens += getNumericValue(record.totalTokens);
@@ -203,21 +217,36 @@ export function useSystemViewData(projectId: string) {
       totalCachedTokens += getNumericValue(record.cachedInputTokens);
 
       if (record.finishedAt !== null) {
-        durationTotal += getDurationMs(record);
-        finishedCount += 1;
+        const durationMs = getDurationMs(record);
+        durationTotal += durationMs;
+        durations.push(durationMs);
       }
     }
+
+    durations.sort((left, right) => left - right);
+    const finishedCount = durations.length;
+    const p95DurationMs = finishedCount > 0
+      ? durations[Math.min(finishedCount - 1, Math.max(0, Math.ceil(0.95 * finishedCount) - 1))]!
+      : 0;
+    const decidedCount = completedCount + failedCount + cancelledCount;
+    const cacheDenominator = totalInputTokens + totalCachedTokens;
 
     return {
       totalInvocations,
       runningCount,
       failedCount,
+      completedCount,
+      cancelledCount,
+      pausedCount,
       errorRate: failedCount / Math.max(1, totalInvocations),
+      successRate: decidedCount > 0 ? completedCount / decidedCount : null,
       totalTokens,
       totalInputTokens,
       totalOutputTokens,
       totalCachedTokens,
+      cacheHitRate: cacheDenominator > 0 ? totalCachedTokens / cacheDenominator : null,
       avgDurationMs: finishedCount > 0 ? durationTotal / finishedCount : 0,
+      p95DurationMs,
     };
   }, [filteredInvocations]);
 

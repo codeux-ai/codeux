@@ -107,8 +107,10 @@ describe("SystemStudio", () => {
     expect(screen.getByText("Rate limited")).toBeTruthy();
     expect(screen.queryByText("Loading messages")).toBeNull();
 
-    expect(container.querySelectorAll(".text-red-300").length).toBeGreaterThan(0);
-    expect(container.querySelectorAll(".text-blue-300").length).toBeGreaterThan(0);
+    expect(container.querySelectorAll(".text-red-600").length).toBeGreaterThan(0);
+    expect(container.querySelectorAll(".text-blue-600").length).toBeGreaterThan(0);
+    expect(container.textContent).toContain("Status Distribution");
+    expect(container.textContent).toContain("Success Rate");
 
     fireEvent.click(screen.getByRole("button", { name: "Errors" }));
 

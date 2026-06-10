@@ -11,6 +11,7 @@ import {
   PANEL_CLASS,
 } from "./StatsShared.js";
 import { SystemStudio } from "./system/SystemStudio.js";
+import { ModelsStudio } from "./ModelsStudio.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
 
 export interface AnalysisStudioSectionProps {
@@ -60,6 +61,12 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
       {visualMode === "composition" ? (
         <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
           <CompositionStudio stats={stats} providerSegments={providerSegments} tokenSegments={tokenSegments} />
+        </div>
+      ) : null}
+
+      {visualMode === "models" ? (
+        <div className={loading ? "pointer-events-none opacity-60 transition-opacity motion-reduce:transition-none" : "transition-opacity motion-reduce:transition-none"}>
+          <ModelsStudio stats={stats} />
         </div>
       ) : null}
 

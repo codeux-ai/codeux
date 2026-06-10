@@ -17,6 +17,7 @@ import {
   formatAxisLabel,
 } from './StatsShared.js';
 import { UsageSeriesSidebar } from './UsageSeriesSidebar.js';
+import { UsageChartMinimap } from './UsageChartMinimap.js';
 import type { UsageChartState } from '../use-usage-chart-state.js';
 import {
   getVisibleBuckets,
@@ -277,7 +278,7 @@ export const InteractiveUsageChart: FunctionComponent<{
       <div className="relative flex flex-col gap-8">
         <UsageGraphHeader
           title={zoomRange ? "Zoomed telemetry window" : stats.range.label}
-          description="Normalized telemetry lines reveal shape instead of forcing tokens, duration, and invocation counts into one scale. Drag across the plot to zoom a timeframe, keep hourly hover precision, and use filters to focus the graph."
+          description="Normalized telemetry lines reveal shape instead of forcing tokens, duration, and invocation counts into one scale. Drag across the plot or the overview strip to zoom a timeframe, hover for exact bucket values, and use filters to focus the graph."
         />
 
         <div className="relative z-50">
@@ -382,8 +383,8 @@ export const InteractiveUsageChart: FunctionComponent<{
                   <defs>
                     {chartData.map((series) => (
                       <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor={series.accentHex} stopOpacity="0.25" />
-                        <stop offset="100%" stopColor={series.accentHex} stopOpacity="0" />
+                        <stop offset="0%" stop-color={series.accentHex} stop-opacity="0.25" />
+                        <stop offset="100%" stop-color={series.accentHex} stop-opacity="0" />
                       </linearGradient>
                     ))}
                   </defs>
@@ -517,6 +518,13 @@ export const InteractiveUsageChart: FunctionComponent<{
                 </svg>
               )}
             </div>
+            {buckets.length > 1 ? (
+              <UsageChartMinimap
+                buckets={buckets}
+                zoomRange={zoomRange}
+                onZoomChange={setZoomRange}
+              />
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-6">

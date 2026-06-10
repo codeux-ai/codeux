@@ -59,7 +59,9 @@ export function normalizeChartSeries(
       ? formatDuration
       : series.formatter === 'number'
         ? (val: number) => NUMBER_FORMATTER.format(val)
-        : formatTokens;
+        : series.formatter === 'percent'
+          ? (val: number) => `${val.toFixed(1)}%`
+          : formatTokens;
 
     const values = visibleBuckets.map((_, bucketIdx) => series.data[viewStart + bucketIdx] || 0);
     const points = buildPoints(values.length > 0 ? values : [0], width, height, padding);

@@ -163,6 +163,12 @@ describe("queryProjectStatsSnapshot", () => {
     expect(snapshot.git.totals).toEqual({ insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0, mergeConflictCount: 0 });
     expect(snapshot.activeSprint?.sprintId).toBe("sprint-1");
 
+    // Model + reliability analytics are present even on an empty window
+    expect(snapshot.models).toEqual([]);
+    expect(snapshot.statusCounts).toEqual({ completed: 0, failed: 0, cancelled: 0, running: 0, paused: 0 });
+    expect(snapshot.duration).toEqual({ sampleCount: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0 });
+    expect(snapshot.chartSeries.find(s => s.id === 'core_cache_hit')).toMatchObject({ grouping: 'details', formatter: 'percent', defaultEnabled: false });
+
     // Assert git series
     expect(snapshot.chartSeries.find(s => s.id === 'git_insertions')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: true });
     expect(snapshot.chartSeries.find(s => s.id === 'git_deletions')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: true });
