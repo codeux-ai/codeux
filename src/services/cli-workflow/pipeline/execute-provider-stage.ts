@@ -18,6 +18,11 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     ? ctx.deps.executionRepository.getTaskRun(ctx.taskRunId)
     : null;
 
+  const previousInvocation = (ctx.deps.executionRepository && typeof ctx.deps.executionRepository.getLatestProviderInvocationUsageBySession === "function")
+    ? ctx.deps.executionRepository.getLatestProviderInvocationUsageBySession(ctx.workspaceSessionId, "task_coding")
+    : null;
+  const continueSessionId = previousInvocation?.nativeSessionId || (ctx.provider === "claude-code" ? null : ctx.workspaceSessionId);
+
   const providerExecutionService = new ProviderExecutionService({
     executionRepository: ctx.deps.executionRepository,
     sessionTracking: ctx.deps.sessionTracking,
@@ -47,17 +52,19 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     qwenModelId: providerSettings.qwenModelId,
     qwenProtocol: providerSettings.qwenProtocol,
     qwenAdditionalModelProviders: providerSettings.qwenAdditionalModelProviders,
-        openCodeAuthMode: providerSettings.openCodeAuthMode,
-        openCodeProviderId: providerSettings.openCodeProviderId,
-        openCodeModelId: providerSettings.openCodeModelId,
-        openCodeBaseUrl: providerSettings.openCodeBaseUrl,
-        openCodeEnvKey: providerSettings.openCodeEnvKey,
-        openCodePackage: providerSettings.openCodePackage,
+    openCodeAuthMode: providerSettings.openCodeAuthMode,
+    openCodeProviderId: providerSettings.openCodeProviderId,
+    openCodeModelId: providerSettings.openCodeModelId,
+    openCodeBaseUrl: providerSettings.openCodeBaseUrl,
+    openCodeEnvKey: providerSettings.openCodeEnvKey,
+    openCodePackage: providerSettings.openCodePackage,
     providerMountAuth,
     providerAuthPath,
     customBaseUrl: providerSettings.customBaseUrl,
     customModel: providerSettings.customModel,
     sessionId: ctx.sessionId,
+    workspaceSessionId: ctx.workspaceSessionId,
+    continueSessionId,
     workflowSettings: ctx.workflowSettings,
     repoPath: ctx.repoPath,
     githubToken: ctx.deps.getGithubToken(),

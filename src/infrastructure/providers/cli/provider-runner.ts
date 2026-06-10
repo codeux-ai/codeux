@@ -148,7 +148,7 @@ export interface ProviderRunInput {
   onActivity: (desc: string, originator?: string) => void;
   onTelemetry?: (telemetry: ProviderUsageTelemetry) => void;
   /** Pass a previous nativeSessionId to continue an existing CLI session.
-   *  Claude Code: reuses --session-id. Gemini: adds --resume. Codex: uses exec resume --last.
+   *  Claude Code: uses --resume. Gemini: adds --resume. Codex: uses exec resume --last.
    *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
   continueSessionId?: string | null;
   /** MCP server connection info for injecting management tools into the CLI provider. */
@@ -166,14 +166,14 @@ export class ProviderRunner implements IProviderRunner {
   constructor(private readonly dockerRunner: IDockerRunner) { }
 
   async runProvider(input: ProviderRunInput): Promise<ProviderRunResult> {
-    const preserveQwenSessionWorkspace = this.shouldPreserveQwenSessionWorkspace(input);
+    const preserveSessionWorkspace = this.shouldPreserveSessionWorkspace(input);
     const prepared = input.workflowSettings.executionMode === "DOCKER"
       ? await this.dockerRunner.ensureWorkspace({
         cwd: input.cwd,
         repoPath: input.repoPath,
         sessionId: input.workspaceSessionId || input.sessionId,
-        preserve: preserveQwenSessionWorkspace,
-        reuseExisting: preserveQwenSessionWorkspace,
+        preserve: preserveSessionWorkspace,
+        reuseExisting: preserveSessionWorkspace,
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
@@ -196,14 +196,14 @@ export class ProviderRunner implements IProviderRunner {
   }
 
   async runProviderForText(input: ProviderRunInput): Promise<ProviderRunResult & { text: string }> {
-    const preserveQwenSessionWorkspace = this.shouldPreserveQwenSessionWorkspace(input);
+    const preserveSessionWorkspace = this.shouldPreserveSessionWorkspace(input);
     const prepared = input.workflowSettings.executionMode === "DOCKER"
       ? await this.dockerRunner.ensureWorkspace({
         cwd: input.cwd,
         repoPath: input.repoPath,
         sessionId: input.workspaceSessionId || input.sessionId,
-        preserve: preserveQwenSessionWorkspace,
-        reuseExisting: preserveQwenSessionWorkspace,
+        preserve: preserveSessionWorkspace,
+        reuseExisting: preserveSessionWorkspace,
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
@@ -245,9 +245,8 @@ export class ProviderRunner implements IProviderRunner {
       : path.join(os.tmpdir(), `provider-last-message-${input.sessionId}.txt`);
   }
 
-  private shouldPreserveQwenSessionWorkspace(input: ProviderRunInput): boolean {
-    return input.provider === "qwen-code"
-      && input.workflowSettings.executionMode === "DOCKER"
+  private shouldPreserveSessionWorkspace(input: ProviderRunInput): boolean {
+    return input.workflowSettings.executionMode === "DOCKER"
       && !input.cwd.startsWith("docker-volume://");
   }
 
@@ -949,7 +948,12 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     if (provider === "claude-code" && nativeSessionId) {
-      const args = ["--dangerously-skip-permissions", "--session-id", nativeSessionId];
+      const args = ["--dangerously-skip-permissions"];
+      if (continueSession) {
+        args.push("--resume", nativeSessionId);
+      } else {
+        args.push("--session-id", nativeSessionId);
+      }
       if (model && model !== "default") {
         args.push("--model", model);
       }

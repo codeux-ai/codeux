@@ -83,6 +83,7 @@ describe("ChatManagementActionService", () => {
       approvalRequired: false,
       approvalMessage: undefined,
       result: { status: "success", domain: "sprints", action: "update_sprint", message: "updated" },
+      nativeSessionId: "sess1",
     });
 
     expect(managementToolHandler.handleManageCodeUx).toHaveBeenCalledWith({
@@ -147,6 +148,7 @@ describe("ChatManagementActionService", () => {
       approvalRequired: true,
       approvalMessage: "Destructive action requires approval.",
       result: undefined,
+      nativeSessionId: "sess1",
     });
   });
 

@@ -380,8 +380,7 @@ export class ChatThreadRuntimeService {
       providerMountAuth: route.providerMountAuth,
       providerAuthPath: route.providerAuthPath,
       customBaseUrl: route.customBaseUrl,
-      customModel: route.customModel,
-      sessionId: continueSessionId || thread.id,
+      sessionId: thread.id,
       continueSessionId,
       settings: dashboardSettings,
       prompt: finalPrompt,
@@ -436,7 +435,7 @@ export class ChatThreadRuntimeService {
       routeKind: "virtual",
       virtualProvider: provider,
       modelLabel: model,
-      sessionIds: [continueSessionId || thread.id], // processManagementAction doesn't currently return nativeSessionId from StructuredProviderResponseService!
+      sessionIds: [result.nativeSessionId || continueSessionId || thread.id],
       replayRequired: false,
     };
 

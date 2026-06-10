@@ -114,7 +114,7 @@ describe("ChatThreadRuntimeService", () => {
     expect(deps.chatManagementActionService.processManagementAction).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "claude-code",
-        sessionId: "existing-session",
+        sessionId: "t1",
         continueSessionId: "existing-session",
       })
     );

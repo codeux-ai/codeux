@@ -20,6 +20,7 @@ export interface ManagementActionProposedResult {
   approvalRequired: boolean;
   approvalMessage?: string;
   result?: unknown;
+  nativeSessionId?: string | null;
 }
 
 interface ParsedProviderManagementJSON {
@@ -316,6 +317,7 @@ export class ChatManagementActionService {
         replyMarkdown: replyText || "_No response._",
         action: null,
         approvalRequired: false,
+        nativeSessionId: result.nativeSessionId,
       };
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : String(err);
@@ -417,6 +419,7 @@ export class ChatManagementActionService {
           replyMarkdown: parsed.replyMarkdown,
           action: null,
           approvalRequired: false,
+          nativeSessionId: response.nativeSessionId,
         };
       }
 
@@ -446,6 +449,7 @@ export class ChatManagementActionService {
         approvalRequired: !!envelope.approvalRequired,
         approvalMessage: envelope.approvalMessage,
         result: envelope.result,
+        nativeSessionId: response.nativeSessionId,
       };
 
     } catch (err: unknown) {

@@ -53,8 +53,8 @@ describe("ProviderRunner", () => {
       cwd: "/repo",
       repoPath: "/repo",
       sessionId: "workspace-1",
-      preserve: false,
-      reuseExisting: false,
+      preserve: true,
+      reuseExisting: true,
     });
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       cwd: "docker-volume://workspace-1",
@@ -171,7 +171,7 @@ describe("ProviderRunner", () => {
     });
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
-      args: expect.arrayContaining(["--session-id", "native-123"]),
+      args: expect.arrayContaining(["--resume", "native-123"]),
     }));
   });
 
@@ -329,6 +329,28 @@ describe("ProviderRunner", () => {
       cwd: "/repo",
       repoPath: "/repo",
       sessionId: "chat-thread-1",
+      preserve: true,
+      reuseExisting: true,
+    });
+  });
+
+  it("preserves and reuses Docker-created Claude workspaces so saved sessions survive short-lived containers", async () => {
+    await runner.runProvider({
+      provider: "claude-code",
+      prompt: "hello",
+      cwd: "/repo",
+      model: "sonnet",
+      apiKey: "sk-anthropic",
+      sessionId: "chat-thread-2",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(dockerRunner.ensureWorkspace).toHaveBeenCalledWith({
+      cwd: "/repo",
+      repoPath: "/repo",
+      sessionId: "chat-thread-2",
       preserve: true,
       reuseExisting: true,
     });
