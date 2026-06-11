@@ -209,6 +209,57 @@ describe("OnboardingExperience integration", () => {
     await waitFor(() => expect(settingsApi.fetchSystemSettings).toHaveBeenCalled());
     expect(systemSettings.defaults.automationInterventions.autoApprovePlan).toBe(true);
   });
+
+  it("mentions Knowledge Base in the introduction step", async () => {
+    const defaultSettings = cloneDefaultSettings();
+    const systemSettings = {
+      runtime: {
+        dashboardPort: defaultSettings.dashboardPort,
+        enableDebugLogFile: defaultSettings.enableDebugLogFile,
+        consoleLogLevel: defaultSettings.consoleLogLevel,
+      },
+      integrations: {
+        julesApiKey: "",
+        geminiApiKey: "",
+        codexApiKey: "",
+        claudeCodeApiKey: "",
+        githubToken: "",
+      },
+      defaults: defaultSettings,
+    };
+    vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue(systemSettings as any);
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/api/user/onboarding")) {
+        return new Response(JSON.stringify({ completed: false, onboardingCompletedAt: null }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.endsWith("/api/onboarding/readiness")) {
+        return new Response(
+          JSON.stringify({
+            checkedAt: "2026-06-01T00:00:00.000Z",
+            cluster: { status: "ready", label: "Healthy", detail: "Runtime environment is ready." },
+            dependencies: [],
+            providers: [],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<OnboardingExperience />);
+
+    // Introduction is step 2 (idx 1), navigate to it
+    const nextButton = await screen.findByRole("button", { name: "Next" });
+    await userEvent.click(nextButton);
+
+    await screen.findByText("Welcome to Code UX.");
+    expect(screen.getAllByText(/knowledge base/i).length).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe("onboarding appearance step", () => {
