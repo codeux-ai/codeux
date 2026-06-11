@@ -87,6 +87,7 @@ export interface CreateSchedulerEntryInput {
 export interface UpdateSchedulerEntryInput {
   title?: string;
   status?: ScheduleStatus;
+  targetType?: ScheduleTargetType;
   scheduledFor?: string;
   timezone?: string;
   recurrence?: Partial<ScheduleRecurrenceRule>;
@@ -94,3 +95,4 @@ export interface UpdateSchedulerEntryInput {
   quicksprintTarget?: ScheduleQuicksprintTarget;
   chatTarget?: ScheduleChatTarget;
 }
+
