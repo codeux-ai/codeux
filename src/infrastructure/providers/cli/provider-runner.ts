@@ -132,7 +132,8 @@ export interface ProviderRunInput {
   providerMountAuth?: boolean;
   providerAuthPath?: string;
   /** Override the default API endpoint for providers that support it.
-   *  Sets ANTHROPIC_BASE_URL (claude-code) or OPENAI_BASE_URL (codex). */
+   *  Sets ANTHROPIC_BASE_URL (claude-code) or uses a dedicated TOML model
+   *  provider for Codex. */
   customBaseUrl?: string;
   /** Override the model identifier sent to the CLI for providers that support a custom
    *  base URL (claude-code, codex). Used when routing through a gateway such as OpenRouter
@@ -332,7 +333,7 @@ export class ProviderRunner implements IProviderRunner {
     const applicableCustomServers = enabledCustomServersFor(input.customMcpServers, provider);
     const hasMcpConfig = !!input.mcpConnection || applicableCustomServers.length > 0;
     const continueSession = !!input.continueSessionId;
-    const codexProviderArgs = this.buildCodexCustomProviderArgs(provider, input, workflowSettings);
+    const codexProviderArgs = this.buildCodexCustomProviderArgs(provider, input, workflowSettings, input.customModel);
     const spec = this.buildCommandSpec(
       provider,
       runModel,
@@ -901,8 +902,9 @@ export class ProviderRunner implements IProviderRunner {
    *  empty array for non-codex providers or when no custom base URL is configured. */
   private buildCodexCustomProviderArgs(
     provider: CliProviderId,
-    config: Pick<ProviderRunInput, "customBaseUrl" | "customModel">,
+    config: Pick<ProviderRunInput, "customBaseUrl">,
     workflowSettings: CliWorkflowSettings,
+    customModel?: string,
   ): string[] {
     if (provider !== "codex" || !config.customBaseUrl || config.customBaseUrl.trim().length === 0) {
       return [];
@@ -919,8 +921,8 @@ export class ProviderRunner implements IProviderRunner {
       "-c", `model_providers.${providerId}.env_key="OPENAI_API_KEY"`,
       "-c", `model_providers.${providerId}.requires_openai_auth=false`,
     ];
-    if (config.customModel && config.customModel.trim().length > 0) {
-      args.push("-c", `model_providers.${providerId}.model="${escapeTomlString(config.customModel.trim())}"`);
+    if (customModel && customModel.trim().length > 0) {
+      args.push("-c", `model_providers.${providerId}.model="${escapeTomlString(customModel.trim())}"`);
     }
     return args;
   }
