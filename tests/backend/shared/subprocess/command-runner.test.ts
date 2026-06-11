@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import * as fs from "fs/promises";
+import * as fsPromises from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { CommandRunner } from "../../../../src/shared/subprocess/command-runner.js";
@@ -89,10 +89,10 @@ describe("CommandRunner", () => {
   });
 
   it("should stream a file into command stdin", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-command-runner-"));
+    const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "code-ux-command-runner-"));
     const inputPath = path.join(tempDir, "input.txt");
     try {
-      await fs.writeFile(inputPath, "from-file-stdin", "utf8");
+      await fsPromises.writeFile(inputPath, "from-file-stdin", "utf8");
 
       const result = await runner.run(node, ["-e", "process.stdin.pipe(process.stdout)"], {
         stdinFile: inputPath,
@@ -101,7 +101,7 @@ describe("CommandRunner", () => {
       expect(result.ok).toBe(true);
       expect(result.stdout).toBe("from-file-stdin");
     } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fsPromises.rm(tempDir, { recursive: true, force: true });
     }
   });
 
@@ -180,11 +180,11 @@ describe("CommandRunner", () => {
   });
 
   it("mounts absolute Git env paths for helper-container commands", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-git-env-mount-"));
+    const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "code-ux-git-env-mount-"));
     const repoDir = path.join(tempDir, "repo");
     const indexDir = path.join(tempDir, "index");
-    await fs.mkdir(repoDir);
-    await fs.mkdir(indexDir);
+    await fsPromises.mkdir(repoDir);
+    await fsPromises.mkdir(indexDir);
 
     const previous = process.env.CODE_UX_CONTAINERIZED_GIT;
     process.env.CODE_UX_CONTAINERIZED_GIT = "1";
@@ -201,7 +201,9 @@ describe("CommandRunner", () => {
 
       expect(containerized.args).toEqual(expect.arrayContaining([
         "--mount",
-        `type=bind,source=${indexDir},target=${indexDir}`,
+        `type=bind,source=${indexDir},target=/mnt/code-ux/git-paths/0`,
+        "-e",
+        "GIT_INDEX_FILE=/mnt/code-ux/git-paths/0/workspace.index",
       ]));
     } finally {
       if (previous === undefined) {
@@ -209,7 +211,69 @@ describe("CommandRunner", () => {
       } else {
         process.env.CODE_UX_CONTAINERIZED_GIT = previous;
       }
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fsPromises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rewrites external absolute Git args to portable container mount targets", async () => {
+    const tempDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "code-ux-git-arg-mount-"));
+    const repoDir = path.join(tempDir, "repo");
+    const bundleDir = path.join(tempDir, "bundle");
+    const bundlePath = path.join(bundleDir, "repo.bundle");
+    await fsPromises.mkdir(repoDir);
+    await fsPromises.mkdir(bundleDir);
+
+    const previous = process.env.CODE_UX_CONTAINERIZED_GIT;
+    process.env.CODE_UX_CONTAINERIZED_GIT = "1";
+    try {
+      const containerized = (runner as unknown as {
+        resolveCommand: (command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) => { command: string; args: string[] };
+      }).resolveCommand("git", ["bundle", "create", bundlePath, "--all"], { cwd: repoDir });
+
+      expect(containerized.args).toEqual(expect.arrayContaining([
+        "--mount",
+        `type=bind,source=${bundleDir},target=/mnt/code-ux/git-paths/0`,
+        "/mnt/code-ux/git-paths/0/repo.bundle",
+      ]));
+      expect(containerized.args).not.toContain(bundlePath);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CODE_UX_CONTAINERIZED_GIT;
+      } else {
+        process.env.CODE_UX_CONTAINERIZED_GIT = previous;
+      }
+      await fsPromises.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps Windows Git bundle paths out of Docker mount targets", () => {
+    const repoDir = "C:\\Users\\pierr\\Projects\\repo";
+    const bundleDir = "C:\\Users\\pierr\\AppData\\Local\\Temp\\code-ux-bundle-Zh27Uz";
+    const bundlePath = `${bundleDir}\\repo.bundle`;
+
+    const rewritten = (runner as unknown as {
+      rewriteHostPathForContainer: (
+        candidate: string,
+        cwd: string,
+        mappings: Array<{ hostPath: string; containerPath: string }>,
+      ) => string;
+    }).rewriteHostPathForContainer(bundlePath, repoDir, [
+      { hostPath: bundleDir, containerPath: "/mnt/code-ux/git-paths/0" },
+    ]);
+    const mountArgs = (runner as unknown as {
+      buildGitContainerMountArgs: (mappings: Array<{ hostPath: string; containerPath: string }>) => string[];
+    }).buildGitContainerMountArgs([
+      { hostPath: bundleDir, containerPath: "/mnt/code-ux/git-paths/0" },
+    ]);
+
+    expect(rewritten).toBe("/mnt/code-ux/git-paths/0/repo.bundle");
+    expect(mountArgs).toContain(
+      "type=bind,source=C:\\Users\\pierr\\AppData\\Local\\Temp\\code-ux-bundle-Zh27Uz,target=/mnt/code-ux/git-paths/0",
+    );
+    for (let index = 0; index < mountArgs.length; index += 1) {
+      if (mountArgs[index - 1] === "--mount") {
+        expect(mountArgs[index]).not.toMatch(/target=[A-Za-z]:/);
+      }
     }
   });
 });
