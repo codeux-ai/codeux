@@ -10,14 +10,18 @@ describe("runStartReadyTasksStep limits", () => {
       { id: "3", title: "3", prompt: "3", depends_on: [], is_independent: true, status: "PENDING" },
     ];
     let fails = 0;
-    const startTask = vi.fn().mockResolvedValue({ id: "sess1", provider: "codex" });
+    let runningCount = 1;
+    const startTask = vi.fn().mockImplementation(async () => {
+      runningCount++;
+      return { id: "sess1", provider: "codex" };
+    });
 
     const getProviderSettings = vi.fn().mockImplementation((provider) => {
       if (provider === "codex") return { maxConcurrentTasks: 2 };
       return {};
     });
 
-    const getRunningCounts = vi.fn().mockReturnValue({ codex: 1 });
+    const getRunningCounts = vi.fn().mockImplementation(() => ({ codex: runningCount }));
     const getProviderForTask = vi.fn().mockReturnValue("codex");
 
     const res = await runStartReadyTasksStep(subtasks, {

@@ -117,4 +117,34 @@ describe("start-ready-tasks-step", () => {
     expect(errorSpy).toHaveBeenCalledWith("Error starting task", expect.objectContaining({ error: "string fail" }));
     expect(fails).toBe(1);
   });
+
+  it("blocks second task if provider concurrency cap is reached", async () => {
+    const subtasks: Subtask[] = [
+      { id: "1", title: "t1", prompt: "p1", depends_on: [], is_independent: false, status: "PENDING" },
+      { id: "2", title: "t2", prompt: "p2", depends_on: [], is_independent: false, status: "PENDING" },
+    ];
+    let runningCount = 0;
+    const startTask = vi.fn().mockImplementation(async () => {
+      runningCount++;
+      return { id: "sess", provider: "gemini" };
+    });
+    
+    const res = await runStartReadyTasksStep(subtasks, {
+      action: "orchestrate",
+      getConsecutiveFailures: () => 0,
+      setConsecutiveFailures: vi.fn(),
+      maxFailures: 3,
+      startTask,
+      resolveSessionName: (s: any) => s.id,
+      extractSessionId: (s: any) => s.id,
+      logger: { info: vi.fn(), error: vi.fn() } as any,
+      getProviderForTask: () => "gemini",
+      getProviderSettings: () => ({ maxConcurrentTasks: 1 }),
+      getRunningCounts: () => ({ gemini: runningCount }),
+    });
+
+    expect(startTask).toHaveBeenCalledTimes(1);
+    expect(res.subtasks[0].status).toBe("RUNNING");
+    expect(res.subtasks[1].status).toBe("BLOCKED");
+  });
 });
