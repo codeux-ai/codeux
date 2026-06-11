@@ -22,10 +22,10 @@ function isProtectedExportPath(candidate: string): boolean {
 // Safety net: qwen-code's OpenAI logger writes `logs/openai/openai-<ts>-<id>.json`
 // files. We redirect them out of the worktree via settings, but guard against
 // qwen versions that ignore that setting so the logs are never committed.
-const QWEN_OPENAI_LOG_FILE_RE = /(^|\/)logs\/openai\/openai-[^/]*\.json$/;
+const QWEN_OPENAI_LOG_PATH_RE = /(^|\/)logs\/openai\//;
 
 function isQwenOpenAiLogPath(candidate: string): boolean {
-  return QWEN_OPENAI_LOG_FILE_RE.test(candidate);
+  return QWEN_OPENAI_LOG_PATH_RE.test(candidate);
 }
 
 export interface AppliedWorkspacePatchResult {
@@ -71,8 +71,8 @@ export class WorkspaceArtifactService {
       `:(exclude)${LEARNINGS_FILENAME}`,
       ":(exclude).code-ux-home",
       ":(exclude).code-ux-home/**",
-      ":(exclude,glob)**/logs/openai/openai-*.json",
-      ":(exclude,glob)logs/openai/openai-*.json",
+      ":(exclude,glob)**/logs/openai/**",
+      ":(exclude,glob)logs/openai/**",
     ];
     const untrackedResult = await this.workspaceManager.runWorkspaceCommand(
       workspaceRef,
