@@ -333,7 +333,7 @@ export class ProviderRunner implements IProviderRunner {
     const applicableCustomServers = enabledCustomServersFor(input.customMcpServers, provider);
     const hasMcpConfig = !!input.mcpConnection || applicableCustomServers.length > 0;
     const continueSession = !!input.continueSessionId;
-    const codexProviderArgs = this.buildCodexCustomProviderArgs(provider, input, workflowSettings);
+    const codexProviderArgs = this.buildCodexCustomProviderArgs(provider, input, workflowSettings, input.customModel);
     const spec = this.buildCommandSpec(
       provider,
       runModel,
@@ -905,6 +905,7 @@ export class ProviderRunner implements IProviderRunner {
     provider: CliProviderId,
     config: Pick<ProviderRunInput, "customBaseUrl">,
     workflowSettings: CliWorkflowSettings,
+    customModel?: string,
   ): string[] {
     if (provider !== "codex" || !config.customBaseUrl || config.customBaseUrl.trim().length === 0) {
       return [];
@@ -914,13 +915,16 @@ export class ProviderRunner implements IProviderRunner {
       config.customBaseUrl.trim(),
       this.shouldRewriteDockerLoopbackUrls(workflowSettings),
     );
-    return [
+    const args = [
       "-c", `model_provider="${providerId}"`,
-      "-c", `model_providers.${providerId}.name="${providerId}"`,
       "-c", `model_providers.${providerId}.base_url="${escapeTomlString(baseUrl)}"`,
       "-c", `model_providers.${providerId}.env_key="OPENAI_API_KEY"`,
       "-c", `model_providers.${providerId}.requires_openai_auth=false`,
     ];
+    if (customModel && customModel.trim().length > 0) {
+      args.push("-c", `model_providers.${providerId}.model="${escapeTomlString(customModel.trim())}"`);
+    }
+    return args;
   }
 
   private buildCommandSpec(
@@ -1097,12 +1101,6 @@ export class ProviderRunner implements IProviderRunner {
     } else if (provider === "codex") {
       if (model && model !== "default") env.CODEX_MODEL = model;
       if (apiKey && !useProviderMount) env.OPENAI_API_KEY = apiKey;
-      if (providerConfig?.customBaseUrl) {
-        env.OPENAI_BASE_URL = this.rewriteLoopbackUrlForDocker(
-          providerConfig.customBaseUrl,
-          this.shouldRewriteDockerLoopbackUrls(workflowSettings),
-        );
-      }
     } else if (provider === "qwen-code") {
       const qwenEnvKeys = new Set<string>();
       const primaryEnvKey = providerConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"

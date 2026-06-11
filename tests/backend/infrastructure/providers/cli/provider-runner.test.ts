@@ -422,16 +422,18 @@ describe("ProviderRunner", () => {
       args: expect.arrayContaining([
         "-c", `model_provider="custom_gateway"`,
         "-c", `model_providers.custom_gateway.base_url="https://openrouter.ai/api/v1"`,
+        "-c", `model_providers.custom_gateway.model="openai/gpt-5-codex"`,
         "-c", `model_providers.custom_gateway.env_key="OPENAI_API_KEY"`,
         "-c", `model_providers.custom_gateway.requires_openai_auth=false`,
         "--model", "openai/gpt-5-codex", "ship it",
       ]),
       providerEnv: expect.objectContaining({
         OPENAI_API_KEY: "sk-openai",
-        OPENAI_BASE_URL: "https://openrouter.ai/api/v1",
         CODEX_MODEL: "openai/gpt-5-codex",
       }),
     }));
+    const call = dockerRunner.runProviderInDocker.mock.calls[0][0];
+    expect(call.providerEnv.OPENAI_BASE_URL).toBeUndefined();
   });
 
   it("does not set a Codex wire_api override (Codex only supports the responses default)", async () => {
