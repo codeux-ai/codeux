@@ -139,7 +139,7 @@ export class SchedulerRepository {
       : current.recurrence;
     const nextStatus = input.status ?? current.status;
     const now = new Date().toISOString();
-    const shouldResetNextRun = input.scheduledFor !== undefined || input.recurrence !== undefined || input.status === "scheduled";
+    const shouldResetNextRun = input.scheduledFor !== undefined || input.recurrence !== undefined;
     const nextRunAt = nextStatus === "scheduled"
       ? (shouldResetNextRun ? nextScheduledFor : current.nextRunAt)
       : current.nextRunAt;

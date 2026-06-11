@@ -77,4 +77,45 @@ describe("SchedulerRepository", () => {
     expect(updated.runCount).toBe(1);
     expect(updated.nextRunAt).toBeNull();
   });
+
+  it("does not reset next_run_at to the past when resuming a paused task", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+
+    const pastDate = "2020-01-01T09:00:00.000Z";
+    const futureDate = "2030-01-01T09:00:00.000Z";
+
+    // 1. Create entry scheduled for the past
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "chat",
+      scheduledFor: pastDate,
+      recurrence: { frequency: "daily", interval: 1 },
+      chatTarget: { bodyMarkdown: "Status please" },
+    });
+
+    expect(entry.nextRunAt).toBe(pastDate);
+
+    // 2. Mark it as succeeded, setting nextRunAt to the future
+    schedulerRepository.markRunSucceeded(entry.id, pastDate, futureDate);
+    let updated = schedulerRepository.getEntry(entry.id)!;
+    expect(updated.nextRunAt).toBe(futureDate);
+    expect(updated.status).toBe("scheduled");
+
+    // 3. Pause it
+    schedulerRepository.updateEntry(entry.id, { status: "paused" });
+    updated = schedulerRepository.getEntry(entry.id)!;
+    expect(updated.status).toBe("paused");
+    expect(updated.nextRunAt).toBe(futureDate);
+
+    // 4. Resume it
+    schedulerRepository.updateEntry(entry.id, { status: "scheduled" });
+    updated = schedulerRepository.getEntry(entry.id)!;
+    
+    expect(updated.status).toBe("scheduled");
+    expect(updated.nextRunAt).toBe(futureDate);
+  });
 });
