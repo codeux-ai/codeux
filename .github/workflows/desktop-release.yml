@@ -99,7 +99,17 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}
           path: |
-            release/electron/**
+            release/electron/*.dmg
+            release/electron/*.zip
+            release/electron/*.AppImage
+            release/electron/*.deb
+            release/electron/*.rpm
+            release/electron/*.exe
+            release/electron/*.msi
+            release/electron/*.pkg
+            release/electron/*.tar.gz
+            release/electron/*.tar.xz
+            release/electron/*.7z
             !release/electron/*-unpacked/**
             !release/electron/builder-debug.yml
             !release/electron/builder-effective-config.yaml
@@ -111,7 +121,17 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
-            release/electron/**
+            release/electron/*.dmg
+            release/electron/*.zip
+            release/electron/*.AppImage
+            release/electron/*.deb
+            release/electron/*.rpm
+            release/electron/*.exe
+            release/electron/*.msi
+            release/electron/*.pkg
+            release/electron/*.tar.gz
+            release/electron/*.tar.xz
+            release/electron/*.7z
             !release/electron/*-unpacked/**
             !release/electron/builder-debug.yml
             !release/electron/builder-effective-config.yaml
