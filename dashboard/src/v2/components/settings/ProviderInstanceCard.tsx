@@ -307,7 +307,7 @@ export const ProviderInstanceCard: FunctionComponent<{
             description={
               provider.provider === "claude-code"
                 ? "Model slug sent to the gateway (e.g. anthropic/claude-sonnet-4.5). Applied to every Claude Code tier so background calls hit the same model. Leave empty to use the agent's selected model."
-                : "The full model slug used by the endpoint (e.g. \"openai/gpt-4o\" for OpenRouter). This tells Codex which model to use via its custom gateway config. Leave empty to use the agent's selected model."
+                : "The full model slug used by the endpoint (e.g. \"openai/gpt-4o\" for OpenRouter). This registers the model inside the custom gateway TOML configuration. Leave empty to use the agent's selected model."
             }
             last={isLast}
           >

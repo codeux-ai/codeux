@@ -432,6 +432,8 @@ describe("ProviderRunner", () => {
         CODEX_MODEL: "openai/gpt-5-codex",
       }),
     }));
+    const providerEnv = dockerRunner.runProviderInDocker.mock.calls[0][0].providerEnv;
+    expect(providerEnv.OPENAI_BASE_URL).toBeUndefined();
   });
 
   it("does not set a Codex wire_api override (Codex only supports the responses default)", async () => {

@@ -1099,6 +1099,15 @@ export class ProviderRunner implements IProviderRunner {
     } else if (provider === "codex") {
       if (model && model !== "default") env.CODEX_MODEL = model;
       if (apiKey && !useProviderMount) env.OPENAI_API_KEY = apiKey;
+      // If we have a custom base URL, we use a TOML model_provider="custom_gateway"
+      // override via CLI flags. In that mode, Codex's own custom_gateway config
+      // manages the base_url. Setting OPENAI_BASE_URL as well causes a conflict
+      // or override that bypasses the TOML config.
+      if (providerConfig?.customBaseUrl) {
+        delete env.OPENAI_BASE_URL;
+      } else if (process.env.OPENAI_BASE_URL) {
+        env.OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
+      }
     } else if (provider === "qwen-code") {
       const qwenEnvKeys = new Set<string>();
       const primaryEnvKey = providerConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"
