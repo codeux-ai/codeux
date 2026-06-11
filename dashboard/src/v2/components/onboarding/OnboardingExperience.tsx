@@ -804,17 +804,17 @@ export const OnboardingExperience: FunctionComponent = () => {
                   id: "automation",
                   label: "Automation",
                   icon: Sparkles,
-                  active: activeStep === 7,
-                  complete: activeStep > 7,
-                  onClick: () => setActiveStep(7),
+                  active: activeStep === 8,
+                  complete: activeStep > 8,
+                  onClick: () => setActiveStep(8),
                 },
                 {
                   id: "appearance",
                   label: "Appearance",
                   icon: Monitor,
-                  active: activeStep === 8,
-                  complete: activeStep > 8,
-                  onClick: () => setActiveStep(8),
+                  active: activeStep === 9,
+                  complete: activeStep > 9,
+                  onClick: () => setActiveStep(9),
                 },
               ].map((step) => {
                 const StepIcon = step.icon;
@@ -848,8 +848,10 @@ export const OnboardingExperience: FunctionComponent = () => {
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
                 {activeStep < 3 ? `Step ${activeStep + 1} of 6`
-                  : activeStep >= 3 && activeStep <= 6 ? `Step 4 of 6 (${activeStep - 2}/4)`
-                  : `Step ${activeStep - 2} of 6`}
+                  : activeStep >= 3 && activeStep <= 7 ? `Step 4 of 6 (${activeStep - 2}/5)`
+                  : activeStep === 8 ? "Step 5 of 6"
+                  : activeStep === 9 ? "Step 6 of 6"
+                  : `Step ${activeStep + 1} of 6`}
               </div>
               <h3 className="mt-1 font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{active.label}</h3>
             </div>
@@ -1530,9 +1532,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                 { active: activeStep === 0, onClick: () => setActiveStep(0), label: "Installation" },
                 { active: activeStep === 1, onClick: () => setActiveStep(1), label: "Introduction" },
                 { active: activeStep === 2, onClick: () => setActiveStep(2), label: "Select Providers" },
-                { active: activeStep >= 3 && activeStep <= 6, onClick: () => setActiveStep(activeStep >= 3 && activeStep <= 6 ? activeStep : 3), label: "Providers" },
-                { active: activeStep === 7, onClick: () => setActiveStep(7), label: "Automation" },
-                { active: activeStep === 8, onClick: () => setActiveStep(8), label: "Appearance" },
+                { active: activeStep >= 3 && activeStep <= 7, onClick: () => setActiveStep(activeStep >= 3 && activeStep <= 7 ? activeStep : 3), label: "Providers" },
+                { active: activeStep === 8, onClick: () => setActiveStep(8), label: "Automation" },
+                { active: activeStep === 9, onClick: () => setActiveStep(9), label: "Appearance" },
               ].map((dot, idx) => (
                 <button
                   key={`dot-${idx}`}
