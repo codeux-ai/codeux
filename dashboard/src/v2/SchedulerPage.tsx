@@ -419,7 +419,7 @@ const EditEntryModal: FunctionComponent<EditEntryModalProps> = ({
             <Button
               variant="signal"
               size="lg"
-              loading={loading}
+              isLoading={loading}
               onClick={() => void submitUpdate()}
               className="flex-1 text-[10px] uppercase tracking-[0.16em]"
               icon={Check}
