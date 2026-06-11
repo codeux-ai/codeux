@@ -13,7 +13,7 @@ import type {
   ScheduleTargetType,
   UpdateSchedulerEntryInput,
 } from "../contracts/scheduler-types.js";
-import { normalizeRecurrenceRule } from "../domain/scheduler/schedule-time.js";
+import { computeFirstOccurrenceAtOrAfter, normalizeRecurrenceRule } from "../domain/scheduler/schedule-time.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 
 interface SchedulerEntryRow {
@@ -139,10 +139,18 @@ export class SchedulerRepository {
       : current.recurrence;
     const nextStatus = input.status ?? current.status;
     const now = new Date().toISOString();
-    const shouldResetNextRun = input.scheduledFor !== undefined || input.recurrence !== undefined || input.status === "scheduled";
-    const nextRunAt = nextStatus === "scheduled"
-      ? (shouldResetNextRun ? nextScheduledFor : current.nextRunAt)
-      : current.nextRunAt;
+
+    let nextRunAt = current.nextRunAt;
+    if (nextStatus === "scheduled") {
+      const isResuming = input.status === "scheduled" && current.status !== "scheduled";
+      const isExplicitScheduleChange = input.scheduledFor !== undefined || input.recurrence !== undefined;
+
+      if (isResuming) {
+        nextRunAt = computeFirstOccurrenceAtOrAfter(nextScheduledFor, nextRecurrence, now);
+      } else if (isExplicitScheduleChange) {
+        nextRunAt = nextScheduledFor;
+      }
+    }
 
     this.db.prepare(`
       UPDATE scheduler_entries

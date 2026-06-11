@@ -176,6 +176,7 @@ For scheduler calls:
 - The `schedule_*` aliases infer the target type and accept flattened target fields.
 - Scheduled quicksprints use the same `taskCount` number or numeric-string normalization as direct quicksprints.
 - Scheduled chat messages use `bodyMarkdown`, optional `threadId`, optional `connectionId`, and optional `title`. When due, the scheduler posts through the same chat runtime used by dashboard conversations.
+- `update` supports pausing and resuming entries via the `status` field. Resuming a `paused` entry to `scheduled` recomputes the next run time to the next future occurrence, preventing immediate execution of missed runs. Pause/resume acts as automation gating and does not manually trigger the target.
 - `delete` requires approval confirmation.
 
 For settings patch calls, `value` may be any JSON value, including strings, booleans, numbers, `null`, arrays, or objects.

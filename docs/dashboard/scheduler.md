@@ -51,6 +51,16 @@ The dashboard API routes are:
 
 `SchedulerService` starts with the dashboard runtime and checks due entries on an interval.
 
+### Pause and Resume Behavior
+
+The scheduler supports gating automation through status changes:
+- **Pause**: Setting an entry to `paused` disables automated scheduled executions. It does not delete the entry or its history.
+- **Resume**: Changing an entry from `paused` to `scheduled` reactivates future automation. 
+  - To prevent immediate "catch-up" executions of missed runs, resuming recomputes `nextRunAt` to the first future occurrence.
+  - Resuming or pausing does not directly trigger the scheduled target; the target only executes when the recomputed due time arrives.
+
+### Due Entry Execution
+
 Due entries execute through existing production paths:
 - sprint entries call `ExecutionControlService.orchestrateSprint`
 - quicksprint entries call `QuicksprintService.executeQuicksprint`
