@@ -456,6 +456,7 @@ export const AI_MODEL_CATALOG: Record<string, string[]> = {
     "claude-opus-4-6",
     "claude-sonnet-4-6",
     "claude-haiku-4-5-20251001",
+    "claude-fable-5",
   ],
   codex: [
     "gpt-5.5",

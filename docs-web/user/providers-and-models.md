@@ -33,7 +33,8 @@ gemma-4-31b-it, gemma-4-26b-a4b-it, gemini-2.5-flash-base, gemini-3-flash-base
 ```
 default, sonnet, opus, haiku,
 sonnet[1m], opus[1m], opusplan,
-claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001
+claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001,
+claude-fable-5
 ```
 
 ### Codex (OpenAI)

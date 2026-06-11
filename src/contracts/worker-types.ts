@@ -30,7 +30,8 @@ export type ClaudeModel =
   | "opusplan"
   | "claude-opus-4-6"
   | "claude-sonnet-4-6"
-  | "claude-haiku-4-5-20251001";
+  | "claude-haiku-4-5-20251001"
+  | "claude-fable-5";
 
 export type CodexModel =
   | "gpt-5.5"
