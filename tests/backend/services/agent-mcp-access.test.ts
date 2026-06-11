@@ -46,10 +46,16 @@ describe("resolveAgentMcpRuntime", () => {
   const conn: McpConnectionInfo = { url: "http://127.0.0.1:3000/mcp", authToken: "secret" };
   const servers = [server("1", "docs"), server("2", "search")];
 
-  it("passes through unchanged when access is undefined (non-agent run)", () => {
+  it("inherits provider-wide MCP servers when access is undefined", () => {
     const result = resolveAgentMcpRuntime({ access: undefined, agentId: undefined, customMcpServers: servers, mcpConnection: conn });
     expect(result.customMcpServers).toBe(servers);
     expect(result.mcpConnection).toBe(conn);
+  });
+
+  it("inherits provider-wide MCP servers and still tags code_ux when access is null", () => {
+    const result = resolveAgentMcpRuntime({ access: null, agentId: "a", customMcpServers: servers, mcpConnection: conn });
+    expect(result.customMcpServers).toBe(servers);
+    expect(result.mcpConnection).toEqual({ ...conn, agentId: "a" });
   });
 
   it("narrows custom servers to linked ids and attaches the agent id to code_ux", () => {
@@ -74,11 +80,6 @@ describe("resolveAgentMcpRuntime", () => {
     expect(result.mcpConnection).toBeNull();
   });
 
-  it("treats null access (configured-but-empty agent) as default", () => {
-    const result = resolveAgentMcpRuntime({ access: null, agentId: "a", customMcpServers: servers, mcpConnection: conn });
-    expect(result.customMcpServers).toEqual([]);
-    expect(result.mcpConnection).toEqual({ ...conn, agentId: "a" });
-  });
 });
 
 describe("mergeCodeUxToolToggles", () => {

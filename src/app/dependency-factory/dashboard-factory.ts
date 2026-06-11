@@ -85,6 +85,7 @@ export function createDashboardDependencies(
 
   const providerExecutionService = new ProviderExecutionService({
     executionRepository,
+    sessionTracking: coreDeps.sessionTracking,
     providerRunner,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     logger: logger.child({ component: "provider-execution-service" }),

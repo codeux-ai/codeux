@@ -78,7 +78,7 @@ describe("DockerBootstrapBuilder", () => {
       runtimeNpmCache: "/runtime/npm-cache",
     });
 
-    expect(script).toContain(`merge_json_file "${CLAUDE_CODE_MCP_CONFIG_MOUNT}" "$HOME/.claude/settings.json"`);
+    expect(script).toContain(`merge_json_file "${CLAUDE_CODE_MCP_CONFIG_MOUNT}" "$HOME/.claude.json"`);
     expect(script).toContain(`merge_json_file "${GEMINI_MCP_SETTINGS_MOUNT}" "$HOME/.gemini/settings.json"`);
     expect(script).toContain(`append_if_missing_literal "${CODEX_MCP_CONFIG_MOUNT}" "$HOME/.codex/config.toml" "[mcp_servers.code-ux]"`);
     expect(script).toContain(`merge_json_file "/opt/provider-config/qwen-settings.json" "$HOME/.qwen/settings.json"`);

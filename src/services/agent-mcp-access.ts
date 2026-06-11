@@ -51,7 +51,7 @@ export interface ResolvedAgentMcpRuntime {
 
 /**
  * Apply per-agent MCP access to a base set of custom servers + code_ux connection.
- * When `access` is undefined the run is not agent-scoped and inputs pass through unchanged.
+ * When `access` is missing, the run inherits provider-wide MCP servers unchanged.
  * When agent-scoped and code_ux is enabled, the agent id is attached to the connection so
  * the gateway can enforce per-agent code_ux tool toggles.
  */
@@ -61,14 +61,17 @@ export const resolveAgentMcpRuntime = (args: {
   customMcpServers: CustomMcpServer[];
   mcpConnection: McpConnectionInfo | null;
 }): ResolvedAgentMcpRuntime => {
-  if (args.access === undefined) {
+  if (args.access == null) {
+    const mcpConnection = args.mcpConnection && args.agentId
+      ? { ...args.mcpConnection, agentId: args.agentId }
+      : args.mcpConnection;
     return {
       customMcpServers: args.customMcpServers,
-      mcpConnection: args.mcpConnection,
+      mcpConnection,
     };
   }
 
-  const access = args.access ?? defaultAgentMcpAccess();
+  const access = args.access;
   const linked = new Set(access.linkedServerIds);
   const customMcpServers = args.customMcpServers.filter((server) => linked.has(server.id));
   const baseConnection = access.codeUxEnabled ? args.mcpConnection : null;

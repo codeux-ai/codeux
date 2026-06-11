@@ -11,6 +11,7 @@ const hasArgs = (value?: string[]): value is string[] => Array.isArray(value) &&
 export const buildClaudeMcpServerEntry = (server: CustomMcpServer): Record<string, unknown> =>
   server.transport === "stdio"
     ? {
+        type: "stdio",
         command: server.command,
         ...(hasArgs(server.args) ? { args: server.args } : {}),
         ...(hasEntries(server.env) ? { env: server.env } : {}),

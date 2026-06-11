@@ -23,7 +23,7 @@ const fingerprintPath = path.join(runtimeDir, ".runtime-fingerprint");
 const packageJson = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 const lockfile = readFileSync(path.join(projectRoot, "pnpm-lock.yaml"), "utf8");
 const workspace = readFileSync(path.join(projectRoot, "pnpm-workspace.yaml"), "utf8");
-const pruneVersion = 2;
+const pruneVersion = 3;
 const targetPlatform = process.env.CODE_UX_ELECTRON_TARGET_PLATFORM || process.platform;
 const targetArch = process.env.CODE_UX_ELECTRON_TARGET_ARCH || process.arch;
 const keepAllNativeBinaries = process.env.CODE_UX_ELECTRON_KEEP_ALL_NATIVE_BINARIES === "1";
@@ -65,7 +65,14 @@ writeFileSync(
   }, null, 2),
 );
 
-writeFileSync(path.join(runtimeDir, ".npmrc"), "shamefully-hoist=true\n");
+// node-linker=hoisted makes pnpm write a real npm-style tree (no symlinks, no
+// .pnpm store) with conflicting versions nested under their dependents. The
+// symlink layout breaks once electron-builder/NSIS dereferences symlinks while
+// copying into resources/node_modules: every package then resolves against the
+// flat hoisted top level, pairing packages with wrong dependency versions
+// (e.g. type-is@2 + media-typer@0.3, which silently disabled express.json()
+// parsing and broke MCP initialize for provider containers).
+writeFileSync(path.join(runtimeDir, ".npmrc"), "node-linker=hoisted\n");
 copyFileSync(path.join(projectRoot, "pnpm-lock.yaml"), path.join(runtimeDir, "pnpm-lock.yaml"));
 copyFileSync(path.join(projectRoot, "pnpm-workspace.yaml"), path.join(runtimeDir, "pnpm-workspace.yaml"));
 
@@ -140,16 +147,22 @@ function pruneOnnxRuntimeNativeBinaries(rootDir) {
     return;
   }
 
-  const nativeRoot = path.join(
-    rootDir,
-    ".pnpm",
-    "onnxruntime-node@1.24.3",
-    "node_modules",
-    "onnxruntime-node",
-    "bin",
-    "napi-v6",
-  );
-  if (!existsSync(nativeRoot)) {
+  // Hoisted layout puts the package at node_modules/onnxruntime-node; the
+  // legacy .pnpm store path is kept as a fallback for stale caches.
+  const nativeRootCandidates = [
+    path.join(rootDir, "onnxruntime-node", "bin", "napi-v6"),
+    path.join(
+      rootDir,
+      ".pnpm",
+      "onnxruntime-node@1.24.3",
+      "node_modules",
+      "onnxruntime-node",
+      "bin",
+      "napi-v6",
+    ),
+  ];
+  const nativeRoot = nativeRootCandidates.find((candidate) => existsSync(candidate));
+  if (!nativeRoot) {
     return;
   }
 

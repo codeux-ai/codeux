@@ -6,6 +6,9 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   root: "dashboard",
   cacheDir: "../.cache/vite/dashboard",
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version || "0.0.0"),
+  },
   plugins: [preact({ reactAliasesEnabled: false }), tailwindcss()],
   resolve: {
     alias: [

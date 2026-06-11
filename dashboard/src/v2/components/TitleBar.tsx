@@ -3,6 +3,8 @@ import { useEffect, useState } from "preact/hooks";
 import { Minus, Square, Copy, X } from "lucide-preact";
 import { RobotLogo } from "./brand/RobotLogo.js";
 
+declare const __APP_VERSION__: string;
+
 type Platform = "darwin" | "win32" | "linux" | "other";
 
 const resolvePlatform = (raw?: string): Platform => {
@@ -98,7 +100,7 @@ export const TitleBar: FunctionComponent<TitleBarProps> = ({ appearanceVariant =
         <span className="text-[11px] font-semibold tracking-[0.08em] text-slate-600 dark:text-slate-300 truncate">
           Code<span className="text-signal-500">UX</span>
           <span className="mx-2 text-slate-300 dark:text-slate-600">·</span>
-          <span className="text-slate-400 dark:text-slate-500 font-medium">Sprint Console</span>
+          <span className="text-slate-400 dark:text-slate-500 font-medium">v{__APP_VERSION__}</span>
         </span>
       </div>
       {controls}

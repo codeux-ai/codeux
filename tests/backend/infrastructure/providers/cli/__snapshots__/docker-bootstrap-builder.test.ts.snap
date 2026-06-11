@@ -38,7 +38,7 @@ fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
-  merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.claude/settings.json" "claude mcp config"
+  merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.claude.json" "claude mcp config"
 fi
 if [ "$1" = "qwen" ]; then
   if [ -d "/opt/credentials/qwen-code" ]; then sync_dir_contents "/opt/credentials/qwen-code" "$HOME/.qwen" "qwen"; fi
@@ -121,7 +121,7 @@ fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
-  merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.claude/settings.json" "claude mcp config"
+  merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.claude.json" "claude mcp config"
 fi
 if [ "$1" = "qwen" ]; then
   if [ -d "/opt/credentials/qwen-code" ]; then sync_dir_contents "/opt/credentials/qwen-code" "$HOME/.qwen" "qwen"; fi
@@ -204,7 +204,7 @@ fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
-  merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.claude/settings.json" "claude mcp config"
+  merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.claude.json" "claude mcp config"
 fi
 if [ "$1" = "qwen" ]; then
   if [ -d "/opt/credentials/qwen-code" ]; then sync_dir_contents "/opt/credentials/qwen-code" "$HOME/.qwen" "qwen"; fi
@@ -286,7 +286,7 @@ fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
-  merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.claude/settings.json" "claude mcp config"
+  merge_json_file "/opt/provider-config/claude-mcp.json" "$HOME/.claude.json" "claude mcp config"
 fi
 if [ "$1" = "qwen" ]; then
   if [ -d "/opt/credentials/qwen-code" ]; then sync_dir_contents "/opt/credentials/qwen-code" "$HOME/.qwen" "qwen"; fi

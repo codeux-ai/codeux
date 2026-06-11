@@ -10,6 +10,8 @@ vi.mock("../../../../../src/infrastructure/providers/cli/docker-bootstrap-builde
   CLAUDE_CODE_MCP_CONFIG_MOUNT: "/opt/provider-config/claude-mcp.json",
   GEMINI_MCP_SETTINGS_MOUNT: "/opt/provider-config/gemini-settings.json",
   CODEX_MCP_CONFIG_MOUNT: "/opt/provider-config/codex-config.toml",
+  QWEN_CODE_SETTINGS_MOUNT: "/opt/provider-config/qwen-settings.json",
+  ANTIGRAVITY_MCP_CONFIG_MOUNT: "/opt/provider-config/antigravity-mcp.json",
   DockerBootstrapBuilder: vi.fn().mockImplementation(function DockerBootstrapBuilder() {
     return {
     build: vi.fn(() => "bootstrap"),
@@ -215,8 +217,11 @@ describe("DockerRunner custom MCP server injection", () => {
     return call ? String(call[1]) : undefined;
   };
 
-  const build = (provider: any, conn: any, customServers: any[]) =>
-    (runner as any).buildProviderConfigMounts(conn, provider, "/tmp/cfg", {}, customServers);
+  const build = (provider: any, conn: any, customServers: any[], env: Record<string, string> = {}) =>
+    (runner as any).buildProviderConfigMounts(conn, provider, "/tmp/cfg", env, customServers);
+
+  const buildDocker = (provider: any, conn: any, customServers: any[], env: Record<string, string> = {}) =>
+    (runner as any).buildProviderConfigMounts(conn, provider, "/tmp/cfg", env, customServers, { executionMode: "DOCKER" });
 
   beforeEach(() => {
     runner = new DockerRunner();
@@ -231,6 +236,46 @@ describe("DockerRunner custom MCP server injection", () => {
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
     expect(json.mcpServers.code_ux).toMatchObject({ type: "http", url: "http://127.0.0.1:3000/mcp" });
     expect(json.mcpServers.docs).toEqual({ type: "http", url: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
+  });
+
+  it("rewrites loopback MCP URLs in Docker-mounted Claude config", async () => {
+    const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+    process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
+    try {
+      await buildDocker("claude-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret" }, [
+        { id: "1", name: "localdocs", transport: "http", url: "http://localhost:8123/mcp", enabled: true },
+      ]);
+    } finally {
+      if (originalRewrite === undefined) {
+        delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+      } else {
+        process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = originalRewrite;
+      }
+    }
+
+    const json = JSON.parse(writtenFor("claude-mcp.json")!);
+    expect(json.mcpServers.code_ux.url).toBe("http://host.docker.internal:3000/mcp");
+    expect(json.mcpServers.localdocs.url).toBe("http://host.docker.internal:8123/mcp");
+  });
+
+  it("rewrites loopback MCP URLs in Docker-mounted Codex TOML", async () => {
+    const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+    process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
+    try {
+      await buildDocker("codex", { url: "http://0.0.0.0:3000/mcp", authToken: null }, [
+        { id: "1", name: "localdocs", transport: "http", url: "http://localhost:8123/mcp", enabled: true },
+      ]);
+    } finally {
+      if (originalRewrite === undefined) {
+        delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
+      } else {
+        process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = originalRewrite;
+      }
+    }
+
+    const toml = writtenFor("codex-config.toml")!;
+    expect(toml).toContain('url = "http://host.docker.internal:3000/mcp"');
+    expect(toml).toContain('url = "http://host.docker.internal:8123/mcp"');
   });
 
   it("writes gemini config from custom servers even without a code_ux connection", async () => {
@@ -268,8 +313,7 @@ describe("DockerRunner custom MCP server injection", () => {
       { id: "p", name: "playwright", enabled: true, transport: "stdio", command: "npx", args: ["@playwright/mcp@latest"], env: { TOKEN: "x" } },
     ]);
     const json = JSON.parse(writtenFor("claude-mcp.json")!);
-    expect(json.mcpServers.playwright).toEqual({ command: "npx", args: ["@playwright/mcp@latest"], env: { TOKEN: "x" } });
-    expect(json.mcpServers.playwright.type).toBeUndefined();
+    expect(json.mcpServers.playwright).toEqual({ type: "stdio", command: "npx", args: ["@playwright/mcp@latest"], env: { TOKEN: "x" } });
   });
 
   it("emits stdio command/args/env as codex TOML", async () => {

@@ -575,7 +575,8 @@ export class CommandRunner {
       return line;
     }
     const relative = cleanLine.slice(prefix.length);
-    return `${path.join(cwd, ...relative.split("/"))}${hasCarriageReturn ? "\r" : ""}`;
+    const pathApi = this.getHostPathApi(cwd);
+    return `${pathApi.join(cwd, ...relative.split("/"))}${hasCarriageReturn ? "\r" : ""}`;
   }
 
   private isPathWithin(basePath: string, targetPath: string): boolean {

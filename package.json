@@ -1,6 +1,6 @@
 {
   "name": "codeux",
-  "version": "1.0.0",
+  "version": "0.6.9",
   "description": "Containerized environment for running and managing AI sub-agents",
   "author": "Pierre Voss <p.voss@codeux.ai>",
   "license": "MIT",

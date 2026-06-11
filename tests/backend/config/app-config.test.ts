@@ -25,6 +25,11 @@ beforeEach(async () => {
   delete process.env.MCP_HTTP_HOST;
   delete process.env.MCP_HTTP_PATH;
   delete process.env.MCP_HTTP_AUTH_TOKEN;
+  delete process.env.MCP_HTTPS_ENABLED;
+  delete process.env.MCP_HTTPS_PORT;
+  delete process.env.MCP_HTTPS_HOST;
+  delete process.env.MCP_HTTPS_PATH;
+  delete process.env.MCP_HTTPS_AUTH_TOKEN;
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "jules-app-config-"));
   process.chdir(tempDir);
 });
@@ -153,6 +158,23 @@ describe("loadAppConfig", () => {
     const config = loadAppConfig(["node", "index.js"], tempDir);
     expect(config.apiKey).toBe("env-key");
     expect(config.dashboardPort).toBe(8888);
+  });
+
+  it("uses a container-reachable default MCP bind with generated auth on Docker Desktop platforms", () => {
+    const config = loadAppConfig(["node", "index.js"], tempDir);
+    const needsContainerReachableDefault = process.platform === "win32"
+      || process.platform === "darwin"
+      || os.release().toLowerCase().includes("microsoft");
+
+    expect(config.mcpHttpEnabled).toBe(true);
+    if (needsContainerReachableDefault) {
+      expect(config.mcpHttpHost).toBe("0.0.0.0");
+      expect(config.mcpHttpAuthToken).toEqual(expect.any(String));
+      expect(config.mcpHttpAuthToken!.length).toBeGreaterThan(20);
+    } else {
+      expect(config.mcpHttpHost).toBe("127.0.0.1");
+      expect(config.mcpHttpAuthToken).toBeNull();
+    }
   });
 
   it("ignores legacy worker-host runtime flags and keeps project-manager defaults", () => {

@@ -115,7 +115,7 @@ export class DockerBootstrapBuilder {
       "if [ \"$1\" = \"claude\" ]; then",
       `  if [ -f "${CLAUDE_CODE_CREDENTIALS_MOUNT}/.credentials.json" ]; then cp -f "${CLAUDE_CODE_CREDENTIALS_MOUNT}/.credentials.json" "$HOME/.claude/.credentials.json"; fi`,
       `  if [ -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" ]; then cp -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" "$HOME/.claude.json"; fi`,
-      `  merge_json_file "${CLAUDE_CODE_MCP_CONFIG_MOUNT}" "$HOME/.claude/settings.json" "claude mcp config"`,
+      `  merge_json_file "${CLAUDE_CODE_MCP_CONFIG_MOUNT}" "$HOME/.claude.json" "claude mcp config"`,
       "fi",
       "if [ \"$1\" = \"qwen\" ]; then",
       `  if [ -d "${QWEN_CODE_CREDENTIALS_MOUNT}" ]; then sync_dir_contents "${QWEN_CODE_CREDENTIALS_MOUNT}" "$HOME/.qwen" "qwen"; fi`,

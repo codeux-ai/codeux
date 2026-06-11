@@ -429,12 +429,22 @@ export class CodeUxServer {
       isTrackedCliSession: (sessionId) => this.isTrackedCliSession(sessionId),
       getMcpConnectionInfo: () => this.mcpHttpHandle
         ? {
-            url: `http://${this.mcpHttpHandle.host}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
+            url: `http://${this.mcpHttpClientHost()}:${this.mcpHttpHandle.port}${this.mcpHttpHandle.path}`,
             authToken: this.appConfig.mcpHttpAuthToken,
           }
         : null,
       getMcpApprovalTracker: () => this.mcpApprovalTracker,
     };
+  }
+
+  private mcpHttpClientHost(): string {
+    if (!this.mcpHttpHandle) {
+      return "127.0.0.1";
+    }
+    const host = this.mcpHttpHandle.host.trim().toLowerCase();
+    return host === "0.0.0.0" || host === "::"
+      ? "127.0.0.1"
+      : this.mcpHttpHandle.host;
   }
 
   private runWithMcpCorrelationContext<T>(request: unknown, operation: () => Promise<T>): Promise<T> {
