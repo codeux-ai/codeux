@@ -6,12 +6,14 @@ import {
   Clock3,
   MessageCircle,
   Pause,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
   Repeat,
   Send,
   Trash2,
+  X,
   Zap,
 } from "lucide-preact";
 import { PageContainer } from "./components/layout/PageContainer.js";
@@ -30,10 +32,12 @@ import {
 import type {
   CreateSchedulerEntryInput,
   SchedulerCollectionResponse,
+  SchedulerEntryRecord,
   SchedulerOccurrence,
   ScheduleRecurrenceRule,
   ScheduleTargetType,
   SprintRecord,
+  UpdateSchedulerEntryInput,
 } from "./types.js";
 import type { QuicksprintTemplateRecord } from "../../../src/contracts/quicksprint-types.js";
 
@@ -129,6 +133,316 @@ const recurrenceSummary = (recurrence: ScheduleRecurrenceRule): string => {
   return `Every ${every}`;
 };
 
+interface EditEntryModalProps {
+  entry: SchedulerEntryRecord;
+  sprints: SprintRecord[];
+  templates: QuicksprintTemplateRecord[];
+  onClose: () => void;
+  onSave: () => Promise<void>;
+}
+
+const EditEntryModal: FunctionComponent<EditEntryModalProps> = ({
+  entry,
+  sprints,
+  templates,
+  onClose,
+  onSave,
+}) => {
+  const [feedback, setFeedback] = useState<FeedbackState>({ tone: "idle", message: null });
+  const [loading, setLoading] = useState(false);
+  const [title, setTitle] = useState(entry.title);
+  const [scheduledFor, setScheduledFor] = useState(() => toDateInputValue(new Date(entry.scheduledFor)));
+  const [timezone, setTimezone] = useState(entry.timezone);
+
+  const [selectedSprintId, setSelectedSprintId] = useState(entry.sprintTarget?.sprintId || "");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(entry.quicksprintTarget?.templateId || "");
+  const [taskCount, setTaskCount] = useState(entry.quicksprintTarget?.taskCount || 5);
+  const [chatMessage, setChatMessage] = useState(entry.chatTarget?.bodyMarkdown || "");
+
+  const [repeatEnabled, setRepeatEnabled] = useState(entry.recurrence.frequency !== "none");
+  const [frequency, setFrequency] = useState<ScheduleRecurrenceRule["frequency"]>(
+    entry.recurrence.frequency === "none" ? "daily" : entry.recurrence.frequency
+  );
+  const [interval, setIntervalValue] = useState(entry.recurrence.interval);
+  const [endMode, setEndMode] = useState<ScheduleRecurrenceRule["endMode"]>(entry.recurrence.endMode);
+  const [count, setCount] = useState(entry.recurrence.count || 6);
+  const [until, setUntil] = useState(() =>
+    entry.recurrence.until
+      ? toDateInputValue(new Date(entry.recurrence.until))
+      : toDateInputValue(addDays(new Date(), 30))
+  );
+
+  const incompleteSprints = useMemo(() => sprints.filter((s) => s.status !== "completed"), [sprints]);
+
+  const submitUpdate = async () => {
+    setLoading(true);
+    setFeedback({ tone: "idle", message: null });
+
+    const recurrence: Partial<ScheduleRecurrenceRule> = repeatEnabled
+      ? {
+        frequency,
+        interval,
+        endMode,
+        count: endMode === "after_count" ? count : null,
+        until: endMode === "on_date" ? new Date(until).toISOString() : null,
+      }
+      : { frequency: "none", interval: 1, endMode: "never" };
+
+    const input: UpdateSchedulerEntryInput = {
+      title,
+      scheduledFor: new Date(scheduledFor).toISOString(),
+      timezone,
+      recurrence,
+    };
+
+    if (entry.targetType === "sprint") {
+      if (!selectedSprintId) {
+        setFeedback({ tone: "error", message: "Choose a sprint." });
+        setLoading(false);
+        return;
+      }
+      input.sprintTarget = { sprintId: selectedSprintId };
+    } else if (entry.targetType === "quicksprint") {
+      if (!selectedTemplateId) {
+        setFeedback({ tone: "error", message: "Choose a template." });
+        setLoading(false);
+        return;
+      }
+      input.quicksprintTarget = {
+        templateId: selectedTemplateId,
+        taskCount,
+        submitMode: "plan_and_start",
+      };
+    } else if (entry.targetType === "chat") {
+      if (!chatMessage.trim()) {
+        setFeedback({ tone: "error", message: "Write a message." });
+        setLoading(false);
+        return;
+      }
+      input.chatTarget = {
+        bodyMarkdown: chatMessage.trim(),
+        title: "Scheduled message",
+      };
+    }
+
+    try {
+      await updateSchedulerEntry(entry.id, input);
+      await onSave();
+      onClose();
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Failed to update entry.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-void-950/80 backdrop-blur-sm">
+      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-[2rem] border border-black/[0.06] bg-white p-6 shadow-2xl dark:border-white/[0.06] dark:bg-void-900 dashboard-scrollbar">
+        <header className="mb-6 flex items-center justify-between">
+          <div>
+            <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">Edit Entry</h3>
+            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Update target, timing, or recurrence.</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-black/[0.03] text-slate-500 hover:bg-black/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.06]"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+
+        <div className="space-y-5">
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Title</span>
+            <input
+              type="text"
+              value={title}
+              onInput={(e) => setTitle(e.currentTarget.value)}
+              className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+            />
+          </label>
+
+          <div className="rounded-2xl border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Target Type (Read-only)</span>
+              <span className="rounded-full bg-signal-500/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-signal-500">
+                {targetLabel(entry.targetType)}
+              </span>
+            </div>
+
+            {entry.targetType === "sprint" && (
+              <AvantgardeSelect
+                value={selectedSprintId}
+                onChange={setSelectedSprintId}
+                searchable={true}
+                options={[
+                  { value: "", label: "Choose sprint" },
+                  ...sprints.map((s) => ({ value: s.id, label: s.name })),
+                ]}
+              />
+            )}
+
+            {entry.targetType === "quicksprint" && (
+              <div className="grid gap-3">
+                <AvantgardeSelect
+                  value={selectedTemplateId}
+                  onChange={setSelectedTemplateId}
+                  searchable={true}
+                  options={[
+                    { value: "", label: "Choose template" },
+                    ...templates.map((t) => ({ value: t.id, label: t.name })),
+                  ]}
+                />
+                <label className="block">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Task count</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={taskCount}
+                    onInput={(e) => setTaskCount(Number(e.currentTarget.value))}
+                    className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+                  />
+                </label>
+              </div>
+            )}
+
+            {entry.targetType === "chat" && (
+              <textarea
+                value={chatMessage}
+                onInput={(e) => setChatMessage(e.currentTarget.value)}
+                rows={4}
+                className={`w-full resize-none py-3 font-medium ${SCHEDULER_FIELD_CLASS}`}
+              />
+            )}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Date and time</span>
+              <input
+                type="datetime-local"
+                value={scheduledFor}
+                onInput={(e) => setScheduledFor(e.currentTarget.value)}
+                className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Timezone</span>
+              <input
+                type="text"
+                value={timezone}
+                onInput={(e) => setTimezone(e.currentTarget.value)}
+                className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+              />
+            </label>
+          </div>
+
+          <div className="rounded-2xl border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]">
+            <label className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
+                <Repeat className="h-4 w-4 text-signal-500" />
+                Repeat
+              </span>
+              <input
+                type="checkbox"
+                checked={repeatEnabled}
+                onChange={(e) => setRepeatEnabled(e.currentTarget.checked)}
+                className="h-5 w-5 accent-signal-500 rounded border-black/[0.08] dark:border-white/[0.08]"
+              />
+            </label>
+
+            {repeatEnabled && (
+              <div className="mt-4 grid gap-3">
+                <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    value={interval}
+                    onInput={(e) => setIntervalValue(Number(e.currentTarget.value))}
+                    className={SCHEDULER_COMPACT_FIELD_CLASS}
+                  />
+                  <AvantgardeSelect
+                    value={frequency}
+                    onChange={(v) => setFrequency(v as ScheduleRecurrenceRule["frequency"])}
+                    options={[
+                      { value: "hourly", label: "Hours" },
+                      { value: "daily", label: "Days" },
+                      { value: "weekly", label: "Weeks" },
+                      { value: "monthly", label: "Months" },
+                    ]}
+                  />
+                </div>
+                <AvantgardeSelect
+                  value={endMode}
+                  onChange={(v) => setEndMode(v as ScheduleRecurrenceRule["endMode"])}
+                  options={[
+                    { value: "never", label: "Endless" },
+                    { value: "after_count", label: "Specific iterations" },
+                    { value: "on_date", label: "End date/time" },
+                  ]}
+                />
+                {endMode === "after_count" && (
+                  <input
+                    type="number"
+                    min={1}
+                    value={count}
+                    onInput={(e) => setCount(Number(e.currentTarget.value))}
+                    className={SCHEDULER_COMPACT_FIELD_CLASS}
+                  />
+                )}
+                {endMode === "on_date" && (
+                  <input
+                    type="datetime-local"
+                    value={until}
+                    onInput={(e) => setUntil(e.currentTarget.value)}
+                    className={SCHEDULER_COMPACT_FIELD_CLASS}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={onClose}
+              className="flex-1 text-[10px] uppercase tracking-[0.16em]"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="signal"
+              size="lg"
+              isLoading={loading}
+              onClick={() => void submitUpdate()}
+              className="flex-1 text-[10px] uppercase tracking-[0.16em]"
+              icon={Check}
+            >
+              Save Changes
+            </Button>
+          </div>
+
+          {feedback.message && (
+            <div className={`rounded-[var(--radius-ui)] border px-4 py-3 text-xs font-semibold backdrop-blur-md ${
+              feedback.tone === "error"
+                ? "border-status-red/20 bg-status-red/[0.06] text-status-red"
+                : "border-signal-500/20 bg-signal-500/[0.06] text-signal-600 dark:text-signal-400"
+            }`}>
+              {feedback.message}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ProjectPlaceholder: FunctionComponent = () => (
   <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-6 md:p-8 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/[0.08] text-signal-500 shadow-[0_0_15px_rgba(0,224,160,0.08)]">
@@ -150,6 +464,7 @@ export const SchedulerPage: FunctionComponent = () => {
   const [templates, setTemplates] = useState<QuicksprintTemplateRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState>({ tone: "idle", message: null });
+  const [editingEntry, setEditingEntry] = useState<SchedulerEntryRecord | null>(null);
 
   const [targetType, setTargetType] = useState<ScheduleTargetType>("sprint");
   const [scheduledFor, setScheduledFor] = useState(() => {
@@ -787,6 +1102,15 @@ export const SchedulerPage: FunctionComponent = () => {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
+                        onClick={() => setEditingEntry(entry)}
+                        disabled={entry.status === "completed" || entry.status === "cancelled"}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                        aria-label="Edit schedule entry"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => void toggleEntryStatus(entry.id, entry.status === "paused")}
                         disabled={entry.status === "completed" || entry.status === "cancelled"}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
@@ -810,6 +1134,16 @@ export const SchedulerPage: FunctionComponent = () => {
           </section>
         </div>
       </section>
+
+      {editingEntry && (
+        <EditEntryModal
+          entry={editingEntry}
+          sprints={sprints}
+          templates={templates}
+          onClose={() => setEditingEntry(null)}
+          onSave={refresh}
+        />
+      )}
     </PageContainer>
   );
 };
