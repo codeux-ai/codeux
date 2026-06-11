@@ -96,6 +96,26 @@ export interface ExecutionProviderRunArgs {
   mcpAgentId?: string | null;
 }
 
+/** Resolves the effective model name to use for telemetry and recording. */
+export function resolveEffectiveModel(args: Pick<ExecutionProviderRunArgs, "provider" | "model" | "customModel" | "qwenAuthMode" | "qwenModelId" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId">): string {
+  const { provider, model, customModel } = args;
+  if ((provider === "claude-code" || provider === "codex") && customModel && customModel.trim().length > 0) {
+    return customModel.trim();
+  }
+  if (provider === "qwen-code" && args.qwenAuthMode === "MODEL_PROVIDER") {
+    if (model === "custom/model" || model === "local-model") {
+      return (args.qwenModelId || "glm-4.7-flash").trim();
+    }
+    return (args.qwenModelId || model || "glm-4.7-flash").trim();
+  }
+  if (provider === "opencode" && args.openCodeAuthMode === "CUSTOM_PROVIDER") {
+    const providerId = (args.openCodeProviderId || model.split("/")[0] || "custom").trim();
+    const modelId = (args.openCodeModelId || model.split("/").slice(1).join("/") || "model").trim();
+    return `${providerId}/${modelId}`;
+  }
+  return model;
+}
+
 /**
  * Maps a parsed provider conversation turn to an invocation message. Reasoning
  * and tool turns stay within the existing role union (assistant / tool) and are
@@ -146,6 +166,7 @@ export class ProviderExecutionService {
 
   async executeProvider(args: ExecutionProviderRunArgs): Promise<ProviderRunResult> {
     let execInvocationId: string | null = args.invocationId || null;
+    const effectiveModel = resolveEffectiveModel(args);
 
     const resolvedMcp = resolveAgentMcpRuntime({
       access: args.agentMcpAccess,
@@ -169,7 +190,7 @@ export class ProviderExecutionService {
           attentionItemId: args.attentionItemId,
           type: args.type,
           provider: args.provider,
-          model: args.model,
+          model: effectiveModel,
           startedAt,
           invocationSource: args.invocationSource,
         })?.id || null;
@@ -209,7 +230,7 @@ export class ProviderExecutionService {
             sessionId: args.sessionId,
             provider: args.provider,
             purpose: args.purpose,
-            model: args.model,
+            model: effectiveModel,
             executionMode: args.workflowSettings.executionMode,
             startedAt,
             promptChars: p.length,
@@ -228,7 +249,7 @@ export class ProviderExecutionService {
           sessionId: args.sessionId,
           provider: args.provider,
           purpose: args.purpose,
-          model: args.model,
+          model: effectiveModel,
           executionMode: args.workflowSettings.executionMode,
           startedAt,
           promptChars: p.length,
@@ -250,7 +271,7 @@ export class ProviderExecutionService {
         sprintId: args.sprintId,
         taskId: args.taskId,
         provider: args.provider,
-        model: args.model,
+        model: effectiveModel,
         purpose: args.purpose,
         executionMode: args.workflowSettings.executionMode,
       });
@@ -259,7 +280,7 @@ export class ProviderExecutionService {
         provider: args.provider,
         prompt: p,
         cwd: args.cwd || args.repoPath,
-        model: args.model,
+        model: effectiveModel,
         apiKey: args.apiKey,
         qwenAuthMode: args.qwenAuthMode,
         qwenRegion: args.qwenRegion,
@@ -303,7 +324,7 @@ export class ProviderExecutionService {
             const durationMs = Date.now() - startedMs;
             this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
               status: "running",
-              model: args.model,
+              model: effectiveModel,
               nativeSessionId: telemetry.nativeSessionId || undefined,
               durationMs,
               transcriptChars: telemetry.transcriptText.length,
@@ -324,7 +345,7 @@ export class ProviderExecutionService {
                 for (const turn of telemetry.conversation) {
                   this.deps.executionRepository.appendExecutionInvocationMessage(
                     execInvocationId,
-                    conversationTurnToMessage(turn, args.provider, args.model),
+                    conversationTurnToMessage(turn, args.provider, effectiveModel),
                   );
                 }
               } else {
@@ -370,7 +391,7 @@ export class ProviderExecutionService {
             sprintId: args.sprintId,
             taskId: args.taskId,
             provider: args.provider,
-            model: args.model,
+            model: effectiveModel,
             purpose: args.purpose,
             durationMs: Date.now() - startedMs,
             error,
@@ -384,7 +405,7 @@ export class ProviderExecutionService {
         const durationMs = Date.now() - startedMs;
         this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
           status: result.ok ? "completed" : "failed",
-          model: args.model,
+          model: effectiveModel,
           nativeSessionId: result.nativeSessionId,
           finishedAt,
           durationMs,
@@ -401,7 +422,7 @@ export class ProviderExecutionService {
         if (args.taskRunId) {
             this.deps.executionRepository.appendTaskRunEvent(args.taskRunId, "cli_provider_usage_reported", "system", {
             provider: args.provider,
-            model: args.model,
+            model: effectiveModel,
             purpose: args.purpose,
             inputTokens: result.usageTelemetry.inputTokens,
             cachedInputTokens: result.usageTelemetry.cachedInputTokens,
@@ -424,7 +445,7 @@ export class ProviderExecutionService {
         sprintId: args.sprintId,
         taskId: args.taskId,
         provider: args.provider,
-        model: args.model,
+        model: effectiveModel,
         purpose: args.purpose,
         ok: result.ok,
         durationMs: Date.now() - startedMs,
@@ -468,7 +489,7 @@ export class ProviderExecutionService {
             this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
               status: "completed",
               provider: args.provider,
-              model: args.model,
+              model: effectiveModel,
               finishedAt: new Date().toISOString(),
             });
           }
@@ -481,7 +502,7 @@ export class ProviderExecutionService {
               for (const turn of conversation) {
                 this.deps.executionRepository?.appendExecutionInvocationMessage(
                   execInvocationId,
-                  conversationTurnToMessage(turn, args.provider, args.model),
+                  conversationTurnToMessage(turn, args.provider, effectiveModel),
                 );
               }
             } else {

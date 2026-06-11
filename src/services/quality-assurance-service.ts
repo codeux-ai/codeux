@@ -6,7 +6,7 @@ import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-mana
 import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
-import { ProviderExecutionService } from "./provider-execution-service.js";
+import { ProviderExecutionService, resolveEffectiveModel } from "./provider-execution-service.js";
 import { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import type { DashboardSettings, DashboardSettingsScope, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { TaskRunRecord } from "../contracts/execution-types.js";
@@ -1300,6 +1300,18 @@ export class QualityAssuranceService {
         this.deps.logger?.warn("Failed to resolve follow-up provider via taskService routing", { error });
       }
     }
+
+    const effectiveModel = resolveEffectiveModel({
+      provider: args.provider,
+      model: followUpProviderSettings.model,
+      customModel: followUpProviderSettings.customModel,
+      qwenAuthMode: followUpProviderSettings.qwenAuthMode,
+      qwenModelId: followUpProviderSettings.qwenModelId,
+      openCodeAuthMode: followUpProviderSettings.openCodeAuthMode,
+      openCodeProviderId: followUpProviderSettings.openCodeProviderId,
+      openCodeModelId: followUpProviderSettings.openCodeModelId,
+    });
+
     const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, followUpProviderSettings.thinkingMode);
     const previousInvocation = this.deps.executionRepository.getLatestProviderInvocationUsageBySession(args.sessionId, "task_coding");
     const initialHead = (await this.runWorkspaceCommand(worktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
@@ -1321,7 +1333,7 @@ export class QualityAssuranceService {
       provider: args.provider,
       prompt: providerPrompt,
       cwd: worktreePath,
-      model: followUpProviderSettings.model,
+      model: effectiveModel,
       apiKey: followUpProviderSettings.apiKey,
       qwenAuthMode: followUpProviderSettings.qwenAuthMode,
       qwenRegion: followUpProviderSettings.qwenRegion,

@@ -306,7 +306,7 @@ export class ProviderRunner implements IProviderRunner {
   }): Promise<ProviderRunResult> {
     const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, gitlabToken, signal, onActivity, onTelemetry } = input;
     const startedMs = Date.now();
-    const runModel = this.resolveRunModel(provider, model, input);
+    const runModel = model;
     // Resolve where qwen-code should write its OpenAI request/response logs, as seen
     // by the qwen process. Kept outside the committed worktree in both execution modes.
     const qwenProcessLogDir = provider === "qwen-code"
@@ -588,30 +588,6 @@ export class ProviderRunner implements IProviderRunner {
         }
       }
     }
-  }
-
-  private resolveRunModel(
-    provider: CliProviderId,
-    model: string,
-    config: Pick<ProviderRunInput, "qwenAuthMode" | "qwenModelId" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId" | "customModel">,
-  ): string {
-    // claude-code / codex routed through a custom base URL (e.g. OpenRouter) use the
-    // gateway's own model slug, which overrides the preset model the agent selected.
-    if ((provider === "claude-code" || provider === "codex") && config.customModel && config.customModel.trim().length > 0) {
-      return config.customModel.trim();
-    }
-    if (provider === "qwen-code" && config.qwenAuthMode === "MODEL_PROVIDER") {
-      if (model === "custom/model" || model === "local-model") {
-        return (config.qwenModelId || "glm-4.7-flash").trim();
-      }
-      return (config.qwenModelId || model || "glm-4.7-flash").trim();
-    }
-    if (provider !== "opencode" || config.openCodeAuthMode !== "CUSTOM_PROVIDER") {
-      return model;
-    }
-    const providerId = (config.openCodeProviderId || model.split("/")[0] || "custom").trim();
-    const modelId = (config.openCodeModelId || model.split("/").slice(1).join("/") || "model").trim();
-    return `${providerId}/${modelId}`;
   }
 
   private async writeLocalOpenCodeConfig(
@@ -1084,16 +1060,16 @@ export class ProviderRunner implements IProviderRunner {
       } else if (apiKey && !useProviderMount) {
         env.ANTHROPIC_API_KEY = apiKey;
       }
-      if (providerConfig?.customModel && providerConfig.customModel.trim().length > 0) {
-        // A custom (gateway) model usually exposes a single slug, so point every Claude
-        // Code model tier at it — including the background "small/fast" tier that would
-        // otherwise request a Haiku model the gateway does not serve.
-        const customModel = providerConfig.customModel.trim();
-        env.ANTHROPIC_MODEL = customModel;
-        env.ANTHROPIC_SMALL_FAST_MODEL = customModel;
-        env.ANTHROPIC_DEFAULT_OPUS_MODEL = customModel;
-        env.ANTHROPIC_DEFAULT_SONNET_MODEL = customModel;
-        env.ANTHROPIC_DEFAULT_HAIKU_MODEL = customModel;
+
+      // If a custom model is provided (and thus passed in `model`), point every Claude
+      // Code model tier at it — including the background "small/fast" tier that would
+      // otherwise request a Haiku model the gateway does not serve.
+      if (model && model !== "default") {
+        env.ANTHROPIC_MODEL = model;
+        env.ANTHROPIC_SMALL_FAST_MODEL = model;
+        env.ANTHROPIC_DEFAULT_OPUS_MODEL = model;
+        env.ANTHROPIC_DEFAULT_SONNET_MODEL = model;
+        env.ANTHROPIC_DEFAULT_HAIKU_MODEL = model;
       }
     } else if (provider === "codex") {
       if (model && model !== "default") env.CODEX_MODEL = model;
