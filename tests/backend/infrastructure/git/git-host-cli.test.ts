@@ -197,6 +197,41 @@ describe("GithubApiHostCli", () => {
       expect((fetchMock.mock.calls[0][1] as any).method).toBe("POST");
     });
 
+    it("maps the head commit statusCheckRollup contexts to gh-compatible checks", async () => {
+      mockFetch([{ ok: true, body: graphqlPrs([{
+        number: 12, title: "Checked", url: "u", isDraft: false,
+        headRefName: "f", baseRefName: "main", mergeStateStatus: "CLEAN",
+        reviewDecision: null, updatedAt: "2024-01-01T00:00:00Z", comments: { totalCount: 0 },
+        commits: { nodes: [{ commit: { statusCheckRollup: { state: "FAILURE", contexts: { nodes: [
+          { __typename: "CheckRun", name: "build", status: "COMPLETED", conclusion: "SUCCESS" },
+          { __typename: "CheckRun", name: "test", status: "IN_PROGRESS", conclusion: null },
+          { __typename: "StatusContext", context: "ci/legacy", state: "FAILURE" },
+          { __typename: "StatusContext", context: "ci/pending", state: "PENDING" },
+        ] } } } }] },
+      }]) }]);
+
+      const res = await cli.prListOpen("tok");
+      expect(res.ok).toBe(true);
+      const parsed = JSON.parse(res.stdout);
+      expect(parsed[0].statusCheckRollup).toEqual([
+        { name: "build", status: "COMPLETED", conclusion: "SUCCESS" },
+        { name: "test", status: "IN_PROGRESS", conclusion: null },
+        { name: "ci/legacy", status: "COMPLETED", conclusion: "FAILURE" },
+        { name: "ci/pending", status: "IN_PROGRESS", conclusion: null },
+      ]);
+      // Still a single GraphQL POST — checks ride along with the PR list.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("requests the statusCheckRollup as part of the single GraphQL query", async () => {
+      mockFetch([{ ok: true, body: graphqlPrs([]) }]);
+      await cli.prListOpen("tok");
+      const body = String((fetchMock.mock.calls[0][1] as any).body);
+      expect(body).toContain("statusCheckRollup");
+      expect(body).toContain("CheckRun");
+      expect(body).toContain("StatusContext");
+    });
+
     it("reports the computed mergeStateStatus (DIRTY) from GraphQL", async () => {
       mockFetch([{ ok: true, body: graphqlPrs([{
         number: 10, title: "Conflicted", url: "u", isDraft: false,

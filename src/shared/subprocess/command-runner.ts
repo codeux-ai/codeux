@@ -366,7 +366,7 @@ export class CommandRunner {
     const result = await this.run(command, args, options);
     if (!result.ok) {
       const commandString = this.formatCommandForError(command, args);
-      const errorMessage = result.stderr || result.stdout || "Unknown error";
+      const errorMessage = result.stderr || result.stdout || `Unknown error (exit code ${result.code ?? "unknown"}, no output captured)`;
       throw new Error(`${commandString} failed: ${errorMessage}`);
     }
     return result;

@@ -53,16 +53,6 @@ const buildFetchArgs = (branch?: string): string[] => {
   ];
 };
 
-// A targeted refspec fetch fails hard when the branch was never pushed (e.g. a task
-// that completed without producing any file changes or a PR). Git reports this as
-// "couldn't find remote ref refs/heads/<branch>". In that case the branch simply does
-// not exist on the remote, which is not an error for our callers — they only need
-// origin refreshed so downstream ref checks can observe its absence.
-const isMissingRemoteRefError = (error: unknown): boolean => {
-  const message = error instanceof Error ? error.message : String(error);
-  return /couldn't find remote ref/i.test(message);
-};
-
 const normalizeOptions = (
   runnerOrOptions?: GitBranchSyncRunner | GitBranchSyncOptions,
 ): GitBranchSyncOptions => {
@@ -115,13 +105,21 @@ export async function fetchOriginIfAvailable(
   try {
     await runGit(runner, fetchArgs, repoPath, fetchEnv, fetchTimeout);
   } catch (error) {
-    // If the targeted branch was never pushed to the remote, fall back to a plain prune
-    // fetch so origin is still refreshed instead of failing the whole operation.
+    // If the targeted branch was never pushed to the remote (or was deleted after a merge),
+    // fall back to a plain prune fetch so origin is still refreshed instead of failing the
+    // whole operation. The fallback runs for any targeted-fetch failure — not only when the
+    // "couldn't find remote ref" text is recognizable — because containerized git can lose
+    // stderr, leaving the error unidentifiable. If the plain fetch also fails, origin really
+    // is unreachable and the original error is the one worth reporting.
     const isTargetedFetch = fetchArgs.length > PRUNE_FETCH_ARGS.length;
-    if (!isTargetedFetch || !isMissingRemoteRefError(error)) {
+    if (!isTargetedFetch) {
       throw error;
     }
-    await runGit(runner, [...PRUNE_FETCH_ARGS], repoPath, fetchEnv, fetchTimeout);
+    try {
+      await runGit(runner, [...PRUNE_FETCH_ARGS], repoPath, fetchEnv, fetchTimeout);
+    } catch {
+      throw error;
+    }
   }
   return true;
 }

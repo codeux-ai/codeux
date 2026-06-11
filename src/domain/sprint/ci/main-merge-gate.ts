@@ -1,4 +1,5 @@
 import {
+  deriveChecksFromCiRuns,
   isCiFailure,
   isCiPending,
 } from "../../../sprint/ci-status-utils.js";
@@ -143,7 +144,12 @@ export class MainMergeGateService {
       };
     }
 
-    const checks = Array.isArray(mainMergePr.checks) ? mainMergePr.checks : [];
+    // Fall back to the feature branch's workflow runs when the PR carries no status-check
+    // rollup of its own (GitLab, GitHub REST fallback) so the gate can settle.
+    const prChecks = Array.isArray(mainMergePr.checks) ? mainMergePr.checks : [];
+    const checks = prChecks.length > 0
+      ? prChecks
+      : deriveChecksFromCiRuns(gitStatus, mainMergePr.headRefName || featureBranch);
     const failedChecks = checks
       .filter((check) => isCiFailure(check.status, check.conclusion))
       .map((check) => check.name);

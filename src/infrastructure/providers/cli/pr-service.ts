@@ -2,6 +2,7 @@ import { runCommandStrict, CommandResult } from "../../../services/cli-process-r
 import { ProviderId } from "../../../contracts/app-types.js";
 import { GitStatusQueryClient } from "../../git/git-status-query-client.js";
 import { resolveRepositoryHost, selectHostToken, type GitHostTokens, type GitProvider } from "../../git/repository-host-resolver.js";
+import { buildGitHttpAuthEnvForRepoWithFallbacks } from "../../../services/git-http-auth.js";
 
 export type { GitHostTokens };
 
@@ -79,7 +80,17 @@ export class PrService implements IPrService {
       bodyLines.push(`Base: \`${args.featureBranch}\``, `Head: \`${args.workerBranch}\``);
 
       const prTitle = `${args.title} (${args.provider})`;
-      const createResult = await client.ghPrCreate(args.featureBranch, args.workerBranch, prTitle, bodyLines.join("\n"), effectiveToken);
+      let createResult = await client.ghPrCreate(args.featureBranch, args.workerBranch, prTitle, bodyLines.join("\n"), effectiveToken);
+
+      if (!createResult.ok) {
+        // A feature branch can disappear from origin between sprints (e.g. deleted by an
+        // auto-merge with branch cleanup). If the PR base is missing remotely but exists
+        // locally, restore it and retry once instead of failing the whole workflow.
+        const restored = await this.pushMissingBaseBranch(repoPath, args.featureBranch, hostToken);
+        if (restored) {
+          createResult = await client.ghPrCreate(args.featureBranch, args.workerBranch, prTitle, bodyLines.join("\n"), effectiveToken);
+        }
+      }
 
       if (!createResult.ok) {
         throw new Error(createResult.stderr || createResult.stdout || "git host backend returned a non-zero exit code");
@@ -118,6 +129,39 @@ export class PrService implements IPrService {
       return (await this.gitRevListCount(repoPath, `${featureBranch}..refs/heads/${workerBranch}`, runner)) > 0;
     }
     return false;
+  }
+
+  /**
+   * Re-pushes the PR base branch when it exists locally but is missing on origin. Returns true
+   * only when the branch was actually pushed, signalling that a PR-create retry is worthwhile.
+   */
+  private async pushMissingBaseBranch(
+    repoPath: string,
+    baseBranch: string,
+    hostToken: string | GitHostTokens | undefined,
+    runner: Runner = runCommandStrict,
+  ): Promise<boolean> {
+    if (!(await this.gitRefExists(repoPath, `refs/heads/${baseBranch}`, runner))) {
+      return false;
+    }
+    const auth = typeof hostToken === "string"
+      ? { githubToken: hostToken, gitlabToken: hostToken }
+      : hostToken ?? {};
+    const authEnv = (await buildGitHttpAuthEnvForRepoWithFallbacks(repoPath, auth)) ?? process.env;
+    try {
+      const lsRemote = await runner("git", ["ls-remote", "--heads", "origin", baseBranch], repoPath, authEnv);
+      if (lsRemote.stdout.trim().length > 0) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+    try {
+      await runner("git", ["push", "-u", "origin", `refs/heads/${baseBranch}:refs/heads/${baseBranch}`], repoPath, authEnv);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async gitRefExists(repoPath: string, ref: string, runner: Runner): Promise<boolean> {

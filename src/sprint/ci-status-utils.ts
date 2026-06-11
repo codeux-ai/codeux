@@ -21,6 +21,39 @@ export const isCiPending = (status: string, conclusion: string | null): boolean 
 
 export const isCiCheckPending = isCiPending;
 
+/**
+ * Derives check-shaped entries (`{ name, status, conclusion }`) from the workflow runs of a
+ * branch when a PR reports no checks of its own. The PR list endpoints of some providers
+ * (GitLab, the GitHub REST fallback) never include a status-check rollup, which would otherwise
+ * leave the CI gate waiting forever on `checks.length === 0`. Only the newest run per workflow
+ * counts — older runs of the same workflow are superseded.
+ */
+export const deriveChecksFromCiRuns = (
+  gitStatus: GitTrackingStatus,
+  branchName: string | null | undefined,
+): Array<{ name: string; status: string; conclusion: string | null }> => {
+  if (!branchName) {
+    return [];
+  }
+  const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
+  const newestPerWorkflow = new Map<string, GitCiRunStatus>();
+  for (const run of runs) {
+    if (run.headBranch !== branchName) {
+      continue;
+    }
+    const workflowKey = run.workflowName || run.name;
+    const existing = newestPerWorkflow.get(workflowKey);
+    if (!existing || (run.updatedAt || "") > (existing.updatedAt || "")) {
+      newestPerWorkflow.set(workflowKey, run);
+    }
+  }
+  return Array.from(newestPerWorkflow.values()).map((run) => ({
+    name: run.workflowName || run.name,
+    status: run.status,
+    conclusion: run.conclusion,
+  }));
+};
+
 export const selectFailedCiRuns = (gitStatus: GitTrackingStatus, branchName: string): GitCiRunStatus[] => {
   const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
   const failedRuns = runs.filter((run) => isCiFailure(run.status, run.conclusion));

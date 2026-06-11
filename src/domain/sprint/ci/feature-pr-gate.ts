@@ -1,4 +1,5 @@
 import { evaluateMergeReadiness } from "./feature-pr/merge-readiness-policy.js";
+import { deriveChecksFromCiRuns } from "../../../sprint/ci-status-utils.js";
 import type { GuardrailService } from "../../../services/guardrail-service.js";
 import { runCommandStrict } from "../../../services/cli-process-runner.js";
 import { matchMergedPrForTask, matchPrForTask } from "./feature-pr/pr-matcher.js";
@@ -359,7 +360,13 @@ export class FeaturePrGateService {
         return { reportText, events, attentionItem };
       }
 
-      const checks = Array.isArray(pr.checks) ? pr.checks : [];
+      // When the PR itself carries no status-check rollup (GitLab, GitHub REST fallback),
+      // fall back to the branch's workflow runs so CI completion is still observed instead of
+      // waiting forever on an empty check list.
+      let checks = Array.isArray(pr.checks) && pr.checks.length > 0 ? pr.checks : [];
+      if (checks.length === 0 && context.gitStatus) {
+        checks = deriveChecksFromCiRuns(context.gitStatus, pr.headRefName || workerBranch);
+      }
       const autoMergeMode = context.ciIntelligence.featurePrAutoMergeMode;
       const waitForFeatureCi = autoMergeMode === "WHEN_GREEN";
       const resolveAllCommentsBeforeFeatureMerge = context.ciIntelligence.resolveAllCommentsBeforeFeatureMerge;

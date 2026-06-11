@@ -210,16 +210,36 @@ describe("git branch sync service", () => {
     });
   });
 
-  it("rethrows fetch failures that are not a missing remote ref", async () => {
+  it("rethrows the original targeted-fetch error when the fallback prune fetch also fails", async () => {
     const runner = vi.fn()
       .mockResolvedValueOnce({ stdout: "git@github.com:owner/repo.git\n", stderr: "", exitCode: 0 })
+      .mockRejectedValueOnce(new Error("fatal: unable to access remote: Connection timed out"))
+      // fallback prune fetch fails too — origin is genuinely unreachable
       .mockRejectedValueOnce(new Error("fatal: unable to access remote: Connection timed out"));
 
     await expect(syncRemoteBranchIfAvailable("/repo", "task/no-changes", runner)).rejects.toThrow(
       /Connection timed out/,
     );
-    // No fallback prune fetch is attempted for unrelated failures.
-    expect(runner).toHaveBeenCalledTimes(2);
+    expect(runner).toHaveBeenCalledTimes(3);
+  });
+
+  it("recovers via the fallback prune fetch even when the targeted-fetch error carries no stderr", async () => {
+    const runner = vi.fn()
+      .mockResolvedValueOnce({ stdout: "git@github.com:owner/repo.git\n", stderr: "", exitCode: 0 })
+      // containerized git can lose stderr, making the missing-ref cause unidentifiable
+      .mockRejectedValueOnce(new Error(
+        "git fetch origin --prune +refs/heads/feature/sprint-1:refs/remotes/origin/feature/sprint-1 failed: Unknown error",
+      ))
+      // fallback prune fetch succeeds
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      // show-ref for the (still absent) remote branch fails -> returns early
+      .mockRejectedValueOnce(new Error("missing remote branch"));
+
+    await expect(syncRemoteBranchIfAvailable("/repo", "feature/sprint-1", runner)).resolves.toBe(true);
+
+    expect(runner).toHaveBeenNthCalledWith(3, "git", ["fetch", "origin", "--prune"], "/repo", undefined, {
+      timeoutMs: 120000,
+    });
   });
 
   it("fast-forwards a non-current local branch to origin when possible", async () => {
