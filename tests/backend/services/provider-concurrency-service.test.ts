@@ -92,6 +92,37 @@ describe("ProviderConcurrencyService", () => {
       expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledTimes(2);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("cap reached"), expect.anything());
     });
+
+    it("should handle simultaneous claims by retrying if tryCreate fails", async () => {
+      vi.useFakeTimers();
+      try {
+        const input1 = { provider: "jules", sessionId: "s1" } as any;
+        const input2 = { provider: "jules", sessionId: "s2" } as any;
+
+        // Simulate a race where two calls try to claim the last slot.
+        // The first call to tryCreateProviderInvocationUsage succeeds, the second fails (returns null).
+        executionRepository.tryCreateProviderInvocationUsage
+          .mockReturnValueOnce({ id: "inv-1" }) // First call succeeds
+          .mockReturnValueOnce(null)             // Second call fails (simulated race)
+          .mockReturnValueOnce({ id: "inv-2" }); // Second call succeeds on retry
+
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([{}, {}, {}, {}, {}]); // 5 running
+
+        const p1 = service.waitForSlotAndClaim("jules", 5, input1);
+        const p2 = service.waitForSlotAndClaim("jules", 5, input2);
+
+        // Advance timers to trigger the retry for the second call
+        await vi.advanceTimersByTimeAsync(2000);
+
+        const [res1, res2] = await Promise.all([p1, p2]);
+
+        expect(res1.id).toBe("inv-1");
+        expect(res2.id).toBe("inv-2");
+        expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe("getGlobalRunningCounts", () => {

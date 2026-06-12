@@ -90,6 +90,14 @@ export class SchedulerService {
       if (this.inFlightEntryIds.has(entry.id)) {
         continue;
       }
+
+      // Re-verify that the entry is still scheduled and due before proceeding.
+      // This prevents running entries that were paused or modified during the current tick.
+      const freshEntry = this.deps.schedulerRepository.getEntry(entry.id);
+      if (!freshEntry || freshEntry.status !== "scheduled" || !freshEntry.nextRunAt || new Date(freshEntry.nextRunAt).getTime() > now.getTime()) {
+        continue;
+      }
+
       this.inFlightEntryIds.add(entry.id);
       
       const occurrenceIso = entry.nextRunAt ?? entry.scheduledFor;

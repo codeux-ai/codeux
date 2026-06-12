@@ -112,6 +112,7 @@ export const CLAUDE_MODELS: string[] = [
   "claude-opus-4-6",
   "claude-sonnet-4-6",
   "claude-haiku-4-5-20251001",
+  "claude-fable-5",
 ];
 
 export const CODEX_MODELS: string[] = [

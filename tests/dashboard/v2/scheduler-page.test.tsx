@@ -238,4 +238,120 @@ describe("SchedulerPage", () => {
     fireEvent.click(deleteButton);
     expect(deleteSchedulerEntry).toHaveBeenCalledWith("entry-1");
   });
+
+  it("opens edit mode, updates title and scheduled time, and saves the entry using PATCH", async () => {
+    const mockSprints = [
+      { id: "sprint-1", name: "Sprint 1", status: "active" },
+    ];
+    const mockSchedule = {
+      entries: [
+        {
+          id: "entry-1",
+          projectId: "proj-1",
+          title: "Original Sprint Title",
+          targetType: "sprint",
+          status: "scheduled",
+          scheduledFor: "2026-06-01T12:00:00.000Z",
+          timezone: "UTC",
+          sprintTarget: { sprintId: "sprint-1" },
+          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+          runCount: 0,
+        },
+      ],
+      occurrences: [],
+    };
+
+    vi.mocked(fetchSprints).mockResolvedValue({ sprints: mockSprints } as any);
+    vi.mocked(fetchProjectSchedule).mockResolvedValue(mockSchedule as any);
+
+    const { container } = renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Original Sprint Title")).toBeInTheDocument();
+    });
+
+    // Verify form header before edit
+    expect(screen.getByText("Add entry")).toBeInTheDocument();
+
+    // Click Edit button
+    const editButton = screen.getByRole("button", { name: /^edit schedule entry$/i });
+    fireEvent.click(editButton);
+
+    // Verify form header updates to "Edit entry"
+    expect(screen.getByText("Edit entry")).toBeInTheDocument();
+
+    // The title field should be hydrated with the current title
+    const titleInput = screen.getByPlaceholderText("Optional description/title") as HTMLInputElement;
+    expect(titleInput.value).toBe("Original Sprint Title");
+
+    // Change title
+    fireEvent.input(titleInput, { target: { value: "Updated Sprint Title" } });
+
+    // Change scheduled time
+    const dateTimeInput = container.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    fireEvent.input(dateTimeInput, { target: { value: "2026-06-02T15:30" } });
+
+    // Click Save changes button
+    const saveButton = screen.getByRole("button", { name: /save/i });
+    fireEvent.click(saveButton);
+
+    // Verify updateSchedulerEntry was called with the correct patched payload
+    await waitFor(() => {
+      expect(updateSchedulerEntry).toHaveBeenCalledWith("entry-1", {
+        title: "Updated Sprint Title",
+        targetType: "sprint",
+        scheduledFor: new Date("2026-06-02T15:30").toISOString(),
+        timezone: "UTC",
+        sprintTarget: { sprintId: "sprint-1" },
+        recurrence: { frequency: "none", interval: 1, endMode: "never" },
+      });
+    });
+
+    // Form title should revert back to "Add entry"
+    expect(screen.getByText("Add entry")).toBeInTheDocument();
+  });
+
+  it("allows cancelling edit mode without mutating the entry", async () => {
+    const mockSchedule = {
+      entries: [
+        {
+          id: "entry-2",
+          projectId: "proj-1",
+          title: "Cancel Target Entry",
+          targetType: "chat",
+          status: "scheduled",
+          scheduledFor: "2026-06-01T12:00:00.000Z",
+          timezone: "UTC",
+          chatTarget: { bodyMarkdown: "Ping text" },
+          recurrence: { frequency: "none", interval: 1, endMode: "never" },
+          runCount: 0,
+        },
+      ],
+      occurrences: [],
+    };
+
+    vi.mocked(fetchProjectSchedule).mockResolvedValue(mockSchedule as any);
+
+    renderSchedulerPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Cancel Target Entry")).toBeInTheDocument();
+    });
+
+    // Click Edit button
+    const editButton = screen.getByRole("button", { name: /^edit schedule entry$/i });
+    fireEvent.click(editButton);
+
+    expect(screen.getByText("Edit entry")).toBeInTheDocument();
+
+    // Click Cancel button
+    const cancelButton = screen.getByRole("button", { name: /cancel/i });
+    fireEvent.click(cancelButton);
+
+    // Revert form header
+    expect(screen.getByText("Add entry")).toBeInTheDocument();
+
+    // Verify updateSchedulerEntry was NOT called
+    expect(updateSchedulerEntry).not.toHaveBeenCalled();
+  });
 });

@@ -16,6 +16,7 @@ import { classifyProviderError, ProviderQuotaError } from "../shared/providers/p
 import { resolveProviderRetryDecision, sleepWithSignal } from "../shared/providers/provider-retry-policy.js";
 import { DEFAULT_PROVIDER_SETTINGS } from "../repositories/settings-defaults.js";
 import type { ProviderId } from "../contracts/app-types.js";
+import type { CreateProviderInvocationUsageInput } from "../contracts/execution-types.js";
 import { sanitizeInvocationOutputText } from "./invocation-output-sanitizer.js";
 
 export interface ProviderExecutionServiceDeps {
@@ -211,49 +212,39 @@ export class ProviderExecutionService {
       }
 
       let invocation;
-      if (this.deps.providerConcurrencyService) {
-        const limit = args.maxConcurrentTasks !== undefined
-          ? args.maxConcurrentTasks
-          : (DEFAULT_PROVIDER_SETTINGS[args.provider as ProviderId]?.maxConcurrentTasks ?? 0);
+      const limit = args.maxConcurrentTasks !== undefined
+        ? args.maxConcurrentTasks
+        : (DEFAULT_PROVIDER_SETTINGS[args.provider as ProviderId]?.maxConcurrentTasks ?? 0);
 
+      const usageInput: CreateProviderInvocationUsageInput = {
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        taskId: args.taskId,
+        sprintRunId: args.sprintRunId,
+        dispatchId: args.dispatchId,
+        taskRunId: args.taskRunId,
+        attentionItemId: args.attentionItemId,
+        sessionId: args.sessionId,
+        provider: args.provider,
+        purpose: args.purpose,
+        model: effectiveModel,
+        executionMode: args.workflowSettings.executionMode,
+        startedAt,
+        promptChars: p.length,
+      };
+
+      if (this.deps.providerConcurrencyService) {
         invocation = await this.deps.providerConcurrencyService.waitForSlotAndClaim(
           args.provider as ProviderId,
           limit,
-          {
-            projectId: args.projectId,
-            sprintId: args.sprintId,
-            taskId: args.taskId,
-            sprintRunId: args.sprintRunId,
-            dispatchId: args.dispatchId,
-            taskRunId: args.taskRunId,
-            attentionItemId: args.attentionItemId,
-            sessionId: args.sessionId,
-            provider: args.provider,
-            purpose: args.purpose,
-            model: effectiveModel,
-            executionMode: args.workflowSettings.executionMode,
-            startedAt,
-            promptChars: p.length,
-          },
+          usageInput,
           args.signal
         );
       } else {
-        invocation = this.deps.executionRepository?.createProviderInvocationUsage({
-          projectId: args.projectId,
-          sprintId: args.sprintId,
-          taskId: args.taskId,
-          sprintRunId: args.sprintRunId,
-          dispatchId: args.dispatchId,
-          taskRunId: args.taskRunId,
-          attentionItemId: args.attentionItemId,
-          sessionId: args.sessionId,
-          provider: args.provider,
-          purpose: args.purpose,
-          model: effectiveModel,
-          executionMode: args.workflowSettings.executionMode,
-          startedAt,
-          promptChars: p.length,
-        });
+        // Fallback for cases where ProviderConcurrencyService is not provided, 
+        // e.g. in some specialized service tests, though in production it should be present
+        // when an execution repository is present.
+        invocation = this.deps.executionRepository?.createProviderInvocationUsage(usageInput);
       }
 
       if (invocation && execInvocationId) {
