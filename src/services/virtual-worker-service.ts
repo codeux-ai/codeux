@@ -17,7 +17,7 @@ import { WorkspaceArtifactService } from "../infrastructure/providers/cli/worksp
 import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
-import { ProviderExecutionService } from "./provider-execution-service.js";
+import { ProviderExecutionService, resolveEffectiveModel } from "./provider-execution-service.js";
 import type { GuardrailService } from "./guardrail-service.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
@@ -1236,6 +1236,17 @@ export class VirtualWorkerService {
     customModel?: string;
     githubToken: string;
   }): Promise<void> {
+    const effectiveModel = resolveEffectiveModel({
+      provider: args.provider,
+      model: args.model,
+      customModel: args.customModel,
+      qwenAuthMode: args.qwenAuthMode,
+      qwenModelId: args.qwenModelId,
+      openCodeAuthMode: args.openCodeAuthMode,
+      openCodeProviderId: args.openCodeProviderId,
+      openCodeModelId: args.openCodeModelId,
+    });
+
     const result = await this.providerExecutionService.executeProvider({
       projectId: args.attentionItem.projectId,
       sprintId: args.attentionItem.sprintId,
@@ -1248,7 +1259,7 @@ export class VirtualWorkerService {
       provider: args.provider,
       prompt: args.providerPrompt,
       cwd: args.worktreePath,
-      model: args.model,
+      model: effectiveModel,
       apiKey: args.apiKey,
       maxConcurrentTasks: args.maxConcurrentTasks,
       qwenAuthMode: args.qwenAuthMode,

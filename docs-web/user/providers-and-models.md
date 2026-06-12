@@ -46,6 +46,20 @@ gpt-5.1-codex-max, gpt-5.1, gpt-5.1-codex,
 gpt-5-codex, gpt-5-codex-mini, gpt-5
 ```
 
+### Custom Endpoints (Claude Code & Codex)
+
+For providers that support custom API endpoints (Claude Code and Codex), you can configure a **Custom Base URL** and a **Custom Model** in Settings.
+
+- **Custom Base URL**: Overrides the default API endpoint. Useful for routing through gateways like OpenRouter or LiteLLM.
+- **Custom Model**: Overrides the model identifier sent to the CLI and recorded in telemetry.
+
+When a Custom Model is set:
+1. **CLI Execution**: Code UX passes the custom model to the CLI via `--model` and relevant environment variables (e.g., `ANTHROPIC_MODEL`, `CODEX_MODEL`).
+2. **Telemetry Labeling**: The custom model slug is used in the dashboard's stats snapshots, invocation logs, and task-run events instead of the default or preset model name.
+3. **Claude Code Specifics**: Setting a custom model for Claude Code points *all* internal model tiers (fast, opus, etc.) at that single slug to ensure the gateway doesn't receive requests for unsupported models.
+
+The loopback URL rewriting behavior (e.g., `host.docker.internal` in Docker mode) also applies to these custom base URLs.
+
 ### Qwen
 ```
 qwen3-coder-plus, qwen3.5-plus, qwen3-coder-next,

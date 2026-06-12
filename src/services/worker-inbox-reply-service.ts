@@ -12,10 +12,7 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import type { IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
-import {
-  buildChatReplayPrompt,
-  normalizeProviderReply,
-} from "./chat-reply-prompt.js";
+import { buildChatReplayPrompt, normalizeProviderReply } from "./chat-reply-prompt.js";
 
 import { getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
 import type { TaskService } from "./task-service.js";
@@ -26,6 +23,7 @@ import type { ProviderConcurrencyService } from "./provider-concurrency-service.
 import type { KnowledgeService } from "./knowledge-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 import type { ResolvedProviderRoute } from "./provider-routing.js";
+import { resolveEffectiveModel } from "./provider-execution-service.js";
 
 export interface GenerateDashboardReplyInput {
   projectId: string;
@@ -491,11 +489,22 @@ export class WorkerInboxReplyService {
   }): Promise<ProviderRunResult & { text: string }> {
     const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
 
+    const effectiveModel = resolveEffectiveModel({
+      provider: input.provider,
+      model: input.model,
+      customModel: input.customModel,
+      qwenAuthMode: input.qwenAuthMode,
+      qwenModelId: input.qwenModelId,
+      openCodeAuthMode: input.openCodeAuthMode,
+      openCodeProviderId: input.openCodeProviderId,
+      openCodeModelId: input.openCodeModelId,
+    });
+
     return await this.deps.providerRunner.runProviderForText({
       provider: input.provider,
       prompt: input.prompt,
       cwd: input.repoPath,
-      model: input.model,
+      model: effectiveModel,
       apiKey: input.apiKey,
       qwenAuthMode: input.qwenAuthMode,
       qwenRegion: input.qwenRegion,
