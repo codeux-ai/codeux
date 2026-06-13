@@ -60,6 +60,11 @@ Production refinement shipped on March 15, 2026:
 - project execution refresh no longer implies a `projects.updated` snapshot by default, which removes a major source of redundant dashboard work during active sprints
 - snapshot-based events (`project.live.updated`, `project.execution.updated`, and `overview.telemetry.updated`) are now fingerprinted; publications and sequence increments are skipped if the semantic payload (ignoring timestamps like `updatedAt`) is unchanged
 
+June 13, 2026 refinement:
+- semantic fingerprinting is now centralized in a shared helper (`src/services/dashboard-realtime-fingerprint.ts`), ensuring consistent duplicate suppression across all snapshot-based events: `project.live.updated`, `project.execution.updated`, `project.git.updated`, and `overview.telemetry.updated`
+- fingerprinting ignores volatile fields like `updatedAt` and `timestamp` while calculating the exact payload size from a stable serialization pass
+- publication is skipped if the semantic fingerprint remains unchanged, reducing websocket bandwidth and browser rendering churn for data-only refreshes
+
 ### Dashboard websocket endpoint
 
 The dashboard server now exposes:
