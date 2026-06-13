@@ -718,8 +718,33 @@ describe("VirtualWorkerService", () => {
           failedChecks: ["lint", "test"],
           failedJobLabels: ["Lint Job"],
           failedLogSnippets: ["Error: lint failed"],
+          failedRuns: [
+            {
+              id: 123,
+              name: "CI",
+              workflowName: "Main CI",
+              status: "completed",
+              conclusion: "failure",
+              event: "pull_request",
+              headBranch: "fix/branch",
+              url: "https://github.com/test/actions/runs/123",
+              updatedAt: "2026-06-13T15:00:00Z",
+              failedJobs: [
+                {
+                  id: 456,
+                  name: "Lint Job",
+                  conclusion: "failure",
+                  failedSteps: ["Run lint"],
+                  logExcerpt: "Error: lint failed",
+                  logCommand: "gh run view 123 --job 456 --log-failed",
+                },
+              ],
+            },
+          ],
           prUrl: "https://github.com/test/pr/1",
           prNumber: 1,
+          taskKey: "T01",
+          taskTitle: "Original feature",
           taskPrompt: "Do the task",
         }
       },
@@ -729,11 +754,23 @@ describe("VirtualWorkerService", () => {
       "Record durable CI learnings in .task-learnings.md",
     );
 
-    expect(prompt).toContain("CI checks have failed for PR #1 on branch `fix/branch`");
+    expect(prompt).toContain("# CI Fix Job");
+    expect(prompt).toContain("You are not starting or reimplementing the original task");
+    expect(prompt).toContain("- PR: #1 (https://github.com/test/pr/1)");
+    expect(prompt).toContain("- Original task: T01 - Original feature");
+    expect(prompt).toContain("## Failed CI Details");
+    expect(prompt).toContain("### Failed Run 1: Main CI");
+    expect(prompt).toContain("- Run ID: 123");
+    expect(prompt).toContain("- Run URL: https://github.com/test/actions/runs/123");
+    expect(prompt).toContain("1. Lint Job");
+    expect(prompt).toContain("- Job ID: 456");
+    expect(prompt).toContain("- Failed steps: Run lint");
+    expect(prompt).toContain("- Log command: gh run view 123 --job 456 --log-failed");
     expect(prompt).toContain("## PROJECT CONTEXT FROM MEMORY");
     expect(prompt).toContain("lint, test");
     expect(prompt).toContain("Lint Job");
     expect(prompt).toContain("Error: lint failed");
+    expect(prompt).toContain("## Original Task Context (Reference Only)");
     expect(prompt).toContain("Do the task");
     expect(prompt).toContain("Record durable CI learnings in .task-learnings.md");
     expect(prompt).toContain("Fix CI");
@@ -819,6 +856,67 @@ describe("VirtualWorkerService", () => {
       && JSON.stringify(call[1]) === JSON.stringify(["push", "-u", "origin", "refs/heads/fix/branch:refs/heads/fix/branch"])
       && call[2] === "/test"
     ))).toBe(true);
+  });
+
+  it("escalates CI fix runs that produce no patch and have nothing unpublished", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:no-op-cifix",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      attentionType: "ci_fix_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "CI Fix",
+      summaryMarkdown: "Fix it",
+      payload: { repoPath: "/test", branchName: "fix/branch", featureBranch: "feature/base" },
+    });
+
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorktreePath").mockReturnValue("/tmp/wt");
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockResolvedValue({ worktreePath: "/tmp/wt" });
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
+    vi.spyOn((virtualWorkerService as any), "runProviderWithRetry").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "old-head\n",
+      stderr: "",
+      code: 0,
+    });
+    (virtualWorkerService as any).prService = {
+      hasUnpushedCommits: vi.fn().mockResolvedValue(false),
+      hasWorkerBranchCommitsAgainstFeature: vi.fn().mockResolvedValue(true),
+    };
+
+    const execRepo = (virtualWorkerService as any).deps.executionRepository;
+    vi.spyOn(execRepo, "createExecutionInvocation").mockReturnValue({ id: "exec-inv-noop" });
+    vi.spyOn(execRepo, "appendExecutionInvocationMessage").mockReturnValue({});
+    vi.spyOn(execRepo, "updateExecutionInvocation").mockReturnValue({});
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    const updatedItem = projectAttentionService.getItem(item.id);
+    expect(updatedItem?.status).toBe("resolved");
+    expect(updatedItem?.payload?.workerOutcome).toBe("needs_human_escalation");
+    expect(updatedItem?.summaryMarkdown).toContain("without producing a patch or unpublished branch commits");
+
+    const humanEscalations = projectAttentionService.listActiveProjectItems(project.id)
+      .filter((attentionItem) => attentionItem.attentionType === "human_escalation_required");
+    expect(humanEscalations).toHaveLength(1);
+    expect(humanEscalations[0]?.summaryMarkdown).toContain("refusing to mark the fix as pushed");
   });
 
   it("reuses an existing task workspace for CI autofix when the branch already has a CLI session", async () => {
