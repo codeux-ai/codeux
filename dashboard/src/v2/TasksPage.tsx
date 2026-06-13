@@ -33,6 +33,7 @@ import { useSprints } from "../hooks/useSprints.js";
 import { useProjectTasks } from "./hooks/use-project-tasks.js";
 import { createTask, deleteTask, updateTask } from "./lib/project-api.js";
 import { deriveTaskBoardState } from "./lib/task-board-state.js";
+import { deriveTasksPageState } from "./lib/tasks/tasks-page-state.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
 import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
 import { SkeletonCard, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
@@ -45,9 +46,7 @@ import { Button } from "./components/ui/Button.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import type { AgentPreset } from "./types.js";
 import { STATUS_CFG } from "./lib/tasks-constants.js";
-import { buildTaskCardViewModel } from "./lib/tasks/task-card-view-model.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
-import { buildLiveTaskEnrichmentMap } from "./lib/tasks/live-task-enrichment.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 
 const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "coding_completed", "QA_REVIEW_FAILED", "completed"];
@@ -491,38 +490,31 @@ export const TasksPage: FunctionComponent = () => {
     return () => ctx.revert();
   }, [resolvedTaskId, tasks]);
 
-  const allTasks = useMemo(() => [...optimisticTasks, ...tasks], [optimisticTasks, tasks]);
-  const taskLookup = useMemo(() => new Map(allTasks.map(t => [t.recordId, t])), [allTasks]);
-
-  const { filteredTasks, visibleTasks, stats, columns } = useMemo(() => {
-    return deriveTaskBoardState(allTasks, statusFilter, priorityFilter, listWindow);
-  }, [allTasks, statusFilter, priorityFilter, listWindow]);
-
-  const scopedDispatches = useMemo(() =>
-    taskScopeSprintId
-      ? execution.taskDispatches.filter((d) => d.sprintId === taskScopeSprintId)
-      : execution.taskDispatches,
-    [execution.taskDispatches, taskScopeSprintId]
+  const { filteredTasks, stats, columns, taskViewModels } = useMemo(
+    () =>
+      deriveTasksPageState({
+        tasks,
+        optimisticTasks,
+        statusFilter,
+        priorityFilter,
+        listWindow,
+        taskScopeSprintId,
+        taskDispatches: execution.taskDispatches,
+        recentEvents: execution.recentEvents,
+        subtasks: status.subtasks ?? [],
+      }),
+    [
+      tasks,
+      optimisticTasks,
+      statusFilter,
+      priorityFilter,
+      listWindow,
+      taskScopeSprintId,
+      execution.taskDispatches,
+      execution.recentEvents,
+      status.subtasks,
+    ]
   );
-  const scopedEvents = useMemo(() =>
-    taskScopeSprintId
-      ? execution.recentEvents.filter((e) => e.sprintId === taskScopeSprintId)
-      : execution.recentEvents,
-    [execution.recentEvents, taskScopeSprintId]
-  );
-
-  const liveEnrichmentMap = useMemo(
-    () => buildLiveTaskEnrichmentMap(status.subtasks ?? [], scopedDispatches, scopedEvents),
-    [status.subtasks, scopedDispatches, scopedEvents]
-  );
-
-  const taskViewModels = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof buildTaskCardViewModel>>();
-    allTasks.forEach(task => {
-      map.set(task.recordId, buildTaskCardViewModel(task, taskLookup, liveEnrichmentMap.get(task.recordId)));
-    });
-    return map;
-  }, [allTasks, taskLookup, liveEnrichmentMap]);
 
   const selectedSprintModel = taskScopeSprintId ? sprints.find((sprint: Sprint) => sprint.id === taskScopeSprintId) || null : null;
   const isTaskScopeReady = !!selectedProject && sprints.length > 0;

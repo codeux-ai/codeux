@@ -32,12 +32,17 @@ Extended on March 15, 2026:
 - added create/update/delete lifecycle helpers for non-MCP endpoints
 - virtual worker startup now prunes orphaned `virtual_cli` endpoints from previous runs
 
-Primary files:
+## Provider Run Lifecycle
 
-- `src/contracts/worker-types.ts`
-- `src/repositories/worker-endpoint-repository.ts`
-- `src/repositories/connection-chat-repository.ts`
-- `src/services/worker-task-dispatch-service.ts`
+To ensure consistent workspace preparation and deterministic cleanup, CLI provider execution follows a shared lifecycle boundary implemented in `src/infrastructure/providers/cli/provider-runner-lifecycle.ts`.
+
+Both `runProvider` and `runProviderForText` use the `runProviderWithLifecycle` helper which:
+1. Prepares the execution workspace (isolated Docker volume or local directory).
+2. Sets up provider-specific output paths (e.g., for Codex last message capture).
+3. Executes the provider-specific logic.
+4. Ensures all resources (Docker volumes, temporary files) are cleaned up regardless of success or failure.
+
+This boundary separates environment orchestration from the specific CLI command generation and output parsing logic found in `ProviderRunner`.
 
 ## Data Model
 

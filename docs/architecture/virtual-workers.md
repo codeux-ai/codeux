@@ -54,6 +54,16 @@ Virtual workers use the same worker abstractions as the rest of the execution mo
 
 Virtual workers create `worker_endpoints.endpoint_type = virtual_cli` and do not require MCP connection rows.
 
+## Reconciliation & Eligibility
+
+To ensure scalability across many projects, the background reconcile loop uses a batched eligibility check:
+
+1. **Eligibility Pass**: For each project, the scheduler resolves its worker execution mode, active cycle status, and the presence of eligible worker attention items once per pass.
+2. **Eligibility Object**: This data is captured in a `ProjectEligibility` object.
+3. **Optimized Scheduling**: The `scheduleProject` flow uses this pre-calculated eligibility to avoid redundant settings resolution and database lookups during a single reconciliation cycle.
+
+Mutation-triggered scheduling (outside the reconcile loop) continues to perform fresh eligibility checks to ensure immediate consistency.
+
 ## Cycle Behavior
 
 Each virtual cycle is project-scoped and one-shot:

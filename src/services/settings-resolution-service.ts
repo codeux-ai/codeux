@@ -6,6 +6,13 @@ import type {
   McpToolToggle,
   SkillToggle,
 } from "../contracts/app-types.js";
+import {
+  deepDiff,
+  deepMerge,
+  flattenSources,
+  safeClone,
+  toRecord,
+} from "../domain/settings/settings-merge.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type {
   EffectiveSettingsResponse,
@@ -158,93 +165,6 @@ function cloneInvocationRouting(
       },
     ]),
   ) as ProjectSettings["aiProvider"]["invocationRouting"];
-}
-
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function deepMerge<T>(base: T, patch: unknown): T {
-  if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
-    return (patch === undefined ? base : patch) as T;
-  }
-
-  const baseRecord = toRecord(base);
-  const patchRecord = toRecord(patch);
-  const result: Record<string, unknown> = { ...baseRecord };
-
-  for (const [key, value] of Object.entries(patchRecord)) {
-    const current = result[key];
-    if (Array.isArray(value)) {
-      result[key] = value.map((entry) => (
-        entry && typeof entry === "object" ? JSON.parse(JSON.stringify(entry)) : entry
-      ));
-      continue;
-    }
-    if (value && typeof value === "object") {
-      result[key] = deepMerge(current ?? {}, value);
-      continue;
-    }
-    result[key] = value;
-  }
-
-  return result as T;
-}
-
-function deepDiff(base: unknown, value: unknown): unknown {
-  if (Array.isArray(base) || Array.isArray(value)) {
-    return JSON.stringify(base) === JSON.stringify(value) ? undefined : value;
-  }
-
-  if (!base || typeof base !== "object" || !value || typeof value !== "object") {
-    return JSON.stringify(base) === JSON.stringify(value) ? undefined : value;
-  }
-
-  const baseRecord = toRecord(base);
-  const valueRecord = toRecord(value);
-  const result: Record<string, unknown> = {};
-
-  for (const key of Object.keys(valueRecord)) {
-    const nextDiff = deepDiff(baseRecord[key], valueRecord[key]);
-    if (nextDiff !== undefined) {
-      result[key] = nextDiff;
-    }
-  }
-
-  return Object.keys(result).length > 0 ? result : undefined;
-}
-
-function flattenSources(
-  value: unknown,
-  source: SettingsValueSource,
-  prefix = "",
-  result: Record<string, SettingsValueSource> = {},
-): Record<string, SettingsValueSource> {
-  if (Array.isArray(value)) {
-    result[prefix] = source;
-    return result;
-  }
-  if (!value || typeof value !== "object") {
-    if (prefix) {
-      result[prefix] = source;
-    }
-    return result;
-  }
-
-  for (const [key, nested] of Object.entries(toRecord(value))) {
-    const nextPrefix = prefix ? `${prefix}.${key}` : key;
-    if (Array.isArray(nested)) {
-      result[nextPrefix] = source;
-      continue;
-    }
-    if (nested && typeof nested === "object") {
-      flattenSources(nested, source, nextPrefix, result);
-      continue;
-    }
-    result[nextPrefix] = source;
-  }
-
-  return result;
 }
 
 function sanitizeSkills(value: unknown, githubMode: DashboardSettings["git"]["githubMode"]): SkillToggle[] {

@@ -27,6 +27,7 @@ import type {
   ThinkingMode,
 } from "../../types.js";
 import type { AgentAvatarConfig } from "../types.js";
+import { getValueByPath, setValueByPath } from "../lib/settings-path-updates.js";
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 type SettingsScope = "system" | "project";
@@ -528,23 +529,6 @@ export const useSettingsPageState = (
       setResettingDatabase(false);
     }
   }, [loadSettings]);
-
-  const getValueByPath = useCallback((obj: any, path: string): any => {
-    return path.split(".").reduce((acc, part) => acc && acc[part], obj);
-  }, []);
-
-  const setValueByPath = useCallback((obj: any, path: string, value: any): any => {
-    const parts = path.split(".");
-    const next = { ...obj };
-    let current = next;
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i]!;
-      current[part] = { ...current[part] };
-      current = current[part];
-    }
-    current[parts[parts.length - 1]!] = value;
-    return next;
-  }, []);
 
   const resetFieldToDefault = useCallback((path: string): void => {
     if (!systemSettings || !projectSettings) {

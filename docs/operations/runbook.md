@@ -180,6 +180,13 @@ Checks:
   - `Recovered runtime state on startup`
 - Verify the affected sprint run returns to active monitoring without creating a brand-new sprint run record.
 
+### 9. Terminal Login WebSocket Reliability
+The interactive terminal login (used for Gemini, Codex, Claude, etc.) uses a custom low-level WebSocket implementation.
+- **Buffer Limits**: Terminal output history (replay) is capped at 50,000 characters to prevent memory exhaustion while maintaining enough history for auth flows.
+- **Message Size**: Incoming client messages (keystrokes/input) are capped at 128KB per frame. Frames exceeding this limit will cause the socket to be closed immediately.
+- **Disconnects**: If the websocket disconnects, the terminal session remains active for a 30-second grace period. If no client reconnects within this window, the session is terminated.
+- **Troubleshooting**: If a terminal session closes abruptly after sending data, check if the client input exceeded the 128KB frame limit.
+
 ## Recovery Techniques
 
 - Temporarily disable selected loop steps for diagnosis.

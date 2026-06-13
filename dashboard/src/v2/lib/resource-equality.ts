@@ -39,6 +39,44 @@ export interface ProjectsResponse {
   selectedProjectId: string | null;
 }
 
+export interface UsageTotals {
+  invocationCount: number;
+  activeTimeMs: number;
+  wallTimeMs: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+  reportedInvocationCount: number;
+  estimatedInvocationCount: number;
+  unavailableInvocationCount: number;
+  unsupportedInvocationCount: number;
+}
+
+export interface Bucket {
+  bucketStart: string;
+  bucketEnd: string;
+  label: string;
+  usage: UsageTotals;
+}
+
+export interface EntitySummary {
+  id: string;
+  label: string;
+  secondaryLabel?: string | null;
+  status?: string | null;
+  purpose?: string | null;
+  provider?: string | null;
+  lastActivityAt?: string | null;
+  usage: UsageTotals;
+}
+
+export interface TokenSource {
+  source: string;
+  count: number;
+}
+
 export function isEqualProject(p1: Source, p2: Source): boolean {
   if (p1 === p2) return true;
   if (!p1 || !p2) return false;
@@ -58,6 +96,7 @@ export function isEqualProject(p1: Source, p2: Source): boolean {
 
 export function isEqualProjectsResponse(prev: ProjectsResponse, next: ProjectsResponse): boolean {
   if (prev === next) return true;
+  if (!prev || !next) return false;
   if (prev.selectedProjectId !== next.selectedProjectId) {
     return false;
   }
@@ -65,9 +104,7 @@ export function isEqualProjectsResponse(prev: ProjectsResponse, next: ProjectsRe
     return false;
   }
   for (let i = 0; i < prev.projects.length; i++) {
-    const p1 = prev.projects[i];
-    const p2 = next.projects[i];
-    if (!isEqualProject(p1, p2)) {
+    if (!isEqualProject(prev.projects[i], next.projects[i])) {
       return false;
     }
   }
@@ -76,14 +113,16 @@ export function isEqualProjectsResponse(prev: ProjectsResponse, next: ProjectsRe
 
 export function stabilizeProjectsResponse(prev: ProjectsResponse, next: ProjectsResponse): ProjectsResponse {
   if (prev === next) return prev;
+  if (!prev || !next) return next;
 
+  // Fast path for exact equality
+  if (isEqualProjectsResponse(prev, next)) return prev;
+
+  const prevMap = new Map(prev.projects.map(p => [p.id, p]));
   let projectsChanged = false;
-  const newProjects = next.projects.map((nextProject, i) => {
-    // If lengths differ, prev.projects[i] might be undefined, but we're mostly
-    // trying to stabilize when array sizes match or when items align.
-    // To be safe, we try to match by ID instead of purely by index, but index is okay
-    // since `isEqualProjectsResponse` checks order. Let's just find by ID to be robust.
-    const prevProject = prev.projects.find(p => p.id === nextProject.id);
+
+  const newProjects = next.projects.map((nextProject) => {
+    const prevProject = prevMap.get(nextProject.id);
     if (prevProject && isEqualProject(prevProject, nextProject)) {
       return prevProject;
     }
@@ -91,7 +130,9 @@ export function stabilizeProjectsResponse(prev: ProjectsResponse, next: Projects
     return nextProject;
   });
 
-  if (prev.selectedProjectId === next.selectedProjectId && !projectsChanged && prev.projects.length === next.projects.length) {
+  const isOrderSame = prev.projects.length === newProjects.length && newProjects.every((p, i) => p === prev.projects[i]);
+
+  if (prev.selectedProjectId === next.selectedProjectId && !projectsChanged && isOrderSame) {
     return prev;
   }
 
@@ -124,7 +165,7 @@ export function stabilizeEffectiveSettings(prev: EffectiveSettingsResponse | nul
   };
 }
 
-export function isEqualUsageTotals(a: any, b: any): boolean {
+export function isEqualUsageTotals(a: UsageTotals | null | undefined, b: UsageTotals | null | undefined): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   return a.invocationCount === b.invocationCount &&
@@ -141,41 +182,45 @@ export function isEqualUsageTotals(a: any, b: any): boolean {
          a.unsupportedInvocationCount === b.unsupportedInvocationCount;
 }
 
-export function isEqualBuckets(a: any[], b: any[]): boolean {
+export function isEqualBuckets(a: Bucket[] | null | undefined, b: Bucket[] | null | undefined): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    if (a[i].bucketStart !== b[i].bucketStart ||
-        a[i].bucketEnd !== b[i].bucketEnd ||
-        a[i].label !== b[i].label ||
-        !isEqualUsageTotals(a[i].usage, b[i].usage)) {
+    const ba = a[i];
+    const bb = b[i];
+    if (ba.bucketStart !== bb.bucketStart ||
+        ba.bucketEnd !== bb.bucketEnd ||
+        ba.label !== bb.label ||
+        !isEqualUsageTotals(ba.usage, bb.usage)) {
       return false;
     }
   }
   return true;
 }
 
-export function isEqualEntitySummaries(a: any[], b: any[]): boolean {
+export function isEqualEntitySummaries(a: EntitySummary[] | null | undefined, b: EntitySummary[] | null | undefined): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
-    if (a[i].id !== b[i].id ||
-        a[i].label !== b[i].label ||
-        a[i].secondaryLabel !== b[i].secondaryLabel ||
-        a[i].status !== b[i].status ||
-        a[i].purpose !== b[i].purpose ||
-        a[i].provider !== b[i].provider ||
-        a[i].lastActivityAt !== b[i].lastActivityAt ||
-        !isEqualUsageTotals(a[i].usage, b[i].usage)) {
+    const ea = a[i];
+    const eb = b[i];
+    if (ea.id !== eb.id ||
+        ea.label !== eb.label ||
+        ea.secondaryLabel !== eb.secondaryLabel ||
+        ea.status !== eb.status ||
+        ea.purpose !== eb.purpose ||
+        ea.provider !== eb.provider ||
+        ea.lastActivityAt !== eb.lastActivityAt ||
+        !isEqualUsageTotals(ea.usage, eb.usage)) {
       return false;
     }
   }
   return true;
 }
 
-export function isEqualTokenSources(a: any[], b: any[]): boolean {
+export function isEqualTokenSources(a: TokenSource[] | null | undefined, b: TokenSource[] | null | undefined): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   if (a.length !== b.length) return false;
@@ -261,7 +306,7 @@ export function stabilizeProjectStatsSnapshot(prev: ProjectExecutionStatsSnapsho
     });
   }
 
-  const stabilizeEntities = (prevArr: any[] | undefined, nextArr: any[] | undefined): any[] | undefined => {
+  const stabilizeEntities = (prevArr: EntitySummary[] | undefined, nextArr: EntitySummary[] | undefined): EntitySummary[] | undefined => {
     if (!prevArr || !nextArr) return nextArr;
     const prevMap = new Map(prevArr.map(e => [e.id, e]));
     return nextArr.map(e => {
@@ -274,16 +319,16 @@ export function stabilizeProjectStatsSnapshot(prev: ProjectExecutionStatsSnapsho
   };
 
   if (sprintsUnchanged) stabilized.sprints = prev.sprints;
-  else stabilized.sprints = stabilizeEntities(prev.sprints, next.sprints) as any;
+  else stabilized.sprints = stabilizeEntities(prev.sprints, next.sprints as EntitySummary[]) as any;
 
   if (tasksUnchanged) stabilized.tasks = prev.tasks;
-  else stabilized.tasks = stabilizeEntities(prev.tasks, next.tasks) as any;
+  else stabilized.tasks = stabilizeEntities(prev.tasks, next.tasks as EntitySummary[]) as any;
 
   if (providersUnchanged) stabilized.providers = prev.providers;
-  else stabilized.providers = stabilizeEntities(prev.providers, next.providers) as any;
+  else stabilized.providers = stabilizeEntities(prev.providers, next.providers as EntitySummary[]) as any;
 
   if (purposesUnchanged) stabilized.purposes = prev.purposes;
-  else stabilized.purposes = stabilizeEntities(prev.purposes, next.purposes) as any;
+  else stabilized.purposes = stabilizeEntities(prev.purposes, next.purposes as EntitySummary[]) as any;
 
   if (tokenSourcesUnchanged) {
     stabilized.tokenSources = prev.tokenSources;
@@ -297,3 +342,4 @@ export function stabilizeProjectStatsSnapshot(prev: ProjectExecutionStatsSnapsho
 
   return stabilized;
 }
+

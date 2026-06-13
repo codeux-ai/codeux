@@ -175,6 +175,22 @@ Dashboard behavior:
 - the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model
 - dashboard theme selection is unified through `dashboard/src/v2/hooks/useThemeSetting.ts`: both the top-nav theme toggle and Settings > Appearance theme control persist through `saveSystemSettings` and react to the same `codeux:settings-updated` event stream.
 - the main settings editor is composed of smaller panel modules for better maintainability (e.g., automation, provider, worker, QA controls) instead of one monolithic component.
+
+## Settings Merge and Resolution Logic
+
+Effective settings are resolved using a recursive merge strategy across `system -> project -> sprint` scopes.
+
+### Merge Rules
+- **Recursive Object Merge**: Nested objects are merged recursively. If a key exists in both the base and the patch, the patch value is merged into the base value.
+- **Array Replacement**: Arrays are treated as leaf values. A patch containing an array will completely replace the base array at that key rather than merging elements.
+- **Safe Cloning**: All merged values are deeply cloned using a typed clone path that ensures JSON-compatible data and rejects unsupported object shapes (like class instances or functions).
+- **Undefined Handling**: `undefined` values in a patch are ignored, preserving the base value. `null` or other primitives in a patch replace the base value.
+
+### Source Resolution
+The system tracks the origin of each setting field (`system`, `project`, or `sprint`) by flattening the effective settings object.
+- **Leaf Values**: Primitives and nulls are assigned the source of the scope that last provided them.
+- **Arrays as Leaves**: Arrays are treated as atomic leaf values for source tracking. The entire array is associated with a single source.
+- **Path Mapping**: Flattened keys use dot-notation (e.g., `aiProvider.provider`).
 - AI provider configuration and catalog metadata are centralized in `settings-view-models.ts` instead of directly within the editor.
 - AI provider configuration now uses compact focused workspaces instead of only long card grids:
   - one provider is edited at a time in the provider deck detail panel

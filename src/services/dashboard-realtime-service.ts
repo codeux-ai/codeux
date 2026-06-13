@@ -1,4 +1,4 @@
-import type {
+import {
   DashboardRealtimeEvent,
   DashboardRealtimeScopeType,
   DashboardStatus,
@@ -12,6 +12,7 @@ import {
   DashboardRealtimeEventRepository,
   type AppendDashboardRealtimeEventInput,
 } from "../repositories/dashboard-realtime-event-repository.js";
+import { calculateRealtimeFingerprint } from "./dashboard-realtime-fingerprint.js";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -318,7 +319,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         (async () => {
           try {
             const snapshot = await Promise.resolve(loaders.getProjectLiveSnapshot(projectId));
-            const fingerprint = this.getFingerprint(snapshot);
+            const { fingerprint, sizeBytes } = calculateRealtimeFingerprint(snapshot);
             const cacheKey = `project:${projectId}:project.live.updated`;
 
             if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
@@ -330,7 +331,6 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
               return;
             }
 
-            const payloadSizeBytes = Buffer.byteLength(JSON.stringify(snapshot), "utf8");
             this.publishRawEvent({
               scopeType: "project",
               scopeId: projectId,
@@ -346,7 +346,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
 
             this.logger.info("realtime_snapshot_published", {
               type: "project.live.updated",
-              sizeBytes: payloadSizeBytes,
+              sizeBytes,
               projectId,
               publishFrequencyMs: lastPublishedAt > 0 ? now - lastPublishedAt : 0,
             });
@@ -378,7 +378,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         (async () => {
           try {
             const gitStatus = await Promise.resolve(loadGit(projectId));
-            const fingerprint = this.getFingerprint(gitStatus);
+            const { fingerprint, sizeBytes } = calculateRealtimeFingerprint(gitStatus);
             const cacheKey = `project:${projectId}:project.git.updated`;
 
             if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
@@ -397,6 +397,13 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
               replayable: false,
             });
             this.lastPayloadFingerprints.set(cacheKey, fingerprint);
+
+            this.logger.info("realtime_snapshot_published", {
+              type: "project.git.updated",
+              sizeBytes,
+              projectId,
+              publishFrequencyMs: lastPublishedAt > 0 ? now - lastPublishedAt : 0,
+            });
             this.projectGitPublishedAt.set(projectId, now);
           } catch (error) {
             this.logger.error("Failed to publish project git realtime snapshot", {
@@ -421,7 +428,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         (async () => {
           try {
             const snapshot = await Promise.resolve(loaders.getProjectExecutionSnapshot(projectId));
-            const fingerprint = this.getFingerprint(snapshot);
+            const { fingerprint, sizeBytes } = calculateRealtimeFingerprint(snapshot);
             const cacheKey = `project:${projectId}:project.execution.updated`;
 
             if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
@@ -444,6 +451,13 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
               replayable: false,
             });
             this.lastPayloadFingerprints.set(cacheKey, fingerprint);
+
+            this.logger.info("realtime_snapshot_published", {
+              type: "project.execution.updated",
+              sizeBytes,
+              projectId,
+              publishFrequencyMs: lastPublishedAt > 0 ? now - lastPublishedAt : 0,
+            });
             this.projectExecutionPublishedAt.set(projectId, now);
           } catch (error) {
             this.logger.error("Failed to publish project execution realtime snapshot", {
@@ -535,7 +549,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
           (async () => {
             try {
               const telemetry = await Promise.resolve(loaders.getOverviewTelemetrySnapshot());
-              const fingerprint = this.getFingerprint(telemetry);
+              const { fingerprint, sizeBytes } = calculateRealtimeFingerprint(telemetry);
               const cacheKey = `overview:overview:overview.telemetry.updated`;
 
               if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
@@ -556,7 +570,12 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
                 replayable: false,
               });
               this.lastPayloadFingerprints.set(cacheKey, fingerprint);
-              this.logger.info("realtime_background_refresh", { type: "overview" });
+
+              this.logger.info("realtime_snapshot_published", {
+                type: "overview.telemetry.updated",
+                sizeBytes,
+                publishFrequencyMs: this.overviewPublishedAt > 0 ? now - this.overviewPublishedAt : 0,
+              });
               this.overviewPublishedAt = now;
             } catch (error) {
               this.logger.error("Failed to publish overview telemetry realtime snapshot", {
@@ -587,15 +606,6 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       return candidateDelayMs;
     }
     return Math.min(currentDelayMs, candidateDelayMs);
-  }
-
-  private getFingerprint(payload: unknown): string {
-    return JSON.stringify(payload, (key, value) => {
-      if (key === "updatedAt" || key === "timestamp") {
-        return undefined;
-      }
-      return value;
-    });
   }
 
   private broadcast(event: DashboardRealtimeEvent): void {

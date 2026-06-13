@@ -880,4 +880,86 @@ describe("ProviderRunner", () => {
     // Check clean up
     await expect(fs.access(mcpConfigPath)).rejects.toThrow();
   });
+
+  describe("Lifecycle Regression", () => {
+    it("runs cleanup when the provider callback succeeds", async () => {
+      const cleanup = vi.fn();
+      dockerRunner.ensureWorkspace.mockResolvedValueOnce({ cwd: "/work", cleanup });
+
+      await runner.runProvider({
+        provider: "gemini",
+        prompt: "hello",
+        cwd: "/repo",
+        model: "default",
+        apiKey: "key",
+        sessionId: "session-1",
+        workflowSettings: { executionMode: "DOCKER" } as any,
+        repoPath: "/repo",
+        onActivity: vi.fn(),
+      });
+
+      expect(cleanup).toHaveBeenCalled();
+    });
+
+    it("runs cleanup when the provider callback fails", async () => {
+      const cleanup = vi.fn();
+      dockerRunner.ensureWorkspace.mockResolvedValueOnce({ cwd: "/work", cleanup });
+      dockerRunner.runProviderInDocker.mockRejectedValueOnce(new Error("provider failed"));
+
+      await expect(runner.runProvider({
+        provider: "gemini",
+        prompt: "hello",
+        cwd: "/repo",
+        model: "default",
+        apiKey: "key",
+        sessionId: "session-1",
+        workflowSettings: { executionMode: "DOCKER" } as any,
+        repoPath: "/repo",
+        onActivity: vi.fn(),
+      })).rejects.toThrow("provider failed");
+
+      expect(cleanup).toHaveBeenCalled();
+    });
+
+    it("cleans up Codex output path even when provider fails", async () => {
+      const cleanup = vi.fn();
+      dockerRunner.ensureWorkspace.mockResolvedValueOnce({ cwd: "/work", cleanup });
+      dockerRunner.runProviderInDocker.mockRejectedValueOnce(new Error("codex failed"));
+      dockerRunner.removeWorkspaceDir = vi.fn().mockResolvedValue(undefined);
+
+      await expect(runner.runProvider({
+        provider: "codex",
+        prompt: "hello",
+        cwd: "/repo",
+        model: "default",
+        apiKey: "key",
+        sessionId: "session-1",
+        workflowSettings: { executionMode: "DOCKER" } as any,
+        repoPath: "/repo",
+        onActivity: vi.fn(),
+      })).rejects.toThrow("codex failed");
+
+      expect(dockerRunner.removeWorkspaceDir).toHaveBeenCalledWith("/work", "/workspace/provider-last-message-session-1.txt");
+    });
+
+    it("reads captured text from Docker workspace output path during runProviderForText", async () => {
+      dockerRunner.readWorkspaceFile.mockResolvedValue("text from docker");
+      dockerRunner.ensureWorkspace.mockResolvedValueOnce({ cwd: "docker-volume://work", cleanup: vi.fn() });
+
+      const result = await runner.runProviderForText({
+        provider: "codex",
+        prompt: "hello",
+        cwd: "/repo",
+        model: "default",
+        apiKey: "key",
+        sessionId: "session-1",
+        workflowSettings: { executionMode: "DOCKER" } as any,
+        repoPath: "/repo",
+        onActivity: vi.fn(),
+      });
+
+      expect(dockerRunner.readWorkspaceFile).toHaveBeenCalledWith("docker-volume://work", "/workspace/provider-last-message-session-1.txt");
+      expect(result.text).toBe("text from docker");
+    });
+  });
 });
