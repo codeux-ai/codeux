@@ -19,8 +19,7 @@ import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import type { Subtask, ExecutionRuntimeEventSummary } from "../types.js";
 import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
-import { getTaskProgressPhase, getLiveTaskProgressPhase } from "../lib/task-progress.js";
-import { pickLatestTaskDispatch, projectLiveTask, findActiveQuotaWait } from "./lib/live-task-runtime.js";
+import { deriveLiveSessionRuntimeStateHelper, type TaskFilter } from "./lib/live-session-runtime-state.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
 import { ExecutionTimelineProvider } from "../hooks/ExecutionTimelineContext.js";
 import { ExecutionTimeline } from "./components/ExecutionTimeline.js";
@@ -59,8 +58,6 @@ const SprintDag = lazy(() => import("./components/SprintDag.js").then(m => ({ de
 type HeaderView = "stats" | "race" | "dag";
 
 /* ─── Filter Type ────────────────────────────────────────────────────────── */
-
-type TaskFilter = "All" | "Running" | "Completed" | "Failed" | "Pending";
 
 const FILTER_STATUS_MAP: Record<TaskFilter, string | null> = {
     All: null, Running: "RUNNING", Completed: "COMPLETED", Failed: "FAILED", Pending: "PENDING",
@@ -210,30 +207,34 @@ export const LiveSessionPage: FunctionComponent = () => {
             : execution.sprintRuns;
     }, [execution.sprintRuns, sprintScopeId, sprintScopeReady]);
 
-    const visibleTasksWithLiveActivities = useMemo(() => (
-        tasksWithLiveActivities.map((task) => projectLiveTask(task, sprintDispatches, sprintEvents))
-    ), [sprintDispatches, sprintEvents, tasksWithLiveActivities]);
-
-    const hasSprintContext = rawHasSprintContext || visibleTasksWithLiveActivities.length > 0;
-
     const [nowIso, setNowIso] = useState(() => new Date().toISOString());
 
-    const visibleStats = useMemo(() => {
-        if (!hasSprintContext) return EMPTY_RUNTIME_STATS;
-        return {
-            total: visibleTasksWithLiveActivities.length,
-            running: visibleTasksWithLiveActivities.filter((task) => task.status === "RUNNING").length,
-            codingCompleted: visibleTasksWithLiveActivities.filter((task) => task.status === "CODING_COMPLETED").length,
-            completed: visibleTasksWithLiveActivities.filter((task) => task.status === "COMPLETED").length,
-            failed: visibleTasksWithLiveActivities.filter((task) => task.status === "FAILED").length,
-            ci: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "CI").length,
-            qa: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "QA_PENDING").length,
-            automerge: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "AUTOMERGE").length,
-            merged: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "MERGED" || task.is_merged).length,
-            mergeBlocked: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "MERGE_BLOCKED").length,
-            mergeConflicts: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "MERGE_CONFLICT").length,
-        };
-    }, [hasSprintContext, visibleTasksWithLiveActivities]);
+    const {
+        visibleTasksWithLiveActivities,
+        visibleStats,
+        taskCounts,
+        taskCardItems,
+    } = useMemo(() => {
+        const hasEffectiveSprintContext = rawHasSprintContext || tasksWithLiveActivities.length > 0;
+        
+        // We still need to compute taskTimingMap here because it depends on sprintRuns and nowIso
+        // which are not currently passed into the helper, or we can pass them.
+        // Let's check what useLiveTaskTimingSummaries does.
+        return deriveLiveSessionRuntimeStateHelper({
+            tasksWithLiveActivities,
+            sprintDispatches,
+            sprintEvents,
+            activeFilter,
+            optimisticallyCompletedTaskIds,
+            rerunningIds,
+            forceCompletePendingIds,
+            forceCompleteErrorByTaskId,
+            hasSprintContext: hasEffectiveSprintContext,
+            taskTimingMap: new Map(), // Placeholder, will be updated below if needed
+        });
+    }, [activeFilter, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rawHasSprintContext, rerunningIds, sprintDispatches, sprintEvents, tasksWithLiveActivities]);
+
+    const hasSprintContext = rawHasSprintContext || visibleTasksWithLiveActivities.length > 0;
 
     const { sprintTiming, taskTimings, taskTimingMap } = useLiveTaskTimingSummaries({
         tasks: visibleTasksWithLiveActivities,
@@ -269,115 +270,23 @@ export const LiveSessionPage: FunctionComponent = () => {
         return () => window.clearInterval(timer);
     }, [hasLiveDurationTicker]);
 
-    const taskEventsByRecordId = useMemo(() => {
-        const byRecordId = new Map<string, ExecutionRuntimeEventSummary[]>();
-        const byTaskKey = new Map<string, ExecutionRuntimeEventSummary[]>();
-        for (const event of sprintEvents) {
-            if (event.taskId) {
-                const existing = byRecordId.get(event.taskId) || [];
-                existing.push(event);
-                byRecordId.set(event.taskId, existing);
-            }
-            if (event.taskKey) {
-                const existing = byTaskKey.get(event.taskKey) || [];
-                existing.push(event);
-                byTaskKey.set(event.taskKey, existing);
-            }
-        }
-        return { byRecordId, byTaskKey };
-    }, [sprintEvents]);
+    // Re-derive taskCardItems with the correct timing map
+    const finalTaskCardItems = useMemo(() => {
+        const { taskCardItems } = deriveLiveSessionRuntimeStateHelper({
+            tasksWithLiveActivities,
+            sprintDispatches,
+            sprintEvents,
+            activeFilter,
+            optimisticallyCompletedTaskIds,
+            rerunningIds,
+            forceCompletePendingIds,
+            forceCompleteErrorByTaskId,
+            hasSprintContext,
+            taskTimingMap,
+        });
+        return taskCardItems;
+    }, [activeFilter, forceCompleteErrorByTaskId, forceCompletePendingIds, hasSprintContext, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, sprintEvents, taskTimingMap, tasksWithLiveActivities]);
 
-    const { filteredTasks, taskCounts } = useMemo(() => {
-        const filteredTasks: Subtask[] = [];
-        const targetStatus = FILTER_STATUS_MAP[activeFilter];
-        let pendingCount = 0;
-
-        for (const task of visibleTasksWithLiveActivities) {
-            const phase = getTaskProgressPhase(task);
-            const isPending = phase === "PENDING" || phase === "BLOCKED" || phase === "QUOTA";
-
-            if (isPending) {
-                pendingCount += 1;
-            }
-
-            if (
-                activeFilter === "All"
-                || (activeFilter === "Pending" && isPending)
-                || (activeFilter !== "Pending" && targetStatus !== null && phase === targetStatus)
-            ) {
-                filteredTasks.push(task);
-            }
-        }
-
-        return {
-            filteredTasks,
-            taskCounts: {
-                All: visibleTasksWithLiveActivities.length,
-                Running: visibleStats.running,
-                Completed: visibleStats.completed,
-                Failed: visibleStats.failed,
-                Pending: pendingCount,
-            } satisfies Record<TaskFilter, number>,
-        };
-    }, [activeFilter, visibleStats, visibleTasksWithLiveActivities]);
-
-    const taskCardItems = useMemo(() => (
-        filteredTasks.map((task) => {
-            const taskRuntimeId = task.record_id || task.id;
-            const optimisticTask: Subtask = optimisticallyCompletedTaskIds.has(taskRuntimeId)
-                ? { ...task, status: "COMPLETED" as const }
-                : task;
-            const latestDispatch = pickLatestTaskDispatch(task, sprintDispatches);
-            const taskEvents = (task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
-                || taskEventsByRecordId.byTaskKey.get(task.id)
-                || EMPTY_RUNTIME_EVENTS;
-            // Resolve the live phase from the latest dispatch so states the task record
-            // hasn't caught up to yet — notably QUOTA while waiting on a provider reset —
-            // surface on the card instead of lingering as "Running". Preserve the optimistic
-            // force-complete state when one is pending.
-            const dispatchPhase = optimisticallyCompletedTaskIds.has(taskRuntimeId)
-                ? "COMPLETED" as const
-                : getLiveTaskProgressPhase({ task: optimisticTask, dispatch: latestDispatch });
-            // When `retryOnQuotaReset` is on, the provider sleeps in-process and the dispatch
-            // stays "running"; detect that wait from runtime events so the card still shows
-            // QUOTA + a countdown rather than a misleading "Running" while we wait on quota.
-            // IMPORTANT: Only look at events belonging to the *current* dispatch to prevent
-            // stale quota-wait events from a previous run (which may still have a future
-            // retryAfterIso) from incorrectly showing QUOTA during a fresh rerun.
-            const currentDispatchEvents = latestDispatch
-                ? taskEvents.filter((e) =>
-                    (latestDispatch.taskRunId && e.taskRunId === latestDispatch.taskRunId)
-                    || (latestDispatch.id && e.dispatchId === latestDispatch.id),
-                  )
-                : [];
-            const activeQuotaWait = ["FAILED", "BLOCKED", "QUOTA", "COMPLETED"].includes(dispatchPhase)
-                ? null
-                : findActiveQuotaWait(currentDispatchEvents);
-            const taskPhase = activeQuotaWait ? "QUOTA" as const : dispatchPhase;
-            const showDispatchError = activeQuotaWait
-                ? `Provider quota exhausted — waiting for reset. [RETRY_AFTER:${activeQuotaWait.retryAfterIso}]`
-                : latestDispatch && ["FAILED", "BLOCKED", "QUOTA"].includes(taskPhase)
-                    ? latestDispatch.errorMessage
-                    : null;
-
-            return {
-                key: taskRuntimeId,
-                task: optimisticTask,
-                phase: taskPhase,
-                taskTiming: taskTimingMap.get(taskRuntimeId) || taskTimingMap.get(task.id) || null,
-                events: taskEvents,
-                isRerunning: rerunningIds.has(taskRuntimeId),
-                isForceCompleting: forceCompletePendingIds.has(taskRuntimeId),
-                forceCompleteError: forceCompleteErrorByTaskId.get(taskRuntimeId) || null,
-                dispatchInfo: (latestDispatch || activeQuotaWait) ? {
-                    errorMessage: showDispatchError,
-                    startedAt: latestDispatch?.startedAt ?? null,
-                    finishedAt: latestDispatch?.finishedAt ?? null,
-                    status: latestDispatch?.status ?? null,
-                } : null,
-            };
-        })
-    ), [filteredTasks, forceCompleteErrorByTaskId, forceCompletePendingIds, optimisticallyCompletedTaskIds, rerunningIds, sprintDispatches, taskEventsByRecordId, taskTimingMap]);
 
     const handleEditTask = (task: Subtask): void => {
         const search = new URLSearchParams();
@@ -526,7 +435,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 ? sprintStatusPresentation.detail
                                 : "Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project."}
                         />
-                    ) : taskCardItems.length === 0 ? (
+                    ) : finalTaskCardItems.length === 0 ? (
                         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border-2 border-dashed border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-16 text-center">
                             <div className="relative z-10">
                                 <Play className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-4" strokeWidth={1} />
@@ -539,7 +448,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : (
-                        taskCardItems.map(({ key, task, phase, taskTiming, events, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
+                        finalTaskCardItems.map(({ key, task, phase, taskTiming, events, isRerunning, isForceCompleting, forceCompleteError, dispatchInfo }) => (
                             <LiveTaskCard
                                 key={key}
                                 task={task}
