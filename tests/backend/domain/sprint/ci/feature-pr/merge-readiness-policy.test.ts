@@ -34,11 +34,18 @@ describe("evaluateMergeReadiness", () => {
     expect(result.isMergeReady).toBe(false);
   });
 
-  it("should detect review blockers (comments)", () => {
+  it("should detect review blockers (approved PR with comments)", () => {
     const checks = [{ name: "test", status: "completed", conclusion: "success" }];
     const result = evaluateMergeReadiness(checks, true, true, "APPROVED", 1);
     expect(result.hasReviewBlockers).toBe(true);
     expect(result.isMergeReady).toBe(false);
+  });
+
+  it("should ignore incidental comments when there is no review decision", () => {
+    const checks = [{ name: "test", status: "completed", conclusion: "success" }];
+    const result = evaluateMergeReadiness(checks, true, true, null, 1);
+    expect(result.hasReviewBlockers).toBe(false);
+    expect(result.isMergeReady).toBe(true);
   });
 
   it("should ignore checks if waitForFeatureCi is false", () => {

@@ -604,6 +604,62 @@ describe("QualityAssuranceService", () => {
     expect(qaReviewRepository.getRun(staleRun.id)?.status).toBe("failed");
   });
 
+  it("keeps merge blocked when latest QA requested changes at the retry cap", () => {
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: {} as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository: {
+        getLatestTaskRun: vi.fn().mockReturnValue({
+          id: "qa-run-1",
+          taskId: "task-1",
+          status: "completed",
+          outcome: "changes_requested",
+          summaryMarkdown: "Still needs fixes.",
+          runIndex: 3,
+        }),
+        countTaskRuns: vi.fn().mockReturnValue(3),
+      } as any,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            maxTaskReviewRuns: 3,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    const gate = service.getTaskMergeGateStatus({
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      task: {
+        record_id: "task-1",
+        id: "T1",
+        title: "Task",
+        prompt: "Implement task.",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        pr_url: "https://example.com/pr/1",
+      },
+    });
+
+    expect(gate.mergeAllowed).toBe(false);
+    expect(gate.reason).toBe("changes_requested");
+    expect(gate.runsUsed).toBe(3);
+    expect(gate.maxRuns).toBe(3);
+  });
+
   it("reruns sprint QA after recovering a stale running review row", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-stale-sprint-"));
     tempDirs.push(dir);

@@ -697,22 +697,22 @@ export class QualityAssuranceService {
       };
     }
 
-    if (runsUsed >= maxRuns) {
+    if (latestRun?.outcome === "changes_requested") {
       return {
-        mergeAllowed: true,
-        reason: "retries_exhausted",
-        summary: latestRun?.summaryMarkdown || `QA retry budget exhausted (${runsUsed}/${maxRuns}).`,
+        mergeAllowed: false,
+        reason: "changes_requested",
+        summary: latestRun.summaryMarkdown || "QA requested follow-up fixes.",
         latestRun,
         runsUsed,
         maxRuns,
       };
     }
 
-    if (latestRun?.outcome === "changes_requested") {
+    if (runsUsed >= maxRuns) {
       return {
-        mergeAllowed: false,
-        reason: "changes_requested",
-        summary: latestRun.summaryMarkdown || "QA requested follow-up fixes.",
+        mergeAllowed: true,
+        reason: "retries_exhausted",
+        summary: latestRun?.summaryMarkdown || `QA retry budget exhausted (${runsUsed}/${maxRuns}).`,
         latestRun,
         runsUsed,
         maxRuns,

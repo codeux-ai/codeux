@@ -1071,10 +1071,11 @@ export interface ExternalSettingsHints {
 
 export interface GetCiStatusForScopeArgs {
   repoPath: string;
-  scope: "FEATURE_PR_CI" | "MAIN_MERGE_PR_CI";
+  scope: "FEATURE_PR_CI" | "MAIN_MERGE_PR_CI" | "MAIN_BRANCH_CI";
   featureBranch: string;
   defaultBranch: string;
   featureBranchPrefix: string;
+  taskPrUrls?: string[];
   cacheTtlMs?: number;
 }
 

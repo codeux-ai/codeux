@@ -236,7 +236,7 @@ Dashboard behavior:
 - `autoAnswerClarification` (default `false`): auto-answer `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`
 - `autoResumePaused` (default `false`): auto-send resume nudge for `PAUSED` sessions in `SEMI_AUTO`
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
-- `clarificationCooldownSeconds` (default `300`): retained for compatibility, but clarification dedupe now keys off the latest clarification content instead of elapsed time; once Code UX starts answering a specific clarification request, repeated cycles skip starting or sending another answer for the same question until Jules emits a different clarification prompt
+- `clarificationCooldownSeconds` (default `300`): retained for compatibility, but clarification dedupe now keys off the latest clarification content and Jules activity identity instead of elapsed time; once Code UX starts answering a specific clarification request, repeated cycles skip starting or sending another answer for the same question until Jules emits a different clarification prompt or a new non-user activity
 - when `autoAnswerClarificationMode = WORKER`, Code UX now composes the clarification-answer prompt from the editable `Project manager` agent preset instead of prepending worker instructions
 - worker-routed clarification prompts now include a dedicated Jules clarification section so the latest explicit `agentMessaged.agentMessage` is passed through when available instead of only broad sprint context
 - worker-routed clarification replies normalize CLI provider envelopes before sending the answer to Jules; if package-manager/bootstrap logs surround a `{ "response": "..." }` provider envelope, only the `response` body is sent and stored as the assistant reply
@@ -392,6 +392,7 @@ Container execution notes:
 - feature PRs with `mergeStateStatus = DIRTY` short-circuit the feature-merge CI wait path; Code UX marks them as merge conflicts immediately instead of waiting for checks that cannot start until the conflict is resolved.
 - completed tasks with no recorded worker branch or PR URL are treated as already settled for dependency unlocks and sprint finalization; only tasks with merge evidence enter the feature-merge wait path.
 - when `featurePrAutoMergeMode = "WHEN_GREEN"` but a matched feature PR has no checks, Code UX inspects local `.github/workflows/*.yml` files and skips CI waiting only when it can confidently determine that no `pull_request` or `pull_request_target` workflow applies to that PR base branch.
+- feature PR review blocking treats `CHANGES_REQUESTED` as authoritative and no longer blocks solely because GitHub reports incidental PR comments while `reviewDecision` is empty. This avoids Jules bot introduction comments holding otherwise merge-ready task PRs.
 - `waitForJulesCiAutofix` (default `false`): when enabled with `featurePrAutoMergeMode = "WHEN_GREEN"`, completed tasks stay in work status while feature PR checks are pending/failed so Jules can apply CI autofix before merge.
 - `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): max Jules CI autofix notify attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names.
 - `featurePrAutoMergeMode` (default `"ALWAYS"`):

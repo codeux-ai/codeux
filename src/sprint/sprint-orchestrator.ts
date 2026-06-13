@@ -97,6 +97,7 @@ export interface SprintOrchestratorDependencies {
     featureBranch: string;
     defaultBranch: string;
     featureBranchPrefix: string;
+    taskPrUrls?: string[];
     cacheTtlMs?: number;
   }) => Promise<GitTrackingStatus | null>;
   autoMergeFeaturePr?: (args: { repoPath: string; prNumber: number }) => Promise<AutoMergeFeaturePrResult>;

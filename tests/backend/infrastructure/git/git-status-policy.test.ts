@@ -84,6 +84,29 @@ describe("git-status-policy", () => {
       expect(res[0].number).toBe(2);
     });
 
+    it("keeps known task PR URLs in FEATURE_PR_CI even when the PR base branch drifted", () => {
+      const driftedPr = {
+        number: 3,
+        baseRefName: "feature/older-sprint-branch",
+        headRefName: "worker/T1",
+        title: "c",
+        url: "https://example.com/pr/3",
+        state: "",
+        isDraft: false,
+        mergeStateStatus: null,
+        reviewDecision: null,
+        updatedAt: null,
+        comments: 0,
+        checks: [],
+      };
+      const res = filterOpenPrs([...prs, driftedPr], {
+        scope: "FEATURE_PR_CI",
+        featureBranch: "feature/current-sprint-branch",
+        taskPrUrls: ["https://example.com/pr/3"],
+      });
+      expect(res.map((pr) => pr.number)).toEqual([3]);
+    });
+
     it("filters MAIN_MERGE_PR_CI", () => {
       const res = filterOpenPrs(prs, { scope: "MAIN_MERGE_PR_CI", featureBranch: "feat", defaultBranch: "main" });
       expect(res).toHaveLength(1);

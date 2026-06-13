@@ -551,6 +551,104 @@ describe("action-required-automation", () => {
     expect(result.subtasks[0].status).toBe("RUNNING");
   });
 
+  it("sends auto-reply again when a new silent agent activity arrives", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const onTaskEvent = vi.fn();
+    const lastAutomatedInterventionKeys = new Map<string, string>();
+    const longPrompt = "Re-apply the changes from T02 to `/workspace/README.md` by replacing the `[To be defined]` placeholders with the actual project details (mechanics, technologies, installation, and usage) as intended.";
+    const firstTask = createTask({
+      prompt: longPrompt,
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [
+        { id: "agent-activity-1", createTime: "2026-06-14T00:54:27.000Z", originator: "agent" },
+      ],
+    });
+    const secondTask = createTask({
+      prompt: longPrompt,
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [
+        { id: "agent-activity-1", createTime: "2026-06-14T00:54:27.000Z", originator: "agent" },
+        { id: "user-reply-1", createTime: "2026-06-14T00:55:22.000Z", originator: "user" },
+        { id: "agent-activity-2", createTime: "2026-06-14T00:55:33.000Z", originator: "agent" },
+      ],
+    });
+    const commonArgs = {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL" as const,
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE" as const,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+        clarificationCooldownSeconds: 300,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      lastAutomatedInterventionKeys,
+      onTaskEvent,
+    };
+
+    await applyActionRequiredAutomation([firstTask], commonArgs);
+    const result = await applyActionRequiredAutomation([secondTask], commonArgs);
+
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(result.subtasks[0].intervention_hint).toBeUndefined();
+    const autoReplyEventKeys = onTaskEvent.mock.calls
+      .map(([event]) => event.sourceEventKey as string)
+      .filter((sourceEventKey) => sourceEventKey.includes("auto-replied"));
+    expect(autoReplyEventKeys).toHaveLength(2);
+    expect(new Set(autoReplyEventKeys).size).toBe(2);
+    expect(autoReplyEventKeys[0]).toMatch(/auto-replied:abc123:[a-f0-9]{16}:/);
+  });
+
+  it("does not treat the latest user reply activity as a new clarification", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const lastAutomatedInterventionKeys = new Map<string, string>();
+    const firstTask = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [
+        { id: "agent-activity-1", createTime: "2026-06-14T00:54:27.000Z", originator: "agent" },
+      ],
+    });
+    const secondTask = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [
+        { id: "agent-activity-1", createTime: "2026-06-14T00:54:27.000Z", originator: "agent" },
+        { id: "user-reply-1", createTime: "2026-06-14T00:55:22.000Z", originator: "user" },
+      ],
+    });
+    const commonArgs = {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL" as const,
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE" as const,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+        clarificationCooldownSeconds: 300,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      lastAutomatedInterventionKeys,
+    };
+
+    await applyActionRequiredAutomation([firstTask], commonArgs);
+    const result = await applyActionRequiredAutomation([secondTask], commonArgs);
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(result.subtasks[0].intervention_owner).toBe("AGENT");
+    expect(result.subtasks[0].intervention_hint).toContain("already answered automatically");
+  });
+
   it("skips duplicate paused-session resume nudges for the same paused state", async () => {
     const sendMessage = vi.fn().mockResolvedValue({});
     const lastAutomatedInterventionKeys = new Map<string, string>();

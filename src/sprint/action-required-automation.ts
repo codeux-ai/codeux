@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   AutomationInterventionsSettings,
   AutomationLevel,
@@ -67,41 +68,86 @@ const getSemiAutoDisabledReason = (state: string | undefined, settings: Automati
   return "SEMI_AUTO policy did not allow auto-intervention for this state.";
 };
 
-const getLatestAgentPrompt = (task: Subtask): string => {
+interface LatestAgentRequest {
+  message: string;
+  identity: string;
+}
+
+const toStringField = (value: unknown): string => typeof value === "string" ? value.trim() : "";
+
+const getActivityIdentity = (entry: Record<string, unknown>): string => {
+  const id = toStringField(entry.id);
+  const name = toStringField(entry.name);
+  const createTime = toStringField(entry.createTime);
+  const originator = toStringField(entry.originator);
+  return [id || name, createTime, originator].filter(Boolean).join("|");
+};
+
+const isUserOriginatedActivity = (entry: Record<string, unknown>): boolean => {
+  return toStringField(entry.originator).toLowerCase() === "user";
+};
+
+const getActivityMessage = (entry: Record<string, unknown>): string => {
+  const agentMessaged = entry.agentMessaged as Record<string, unknown> | undefined;
+  const agentMessage = toStringField(agentMessaged?.agentMessage);
+  if (agentMessage.length > 0) {
+    return agentMessage;
+  }
+  const progressUpdated = entry.progressUpdated as Record<string, unknown> | undefined;
+  const progressTitle = toStringField(progressUpdated?.title);
+  if (progressTitle.length > 0) {
+    return progressTitle;
+  }
+  const progressDescription = toStringField(progressUpdated?.description);
+  if (progressDescription.length > 0) {
+    return progressDescription;
+  }
+  return toStringField(entry.description);
+};
+
+const getLatestAgentRequest = (task: Subtask): LatestAgentRequest => {
   const activities = Array.isArray(task.activities) ? task.activities : [];
   for (let index = activities.length - 1; index >= 0; index -= 1) {
     const entry = activities[index] as Record<string, unknown>;
-    const agentMessaged = entry.agentMessaged as Record<string, unknown> | undefined;
-    const agentMessage = typeof agentMessaged?.agentMessage === "string" ? agentMessaged.agentMessage.trim() : "";
-    if (agentMessage.length > 0) {
-      return agentMessage;
+    if (isUserOriginatedActivity(entry)) {
+      continue;
     }
-    const description = typeof entry.description === "string" ? entry.description.trim() : "";
-    if (description.length > 0) {
-      return description;
+    const message = getActivityMessage(entry);
+    const identity = getActivityIdentity(entry);
+    if (message.length > 0 || identity.length > 0) {
+      return { message, identity };
     }
   }
-  return "";
+  return { message: "", identity: "" };
 };
 
 const normalizeAutomationMessage = (value: string): string => value.replace(/\s+/g, " ").trim();
 
 const buildClarificationDedupKey = (task: Subtask): string => {
-  const latestPrompt = normalizeAutomationMessage(getLatestAgentPrompt(task));
+  const latestRequest = getLatestAgentRequest(task);
+  const latestPrompt = normalizeAutomationMessage(latestRequest.message);
   const fallback = normalizeAutomationMessage(task.prompt || task.title || "clarification");
-  return (latestPrompt || fallback).slice(0, 1000);
+  const requestIdentity = normalizeAutomationMessage(latestRequest.identity);
+  return `${latestPrompt || fallback}|activity:${requestIdentity || "none"}`.slice(0, 1000);
 };
 
 const buildPausedDedupKey = (task: Subtask): string => {
-  const latestPrompt = normalizeAutomationMessage(getLatestAgentPrompt(task));
+  const latestRequest = getLatestAgentRequest(task);
+  const latestPrompt = normalizeAutomationMessage(latestRequest.message);
   const fallback = normalizeAutomationMessage(task.prompt || task.title || "resume");
-  return (latestPrompt || fallback).slice(0, 1000);
+  const requestIdentity = normalizeAutomationMessage(latestRequest.identity);
+  return `${latestPrompt || fallback}|activity:${requestIdentity || "none"}`.slice(0, 1000);
+};
+
+const buildInterventionEventSuffix = (kind: string, sessionId: string, dedupKey: string): string => {
+  const digest = createHash("sha256").update(dedupKey).digest("hex").slice(0, 16);
+  return `${kind}:${sessionId}:${digest}:${dedupKey.slice(0, 160)}`;
 };
 
 const getInterventionStateKey = (sessionId: string, state: "clarification" | "paused"): string => `${state}:${sessionId}`;
 
 const buildClarificationAutoReply = (task: Subtask, template: string): string => {
-  const latestPrompt = getLatestAgentPrompt(task);
+  const latestPrompt = getLatestAgentRequest(task).message;
   const contextBlock = latestPrompt.length > 0
     ? `Context from latest agent request: "${latestPrompt.slice(0, 400)}"\n\n`
     : "";
@@ -226,7 +272,7 @@ export const applyActionRequiredAutomation = async (
             sessionId,
             sessionState: task.session_state || null,
             clarificationKeyPreview: clarificationKey.slice(0, 200),
-          }, `duplicate-clarification:${sessionId}`);
+          }, buildInterventionEventSuffix("duplicate-clarification", sessionId, clarificationKey));
           continue;
         }
 
@@ -250,7 +296,7 @@ export const applyActionRequiredAutomation = async (
           sessionId,
           sessionState: task.session_state,
           replyPreview: reply.slice(0, 200),
-        }, `auto-replied:${sessionId}`);
+        }, buildInterventionEventSuffix("auto-replied", sessionId, clarificationKey));
         reportText += `🤖 **Auto-Answered Clarification:** Task \`${task.id}\` session \`${sessionId}\` received an automated response and stays in progress.\n`;
         continue;
       }
@@ -266,7 +312,7 @@ export const applyActionRequiredAutomation = async (
             sessionId,
             sessionState: task.session_state || null,
             pausedKeyPreview: pausedKey.slice(0, 200),
-          }, `duplicate-paused:${sessionId}`);
+          }, buildInterventionEventSuffix("duplicate-paused", sessionId, pausedKey));
           continue;
         }
 
@@ -279,7 +325,7 @@ export const applyActionRequiredAutomation = async (
         emitTaskEvent(task, "action_required_auto_resumed", {
           sessionId,
           sessionState: task.session_state,
-        }, `auto-resumed:${sessionId}`);
+        }, buildInterventionEventSuffix("auto-resumed", sessionId, pausedKey));
         reportText += `🤖 **Auto-Resumed Session:** Task \`${task.id}\` session \`${sessionId}\` was nudged to continue.\n`;
         continue;
       }

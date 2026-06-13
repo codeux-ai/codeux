@@ -20,6 +20,7 @@ import type { ProjectAttentionOwnerType } from "../../../contracts/project-atten
 import type { ProjectAttentionItemRecord } from "../../../contracts/project-attention-types.js";
 import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orchestrator.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
+import type { TaskQaMergeGateStatus } from "../../../services/quality-assurance-service.js";
 import { FeaturePrGateService } from "../ci/feature-pr-gate.js";
 import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 import { resolveCiEscalationOwner } from "../ci/feature-pr/ci-autofix-policy.js";
@@ -143,7 +144,6 @@ export class CycleRunner {
         githubMode: args.githubMode,
       });
       await this.captureTaskCompletionMemories(subtasks, cycleEntryStates, args, dashboardSettings);
-      await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
     }
 
     let reportText = "";
@@ -193,9 +193,14 @@ export class CycleRunner {
             featureBranch: args.defaultFeatureBranch,
             defaultBranch: args.defaultBranch,
             featureBranchPrefix: args.featureBranchPrefix,
+            taskPrUrls: collectTaskPrUrls(subtasks),
             cacheTtlMs: resolveCiStatusCacheTtlMs(args.loopSteps.watchLoopIntervalSeconds),
           })
         : null;
+      this.backfillTaskPrMetadataFromGitStatus(subtasks, gitStatus, args.sprintRunId);
+      if (args.loopSteps.statusDerivation) {
+        await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
+      }
 
       const ciAutofixResult = await this.featurePrGate.evaluateCiGate(subtasks, {
         evaluateTaskQaGate: (() => {
@@ -563,7 +568,10 @@ export class CycleRunner {
         && (
           qaGate.reason === "pending_review"
           || qaGate.reason === "review_failed"
-          || (qaGate.reason === "changes_requested" && newlyCodeComplete)
+          || (qaGate.reason === "changes_requested" && (
+            newlyCodeComplete
+            || this.hasCompletedTaskRunAfterLatestQaRequest(task, qaGate, args.sprintRunId)
+          ))
         );
 
       if (!shouldRunQaReview) {
@@ -618,4 +626,79 @@ export class CycleRunner {
     }
   }
 
+  private backfillTaskPrMetadataFromGitStatus(
+    subtasks: Subtask[],
+    gitStatus: GitTrackingStatus | null,
+    sprintRunId?: string,
+  ): void {
+    if (!gitStatus?.available) {
+      return;
+    }
+
+    for (const task of subtasks) {
+      const pr = matchPrForTask(task, gitStatus);
+      if (!pr) {
+        continue;
+      }
+
+      const nextWorkerBranch = pr.headRefName?.trim() || task.worker_branch;
+      const nextPrUrl = pr.url?.trim() || task.pr_url;
+      const workerBranchChanged = Boolean(nextWorkerBranch && nextWorkerBranch !== task.worker_branch);
+      const prUrlChanged = Boolean(nextPrUrl && nextPrUrl !== task.pr_url);
+      if (!workerBranchChanged && !prUrlChanged) {
+        continue;
+      }
+
+      if (nextWorkerBranch) {
+        task.worker_branch = nextWorkerBranch;
+      }
+      if (nextPrUrl) {
+        task.pr_url = nextPrUrl;
+      }
+
+      if (!task.record_id || !sprintRunId) {
+        continue;
+      }
+      const taskRun = this.deps.executionRepository.getLatestTaskRun(task.record_id, sprintRunId)
+        || (task.session_id ? this.deps.executionRepository.getLatestTaskRunBySessionId(task.session_id) : null);
+      if (!taskRun) {
+        continue;
+      }
+      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+        workerBranch: nextWorkerBranch || taskRun.workerBranch,
+        prUrl: nextPrUrl || taskRun.prUrl,
+      });
+    }
+  }
+
+  private hasCompletedTaskRunAfterLatestQaRequest(
+    task: Subtask,
+    qaGate: TaskQaMergeGateStatus,
+    sprintRunId?: string,
+  ): boolean {
+    if (qaGate.reason !== "changes_requested" || !qaGate.latestRun?.finishedAt || !task.record_id) {
+      return false;
+    }
+
+    const latestRun = this.deps.executionRepository.getLatestTaskRun(task.record_id, sprintRunId)
+      || (task.session_id ? this.deps.executionRepository.getLatestTaskRunBySessionId(task.session_id) : null);
+    if (latestRun?.state !== "COMPLETED" || !latestRun.finishedAt) {
+      return false;
+    }
+
+    const taskFinishedAt = Date.parse(latestRun.finishedAt);
+    const qaFinishedAt = Date.parse(qaGate.latestRun.finishedAt);
+    return Number.isFinite(taskFinishedAt)
+      && Number.isFinite(qaFinishedAt)
+      && taskFinishedAt > qaFinishedAt;
+  }
+
+}
+
+function collectTaskPrUrls(subtasks: Subtask[]): string[] {
+  return Array.from(new Set(
+    subtasks
+      .map((task) => task.pr_url?.trim())
+      .filter((url): url is string => Boolean(url))
+  ));
 }
