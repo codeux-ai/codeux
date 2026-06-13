@@ -78,6 +78,10 @@ import { queryExecutionTaskDispatches } from "./execution/execution-task-dispatc
 import { queryExecutionRuntimeEvents } from "./execution/execution-runtime-events-query.js";
 import { normalizeProjectStatsQuery } from "./execution/project-stats-query.js";
 import { queryProjectStatsSnapshot } from "./execution/project-stats-snapshot-query.js";
+import {
+  getUsageTotalsByTaskIds,
+  getUsageTotalsBySprintRunIds
+} from "./execution/execution-usage-aggregate-query.js";
 import { OverviewTelemetryQuery } from "./execution/overview-telemetry-query.js";
 import { createUsageBuckets, createEmptyUsageTotals } from "./execution/stats-buckets.js";
 import { claimNextTaskDispatchTransaction } from "./execution/task-dispatch-claim-query.js";
@@ -1155,8 +1159,8 @@ export class ExecutionRepository {
   getProjectExecutionSnapshot(projectId: string): ExecutionDashboardSnapshot {
     requireProject(this.db, projectId);
     return queryProjectExecutionSnapshot(this.db, this.storage, projectId, {
-      getUsageTotalsByTaskIds: (pId, tIds) => this.getUsageTotalsByTaskIds(pId, tIds),
-      getUsageTotalsBySprintRunIds: (pId, sIds) => this.getUsageTotalsBySprintRunIds(pId, sIds),
+      getUsageTotalsByTaskIds: (pId, tIds) => getUsageTotalsByTaskIds(this.storage, pId, tIds),
+      getUsageTotalsBySprintRunIds: (pId, sIds) => getUsageTotalsBySprintRunIds(this.storage, pId, sIds),
       getWallTimeTotalsByTaskIds: (pId, tIds, now) => this.getWallTimeTotalsByTaskIds(pId, tIds, now),
       getWallTimeTotalsBySprintRunIds: (pId, sIds, now) => this.getWallTimeTotalsBySprintRunIds(pId, sIds, now),
     });
@@ -1600,99 +1604,6 @@ export class ExecutionRepository {
     });
     this.releaseStaleSprintLease(updated.projectId, updated.sprintId);
     return updated;
-  }
-
-
-  private getUsageTotalsByTaskIds(projectId: string, taskIds: string[]): Map<string, ExecutionUsageTotals> {
-    if (taskIds.length === 0) {
-      return new Map();
-    }
-    const rows = this.storage.executeChunkedInQuery<any>({
-      sqlPrefix: `
-        SELECT
-          task_id,
-          COUNT(*) as invocationCount,
-          SUM(COALESCE(duration_ms, 0)) as activeTimeMs,
-          SUM(input_tokens) as inputTokens,
-          SUM(cached_input_tokens) as cachedInputTokens,
-          SUM(output_tokens) as outputTokens,
-          SUM(reasoning_output_tokens) as reasoningOutputTokens,
-          SUM(total_tokens) as totalTokens,
-          SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
-          SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
-          SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
-          SUM(CASE WHEN usage_source NOT IN ('reported', 'estimated', 'unsupported') THEN 1 ELSE 0 END) as unavailableInvocationCount
-        FROM provider_invocations
-        WHERE project_id = ? AND task_id`,
-      items: taskIds,
-      bindParamsBefore: [projectId],
-      sqlSuffix: "GROUP BY task_id"
-    });
-
-    const map = new Map<string, ExecutionUsageTotals>();
-    for (const row of rows) {
-      map.set(row.task_id, {
-        invocationCount: toNumber(row.invocationCount),
-        activeTimeMs: toNumber(row.activeTimeMs),
-        wallTimeMs: 0,
-        inputTokens: toNumber(row.inputTokens),
-        cachedInputTokens: toNumber(row.cachedInputTokens),
-        outputTokens: toNumber(row.outputTokens),
-        reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
-        totalTokens: toNumber(row.totalTokens),
-        reportedInvocationCount: toNumber(row.reportedInvocationCount),
-        estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
-        unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),
-        unavailableInvocationCount: toNumber(row.unavailableInvocationCount),
-      });
-    }
-    return map;
-  }
-
-  private getUsageTotalsBySprintRunIds(projectId: string, sprintRunIds: string[]): Map<string, ExecutionUsageTotals> {
-    if (sprintRunIds.length === 0) {
-      return new Map();
-    }
-    const rows = this.storage.executeChunkedInQuery<any>({
-      sqlPrefix: `
-        SELECT
-          sprint_run_id,
-          COUNT(*) as invocationCount,
-          SUM(COALESCE(duration_ms, 0)) as activeTimeMs,
-          SUM(input_tokens) as inputTokens,
-          SUM(cached_input_tokens) as cachedInputTokens,
-          SUM(output_tokens) as outputTokens,
-          SUM(reasoning_output_tokens) as reasoningOutputTokens,
-          SUM(total_tokens) as totalTokens,
-          SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
-          SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
-          SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
-          SUM(CASE WHEN usage_source NOT IN ('reported', 'estimated', 'unsupported') THEN 1 ELSE 0 END) as unavailableInvocationCount
-        FROM provider_invocations
-        WHERE project_id = ? AND sprint_run_id`,
-      items: sprintRunIds,
-      bindParamsBefore: [projectId],
-      sqlSuffix: "GROUP BY sprint_run_id"
-    });
-
-    const map = new Map<string, ExecutionUsageTotals>();
-    for (const row of rows) {
-      map.set(row.sprint_run_id, {
-        invocationCount: toNumber(row.invocationCount),
-        activeTimeMs: toNumber(row.activeTimeMs),
-        wallTimeMs: 0,
-        inputTokens: toNumber(row.inputTokens),
-        cachedInputTokens: toNumber(row.cachedInputTokens),
-        outputTokens: toNumber(row.outputTokens),
-        reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
-        totalTokens: toNumber(row.totalTokens),
-        reportedInvocationCount: toNumber(row.reportedInvocationCount),
-        estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
-        unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),
-        unavailableInvocationCount: toNumber(row.unavailableInvocationCount),
-      });
-    }
-    return map;
   }
 
   private getWallTimeTotalsByTaskIds(projectId: string, taskIds: string[], nowIso: string): Map<string, number> {

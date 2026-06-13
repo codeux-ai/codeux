@@ -109,7 +109,7 @@ describe("deriveLiveSessionRuntimeStateHelper", () => {
         const currentDispatch = createDispatch({ id: "D1", taskId: "R1", taskRunId: "RUN1", status: "running" });
         
         const events = [
-            createEvent({ eventType: "cli_provider_quota_wait", taskId: "R1", taskRunId: "RUN1", payload: { retryAfterIso: "2026-06-13T14:00:00Z" } }),
+            createEvent({ eventType: "cli_provider_quota_wait", taskId: "R1", taskRunId: "RUN1", payload: { retryAfterIso: "2026-06-13T20:00:00Z" } }),
         ];
 
         const result = deriveLiveSessionRuntimeStateHelper({

@@ -47,6 +47,8 @@ This map explains where major responsibilities live.
   - Focused query module separating invocation and message lists from write concerns.
   - `execution/execution-stats-types.ts`
   - Dedicated module for stats query types to decouple queries from the main execution repository.
+  - `execution/execution-usage-aggregate-query.ts`
+  - Focused module for cross-cutting usage aggregation SQL and row mapping logic.
   - `settings-repository.ts`
   - `settings-defaults.ts`
   - `settings-sanitizer.ts`
