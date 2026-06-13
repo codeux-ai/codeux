@@ -181,8 +181,9 @@ describe("git-status-policy", () => {
     expect(trimLogExcerpt(short)).toBe(short);
     const long = "A".repeat(2001);
     const trimmed = trimLogExcerpt(long);
-    expect(trimmed.startsWith("...")).toBe(true);
-    expect(trimmed.length).toBe(2003);
+    expect(trimmed.startsWith("A")).toBe(true);
+    expect(trimmed).toContain("trimmed 1 chars from middle");
+    expect(trimmed.endsWith("A")).toBe(true);
   });
 
   describe("filterMergedPrs", () => {

@@ -172,7 +172,14 @@ export const trimLogExcerpt = (logText: string): string => {
   if (normalized.length <= FAILED_JOB_LOG_MAX_CHARS) {
     return normalized;
   }
-  return `...${normalized.slice(normalized.length - FAILED_JOB_LOG_MAX_CHARS)}`;
+  const headLength = Math.ceil(FAILED_JOB_LOG_MAX_CHARS / 2);
+  const tailLength = Math.floor(FAILED_JOB_LOG_MAX_CHARS / 2);
+  const omittedChars = normalized.length - headLength - tailLength;
+  return [
+    normalized.slice(0, headLength),
+    `... [trimmed ${omittedChars} chars from middle of failed-job log] ...`,
+    normalized.slice(normalized.length - tailLength),
+  ].join("\n");
 };
 
 export const filterMergedPrs = (merged: GitMergeStatus[], tracking?: GitTrackingRequest): GitMergeStatus[] => {

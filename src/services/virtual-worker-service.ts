@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { CliWorkflowSettings, DashboardSettings, JulesSession, ProviderId, QwenModelProviderSettings, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
+import type { CliWorkflowSettings, DashboardSettings, GitCiRunStatus, JulesSession, ProviderId, QwenModelProviderSettings, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
 import type { WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
@@ -45,6 +45,51 @@ function sleep(ms: number): Promise<void> {
     return Promise.resolve();
   }
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatCiFixFailureDetails(failedRuns: GitCiRunStatus[], fallbackLogSnippets: string[]): string {
+  if (failedRuns.length === 0) {
+    return fallbackLogSnippets.length > 0
+      ? `No structured failed run metadata was available. Failed job logs:\n${fallbackLogSnippets.join("\n\n")}`
+      : "No structured failed run metadata or failed-job logs were available in the CI status payload.";
+  }
+
+  const sections: string[] = [];
+  failedRuns.forEach((run, runIndex) => {
+    const runLabel = run.workflowName || run.name || `run-${run.id ?? runIndex + 1}`;
+    const lines = [
+      `### Failed Run ${runIndex + 1}: ${runLabel}`,
+      `- Run ID: ${run.id ?? "unknown"}`,
+      `- Run URL: ${run.url || "unknown"}`,
+      `- Status: ${run.status}`,
+      `- Conclusion: ${run.conclusion ?? "unknown"}`,
+      `- Event: ${run.event ?? "unknown"}`,
+      `- Head branch: ${run.headBranch ?? "unknown"}`,
+      `- Updated at: ${run.updatedAt ?? "unknown"}`,
+    ];
+
+    const jobs = Array.isArray(run.failedJobs) ? run.failedJobs : [];
+    if (jobs.length === 0) {
+      lines.push("- Failed jobs: unavailable from CI metadata.");
+    } else {
+      lines.push("- Failed jobs:");
+      jobs.forEach((job, jobIndex) => {
+        lines.push(`  ${jobIndex + 1}. ${job.name}`);
+        lines.push(`     - Job ID: ${job.id ?? "unknown"}`);
+        lines.push(`     - Conclusion: ${job.conclusion ?? "unknown"}`);
+        lines.push(`     - Failed steps: ${job.failedSteps.length > 0 ? job.failedSteps.join(", ") : "not reported"}`);
+        lines.push(`     - Log command: ${job.logCommand ?? "not available"}`);
+        lines.push("     - Failed log excerpt:");
+        lines.push("```text");
+        lines.push(job.logExcerpt?.trim() || "No failed-job log excerpt was available.");
+        lines.push("```");
+      });
+    }
+
+    sections.push(lines.join("\n"));
+  });
+
+  return sections.join("\n\n");
 }
 
 function isTerminalSessionState(state: string | undefined): boolean {
@@ -1037,6 +1082,11 @@ export class VirtualWorkerService {
           );
         }
       }
+      if (!applyResult.hasChanges && !hasUnpushed) {
+        throw new Error(
+          "CI fix completed without producing a patch or unpublished branch commits; refusing to mark the fix as pushed.",
+        );
+      }
       const headSha = applyResult.commitSha
         || ((hasUnpushed || hasAhead)
           ? (await runCommandStrict("git", ["rev-parse", `refs/heads/${branchName}`], repoPath)).stdout.trim()
@@ -1146,39 +1196,54 @@ export class VirtualWorkerService {
   ): string {
     const payload = item.payload || {};
     const failedChecks = Array.isArray(payload.failedChecks) ? payload.failedChecks as string[] : [];
+    const failedRuns = Array.isArray(payload.failedRuns) ? payload.failedRuns as GitCiRunStatus[] : [];
     const failedJobLabels = Array.isArray(payload.failedJobLabels) ? payload.failedJobLabels as string[] : [];
     const failedLogSnippets = Array.isArray(payload.failedLogSnippets) ? payload.failedLogSnippets as string[] : [];
     const prUrl = typeof payload.prUrl === "string" ? payload.prUrl : "";
     const prNumber = typeof payload.prNumber === "number" ? payload.prNumber : 0;
+    const taskKey = typeof payload.taskKey === "string" ? payload.taskKey : item.taskId || "unknown task";
+    const taskTitle = typeof payload.taskTitle === "string" ? payload.taskTitle : item.title;
     const taskPrompt = typeof payload.taskPrompt === "string" ? payload.taskPrompt.trim() : "";
+    const featureBranch = typeof payload.featureBranch === "string" ? payload.featureBranch : "";
+    const defaultBranch = typeof payload.defaultBranch === "string" ? payload.defaultBranch : "";
+    const failureDetails = formatCiFixFailureDetails(failedRuns, failedLogSnippets);
 
     return [
-      `CI checks have failed for PR #${prNumber} on branch \`${branchName}\`.`,
-      workerInstruction?.trim() ? `## Agent Instructions\n\n${workerInstruction.trim()}` : null,
+      "# CI Fix Job",
+      "",
+      "You are not starting or reimplementing the original task. The original task work already exists on this branch and has an open PR. Your job is to repair the failing CI checks with the smallest necessary changes, commit those fixes, and leave the same branch pushable.",
+      "",
+      "## CI Failure Target",
+      `- PR: ${prNumber > 0 ? `#${prNumber}` : "unknown"}${prUrl ? ` (${prUrl})` : ""}`,
+      `- Worker branch to fix: \`${branchName}\``,
+      featureBranch ? `- PR base / sprint feature branch: \`${featureBranch}\`` : null,
+      defaultBranch ? `- Repository default branch: \`${defaultBranch}\`` : null,
+      `- Original task: ${taskKey}${taskTitle ? ` - ${taskTitle}` : ""}`,
+      `- Failed checks: ${failedChecks.length > 0 ? failedChecks.join(", ") : "unknown"}`,
+      `- Failed jobs: ${failedJobLabels.length > 0 ? failedJobLabels.join(", ") : "unknown"}`,
+      "",
+      "## Required Outcome",
+      "- Investigate the CI failures using the details below as the primary source of truth.",
+      "- Fix only the root cause of the failing CI checks.",
+      "- Commit the necessary changes on the current worker branch.",
+      "- Do not open a new pull request, do not rewrite history, and do not restart the original task from scratch.",
+      "- If the provided CI metadata is insufficient, then use the included `gh run view ... --log-failed` commands to fetch missing logs.",
+      "",
+      "## Failed CI Details",
+      failureDetails,
+      "",
+      workerInstruction?.trim() ? `## General Coding Agent Instructions\n\n${workerInstruction.trim()}` : null,
       prUrl ? `PR URL: ${prUrl}` : null,
       "",
       memoryContext?.trim() || null,
       "",
-      "Failed checks: " + (failedChecks.length > 0 ? failedChecks.join(", ") : "unknown"),
-      failedJobLabels.length > 0 ? "Failed jobs: " + failedJobLabels.join(", ") : null,
-      "",
-      "Requirements:",
-      "- Investigate the CI failures and fix the root cause.",
-      "- Commit the necessary changes and leave the branch in a pushable state.",
-      "- Do not open a new pull request or rewrite history.",
-      "- Continue until the issues causing CI failures are resolved.",
-      "",
-      failedLogSnippets.length > 0
-        ? "Failed job logs (excerpt):\n" + failedLogSnippets.join("\n\n")
-        : "Failed job logs were not available from CI metadata. Use `gh run view <run-id> --log-failed` to fetch logs.",
-      "",
-      taskPrompt ? "Original task prompt:\n" + taskPrompt : null,
+      taskPrompt ? "## Original Task Context (Reference Only)\nThe implementation below is already present on the worker branch. Use it only to understand the intended behavior while fixing CI; do not redo the whole task.\n\n" + taskPrompt : null,
       "",
       "## LEARNINGS CAPTURE (Required)",
       memoryInstructions?.trim()
         || `Before you finish, write key durable learnings and pitfalls from this CI fix to \`${LEARNINGS_FILENAME}\`.`,
       "",
-      "Original attention summary:",
+      "## Original Attention Summary",
       item.summaryMarkdown.trim(),
       "",
       workspaceGuidance,
