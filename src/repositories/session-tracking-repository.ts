@@ -275,13 +275,14 @@ export class SessionTrackingRepository {
     featureBranch: string;
     repoPath: string;
   }): FailedCliSessionResumeTarget | null {
+    const normalizedPath = path.resolve(args.repoPath).replace(/\\/g, "/");
     const row = this.db.prepare(`
       SELECT id, worker_branch
       FROM provider_sessions
       WHERE provider = ?
         AND task_id = ?
         AND feature_branch = ?
-        AND repo_path = ?
+        AND (repo_path = ? OR repo_path = ? OR repo_path = '/workspace')
         AND state = 'FAILED'
         AND id LIKE 'cli-%'
         AND worker_branch IS NOT NULL
@@ -291,7 +292,8 @@ export class SessionTrackingRepository {
       args.provider,
       args.taskId,
       args.featureBranch,
-      args.repoPath
+      args.repoPath,
+      normalizedPath,
     ) as { id?: string; worker_branch?: string } | undefined;
 
     if (!row?.id || !row.worker_branch) {
@@ -312,10 +314,11 @@ export class SessionTrackingRepository {
       ? args.providers
       : ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
     const placeholders = providers.map(() => "?").join(", ");
+    const normalizedPath = path.resolve(args.repoPath).replace(/\\/g, "/");
     const row = this.db.prepare(`
       SELECT id, worker_branch, state
       FROM provider_sessions
-      WHERE repo_path = ?
+      WHERE (repo_path = ? OR repo_path = ? OR repo_path = '/workspace')
         AND worker_branch = ?
         AND provider IN (${placeholders})
         AND id LIKE 'cli-%'
@@ -323,6 +326,7 @@ export class SessionTrackingRepository {
       LIMIT 1
     `).get(
       args.repoPath,
+      normalizedPath,
       args.workerBranch,
       ...providers,
     ) as { id?: string; worker_branch?: string; state?: string } | undefined;

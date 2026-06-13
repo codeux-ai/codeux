@@ -135,18 +135,19 @@ export function resolveTaskPipelineStage(
 ): TaskStageProjection {
   const env = environment ?? {};
   const status = observation.status ?? "PENDING";
+  const effectiveStatus = (status === "RUNNING" && env.isExecutionCompleted) ? "CODING_COMPLETED" : status;
 
   // Off-ramps and pre-pipeline statuses pass through. A task that is actively
   // coding (or queued to) must never carry a merge indicator or a merged flag —
   // this clears stale CI/QA/MERGED state left over from a previous run when a
   // task is re-dispatched (QA follow-up, retry, etc.).
-  if (status !== "COMPLETED" && status !== "CODING_COMPLETED") {
-    if (status === "RUNNING" || status === "PENDING") {
-      return { stage: "CODING", status, mergeIndicator: undefined, isMerged: false };
+  if (effectiveStatus !== "COMPLETED" && effectiveStatus !== "CODING_COMPLETED") {
+    if (effectiveStatus === "RUNNING" || effectiveStatus === "PENDING") {
+      return { stage: "CODING", status: effectiveStatus, mergeIndicator: undefined, isMerged: false };
     }
     return {
-      stage: mapNonPipelineStage(status),
-      status,
+      stage: mapNonPipelineStage(effectiveStatus),
+      status: effectiveStatus,
       mergeIndicator: observation.mergeIndicator,
       isMerged: observation.isMerged,
     };
@@ -168,7 +169,7 @@ export function resolveTaskPipelineStage(
     ? "QA_PENDING"
     : normalizeTaskMergeIndicator(evidenceTask, env);
 
-  let nextStatus: SubtaskStatus = status;
+  let nextStatus: SubtaskStatus = effectiveStatus;
 
   // A task marked COMPLETED but still carrying unmerged evidence has not truly
   // finished the pipeline — demote it back to CODING_COMPLETED.

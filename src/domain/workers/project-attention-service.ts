@@ -110,7 +110,13 @@ export class ProjectAttentionService {
     if (current.ownerType !== "worker") {
       throw new Error(`Attention item ${itemId} is not worker-claimable.`);
     }
-    if (current.assignedWorkerEndpointId && current.assignedWorkerEndpointId !== workerEndpointId) {
+    if (
+      current.assignedWorkerEndpointId
+      && current.assignedWorkerEndpointId !== workerEndpointId
+      && !claimReason?.startsWith("virtual_worker_")
+      && current.attentionType !== "ci_fix_required"
+      && current.attentionType !== "merge_conflict"
+    ) {
       throw new Error(`Attention item ${itemId} is assigned to another worker endpoint.`);
     }
     return this.projectAttentionRepository.claimAttentionItem(itemId, {
@@ -132,6 +138,9 @@ export class ProjectAttentionService {
       && current.ownerType === "worker"
       && current.assignedWorkerEndpointId
       && current.assignedWorkerEndpointId !== input.workerEndpointId
+      && !input.reason?.startsWith("virtual_worker_")
+      && current.attentionType !== "ci_fix_required"
+      && current.attentionType !== "merge_conflict"
     ) {
       throw new Error(`Attention item ${itemId} is assigned to another worker endpoint.`);
     }

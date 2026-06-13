@@ -202,14 +202,11 @@ export class VirtualWorkerService {
   }
 
   private projectNeedsVirtualWorker(projectId: string): boolean {
-    if (!this.projectUsesVirtualWorkers(projectId)) {
-      return false;
-    }
     if (this.activeCycles.has(projectId)) {
       return false;
     }
 
-    return this.pickNextWorkerAttention(projectId) !== null;
+    return this.peekNextWorkerAttention(projectId) !== null;
   }
 
   private async runProjectCycle(projectId: string, reason: string): Promise<void> {
@@ -239,8 +236,8 @@ export class VirtualWorkerService {
     }
   }
 
-  private pickNextWorkerAttention(projectId: string): ProjectAttentionItemRecord | null {
-    const nextItem = this.deps.projectAttentionService.listActiveProjectItems(projectId)
+  private peekNextWorkerAttention(projectId: string): ProjectAttentionItemRecord | null {
+    return this.deps.projectAttentionService.listActiveProjectItems(projectId)
       .find((item) => {
         if (item.ownerType !== "worker") {
           return false;
@@ -275,6 +272,10 @@ export class VirtualWorkerService {
         // Default: worker-owned items are handleable unless explicitly excluded above
         return true;
       }) || null;
+  }
+
+  private pickNextWorkerAttention(projectId: string): ProjectAttentionItemRecord | null {
+    const nextItem = this.peekNextWorkerAttention(projectId);
 
     if (nextItem && nextItem.status === "open") {
       // Explicitly set the item's status to claimed so subsequent HI queries filter it out
@@ -411,7 +412,7 @@ export class VirtualWorkerService {
 
   private resolveCycleSettings(projectId: string): DashboardSettings {
     const attentionItem = this.deps.projectAttentionService.listActiveProjectItems(projectId)
-      .find((item) => item.ownerType === "worker" && this.projectUsesVirtualWorkers(item.projectId, item.sprintId));
+      .find((item) => item.ownerType === "worker");
     if (attentionItem) {
       return this.resolveDashboardSettings(projectId, attentionItem.sprintId);
     }

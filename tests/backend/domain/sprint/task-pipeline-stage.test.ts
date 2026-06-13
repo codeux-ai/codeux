@@ -62,6 +62,15 @@ describe("task pipeline stage resolver", () => {
         expect(result.isMerged).toBe(false);
       });
     }
+
+    it("treats RUNNING status as CODING_COMPLETED if execution is completed", () => {
+      const result = resolveTaskPipelineStage(
+        obs({ status: "RUNNING", merge_indicator: "CI", worker_branch: "task/x", pr_url: "u" }),
+        { isExecutionCompleted: true }
+      );
+      expect(result.status).toBe("CODING_COMPLETED");
+      expect(result.stage).toBe("CI");
+    });
   });
 
   describe("nothing to merge settles honestly (no fabricated MERGED)", () => {

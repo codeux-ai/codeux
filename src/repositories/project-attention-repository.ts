@@ -310,7 +310,13 @@ export class ProjectAttentionRepository {
     if (current.ownerType !== "worker") {
       throw new Error(`Attention item ${itemId} is not worker-claimable.`);
     }
-    if (current.assignedWorkerEndpointId && current.assignedWorkerEndpointId !== input.assignedWorkerEndpointId) {
+    if (
+      current.assignedWorkerEndpointId
+      && current.assignedWorkerEndpointId !== input.assignedWorkerEndpointId
+      && !input.claimReason?.startsWith("virtual_worker_")
+      && current.attentionType !== "ci_fix_required"
+      && current.attentionType !== "merge_conflict"
+    ) {
       throw new Error(`Attention item ${itemId} is assigned to another worker endpoint.`);
     }
 

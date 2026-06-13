@@ -130,6 +130,58 @@ describe("SessionTrackingRepository", () => {
     });
   });
 
+  it("finds latest failed cli session using container path /workspace fallback and POSIX path normalization", async () => {
+    const repo = await createRepo();
+
+    repo.createSession({
+      id: "cli-gemini-container",
+      provider: "gemini",
+      state: "FAILED",
+      prompt: "prompt",
+      title: "Sprint 1: [task-2] test",
+      taskId: "task-2",
+      featureBranch: "feature/sprint1",
+      workerBranch: "task/feature-sprint1-task-2-gemini",
+      repoPath: "/workspace",
+    });
+
+    const target = repo.findLatestFailedCliSessionForTask({
+      provider: "gemini",
+      taskId: "task-2",
+      featureBranch: "feature/sprint1",
+      repoPath: "C:\\Users\\pierr\\project",
+    });
+
+    expect(target).toEqual({
+      sessionId: "cli-gemini-container",
+      workerBranch: "task/feature-sprint1-task-2-gemini",
+    });
+
+    repo.createSession({
+      id: "cli-gemini-branch-container",
+      provider: "gemini",
+      state: "COMPLETED",
+      prompt: "prompt",
+      title: "Sprint 1: [task-3] test",
+      taskId: "task-3",
+      featureBranch: "feature/sprint1",
+      workerBranch: "task/feature-sprint1-task-3-gemini",
+      repoPath: "/workspace",
+    });
+
+    const targetBranch = repo.findLatestCliSessionForBranch({
+      repoPath: "C:\\Users\\pierr\\project",
+      workerBranch: "task/feature-sprint1-task-3-gemini",
+      providers: ["gemini"],
+    });
+
+    expect(targetBranch).toEqual({
+      sessionId: "cli-gemini-branch-container",
+      workerBranch: "task/feature-sprint1-task-3-gemini",
+      state: "COMPLETED",
+    });
+  });
+
   it("updates an existing session", async () => {
     const repo = await createRepo();
     repo.createSession({ id: "s1", provider: "jules", state: "RUNNING" });
