@@ -40,6 +40,13 @@ import { DockerService } from "./docker-service.js";
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
 
+interface ProjectEligibility {
+  projectId: string;
+  executionMode: WorkerExecutionMode;
+  hasActiveCycle: boolean;
+  hasWorkerAttention: boolean;
+}
+
 function sleep(ms: number): Promise<void> {
   if (ms <= 0) {
     return Promise.resolve();
@@ -151,18 +158,18 @@ export class VirtualWorkerService {
     }
   }
 
-  scheduleProject(projectId: string, reason: string): void {
+  scheduleProject(projectId: string, reason: string, eligibility?: ProjectEligibility): void {
     if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId)) {
       return;
     }
-    if (!this.projectNeedsVirtualWorker(projectId)) {
+    if (!this.projectNeedsVirtualWorker(projectId, eligibility)) {
       return;
     }
 
     this.scheduledProjects.add(projectId);
     queueMicrotask(() => {
       this.scheduledProjects.delete(projectId);
-      if (this.activeCycles.has(projectId) || !this.projectNeedsVirtualWorker(projectId)) {
+      if (this.activeCycles.has(projectId) || !this.projectNeedsVirtualWorker(projectId, eligibility)) {
         return;
       }
 
@@ -183,8 +190,19 @@ export class VirtualWorkerService {
 
   async reconcile(): Promise<void> {
     for (const project of this.deps.projectManagementRepository.listProjects().projects) {
-      if (this.projectNeedsVirtualWorker(project.id)) {
-        this.scheduleProject(project.id, "reconcile");
+      const executionMode = this.resolveWorkerExecutionMode(project.id);
+      const hasActiveCycle = this.activeCycles.has(project.id);
+      const hasWorkerAttention = executionMode === "VIRTUAL" && !hasActiveCycle && this.pickNextWorkerAttention(project.id) !== null;
+
+      const eligibility: ProjectEligibility = {
+        projectId: project.id,
+        executionMode,
+        hasActiveCycle,
+        hasWorkerAttention,
+      };
+
+      if (this.projectNeedsVirtualWorker(project.id, eligibility)) {
+        this.scheduleProject(project.id, "reconcile", eligibility);
       }
     }
   }
@@ -201,7 +219,13 @@ export class VirtualWorkerService {
     return resolveEffectiveDashboardSettings(this.deps.settingsRepository, projectId, sprintId).settings;
   }
 
-  private projectNeedsVirtualWorker(projectId: string): boolean {
+  private projectNeedsVirtualWorker(projectId: string, eligibility?: ProjectEligibility): boolean {
+    if (eligibility) {
+      return eligibility.executionMode === "VIRTUAL"
+        && !eligibility.hasActiveCycle
+        && eligibility.hasWorkerAttention;
+    }
+
     if (!this.projectUsesVirtualWorkers(projectId)) {
       return false;
     }

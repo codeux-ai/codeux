@@ -163,7 +163,7 @@ describe("VirtualWorkerService", () => {
     await virtualWorkerService.reconcile();
 
     expect(scheduleSpy).toHaveBeenCalledTimes(1);
-    expect(scheduleSpy).toHaveBeenCalledWith(virtualProject.id, "reconcile");
+    expect(scheduleSpy).toHaveBeenCalledWith(virtualProject.id, "reconcile", expect.anything());
   });
 
   it("escalates unsupported worker attention items to a human attention item", async () => {
@@ -1190,4 +1190,81 @@ describe("VirtualWorkerService", () => {
     });
     return { ...res, project };
   }
+
+  it("reconcile pass correctly identifies eligible projects and avoids redundant work", async () => {
+    const {
+      settingsRepository,
+      projectManagementRepository,
+      projectAttentionService,
+      virtualWorkerService,
+    } = await setupService();
+
+    // 1. Project in VIRTUAL mode with worker attention -> Eligible
+    const eligibleProject = projectManagementRepository.createProject({ name: "Eligible", sourceType: "local", sourceRef: "/tmp/1", defaultBranch: "main" });
+    settingsRepository.saveProjectSettings(eligibleProject.id, { workers: { executionMode: "VIRTUAL" } });
+    projectAttentionService.openItem({ projectId: eligibleProject.id, attentionType: "action_required", severity: "high", ownerType: "worker", title: "Work", summaryMarkdown: "Do it", payload: null });
+
+    // 2. Project in VIRTUAL mode but NO worker attention -> Ineligible
+    const noAttentionProject = projectManagementRepository.createProject({ name: "No Attention", sourceType: "local", sourceRef: "/tmp/2", defaultBranch: "main" });
+    settingsRepository.saveProjectSettings(noAttentionProject.id, { workers: { executionMode: "VIRTUAL" } });
+
+    // 3. Project with HUMAN attention -> Ineligible
+    const humanAttentionProject = projectManagementRepository.createProject({ name: "Human Attention", sourceType: "local", sourceRef: "/tmp/3", defaultBranch: "main" });
+    settingsRepository.saveProjectSettings(humanAttentionProject.id, { workers: { executionMode: "VIRTUAL" } });
+    projectAttentionService.openItem({ projectId: humanAttentionProject.id, attentionType: "manual_attention", severity: "high", ownerType: "human", title: "Human work", summaryMarkdown: "Review this", payload: null });
+
+    // 4. Project in VIRTUAL mode with worker attention but ALREADY ACTIVE cycle -> Ineligible (to schedule AGAIN)
+    const activeProject = projectManagementRepository.createProject({ name: "Active", sourceType: "local", sourceRef: "/tmp/4", defaultBranch: "main" });
+    settingsRepository.saveProjectSettings(activeProject.id, { workers: { executionMode: "VIRTUAL" } });
+    projectAttentionService.openItem({ projectId: activeProject.id, attentionType: "action_required", severity: "high", ownerType: "worker", title: "Work", summaryMarkdown: "Do it", payload: null });
+
+    // Manually mark project 4 as active
+    (virtualWorkerService as any).activeCycles.set(activeProject.id, Promise.resolve());
+
+    const scheduleSpy = vi.spyOn(virtualWorkerService, "scheduleProject");
+    const needsWorkerSpy = vi.spyOn(virtualWorkerService as any, "projectNeedsVirtualWorker");
+
+    await virtualWorkerService.reconcile();
+
+    // Should only schedule the eligible project
+    expect(scheduleSpy).toHaveBeenCalledTimes(1);
+    expect(scheduleSpy).toHaveBeenCalledWith(eligibleProject.id, "reconcile", expect.anything());
+
+    // Should have checked all projects (reconcile loop calls it once per project,
+    // plus 2 calls inside scheduleProject for the eligible project)
+    expect(needsWorkerSpy).toHaveBeenCalledTimes(6);
+
+    // Verify eligibility object was passed
+    const callArgs = scheduleSpy.mock.calls[0];
+    expect(callArgs[2]).toMatchObject({
+      projectId: eligibleProject.id,
+      executionMode: "VIRTUAL",
+      hasActiveCycle: false,
+      hasWorkerAttention: true,
+    });
+
+    // Reset spies to check that scheduleProject uses eligibility to avoid redundant checks
+    needsWorkerSpy.mockClear();
+    const resolveModeSpy = vi.spyOn(virtualWorkerService as any, "resolveWorkerExecutionMode");
+    const pickAttentionSpy = vi.spyOn(virtualWorkerService as any, "pickNextWorkerAttention");
+
+    // Clear state for clean second call
+    (virtualWorkerService as any).activeCycles.delete(eligibleProject.id);
+    (virtualWorkerService as any).scheduledProjects.clear();
+
+    virtualWorkerService.scheduleProject(eligibleProject.id, "reconcile", callArgs[2] as any);
+
+    // Immediate check
+    expect(needsWorkerSpy).toHaveBeenCalledTimes(1);
+    expect(resolveModeSpy).not.toHaveBeenCalled();
+    expect(pickAttentionSpy).not.toHaveBeenCalled();
+
+    await vi.runAllTicks();
+
+    // Microtask check
+    expect(needsWorkerSpy).toHaveBeenCalledTimes(2);
+    expect(resolveModeSpy).not.toHaveBeenCalled();
+    // One call from runProjectCycle to actually handle the work
+    expect(pickAttentionSpy).toHaveBeenCalledTimes(1);
+  });
 });
