@@ -51,6 +51,24 @@ The dashboard API routes are:
 
 `SchedulerService` starts with the dashboard runtime and checks due entries on an interval.
 
+### Pause and Resume Behavior
+
+The scheduler supports gating automation through status changes:
+- **Pause**: Setting an entry to `paused` disables automated scheduled executions. It does not delete the entry or its history.
+- **Resume**: Changing an entry from `paused` to `scheduled` reactivates future automation. 
+  - To prevent immediate "catch-up" executions of missed runs, resuming recomputes `nextRunAt` to the first future occurrence.
+  - Resuming or pausing does not directly trigger the scheduled target; the target only executes when the recomputed due time arrives.
+
+### Editing Scheduled Entries
+
+Operators can modify existing scheduler entries without deleting and recreating them:
+- **Hydration**: Clicking the **Edit** action next to a scheduled entry or any of its occurrences will populate the scheduler form with its current title, target type, target-specific values (sprint ID, template ID, task count, or chat message body), date/time, and recurrence settings.
+- **Title Customization**: A customizable **Title** field is available. If left empty during creation or edit, a descriptive title will be automatically generated (e.g., `Run Morning Check`).
+- **Target Validation**: All target-specific validation rules apply when editing (e.g., sprint selection must be a non-completed sprint, chat message cannot be empty).
+- **Save and Cancel**: Submitting in edit mode sends a `PATCH` request to update the entry without triggering it immediately. The edit mode can be cancelled at any time to return to creation mode without mutating the entry.
+
+### Due Entry Execution
+
 Due entries execute through existing production paths:
 - sprint entries call `ExecutionControlService.orchestrateSprint`
 - quicksprint entries call `QuicksprintService.executeQuicksprint`

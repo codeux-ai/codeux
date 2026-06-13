@@ -35,6 +35,7 @@ describe("SchedulerService", () => {
     const entry = createEntry();
     const schedulerRepository = {
       listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
       markRunSucceeded: vi.fn(),
       markRunFailed: vi.fn(),
     };
@@ -69,6 +70,7 @@ describe("SchedulerService", () => {
     });
     const schedulerRepository = {
       listDueEntries: vi.fn(() => [entry]),
+      getEntry: vi.fn(() => entry),
       markRunSucceeded: vi.fn(),
       markRunFailed: vi.fn(),
     };

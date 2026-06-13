@@ -1,12 +1,24 @@
 import type { PipelineContext } from "./pipeline-context.js";
 import { resolveProviderForInvocation } from "../../provider-routing.js";
-import { ProviderExecutionService } from "../../provider-execution-service.js";
+import { ProviderExecutionService, resolveEffectiveModel } from "../../provider-execution-service.js";
 
 export async function executeProviderStage(ctx: PipelineContext, providerPrompt: string): Promise<void> {
   const providerSettings = ctx.providerSettingsOverride || resolveProviderForInvocation(ctx.settings, {
     invocation: "task_coding",
     task: ctx.task,
   }).providers[ctx.provider];
+
+  const effectiveModel = resolveEffectiveModel({
+    provider: ctx.provider,
+    model: providerSettings.model,
+    customModel: providerSettings.customModel,
+    qwenAuthMode: providerSettings.qwenAuthMode,
+    qwenModelId: providerSettings.qwenModelId,
+    openCodeAuthMode: providerSettings.openCodeAuthMode,
+    openCodeProviderId: providerSettings.openCodeProviderId,
+    openCodeModelId: providerSettings.openCodeModelId,
+  });
+
   const providerMountAuth = "mountAuth" in providerSettings
     ? providerSettings.mountAuth
     : providerSettings.providerMountAuth;
@@ -43,7 +55,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     provider: ctx.provider,
     prompt: providerPrompt,
     cwd: ctx.worktreePath,
-    model: providerSettings.model,
+    model: effectiveModel,
     apiKey: providerSettings.apiKey,
     qwenAuthMode: providerSettings.qwenAuthMode,
     qwenRegion: providerSettings.qwenRegion,

@@ -94,6 +94,7 @@ The guide covers:
 - Projects: project management and adding the first project
 - Docker Containers: container runtime readiness and running CLI containers
 - Active Sessions: preview containers and browser sessions
-- Each navigation destination: Chat, Overview, Sprints, Tasks, Agents, Stats, Memory, Browser, Live, and Settings/Config
+- Each navigation destination: Chat, Overview, Sprints, Tasks, Agents, Stats, Memory, Knowledge, Browser, Live, and Settings/Config
 
 The tour card includes previous/next controls, a hide action, the current step count, and an auto-advance progress bar. Hidden state is stored in the browser under `codeux:dashboard-tour-hidden:v1`.
+p count, and an auto-advance progress bar. Hidden state is stored in the browser under `codeux:dashboard-tour-hidden:v1`.

@@ -33,7 +33,8 @@ gemma-4-31b-it, gemma-4-26b-a4b-it, gemini-2.5-flash-base, gemini-3-flash-base
 ```
 default, sonnet, opus, haiku,
 sonnet[1m], opus[1m], opusplan,
-claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001
+claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001,
+claude-fable-5
 ```
 
 ### Codex (OpenAI)
@@ -44,6 +45,20 @@ gpt-5.2-codex, gpt-5.2,
 gpt-5.1-codex-max, gpt-5.1, gpt-5.1-codex,
 gpt-5-codex, gpt-5-codex-mini, gpt-5
 ```
+
+### Custom Endpoints (Claude Code & Codex)
+
+For providers that support custom API endpoints (Claude Code and Codex), you can configure a **Custom Base URL** and a **Custom Model** in Settings.
+
+- **Custom Base URL**: Overrides the default API endpoint. Useful for routing through gateways like OpenRouter or LiteLLM.
+- **Custom Model**: Overrides the model identifier sent to the CLI and recorded in telemetry.
+
+When a Custom Model is set:
+1. **CLI Execution**: Code UX passes the custom model to the CLI via `--model` and relevant environment variables (e.g., `ANTHROPIC_MODEL`, `CODEX_MODEL`).
+2. **Telemetry Labeling**: The custom model slug is used in the dashboard's stats snapshots, invocation logs, and task-run events instead of the default or preset model name.
+3. **Claude Code Specifics**: Setting a custom model for Claude Code points *all* internal model tiers (fast, opus, etc.) at that single slug to ensure the gateway doesn't receive requests for unsupported models.
+
+The loopback URL rewriting behavior (e.g., `host.docker.internal` in Docker mode) also applies to these custom base URLs.
 
 ### Qwen
 ```

@@ -77,6 +77,12 @@ describe("settings view model source helpers", () => {
     ]));
   });
 
+  it("includes claude-fable-5 in Claude model options", () => {
+    expect(getProviderModelOptions("claude-code")).toEqual(expect.arrayContaining([
+      { value: "claude-fable-5", label: "claude-fable-5" },
+    ]));
+  });
+
   it("adds configured OpenCode custom endpoint models to instance model options", () => {
     const systemSettings = {
       integrations: {

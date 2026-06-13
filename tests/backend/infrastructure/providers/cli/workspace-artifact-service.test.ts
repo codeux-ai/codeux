@@ -129,6 +129,9 @@ describe("WorkspaceArtifactService", () => {
     );
     await fs.writeFile(path.join(workspaceRepoPath, "new-component.tsx"), "export const value = 1;\n", "utf8");
     await fs.writeFile(path.join(workspaceRepoPath, ".task-learnings.md"), "## Category: learning\n- Do not commit this file.\n", "utf8");
+    await fs.mkdir(path.join(workspaceRepoPath, "logs", "openai"), { recursive: true });
+    await fs.writeFile(path.join(workspaceRepoPath, "logs", "openai", "openai-123.json"), "{}", "utf8");
+    await fs.writeFile(path.join(workspaceRepoPath, "logs", "openai", "request.log"), "log", "utf8");
 
     const workspaceManager = {
       runWorkspaceCommand: async (
@@ -148,6 +151,7 @@ describe("WorkspaceArtifactService", () => {
     expect(patchText).toContain("diff --git a/new-component.tsx b/new-component.tsx");
     expect(patchText).not.toContain(".task-learnings.md");
     expect(patchText).not.toContain(".code-ux-home");
+    expect(patchText).not.toContain("logs/openai");
 
     const result = await service.applyPatchToBranch({
       repoPath: hostRepoPath,
@@ -165,6 +169,10 @@ describe("WorkspaceArtifactService", () => {
     await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.code-ux-home/.gemini/settings.json"]))
       .rejects.toThrow();
     await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.code-ux-home/.cache/node-gyp/header.h"]))
+      .rejects.toThrow();
+    await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:logs/openai/openai-123.json"]))
+      .rejects.toThrow();
+    await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:logs/openai/request.log"]))
       .rejects.toThrow();
   });
 

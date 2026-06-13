@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
 import { ProviderRunner } from "../../../../../src/infrastructure/providers/cli/provider-runner.js";
+import { resolveEffectiveModel } from "../../../../../src/services/provider-execution-service.js";
 
 vi.mock("../../../../../src/services/cli-process-runner.js", () => ({
   runStreamingCommand: vi.fn(async () => ({
@@ -226,23 +227,25 @@ describe("ProviderRunner", () => {
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
     try {
-      await runner.runProvider({
-        provider: "qwen-code",
+      const runArgs = {
+        provider: "qwen-code" as const,
         prompt: "hello",
         cwd: "/repo",
         model: "custom/model",
         apiKey: "sk-qwen-test",
-        qwenAuthMode: "MODEL_PROVIDER",
+        qwenAuthMode: "MODEL_PROVIDER" as const,
         qwenModelId: "glm-4.7-flash",
         qwenBaseUrl: "http://127.0.0.1:11434/v1",
         qwenEnvKey: "OLLAMA_API_KEY",
-        qwenProtocol: "openai",
+        qwenProtocol: "openai" as const,
         sessionId: "session-1",
         workflowSettings: { executionMode: "DOCKER" } as any,
         repoPath: "/repo",
         mcpConnection: { url: "http://127.0.0.1:4445/mcp", authToken: null },
         onActivity: vi.fn(),
-      });
+      };
+      const model = resolveEffectiveModel(runArgs);
+      await runner.runProvider({ ...runArgs, model });
     } finally {
       if (originalRewrite === undefined) {
         delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
@@ -357,8 +360,8 @@ describe("ProviderRunner", () => {
   });
 
   it("routes Claude Code through a custom base URL and model when configured", async () => {
-    await runner.runProvider({
-      provider: "claude-code",
+    const runArgs = {
+      provider: "claude-code" as const,
       prompt: "build it",
       cwd: "/repo",
       model: "sonnet",
@@ -369,7 +372,9 @@ describe("ProviderRunner", () => {
       workflowSettings: { executionMode: "DOCKER" } as any,
       repoPath: "/repo",
       onActivity: vi.fn(),
-    });
+    };
+    const model = resolveEffectiveModel(runArgs);
+    await runner.runProvider({ ...runArgs, model });
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "claude",
@@ -425,8 +430,8 @@ describe("ProviderRunner", () => {
   });
 
   it("routes Codex through a custom base URL and model via a dedicated model provider", async () => {
-    await runner.runProvider({
-      provider: "codex",
+    const runArgs = {
+      provider: "codex" as const,
       prompt: "ship it",
       cwd: "/repo",
       model: "gpt-5-codex",
@@ -437,7 +442,9 @@ describe("ProviderRunner", () => {
       workflowSettings: { executionMode: "DOCKER" } as any,
       repoPath: "/repo",
       onActivity: vi.fn(),
-    });
+    };
+    const model = resolveEffectiveModel(runArgs);
+    await runner.runProvider({ ...runArgs, model });
 
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       command: "codex",
@@ -566,13 +573,13 @@ describe("ProviderRunner", () => {
     const originalRewrite = process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;
     process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST = "1";
     try {
-      await runner.runProvider({
-        provider: "opencode",
+      const runArgs = {
+        provider: "opencode" as const,
         prompt: "hello",
         cwd: "/repo",
         model: "custom/model",
         apiKey: "sk-open-test",
-        openCodeAuthMode: "CUSTOM_PROVIDER",
+        openCodeAuthMode: "CUSTOM_PROVIDER" as const,
         openCodeProviderId: "ollama",
         openCodeModelId: "glm-4.7-flash",
         openCodeBaseUrl: "http://127.0.0.1:11434/v1",
@@ -581,7 +588,9 @@ describe("ProviderRunner", () => {
         repoPath: "/repo",
         mcpConnection: { url: "http://127.0.0.1:4445/mcp", authToken: null },
         onActivity: vi.fn(),
-      });
+      };
+      const model = resolveEffectiveModel(runArgs);
+      await runner.runProvider({ ...runArgs, model });
     } finally {
       if (originalRewrite === undefined) {
         delete process.env.CODE_UX_DOCKER_REWRITE_LOCALHOST;

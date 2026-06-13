@@ -27,7 +27,7 @@ import { parsePlannedSprintReply, PlanningParseError } from "./planning-json-ext
 import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import type { PlannedSprintPayload, PlannedTaskDraft } from "../contracts/project-management-types.js";
 import { persistPlannedTasks } from "./planning-task-persistence.js";
-import { ProviderExecutionService } from "./provider-execution-service.js";
+import { ProviderExecutionService, resolveEffectiveModel } from "./provider-execution-service.js";
 import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { waitUntil } from "../shared/polling/wait-until.js";
@@ -512,12 +512,23 @@ export class PlanningAgentService {
       providerSettings.model = args.overrides.virtualModel;
     }
 
+    const effectiveModel = resolveEffectiveModel({
+      provider,
+      model: providerSettings.model,
+      customModel: providerSettings.customModel,
+      qwenAuthMode: providerSettings.qwenAuthMode,
+      qwenModelId: providerSettings.qwenModelId,
+      openCodeAuthMode: providerSettings.openCodeAuthMode,
+      openCodeProviderId: providerSettings.openCodeProviderId,
+      openCodeModelId: providerSettings.openCodeModelId,
+    });
+
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...args.settings.cliWorkflow,
     };
     const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode);
-    const systemRoutingMessage = `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${providerSettings.model}).`;
+    const systemRoutingMessage = `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${effectiveModel}).`;
     let snapshotWorkspace = args.repoPath;
     let cleanupWorkspace: (() => Promise<void>) | undefined;
     if (workflowSettings.executionMode === "DOCKER") {
@@ -537,7 +548,7 @@ export class PlanningAgentService {
         purpose: "planning",
         type: "planning",
         provider,
-        model: providerSettings.model,
+        model: effectiveModel,
         apiKey: providerSettings.apiKey,
         maxConcurrentTasks: providerSettings.maxConcurrentTasks,
         qwenAuthMode: providerSettings.qwenAuthMode,

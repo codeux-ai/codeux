@@ -86,6 +86,49 @@ export function computeNextRunAfterOccurrence(
   return nextRunAt;
 }
 
+export function computeFirstOccurrenceAtOrAfter(
+  scheduledForIso: string,
+  recurrence: ScheduleRecurrenceRule,
+  nowIso: string,
+): string | null {
+  const nowTime = new Date(nowIso).getTime();
+  let current: string | null = scheduledForIso;
+  let occurrenceIndex = 1;
+
+  while (current) {
+    const currentTime = new Date(current).getTime();
+    if (!Number.isFinite(currentTime)) {
+      return null;
+    }
+
+    if (currentTime >= nowTime) {
+      if (recurrence.endMode === "after_count" && recurrence.count && occurrenceIndex > recurrence.count) {
+        return null;
+      }
+      return current;
+    }
+
+    if (recurrence.frequency === "none") {
+      return null;
+    }
+
+    current = addRecurrenceInterval(current, recurrence);
+    occurrenceIndex += 1;
+
+    if (occurrenceIndex > 1000) {
+      break;
+    }
+
+    if (recurrence.endMode === "on_date" && recurrence.until && current) {
+      if (new Date(current).getTime() > new Date(recurrence.until).getTime()) {
+        return null;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function buildSchedulerOccurrences(
   entries: SchedulerEntryRecord[],
   fromIso: string,

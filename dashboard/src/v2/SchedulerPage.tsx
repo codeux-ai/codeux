@@ -6,6 +6,7 @@ import {
   Clock3,
   MessageCircle,
   Pause,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
@@ -30,6 +31,7 @@ import {
 import type {
   CreateSchedulerEntryInput,
   SchedulerCollectionResponse,
+  SchedulerEntryRecord,
   SchedulerOccurrence,
   ScheduleRecurrenceRule,
   ScheduleTargetType,
@@ -151,6 +153,8 @@ export const SchedulerPage: FunctionComponent = () => {
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState>({ tone: "idle", message: null });
 
+  const [editingEntry, setEditingEntry] = useState<SchedulerEntryRecord | null>(null);
+  const [entryTitle, setEntryTitle] = useState("");
   const [targetType, setTargetType] = useState<ScheduleTargetType>("sprint");
   const [scheduledFor, setScheduledFor] = useState(() => {
     const date = new Date();
@@ -253,6 +257,62 @@ export const SchedulerPage: FunctionComponent = () => {
     };
   }, [schedule?.entries, schedule?.occurrences]);
 
+  const startEdit = (entry: SchedulerEntryRecord) => {
+    setEditingEntry(entry);
+    setEntryTitle(entry.title);
+    setTargetType(entry.targetType);
+    setScheduledFor(toDateInputValue(new Date(entry.scheduledFor)));
+
+    if (entry.targetType === "sprint" && entry.sprintTarget) {
+      setSelectedSprintId(entry.sprintTarget.sprintId);
+    } else if (entry.targetType === "quicksprint" && entry.quicksprintTarget) {
+      setSelectedTemplateId(entry.quicksprintTarget.templateId);
+      setTaskCount(entry.quicksprintTarget.taskCount);
+    } else if (entry.targetType === "chat" && entry.chatTarget) {
+      setChatMessage(entry.chatTarget.bodyMarkdown);
+    }
+
+    if (entry.recurrence && entry.recurrence.frequency !== "none") {
+      setRepeatEnabled(true);
+      setFrequency(entry.recurrence.frequency);
+      setIntervalValue(entry.recurrence.interval || 1);
+      setEndMode(entry.recurrence.endMode || "never");
+      setCount(entry.recurrence.count || 6);
+      setUntil(entry.recurrence.until ? toDateInputValue(new Date(entry.recurrence.until)) : toDateInputValue(addDays(new Date(), 30)));
+    } else {
+      setRepeatEnabled(false);
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingEntry(null);
+    setEntryTitle("");
+    setTargetType("sprint");
+    const date = new Date();
+    date.setHours(date.getHours() + 1, 0, 0, 0);
+    setScheduledFor(toDateInputValue(date));
+    setSelectedSprintId(sprints.find((sprint) => sprint.status !== "completed")?.id || "");
+    setSelectedTemplateId(templates[0]?.id || "");
+    setTaskCount(5);
+    setChatMessage("");
+    setRepeatEnabled(false);
+    setFrequency("daily");
+    setIntervalValue(1);
+    setEndMode("never");
+    setCount(6);
+    setUntil(toDateInputValue(addDays(new Date(), 30)));
+    setFeedback({ tone: "idle", message: null });
+  };
+
+  const editOccurrence = (occurrence: SchedulerOccurrence) => {
+    const entry = (schedule?.entries || []).find((e) => e.id === occurrence.entryId);
+    if (entry) {
+      startEdit(entry);
+    } else {
+      setFeedback({ tone: "error", message: "Parent schedule entry not found." });
+    }
+  };
+
   const submitSchedule = async () => {
     if (!selectedProject) {
       return;
@@ -268,39 +328,60 @@ export const SchedulerPage: FunctionComponent = () => {
       }
       : { frequency: "none", interval: 1, endMode: "never" };
 
-    const input: CreateSchedulerEntryInput = {
-      targetType,
-      scheduledFor: new Date(scheduledFor).toISOString(),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      recurrence,
-    };
+    const titleVal = entryTitle.trim();
+    const generatedTitle = (() => {
+      if (targetType === "sprint") {
+        const sprint = sprints.find((item) => item.id === selectedSprintId);
+        return sprint ? `Run ${sprint.name}` : "Scheduled sprint";
+      } else if (targetType === "quicksprint") {
+        const template = templates.find((item) => item.id === selectedTemplateId);
+        return template ? `Run ${template.name}` : "Scheduled quicksprint";
+      } else {
+        return "Scheduled chat message";
+      }
+    })();
+
+    const finalTitle = titleVal || generatedTitle;
 
     if (targetType === "sprint") {
       if (!selectedSprintId) {
         setFeedback({ tone: "error", message: "Choose a sprint that is not completed." });
         return;
       }
-      const sprint = incompleteSprints.find((item) => item.id === selectedSprintId);
-      input.title = sprint ? `Run ${sprint.name}` : "Scheduled sprint";
-      input.sprintTarget = { sprintId: selectedSprintId };
+      const sprint = sprints.find((item) => item.id === selectedSprintId);
+      if (!sprint || (sprint.status === "completed" && (!editingEntry || editingEntry.sprintTarget?.sprintId !== selectedSprintId))) {
+        setFeedback({ tone: "error", message: "Choose a sprint that is not completed." });
+        return;
+      }
     } else if (targetType === "quicksprint") {
       if (!selectedTemplateId) {
         setFeedback({ tone: "error", message: "Choose a quicksprint template." });
         return;
       }
-      const template = templates.find((item) => item.id === selectedTemplateId);
-      input.title = template ? `Run ${template.name}` : "Scheduled quicksprint";
+    } else {
+      if (!chatMessage.trim()) {
+        setFeedback({ tone: "error", message: "Write the chat message to schedule." });
+        return;
+      }
+    }
+
+    const input: any = {
+      title: finalTitle,
+      targetType,
+      scheduledFor: new Date(scheduledFor).toISOString(),
+      timezone: editingEntry ? editingEntry.timezone : (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
+      recurrence,
+    };
+
+    if (targetType === "sprint") {
+      input.sprintTarget = { sprintId: selectedSprintId };
+    } else if (targetType === "quicksprint") {
       input.quicksprintTarget = {
         templateId: selectedTemplateId,
         taskCount,
         submitMode: "plan_and_start",
       };
     } else {
-      if (!chatMessage.trim()) {
-        setFeedback({ tone: "error", message: "Write the chat message to schedule." });
-        return;
-      }
-      input.title = "Scheduled chat message";
       input.chatTarget = {
         bodyMarkdown: chatMessage.trim(),
         title: "Scheduled message",
@@ -308,12 +389,19 @@ export const SchedulerPage: FunctionComponent = () => {
     }
 
     try {
-      await createSchedulerEntry(selectedProject.id, input);
-      setFeedback({ tone: "success", message: "Schedule entry created." });
-      setChatMessage("");
+      if (editingEntry) {
+        await updateSchedulerEntry(editingEntry.id, input);
+        setFeedback({ tone: "success", message: "Schedule entry updated." });
+        cancelEdit();
+      } else {
+        await createSchedulerEntry(selectedProject.id, input);
+        setFeedback({ tone: "success", message: "Schedule entry created." });
+        setChatMessage("");
+        setEntryTitle("");
+      }
       await refresh();
     } catch (error) {
-      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to create schedule entry." });
+      setFeedback({ tone: "error", message: error instanceof Error ? error.message : "Failed to save schedule entry." });
     }
   };
 
@@ -438,11 +526,15 @@ export const SchedulerPage: FunctionComponent = () => {
         <aside data-testid="scheduler-form-panel" className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
-              <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">Add entry</h3>
-              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Choose the work, time, and recurrence.</p>
+              <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                {editingEntry ? "Edit entry" : "Add entry"}
+              </h3>
+              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {editingEntry ? "Modify the title, work, time, and recurrence." : "Choose the work, time, and recurrence."}
+              </p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ember-500/12 text-ember-500">
-              <Plus className="h-5 w-5" />
+            <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${editingEntry ? "bg-signal-500/12 text-signal-500" : "bg-ember-500/12 text-ember-500"}`}>
+              {editingEntry ? <Pencil className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
             </div>
           </div>
 
@@ -465,6 +557,17 @@ export const SchedulerPage: FunctionComponent = () => {
           </div>
 
           <div className="mt-5 space-y-4">
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Title</span>
+              <input
+                type="text"
+                value={entryTitle}
+                onInput={(event) => setEntryTitle(event.currentTarget.value)}
+                className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+                placeholder="Optional description/title"
+              />
+            </label>
+
             {targetType === "sprint" && (
               <label className="block">
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint</span>
@@ -474,7 +577,11 @@ export const SchedulerPage: FunctionComponent = () => {
                   searchable={true}
                   options={[
                     { value: "", label: "Choose sprint" },
-                    ...incompleteSprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))
+                    ...incompleteSprints.map((sprint) => ({ value: sprint.id, label: sprint.name })),
+                    ...(editingEntry && editingEntry.sprintTarget && !incompleteSprints.some(s => s.id === editingEntry.sprintTarget?.sprintId)
+                      ? [{ value: editingEntry.sprintTarget.sprintId, label: sprints.find(s => s.id === editingEntry.sprintTarget?.sprintId)?.name || editingEntry.sprintTarget.sprintId }]
+                      : []
+                    )
                   ]}
                   className="mt-2"
                 />
@@ -617,15 +724,27 @@ export const SchedulerPage: FunctionComponent = () => {
               )}
             </div>
 
-            <Button
-              variant="signal"
-              size="lg"
-              onClick={() => void submitSchedule()}
-              className="w-full text-[10px] uppercase tracking-[0.16em]"
-              icon={Send}
-            >
-              Schedule
-            </Button>
+            <div className="flex gap-2">
+              {editingEntry && (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={cancelEdit}
+                  className="flex-1 text-[10px] uppercase tracking-[0.16em]"
+                >
+                  Cancel
+                </Button>
+              )}
+              <Button
+                variant="signal"
+                size="lg"
+                onClick={() => void submitSchedule()}
+                className={editingEntry ? "flex-1 text-[10px] uppercase tracking-[0.16em]" : "w-full text-[10px] uppercase tracking-[0.16em]"}
+                icon={editingEntry ? Check : Send}
+              >
+                {editingEntry ? "Save" : "Schedule"}
+              </Button>
+            </div>
 
             {feedback.message && (
               <div className={`rounded-[var(--radius-ui)] border px-4 py-3 text-xs font-semibold backdrop-blur-md transition-all duration-150 ${
@@ -690,7 +809,20 @@ export const SchedulerPage: FunctionComponent = () => {
                             <div key={occurrence.id} className="rounded-xl border border-black/[0.04] bg-white/80 p-2 text-xs shadow-sm dark:border-white/[0.05] dark:bg-white/[0.04]">
                               <div className="flex items-center justify-between gap-2">
                                 <span className="font-bold text-slate-800 dark:text-white">{formatTimeLabel(occurrence.startsAt)}</span>
-                                <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>{targetLabel(occurrence.targetType)}</span>
+                                <div className="flex items-center gap-1">
+                                  <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>{targetLabel(occurrence.targetType)}</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      editOccurrence(occurrence);
+                                    }}
+                                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                                    aria-label="Edit schedule entry from occurrence"
+                                  >
+                                    <Pencil className="h-2.5 w-2.5" />
+                                  </button>
+                                </div>
                               </div>
                               <div className="mt-1 line-clamp-2 font-semibold text-slate-500 dark:text-slate-400">{occurrence.title}</div>
                             </div>
@@ -724,9 +856,19 @@ export const SchedulerPage: FunctionComponent = () => {
                                   <Clock3 className={`h-3.5 w-3.5 ${option?.tone || "text-signal-500"}`} />
                                   {formatTimeLabel(occurrence.startsAt)}
                                 </span>
-                                <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>
-                                  {targetLabel(occurrence.targetType)}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${option?.chipClassName || "bg-slate-500/10 text-slate-500"}`}>
+                                    {targetLabel(occurrence.targetType)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => editOccurrence(occurrence)}
+                                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                                    aria-label="Edit schedule entry from occurrence"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
+                                </div>
                               </div>
                               <div className="mt-2 text-sm font-bold text-slate-700 dark:text-slate-200">{occurrence.title}</div>
                             </div>
@@ -785,6 +927,14 @@ export const SchedulerPage: FunctionComponent = () => {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(entry)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/[0.06] bg-white/70 text-slate-600 transition-all duration-150 hover:bg-white hover:text-slate-950 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                        aria-label="Edit schedule entry"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => void toggleEntryStatus(entry.id, entry.status === "paused")}

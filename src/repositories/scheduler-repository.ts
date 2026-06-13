@@ -13,7 +13,7 @@ import type {
   ScheduleTargetType,
   UpdateSchedulerEntryInput,
 } from "../contracts/scheduler-types.js";
-import { normalizeRecurrenceRule } from "../domain/scheduler/schedule-time.js";
+import { computeFirstOccurrenceAtOrAfter, normalizeRecurrenceRule } from "../domain/scheduler/schedule-time.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 
 interface SchedulerEntryRow {
@@ -123,12 +123,13 @@ export class SchedulerRepository {
 
   updateEntry(entryId: string, input: UpdateSchedulerEntryInput): SchedulerEntryRecord {
     const current = this.requireEntry(entryId);
-    const nextTargetType = current.targetType;
+    const nextTargetType = input.targetType ?? current.targetType;
+    const isTargetTypeChanged = input.targetType !== undefined && input.targetType !== current.targetType;
     const nextTargetPayload = this.normalizeTargetPayload(nextTargetType, {
       targetType: nextTargetType,
-      sprintTarget: input.sprintTarget ?? current.sprintTarget,
-      quicksprintTarget: input.quicksprintTarget ?? current.quicksprintTarget,
-      chatTarget: input.chatTarget ?? current.chatTarget,
+      sprintTarget: isTargetTypeChanged ? input.sprintTarget : (input.sprintTarget ?? current.sprintTarget),
+      quicksprintTarget: isTargetTypeChanged ? input.quicksprintTarget : (input.quicksprintTarget ?? current.quicksprintTarget),
+      chatTarget: isTargetTypeChanged ? input.chatTarget : (input.chatTarget ?? current.chatTarget),
       scheduledFor: input.scheduledFor ?? current.scheduledFor,
     });
     const nextScheduledFor = input.scheduledFor
@@ -139,15 +140,23 @@ export class SchedulerRepository {
       : current.recurrence;
     const nextStatus = input.status ?? current.status;
     const now = new Date().toISOString();
-    const shouldResetNextRun = input.scheduledFor !== undefined || input.recurrence !== undefined || input.status === "scheduled";
-    const nextRunAt = nextStatus === "scheduled"
-      ? (shouldResetNextRun ? nextScheduledFor : current.nextRunAt)
-      : current.nextRunAt;
+
+    let nextRunAt = current.nextRunAt;
+    if (nextStatus === "scheduled") {
+      const isResuming = input.status === "scheduled" && current.status !== "scheduled";
+      const isExplicitScheduleChange = input.scheduledFor !== undefined || input.recurrence !== undefined;
+
+      if (isResuming) {
+        nextRunAt = computeFirstOccurrenceAtOrAfter(nextScheduledFor, nextRecurrence, now);
+      } else if (isExplicitScheduleChange) {
+        nextRunAt = nextScheduledFor;
+      }
+    }
 
     this.db.prepare(`
       UPDATE scheduler_entries
       SET title = ?, status = ?, scheduled_for = ?, timezone = ?, recurrence_json = ?,
-          target_json = ?, next_run_at = ?, updated_at = ?, last_error = ?
+          target_json = ?, next_run_at = ?, updated_at = ?, last_error = ?, target_type = ?
       WHERE id = ?
     `).run(
       input.title?.trim() || current.title,
@@ -159,6 +168,7 @@ export class SchedulerRepository {
       nextRunAt,
       now,
       nextStatus === "scheduled" ? null : current.lastError,
+      nextTargetType,
       entryId,
     );
 
