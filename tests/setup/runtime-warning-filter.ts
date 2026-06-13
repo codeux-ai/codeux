@@ -28,6 +28,14 @@ process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
   return originalEmitWarning(warning as never, ...(args as []));
 }) as typeof process.emitWarning;
 
+// Clear git configuration environment variables that might leak from CI (e.g. GitHub Actions)
+// to prevent them from interfering with git-related tests that expect a clean state.
+delete process.env.GIT_CONFIG_COUNT;
+for (let i = 0; i < 20; i++) {
+  delete process.env[`GIT_CONFIG_KEY_${i}`];
+  delete process.env[`GIT_CONFIG_VALUE_${i}`];
+}
+
 process.env.LOG_LEVEL = originalLogLevel ?? "error";
 
 const isWindowsTempLockError = (error: unknown, targetPath: unknown): boolean => {

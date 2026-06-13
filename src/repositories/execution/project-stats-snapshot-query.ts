@@ -195,7 +195,7 @@ export function queryProjectStatsSnapshot(
         lastActivityAt: activityMap.get(id) || null,
         usage: u,
       };
-    }).sort((a, b) => (b.usage?.totalTokens || 0) - (a.usage?.totalTokens || 0));
+    }).sort((a, b) => (b.usage?.totalTokens || 0) - (a.usage?.totalTokens || 0) || a.id.localeCompare(b.id));
   };
 
   const tasks = mapEntityUsage(taskUsage, taskLastActivity, (id) => deps.getTaskMetadata(projectId, [id]).get(id));
@@ -230,21 +230,21 @@ export function queryProjectStatsSnapshot(
   // Build chart series
   const chartSeries: ProjectExecutionStatsChartSeries[] = [
     { id: "core_total_tokens", label: "Total Tokens", grouping: "totals", defaultEnabled: true, data: buckets.map((b) => b.usage.totalTokens), color: '#00E0A0', signalLabel: 'Throughput', formatter: 'tokens' },
-    { id: "core_active_time", label: "Active Time (ms)", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.activeTimeMs), color: '#FFB800', signalLabel: 'Latency', formatter: 'duration' },
+    { id: "core_active_time", label: "Active Time", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.activeTimeMs), color: '#FFB800', signalLabel: 'Latency', formatter: 'duration' },
     { id: "core_invocations", label: "Invocations", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.invocationCount), color: '#0EA5E9', signalLabel: 'Volume', formatter: 'number' },
     { id: "core_input_tokens", label: "Input Tokens", grouping: "details", defaultEnabled: false, data: buckets.map((b) => b.usage.inputTokens), formatter: 'tokens' },
     { id: "core_cached_tokens", label: "Cached Tokens", grouping: "details", defaultEnabled: false, data: buckets.map((b) => b.usage.cachedInputTokens), formatter: 'tokens' },
     { id: "core_output_tokens", label: "Output Tokens", grouping: "details", defaultEnabled: false, data: buckets.map((b) => b.usage.outputTokens), formatter: 'tokens' },
     { id: "core_reasoning_tokens", label: "Reasoning Tokens", grouping: "details", defaultEnabled: false, data: buckets.map((b) => b.usage.reasoningOutputTokens), formatter: 'tokens' },
-    { id: "reliability_reported", label: "Reported Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.reportedInvocationCount), formatter: 'number' },
-    { id: "reliability_estimated", label: "Estimated Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.estimatedInvocationCount), formatter: 'number' },
-    { id: "reliability_unsupported", label: "Unsupported Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.unsupportedInvocationCount), formatter: 'number' },
-    { id: "reliability_unavailable", label: "Unavailable Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.unavailableInvocationCount), formatter: 'number' },
+    { id: "reliability_reported", label: "Reported", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.reportedInvocationCount), formatter: 'number' },
+    { id: "reliability_estimated", label: "Estimated", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.estimatedInvocationCount), formatter: 'number' },
+    { id: "reliability_unsupported", label: "Unsupported", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.unsupportedInvocationCount), formatter: 'number' },
+    { id: "reliability_unavailable", label: "Unavailable", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.unavailableInvocationCount), formatter: 'number' },
     { id: "git_insertions", label: "Insertions", grouping: "git", defaultEnabled: true, data: gitBuckets.map((b) => b.metrics.insertions), color: '#10B981', signalLabel: 'Added', formatter: 'number' },
     { id: "git_deletions", label: "Deletions", grouping: "git", defaultEnabled: true, data: gitBuckets.map((b) => b.metrics.deletions), color: '#EF4444', signalLabel: 'Removed', formatter: 'number' },
     { id: "git_files_changed", label: "Files Changed", grouping: "git", defaultEnabled: true, data: gitBuckets.map((b) => b.metrics.filesChanged), color: '#3B82F6', signalLabel: 'Modified', formatter: 'number' },
     { id: "git_prs", label: "Pull Requests", grouping: "git", defaultEnabled: false, data: gitBuckets.map((b) => b.metrics.prCount), color: '#8B5CF6', signalLabel: 'Merged', formatter: 'number' },
-    { id: "git_merges", label: "Commits", grouping: "git", defaultEnabled: false, data: gitBuckets.map((b) => b.metrics.mergedCount), color: '#F59E0B', signalLabel: 'History', formatter: 'number' },
+    { id: "git_merges", label: "Merges", grouping: "git", defaultEnabled: false, data: gitBuckets.map((b) => b.metrics.mergedCount), color: '#F59E0B', signalLabel: 'History', formatter: 'number' },
     { id: "core_cache_hit", label: "Cache Hit Rate", grouping: "details", defaultEnabled: false, data: buckets.map((b) => {
       const denominator = b.usage.inputTokens + b.usage.cachedInputTokens;
       return denominator > 0 ? Math.round((b.usage.cachedInputTokens / denominator) * 1000) / 10 : 0;
@@ -285,7 +285,7 @@ export function queryProjectStatsSnapshot(
     statusCounts,
     tokenSources: Array.from(tokenSourceCounts.entries())
       .map(([source, count]) => ({ source: source as any, count }))
-      .sort((a, b) => b.count - a.count),
+      .sort((a, b) => b.count - a.count || a.source.localeCompare(b.source)),
     git: {
       totals: gitTotals,
       buckets: gitBuckets,
@@ -321,7 +321,7 @@ export function queryProjectStatsSnapshot(
         duration: computeDurationStats((u as any).durationSamples || []),
         lastActivityAt: modelLastActivity.get(key) || null,
       };
-    }).sort((a, b) => (b.usage?.totalTokens || 0) - (a.usage?.totalTokens || 0)),
+    }).sort((a, b) => (b.usage?.totalTokens || 0) - (a.usage?.totalTokens || 0) || a.id.localeCompare(b.id)),
     buckets: buckets.map((b): ExecutionUsageBucketSummary => ({
       bucketStart: b.bucketStart,
       bucketEnd: b.bucketEnd,
