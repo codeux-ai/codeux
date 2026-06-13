@@ -223,7 +223,8 @@ describe('ActivityCacheService', () => {
 
       // Should only fetch once
       expect(mockDeps.fetchRecentActivities).toHaveBeenCalledTimes(1);
-      expect(res1).toBe(res2); // Should be the exact same object reference
+      // In the new implementation, each call returns a new object but with the same data
+      expect(res1).toEqual(res2);
     });
   });
 

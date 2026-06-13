@@ -38,7 +38,7 @@ export interface ActivityCacheServiceDependencies {
 
 export class ActivityCacheService {
   private liveActivitiesCache: Map<string, { timestamp: number; data: JulesActivity[] }> = new Map();
-  private liveActivitiesFetchPromise: Promise<Record<string, JulesActivity[]>> | null = null;
+  private inFlightFetches: Map<string, Promise<JulesActivity[]>> = new Map();
 
   constructor(
     private readonly deps: ActivityCacheServiceDependencies,
@@ -54,7 +54,7 @@ export class ActivityCacheService {
 
   invalidateLiveActivitiesCache(): void {
     this.liveActivitiesCache.clear();
-    this.liveActivitiesFetchPromise = null;
+    this.inFlightFetches.clear();
   }
 
   async getGitStatus(): Promise<GitTrackingStatus> {
@@ -62,69 +62,69 @@ export class ActivityCacheService {
   }
 
   async getLiveActivitiesForActiveTasks(): Promise<Record<string, JulesActivity[]>> {
-    if (this.liveActivitiesFetchPromise) {
-      return this.liveActivitiesFetchPromise;
+    const subtasks = this.deps.getSubtasks();
+    const activeSessionNames = Array.from(
+      new Set(
+        subtasks
+          .filter((task) => task.status === "RUNNING")
+          .map((task) => this.deps.resolveSessionNameFromTask(task))
+          .filter((value): value is string => {
+            if (!value) return false;
+            if (this.deps.isSessionTerminal?.(value)) return false;
+            return true;
+          })
+      )
+    );
+
+    if (activeSessionNames.length === 0) {
+      return {};
     }
 
-    this.liveActivitiesFetchPromise = (async () => {
-      const subtasks = this.deps.getSubtasks();
-      const activeSessionNames = Array.from(
-        new Set(
-          subtasks
-            .filter((task) => task.status === "RUNNING")
-            .map((task) => this.deps.resolveSessionNameFromTask(task))
-            .filter((value): value is string => {
-              if (!value) return false;
-              if (this.deps.isSessionTerminal?.(value)) return false;
-              return true;
-            })
-        )
+    const now = Date.now();
+    const result: Record<string, JulesActivity[]> = {};
+    const sessionsToFetch: string[] = [];
+
+    for (const sessionName of activeSessionNames) {
+      const cached = this.liveActivitiesCache.get(sessionName);
+      if (cached && now - cached.timestamp < this.liveActivityCacheMs) {
+        result[sessionName] = cached.data;
+      } else {
+        sessionsToFetch.push(sessionName);
+      }
+    }
+
+    if (sessionsToFetch.length > 0) {
+      const fetchResults = await pMap(
+        sessionsToFetch,
+        async (sessionName) => {
+          let fetchPromise = this.inFlightFetches.get(sessionName);
+
+          if (!fetchPromise) {
+            fetchPromise = (async () => {
+              try {
+                return await this.deps.fetchRecentActivities(sessionName, this.activityPageSize);
+              } catch {
+                this.deps.logger?.warn("Could not fetch live activities", { sessionName });
+                return [];
+              }
+            })().finally(() => {
+              this.inFlightFetches.delete(sessionName);
+            });
+            this.inFlightFetches.set(sessionName, fetchPromise);
+          }
+
+          const activities = await fetchPromise;
+          this.liveActivitiesCache.set(sessionName, { timestamp: Date.now(), data: activities });
+          return [sessionName, activities] as [string, JulesActivity[]];
+        },
+        this.activityFetchConcurrency
       );
 
-      if (activeSessionNames.length === 0) {
-        return {};
+      for (const [sessionName, activities] of fetchResults) {
+        result[sessionName] = activities;
       }
+    }
 
-      const now = Date.now();
-      const result: Record<string, JulesActivity[]> = {};
-      const missingSessions: string[] = [];
-
-      for (const sessionName of activeSessionNames) {
-        const cached = this.liveActivitiesCache.get(sessionName);
-        if (cached && now - cached.timestamp < this.liveActivityCacheMs) {
-          result[sessionName] = cached.data;
-        } else {
-          missingSessions.push(sessionName);
-        }
-      }
-
-      if (missingSessions.length > 0) {
-        const fetchResults = await pMap(
-          missingSessions,
-          async (sessionName) => {
-            try {
-              const activities = await this.deps.fetchRecentActivities(sessionName, this.activityPageSize);
-              return [sessionName, activities] as [string, JulesActivity[]];
-            } catch {
-              this.deps.logger?.warn("Could not fetch live activities", { sessionName });
-              return [sessionName, []] as [string, JulesActivity[]];
-            }
-          },
-          this.activityFetchConcurrency
-        );
-
-        const fetchTimestamp = Date.now();
-        for (const [sessionName, activities] of fetchResults) {
-          result[sessionName] = activities;
-          this.liveActivitiesCache.set(sessionName, { timestamp: fetchTimestamp, data: activities });
-        }
-      }
-
-      return result;
-    })().finally(() => {
-      this.liveActivitiesFetchPromise = null;
-    });
-
-    return this.liveActivitiesFetchPromise;
+    return result;
   }
 }
