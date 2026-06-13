@@ -23,6 +23,9 @@ import {
   type QwenUsageTotals,
   type ParsedConversationTurn,
 } from "./provider-usage.js";
+import { runProviderWithLifecycle } from "./provider-runner-lifecycle.js";
+import type { ProviderCommandSpec, ProviderRunResult, CliProviderId, ProviderRunInput } from "./provider-runner-types.js";
+export type { ProviderCommandSpec, ProviderRunResult, CliProviderId, ProviderRunInput };
 
 const CONTAINER_WORKSPACE_ROOT = "/workspace";
 const CONTAINER_RUNTIME_HOME = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".code-ux-home");
@@ -44,16 +47,6 @@ const enabledCustomServersFor = (servers: CustomMcpServer[] | undefined, provide
 const isOpenCodeNativeSessionId = (value: string | null | undefined): boolean => (
   typeof value === "string" && /^ses_[A-Za-z0-9]+$/.test(value)
 );
-
-export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
-
-export interface ProviderRunResult extends CommandResult {
-  usageTelemetry: ProviderUsageTelemetry;
-  nativeSessionId: string | null;
-  text?: string;
-}
-
-export type CliProviderId = Extract<ProviderId, "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity">;
 
 export const providerSpecs: Record<CliProviderId, ProviderCommandSpec> = {
   "gemini": (model: string, prompt: string) => ({
@@ -111,53 +104,6 @@ interface QwenRuntimeSettings {
   qwenAdditionalModelProviders?: QwenModelProviderSettings[];
 }
 
-export interface ProviderRunInput {
-  provider: CliProviderId;
-  prompt: string;
-  cwd: string;
-  model: string;
-  apiKey: string;
-  qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
-  qwenRegion?: "china" | "international";
-  qwenBaseUrl?: string;
-  qwenEnvKey?: string;
-  qwenModelId?: string;
-  qwenProtocol?: "openai" | "anthropic" | "gemini";
-  qwenAdditionalModelProviders?: QwenModelProviderSettings[];
-  openCodeAuthMode?: "LOCAL_AUTH" | "ENV_KEY" | "CUSTOM_PROVIDER";
-  openCodeProviderId?: string;
-  openCodeModelId?: string;
-  openCodeBaseUrl?: string;
-  openCodeEnvKey?: string;
-  openCodePackage?: string;
-  providerMountAuth?: boolean;
-  providerAuthPath?: string;
-  /** Override the default API endpoint for providers that support it.
-   *  Sets ANTHROPIC_BASE_URL (claude-code) or OPENAI_BASE_URL (codex). */
-  customBaseUrl?: string;
-  /** Override the model identifier sent to the CLI for providers that support a custom
-   *  base URL (claude-code, codex). Used when routing through a gateway such as OpenRouter
-   *  whose model slugs differ from the built-in preset names. */
-  customModel?: string;
-  sessionId: string;
-  workspaceSessionId?: string;
-  workflowSettings: CliWorkflowSettings;
-  repoPath: string;
-  githubToken?: string;
-  gitlabToken?: string;
-  signal?: AbortSignal;
-  onActivity: (desc: string, originator?: string) => void;
-  onTelemetry?: (telemetry: ProviderUsageTelemetry) => void;
-  /** Pass a previous nativeSessionId to continue an existing CLI session.
-   *  Claude Code: uses --resume. Gemini: adds --resume. Codex: uses exec resume --last.
-   *  Qwen Code uses project-scoped --continue because Code UX logical ids are not Qwen saved-session ids. */
-  continueSessionId?: string | null;
-  /** MCP server connection info for injecting management tools into the CLI provider. */
-  mcpConnection?: McpConnectionInfo | null;
-  /** User-defined custom MCP servers injected into the CLI provider alongside code_ux. */
-  customMcpServers?: CustomMcpServer[];
-}
-
 export interface IProviderRunner {
   runProvider(input: ProviderRunInput): Promise<ProviderRunResult>;
   runProviderForText(input: ProviderRunInput): Promise<ProviderRunResult & { text: string }>;
@@ -167,105 +113,34 @@ export class ProviderRunner implements IProviderRunner {
   constructor(private readonly dockerRunner: IDockerRunner) { }
 
   async runProvider(input: ProviderRunInput): Promise<ProviderRunResult> {
-    const preserveSessionWorkspace = this.shouldPreserveSessionWorkspace(input);
-    const prepared = input.workflowSettings.executionMode === "DOCKER"
-      ? await this.dockerRunner.ensureWorkspace({
-        cwd: input.cwd,
-        repoPath: input.repoPath,
-        sessionId: input.workspaceSessionId || input.sessionId,
-        preserve: preserveSessionWorkspace,
-        reuseExisting: preserveSessionWorkspace,
-      })
-      : { cwd: input.cwd, cleanup: async () => undefined };
-
-    const outputPath = this.resolveCodexOutputPath(input);
-
-    if (outputPath && !outputPath.startsWith("/workspace/")) {
-      await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    }
-
-    try {
+    return await runProviderWithLifecycle(input, this.dockerRunner, async (prepared) => {
       return await this.runProviderInternal({
         ...input,
         cwd: prepared.cwd,
-        codexOutputPath: outputPath,
+        codexOutputPath: prepared.codexOutputPath,
       });
-    } finally {
-      await prepared.cleanup();
-      await this.cleanupCodexOutputPath(outputPath, input.workflowSettings.executionMode, prepared.cwd);
-    }
+    });
   }
 
   async runProviderForText(input: ProviderRunInput): Promise<ProviderRunResult & { text: string }> {
-    const preserveSessionWorkspace = this.shouldPreserveSessionWorkspace(input);
-    const prepared = input.workflowSettings.executionMode === "DOCKER"
-      ? await this.dockerRunner.ensureWorkspace({
-        cwd: input.cwd,
-        repoPath: input.repoPath,
-        sessionId: input.workspaceSessionId || input.sessionId,
-        preserve: preserveSessionWorkspace,
-        reuseExisting: preserveSessionWorkspace,
-      })
-      : { cwd: input.cwd, cleanup: async () => undefined };
-
-    const outputPath = this.resolveCodexOutputPath(input);
-
-    if (outputPath && !outputPath.startsWith("/workspace/")) {
-      await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    }
-
-    try {
+    return await runProviderWithLifecycle(input, this.dockerRunner, async (prepared) => {
       const result = await this.runProviderInternal({
         ...input,
         cwd: prepared.cwd,
-        codexOutputPath: outputPath,
+        codexOutputPath: prepared.codexOutputPath,
       });
 
-      const capturedText = outputPath
-        ? outputPath.startsWith("/workspace/")
-          ? ((await this.dockerRunner.readWorkspaceFile?.(prepared.cwd, outputPath).catch(() => null)) || "").trim()
-          : (await fs.readFile(outputPath, "utf8").catch(() => "")).trim()
+      const capturedText = prepared.codexOutputPath
+        ? prepared.codexOutputPath.startsWith("/workspace/")
+          ? ((await this.dockerRunner.readWorkspaceFile?.(prepared.cwd, prepared.codexOutputPath).catch(() => null)) || "").trim()
+          : (await fs.readFile(prepared.codexOutputPath, "utf8").catch(() => "")).trim()
         : "";
 
       return {
         ...result,
         text: sanitizeInvocationOutputText(capturedText || result.usageTelemetry.transcriptText || result.stdout || result.stderr),
       };
-    } finally {
-      await prepared.cleanup();
-      await this.cleanupCodexOutputPath(outputPath, input.workflowSettings.executionMode, prepared.cwd);
-    }
-  }
-
-  private resolveCodexOutputPath(input: ProviderRunInput): string | null {
-    if (input.provider !== "codex") {
-      return null;
-    }
-    return input.workflowSettings.executionMode === "DOCKER"
-      ? pathPosix.join("/workspace", `provider-last-message-${input.sessionId}.txt`)
-      : path.join(os.tmpdir(), `provider-last-message-${input.sessionId}.txt`);
-  }
-
-  private shouldPreserveSessionWorkspace(input: ProviderRunInput): boolean {
-    return input.workflowSettings.executionMode === "DOCKER"
-      && !input.cwd.startsWith("docker-volume://");
-  }
-
-  private async cleanupCodexOutputPath(
-    outputPath: string | null,
-    executionMode: CliWorkflowSettings["executionMode"],
-    preparedCwd: string,
-  ): Promise<void> {
-    if (!outputPath) {
-      return;
-    }
-    if (executionMode === "DOCKER") {
-      if (this.dockerRunner.removeWorkspaceDir) {
-        await this.dockerRunner.removeWorkspaceDir(preparedCwd, outputPath).catch(() => undefined);
-      }
-    } else {
-      await fs.rm(outputPath, { force: true }).catch(() => undefined);
-    }
+    });
   }
 
   private async runProviderInternal(input: {
