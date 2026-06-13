@@ -1264,6 +1264,28 @@ export class ExecutionRepository {
       return new Map();
     }
 
+    if (sprintRunId) {
+      const rows = this.storage.executeChunkedInQuery<TaskRunRow>({
+        sqlPrefix: `SELECT *
+        FROM task_runs
+        WHERE task_id`,
+        sqlSuffix: `AND (sprint_run_id = ? OR sprint_run_id IS NULL)
+        ORDER BY task_id ASC,
+          CASE WHEN sprint_run_id = ? THEN 0 ELSE 1 END ASC,
+          rowid DESC`,
+        items: uniqueTaskIds,
+        bindParamsAfter: [sprintRunId, sprintRunId],
+      });
+
+      const map = new Map<string, TaskRunRecord>();
+      for (const row of rows) {
+        if (!map.has(row.task_id)) {
+          map.set(row.task_id, this.mapTaskRunRow(row));
+        }
+      }
+      return map;
+    }
+
     const runClause = sprintRunId ? "AND sprint_run_id = ?" : "";
     const rows = this.storage.executeChunkedInQuery<TaskRunRow>({
       sqlPrefix: `SELECT tr.*
@@ -1277,7 +1299,7 @@ export class ExecutionRepository {
       ) latest ON latest.latest_rowid = tr.rowid
       ORDER BY tr.rowid DESC`,
       items: uniqueTaskIds,
-      bindParamsAfter: sprintRunId ? [sprintRunId] : [],
+      bindParamsAfter: [],
     });
 
     const map = new Map<string, TaskRunRecord>();

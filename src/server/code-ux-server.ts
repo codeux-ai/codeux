@@ -882,6 +882,7 @@ export class CodeUxServer {
         featureBranch: args.featureBranch,
         defaultBranch: args.defaultBranch,
         featureBranchPrefix: args.featureBranchPrefix,
+        taskPrUrls: args.taskPrUrls,
       };
       return typeof args.cacheTtlMs === "number"
         ? await gitStatusService.getStatus(

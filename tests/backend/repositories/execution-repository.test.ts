@@ -113,6 +113,85 @@ describe("ExecutionRepository", () => {
     });
   });
 
+  it("falls back to unscoped task runs when listing latest runs for a sprint run", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Task Run Fallback Project",
+      sourceType: "local",
+      sourceRef: "/workspace/task-run-fallback",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship",
+      status: "running",
+    });
+    const taskWithOnlyUnscopedRun = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Unscoped run task",
+      promptMarkdown: "Do work",
+      status: "coding_completed",
+      isIndependent: true,
+    });
+    const taskWithScopedRun = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T2",
+      title: "Scoped run task",
+      promptMarkdown: "Do work",
+      status: "coding_completed",
+      isIndependent: true,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+
+    const unscopedOnly = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: taskWithOnlyUnscopedRun.id,
+      sprintRunId: null,
+      provider: "jules",
+      mode: "jules",
+      state: "COMPLETED",
+      workerBranch: "worker/T1",
+      prUrl: "https://example.com/pr/1",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: taskWithScopedRun.id,
+      sprintRunId: null,
+      provider: "jules",
+      mode: "jules",
+      state: "COMPLETED",
+      workerBranch: "worker/T2-unscoped",
+      prUrl: "https://example.com/pr/2-unscoped",
+    });
+    const scoped = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: taskWithScopedRun.id,
+      sprintRunId: sprintRun.id,
+      provider: "jules",
+      mode: "jules",
+      state: "COMPLETED",
+      workerBranch: "worker/T2-scoped",
+      prUrl: "https://example.com/pr/2-scoped",
+    });
+
+    const latestRuns = executionRepository.listLatestTaskRuns(
+      [taskWithOnlyUnscopedRun.id, taskWithScopedRun.id],
+      sprintRun.id,
+    );
+
+    expect(latestRuns.get(taskWithOnlyUnscopedRun.id)?.id).toBe(unscopedOnly.id);
+    expect(latestRuns.get(taskWithOnlyUnscopedRun.id)?.workerBranch).toBe("worker/T1");
+    expect(latestRuns.get(taskWithScopedRun.id)?.id).toBe(scoped.id);
+    expect(latestRuns.get(taskWithScopedRun.id)?.workerBranch).toBe("worker/T2-scoped");
+  });
+
   it("skips resource validation when skipValidation flag is true", async () => {
     const { executionRepository, projectRepository } = await createRepositories();
 

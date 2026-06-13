@@ -21,8 +21,12 @@ export function evaluateMergeReadiness(
   const hasPendingChecks = waitForFeatureCi
     ? checks.length === 0 || checks.some((check) => isCiPending(check.status ?? "", check.conclusion ?? ""))
     : false;
+  const normalizedReviewDecision = (reviewDecision || "").trim().toUpperCase();
+  // GitHub's PR comment count includes non-review chatter such as Jules' own intro comment.
+  // Treat comments as blockers only when GitHub has already established an approved review state.
   const hasReviewBlockers = resolveAllCommentsBeforeFeatureMerge
-    ? reviewDecision === "CHANGES_REQUESTED" || comments > 0
+    ? normalizedReviewDecision === "CHANGES_REQUESTED"
+      || (normalizedReviewDecision === "APPROVED" && comments > 0)
     : false;
 
   const isMergeReady = !hasFailedChecks && !hasPendingChecks && !hasReviewBlockers;

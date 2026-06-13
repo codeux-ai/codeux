@@ -13,6 +13,7 @@ export interface GitTrackingRequest {
   featureBranch?: string | null;
   defaultBranch?: string | null;
   featureBranchPrefix?: string | null;
+  taskPrUrls?: string[];
 }
 
 export const isFailedConclusion = (value: string | null): boolean => {
@@ -70,11 +71,16 @@ export const filterOpenPrs = (prs: GitPullRequestStatus[], tracking?: GitTrackin
 
   const featureBranch = normalizeBranch(tracking.featureBranch);
   const defaultBranch = normalizeBranch(tracking.defaultBranch);
+  const taskPrUrls = new Set(
+    (tracking.taskPrUrls || [])
+      .map((url) => url.trim())
+      .filter(Boolean)
+  );
 
   switch (tracking.scope) {
     case "FEATURE_PR_CI":
       return featureBranch
-        ? prs.filter((pr) => normalizeBranch(pr.baseRefName) === featureBranch)
+        ? prs.filter((pr) => normalizeBranch(pr.baseRefName) === featureBranch || taskPrUrls.has(pr.url.trim()))
         : prs;
     case "MAIN_MERGE_PR_CI":
       if (!featureBranch || !defaultBranch) {

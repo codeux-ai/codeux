@@ -98,6 +98,10 @@ Recovery guarantees:
 
 - task QA no longer depends only on catching a single in-cycle transition edge; if a task is already code-complete and still has no successful QA run, Code UX will enqueue the missing review on the next orchestration cycle instead of leaving the task parked in `QA_PENDING`
 - if a QA run row is left behind in `running` state after its backing execution invocation has already finished, Code UX now automatically converts that stale row into a retryable failed run so the gate can recover instead of blocking indefinitely
+- before task QA starts, Code UX polls feature PR status with any task-level PR URLs already recorded by Jules. This lets orchestration recover the PR head branch even when the Jules PR base branch has drifted from the currently configured sprint feature branch.
+- if a prior QA run requested changes and a later Jules or CLI task run completed after that QA result, Code UX treats the later completion as meaningful work and reruns task QA on the next orchestration cycle even when the task was already persisted as `coding_completed`.
+- sprint-scoped task loading falls back to the latest unscoped task run when no task run exists for the active sprint run. This keeps continued Jules sessions visible to QA and merge gates after restarts or follow-up messages.
+- remote branch refreshes for task QA are serialized per repository, preventing parallel QA checks from racing while creating local tracking branches and failing on `.git/config` locks.
 
 Run budgeting:
 
@@ -106,7 +110,8 @@ Run budgeting:
 - `maxTaskReviewRuns = 1` means only the initial task review runs; QA does not re-check later fixes
 - `maxTaskReviewRuns = 2` means the initial task review plus one QA re-check after fixes
 - `maxTaskReviewRuns = N` means the initial task review plus up to `N - 1` QA re-checks for later fix iterations
-- if QA still has not produced a green light after that cap, Code UX stops holding the merge on QA alone and treats the retry budget as exhausted
+- if QA has failed at the cap without an explicit `changes_requested` verdict, Code UX treats the retry budget as exhausted
+- if the latest QA verdict is `changes_requested`, Code UX keeps the merge blocked even at the retry cap and continues the task session when possible
 - a passing task QA result is final for that completion state and is not retriggered just because orchestration loops again
 - task-level QA runs are now surfaced in task list records and live runtime snapshots. The Tasks page and Live page both show a compact QA badge, including a spinner state while the latest task QA run is still `running`.
 

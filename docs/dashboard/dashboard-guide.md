@@ -608,6 +608,7 @@ Effect:
 - Tasks that are still waiting on feature-PR CI now persist as `in_progress` in the dashboard task store instead of staying marked `completed` just because the provider session finished.
 - Feature PRs already in GitHub `DIRTY` merge state are surfaced as merge conflicts before any CI wait, so branch-protection deadlocks do not leave the task stuck in perpetual pending-check state.
 - If a matched feature PR has no checks, Code UX now consults local workflow definitions and only keeps waiting when a `pull_request` or `pull_request_target` workflow actually applies to that PR base branch; otherwise the task skips CI waiting and proceeds to merge readiness/review gating.
+- Feature PR review gates ignore incidental comment counts when GitHub has no review decision, so Jules bot introduction comments do not appear as actionable review blockers.
 - CI Runs in `Feature PR CI` tracking include recent runs from PR head branches targeting the feature implementation branch (plus feature branch runs), sorted newest-first; the panel shows the latest 5.
 - Failed CI runs in tracking are enriched with failed job details and failed-job log excerpts (bounded) from Git host API/CLI data.
 - Main merge stage (`feature -> main`) now emits live CI/review gate feedback with failed check names and ready-to-run `gh` commands.
@@ -640,7 +641,7 @@ Use case:
 - Tracking scope is dynamic and shown in panel metadata:
   - `Feature PR CI` while sprint tasks are actively running and `featurePrAutoMergeMode = WHEN_GREEN`.
   - `Main Branch CI` outside active running-task windows (including final merge stage).
-- PR comment counters are sourced from GitHub `comments` payloads in both object and numeric shapes.
+- PR comment counters are sourced from GitHub `comments` payloads in both object and numeric shapes. Feature PR merge readiness does not treat that counter alone as a blocker when GitHub reports no review decision.
 - Recent merges list includes all fetched merges into feature-prefixed branches and the default branch.
 
 ## No-Key Startup Mode

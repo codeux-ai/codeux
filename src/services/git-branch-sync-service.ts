@@ -15,6 +15,7 @@ export interface GitBranchSyncOptions extends GitHttpAuthOptions {
 }
 
 const DEFAULT_FETCH_TIMEOUT_MS = 120_000;
+const repoSyncLocks = new Map<string, Promise<void>>();
 
 const getDefaultFetchTimeoutMs = (): number => {
   const raw = process.env.CODE_UX_GIT_FETCH_TIMEOUT_MS?.trim();
@@ -125,6 +126,28 @@ export async function fetchOriginIfAvailable(
 }
 
 export async function syncRemoteBranchIfAvailable(
+  repoPath: string,
+  branch: string | undefined,
+  runnerOrOptions?: GitBranchSyncRunner | GitBranchSyncOptions,
+): Promise<boolean> {
+  const previousLock = repoSyncLocks.get(repoPath) || Promise.resolve();
+  let releaseLock!: () => void;
+  const currentLock = previousLock.then(() => new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  }));
+  repoSyncLocks.set(repoPath, currentLock);
+  await previousLock;
+  try {
+    return await syncRemoteBranchIfAvailableUnlocked(repoPath, branch, runnerOrOptions);
+  } finally {
+    releaseLock();
+    if (repoSyncLocks.get(repoPath) === currentLock) {
+      repoSyncLocks.delete(repoPath);
+    }
+  }
+}
+
+async function syncRemoteBranchIfAvailableUnlocked(
   repoPath: string,
   branch: string | undefined,
   runnerOrOptions?: GitBranchSyncRunner | GitBranchSyncOptions,
