@@ -166,7 +166,19 @@ The QA provider is prompted to return JSON only with:
 
 That contract keeps the follow-up automation deterministic instead of scraping prose heuristically.
 
-QA agent responses are processed using the shared structured response helper (`StructuredProviderResponseService`). This ensures that if the agent returns malformed JSON or omits required fields, Code UX automatically triggers an in-session retry to correct the output shape before failing the review.
+### Result Normalization Boundary
+
+QA agent responses are processed using the `normalizeQaReviewResult` domain parser in `src/domain/qa-review/qa-review-result-normalizer.ts`. This parser acts as a deterministic boundary that:
+
+- Extracts JSON from raw provider text using shared LLM extraction logic.
+- Validates the presence and format of required fields (`verdict`, `summary`).
+- Coerces findings into a stable list of strings.
+- Normalizes `followUpTasks` with proper type coercion for priorities and task keys.
+- Provides a side-effect free, unit-tested interface for the `QualityAssuranceService`.
+
+This domain-level normalization ensures that the service layer focuses on orchestration and side effects (like repo writes or task reopening) while the parser guarantees the integrity of the review payload.
+
+QA agent responses are also processed using the shared structured response helper (`StructuredProviderResponseService`). This ensures that if the agent returns malformed JSON or omits required fields, Code UX automatically triggers an in-session retry to correct the output shape before failing the review.
 
 ## Gemini Workspace Trust
 
