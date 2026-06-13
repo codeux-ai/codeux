@@ -142,5 +142,40 @@ describe("ExecutionUsageAggregateQuery", () => {
       expect(mockStorage.executeChunkedInQuery).toHaveBeenCalled();
       expect(result.get("run-1")?.outputTokens).toBe(20);
     });
+
+    it("handles chunked ID lists by passing items to storage", () => {
+      const manyIds = Array.from({ length: 150 }, (_, i) => `task-${i}`);
+      mockStorage.executeChunkedInQuery.mockReturnValue([
+        { task_id: "task-0", invocationCount: 1 },
+        { task_id: "task-149", invocationCount: 1 }
+      ]);
+
+      const result = getUsageTotalsByTaskIds(mockStorage, "proj-1", manyIds);
+      
+      expect(mockStorage.executeChunkedInQuery).toHaveBeenCalledWith(expect.objectContaining({
+        items: manyIds
+      }));
+      expect(result.has("task-0")).toBe(true);
+      expect(result.has("task-149")).toBe(true);
+    });
+
+    it("handles null token sums in results", () => {
+      mockStorage.executeChunkedInQuery.mockReturnValue([
+        { 
+          task_id: "task-null", 
+          invocationCount: 1, 
+          inputTokens: null, 
+          outputTokens: null,
+          totalTokens: null 
+        }
+      ]);
+
+      const result = getUsageTotalsByTaskIds(mockStorage, "proj-1", ["task-null"]);
+      const totals = result.get("task-null");
+      expect(totals?.inputTokens).toBe(0);
+      expect(totals?.outputTokens).toBe(0);
+      expect(totals?.totalTokens).toBe(0);
+    });
   });
 });
+

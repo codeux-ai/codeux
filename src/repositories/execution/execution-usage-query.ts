@@ -5,16 +5,12 @@ import { createEmptyUsageTotals } from "./stats-buckets.js";
 import {
   mapUsageRowToTotals as mapRowToTotals,
   mergeUsageTotals as mergeAggregatedUsage,
-  USAGE_AGGREGATION_FIELDS_SQL,
+  getUsageTotalsByTaskIds as getUsageByTaskIds,
+  getUsageTotalsBySprintRunIds as getUsageBySprintRunIds,
   UsageRowRaw
 } from "./execution-usage-aggregate-query.js";
 
 export { UsageRowRaw };
-
-export const USAGE_AGGREGATION_SQL = `SELECT
-      %ID_COLUMN%,
-      ${USAGE_AGGREGATION_FIELDS_SQL}
-    FROM provider_invocations WHERE project_id = ? AND %ID_COLUMN%`;
 
 export function mapUsageRowToTotals(row: any): ExecutionUsageTotals {
   return mapRowToTotals(row);
@@ -79,24 +75,7 @@ export function getUsageTotalsByTaskIds(
   projectId: string,
   taskIds: string[],
 ): Map<string, ExecutionUsageTotals> {
-  if (taskIds.length === 0) {
-    return new Map();
-  }
-  const rows = storage.executeChunkedInQuery<any>({
-    sqlPrefix: USAGE_AGGREGATION_SQL.replace(/%ID_COLUMN%/g, 'task_id'),
-    sqlSuffix: "GROUP BY task_id",
-    items: taskIds,
-    bindParamsBefore: [projectId],
-  });
-
-  const map = new Map<string, ExecutionUsageTotals>();
-  for (const row of rows) {
-    const key = row.task_id || row.sprint_run_id;
-    if (key) {
-      map.set(key, mapUsageRowToTotals(row));
-    }
-  }
-  return map;
+  return getUsageByTaskIds(storage, projectId, taskIds);
 }
 
 export function getUsageTotalsBySprintRunIds(
@@ -104,22 +83,6 @@ export function getUsageTotalsBySprintRunIds(
   projectId: string,
   sprintRunIds: string[],
 ): Map<string, ExecutionUsageTotals> {
-  if (sprintRunIds.length === 0) {
-    return new Map();
-  }
-  const rows = storage.executeChunkedInQuery<any>({
-    sqlPrefix: USAGE_AGGREGATION_SQL.replace(/%ID_COLUMN%/g, 'sprint_run_id'),
-    sqlSuffix: "GROUP BY sprint_run_id",
-    items: sprintRunIds,
-    bindParamsBefore: [projectId],
-  });
-
-  const map = new Map<string, ExecutionUsageTotals>();
-  for (const row of rows) {
-    const key = row.task_id || row.sprint_run_id;
-    if (key) {
-      map.set(key, mapUsageRowToTotals(row));
-    }
-  }
-  return map;
+  return getUsageBySprintRunIds(storage, projectId, sprintRunIds);
 }
+
