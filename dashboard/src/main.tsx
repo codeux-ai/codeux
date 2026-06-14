@@ -171,9 +171,6 @@ const AppLayout = () => {
       {showSidebar && <Sidebar isMobile={isMobile} isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />}
 
       <div className="flex flex-col flex-1 h-full overflow-hidden relative">
-        <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:px-4 focus:py-2 focus:bg-white focus:text-slate-900 focus:font-bold focus:rounded-br-lg ">
-          Skip to main content
-        </a>
         {/*
           Keep the Suspense boundary permanently mounted and only toggle its
           child. Replacing the boundary with a plain <div> when a background

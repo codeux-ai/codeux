@@ -116,6 +116,12 @@ html.is-electron.is-fullscreen .app-shell {
     color: #33FFB8; /* signal.400 */
   }
 
+  :where(p, li, td, dd, blockquote, article, .prose) a[href] {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+
   button {
     @apply transition-all duration-200;
   }

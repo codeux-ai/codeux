@@ -9,19 +9,23 @@ interface InfoIconPopoverProps {
     className?: string;
     title?: string;
     items?: Array<{ key: string; desc: string }>;
+    label?: string;
 }
 
-export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ className = "", title = "Placeholders", items = [] }) => {
+export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ className = "", title = "Placeholders", items = [], label }) => {
     const [isVisible, setIsVisible] = useState(false);
     const [isRendered, setIsRendered] = useState(false);
 
-    const wrapperRef = useRef<HTMLDivElement>(null);
+    const wrapperRef = useRef<HTMLButtonElement>(null);
     const popoverRef = useRef<HTMLDivElement>(null);
+    const previousFocusRef = useRef<HTMLElement | null>(null);
     const hoverTimeout = useRef<number | null>(null);
     const leaveTimeout = useRef<number | null>(null);
 
     const [coords, setCoords] = useState({ top: 0, left: 0 });
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+    const hasInteractiveContent = items && items.length > 0;
 
     const handleMouseEnter = () => {
         if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
@@ -50,6 +54,9 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
         if (isVisible) {
             setIsVisible(false);
         } else {
+            if (hasInteractiveContent) {
+                previousFocusRef.current = document.activeElement as HTMLElement | null;
+            }
             setIsVisible(true);
             setIsRendered(true);
         }
@@ -97,6 +104,13 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
                 if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
                 if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
                 setIsVisible(false);
+                if (hasInteractiveContent) {
+                    if (wrapperRef.current) {
+                        wrapperRef.current.focus();
+                    } else if (previousFocusRef.current) {
+                        previousFocusRef.current.focus();
+                    }
+                }
             }
         };
 
@@ -112,25 +126,30 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
     }, [isVisible]);
 
     return (
-        <div
+        <button
+            type="button"
             ref={wrapperRef}
-            className={`inline-flex relative cursor-help ${className}`}
+            className={`inline-flex relative cursor-help text-left ${className}`}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
             onClick={handleClick}
             onFocusCapture={handleMouseEnter}
             onBlurCapture={handleMouseLeave}
-            aria-haspopup="dialog"
+            aria-label={label || "More information about this field"}
+            aria-haspopup={hasInteractiveContent ? "dialog" : "true"}
             aria-expanded={isVisible}
+            aria-describedby={!hasInteractiveContent && isVisible ? "info-popover-panel" : undefined}
         >
             <Info className="w-4 h-4 text-slate-400 hover:text-signal-500 transition-colors" strokeWidth={1.5} />
 
             {isRendered && createPortal(
                 <div
+                    id="info-popover-panel"
                     ref={popoverRef}
                     className="fixed z-[9999] p-4 bg-white/90 dark:bg-void-700/90 backdrop-blur-2xl rounded-xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] border border-black/[0.06] dark:border-white/[0.06] w-64"
                     style={{ top: coords.top, left: coords.left }}
-                    role="dialog"
+                    role={hasInteractiveContent ? "dialog" : "tooltip"}
+                    tabIndex={-1}
                     aria-label={title || "Information"}
                     onMouseEnter={handleMouseEnter}
                     onMouseLeave={handleMouseLeave}
@@ -165,6 +184,6 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
                 </div>,
                 document.body
             )}
-        </div>
+        </button>
     );
 };

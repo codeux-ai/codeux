@@ -234,7 +234,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                     <button
                         onClick={toggleMinimize}
                         className={`mt-2 relative flex items-center ${isMinimized ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-3 min-h-[44px] rounded-2xl transition-all duration-300 group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 bg-transparent border-0 cursor-pointer`}
-                        aria-label={isMinimized ? "Expand Sidebar" : "Minimize Sidebar"}
+                        aria-label={isMinimized ? "Expand sidebar" : "Collapse sidebar"}
                     >
                         <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100" />
                         {isMinimized ? (

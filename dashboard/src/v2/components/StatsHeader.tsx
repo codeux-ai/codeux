@@ -88,10 +88,10 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                         >
                             LIVE
                         </h2>
-                        <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] font-display relative z-10">
+                        <h2 className="text-5xl md:text-7xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] font-display relative z-10">
                             Sprint <br />
                             <span className="text-signal-500">Pipeline.</span>
-                        </h1>
+                        </h2>
                     </div>
 
                     <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
