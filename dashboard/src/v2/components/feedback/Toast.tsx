@@ -52,7 +52,6 @@ export const Toast: FunctionComponent<ToastProps> = ({
   const reducedMotion = useReducedMotion();
   const Icon = icons[type];
   const colorClass = colors[type];
-  const ariaLive = type === "error" ? "assertive" : "polite";
 
   useLayoutEffect(() => {
     if (!containerRef.current) return;
@@ -111,11 +110,9 @@ export const Toast: FunctionComponent<ToastProps> = ({
   return (
     <div
       ref={containerRef}
-      role="status"
-      aria-live={ariaLive}
       className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm p-4 rounded-xl shadow-lg border backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
     >
-      <Icon className="w-5 h-5 shrink-0 mt-0.5" />
+      <Icon aria-hidden="true" className="w-5 h-5 shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium leading-relaxed dark:text-slate-200">
           {message}
