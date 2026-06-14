@@ -163,6 +163,8 @@ The dashboard must show these states explicitly and must not invent fake precisi
 
 ## Dashboard API Surface
 
+Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets.
+
 Usage data now appears in two read models:
 
 - `GET /api/projects/:projectId/execution`
