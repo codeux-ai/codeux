@@ -45,7 +45,7 @@ test("MultiSelect removes last tag on backspace when input is empty", () => {
   const onChange = vi.fn();
   render(<MultiSelect value={["bug", "feature"]} onChange={onChange} />);
 
-  const input = screen.getByRole("textbox");
+  const input = screen.getByRole("combobox");
 
   // Backspace with empty input
   fireEvent.keyDown(input, { key: "Backspace" });
