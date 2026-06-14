@@ -17,8 +17,9 @@ export const cloneGuardrails = (guardrails: GuardrailSettings): GuardrailSetting
 
 export const cloneDefaultSettings = (): DashboardSettings => ({
   dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
-  enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
   consoleLogLevel: DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel,
+  debugLogFileLevel: DEFAULT_DASHBOARD_SETTINGS.debugLogFileLevel,
+  consoleLogMode: DEFAULT_DASHBOARD_SETTINGS.consoleLogMode,
   dbAutoVacuumOnStartup: DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup,
   dbPruningEnabled: DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled,
   dbRetentionDays: DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays,

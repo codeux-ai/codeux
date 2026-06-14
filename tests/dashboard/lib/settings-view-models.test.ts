@@ -188,7 +188,7 @@ describe("provider availability helpers", () => {
   };
 
   const mockSystemSettings: SystemSettings = {
-    runtime: { dashboardPort: 5173, enableDebugLogFile: false, consoleLogLevel: "standard" },
+    runtime: { dashboardPort: 5173, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
     integrations: {
       providers: {
         jules: { provider: "jules", name: "Jules Primary", apiKey: "", mountAuth: false, authPath: "" },

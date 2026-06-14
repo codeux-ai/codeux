@@ -1,7 +1,8 @@
 import * as fs from "fs";
+import * as path from "path";
 import { inspect } from "util";
 import { getCorrelationId } from "./correlation-id.js";
-import type { ConsoleLogLevel } from "../../contracts/app-types.js";
+import type { ConsoleLogMode, RuntimeLogLevel } from "../../contracts/app-types.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type LogPurpose =
@@ -34,8 +35,12 @@ export interface Logger {
 
 interface StructuredLoggerOptions {
   level?: LogLevel;
-  consoleLogLevel?: ConsoleLogLevel;
-  getConsoleLogLevel?: () => ConsoleLogLevel | undefined;
+  consoleLogLevel?: RuntimeLogLevel;
+  getConsoleLogLevel?: () => RuntimeLogLevel | undefined;
+  debugLogFileLevel?: RuntimeLogLevel;
+  getDebugLogFileLevel?: () => RuntimeLogLevel | undefined;
+  consoleLogMode?: ConsoleLogMode;
+  getConsoleLogMode?: () => ConsoleLogMode | undefined;
   environment?: "development" | "production";
   bindings?: LogMetadata;
   logFilePath?: string;
@@ -109,8 +114,16 @@ const normalizeLevel = (level: string | undefined): LogLevel => {
   return "info";
 };
 
-const normalizeConsoleLogLevel = (level: string | undefined): ConsoleLogLevel => {
-  return level?.toLowerCase() === "full" ? "full" : "standard";
+const normalizeRuntimeLogLevel = (level: string | undefined, fallback: RuntimeLogLevel): RuntimeLogLevel => {
+  const normalized = level?.toLowerCase();
+  if (normalized === "off" || normalized === "debug" || normalized === "info" || normalized === "warn" || normalized === "error") {
+    return normalized;
+  }
+  return fallback;
+};
+
+const normalizeConsoleLogMode = (mode: string | undefined): ConsoleLogMode => {
+  return mode?.toLowerCase() === "full" ? "full" : "standard";
 };
 
 const normalizePurpose = (purpose: unknown): LogPurpose | undefined => {
@@ -220,39 +233,53 @@ const serializeForColoredDevelopment = (record: StructuredLogRecord): string => 
 };
 
 export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
-  const minLevel = options.level ?? normalizeLevel(process.env.LOG_LEVEL);
-  const staticConsoleLogLevel = options.consoleLogLevel ?? normalizeConsoleLogLevel(process.env.CONSOLE_LOG_LEVEL);
+  const fallbackLogLevel = options.level ?? normalizeLevel(process.env.LOG_LEVEL);
+  const staticConsoleLogLevel = options.consoleLogLevel ?? fallbackLogLevel;
+  const staticDebugLogFileLevel = options.debugLogFileLevel ?? normalizeRuntimeLogLevel(process.env.DEBUG_LOG_FILE_LEVEL, "off");
+  const staticConsoleLogMode = options.consoleLogMode ?? normalizeConsoleLogMode(process.env.CONSOLE_LOG_MODE ?? process.env.CONSOLE_LOG_LEVEL);
   const getConsoleLogLevel = options.getConsoleLogLevel;
+  const getDebugLogFileLevel = options.getDebugLogFileLevel;
+  const getConsoleLogMode = options.getConsoleLogMode;
   const environment = options.environment ?? (process.env.NODE_ENV === "production" ? "production" : "development");
   const bindings = { ...(options.bindings || {}) };
   const logFilePath = options.logFilePath;
   const useColor = options.color ?? (Boolean(process.stderr.isTTY) && !process.env.NO_COLOR);
-  const logFileStream = logFilePath
-    ? (() => {
-        const existing = logFileStreams.get(logFilePath);
-        if (existing) {
-          return existing;
-        }
-        const stream = fs.createWriteStream(logFilePath, { flags: "a" });
-        stream.on("error", () => {
-          logFileStreams.delete(logFilePath);
-        });
-        logFileStreams.set(logFilePath, stream);
-        return stream;
-      })()
-    : null;
 
-  const shouldLogBySeverity = (level: LogLevel): boolean => LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minLevel];
-  const resolveConsoleLogLevel = (): ConsoleLogLevel => normalizeConsoleLogLevel(getConsoleLogLevel?.() ?? staticConsoleLogLevel);
+  const getLogFileStream = (): fs.WriteStream | null => {
+    if (!logFilePath) {
+      return null;
+    }
+    const existing = logFileStreams.get(logFilePath);
+    if (existing) {
+      return existing;
+    }
+    fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
+    const stream = fs.createWriteStream(logFilePath, { flags: "a" });
+    stream.on("error", () => {
+      logFileStreams.delete(logFilePath);
+    });
+    logFileStreams.set(logFilePath, stream);
+    return stream;
+  };
+
+  const shouldLogBySeverity = (level: LogLevel, minLevel: RuntimeLogLevel): boolean => (
+    minLevel !== "off" && LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minLevel]
+  );
+  const resolveConsoleLogLevel = (): RuntimeLogLevel => normalizeRuntimeLogLevel(getConsoleLogLevel?.(), staticConsoleLogLevel);
+  const resolveDebugLogFileLevel = (): RuntimeLogLevel => normalizeRuntimeLogLevel(getDebugLogFileLevel?.(), staticDebugLogFileLevel);
+  const resolveConsoleLogMode = (): ConsoleLogMode => normalizeConsoleLogMode(getConsoleLogMode?.() ?? staticConsoleLogMode);
   const shouldLogToConsole = (level: LogLevel, purpose: LogPurpose): boolean => {
-    if (!shouldLogBySeverity(level)) {
+    if (!shouldLogBySeverity(level, resolveConsoleLogLevel())) {
       return false;
     }
-    if (resolveConsoleLogLevel() === "full") {
+    if (resolveConsoleLogMode() === "full") {
       return true;
     }
     return purpose !== "request";
   };
+  const shouldLogToFile = (level: LogLevel): boolean => (
+    Boolean(logFilePath) && shouldLogBySeverity(level, resolveDebugLogFileLevel())
+  );
 
   const write = (level: LogLevel, purpose: LogPurpose, consoleText: string, fileText: string): void => {
     // In Node.js, console.info/log goes to stdout.
@@ -262,9 +289,9 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
       process.stderr.write(consoleText + "\n");
     }
 
-    if (logFileStream) {
+    if (shouldLogToFile(level)) {
       try {
-        logFileStream.write(fileText + "\n");
+        getLogFileStream()?.write(fileText + "\n");
       } catch {
         // Silently ignore log file write errors to avoid crashing
       }
@@ -272,13 +299,9 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
   };
 
   const log = (level: LogLevel, message: string, metadata?: LogMetadata): void => {
-    if (!shouldLogBySeverity(level)) {
-      return;
-    }
-
     const purpose = inferPurpose({ ...(bindings || {}), ...(metadata || {}) }, message);
     const willWriteToConsole = shouldLogToConsole(level, purpose);
-    const willWriteToFile = Boolean(logFileStream);
+    const willWriteToFile = shouldLogToFile(level);
     if (!willWriteToConsole && !willWriteToFile) {
       return;
     }
@@ -323,9 +346,13 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
     error: (message: string, metadata?: LogMetadata) => log("error", message, metadata),
     child: (childBindings: LogMetadata) =>
       createLogger({
-        level: minLevel,
+        level: fallbackLogLevel,
         consoleLogLevel: staticConsoleLogLevel,
         getConsoleLogLevel,
+        debugLogFileLevel: staticDebugLogFileLevel,
+        getDebugLogFileLevel,
+        consoleLogMode: staticConsoleLogMode,
+        getConsoleLogMode,
         environment,
         logFilePath,
         color: useColor,

@@ -7,7 +7,7 @@ import {
 } from "../../../src/server/dashboard-middleware.js";
 import { createLogger } from "../../../src/shared/logging/logger.js";
 
-const logger = createLogger({ consoleLogLevel: "standard" });
+const logger = createLogger({ consoleLogLevel: "info" });
 
 describe("dashboard JSON body parser", () => {
   it("parses API JSON bodies even when packaged clients send text/plain", async () => {

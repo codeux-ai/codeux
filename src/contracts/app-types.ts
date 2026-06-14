@@ -912,12 +912,14 @@ export interface CustomMcpServer {
   providers?: ProviderId[];
 }
 
-export type ConsoleLogLevel = "standard" | "full";
+export type RuntimeLogLevel = "off" | "debug" | "info" | "warn" | "error";
+export type ConsoleLogMode = "standard" | "full";
 
 export interface DashboardSettings {
   dashboardPort: number;
-  enableDebugLogFile: boolean;
-  consoleLogLevel: ConsoleLogLevel;
+  consoleLogLevel: RuntimeLogLevel;
+  debugLogFileLevel: RuntimeLogLevel;
+  consoleLogMode: ConsoleLogMode;
   dbAutoVacuumOnStartup: boolean;
   dbPruningEnabled: boolean;
   dbRetentionDays: number;

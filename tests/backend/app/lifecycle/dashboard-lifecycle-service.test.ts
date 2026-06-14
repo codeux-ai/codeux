@@ -37,8 +37,9 @@ describe("dashboard-lifecycle-service", () => {
         getSystemSettings: vi.fn().mockReturnValue({
           runtime: {
             dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
-            enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
-            consoleLogLevel: "standard",
+            consoleLogLevel: "info",
+            debugLogFileLevel: "error",
+            consoleLogMode: "standard",
           },
           integrations: {
             julesApiKey: "",
@@ -211,9 +212,7 @@ describe("dashboard-lifecycle-service", () => {
   });
 
   describe("reinitializeLogger", () => {
-    it("creates logger without logFilePath when enableDebugLogFile is false or undefined", () => {
-      mockDeps.runtimeContext.dashboardSettings!.enableDebugLogFile = false;
-
+    it("creates logger with independent runtime log selectors", () => {
       reinitializeLogger({
         projectRoot: mockDeps.projectRoot,
         runtimeContext: mockDeps.runtimeContext,
@@ -222,21 +221,8 @@ describe("dashboard-lifecycle-service", () => {
       expect(createLogger).toHaveBeenCalledWith({
         bindings: { service: "code-ux" },
         getConsoleLogLevel: expect.any(Function),
-        logFilePath: undefined,
-      });
-    });
-
-    it("creates logger with logFilePath when enableDebugLogFile is true", () => {
-      mockDeps.runtimeContext.dashboardSettings!.enableDebugLogFile = true;
-
-      reinitializeLogger({
-        projectRoot: mockDeps.projectRoot,
-        runtimeContext: mockDeps.runtimeContext,
-      });
-
-      expect(createLogger).toHaveBeenCalledWith({
-        bindings: { service: "code-ux" },
-        getConsoleLogLevel: expect.any(Function),
+        getDebugLogFileLevel: expect.any(Function),
+        getConsoleLogMode: expect.any(Function),
         logFilePath: path.join("/project-root", ".code-ux", "debug.log"),
       });
     });
@@ -271,8 +257,9 @@ describe("dashboard-lifecycle-service", () => {
         ...mockDeps.settingsRepository.getSystemSettings(),
         runtime: {
           dashboardPort: 4444,
-          enableDebugLogFile: true,
-          consoleLogLevel: "standard",
+          consoleLogLevel: "info",
+          debugLogFileLevel: "error",
+          consoleLogMode: "standard",
         },
       };
 

@@ -229,13 +229,17 @@ export class SettingsRepository {
     }
 
     try {
-      const legacySettings = JSON.parse(legacyPayload) as DashboardSettings;
+      const legacySettings = JSON.parse(legacyPayload) as DashboardSettings & {
+        enableDebugLogFile?: boolean;
+        consoleLogLevel?: unknown;
+      };
       const defaults = buildDefaultProjectSettings(this.externalHints);
       const systemSettings = sanitizeSystemSettings({
         runtime: {
           dashboardPort: legacySettings.dashboardPort,
-          enableDebugLogFile: legacySettings.enableDebugLogFile,
+          debugLogFileLevel: legacySettings.enableDebugLogFile ? "error" : "off",
           consoleLogLevel: legacySettings.consoleLogLevel,
+          consoleLogMode: legacySettings.consoleLogLevel,
         },
         integrations: {
           julesApiKey: legacySettings.aiProvider?.providers?.jules?.apiKey || "",

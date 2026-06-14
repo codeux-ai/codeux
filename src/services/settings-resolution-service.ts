@@ -1,9 +1,11 @@
 import type {
   BackgroundPattern,
+  ConsoleLogMode,
   CustomMcpServer,
   DashboardSettings,
   ExternalSettingsHints,
   McpToolToggle,
+  RuntimeLogLevel,
   SkillToggle,
 } from "../contracts/app-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
@@ -50,6 +52,18 @@ const BACKGROUND_PATTERNS = new Set<BackgroundPattern>([
   "WAVES",
   "NOISE",
 ]);
+
+const RUNTIME_LOG_LEVEL_SET = new Set<RuntimeLogLevel>(["off", "debug", "info", "warn", "error"]);
+
+const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): RuntimeLogLevel => (
+  typeof value === "string" && RUNTIME_LOG_LEVEL_SET.has(value as RuntimeLogLevel)
+    ? value as RuntimeLogLevel
+    : fallback
+);
+
+const readConsoleLogMode = (value: unknown, fallback: ConsoleLogMode): ConsoleLogMode => (
+  value === "full" ? "full" : fallback
+);
 
 const sanitizeBackgroundImage = (value: unknown): string | null => {
   if (typeof value !== "string") {
@@ -482,8 +496,9 @@ export function buildDefaultSystemSettings(externalHints?: ExternalSettingsHints
   return {
     runtime: {
       dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
-      enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
       consoleLogLevel: DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel,
+      debugLogFileLevel: DEFAULT_DASHBOARD_SETTINGS.debugLogFileLevel,
+      consoleLogMode: DEFAULT_DASHBOARD_SETTINGS.consoleLogMode,
       lastActiveScope: "system",
       dbAutoVacuumOnStartup: DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup,
       dbPruningEnabled: DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled,
@@ -634,12 +649,15 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   });
 
   const dashboardPort = typeof runtime.dashboardPort === "number" ? runtime.dashboardPort : defaults.runtime.dashboardPort;
-  const enableDebugLogFile = typeof runtime.enableDebugLogFile === "boolean"
-    ? runtime.enableDebugLogFile
-    : defaults.runtime.enableDebugLogFile;
-  const consoleLogLevel = runtime.consoleLogLevel === "full"
-    ? "full"
-    : defaults.runtime.consoleLogLevel;
+  const legacyConsoleLogMode = runtime.consoleLogLevel === "full" || runtime.consoleLogLevel === "standard"
+    ? runtime.consoleLogLevel
+    : undefined;
+  const legacyDebugLogFileLevel = Object.hasOwn(runtime, "enableDebugLogFile")
+    ? runtime.enableDebugLogFile === true ? defaults.runtime.debugLogFileLevel : "off"
+    : defaults.runtime.debugLogFileLevel;
+  const consoleLogLevel = readRuntimeLogLevel(runtime.consoleLogLevel, defaults.runtime.consoleLogLevel);
+  const debugLogFileLevel = readRuntimeLogLevel(runtime.debugLogFileLevel, legacyDebugLogFileLevel);
+  const consoleLogMode = readConsoleLogMode(runtime.consoleLogMode ?? legacyConsoleLogMode, defaults.runtime.consoleLogMode);
   const lastActiveScope = runtime.lastActiveScope === "project" ? "project" : "system";
   const dbAutoVacuumOnStartup = typeof runtime.dbAutoVacuumOnStartup === "boolean"
     ? runtime.dbAutoVacuumOnStartup
@@ -679,8 +697,9 @@ export function sanitizeSystemSettings(value: unknown, externalHints?: ExternalS
   return {
     runtime: {
       dashboardPort,
-      enableDebugLogFile,
       consoleLogLevel,
+      debugLogFileLevel,
+      consoleLogMode,
       lastActiveScope,
       dbAutoVacuumOnStartup,
       dbPruningEnabled,
@@ -765,8 +784,9 @@ export function resolveDashboardSettings(args: {
   const systemJira = args.systemSettings.integrations.jira ?? DEFAULT_DASHBOARD_SETTINGS.jira;
   const dashboardSettings: DashboardSettings = {
     dashboardPort: args.systemSettings.runtime.dashboardPort,
-    enableDebugLogFile: args.systemSettings.runtime.enableDebugLogFile,
     consoleLogLevel: args.systemSettings.runtime.consoleLogLevel,
+    debugLogFileLevel: args.systemSettings.runtime.debugLogFileLevel,
+    consoleLogMode: args.systemSettings.runtime.consoleLogMode,
     dbAutoVacuumOnStartup: args.systemSettings.runtime.dbAutoVacuumOnStartup,
     dbPruningEnabled: args.systemSettings.runtime.dbPruningEnabled,
     dbRetentionDays: args.systemSettings.runtime.dbRetentionDays,

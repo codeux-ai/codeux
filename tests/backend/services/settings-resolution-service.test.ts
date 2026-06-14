@@ -134,7 +134,7 @@ describe("Settings Resolution Service", () => {
     it("should return project settings as effective when no system settings override provided", () => {
       const baseProject = buildDefaultProjectSettings();
       const systemSettings: SystemSettings = {
-        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
         integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
         defaults: baseProject,
         mcpTools: [],
@@ -152,7 +152,7 @@ describe("Settings Resolution Service", () => {
       baseProject.appearance.backgroundImage = "https://example.com/background.png";
       baseProject.appearance.backgroundPattern = "HEXAGONS";
       const systemSettings: SystemSettings = {
-        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
         integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
         defaults: baseProject,
         mcpTools: [],
@@ -169,7 +169,7 @@ describe("Settings Resolution Service", () => {
     it("should include API key when system integration settings provide it", () => {
       const baseProject = buildDefaultProjectSettings();
       const systemSettings: SystemSettings = {
-        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
         integrations: { julesApiKey: "fake-jules-key", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "fake-github-token" },
         defaults: baseProject,
         mcpTools: [],
@@ -185,7 +185,7 @@ describe("Settings Resolution Service", () => {
     it("preserves explicit project overrides for CI, memory, and QA settings", () => {
       const baseProject = buildDefaultProjectSettings();
       const systemSettings: SystemSettings = {
-        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
         integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
         defaults: baseProject,
         mcpTools: [],
@@ -222,7 +222,7 @@ describe("Settings Resolution Service", () => {
     it("merges custom MCP servers and tool toggles across system and project scope", () => {
       const baseProject = buildDefaultProjectSettings();
       const systemSettings: SystemSettings = {
-        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
         integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
         defaults: baseProject,
         mcpTools: [],
@@ -256,7 +256,7 @@ describe("Settings Resolution Service", () => {
     it("should resolve project settings", () => {
       const baseProject = buildDefaultProjectSettings();
       const systemSettings: SystemSettings = {
-        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
         integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" } as any,
         defaults: baseProject,
         mcpTools: [],
@@ -269,7 +269,7 @@ describe("Settings Resolution Service", () => {
       const baseProject = buildDefaultProjectSettings();
       const customProviderId = "codex-custom-2";
       const systemSettings: SystemSettings = {
-        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
         integrations: {
           providers: {
             [customProviderId]: {
@@ -318,7 +318,7 @@ describe("Settings Resolution Service", () => {
     it("should resolve sprint settings", () => {
       const baseProject = buildDefaultProjectSettings();
       const systemSettings: SystemSettings = {
-        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
         integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
         defaults: baseProject,
         mcpTools: [],
@@ -336,7 +336,7 @@ describe("Settings Resolution Service", () => {
 
     beforeEach(() => {
       mockSystemSettings = {
-        runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
         integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
         defaults: buildDefaultProjectSettings(),
         mcpTools: [],

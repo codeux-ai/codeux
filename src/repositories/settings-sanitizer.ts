@@ -3,6 +3,8 @@ import type {
   DashboardSettings,
   ExternalSettingsHints,
   McpToolToggle,
+  RuntimeLogLevel,
+  ConsoleLogMode,
   SkillToggle,
 } from "../contracts/app-types.js";
 import { readBoolean, readPort, readString } from "../shared/config/value-readers.js";
@@ -41,6 +43,18 @@ const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" |
     return skill;
   });
 };
+
+const RUNTIME_LOG_LEVEL_SET = new Set<RuntimeLogLevel>(["off", "debug", "info", "warn", "error"]);
+
+const readRuntimeLogLevel = (value: unknown, fallback: RuntimeLogLevel): RuntimeLogLevel => (
+  typeof value === "string" && RUNTIME_LOG_LEVEL_SET.has(value as RuntimeLogLevel)
+    ? value as RuntimeLogLevel
+    : fallback
+);
+
+const readConsoleLogMode = (value: unknown, fallback: ConsoleLogMode): ConsoleLogMode => (
+  value === "full" ? "full" : fallback
+);
 
 const sanitizeSkills = (value: unknown): SkillToggle[] => {
   if (!Array.isArray(value)) return DEFAULT_SKILLS.map((skill) => ({ ...skill }));
@@ -163,8 +177,9 @@ const sanitizeAgentRouting = (value: unknown): DashboardSettings["agents"]["rout
 
 export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
   dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
-  enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
   consoleLogLevel: DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel,
+  debugLogFileLevel: DEFAULT_DASHBOARD_SETTINGS.debugLogFileLevel,
+  consoleLogMode: DEFAULT_DASHBOARD_SETTINGS.consoleLogMode,
   dbAutoVacuumOnStartup: DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup,
   dbPruningEnabled: DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled,
   dbRetentionDays: DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays,
@@ -233,10 +248,21 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
 });
 
 export const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints): DashboardSettings => {
-  const input = (value && typeof value === "object" ? value : {}) as Partial<DashboardSettings>;
+  const input = (value && typeof value === "object" ? value : {}) as Partial<DashboardSettings> & {
+    enableDebugLogFile?: unknown;
+    consoleLogMode?: unknown;
+  };
   const dashboardPort = readPort(input.dashboardPort, DEFAULT_DASHBOARD_SETTINGS.dashboardPort);
-  const enableDebugLogFile = readBoolean(input.enableDebugLogFile, DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile);
-  const consoleLogLevel = input.consoleLogLevel === "full" ? "full" : DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel;
+  const rawConsoleLogLevel = input.consoleLogLevel as unknown;
+  const legacyConsoleLogMode = rawConsoleLogLevel === "full" || rawConsoleLogLevel === "standard"
+    ? rawConsoleLogLevel
+    : undefined;
+  const legacyDebugLogFileLevel = Object.hasOwn(input, "enableDebugLogFile")
+    ? readBoolean(input.enableDebugLogFile, false) ? DEFAULT_DASHBOARD_SETTINGS.debugLogFileLevel : "off"
+    : DEFAULT_DASHBOARD_SETTINGS.debugLogFileLevel;
+  const consoleLogLevel = readRuntimeLogLevel(rawConsoleLogLevel, DEFAULT_DASHBOARD_SETTINGS.consoleLogLevel);
+  const debugLogFileLevel = readRuntimeLogLevel(input.debugLogFileLevel, legacyDebugLogFileLevel);
+  const consoleLogMode = readConsoleLogMode(input.consoleLogMode ?? legacyConsoleLogMode, DEFAULT_DASHBOARD_SETTINGS.consoleLogMode);
   const dbAutoVacuumOnStartup = readBoolean(input.dbAutoVacuumOnStartup, DEFAULT_DASHBOARD_SETTINGS.dbAutoVacuumOnStartup);
   const dbPruningEnabled = readBoolean(input.dbPruningEnabled, DEFAULT_DASHBOARD_SETTINGS.dbPruningEnabled);
   const dbRetentionDays = typeof input.dbRetentionDays === "number" ? input.dbRetentionDays : DEFAULT_DASHBOARD_SETTINGS.dbRetentionDays;
@@ -409,8 +435,9 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
 
   return {
     dashboardPort,
-    enableDebugLogFile,
     consoleLogLevel,
+    debugLogFileLevel,
+    consoleLogMode,
     dbAutoVacuumOnStartup,
     dbPruningEnabled,
     dbRetentionDays,

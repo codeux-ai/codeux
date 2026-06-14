@@ -64,8 +64,9 @@ describe("validateSettingsPayload", () => {
   it("reports section-level object and array validation failures", () => {
     const payload = {
       dashboardPort: 4444,
-      enableDebugLogFile: false,
-      consoleLogLevel: "standard",
+      consoleLogLevel: "info",
+      debugLogFileLevel: "error",
+      consoleLogMode: "standard",
       automationLevel: "FULL",
       automationInterventions: "invalid",
       aiProvider: "invalid",
@@ -98,8 +99,9 @@ describe("validateSettingsPayload", () => {
   it("reports detailed field validation failures across nested settings", () => {
     const payload = {
       dashboardPort: "bad",
-      enableDebugLogFile: "bad",
       consoleLogLevel: "bad",
+      debugLogFileLevel: "bad",
+      consoleLogMode: "bad",
       automationLevel: "INVALID",
       automationInterventions: {
         autoApprovePlan: "bad",
@@ -224,8 +226,9 @@ describe("validateSettingsPayload", () => {
 
     expect(result.success).toBe(false);
     expect(paths).toContain("dashboardPort");
-    expect(paths).toContain("enableDebugLogFile");
     expect(paths).toContain("consoleLogLevel");
+    expect(paths).toContain("debugLogFileLevel");
+    expect(paths).toContain("consoleLogMode");
     expect(paths).toContain("automationLevel");
     expect(paths).toContain("automationInterventions.autoApprovePlan");
     expect(paths).toContain("aiProvider.provider");

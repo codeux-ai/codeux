@@ -618,7 +618,12 @@ describe("dashboard project management API", () => {
     const systemSettingsResponse = await fetch(`${baseUrl}/api/system-settings`);
     expect(systemSettingsResponse.status).toBe(200);
     const initialSystemSettings = await systemSettingsResponse.json() as {
-      runtime: { dashboardPort: number; enableDebugLogFile: boolean; consoleLogLevel: "standard" | "full" };
+      runtime: {
+        dashboardPort: number;
+        consoleLogLevel: "off" | "debug" | "info" | "warn" | "error";
+        debugLogFileLevel: "off" | "debug" | "info" | "warn" | "error";
+        consoleLogMode: "standard" | "full";
+      };
       integrations: { githubToken: string };
       defaults: { git: { defaultBranch: string } };
     };
@@ -632,7 +637,7 @@ describe("dashboard project management API", () => {
         runtime: {
           ...initialSystemSettings.runtime,
           dashboardPort: 4555,
-          enableDebugLogFile: true,
+          debugLogFileLevel: "warn",
         },
         integrations: {
           ...initialSystemSettings.integrations,
@@ -671,7 +676,7 @@ describe("dashboard project management API", () => {
     const effectiveProjectSettings = await effectiveProjectSettingsResponse.json() as {
       settings: {
         dashboardPort: number;
-        enableDebugLogFile: boolean;
+        debugLogFileLevel: string;
         automationLevel: string;
         git: { defaultBranch: string; githubToken: string };
       };
@@ -679,7 +684,7 @@ describe("dashboard project management API", () => {
     };
     expect(effectiveProjectSettings.settings).toMatchObject({
       dashboardPort: 4555,
-      enableDebugLogFile: true,
+      debugLogFileLevel: "warn",
       automationLevel: "SEMI_AUTO",
       git: {
         defaultBranch: "develop",

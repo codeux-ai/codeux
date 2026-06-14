@@ -19,7 +19,8 @@ import type {
   SkillToggle,
   ThinkingMode,
   WorkerSettings,
-  ConsoleLogLevel,
+  ConsoleLogMode,
+  RuntimeLogLevel,
   JiraSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
@@ -86,8 +87,9 @@ export interface ProjectSettings {
 
 export interface SystemRuntimeSettings {
   dashboardPort: number;
-  enableDebugLogFile: boolean;
-  consoleLogLevel: ConsoleLogLevel;
+  consoleLogLevel: RuntimeLogLevel;
+  debugLogFileLevel: RuntimeLogLevel;
+  consoleLogMode: ConsoleLogMode;
   lastActiveScope?: "system" | "project";
   dbAutoVacuumOnStartup: boolean;
   dbPruningEnabled: boolean;

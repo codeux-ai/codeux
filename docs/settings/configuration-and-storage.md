@@ -87,8 +87,9 @@ Runtime resolution:
 `system_settings` fields:
 - `runtime`
   - `dashboardPort`
-  - `enableDebugLogFile`
-  - `consoleLogLevel` (`standard` by default; `full` also prints routine dashboard HTTP request logs)
+  - `consoleLogLevel` (`info` by default; one of `off`, `debug`, `info`, `warn`, `error`)
+  - `debugLogFileLevel` (`error` by default for `.code-ux/debug.log`; `off` disables file logging)
+  - `consoleLogMode` (`standard` by default; `full` also prints routine dashboard HTTP request logs)
   - `dbAutoVacuumOnStartup` (default `true`; executes SQL `VACUUM` on startup to reclaim disk space)
   - `dbPruningEnabled` (default `true`; enables automatic startup pruning of old data)
   - `dbRetentionDays` (default `14`; retention threshold in days for completed runs and logs)
@@ -133,7 +134,7 @@ System-level integrations are injected into effective dashboard settings at reso
     - **Connection-Lost Cleanup**: If a user closes the browser tab, the terminal modal, or suffers a network drop, the server monitors the WebSocket connection. If all client connections are lost, a **1-second grace period** timer triggers. If no client reconnects, the backend SIGKILLs the spawned container process and invokes `docker rm -f` to clean up resources immediately.
     - **Orphan Pruning on Startup**: When the backend restarts, any leftover login containers (identified by the `code-ux.login=true` label) are considered orphaned and forcefully terminated. Additionally, any unsaved temporary credentials directories (of the form `${providerId}-temp-${sessionId}` under the host's `~/.code-ux/credentials/` path) are fully wiped to ensure a clean slate.
 - `git.githubToken` and `git.gitlabToken` are system-scoped
-- runtime fields like `dashboardPort` and `enableDebugLogFile` are system-scoped
+- runtime fields like `dashboardPort`, `consoleLogLevel`, `debugLogFileLevel`, and `consoleLogMode` are system-scoped
 - project and sprint scopes still own `cliWorkflow.containerMountGithubAuth`, `cliWorkflow.containerGithubAuthPath`, `cliWorkflow.containerMountGitConfig`, `cliWorkflow.containerGitUserName`, and `cliWorkflow.containerGitUserEmail`
 
 Backend contract:

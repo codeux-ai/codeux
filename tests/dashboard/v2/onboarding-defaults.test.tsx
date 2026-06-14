@@ -90,7 +90,7 @@ describe("Onboarding automation defaults", () => {
     vi.clearAllMocks();
     const settings = JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS));
     vi.mocked(settingsApi.fetchSystemSettings).mockResolvedValue({
-      runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+      runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
       integrations: {
         providers: {
           jules: { provider: "jules", name: "Jules Primary", apiKey: "" },

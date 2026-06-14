@@ -134,14 +134,12 @@ export interface BootDashboardDeps {
 }
 
 export function reinitializeLogger(deps: { projectRoot: string, runtimeContext: RuntimeContext }): Logger {
-  const logFilePath = deps.runtimeContext.dashboardSettings?.enableDebugLogFile
-    ? getRepoDebugLogPath(deps.projectRoot)
-    : undefined;
-
   return createLogger({
     bindings: { service: CODE_UX_SERVICE_NAME },
     getConsoleLogLevel: () => deps.runtimeContext.dashboardSettings?.consoleLogLevel,
-    logFilePath,
+    getDebugLogFileLevel: () => deps.runtimeContext.dashboardSettings?.debugLogFileLevel,
+    getConsoleLogMode: () => deps.runtimeContext.dashboardSettings?.consoleLogMode,
+    logFilePath: getRepoDebugLogPath(deps.projectRoot),
   });
 }
 

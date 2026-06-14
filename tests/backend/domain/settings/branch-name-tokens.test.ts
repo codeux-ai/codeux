@@ -8,8 +8,9 @@ import { validateSettingsPayload } from "../../../../src/domain/settings/setting
 function makeBasePayload() {
   return {
     dashboardPort: 4444,
-    enableDebugLogFile: false,
-    consoleLogLevel: "standard",
+    consoleLogLevel: "info",
+    debugLogFileLevel: "error",
+    consoleLogMode: "standard",
     dbAutoVacuumOnStartup: true,
     dbPruningEnabled: true,
     dbRetentionDays: 14,

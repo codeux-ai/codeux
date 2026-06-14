@@ -11,8 +11,9 @@ const cloneSettings = (): SystemSettings => ({
   defaults: JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS)),
   runtime: {
     dashboardPort: 4444,
-    enableDebugLogFile: false,
-    consoleLogLevel: "standard",
+    consoleLogLevel: "info",
+    debugLogFileLevel: "error",
+    consoleLogMode: "standard",
   } as SystemSettings["runtime"],
   integrations: {
     providers: {

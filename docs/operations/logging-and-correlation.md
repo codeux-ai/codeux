@@ -13,10 +13,14 @@ This project now uses a shared structured logger and request correlation context
     - `NODE_ENV=production`: JSON log records.
     - other environments: colored human-readable single-line logs when stderr is a TTY.
   - Automatically includes active `correlationId` when available.
-  - Supports dashboard-controlled console verbosity:
+  - Supports separate dashboard-controlled severity thresholds for console and `.code-ux/debug.log`:
+    - `consoleLogLevel`: `off`, `debug`, `info`, `warn`, or `error`.
+    - `debugLogFileLevel`: `off`, `debug`, `info`, `warn`, or `error`.
+    - The debug log file defaults to `error`, so only error records are persisted unless the level is lowered or set to `off`.
+  - Supports dashboard-controlled console visibility:
     - `standard` is the default and keeps important lifecycle, orchestration, invocation, MCP, warning, and error logs visible.
     - `full` also prints routine dashboard HTTP request-completion logs.
-  - When the debug log file is enabled, records that pass severity filtering are still written to disk even if the console verbosity hides them.
+  - File output uses its own severity threshold and is not hidden by console visibility filtering.
 
 - `src/shared/logging/correlation-id.ts`
   - Correlation ID context backed by `AsyncLocalStorage`.
@@ -29,15 +33,19 @@ This project now uses a shared structured logger and request correlation context
 2. Incoming `x-correlation-id` is reused when present, otherwise a new ID is generated.
 3. Response always includes `x-correlation-id`.
 4. Request-completion logs are emitted through the shared logger and include the active correlation ID.
-5. Dashboard HTTP request logs are purpose-classified as `request`/`HTTP` and only print to the server console when Console Log Level is `full`.
+5. Dashboard HTTP request logs are purpose-classified as `request`/`HTTP` and only print to the server console when Console Visibility is `full`.
 
-## Console Log Level
+## Runtime Log Levels
 
-The Dashboard General settings page stores `runtime.consoleLogLevel` in system settings.
+The Dashboard General settings page stores separate system runtime settings for console and file logging.
 
-- `standard` is the default. It is intended for day-to-day server operation and keeps high-signal events visible, including provider invocation start/finish logs.
-- `full` enables request-level HTTP visibility for dashboard/API traffic in addition to standard logs.
-- `LOG_LEVEL` still controls severity (`debug`, `info`, `warn`, `error`); Console Log Level controls console purpose filtering.
+- `runtime.consoleLogLevel` controls the minimum severity printed to stderr. `info` is the default.
+- `runtime.debugLogFileLevel` controls the minimum severity written to `.code-ux/debug.log`. `error` is the default. `off` disables file logging.
+- `runtime.consoleLogMode` controls console purpose filtering:
+  - `standard` is the default. It is intended for day-to-day server operation and keeps high-signal events visible, including provider invocation start/finish logs.
+  - `full` enables request-level HTTP visibility for dashboard/API traffic in addition to standard logs.
+- `LOG_LEVEL` remains the environment fallback for console severity when a logger is created without an explicit console level.
+- `DEBUG_LOG_FILE_LEVEL` can provide a file severity fallback for standalone logger construction.
 
 ## MCP Correlation Flow
 

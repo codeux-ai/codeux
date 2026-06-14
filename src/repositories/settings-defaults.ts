@@ -51,7 +51,8 @@ export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["DOCKER", "HOST"];
 export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "CREATE_PR", "WHEN_GREEN", "ALWAYS"];
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["VIRTUAL"];
 export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity"];
-export const CONSOLE_LOG_LEVELS = ["standard", "full"] as const;
+export const RUNTIME_LOG_LEVELS = ["off", "debug", "info", "warn", "error"] as const;
+export const CONSOLE_LOG_MODES = ["standard", "full"] as const;
 export const DEFAULT_PROVIDER_CONFIG_IDS: Record<ProviderId, ProviderConfigId> = {
   jules: "jules",
   gemini: "gemini",
@@ -368,8 +369,9 @@ export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationR
 
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   dashboardPort: 4444,
-  enableDebugLogFile: false,
-  consoleLogLevel: "standard",
+  consoleLogLevel: "info",
+  debugLogFileLevel: "error",
+  consoleLogMode: "standard",
   dbAutoVacuumOnStartup: true,
   dbPruningEnabled: true,
   dbRetentionDays: 14,

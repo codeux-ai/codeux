@@ -125,7 +125,9 @@ Legacy runtime:
   - Resolves or dismisses an active attention item from the dashboard runtime surface
 - `GET /api/system-settings`
   - Persisted system-wide settings (`runtime`, `integrations`, `defaults`, `mcpTools`)
-  - `runtime.consoleLogLevel` controls server console verbosity:
+  - `runtime.consoleLogLevel` controls minimum server console severity (`off`, `debug`, `info`, `warn`, `error`).
+  - `runtime.debugLogFileLevel` controls minimum `.code-ux/debug.log` severity and defaults to `error`; `off` disables file logging.
+  - `runtime.consoleLogMode` controls server console visibility:
     - `standard` keeps important lifecycle, orchestration, MCP, invocation, warning, and error output visible.
     - `full` also prints routine dashboard HTTP request-completion logs.
 - `PUT /api/system-settings`

@@ -39,7 +39,7 @@ beforeEach(() => {
   mockSaveSystem = vi.spyOn(settingsApi, 'saveSystemSettings').mockResolvedValue({ defaults: cloneDashboardSettings(), runtime: {} } as any);
   mockSaveProject = vi.spyOn(settingsApi, 'saveProjectSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
   mockFetchSystem = vi.spyOn(settingsApi, 'fetchSystemSettings').mockResolvedValue({
-    runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+    runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
     integrations: {
       providers: {
         jules: { provider: "jules", name: "Jules Primary", apiKey: "" },
@@ -171,7 +171,7 @@ describe("useSettingsPageState", () => {
     dashboardSettings.aiProvider.providers.gemini.model = "gemini-2.5-pro";
 
     mockFetchSystem.mockResolvedValue({
-      runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+      runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
       integrations: {
         providers: {
           jules: { provider: "jules", name: "Jules Primary", apiKey: "" },
@@ -480,7 +480,7 @@ describe("useSettingsPageState", () => {
 
   it("saves from the modal and then completes the pending navigation", async () => {
     mockSaveSystem.mockResolvedValueOnce({
-      runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+      runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
       integrations: { providers: {}, githubToken: "" },
       defaults: cloneDashboardSettings(),
       mcpTools: [],

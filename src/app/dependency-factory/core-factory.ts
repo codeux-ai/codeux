@@ -120,14 +120,12 @@ export function createCoreDependencies(
     resolveEffectiveDashboardSettings(settingsRepository, projectId, sprintId).settings.workers.executionMode
   );
 
-  const logFilePath = dashboardSettings.enableDebugLogFile
-    ? getRepoDebugLogPath(options.projectRoot)
-    : undefined;
-
   const logger = createLogger({
     bindings: { service: CODE_UX_SERVICE_NAME },
     getConsoleLogLevel: () => context.runtimeContext.dashboardSettings?.consoleLogLevel,
-    logFilePath,
+    getDebugLogFileLevel: () => context.runtimeContext.dashboardSettings?.debugLogFileLevel,
+    getConsoleLogMode: () => context.runtimeContext.dashboardSettings?.consoleLogMode,
+    logFilePath: getRepoDebugLogPath(options.projectRoot),
   });
 
   const server = new Server(

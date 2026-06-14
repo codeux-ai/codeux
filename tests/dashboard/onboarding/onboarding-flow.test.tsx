@@ -103,8 +103,9 @@ describe("OnboardingExperience integration", () => {
     const systemSettings = {
       runtime: {
         dashboardPort: defaultSettings.dashboardPort,
-        enableDebugLogFile: defaultSettings.enableDebugLogFile,
         consoleLogLevel: defaultSettings.consoleLogLevel,
+        debugLogFileLevel: defaultSettings.debugLogFileLevel,
+        consoleLogMode: defaultSettings.consoleLogMode,
       },
       integrations: {
         julesApiKey: "",
@@ -167,8 +168,9 @@ describe("OnboardingExperience integration", () => {
     const systemSettings = {
       runtime: {
         dashboardPort: defaultSettings.dashboardPort,
-        enableDebugLogFile: defaultSettings.enableDebugLogFile,
         consoleLogLevel: defaultSettings.consoleLogLevel,
+        debugLogFileLevel: defaultSettings.debugLogFileLevel,
+        consoleLogMode: defaultSettings.consoleLogMode,
       },
       integrations: {
         julesApiKey: "",
@@ -215,8 +217,9 @@ describe("OnboardingExperience integration", () => {
     const systemSettings = {
       runtime: {
         dashboardPort: defaultSettings.dashboardPort,
-        enableDebugLogFile: defaultSettings.enableDebugLogFile,
         consoleLogLevel: defaultSettings.consoleLogLevel,
+        debugLogFileLevel: defaultSettings.debugLogFileLevel,
+        consoleLogMode: defaultSettings.consoleLogMode,
       },
       integrations: {
         julesApiKey: "",
@@ -275,7 +278,7 @@ describe("onboarding appearance step", () => {
     } as any;
 
     const mockSystemSettings = {
-      runtime: { dashboardPort: 4444, enableDebugLogFile: false, consoleLogLevel: "standard" },
+      runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
       integrations: {
         providers: {},
         githubToken: "",

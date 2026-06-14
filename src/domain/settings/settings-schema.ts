@@ -13,7 +13,8 @@ import type {
   WorkerExecutionMode,
   InvocationRoutingId,
   InvocationRoutingProfile,
-  ConsoleLogLevel,
+  ConsoleLogMode,
+  RuntimeLogLevel,
 } from "../../contracts/app-types.js";
 import { EMBEDDING_MODEL_IDS } from "../../contracts/memory-types.js";
 import type { EmbeddingModelId } from "../../contracts/memory-types.js";
@@ -27,7 +28,8 @@ import {
   WORKER_EXECUTION_MODES,
   INVOCATION_ROUTING_IDS,
   INVOCATION_ROUTING_PROFILES,
-  CONSOLE_LOG_LEVELS,
+  CONSOLE_LOG_MODES,
+  RUNTIME_LOG_LEVELS,
   GUARDRAIL_JOB_TYPES,
   GUARDRAIL_ON_LIMIT_ACTIONS,
 } from "../../repositories/settings-defaults.js";
@@ -667,12 +669,16 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
     issues.push({ path: "dashboardPort", message: "Expected a number" });
   }
 
-  if (typeof payload.enableDebugLogFile !== "boolean") {
-    issues.push({ path: "enableDebugLogFile", message: "Expected a boolean" });
+  if (typeof payload.consoleLogLevel !== "string" || !RUNTIME_LOG_LEVELS.includes(payload.consoleLogLevel as RuntimeLogLevel)) {
+    issues.push({ path: "consoleLogLevel", message: `Expected one of: ${RUNTIME_LOG_LEVELS.join(", ")}` });
   }
 
-  if (typeof payload.consoleLogLevel !== "string" || !CONSOLE_LOG_LEVELS.includes(payload.consoleLogLevel as ConsoleLogLevel)) {
-    issues.push({ path: "consoleLogLevel", message: `Expected one of: ${CONSOLE_LOG_LEVELS.join(", ")}` });
+  if (typeof payload.debugLogFileLevel !== "string" || !RUNTIME_LOG_LEVELS.includes(payload.debugLogFileLevel as RuntimeLogLevel)) {
+    issues.push({ path: "debugLogFileLevel", message: `Expected one of: ${RUNTIME_LOG_LEVELS.join(", ")}` });
+  }
+
+  if (typeof payload.consoleLogMode !== "string" || !CONSOLE_LOG_MODES.includes(payload.consoleLogMode as ConsoleLogMode)) {
+    issues.push({ path: "consoleLogMode", message: `Expected one of: ${CONSOLE_LOG_MODES.join(", ")}` });
   }
 
   if (typeof payload.dbAutoVacuumOnStartup !== "boolean") {

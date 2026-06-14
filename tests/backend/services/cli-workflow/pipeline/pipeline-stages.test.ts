@@ -99,7 +99,9 @@ const createMockContext = (): PipelineContext => {
         timeoutSeconds: 300,
       },
       dashboardPort: 3000,
-      enableDebugLogFile: false,
+      consoleLogLevel: "info",
+      debugLogFileLevel: "error",
+      consoleLogMode: "standard",
       automationLevel: "FULL",
       automationInterventions: {
         autoApprovePlan: true,

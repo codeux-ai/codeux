@@ -61,7 +61,7 @@ Checks:
   - direct attention-item realtime refresh
   - scope-aware websocket replay checks
 - If the live view updates task state but Git/CI panels lag, confirm `/api/git-status` is healthy; that surface is rate-limited to avoid external API spam, so it may trail runtime updates by a couple of seconds under heavy activity.
-- If the dashboard still degrades under load, inspect whether debug file logging is enabled; file logging now uses async streams, but sustained log volume is still a useful signal that a hot loop is too noisy.
+- If the dashboard still degrades under load, inspect `runtime.debugLogFileLevel`; file logging defaults to `error` and uses async streams, but sustained log volume is still a useful signal that a hot loop is too noisy.
 
 ### 2. No PR/CI data in remote mode
 Checks:

@@ -208,26 +208,52 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
                 max={65535}
               />
             </Row>
-            <Row label="Debug log file" description="Write extra runtime diagnostics to disk for development and incident analysis.">
-              <Toggle
-                value={systemSettings?.runtime.enableDebugLogFile ?? false}
-                onChange={() => updateSystem((current) => ({
-                  ...current,
-                  runtime: {
-                    ...current.runtime,
-                    enableDebugLogFile: !current.runtime.enableDebugLogFile,
-                  },
-                }))}
-              />
-            </Row>
-            <Row label="Console Log Level" description="Standard keeps important lifecycle and invocation logs visible. Full also prints routine dashboard HTTP requests." last>
+            <Row label="Console log level" description="Minimum severity printed to the server console. Off suppresses console logging.">
               <PillChoiceGroup
-                value={systemSettings?.runtime.consoleLogLevel ?? "standard"}
+                value={systemSettings?.runtime.consoleLogLevel ?? "info"}
                 onChange={(value) => updateSystem((current) => ({
                   ...current,
                   runtime: {
                     ...current.runtime,
-                    consoleLogLevel: value === "full" ? "full" : "standard",
+                    consoleLogLevel: value === "off" || value === "debug" || value === "warn" || value === "error" ? value : "info",
+                  },
+                }))}
+                options={[
+                  { value: "off", label: "Off", hint: "Suppress console output." },
+                  { value: "debug", label: "Debug", hint: "Everything." },
+                  { value: "info", label: "Info", hint: "Normal activity." },
+                  { value: "warn", label: "Warn", hint: "Warnings and errors." },
+                  { value: "error", label: "Error", hint: "Errors only." },
+                ]}
+              />
+            </Row>
+            <Row label="Debug file level" description="Minimum severity written to .code-ux/debug.log. Off disables file logging.">
+              <PillChoiceGroup
+                value={systemSettings?.runtime.debugLogFileLevel ?? "error"}
+                onChange={(value) => updateSystem((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    debugLogFileLevel: value === "debug" || value === "info" || value === "warn" || value === "off" ? value : "error",
+                  },
+                }))}
+                options={[
+                  { value: "off", label: "Off", hint: "Do not write the file." },
+                  { value: "debug", label: "Debug", hint: "Everything." },
+                  { value: "info", label: "Info", hint: "Normal activity." },
+                  { value: "warn", label: "Warn", hint: "Warnings and errors." },
+                  { value: "error", label: "Error", hint: "Default for debug.log." },
+                ]}
+              />
+            </Row>
+            <Row label="Console visibility" description="Standard hides routine dashboard HTTP request logs. Full includes them." last>
+              <PillChoiceGroup
+                value={systemSettings?.runtime.consoleLogMode ?? "standard"}
+                onChange={(value) => updateSystem((current) => ({
+                  ...current,
+                  runtime: {
+                    ...current.runtime,
+                    consoleLogMode: value === "full" ? "full" : "standard",
                   },
                 }))}
                 options={[
