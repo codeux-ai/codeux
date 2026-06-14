@@ -247,6 +247,7 @@ export class MemoryService {
     const minSim = query.minSimilarity ?? 0.3;
 
     for (const candidate of candidates) {
+      if (candidate.embeddingDimension !== dimension) continue;
       const vec = bufferToFloat32(candidate.embeddingBlob, candidate.embeddingDimension);
       const sim = cosineSimilarity(queryEmbedding, vec);
       if (sim >= minSim) {
