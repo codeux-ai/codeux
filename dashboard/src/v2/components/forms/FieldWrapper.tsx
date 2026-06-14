@@ -1,5 +1,5 @@
 import { h, ComponentChildren, VNode, cloneElement, isValidElement } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useState, useId } from "preact/hooks";
 import { FormError } from "./FormError";
 
 export interface FieldWrapperProps {
@@ -13,6 +13,8 @@ export interface FieldWrapperProps {
 export function FieldWrapper({ label, error, children, htmlFor, required }: FieldWrapperProps) {
   const [shake, setShake] = useState(false);
   const [previousError, setPreviousError] = useState<string | undefined>(undefined);
+  const generatedId = useId();
+  const inputId = htmlFor ?? generatedId;
 
   useEffect(() => {
     if (error && error !== previousError) {
@@ -27,17 +29,18 @@ export function FieldWrapper({ label, error, children, htmlFor, required }: Fiel
     }
   }, [error, previousError]);
 
-  const errorId = error ? `${htmlFor}-error` : undefined;
+  const errorId = error ? `${inputId}-error` : undefined;
 
   // Clone children to append aria attributes if valid
   const child = isValidElement(children) ? cloneElement(children as VNode<any>, {
+    id: inputId,
     "aria-invalid": !!error,
     ...(errorId ? { "aria-errormessage": errorId } : {}),
   }) : children;
 
   return (
     <div class="flex flex-col mb-4">
-      <label htmlFor={htmlFor} class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex gap-1">
+      <label htmlFor={inputId} class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex gap-1">
         {label}
         {required && <span class="text-status-red">*</span>}
       </label>
