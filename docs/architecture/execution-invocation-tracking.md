@@ -19,6 +19,8 @@ For supported models, tracking relies on provider-reported usage. For Jules inte
 ### `execution_invocation_messages`
 This table records each granular interaction loop in an invocation, preserving the exact sequence of \`system\`, \`user\`, \`assistant\`, and \`tool\` messages. It persists markdown content and parsed JSON arguments for tool calls, serving as a replayable log of an agent's reasoning process.
 
+Before being written to the database, provider-specific conversation turns are normalized and mapped into a standard message format within `src/services/provider-conversation-message-mapper.ts`. This ensures that specialized kinds like reasoning and tool interactions are mapped to correct unified schema values (e.g. keeping reasoning distinct without changing core DB schemas).
+
 Invocation persistence applies a narrow hygiene sanitizer for one known noisy bootstrap case: lines matching `fatal: your current branch 'code-ux-bootstrap-*' does not have any commits yet` are removed before chat-facing invocation message content is written. Other `fatal:` lines and unrelated stderr/stdout remain unchanged so real failures still surface.
 
 ## Chat Thread Usage
