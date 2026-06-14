@@ -55,6 +55,60 @@ describe("ProviderConcurrencyService", () => {
         vi.useRealTimers();
       }
     });
+
+    it("should throw timeout error if maxWaitMs is exceeded", async () => {
+      vi.useFakeTimers();
+      try {
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([{}, {}]); // 2 running, limit 2
+
+        const waitPromise = service.waitForSlot("jules", 2, undefined, 5000);
+        const assertion = expect(waitPromise).rejects.toThrow("Provider concurrency wait timed out after 5000ms");
+
+        await vi.advanceTimersByTimeAsync(5000);
+        await assertion;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should abort immediately with signal reason when aborted while waiting", async () => {
+      vi.useFakeTimers();
+      try {
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([{}, {}]); // 2 running, limit 2
+
+        const controller = new AbortController();
+        const customError = new Error("Custom abort");
+
+        const waitPromise = service.waitForSlot("jules", 2, controller.signal);
+        const assertion = expect(waitPromise).rejects.toThrow(customError);
+
+        // Let it start waiting
+        await vi.advanceTimersByTimeAsync(100);
+
+        controller.abort(customError);
+        await assertion;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should rate limit logs to once per 10 seconds", async () => {
+      vi.useFakeTimers();
+      try {
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([{}, {}]); // 2 running, limit 2
+
+        const waitPromise = service.waitForSlot("jules", 2, undefined, 25000); // wait for 25s
+        const assertion = expect(waitPromise).rejects.toThrow("Provider concurrency wait timed out");
+
+        await vi.advanceTimersByTimeAsync(25000);
+        await assertion;
+
+        // Check logs: initially at 0s, then at 10s, then at 20s = 3 logs
+        expect(logger.info).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe("waitForSlotAndClaim", () => {
@@ -119,6 +173,46 @@ describe("ProviderConcurrencyService", () => {
         expect(res1.id).toBe("inv-1");
         expect(res2.id).toBe("inv-2");
         expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should throw timeout error if maxWaitMs is exceeded", async () => {
+      vi.useFakeTimers();
+      try {
+        const input = { provider: "jules" } as any;
+        executionRepository.tryCreateProviderInvocationUsage.mockReturnValue(null);
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([{}, {}]); // 2 running
+
+        const waitPromise = service.waitForSlotAndClaim("jules", 2, input, undefined, 5000);
+        const assertion = expect(waitPromise).rejects.toThrow("Provider concurrency wait timed out after 5000ms");
+
+        await vi.advanceTimersByTimeAsync(5000);
+        await assertion;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should abort immediately with signal reason when aborted while waiting", async () => {
+      vi.useFakeTimers();
+      try {
+        const input = { provider: "jules" } as any;
+        executionRepository.tryCreateProviderInvocationUsage.mockReturnValue(null);
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([{}, {}]); // 2 running
+
+        const controller = new AbortController();
+        const customError = new Error("Custom abort");
+
+        const waitPromise = service.waitForSlotAndClaim("jules", 2, input, controller.signal);
+        const assertion = expect(waitPromise).rejects.toThrow(customError);
+
+        // Let it start waiting
+        await vi.advanceTimersByTimeAsync(100);
+
+        controller.abort(customError);
+        await assertion;
       } finally {
         vi.useRealTimers();
       }
