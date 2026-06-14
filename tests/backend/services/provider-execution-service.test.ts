@@ -45,8 +45,10 @@ describe("ProviderExecutionService", () => {
 
     executionRepository = {
       createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-1" }),
+      getExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-1", status: "running" }),
       appendExecutionInvocationMessage: vi.fn(),
       createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "prov-inv-1" }),
+      getProviderInvocationUsage: vi.fn().mockReturnValue({ id: "prov-inv-1", status: "running" }),
       updateProviderInvocationUsage: vi.fn(),
       updateExecutionInvocation: vi.fn(),
       appendTaskRunEvent: vi.fn(),
@@ -112,6 +114,43 @@ describe("ProviderExecutionService", () => {
     expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith(
       "exec-inv-1",
       expect.objectContaining({ status: "completed" })
+    );
+  });
+
+  it("does not rewrite provider usage after external recovery closes it", async () => {
+    executionRepository.getProviderInvocationUsage.mockReturnValue({ id: "prov-inv-1", status: "failed" } as any);
+    executionRepository.getExecutionInvocation.mockReturnValue({ id: "exec-inv-1", status: "failed" } as any);
+    providerRunner.runProvider.mockImplementation(async (opts: any) => {
+      opts.onTelemetry({
+        transcriptText: "late telemetry",
+        inputTokens: 1,
+        outputTokens: 2,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 3,
+        usageSource: "reported",
+        rawUsageJson: {},
+      });
+      return mockResult;
+    });
+
+    await service.executeProvider(defaultArgs);
+
+    expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
+      "prov-inv-1",
+      expect.objectContaining({ status: "running" }),
+    );
+    expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
+      "prov-inv-1",
+      expect.objectContaining({ status: "completed" }),
+    );
+    expect(executionRepository.updateExecutionInvocation).not.toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({ status: "completed" }),
+    );
+    expect(executionRepository.appendExecutionInvocationMessage).not.toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({ contentMarkdown: "late telemetry" }),
     );
   });
 

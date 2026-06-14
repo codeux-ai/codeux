@@ -311,7 +311,7 @@ export class ProviderExecutionService {
           }
         },
         onTelemetry: (telemetry: ProviderUsageTelemetry) => {
-          if (invocation && this.deps.executionRepository) {
+          if (invocation && this.deps.executionRepository && this.isProviderInvocationStillRunning(invocation.id)) {
             const durationMs = Date.now() - startedMs;
             this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
               status: "running",
@@ -329,7 +329,11 @@ export class ProviderExecutionService {
             });
           }
 
-          if (execInvocationId && this.deps.executionRepository) {
+          if (
+            execInvocationId
+            && this.deps.executionRepository
+            && this.isExecutionInvocationStillRunning(execInvocationId)
+          ) {
             if (args.trackAssistantInInvocation !== false) {
               if (!args.expectTextOutput && telemetry.conversation && telemetry.conversation.length > 0) {
                 this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
@@ -394,21 +398,23 @@ export class ProviderExecutionService {
       if (invocation && this.deps.executionRepository) {
         const finishedAt = new Date().toISOString();
         const durationMs = Date.now() - startedMs;
-        this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-          status: result.ok ? "completed" : "failed",
-          model: effectiveModel,
-          nativeSessionId: result.nativeSessionId,
-          finishedAt,
-          durationMs,
-          transcriptChars: result.usageTelemetry.transcriptText.length,
-          inputTokens: result.usageTelemetry.inputTokens,
-          cachedInputTokens: result.usageTelemetry.cachedInputTokens,
-          outputTokens: result.usageTelemetry.outputTokens,
-          reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
-          totalTokens: result.usageTelemetry.totalTokens,
-          usageSource: result.usageTelemetry.usageSource,
-          rawUsageJson: result.usageTelemetry.rawUsageJson,
-        });
+        if (this.isProviderInvocationStillRunning(invocation.id)) {
+          this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+            status: result.ok ? "completed" : "failed",
+            model: effectiveModel,
+            nativeSessionId: result.nativeSessionId,
+            finishedAt,
+            durationMs,
+            transcriptChars: result.usageTelemetry.transcriptText.length,
+            inputTokens: result.usageTelemetry.inputTokens,
+            cachedInputTokens: result.usageTelemetry.cachedInputTokens,
+            outputTokens: result.usageTelemetry.outputTokens,
+            reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
+            totalTokens: result.usageTelemetry.totalTokens,
+            usageSource: result.usageTelemetry.usageSource,
+            rawUsageJson: result.usageTelemetry.rawUsageJson,
+          });
+        }
 
         if (args.taskRunId) {
             this.deps.executionRepository.appendTaskRunEvent(args.taskRunId, "cli_provider_usage_reported", "system", {
@@ -475,7 +481,7 @@ export class ProviderExecutionService {
       }
 
       if (providerResult.ok) {
-        if (execInvocationId) {
+        if (execInvocationId && this.isExecutionInvocationStillRunning(execInvocationId)) {
           if (args.finalizeExecutionInvocation !== false) {
             this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
               status: "completed",
@@ -588,25 +594,37 @@ export class ProviderExecutionService {
 
       // If no retry policy handles the failure, propagate it to the caller if not OK
       if (execInvocationId) {
-        this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
-          status: "failed",
-          provider: args.provider,
-          model: args.model,
-          finishedAt: new Date().toISOString(),
-        });
-        // Include both streams so the real failure detail is never hidden: some
-        // providers (notably codex) print only a benign "Reading additional input
-        // from stdin..." to stderr while the actionable error events go to stdout.
-        const rawOutput = [providerResult.stderr, providerResult.stdout]
-          .map((stream) => (stream ?? "").trim())
-          .filter((stream) => stream.length > 0)
-          .join("\n\n");
-        this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
-          role: "tool",
-          contentMarkdown: sanitizeInvocationOutputText(rawOutput || "Provider failed without output."),
-        });
+        if (this.isExecutionInvocationStillRunning(execInvocationId)) {
+          this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
+            status: "failed",
+            provider: args.provider,
+            model: args.model,
+            finishedAt: new Date().toISOString(),
+          });
+          // Include both streams so the real failure detail is never hidden: some
+          // providers (notably codex) print only a benign "Reading additional input
+          // from stdin..." to stderr while the actionable error events go to stdout.
+          const rawOutput = [providerResult.stderr, providerResult.stdout]
+            .map((stream) => (stream ?? "").trim())
+            .filter((stream) => stream.length > 0)
+            .join("\n\n");
+          this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
+            role: "tool",
+            contentMarkdown: sanitizeInvocationOutputText(rawOutput || "Provider failed without output."),
+          });
+        }
       }
       return providerResult;
     }
+  }
+
+  private isProviderInvocationStillRunning(providerInvocationId: string): boolean {
+    const current = this.deps.executionRepository?.getProviderInvocationUsage?.(providerInvocationId);
+    return !current || current.status === "running";
+  }
+
+  private isExecutionInvocationStillRunning(executionInvocationId: string): boolean {
+    const current = this.deps.executionRepository?.getExecutionInvocation?.(executionInvocationId);
+    return !current || current.status === "running" || current.status === "paused";
   }
 }

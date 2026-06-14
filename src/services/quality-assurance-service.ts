@@ -8,8 +8,8 @@ import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { ProviderExecutionService, resolveEffectiveModel } from "./provider-execution-service.js";
 import { ProviderConcurrencyService } from "./provider-concurrency-service.js";
-import type { DashboardSettings, DashboardSettingsScope, ProviderId, Subtask } from "../contracts/app-types.js";
-import type { TaskRunRecord } from "../contracts/execution-types.js";
+import type { DashboardSettings, DashboardSettingsScope, DockerContainer, ProviderId, Subtask } from "../contracts/app-types.js";
+import type { ProviderInvocationUsageRecord, TaskRunRecord } from "../contracts/execution-types.js";
 import type { ExecutionInvocationRecord } from "../contracts/invocation-types.js";
 import type { TaskPriority } from "../contracts/project-management-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
@@ -112,6 +112,7 @@ interface QualityAssuranceServiceDependencies {
   logger?: Logger;
   memoryService?: MemoryService;
   structuredAgentRequestService?: StructuredAgentRequestService;
+  dockerService?: Pick<{ listContainers: () => Promise<DockerContainer[]> }, "listContainers">;
 }
 
 export class QualityAssuranceService {
@@ -201,7 +202,12 @@ export class QualityAssuranceService {
     }
 
     const existingRuns = this.deps.qaReviewRepository.countTaskRuns(taskId);
-    if (existingRuns >= qaSettings.maxTaskReviewRuns) {
+    const latestRun = this.deps.qaReviewRepository.getLatestTaskRun(taskId);
+    const allowPostContinuationVerification = existingRuns >= qaSettings.maxTaskReviewRuns
+      && this.shouldVerifyContinuedQaFix(latestRun);
+    const allowRecoveredStaleRetry = existingRuns >= qaSettings.maxTaskReviewRuns
+      && this.isRecoveredStaleQaRun(latestRun);
+    if (existingRuns >= qaSettings.maxTaskReviewRuns && !allowPostContinuationVerification && !allowRecoveredStaleRetry) {
       await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
@@ -414,6 +420,27 @@ export class QualityAssuranceService {
         mergeBlocked: qaError.isRetryable && (existingRuns + 1 < qaSettings.maxTaskReviewRuns),
         reportText: renderQaReviewFailedReport(args.task.id, error),
       };
+    }
+  }
+
+  async reconcileRunningTaskQaReviews(args: {
+    projectId: string;
+    sprintId: string;
+    tasks: Subtask[];
+  }): Promise<void> {
+    const runningRuns = args.tasks
+      .map((task) => task.record_id?.trim())
+      .filter((taskId): taskId is string => Boolean(taskId))
+      .map((taskId) => this.deps.qaReviewRepository.getLatestTaskRun(taskId))
+      .filter((run): run is QaReviewRunRecord => Boolean(run && run.status === "running"));
+
+    if (runningRuns.length === 0) {
+      return;
+    }
+
+    const activeContainerSessionIds = await this.listActiveContainerSessionIds();
+    for (const run of runningRuns) {
+      this.reconcileRunningQaRun(run, { activeContainerSessionIds });
     }
   }
 
@@ -708,6 +735,19 @@ export class QualityAssuranceService {
       };
     }
 
+    const recoveredStaleLatestRun = this.isRecoveredStaleQaRun(latestRun);
+
+    if (latestRun?.status === "failed" && recoveredStaleLatestRun) {
+      return {
+        mergeAllowed: false,
+        reason: "review_failed",
+        summary: latestRun.summaryMarkdown || "QA review failed and must be retried before merge.",
+        latestRun,
+        runsUsed,
+        maxRuns,
+      };
+    }
+
     if (runsUsed >= maxRuns) {
       return {
         mergeAllowed: true,
@@ -891,13 +931,19 @@ export class QualityAssuranceService {
     });
   }
 
-  private reconcileRunningQaRun(run: QaReviewRunRecord | null): QaReviewRunRecord | null {
+  private reconcileRunningQaRun(
+    run: QaReviewRunRecord | null,
+    options: { activeContainerSessionIds?: ReadonlySet<string> } = {},
+  ): QaReviewRunRecord | null {
     if (!run || run.status !== "running") {
       return run;
     }
 
     const latestInvocation = this.findLatestQaExecutionInvocation(run);
-    if (latestInvocation?.status === "running" || latestInvocation?.status === "paused") {
+    const staleRunningInvocationReason = latestInvocation
+      ? this.resolveStaleRunningQaInvocationReason(latestInvocation, options.activeContainerSessionIds)
+      : null;
+    if ((latestInvocation?.status === "running" || latestInvocation?.status === "paused") && !staleRunningInvocationReason) {
       return run;
     }
 
@@ -907,17 +953,53 @@ export class QualityAssuranceService {
       return run;
     }
 
+    const finishedAt = latestInvocation?.finishedAt || new Date().toISOString();
+    const summaryMarkdown = staleRunningInvocationReason
+      || (latestInvocation
+        ? `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation ${latestInvocation.status}. Code UX will retry the review.`
+        : `${RECOVERED_STALE_QA_SUMMARY_PREFIX} that never started its backing invocation. Code UX will retry the review.`);
+
+    if (latestInvocation && (latestInvocation.status === "running" || latestInvocation.status === "paused")) {
+      this.deps.executionRepository.updateExecutionInvocation(latestInvocation.id, {
+        status: "failed",
+        finishedAt,
+        errorMessage: summaryMarkdown,
+      });
+      this.deps.executionRepository.appendExecutionInvocationMessage(latestInvocation.id, {
+        role: "system",
+        contentMarkdown: summaryMarkdown,
+        metadata: {
+          recovery: "qa_runtime_reconcile",
+          qaRunId: run.id,
+        },
+        createdAt: finishedAt,
+      });
+
+      const providerInvocation = this.resolveProviderInvocationUsage(latestInvocation);
+      if (providerInvocation?.status === "running") {
+        this.deps.executionRepository.updateProviderInvocationUsage(providerInvocation.id, {
+          status: "failed",
+          finishedAt,
+          durationMs: this.calculateProviderInvocationDurationMs(providerInvocation, finishedAt),
+        });
+      }
+    }
+
     return this.deps.qaReviewRepository.updateRun(run.id, {
       status: "failed",
-      summaryMarkdown: latestInvocation
-        ? `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation ${latestInvocation.status}. Code UX will retry the review.`
-        : `${RECOVERED_STALE_QA_SUMMARY_PREFIX} that never started its backing invocation. Code UX will retry the review.`,
-      finishedAt: latestInvocation?.finishedAt || new Date().toISOString(),
+      summaryMarkdown,
+      finishedAt,
     });
   }
 
   private isRecoveredStaleQaRun(run: QaReviewRunRecord | null): boolean {
     return typeof run?.summaryMarkdown === "string" && run.summaryMarkdown.startsWith(RECOVERED_STALE_QA_SUMMARY_PREFIX);
+  }
+
+  private shouldVerifyContinuedQaFix(run: QaReviewRunRecord | null): boolean {
+    return run?.status === "completed"
+      && run.outcome === "changes_requested"
+      && run.payload?.continued === true;
   }
 
   private findLatestQaExecutionInvocation(run: QaReviewRunRecord): ExecutionInvocationRecord | null {
@@ -944,6 +1026,67 @@ export class QualityAssuranceService {
       invocation.type === "qa_review"
       && Date.parse(invocation.startedAt) >= Date.parse(run.startedAt)
     )) || null;
+  }
+
+  private resolveStaleRunningQaInvocationReason(
+    invocation: ExecutionInvocationRecord,
+    activeContainerSessionIds?: ReadonlySet<string>,
+  ): string | null {
+    if (invocation.status !== "running" && invocation.status !== "paused") {
+      return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation ${invocation.status}. Code UX will retry the review.`;
+    }
+
+    const referenceAt = Date.parse(invocation.lastMessageAt || invocation.startedAt);
+    const ageMs = Number.isFinite(referenceAt) ? Date.now() - referenceAt : 0;
+    const providerInvocation = this.resolveProviderInvocationUsage(invocation);
+    if (!providerInvocation) {
+      if (ageMs < QA_RUN_START_TIMEOUT_MS) {
+        return null;
+      }
+      return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation stayed running without provider runtime linkage. Code UX will retry the review.`;
+    }
+
+    if (providerInvocation.status !== "running") {
+      return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing provider invocation ${providerInvocation.status}. Code UX will retry the review.`;
+    }
+
+    if (
+      providerInvocation.executionMode === "DOCKER"
+      && activeContainerSessionIds
+      && !activeContainerSessionIds.has(providerInvocation.sessionId)
+    ) {
+      return `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after its Docker container disappeared for session ${providerInvocation.sessionId}. Code UX will retry the review.`;
+    }
+
+    return null;
+  }
+
+  private resolveProviderInvocationUsage(invocation: ExecutionInvocationRecord): ProviderInvocationUsageRecord | null {
+    if (!invocation.providerInvocationId) {
+      return null;
+    }
+    return this.deps.executionRepository.getProviderInvocationUsage(invocation.providerInvocationId);
+  }
+
+  private async listActiveContainerSessionIds(): Promise<ReadonlySet<string> | undefined> {
+    if (!this.deps.dockerService?.listContainers) {
+      return undefined;
+    }
+    const containers = await this.deps.dockerService.listContainers().catch(() => []);
+    return new Set(
+      containers
+        .map((container) => container.labels?.["code-ux.session-id"]?.trim())
+        .filter((sessionId): sessionId is string => Boolean(sessionId)),
+    );
+  }
+
+  private calculateProviderInvocationDurationMs(invocation: ProviderInvocationUsageRecord, finishedAt: string): number {
+    const startedAtMs = Date.parse(invocation.startedAt);
+    const finishedAtMs = Date.parse(finishedAt);
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs)) {
+      return invocation.durationMs || 0;
+    }
+    return Math.max(0, finishedAtMs - startedAtMs);
   }
 
   private async withSprintRunKeepAlive<T>(

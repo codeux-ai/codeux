@@ -161,12 +161,17 @@ Checks:
   - Examples: unset GitHub token, `fatal: could not read Username for 'https://github.com'`, `Authentication failed`, or similar remote permission/auth errors during push/PR flow.
   - Expected behavior: the task run moves to `BLOCKED`, the sprint pauses, and the watch loop stops consuming tokens until credentials are fixed and the task or sprint is resumed manually.
 - For tasks shown as `QUOTA`, inspect the dispatch error and retry-after metadata. Code UX preserves quota/rate-limit dispatch errors during session sync; if no active retry timestamp remains, the task is requeued instead of staying in `QUOTA`. If Code UX was offline while a provider invocation was waiting for a quota reset or rate-limit retry, startup recovery closes that stale running invocation and requeues task-backed work so the recovered sprint loop can start a fresh continuation. Repeated quota failures without a reset timer are still bounded by `cliWorkflow.maxQuotaRetriesWithoutTimer`.
+- For tasks stuck in a CI/QA gate after QA requested fixes, compare the latest `qa_review_runs` row with later `execution_invocations` for the same task run. A completed `cli_task_followup` after the latest `changes_requested` QA result should trigger a verification QA run on the next orchestration cycle; if no follow-up exists, the task is intentionally waiting on fix work or human intervention.
+- For tasks showing `QA_PENDING` with a `running` `qa_review_runs` row but no matching provider container, check the latest `qa_review` row in `execution_invocations`. Code UX now fails stale running QA rows automatically when the invocation never linked provider runtime or when its Docker-backed `provider_invocations.session_id` is absent from running `code-ux.session-id` container labels; the next cycle should enqueue a fresh QA review.
+- If provider concurrency repeatedly logs that the cap is reached but no provider containers are running, inspect `provider_invocations` for old `status = running` rows. Code UX now reconciles stale Docker-backed rows during provider slot waits so orphaned provider slots are failed and new work can claim the slot. Recovery waits for linked execution activity to go idle, so a newly claimed provider slot is not failed merely because its container has not appeared yet.
 
 ### 7. Tasks completed but pipeline not progressing
 Checks:
 - Does the DB task record still show `coding_completed` because a feature PR or worker branch is still unresolved?
 - Did the merge settle on the feature branch, or was this a no-output task that should auto-promote to final `completed`?
 - Are CI / review gates still intentionally holding the task before final completion?
+- If QA requested changes and the provider completed a same-session follow-up, Code UX should treat that `cli_task_followup` as fresh work even when the task run itself did not get a newer `finished_at` timestamp.
+- If QA still appears running but no QA container exists, the watch loop should reconcile the stale QA invocation and retry the review rather than leaving `merge_indicator = QA_PENDING`.
 - If the provider session actually ended `FAILED`, Code UX should now clear the stale session/PR runtime state and requeue the task instead of treating the task as completed just because a PR artifact exists.
 
 ### 8. Tasks show RUNNING after MCP was interrupted

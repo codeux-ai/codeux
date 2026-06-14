@@ -552,6 +552,12 @@ export class CycleRunner {
       return;
     }
 
+    await this.deps.qualityAssuranceService.reconcileRunningTaskQaReviews?.({
+      projectId: args.executionContext.project.id,
+      sprintId: args.executionContext.sprint.id,
+      tasks: subtasks,
+    });
+
     const limit = pLimit(5);
     const reviewPromises: Promise<void>[] = [];
 
@@ -571,6 +577,7 @@ export class CycleRunner {
           || (qaGate.reason === "changes_requested" && (
             newlyCodeComplete
             || this.hasCompletedTaskRunAfterLatestQaRequest(task, qaGate, args.sprintRunId)
+            || this.hasCompletedTaskFollowUpAfterLatestQaRequest(task, qaGate, args.sprintRunId)
           ))
         );
 
@@ -691,6 +698,52 @@ export class CycleRunner {
     return Number.isFinite(taskFinishedAt)
       && Number.isFinite(qaFinishedAt)
       && taskFinishedAt > qaFinishedAt;
+  }
+
+  private hasCompletedTaskFollowUpAfterLatestQaRequest(
+    task: Subtask,
+    qaGate: TaskQaMergeGateStatus,
+    sprintRunId?: string,
+  ): boolean {
+    if (qaGate.reason !== "changes_requested" || !qaGate.latestRun?.finishedAt || !task.record_id) {
+      return false;
+    }
+
+    const executionRepository = this.deps.executionRepository as Partial<SprintOrchestratorDependencies["executionRepository"]>;
+    if (typeof executionRepository.listExecutionInvocations !== "function") {
+      return false;
+    }
+
+    const taskRun = this.deps.executionRepository.getLatestTaskRun(task.record_id, sprintRunId)
+      || (task.session_id ? this.deps.executionRepository.getLatestTaskRunBySessionId(task.session_id) : null);
+    const invocations = taskRun
+      ? executionRepository.listExecutionInvocations({
+          projectId: task.project_id || qaGate.latestRun.projectId,
+          taskRunId: taskRun.id,
+          limit: 20,
+        })
+      : [];
+
+    const qaFinishedAt = Date.parse(qaGate.latestRun.finishedAt);
+    if (!Number.isFinite(qaFinishedAt)) {
+      return false;
+    }
+    const qaContinuedTask = qaGate.latestRun.payload?.continued === true;
+    const qaStartedAt = Date.parse(qaGate.latestRun.startedAt);
+
+    return invocations.some((invocation) => {
+      if (invocation.type !== "cli_task_followup" || invocation.status !== "completed" || !invocation.finishedAt) {
+        return false;
+      }
+      const followUpFinishedAt = Date.parse(invocation.finishedAt);
+      if (!Number.isFinite(followUpFinishedAt)) {
+        return false;
+      }
+      if (qaContinuedTask && Number.isFinite(qaStartedAt)) {
+        return followUpFinishedAt >= qaStartedAt;
+      }
+      return followUpFinishedAt > qaFinishedAt;
+    });
   }
 
 }

@@ -26,6 +26,7 @@ function buildDeps(): SprintOrchestratorDependencies {
     executionRepository: {
       getLatestTaskRun: vi.fn().mockReturnValue({ id: "task-run-1", dispatchId: "dispatch-1" }),
       getLatestTaskRunBySessionId: vi.fn().mockReturnValue(null),
+      listExecutionInvocations: vi.fn().mockReturnValue([]),
       getTaskDispatch: vi.fn().mockReturnValue({
         id: "dispatch-1",
         status: "blocked",
@@ -1832,6 +1833,120 @@ describe("CycleRunner attention sync", () => {
       sprintRunId: "run-1",
     });
 
+    expect(reviewCompletedTask).toHaveBeenCalledTimes(1);
+  });
+
+  it("reruns QA after a changes-requested review when QA continued a completed CLI follow-up in the same task run", async () => {
+    const deps = buildDeps();
+    vi.mocked(deps.executionRepository.getLatestTaskRun).mockReturnValue({
+      id: "task-run-same",
+      state: "COMPLETED",
+      finishedAt: "2026-06-13T20:40:14.510Z",
+    } as any);
+    vi.mocked(deps.executionRepository.listExecutionInvocations).mockReturnValue([
+      {
+        id: "xi-followup",
+        type: "cli_task_followup",
+        status: "completed",
+        startedAt: "2026-06-13T20:43:00.000Z",
+        finishedAt: "2026-06-13T20:44:14.510Z",
+      },
+    ] as any);
+    const reviewCompletedTask = vi.fn().mockResolvedValue({
+      reviewed: true,
+      reopenedTask: false,
+      mergeBlocked: false,
+      reportText: "",
+    });
+    deps.qualityAssuranceService = {
+      getTaskMergeGateStatus: vi.fn().mockReturnValue({
+        mergeAllowed: false,
+        reason: "changes_requested",
+        summary: "QA requested fixes.",
+        latestRun: {
+          id: "qa-1",
+          projectId: "project-1",
+          status: "completed",
+          outcome: "changes_requested",
+          payload: { continued: true },
+          startedAt: "2026-06-13T20:42:31.128Z",
+          finishedAt: "2026-06-13T20:45:31.128Z",
+        },
+        runsUsed: 1,
+        maxRuns: 2,
+      }),
+      reviewCompletedTask,
+    } as any;
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      agents: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents,
+        qualityAssurance: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+          enabled: true,
+        },
+      },
+    });
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        project_id: "project-1",
+        title: "CLI task",
+        prompt: "Change README.",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "qwen-code",
+        session_id: "session-1",
+        pr_url: "https://example.com/pr/4",
+      },
+    ] as any);
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue({
+      available: true,
+      openPullRequests: [],
+      ciRuns: [],
+      mergedPullRequests: [],
+    } as any);
+
+    const runner = new CycleRunner(deps);
+    await runner.run({
+      action: "orchestrate",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: true,
+        startReadyTasks: false,
+        statusTable: false,
+        mergeProtocol: false,
+        actionRequiredProtocol: false,
+      } as any,
+      ciIntelligence: {
+        enabled: true,
+      } as any,
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(deps.executionRepository.listExecutionInvocations).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      taskRunId: "task-run-same",
+    }));
     expect(reviewCompletedTask).toHaveBeenCalledTimes(1);
   });
 });

@@ -16,6 +16,7 @@ import { resolveEffectiveDashboardSettings } from "../../services/settings-resol
 import type { DashboardSettings, DashboardSettingsScope, DashboardStatusSnapshot } from "../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { WorkspaceManager } from "../../infrastructure/providers/cli/workspace-manager.js";
+import { DockerService } from "../../services/docker-service.js";
 
 export interface SprintDependencies {
   cliWorkflowService: CliWorkflowService;
@@ -136,6 +137,7 @@ export function createSprintDependencies(
     sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
     logger: logger.child({ component: "quality-assurance-service" }),
     memoryService: coreDeps.memoryService,
+    dockerService: new DockerService(),
   });
 
   const virtualWorkerService = new VirtualWorkerService({

@@ -13,6 +13,10 @@ describe("ProviderConcurrencyService", () => {
       listRunningProviderInvocationUsages: vi.fn(),
       tryCreateProviderInvocationUsage: vi.fn(),
       createProviderInvocationUsage: vi.fn(),
+      updateProviderInvocationUsage: vi.fn(),
+      listExecutionInvocationsByProviderInvocationId: vi.fn().mockReturnValue([]),
+      updateExecutionInvocation: vi.fn(),
+      appendExecutionInvocationMessage: vi.fn(),
     };
     logger = {
       info: vi.fn(),
@@ -119,6 +123,89 @@ describe("ProviderConcurrencyService", () => {
         expect(res1.id).toBe("inv-1");
         expect(res2.id).toBe("inv-2");
         expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("releases stale Docker provider slots before claiming", async () => {
+      const staleInvocation = {
+        id: "provider-stale",
+        provider: "qwen-code",
+        purpose: "qa_review",
+        status: "running",
+        executionMode: "DOCKER",
+        sessionId: "qa-review-qwen-code-stale",
+        startedAt: "2000-01-01T00:00:00.000Z",
+        durationMs: null,
+      };
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([staleInvocation]);
+      executionRepository.listExecutionInvocationsByProviderInvocationId.mockReturnValue([
+        { id: "exec-stale", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
+      ]);
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "provider-new" });
+      service = new ProviderConcurrencyService({
+        executionRepository,
+        logger,
+        dockerService: {
+          isAvailable: vi.fn().mockResolvedValue(true),
+          listContainers: vi.fn().mockResolvedValue([]),
+        },
+      });
+
+      const result = await service.waitForSlotAndClaim("qwen-code", 2, { provider: "qwen-code" } as any);
+
+      expect(result.id).toBe("provider-new");
+      expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith("provider-stale", expect.objectContaining({
+        status: "failed",
+      }));
+      expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith("exec-stale", expect.objectContaining({
+        status: "failed",
+        errorMessage: expect.stringContaining("Docker container disappeared"),
+      }));
+      expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledWith({ provider: "qwen-code" }, 2);
+    });
+
+    it("keeps Docker provider slots with recent linked execution activity", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-06-14T18:00:00.000Z"));
+      try {
+        const activeInvocation = {
+          id: "provider-active",
+          provider: "qwen-code",
+          purpose: "qa_review",
+          status: "running",
+          executionMode: "DOCKER",
+          sessionId: "qa-review-qwen-code-starting",
+          startedAt: "2026-06-14T17:58:00.000Z",
+          durationMs: null,
+        };
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([activeInvocation, activeInvocation]);
+        executionRepository.listExecutionInvocationsByProviderInvocationId.mockReturnValue([
+          {
+            id: "exec-active",
+            status: "running",
+            startedAt: "2026-06-14T17:59:30.000Z",
+            lastMessageAt: "2026-06-14T17:59:45.000Z",
+          },
+        ]);
+        executionRepository.tryCreateProviderInvocationUsage.mockReturnValueOnce(null).mockReturnValueOnce({ id: "provider-new" });
+        service = new ProviderConcurrencyService({
+          executionRepository,
+          logger,
+          dockerService: {
+            isAvailable: vi.fn().mockResolvedValue(true),
+            listContainers: vi.fn().mockResolvedValue([]),
+          },
+        });
+
+        const wait = service.waitForSlotAndClaim("qwen-code", 1, { provider: "qwen-code" } as any);
+        await vi.advanceTimersByTimeAsync(2000);
+        const result = await wait;
+
+        expect(result.id).toBe("provider-new");
+        expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalled();
+        expect(executionRepository.updateExecutionInvocation).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }
