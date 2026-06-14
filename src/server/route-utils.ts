@@ -1,3 +1,4 @@
+import { toHttpRouteError } from "./http-errors.js";
 import type { Request, Response, RequestHandler } from "express";
 
 export function toErrorResponse(error: unknown, prefix?: string): { error: string } {
@@ -14,7 +15,13 @@ export function syncRoute(handler: (req: Request, res: Response) => void): Reque
       handler(req, res);
     } catch (error) {
       if (!res.headersSent) {
-        res.status(400).json(toErrorResponse(error));
+        const httpError = toHttpRouteError(error);
+        if (httpError.status >= 500) {
+          res.status(httpError.status).json({ error: "Internal Server Error" });
+          next(error);
+        } else {
+          res.status(httpError.status).json(toErrorResponse(error));
+        }
       } else {
         next(error);
       }
@@ -28,7 +35,13 @@ export function asyncRoute(handler: (req: Request, res: Response) => Promise<voi
       await handler(req, res);
     } catch (error) {
       if (!res.headersSent) {
-        res.status(400).json(toErrorResponse(error));
+        const httpError = toHttpRouteError(error);
+        if (httpError.status >= 500) {
+          res.status(httpError.status).json({ error: "Internal Server Error" });
+          next(error);
+        } else {
+          res.status(httpError.status).json(toErrorResponse(error));
+        }
       } else {
         next(error);
       }

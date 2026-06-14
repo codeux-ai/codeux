@@ -252,23 +252,23 @@ describe("dashboard-server quicksprint routes", () => {
   it("Handles exceptions gracefully", async () => {
       quicksprintService.listTemplates.mockImplementation(() => { throw new Error("Oops"); });
       const res = await request(app).get("/api/projects/p1/quicksprints/templates");
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(500);
 
       quicksprintService.getTemplate.mockImplementation(() => { throw new Error("Oops"); });
       const res2 = await request(app).get("/api/projects/p1/quicksprints/templates/t1");
-      expect(res2.status).toBe(400);
+      expect(res2.status).toBe(500);
 
       quicksprintService.createCustomTemplate.mockImplementation(() => { throw new Error("Oops"); });
       const res3 = await request(app).post("/api/projects/p1/quicksprints/templates").send({});
-      expect(res3.status).toBe(400);
+      expect(res3.status).toBe(500);
 
       quicksprintService.updateCustomTemplate.mockImplementation(() => { throw new Error("Oops"); });
       const res4 = await request(app).patch("/api/projects/p1/quicksprints/templates/t1").send({});
-      expect(res4.status).toBe(400);
+      expect(res4.status).toBe(500);
 
       quicksprintService.deleteCustomTemplate.mockImplementation(() => { throw new Error("Oops"); });
       const res5 = await request(app).delete("/api/projects/p1/quicksprints/templates/t1");
-      expect(res5.status).toBe(400);
+      expect(res5.status).toBe(500);
 
       quicksprintService.executeQuicksprint.mockImplementation(() => { throw new Error("Oops"); });
       const res6 = await request(app).post("/api/projects/p1/quicksprints/execute").send({
@@ -276,6 +276,6 @@ describe("dashboard-server quicksprint routes", () => {
         taskCount: 3,
         submitMode: "plan_only",
       });
-      expect(res6.status).toBe(400);
+      expect(res6.status).toBe(500);
   });
 });

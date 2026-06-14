@@ -62,3 +62,13 @@ The Dashboard General settings page stores `runtime.consoleLogLevel` in system s
 - `realtime_snapshot_published`: Logs the published realtime snapshot event and size.
 - `realtime_background_refresh`: Logs scheduled background dashboard refreshes (like overview telemetry).
 - `websocket_recovery_snapshot_required`: Emitted when a client reconnects and needs a full snapshot payload.
+
+## Route Error Status Behavior
+
+Dashboard HTTP requests handled by `syncRoute` or `asyncRoute` automatically map thrown errors to an `HttpRouteError` with the appropriate HTTP status code:
+- `ValidationError` maps to `400 Bad Request`.
+- Request parser exceptions (errors with messages starting with "Invalid " or "Missing ") map to `400 Bad Request`.
+- `EntityNotFoundError` maps to `404 Not Found`.
+- Unexpected or unhandled exceptions map to `500 Internal Server Error`, hiding internal details from the client response.
+
+When a `500 Internal Server Error` occurs (and headers haven't already been sent), the response will be safely formatted and sent, and the original error will then be delegated to Express error handlers via `next(error)` so that it can be logged and appropriately traced.

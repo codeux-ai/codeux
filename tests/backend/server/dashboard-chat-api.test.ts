@@ -300,9 +300,9 @@ describe("Dashboard Chat API", () => {
         virtualProvider: "not-a-real-provider",
       }),
     });
-    expect(invalidVirtualResponse.status).toBe(400);
+    expect(invalidVirtualResponse.status).toBe(500);
     const result1 = await invalidVirtualResponse.json() as any;
-    expect(result1.error).toContain("Virtual provider is not configured or unavailable");
+    expect(result1.error).toEqual("Internal Server Error");
 
     // Test unavailable worker
     const invalidWorkerResponse = await fetch(`${baseUrl}/api/conversations/threads/${thread.id}/route`, {
@@ -313,9 +313,9 @@ describe("Dashboard Chat API", () => {
         workerEndpointId: "missing-worker-id",
       }),
     });
-    expect(invalidWorkerResponse.status).toBe(400);
+    expect(invalidWorkerResponse.status).toBe(500);
     const result2 = await invalidWorkerResponse.json() as any;
-    expect(result2.error).toContain("Connected MCP worker routes are no longer supported");
+    expect(result2.error).toEqual("Internal Server Error");
 
   });
 

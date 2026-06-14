@@ -127,7 +127,7 @@ describe("dashboard route handlers", () => {
     expect((await request(app).get("/api/telemetry/overview")).status).toBe(200);
     expect((await request(app).get("/api/projects/project-1/execution")).status).toBe(200);
     expect((await request(app).get("/api/projects/project-1/stats?window=24h")).status).toBe(200);
-    expect((await request(app).get("/api/projects/project-1/stats?window=custom")).status).toBe(400);
+    expect((await request(app).get("/api/projects/project-1/stats?window=custom")).status).toBe(500);
     expect((await request(app).put("/api/projects/project-1/preferred-worker").send({ workerEndpointId: "worker-1" })).status).toBe(200);
     expect((await request(app).post("/api/projects/project-1/attention-items/item-1/claim").send({ claimReason: "test" })).status).toBe(200);
     expect((await request(app).post("/api/projects/project-1/attention-items/item-1/resolve").send({ status: "resolved" })).status).toBe(200);
@@ -240,8 +240,8 @@ describe("dashboard route handlers", () => {
     const failedMessageResponse = await request(failingMessageApp)
       .post("/api/projects/project-1/conversations/messages")
       .send({ bodyMarkdown: "Hello" });
-    expect(failedMessageResponse.status).toBe(400);
-    expect(failedMessageResponse.body).toEqual({ error: "async chat failure" });
+    expect(failedMessageResponse.status).toBe(500);
+    expect(failedMessageResponse.body).toEqual({ error: "Internal Server Error" });
 
     const disabledApp = createApp((router) => registerConversationRoutes(router, {} as DashboardDependencies));
     expect((await request(disabledApp).put("/api/conversations/threads/thread-1/route").send({ routeKind: "worker" })).status).toBe(404);

@@ -1489,9 +1489,9 @@ describe("dashboard project management API", () => {
       }),
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error: `Preferred worker target not found: ${listener.connection.id}`,
+      error: "Internal Server Error",
     });
   });
 });
