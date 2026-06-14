@@ -29,6 +29,9 @@ Backend types:
 Routing implementation:
 - `src/services/provider-routing.ts`
 
+Provider CLI command generation and configuration utilities:
+- `src/infrastructure/providers/cli/provider-command-specs.ts`
+
 Each `aiProvider.invocationRouting.<routeId>` entry contains:
 - `profile`
   - `GLOBAL`: baseline comes from top-level `aiProvider`
