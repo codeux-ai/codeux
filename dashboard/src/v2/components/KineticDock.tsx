@@ -39,6 +39,7 @@ const DockItemIcon: FunctionComponent<{ item: DockItem; isActive: boolean }> = (
             */}
             <div className="dock-item-icon-wrapper">
                 <item.icon
+                    aria-hidden="true"
                     className={`w-5 h-5 relative z-10 transition-all duration-300 ease-out group-focus-visible:-translate-y-1.5 group-focus-visible:scale-[1.15] group-active:-translate-y-1.5 group-active:scale-[1.15]
                         ${isActive
                             ? item.color
@@ -196,6 +197,7 @@ export const KineticDock: FunctionComponent = () => {
             <Link
                 key={item.label}
                 to={item.path}
+                aria-current={isActive ? 'page' : undefined}
                 ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
                 onMouseEnter={() => prefetchRoute(item.path)}
                 onPointerDown={() => prefetchRoute(item.path)}
