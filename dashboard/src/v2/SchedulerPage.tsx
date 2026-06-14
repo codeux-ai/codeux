@@ -136,7 +136,7 @@ const ProjectPlaceholder: FunctionComponent = () => (
     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-signal-500/20 bg-signal-500/[0.08] text-signal-500 shadow-[0_0_15px_rgba(0,224,160,0.08)]">
       <CalendarDays className="h-5 w-5" />
     </div>
-    <h2 className="mt-5 font-display text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white">Select a project to schedule work.</h2>
+    <h1 className="mt-5 font-display text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white">Select a project to schedule work.</h1>
     <p className="mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
       Scheduler entries are project-scoped so sprints, quicksprints, and chat messages run against the right workspace.
     </p>

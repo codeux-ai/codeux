@@ -85,9 +85,9 @@ const TaskScopePlaceholder: FunctionComponent<{
           <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-signal-500">
             {eyebrow}
           </div>
-          <h2 className="mt-3 max-w-3xl font-display text-4xl font-black leading-[0.98] tracking-tight text-slate-900 dark:text-white md:text-5xl">
+          <h1 className="mt-3 max-w-3xl font-display text-4xl font-black leading-[0.98] tracking-tight text-slate-900 dark:text-white md:text-5xl">
             {title}
-          </h2>
+          </h1>
           <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400 md:text-base">
             {body}
           </p>
