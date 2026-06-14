@@ -133,7 +133,7 @@ function DestructiveConfirmButton({
       onContextMenu={(e) => e.preventDefault()}
       className={`relative overflow-hidden ${className} ${isShaking && !reducedMotion ? "animate-shake" : ""}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
-      aria-label={isHolding ? `Holding — ${Math.round(progress)}% complete, release to cancel` : `Hold to ${label}`}
+      aria-label={isHolding ? `Holding — ${Math.floor(progress / 10) * 10}% complete, release to cancel` : `Hold to ${label}`}
     >
       {isHolding && (
         <div
@@ -142,9 +142,6 @@ function DestructiveConfirmButton({
         />
       )}
 
-      <span aria-live="polite" aria-atomic="true" className="sr-only">
-        {isHolding ? `Holding ${Math.round(progress)} percent — release to cancel` : `Hold button to ${label}`}
-      </span>
       <span className="relative z-10 flex items-center justify-center gap-2">
         {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
         {isHolding ? `Hold to ${label}` : isLoading ? "Processing..." : label}
