@@ -56,11 +56,11 @@ vi.mock("../../hooks/use-project-tasks.js", () => ({
 }));
 
 // Need to mock user interaction resize observers usually present in Kanban rendering
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn(),
-}))
+global.ResizeObserver = class MockResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+} as any;
 
 describe("TasksPage.cards Integration", () => {
   afterEach(() => {
