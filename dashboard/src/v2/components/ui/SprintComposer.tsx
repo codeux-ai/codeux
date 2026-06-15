@@ -577,9 +577,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 type="button"
                 onClick={() => { void handleImprovePrompt(); }}
                 disabled={isBusy || !state.name.trim() || !state.goal.trim()}
+                aria-busy={isImproving}
                 className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/[0.14] disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300"
               >
-                {isImproving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />}
+                {isImproving ? <><Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" /><span className="sr-only">Loading</span></> : <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />}
                 {isImproving ? PLANNING_ACTION_LABELS.improve : "Plan ahead with AI"}
               </button>
             </div>
@@ -796,7 +797,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                   onClick={() => setIsOverlayDismissed(false)}
                   className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
-                  <Loader2 className="h-4 w-4 animate-spin text-signal-500" />
+                  <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-signal-500" /><span className="sr-only">Loading</span></>
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-signal-700 dark:text-signal-300">
                       {PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress..."}
@@ -811,9 +812,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             <button
               type="submit"
               disabled={isBusy || !state.name.trim()}
+              aria-busy={isSubmitting}
               className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-void-900"
             >
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <SubmitIcon className="h-4 w-4" strokeWidth={2.3} />}
+              {isSubmitting ? <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Loading</span></> : <SubmitIcon className="h-4 w-4" strokeWidth={2.3} />}
               {isSubmitting
                 ? PLANNING_ACTION_LABELS[state.submitMode as PlanningActionType] || "Processing..."
                 : state.submitMode === 'draft' ? (state.isEditing ? "Save Changes" : "Save Draft") : activeMode.label}

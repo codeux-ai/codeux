@@ -31,13 +31,14 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
             className={`flex items-center justify-center w-9 h-9 rounded-full text-slate-800 dark:text-white bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 ${SHARED_INTERACTION_CLASSES}`}
             aria-label={isRunning ? "Stop" : "Play"}
             disabled={!onPrimaryAction || primaryBusy}
+            aria-busy={primaryBusy}
             onClick={(e: MouseEvent) => {
                 e.stopPropagation();
                 onPrimaryAction?.();
             }}
         >
             {primaryBusy ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                <><Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin text-slate-400" /><span className="sr-only">Loading</span></>
             ) : isRunning ? (
                 <Square className="w-3.5 h-3.5 text-status-red" fill="currentColor" />
             ) : (

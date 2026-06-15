@@ -157,6 +157,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
                 type="button"
                 onClick={() => { void handleSave(); }}
                 disabled={!dirty || saving}
+                aria-busy={saving}
                 className={`group inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
                   message && !error
                     ? "bg-status-green text-white shadow-[0_4px_20px_rgba(0,171,132,0.3)]"
@@ -165,7 +166,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
               >
                 {saving ? (
                   <>
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} />
+                    <><RefreshCw aria-hidden="true" className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /><span className="sr-only">Loading</span></>
                     Saving
                   </>
                 ) : message && !error ? (

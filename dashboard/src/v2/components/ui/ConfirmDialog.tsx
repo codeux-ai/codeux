@@ -133,6 +133,7 @@ function DestructiveConfirmButton({
       onContextMenu={(e) => e.preventDefault()}
       className={`relative overflow-hidden ${className} ${isShaking && !reducedMotion ? "animate-shake" : ""}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+      aria-busy={isLoading}
       aria-label={isHolding ? `Holding — ${Math.floor(progress / 10) * 10}% complete, release to cancel` : `Hold to ${label}`}
     >
       {isHolding && (
@@ -143,7 +144,7 @@ function DestructiveConfirmButton({
       )}
 
       <span className="relative z-10 flex items-center justify-center gap-2">
-        {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+        {isLoading && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Processing, please wait</span></>}
         {isHolding ? `Hold to ${label}` : isLoading ? "Processing..." : label}
       </span>
     </button>
@@ -300,9 +301,10 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
               type="button"
               onClick={() => handleClose(onConfirm)}
               disabled={isProcessing}
+              aria-busy={isProcessing}
               className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-signal-500 text-white hover:bg-signal-600 dark:hover:bg-signal-400 shadow-[0_4px_12px_rgba(0,224,160,0.25)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {isProcessing && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isProcessing && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Processing, please wait</span></>}
               {isProcessing ? "Processing..." : confirmLabel}
             </button>
           )}

@@ -94,7 +94,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                             onPlayStop?.();
                         }}
                     >
-                        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isRunning ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
+                        {busy ? <><Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin" /><span className="sr-only">Loading</span></> : isRunning ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Play className="w-3.5 h-3.5" fill="currentColor" />}
                     </button>
                     <a
                         href={`/tasks?sprint=${encodeURIComponent(task.sprintId)}`}

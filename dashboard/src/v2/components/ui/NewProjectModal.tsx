@@ -466,10 +466,11 @@ export const NewProjectModal: FunctionComponent<NewProjectModalProps> = ({ onClo
                                 <button
                                     type="submit"
                                     disabled={isSubmitting || (initMode === 'new-remote' && noProviders)}
+                                    aria-busy={isSubmitting}
                                     className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] disabled:shadow-none active:scale-95 disabled:active:scale-100 hover:-translate-y-px disabled:hover:-translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                                 >
                                     {isSubmitting ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <><Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /><span className="sr-only">Loading</span></>
                                     ) : (
                                         <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     )}
