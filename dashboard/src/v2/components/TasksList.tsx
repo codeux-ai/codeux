@@ -1,16 +1,14 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
-import gsap from "gsap";
-import { Flip } from "gsap/Flip";
+import { useMemo, useRef, useState } from "preact/hooks";
 
-gsap.registerPlugin(Flip);
 import { TaskRow } from "./ui/TaskRow.js";
 import { SprintStreamRow } from "./ui/SprintStreamRow.js";
 import { FilterStrip } from "./ui/FilterStrip.js";
 import { SkeletonRow } from "./layout/SkeletonLoader.js";
 import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../lib/overview-streams.js";
-import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { useOverviewStreamActions } from "../hooks/use-overview-stream-actions.js";
+import { useListReorder } from "../lib/motion/use-list-reorder.js";
+
 type TaskFilter = "All Tasks" | "Running" | "Queued" | "Completed";
 
 const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
@@ -18,24 +16,15 @@ const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
 export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("../hooks/use-overview-page-data.js").useOverviewPageData> }> = ({ pageData }) => {
     const listRef = useRef<HTMLDivElement>(null);
     const [activeFilter, setActiveFilter] = useState<TaskFilter>("All Tasks");
-    const flipStateRef = useRef<any>(null);
 
     const handleFilterChange = (newFilter: TaskFilter) => {
-        if (listRef.current) {
-            listRef.current.style.minHeight = `${listRef.current.scrollHeight}px`;
-            flipStateRef.current = Flip.getState(listRef.current.querySelectorAll('[data-flip-id]'));
-        }
         setActiveFilter(newFilter);
     };
 
     const handleClearFilter = () => {
-        if (listRef.current) {
-            listRef.current.style.minHeight = `${listRef.current.scrollHeight}px`;
-            flipStateRef.current = Flip.getState(listRef.current.querySelectorAll('[data-flip-id]'));
-        }
         setActiveFilter("All Tasks");
     };
-    const reducedMotion = useReducedMotion();
+
     const { sprints, tasks, execution, selectedProject, isLoading } = pageData;
 
     const streamActions = useOverviewStreamActions(selectedProject?.id ?? null, execution);
@@ -70,37 +59,10 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
             .sort((a, b) => (b.sprint?.number ?? 0) - (a.sprint?.number ?? 0));
     }, [filteredTasks, sprintById]);
 
-    const initialMountRef = useRef(true);
-
-    useLayoutEffect(() => {
-        if (listRef.current) {
-            if (reducedMotion) {
-                gsap.set(listRef.current.children, { y: 0, opacity: 1, scale: 1 });
-            } else if (flipStateRef.current) {
-                listRef.current.style.minHeight = `${listRef.current.scrollHeight}px`;
-                Flip.from(flipStateRef.current, {
-                    targets: listRef.current.children,
-                    duration: 0.4,
-                    ease: "power3.out",
-                    stagger: 0.03,
-                    absolute: true,
-                    onEnter: (elements: Element[]) => gsap.fromTo(elements, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.03, ease: "power3.out" }),
-                    onLeave: (elements: Element[]) => gsap.to(elements, { opacity: 0, y: -8, duration: 0.4, onComplete: () => elements.forEach(el => el.remove()) }),
-                    onComplete: () => {
-                        if (listRef.current) listRef.current.style.minHeight = '';
-                    }
-                });
-                flipStateRef.current = null;
-            } else if (initialMountRef.current) {
-                initialMountRef.current = false;
-                gsap.fromTo(
-                    listRef.current.children,
-                    { y: 15, opacity: 0, scale: 0.99 },
-                    { y: 0, opacity: 1, scale: 1, duration: 0.25, stagger: 0.04, ease: "power2.out", delay: 0.05 }
-                );
-            }
-        }
-    }, [activeFilter, reducedMotion, filteredTasks]);
+    useListReorder(listRef, [activeFilter, filteredTasks], {
+        flipIdSelector: '[data-flip-id]',
+        stagger: 0.03
+    });
 
     return (
         <div className="w-full relative z-10 px-2">
