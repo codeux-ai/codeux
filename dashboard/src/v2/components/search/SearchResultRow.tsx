@@ -7,6 +7,8 @@ import type { SearchItem } from "./SearchOverlay";
 interface SearchResultRowProps {
     item: SearchItem;
     categoryType: string;
+    searchQuery: string;
+    globalItemIndex: number;
     isFocused: boolean;
     onFocus: () => void;
     activeItemRef: preact.Ref<HTMLButtonElement> | null;
@@ -16,6 +18,8 @@ interface SearchResultRowProps {
 export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     item,
     categoryType,
+    searchQuery,
+    globalItemIndex,
     isFocused,
     onFocus,
     activeItemRef,
@@ -82,11 +86,34 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
         }
     }
 
+    // Highlight matches in the title
+    const renderTitle = () => {
+        if (!searchQuery || !title) return title;
+        const lowerTitle = title.toLowerCase();
+        const lowerQuery = searchQuery.toLowerCase();
+        const startIndex = lowerTitle.indexOf(lowerQuery);
+        if (startIndex === -1) return title;
+
+        const endIndex = startIndex + searchQuery.length;
+        const beforeMatch = title.substring(0, startIndex);
+        const matchText = title.substring(startIndex, endIndex);
+        const afterMatch = title.substring(endIndex);
+
+        return (
+            <>
+                {beforeMatch}
+                <mark className="bg-signal-500/20 text-signal-700 dark:text-signal-400 rounded-[2px] font-medium px-0.5">{matchText}</mark>
+                {afterMatch}
+            </>
+        );
+    };
+
     return (
         <Link
             to={targetTo as any}
             search={targetSearch as any}
             onClick={onClick}
+            id={`search-result-${globalItemIndex}`}
             ref={activeItemRef as any}
             onMouseEnter={onFocus}
             aria-label={`${categoryType} result: ${title}`}
@@ -124,7 +151,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                         <span className={`font-semibold truncate transition-colors duration-200 ${
                             isFocused ? 'text-signal-600 dark:text-signal-400' : 'text-slate-800 dark:text-slate-200 group-hover:text-slate-900 dark:group-hover:text-white'
                         }`}>
-                            {title}
+                            {renderTitle()}
                         </span>
                     </div>
 
