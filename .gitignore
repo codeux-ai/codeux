@@ -31,3 +31,4 @@ logs/openai/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+.qwen
