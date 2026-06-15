@@ -8,3 +8,10 @@ export const selectedAgentPresetIdSignal = signal<string | undefined>(undefined)
 export const lobotomizeModeSignal = signal(false);
 export const memoriesSignal = signal<any[]>([]);
 export const memorySidebarExpandedSignal = signal<boolean>(true);
+
+export const memoryMutationsSignal = signal<any>({
+    addMemory: async (input: any, pid: string) => {},
+    removeMemory: (id: string) => {},
+    feedback: { status: "idle", message: null },
+    clearFeedback: () => {}
+});

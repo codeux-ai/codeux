@@ -4,7 +4,7 @@ import { useState } from "preact/hooks";
 import { activeMemoryIdSignal, lobotomizeModeSignal, memoriesSignal } from "./memoryState.js";
 import { useComputed } from "@preact/signals";
 import { X } from "lucide-preact";
-import { deleteMemory } from "../../lib/memory-api.js";
+import { memoryMutationsSignal } from "./memoryState.js";
 
 interface MemoryCardProps {
     id: string;
@@ -32,22 +32,13 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
     strength,
     onClick,
 }) => {
-    const [deleted, setDeleted] = useState(false);
     const cat = CAT[category] || CAT.context;
     const isSelected = useComputed(() => activeMemoryIdSignal.value === id);
 
-    const handleDelete = async (e: Event) => {
+    const handleDelete = (e: Event) => {
         e.stopPropagation();
-        setDeleted(true);
-        memoriesSignal.value = memoriesSignal.value.filter((m) => m.id !== id);
-        try {
-            await deleteMemory(id);
-        } catch {
-            // Silently fail as per requirements
-        }
+        memoryMutationsSignal.value.removeMemory(id);
     };
-
-    if (deleted) return null;
 
     return (
         <div

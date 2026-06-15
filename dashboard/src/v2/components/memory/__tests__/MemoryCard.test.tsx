@@ -5,15 +5,15 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { expect, test, describe, vi, afterEach } from "vitest";
 import { MemoryCard } from "../MemoryCard.js";
 import { lobotomizeModeSignal, memoriesSignal } from "../memoryState.js";
-import * as MemoryApi from "../../../lib/memory-api.js";
+import { memoryMutationsSignal } from "../memoryState.js";
 
 expect.extend(matchers);
 
-vi.mock("../../../lib/memory-api.js", () => ({
-    deleteMemory: vi.fn(),
-}));
+
 
 describe("MemoryCard", () => {
+    const mockRemoveMemory = vi.fn();
+    memoryMutationsSignal.value = { removeMemory: mockRemoveMemory, addMemory: vi.fn(), feedback: null, clearFeedback: vi.fn() };
     afterEach(() => {
         vi.clearAllMocks();
         lobotomizeModeSignal.value = false;
@@ -53,9 +53,7 @@ describe("MemoryCard", () => {
 
         await fireEvent.click(deleteButton);
 
-        expect(MemoryApi.deleteMemory).toHaveBeenCalledWith("test-id");
-        expect(memoriesSignal.value).toEqual([]);
-        expect(queryByText("test-content")).not.toBeInTheDocument();
+        expect(mockRemoveMemory).toHaveBeenCalledWith("test-id");
     });
 
     test("does not show X button when lobotomizeModeSignal is false", () => {
