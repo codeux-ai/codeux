@@ -19,6 +19,7 @@ import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import { getPlanningFeedback } from "../../lib/sprint-planning-feedback.js";
 import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 
 /* ─── Icon Map ──────────────────────────────────────────────────────── */
@@ -161,6 +162,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const [edCategoryColor, setEdCategoryColor] = useState("#22c55e");
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const iconPickerRef = useFocusTrap(showIconPicker, { onClose: () => setShowIconPicker(false), restoreFocus: true });
+  const colorPickerRef = useFocusTrap(showColorPicker, { onClose: () => setShowColorPicker(false), restoreFocus: true });
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [edInstruction, setEdInstruction] = useState("");
   const [edTaskCount, setEdTaskCount] = useState(5);
@@ -807,8 +810,12 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
             {/* Picker popups (absolute to section, overflow toggled) */}
             {showIconPicker && (<>
-              <div className="fixed inset-0 z-[9998] cursor-pointer" onClick={() => setShowIconPicker(false)} />
+              <div className="fixed inset-0 z-[9998] cursor-pointer" onClick={() => setShowIconPicker(false)} aria-hidden="true" />
               <div
+                ref={iconPickerRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Icon picker"
                 className="absolute z-[9999] w-[17rem] rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
                 style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
               >
@@ -836,8 +843,12 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             </>)}
 
             {showColorPicker && (<>
-              <div className="fixed inset-0 z-[9998] cursor-pointer" onClick={() => setShowColorPicker(false)} />
+              <div className="fixed inset-0 z-[9998] cursor-pointer" onClick={() => setShowColorPicker(false)} aria-hidden="true" />
               <div
+                ref={colorPickerRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Color picker"
                 className="absolute z-[9999] w-52 rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
                 style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
               >
