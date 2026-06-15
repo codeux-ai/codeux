@@ -1,5 +1,5 @@
 import { h, ComponentChildren, FunctionComponent } from "preact";
-import { useEffect, useState, useRef } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { Overlay } from "./Overlay.js";
@@ -10,8 +10,8 @@ interface DialogProps {
   children: ComponentChildren;
   className?: string;
   disableBackdropClick?: boolean;
-  labelledBy?: string;
-  describedBy?: string;
+  ariaLabelledby?: string;
+  ariaDescribedby?: string;
 }
 
 export const Dialog: FunctionComponent<DialogProps> = ({
@@ -20,43 +20,27 @@ export const Dialog: FunctionComponent<DialogProps> = ({
   children,
   className = "",
   disableBackdropClick = false,
-  labelledBy,
-  describedBy,
+  ariaLabelledby,
+  ariaDescribedby,
 }) => {
   const reducedMotion = useReducedMotion();
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [visible, setVisible] = useState(isOpen);
 
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const previousFocusRef = useRef<Element | null>(null);
-
-  // REVIEWER NOTE: `useFocusTrap` in this codebase *returns* a ref (it does not accept one).
-  // We must assign the returned ref to make the trap work at runtime.
-  // To strictly satisfy the prompt's request to "Pass the ref to useFocusTrap(isOpen, onClose)",
-  // we pass `dialogRef` as a third argument, ignoring TS errors.
-  // @ts-expect-error - Satisfying literal prompt constraint
-  const trapRef = useFocusTrap(isOpen, onClose, dialogRef);
+  const trapRef = useFocusTrap(isOpen, { onClose, restoreFocus: true });
 
   useEffect(() => {
     if (isOpen) {
-      previousFocusRef.current = document.activeElement;
       setShouldRender(true);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           setVisible(true);
-          if (dialogRef.current) {
-            const focusable = dialogRef.current.querySelector(
-              'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
-            ) as HTMLElement | null;
-            focusable?.focus();
-          }
         });
       });
     } else {
       setVisible(false);
       const timer = setTimeout(() => {
         setShouldRender(false);
-        (previousFocusRef.current as HTMLElement)?.focus();
       }, reducedMotion ? 0 : 150); // Exit transition time
       return () => clearTimeout(timer);
     }
@@ -67,16 +51,11 @@ export const Dialog: FunctionComponent<DialogProps> = ({
   return (
     <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur exitDuration={150}>
       <div
-        ref={(el) => {
-          dialogRef.current = el;
-          if (trapRef) {
-            (trapRef as any).current = el;
-          }
-        }}
+        ref={trapRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={labelledBy}
-        aria-describedby={describedBy}
+        aria-labelledby={ariaLabelledby}
+        aria-describedby={ariaDescribedby}
         className={`relative z-50 bg-white dark:bg-void-800 rounded-[1.75rem] shadow-2xl border border-black/[0.06] dark:border-white/[0.06] ${className}`}
         style={{
           opacity: visible ? 1 : 0,
