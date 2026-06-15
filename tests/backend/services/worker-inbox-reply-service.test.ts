@@ -630,6 +630,185 @@ describe("WorkerInboxReplyService", () => {
     });
   });
 
+  it("extracts the clarification from the hydrated subtask when the task record carries no activities", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "Preserve the session semantics." });
+
+    const appendMessage = vi.fn();
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Code UX",
+          baseDir: "/repo",
+        }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn(),
+        listMessages: vi.fn(),
+      } as any,
+      taskService: {
+        resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
+      } as any,
+      agentPresetSyncService: {
+        getProjectManagerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Project manager guide fallback",
+        }),
+      } as any,
+      executionRepository: {
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-hydrated" }),
+        updateProviderInvocationUsage: vi.fn(),
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-hydrated" }),
+        appendExecutionInvocationMessage: appendMessage,
+        updateExecutionInvocation: vi.fn(),
+      } as any,
+      getDashboardSettings: () => settings,
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
+    });
+
+    await service.generateClarificationReply({
+      projectId: "project-1",
+      sprintGoal: "Ship the fix",
+      subtasks: [{
+        record_id: "task-123",
+        id: "T1",
+        title: "Fix clarification handling",
+        prompt: "Repair the Jules clarification flow.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+        activities: [
+          {
+            originator: "user",
+            userMessaged: { userMessage: "Please proceed." },
+          },
+          {
+            originator: "agent",
+            agentMessaged: {
+              agentMessage: "Should the new service preserve session lineage across retries?",
+            },
+          },
+        ],
+      }],
+      // Bare task record (as loaded by the virtual-worker attention flow) has no activities.
+      task: {
+        record_id: "task-123",
+        id: "T1",
+        title: "Fix clarification handling",
+        prompt: "Repair the Jules clarification flow.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+      } as any,
+    });
+
+    expect(appendMessage).toHaveBeenCalledWith("exec-inv-hydrated", {
+      role: "user",
+      contentMarkdown: expect.stringContaining(
+        "Should the new service preserve session lineage across retries?",
+      ),
+    });
+    expect(appendMessage).not.toHaveBeenCalledWith("exec-inv-hydrated", {
+      role: "user",
+      contentMarkdown: expect.stringContaining(
+        "No explicit Jules clarification message was captured",
+      ),
+    });
+  });
+
+  it("reads the live Jules clarification from the API even when the local activity cache is empty", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "Yes, proceed with the regression suites." });
+
+    const appendMessage = vi.fn();
+    const createExecutionInvocation = vi.fn().mockReturnValue({ id: "exec-inv-live" });
+    const fetchSessionActivities = vi.fn().mockResolvedValue([
+      { originator: "agent", progressUpdated: { description: "Ran typechecks locally." } },
+      {
+        originator: "agent",
+        agentMessaged: {
+          agentMessage: "I have completed the implementation. Shall I proceed with running the regression suites?",
+        },
+      },
+      { originator: "user", userMessaged: { userMessage: "I don't see an explicit clarification request." } },
+      { originator: "agent", progressUpdated: { description: "Resuming work." } },
+    ]);
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({ id: "project-1", name: "Code UX", baseDir: "/repo" }),
+      } as any,
+      connectionChatRepository: { getThread: vi.fn(), listMessages: vi.fn() } as any,
+      taskService: { resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute) } as any,
+      agentPresetSyncService: {
+        getProjectManagerAgent: vi.fn().mockResolvedValue({ instructionMarkdown: "Project manager guide fallback" }),
+      } as any,
+      executionRepository: {
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-live" }),
+        updateProviderInvocationUsage: vi.fn(),
+        createExecutionInvocation,
+        appendExecutionInvocationMessage: appendMessage,
+        updateExecutionInvocation: vi.fn(),
+      } as any,
+      getDashboardSettings: () => settings,
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+      providerConcurrencyService: {
+        waitForSlotAndClaim: vi.fn().mockImplementation((p, l, input) => ({ ...input, id: "inv-1" })),
+      } as any,
+      fetchSessionActivities,
+    } as any);
+
+    await service.generateClarificationReply({
+      projectId: "project-1",
+      sprintGoal: "Ship the fix",
+      subtasks: [{
+        record_id: "task-789",
+        sprint_id: "sprint-42",
+        id: "T07",
+        title: "Optimistic Undo",
+        prompt: "Implement optimistic undo.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+        session_name: "sessions/7528990551411663509",
+        // Local cache is empty — the message only exists in the live Jules API.
+        activities: [],
+      }],
+      // Bare task record without activities, session, record_id, or sprint_id.
+      task: {
+        id: "T07",
+        title: "Optimistic Undo",
+        prompt: "Implement optimistic undo.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+      } as any,
+    });
+
+    expect(fetchSessionActivities).toHaveBeenCalledWith("sessions/7528990551411663509", 30);
+    expect(appendMessage).toHaveBeenCalledWith("exec-inv-live", {
+      role: "user",
+      contentMarkdown: expect.stringContaining(
+        "I have completed the implementation. Shall I proceed with running the regression suites?",
+      ),
+    });
+    expect(appendMessage).not.toHaveBeenCalledWith("exec-inv-live", {
+      role: "user",
+      contentMarkdown: expect.stringContaining("No explicit Jules clarification message was captured"),
+    });
+    // The invocation must be tracked against the resolved sprint and task so it is navigable.
+    expect(createExecutionInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({ sprintId: "sprint-42", taskId: "task-789" }),
+    );
+  });
+
   it("does not refresh origin before clarification replies in LOCAL git mode", async () => {
     mockRunProviderForText.mockResolvedValue({ text: "Only the clarification answer." });
 

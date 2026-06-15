@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { randomUUID } from "crypto";
-import type { DashboardSettings, ProviderId, QwenModelProviderSettings, Subtask } from "../contracts/app-types.js";
+import type { DashboardSettings, JulesActivity, ProviderId, QwenModelProviderSettings, Subtask } from "../contracts/app-types.js";
 import type {
   ConversationCompactionSummary,
   ConversationMessageRecord,
@@ -50,6 +50,12 @@ interface WorkerInboxReplyServiceDependencies {
   providerRunner: IProviderRunner;
   providerConcurrencyService: ProviderConcurrencyService;
   knowledgeService: KnowledgeService;
+  /**
+   * Fetches the most recent activities for a Jules session straight from the
+   * Jules API. Used to read the live clarification request at reply time so we
+   * never depend on a possibly-empty local activity cache.
+   */
+  fetchSessionActivities?: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
   logger?: Logger;
 }
 
@@ -247,13 +253,13 @@ export class WorkerInboxReplyService {
       },
     );
 
-    const invocationTaskId = typeof args.task.record_id === "string" && args.task.record_id.trim().length > 0
-      ? args.task.record_id.trim()
-      : null;
+    const matchingSubtask = this.findMatchingSubtask(args.task, args.subtasks);
+    const invocationTaskId = this.firstNonEmptyString(args.task.record_id, matchingSubtask?.record_id);
+    const invocationSprintId = this.firstNonEmptyString(args.task.sprint_id, matchingSubtask?.sprint_id);
 
     const settings = this.deps.getDashboardSettings({
       projectId: args.projectId,
-      sprintId: typeof args.task.sprint_id === "string" ? args.task.sprint_id : undefined,
+      sprintId: invocationSprintId ?? undefined,
     });
     const clarificationAgentPresetId = settings.agents?.routing?.clarificationReply?.agentPresetId ?? null;
     const clarificationAgent = clarificationAgentPresetId
@@ -271,7 +277,8 @@ export class WorkerInboxReplyService {
       .trim();
     const knowledgeManifest = this.deps.knowledgeService?.buildManifestMarkdownForAgent(clarificationAgent.id) ?? null;
 
-    const clarificationRequest = this.getLatestClarificationRequest(args.task);
+    const clarificationActivities = await this.resolveClarificationActivities(args.task, args.subtasks);
+    const clarificationRequest = this.getLatestClarificationRequest(clarificationActivities);
 
     const fullContextPrompt = [
       projectManagerInstructions ? `## PROJECT MANAGER INSTRUCTIONS\n\n${projectManagerInstructions}` : "",
@@ -334,7 +341,7 @@ export class WorkerInboxReplyService {
       attentionItemId: null,
       dispatchId: null,
       providerInvocationId: usageRecord.id,
-      sprintId: null,
+      sprintId: invocationSprintId,
       sprintRunId: null,
       taskId: invocationTaskId,
       taskRunId: null,
@@ -413,18 +420,105 @@ export class WorkerInboxReplyService {
     return reply;
   }
 
-  private getLatestClarificationRequest(task: Subtask): string {
-    const activities = Array.isArray(task.activities) ? task.activities : [];
+  private firstNonEmptyString(...values: Array<string | null | undefined>): string | null {
+    for (const value of values) {
+      if (typeof value === "string" && value.trim().length > 0) {
+        return value.trim();
+      }
+    }
+    return null;
+  }
+
+  private findMatchingSubtask(task: Subtask, subtasks: Subtask[]): Subtask | undefined {
+    // The task may arrive in two shapes: a hydrated Subtask (`id` = task key,
+    // `record_id` = db id) or a bare task record cast to Subtask (`id` = db id).
+    // Cross-match both identifier fields so either shape resolves its subtask.
+    const recordId = this.firstNonEmptyString(task.record_id);
+    const taskKeyOrId = this.firstNonEmptyString(task.id);
+    return subtasks.find((candidate) =>
+      (recordId && (candidate.record_id === recordId || candidate.id === recordId)) ||
+      (taskKeyOrId && (candidate.id === taskKeyOrId || candidate.record_id === taskKeyOrId))
+    );
+  }
+
+  private resolveSessionNameForTask(task: Subtask, subtasks: Subtask[]): string | null {
+    const match = this.findMatchingSubtask(task, subtasks);
+    return this.firstNonEmptyString(
+      task.session_name,
+      task.session_id,
+      match?.session_name,
+      match?.session_id,
+    );
+  }
+
+  /**
+   * Resolves the session activities to mine for the latest Jules clarification.
+   *
+   * The local activity cache can be empty or stale (e.g. when the clarification
+   * is handled outside the regular session-sync loop), so we read the live
+   * activities straight from the Jules API first. We only fall back to the
+   * task's (or its hydrated subtask's) cached activities when the live fetch is
+   * unavailable, fails, or returns nothing — guaranteeing the real Jules
+   * message is never silently dropped.
+   */
+  private async resolveClarificationActivities(task: Subtask, subtasks: Subtask[]): Promise<JulesActivity[]> {
+    const sessionName = this.resolveSessionNameForTask(task, subtasks);
+    const isCliSession = !!sessionName && sessionName.replace(/^sessions\//, "").startsWith("cli-");
+    if (sessionName && !isCliSession && this.deps.fetchSessionActivities) {
+      try {
+        const liveActivities = await this.deps.fetchSessionActivities(sessionName, 30);
+        if (Array.isArray(liveActivities) && liveActivities.length > 0) {
+          return liveActivities;
+        }
+      } catch (error) {
+        this.deps.logger?.warn(
+          "Failed to fetch live Jules activities for clarification reply; falling back to cached activities",
+          {
+            sessionName,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
+    }
+
+    const taskActivities = Array.isArray(task.activities) ? task.activities : [];
+    if (taskActivities.length > 0) {
+      return taskActivities;
+    }
+    const match = this.findMatchingSubtask(task, subtasks);
+    return Array.isArray(match?.activities) ? match.activities : [];
+  }
+
+  private isUserOriginatedActivity(entry: JulesActivity): boolean {
+    return typeof entry.originator === "string" && entry.originator.toLowerCase() === "user";
+  }
+
+  private getLatestClarificationRequest(activities: JulesActivity[]): string {
+    // Prefer the most recent agent message across all activities so that a
+    // newer progress/description entry never masks the actual question Jules
+    // asked. User-originated activities (e.g. our own prior reply) are skipped.
     for (let index = activities.length - 1; index >= 0; index -= 1) {
-      const entry = activities[index] as Record<string, unknown>;
-      const agentMessaged = entry.agentMessaged as Record<string, unknown> | undefined;
-      const agentMessage = typeof agentMessaged?.agentMessage === "string" ? agentMessaged.agentMessage.trim() : "";
+      const entry = activities[index];
+      if (this.isUserOriginatedActivity(entry)) {
+        continue;
+      }
+      const agentMessage = typeof entry.agentMessaged?.agentMessage === "string"
+        ? entry.agentMessaged.agentMessage.trim()
+        : "";
       if (agentMessage.length > 0) {
         return agentMessage;
       }
-      const description = typeof entry.description === "string" ? entry.description.trim() : "";
-      if (description.length > 0) {
-        return `No explicit Jules clarification message was captured. Latest related activity summary: ${description}`;
+    }
+    for (let index = activities.length - 1; index >= 0; index -= 1) {
+      const entry = activities[index];
+      if (this.isUserOriginatedActivity(entry)) {
+        continue;
+      }
+      const summary = (typeof entry.progressUpdated?.title === "string" ? entry.progressUpdated.title.trim() : "")
+        || (typeof entry.progressUpdated?.description === "string" ? entry.progressUpdated.description.trim() : "")
+        || (typeof entry.description === "string" ? entry.description.trim() : "");
+      if (summary.length > 0) {
+        return `No explicit Jules clarification message was captured. Latest related activity summary: ${summary}`;
       }
     }
     return "No explicit Jules clarification message was captured in recent session activities.";

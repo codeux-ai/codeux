@@ -119,6 +119,8 @@ export function createSprintDependencies(
     providerRunner: coreDeps.providerRunner,
     providerConcurrencyService: coreDeps.providerConcurrencyService,
     knowledgeService: coreDeps.knowledgeService,
+    fetchSessionActivities: (sessionName, pageSize) =>
+      coreDeps.julesApi.fetchRecentActivities(sessionName, pageSize ?? 30),
     logger: logger.child({ component: "worker-inbox-reply-service" }),
   });
 
