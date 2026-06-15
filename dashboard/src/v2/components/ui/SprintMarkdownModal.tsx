@@ -180,9 +180,10 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
             </div>
             <button
               onClick={handleClose}
+              aria-label="Close dialog"
               className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
             >
-              <X className="w-4 h-4" />
+              <X aria-hidden="true" className="w-4 h-4" />
             </button>
           </div>
 

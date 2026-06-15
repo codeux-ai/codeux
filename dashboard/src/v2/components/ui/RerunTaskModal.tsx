@@ -199,9 +199,10 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
+                        aria-label="Close dialog"
                         className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber"
                     >
-                        <X className="w-3.5 h-3.5" strokeWidth={2} />
+                        <X aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
                     </button>
                 </div>
 

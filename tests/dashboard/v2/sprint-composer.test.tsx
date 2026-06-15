@@ -359,7 +359,7 @@ describe("AddTaskModal Lifecycle", () => {
       <AddTaskModal {...defaultProps} />
     );
 
-    const closeBtn = getByLabelText("Close");
+    const closeBtn = getByLabelText("Close dialog");
     fireEvent.click(closeBtn);
 
     // useFocusTrap sets the timeout to focus the previous active element.
@@ -395,7 +395,7 @@ describe("AddTaskModal Lifecycle", () => {
       expect(mockOnSubmit).toHaveBeenCalled();
     });
 
-    const closeBtn = getByLabelText("Close");
+    const closeBtn = getByLabelText("Close dialog");
     const cancelBtn = getByText("Cancel");
 
     expect(closeBtn).toBeDisabled();
