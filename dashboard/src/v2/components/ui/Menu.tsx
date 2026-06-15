@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preac
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
-import { GSAP_DURATIONS, GSAP_EASINGS } from "../../lib/motion/constants.js";
+import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface MenuProps {
@@ -34,6 +34,7 @@ export const Menu = ({
   const localTriggerRef = useRef<HTMLDivElement>(null);
   const triggerRef = externalTriggerRef || localTriggerRef;
   const menuRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
 
   // Generate a unique ID for ARIA wiring if none exists
@@ -56,10 +57,19 @@ export const Menu = ({
   useEffect(() => {
     if (isOpen) {
       setIsRendered(true);
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
       setTimeout(() => {
         const first = menuRef.current?.querySelector('[role="menuitem"]:not([aria-disabled="true"])') as HTMLElement | null;
         first?.focus();
       }, 0);
+    } else if (isRendered) { // Only restore if it was previously open
+      // Restore focus on close
+      if (previousFocusRef.current) {
+        previousFocusRef.current.focus();
+        previousFocusRef.current = null;
+      } else if (triggerRef.current) {
+        triggerRef.current.focus();
+      }
     }
   }, [isOpen]);
 
@@ -90,22 +100,23 @@ export const Menu = ({
         {
           opacity: 0,
           scale: 0.95,
-          y: position === "bottom" ? -10 : position === "top" ? 10 : 0,
+          y: position === "bottom" ? -5 : position === "top" ? 5 : 0,
         },
         {
           opacity: 1,
           scale: 1,
           y: 0,
-          duration: isReducedMotion ? 0 : GSAP_DURATIONS.slow,
-          ease: GSAP_EASINGS.spring,
+          duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
+          ease: MOTION_TOKENS.easing.standard,
         }
       );
     } else if (isRendered) {
       gsap.to(menuRef.current, {
         opacity: 0,
         scale: 0.95,
-        duration: isReducedMotion ? 0 : GSAP_DURATIONS.fast,
-        ease: "power2.in",
+        y: position === "bottom" ? -5 : position === "top" ? 5 : 0,
+        duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
+        ease: MOTION_TOKENS.easing.standard,
         onComplete: () => setIsRendered(false),
       });
     }
@@ -129,13 +140,18 @@ export const Menu = ({
 
       if (e.key === "Escape") {
         onOpenChange(false);
-        triggerRef.current?.focus(); // Restore focus
+        if (previousFocusRef.current) {
+          previousFocusRef.current.focus();
+          previousFocusRef.current = null;
+        } else if (triggerRef.current) {
+          triggerRef.current.focus();
+        }
         return;
       }
 
       if (!menuRef.current) return;
 
-      const items = Array.from(menuRef.current.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"])')) as HTMLElement[];
+      const items = Array.from(menuRef.current.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"]), button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')) as HTMLElement[];
       if (items.length === 0) return;
 
       const currentIndex = items.findIndex((item) => item === document.activeElement);
@@ -155,8 +171,12 @@ export const Menu = ({
         items[items.length - 1]?.focus();
       } else if (e.key === "Enter" || e.key === " ") {
         if (document.activeElement && items.includes(document.activeElement as HTMLElement)) {
-          e.preventDefault();
-          (document.activeElement as HTMLElement).click();
+          // Check if the element handles Enter/Space itself, otherwise we click it.
+          // Native buttons and links handle Enter/Space natively on focus, but we'll manually dispatch a click if it's a generic menuitem
+          if (document.activeElement.getAttribute('role') === 'menuitem') {
+            e.preventDefault();
+            (document.activeElement as HTMLElement).click();
+          }
         }
       }
     };
