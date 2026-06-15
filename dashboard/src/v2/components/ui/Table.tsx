@@ -12,7 +12,7 @@ export function Table({ children, className = "" }: { children: ComponentChildre
 
 export function TableHeader({ children }: { children: ComponentChildren }) {
   return (
-    <thead className="hidden lg:table-header-group">
+    <thead className="sr-only lg:not-sr-only lg:table-header-group">
       <tr className="text-[11px] font-bold text-slate-400">
         {children}
       </tr>

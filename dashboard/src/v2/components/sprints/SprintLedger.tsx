@@ -300,6 +300,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
         <Table>
           <TableHeader>
             <TableCell isHeader isFirst className="w-[80px] min-w-[80px]">
+              <span className="sr-only">Select</span>
               <button
                 type="button"
                 disabled={windowedSprints.length === 0 || isAnyBulkPending}
