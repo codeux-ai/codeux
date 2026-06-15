@@ -1,5 +1,6 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { useEffect, useState } from "preact/hooks";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 const Shimmer = () => (
   <div
@@ -9,20 +10,28 @@ const Shimmer = () => (
 
 export const SkeletonLoader: FunctionComponent<{ show: boolean; children: ComponentChildren; className?: string }> = ({ show, children, className }) => {
   const [shouldRender, setShouldRender] = useState(show);
+  const isReducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (show) {
       setShouldRender(true);
     } else {
-      const timeout = setTimeout(() => setShouldRender(false), 200);
-      return () => clearTimeout(timeout);
+      if (isReducedMotion) {
+        setShouldRender(false);
+      } else {
+        const timeout = setTimeout(() => setShouldRender(false), 200);
+        return () => clearTimeout(timeout);
+      }
     }
-  }, [show]);
+  }, [show, isReducedMotion]);
 
   if (!shouldRender) return null;
 
   return (
-    <div className={`transition-opacity duration-200 ease-in-out pointer-events-none ${show ? 'opacity-100' : 'opacity-0'} ${className || ''}`}>
+    <div
+      className={`transition-opacity duration-200 ease-in-out pointer-events-none bg-white dark:bg-void-800 z-10 ${show ? 'opacity-100' : 'opacity-0'} ${className || ''}`}
+      aria-busy={show}
+    >
       {children}
     </div>
   );
@@ -31,7 +40,6 @@ export const SkeletonLoader: FunctionComponent<{ show: boolean; children: Compon
 export const SkeletonRow: FunctionComponent = () => (
   <div
     className="relative overflow-hidden flex h-16 w-full items-center gap-4 rounded-2xl border border-black/[0.04] bg-black/[0.02] px-5 dark:border-white/[0.04] dark:bg-white/[0.02]"
-    aria-busy="true"
   >
     <Shimmer />
     <span className="sr-only">Loading row...</span>
@@ -45,7 +53,6 @@ export const SkeletonRow: FunctionComponent = () => (
 export const SkeletonCard: FunctionComponent = () => (
   <div
     className="skeleton-card-entry relative overflow-hidden flex h-40 w-full flex-col gap-4 rounded-[1.25rem] border border-black/[0.04] bg-black/[0.02] p-5 dark:border-white/[0.04] dark:bg-white/[0.02]"
-    aria-busy="true"
   >
     <Shimmer />
     <span className="sr-only">Loading card...</span>
@@ -67,7 +74,6 @@ export const SkeletonCard: FunctionComponent = () => (
 export const SkeletonPanel: FunctionComponent = () => (
   <div
     className="skeleton-panel-entry relative overflow-hidden flex h-64 w-full flex-col gap-6 rounded-[1.75rem] border border-black/[0.04] bg-black/[0.02] p-7 dark:border-white/[0.04] dark:bg-white/[0.02]"
-    aria-busy="true"
   >
     <Shimmer />
     <span className="sr-only">Loading panel...</span>
