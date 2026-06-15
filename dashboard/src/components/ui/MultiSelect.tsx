@@ -12,6 +12,9 @@ interface MultiSelectProps {
   onChange: (value: string[]) => void;
   placeholder?: string;
   className?: string;
+  ariaLabel?: string;
+  labelledBy?: string;
+  inputId?: string;
 }
 
 export function MultiSelect({
@@ -20,12 +23,16 @@ export function MultiSelect({
   onChange,
   placeholder = 'Select...',
   className = '',
+  ariaLabel,
+  labelledBy,
+  inputId,
 }: MultiSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const activeIndexRef = useRef<number>(-1);
   const [listboxId] = useState(() => 'ms-' + Math.random().toString(36).slice(2, 7));
+  const [announcement, setAnnouncement] = useState("");
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -38,10 +45,13 @@ export function MultiSelect({
   }, []);
 
   const toggleOption = (optionValue: string) => {
-    const newValue = value.includes(optionValue)
-      ? value.filter((v) => v !== optionValue)
-      : [...value, optionValue];
-    onChange(newValue);
+    if (value.includes(optionValue)) {
+      onChange(value.filter((v) => v !== optionValue));
+      setAnnouncement(`Removed ${optionValue}`);
+    } else {
+      onChange([...value, optionValue]);
+      setAnnouncement(`Added ${optionValue}`);
+    }
   };
 
   const selectedOptions = options.filter((opt) => value.includes(opt.value));
@@ -51,6 +61,10 @@ export function MultiSelect({
       <button
         type="button"
         ref={triggerRef}
+        id={inputId}
+        aria-label={ariaLabel}
+        aria-labelledby={labelledBy}
+        aria-describedby={`${listboxId}-desc`}
         role="combobox"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
@@ -82,11 +96,12 @@ export function MultiSelect({
               {opt.label}
               <button
                 type="button"
-                aria-label={`Remove ${opt.label}`}
+                aria-label={`Remove label ${opt.label}`}
                 className="text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleOption(opt.value);
+                  triggerRef.current?.focus();
                 }}
               >
                 &times;
@@ -166,6 +181,10 @@ export function MultiSelect({
           )}
         </div>
       )}
+      <span id={`${listboxId}-desc`} className="sr-only">
+        {selectedOptions.length} selected: {selectedOptions.map((o) => o.label).join(', ')}
+      </span>
+      <div aria-live="polite" className="sr-only">{announcement}</div>
     </div>
   );
 }
