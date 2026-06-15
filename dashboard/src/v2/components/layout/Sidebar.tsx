@@ -34,6 +34,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
     const sidebarRef = useRef<HTMLElement>(null);
     const overlayRef = useRef<HTMLDivElement>(null);
     const navRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLElement | null>(null);
     const [brandActive, setBrandActive] = useState(false);
     const { selectedProject } = useProjectData();
     const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
@@ -74,15 +75,23 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             const overlayDuration = prefersReducedMotion ? 0 : 0.3;
 
             if (isOpen) {
+                triggerRef.current = document.activeElement as HTMLElement;
                 gsap.to(sidebarRef.current, { x: 0, opacity: 1, duration: animDuration, ease: "power3.out" });
                 if (overlayRef.current) {
                     gsap.to(overlayRef.current, { opacity: 1, duration: overlayDuration, ease: "power2.out", display: "block" });
                 }
+                setTimeout(() => {
+                    const firstFocusable = sidebarRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])');
+                    firstFocusable?.focus();
+                }, 420);
             } else {
                 gsap.to(sidebarRef.current, { x: "-100%", opacity: 0, duration: animDuration, ease: "power3.in" });
                 if (overlayRef.current) {
                     gsap.to(overlayRef.current, { opacity: 0, duration: overlayDuration, ease: "power2.in", display: "none" });
                 }
+                setTimeout(() => {
+                    triggerRef.current?.focus();
+                }, 420);
             }
         } else {
             // Reset transforms if returning to desktop
@@ -129,6 +138,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             />
         )}
         <aside
+            id="primary-navigation"
             aria-label="Primary Navigation"
             ref={sidebarRef}
             className={`h-full shrink-0 border-r border-black/[0.05] dark:border-white/[0.04] bg-[#F5F3EF]/60 dark:bg-void-900 flex flex-col justify-between py-8 z-50 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
