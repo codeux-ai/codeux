@@ -306,6 +306,78 @@ describe("ProviderConcurrencyService", () => {
     });
   });
 
+  describe("tryClaimSlot", () => {
+    it("creates an invocation immediately when limit is 0 (unlimited)", async () => {
+      const record = { id: "inv-1" };
+      executionRepository.createProviderInvocationUsage.mockReturnValue(record);
+
+      const result = await service.tryClaimSlot("jules", 0, { provider: "jules" } as any);
+
+      expect(result).toBe(record);
+      expect(executionRepository.tryCreateProviderInvocationUsage).not.toHaveBeenCalled();
+    });
+
+    it("atomically claims a slot when under the cap", async () => {
+      const record = { id: "inv-2" };
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([]);
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue(record);
+
+      const result = await service.tryClaimSlot("jules", 15, { provider: "jules" } as any);
+
+      expect(result).toBe(record);
+      expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledWith({ provider: "jules" }, 15);
+    });
+
+    it("returns null when the cap is reached", async () => {
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([]);
+      executionRepository.tryCreateProviderInvocationUsage.mockReturnValue(null);
+
+      const result = await service.tryClaimSlot("jules", 15, { provider: "jules" } as any);
+
+      expect(result).toBeNull();
+    });
+
+    it("releases a stale Jules claim whose task run is already terminal before claiming", async () => {
+      vi.useFakeTimers();
+      try {
+        const staleStartedAt = new Date(Date.now() - 120_000).toISOString();
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([
+          { id: "stale-1", sessionId: "sessions/abc", startedAt: staleStartedAt, durationMs: 0, purpose: "task_coding" },
+        ]);
+        executionRepository.getLatestTaskRunBySessionId = vi.fn().mockReturnValue({ state: "COMPLETED" });
+        executionRepository.tryCreateProviderInvocationUsage.mockReturnValue({ id: "inv-3" });
+
+        const result = await service.tryClaimSlot("jules", 1, { provider: "jules" } as any);
+
+        expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith(
+          "stale-1",
+          expect.objectContaining({ status: "failed" }),
+        );
+        expect(result).toEqual({ id: "inv-3" });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps a Jules claim whose task run is still running", async () => {
+      vi.useFakeTimers();
+      try {
+        const staleStartedAt = new Date(Date.now() - 120_000).toISOString();
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([
+          { id: "active-1", sessionId: "sessions/xyz", startedAt: staleStartedAt, durationMs: 0, purpose: "task_coding" },
+        ]);
+        executionRepository.getLatestTaskRunBySessionId = vi.fn().mockReturnValue({ state: "RUNNING" });
+        executionRepository.tryCreateProviderInvocationUsage.mockReturnValue(null);
+
+        await service.tryClaimSlot("jules", 1, { provider: "jules" } as any);
+
+        expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe("getGlobalRunningCounts", () => {
     it("should return counts per provider", () => {
       executionRepository.listRunningProviderInvocationUsages.mockReturnValue([

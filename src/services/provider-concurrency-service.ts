@@ -6,6 +6,11 @@ import { sleepWithSignal } from "../shared/providers/provider-retry-policy.js";
 
 const STALE_DOCKER_PROVIDER_INVOCATION_MS = 60_000;
 const STALE_DOCKER_PROVIDER_ACTIVITY_IDLE_MS = 180_000;
+// A running Jules provider invocation whose linked task run is already terminal is released
+// after this age. Orphaned claims (no associated session/task run yet) are only released once
+// they are clearly abandoned, to avoid reclaiming a slot mid-dispatch.
+const STALE_JULES_PROVIDER_INVOCATION_MS = 60_000;
+const STALE_JULES_PROVIDER_ORPHAN_MS = 600_000;
 
 export interface ProviderConcurrencyServiceDeps {
   executionRepository: ExecutionRepository;
@@ -129,6 +134,29 @@ export class ProviderConcurrencyService {
   }
 
   /**
+   * Attempts to claim a concurrency slot for the given provider atomically without waiting.
+   * Returns the claimed invocation record, or null if the global cap is currently reached.
+   *
+   * Unlike {@link waitForSlotAndClaim} this never blocks — callers that prefer to defer work
+   * (e.g. Jules sprint dispatch, which blocks the task and retries next cycle) use this so the
+   * cap is enforced globally and atomically across all sprints and projects.
+   */
+  async tryClaimSlot(
+    provider: ProviderId,
+    limit: number,
+    input: CreateProviderInvocationUsageInput,
+  ): Promise<ProviderInvocationUsageRecord | null> {
+    if (limit <= 0) {
+      return this.deps.executionRepository.createProviderInvocationUsage(input);
+    }
+
+    await this.reconcileStaleDockerProviderInvocations(provider);
+    this.reconcileStaleJulesProviderInvocations(provider);
+
+    return this.deps.executionRepository.tryCreateProviderInvocationUsage(input, limit);
+  }
+
+  /**
    * Returns the current running invocation counts per provider across all projects.
    */
   getGlobalRunningCounts(providers?: string[]): Record<string, number> {
@@ -210,6 +238,59 @@ export class ProviderConcurrencyService {
       }
 
       this.deps.logger.warn("Recovered stale Docker provider invocation while waiting for provider slot", {
+        provider,
+        providerInvocationId: invocation.id,
+        sessionId: invocation.sessionId,
+        purpose: invocation.purpose,
+      });
+    }
+  }
+
+  /**
+   * Releases running Jules provider invocations whose work has already finished but whose slot
+   * was never released (e.g. the session-sync terminal handler never observed the session, or a
+   * dispatch crashed after claiming). Without this a leaked claim would permanently consume a
+   * slot and starve the global cap.
+   */
+  private reconcileStaleJulesProviderInvocations(provider: ProviderId): void {
+    if (provider !== "jules") {
+      return;
+    }
+
+    const running = this.deps.executionRepository.listRunningProviderInvocationUsages(["jules"]);
+    if (running.length === 0) {
+      return;
+    }
+
+    const nowMs = Date.now();
+    const reconciledAt = new Date().toISOString();
+
+    for (const invocation of running) {
+      const ageMs = nowMs - Date.parse(invocation.startedAt);
+      if (!Number.isFinite(ageMs) || ageMs < STALE_JULES_PROVIDER_INVOCATION_MS) {
+        continue;
+      }
+
+      const taskRun = this.deps.executionRepository.getLatestTaskRunBySessionId(invocation.sessionId);
+      if (taskRun) {
+        const terminal = taskRun.state === "COMPLETED" || taskRun.state === "FAILED";
+        if (!terminal) {
+          // The underlying Jules work is still active — keep holding the slot.
+          continue;
+        }
+      } else if (ageMs < STALE_JULES_PROVIDER_ORPHAN_MS) {
+        // No task run associated yet (claim still has a placeholder session id, or the dispatch
+        // is mid-flight). Only reclaim once it is clearly abandoned.
+        continue;
+      }
+
+      this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+        status: "failed",
+        finishedAt: reconciledAt,
+        durationMs: this.calculateDurationMs(invocation, reconciledAt),
+      });
+
+      this.deps.logger.warn("Recovered stale Jules provider invocation while claiming provider slot", {
         provider,
         providerInvocationId: invocation.id,
         sessionId: invocation.sessionId,

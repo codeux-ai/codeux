@@ -219,6 +219,38 @@ describe("Settings Resolution Service", () => {
       expect(resolved.settings.agents.qualityAssurance.enabled).toBe(false);
     });
 
+    it("enforces the system provider concurrency cap as a hard ceiling over project overrides", () => {
+      const baseProject = buildDefaultProjectSettings();
+      baseProject.aiProvider.providers.jules.maxConcurrentTasks = 15;
+      const systemSettings: SystemSettings = {
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
+        integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", "claudeCodeApiKey": "", githubToken: "" },
+        defaults: baseProject,
+        mcpTools: [],
+      };
+
+      // A project override that tries to RAISE the cap above the system value is clamped down.
+      const raised = resolveDashboardSettings({
+        systemSettings,
+        projectOverride: { aiProvider: { providers: { jules: { maxConcurrentTasks: 50 } } } } as unknown as ProjectSettingsOverride,
+      });
+      expect(raised.settings.aiProvider.providers.jules.maxConcurrentTasks).toBe(15);
+
+      // A project override that LOWERS the cap below the system value is honored.
+      const lowered = resolveDashboardSettings({
+        systemSettings,
+        projectOverride: { aiProvider: { providers: { jules: { maxConcurrentTasks: 5 } } } } as unknown as ProjectSettingsOverride,
+      });
+      expect(lowered.settings.aiProvider.providers.jules.maxConcurrentTasks).toBe(5);
+
+      // A project requesting "unlimited" (0) is still bounded by the system cap.
+      const unlimited = resolveDashboardSettings({
+        systemSettings,
+        projectOverride: { aiProvider: { providers: { jules: { maxConcurrentTasks: 0 } } } } as unknown as ProjectSettingsOverride,
+      });
+      expect(unlimited.settings.aiProvider.providers.jules.maxConcurrentTasks).toBe(15);
+    });
+
     it("merges custom MCP servers and tool toggles across system and project scope", () => {
       const baseProject = buildDefaultProjectSettings();
       const systemSettings: SystemSettings = {

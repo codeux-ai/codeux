@@ -733,6 +733,37 @@ function applyIntegrations(settings: ProjectSettings, integrations: SystemSettin
   };
 }
 
+/**
+ * Resolves the effective provider concurrency cap, enforcing the system-level cap as a
+ * hard ceiling. A project/sprint override may only lower the cap, never raise it above
+ * the system value. `0` means "unlimited" for both layers.
+ */
+export function applySystemConcurrencyCeiling(scopedValue: number, systemValue: number | undefined): number {
+  if (systemValue === undefined || systemValue <= 0) {
+    // System imposes no ceiling — the scoped value (project/sprint) stands.
+    return scopedValue;
+  }
+  if (scopedValue <= 0) {
+    // Scoped scope requests "unlimited", but the system cap is a hard ceiling.
+    return systemValue;
+  }
+  return Math.min(scopedValue, systemValue);
+}
+
+/**
+ * Clamps every provider's `maxConcurrentTasks` in the resolved (project/sprint) aiProvider
+ * settings to the corresponding system-level cap so a project can never exceed the system cap.
+ */
+function clampProviderConcurrencyToSystemCap(
+  resolved: DashboardSettings["aiProvider"],
+  systemAiProvider: DashboardSettings["aiProvider"],
+): void {
+  for (const [providerConfigId, provider] of Object.entries(resolved.providers)) {
+    const systemCap = systemAiProvider.providers[providerConfigId]?.maxConcurrentTasks;
+    provider.maxConcurrentTasks = applySystemConcurrencyCeiling(provider.maxConcurrentTasks, systemCap);
+  }
+}
+
 export function resolveProjectSettings(
   systemSettings: SystemSettings,
   projectOverride?: ProjectSettingsOverride | null,
@@ -779,6 +810,12 @@ export function resolveDashboardSettings(args: {
   const baseProject = args.systemSettings.defaults;
   const projectSettings = resolveProjectSettings(args.systemSettings, args.projectOverride);
   const sprintSettings = resolveSprintProjectSettings(args.systemSettings, args.projectOverride, args.sprintOverride);
+  // Provider concurrency caps: the system-level cap is a hard ceiling. Resolve the scoped
+  // (project/sprint) caps, then clamp each provider to the system cap so an override can
+  // only lower a cap, never raise it above the system value.
+  const resolvedAiProvider = applyIntegrations(sprintSettings, args.systemSettings.integrations);
+  const systemAiProvider = applyIntegrations(baseProject, args.systemSettings.integrations);
+  clampProviderConcurrencyToSystemCap(resolvedAiProvider, systemAiProvider);
   const systemGithubToken = args.systemSettings.integrations.githubToken || "";
   const systemGitlabToken = args.systemSettings.integrations.gitlabToken || "";
   const systemJira = args.systemSettings.integrations.jira ?? DEFAULT_DASHBOARD_SETTINGS.jira;
@@ -793,7 +830,7 @@ export function resolveDashboardSettings(args: {
     appearance: { ...sprintSettings.appearance },
     automationLevel: sprintSettings.automationLevel,
     automationInterventions: { ...sprintSettings.automationInterventions },
-    aiProvider: applyIntegrations(sprintSettings, args.systemSettings.integrations),
+    aiProvider: resolvedAiProvider,
     // GitHub/GitLab/Jira resolve through the scoped project/sprint settings, which
     // inherit the system integration values unless a project or sprint overrides
     // them. A blank scoped value falls back to the system integration value.

@@ -1,5 +1,6 @@
 import type { Subtask } from "../../contracts/app-types.js";
 import type { Logger } from "../../shared/logging/logger.js";
+import { ProviderCapReachedError } from "../../services/sprint-task-dispatch-service.js";
 
 interface StartReadyTasksOptions {
   action: "status" | "orchestrate" | "plan";
@@ -76,6 +77,17 @@ export const runStartReadyTasksStep = async (
       reportText += `🚀 **Started ${providerLabel} Session** for task \`${task.id}\`: [${session.id}](${session.id})\n`;
       options.setConsecutiveFailures(0);
     } catch (error: unknown) {
+      // A provider cap deferral is not a dispatch failure: block the task and retry next cycle
+      // without counting it toward the emergency-stop failure budget.
+      if (error instanceof ProviderCapReachedError) {
+        task.status = "BLOCKED";
+        options.logger.info("Task blocked: provider concurrency cap reached at dispatch", {
+          taskId: task.id,
+          provider: error.provider,
+          limit: error.limit,
+        });
+        continue;
+      }
       const currentFails = options.getConsecutiveFailures() + 1;
       options.setConsecutiveFailures(currentFails);
       const message = error instanceof Error ? error.message : String(error);

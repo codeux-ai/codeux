@@ -1004,6 +1004,25 @@ export class ExecutionRepository {
     });
   }
 
+  /**
+   * Re-keys a provider invocation onto its real provider session id once it is known.
+   * Used by the Jules dispatch path, which claims a concurrency slot (with a placeholder
+   * session id) before calling the Jules API, then associates the returned session id so
+   * the session-sync lifecycle can release the slot when the session reaches a terminal state.
+   */
+  associateProviderInvocationSession(invocationId: string, sessionId: string, nativeSessionId?: string | null): void {
+    const trimmed = sessionId.trim();
+    if (!trimmed) {
+      return;
+    }
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      UPDATE provider_invocations
+      SET session_id = ?, native_session_id = ?, updated_at = ?
+      WHERE id = ?
+    `).run(trimmed, nativeSessionId ?? trimmed, now, invocationId);
+  }
+
   updateProviderInvocationUsage(invocationId: string, input: UpdateProviderInvocationUsageInput): ProviderInvocationUsageRecord {
     try {
       const current = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);

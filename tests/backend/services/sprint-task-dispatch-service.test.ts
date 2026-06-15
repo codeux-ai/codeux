@@ -6,6 +6,8 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { SprintTaskDispatchService } from "../../../src/services/sprint-task-dispatch-service.js";
+import { ProviderConcurrencyService } from "../../../src/services/provider-concurrency-service.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 const tempDirs: string[] = [];
 
@@ -28,11 +30,19 @@ async function createFixture() {
     getCounts: vi.fn(),
     reset: vi.fn(),
   };
+  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), child: vi.fn(() => logger) };
+  const providerConcurrencyService = new ProviderConcurrencyService({
+    executionRepository,
+    logger: logger as any,
+  });
   const service = new SprintTaskDispatchService(
     executionRepository,
     projectManagementRepository,
     taskService as any,
     guardrailService as any,
+    providerConcurrencyService,
+    () => DEFAULT_DASHBOARD_SETTINGS,
+    logger as any,
   );
 
   return {

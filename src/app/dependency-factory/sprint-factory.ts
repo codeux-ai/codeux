@@ -189,6 +189,8 @@ export function createSprintDependencies(
     projectManagementRepository,
     taskService,
     coreDeps.guardrailService,
+    coreDeps.providerConcurrencyService,
+    resolveDashboardSettings,
     logger.child({ component: "sprint-task-dispatch-service" }),
   );
 

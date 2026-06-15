@@ -1,10 +1,24 @@
-import type { JulesSession, Subtask } from "../contracts/app-types.js";
-import type { TaskDispatchExecutorType, TaskRunRecord } from "../contracts/execution-types.js";
+import { randomUUID } from "node:crypto";
+import type { DashboardSettings, DashboardSettingsScope, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
+import type { ProviderInvocationUsageRecord, TaskDispatchExecutorType, TaskRunRecord } from "../contracts/execution-types.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { TaskService } from "./task-service.js";
 import type { GuardrailService } from "./guardrail-service.js";
+import type { ProviderConcurrencyService } from "./provider-concurrency-service.js";
 import type { Logger } from "../shared/logging/logger.js";
+
+/**
+ * Thrown when a task cannot be dispatched because the provider's global concurrency cap is
+ * currently reached. This is a deferral, not a failure: callers should re-queue the task and
+ * retry on a later cycle rather than counting it toward the emergency-stop failure budget.
+ */
+export class ProviderCapReachedError extends Error {
+  constructor(public readonly provider: string, public readonly limit: number) {
+    super(`Provider concurrency cap reached for ${provider} (limit ${limit}); task deferred.`);
+    this.name = "ProviderCapReachedError";
+  }
+}
 
 export interface StartSprintDispatchArgs {
   task: Subtask;
@@ -35,6 +49,8 @@ export class SprintTaskDispatchService {
     private readonly projectManagementRepository: ProjectManagementRepository,
     private readonly taskService: TaskService,
     private readonly guardrailService: GuardrailService,
+    private readonly providerConcurrencyService: ProviderConcurrencyService,
+    private readonly getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings,
     private readonly logger?: Logger,
   ) {}
 
@@ -52,6 +68,15 @@ export class SprintTaskDispatchService {
     };
     const provider = this.taskService.resolveTaskProvider(args.task, settingsScope, preferredExecutor);
     const executorType: TaskDispatchExecutorType = provider === "jules" ? "jules" : "docker_cli";
+
+    // Jules sessions run remotely and are not gated by the CLI execution path's atomic slot
+    // claim. Claim a global concurrency slot here — before creating any dispatch/task-run
+    // records or calling the Jules API — so the provider cap is enforced atomically across all
+    // sprints and projects. CLI/docker tasks claim their slot later inside ProviderExecutionService.
+    const julesClaim = executorType === "jules"
+      ? await this.claimJulesSlot(args, taskRecordId, settingsScope)
+      : null;
+
     const queuedAt = new Date().toISOString();
     const dispatch = this.executionRepository.createTaskDispatch({
       projectId: args.projectId,
@@ -111,6 +136,15 @@ export class SprintTaskDispatchService {
       const sessionId = session.id || null;
       const nextProvider = session.provider || provider;
 
+      // Re-key the claimed concurrency slot onto the real Jules session id so the session-sync
+      // terminal handler can release it when the session completes or fails.
+      if (julesClaim) {
+        const associatedSessionId = sessionId || sessionName;
+        if (associatedSessionId) {
+          this.executionRepository.associateProviderInvocationSession(julesClaim.id, associatedSessionId, sessionId);
+        }
+      }
+
       this.executionRepository.updateTaskRun(taskRun.id, {
         provider: nextProvider,
         sessionId,
@@ -144,6 +178,13 @@ export class SprintTaskDispatchService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const finishedAt = new Date().toISOString();
+      // Release the claimed Jules concurrency slot so a failed dispatch never leaks capacity.
+      if (julesClaim) {
+        this.executionRepository.updateProviderInvocationUsage(julesClaim.id, {
+          status: "failed",
+          finishedAt,
+        });
+      }
       this.executionRepository.updateTaskRun(taskRun.id, {
         state: "FAILED",
         finishedAt,
@@ -169,6 +210,41 @@ export class SprintTaskDispatchService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Resolves the effective Jules concurrency cap for the scope (already clamped to the system
+   * cap during settings resolution) and atomically claims a slot. Throws ProviderCapReachedError
+   * when no slot is available so the caller can defer the task instead of exceeding the cap.
+   */
+  private async claimJulesSlot(
+    args: StartSprintDispatchArgs,
+    taskRecordId: string,
+    settingsScope: DashboardSettingsScope,
+  ): Promise<ProviderInvocationUsageRecord> {
+    const settings = this.getDashboardSettings(settingsScope);
+    const julesSettings = settings.aiProvider.providers["jules"]
+      ?? Object.values(settings.aiProvider.providers).find((entry) => entry.provider === "jules");
+    const limit = julesSettings?.maxConcurrentTasks ?? 0;
+
+    const claim = await this.providerConcurrencyService.tryClaimSlot("jules" as ProviderId, limit, {
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+      taskId: taskRecordId,
+      sprintRunId: args.sprintRunId,
+      // Placeholder session id until the Jules API returns the real one; re-keyed on success.
+      sessionId: `jules-pending:${taskRecordId}:${randomUUID()}`,
+      provider: "jules",
+      purpose: "task_coding",
+      status: "running",
+      invocationSource: "EXTERNAL_API",
+    });
+
+    if (!claim) {
+      throw new ProviderCapReachedError("jules", limit);
+    }
+
+    return claim;
   }
 
   private requireTaskRecordId(task: Subtask): string {
