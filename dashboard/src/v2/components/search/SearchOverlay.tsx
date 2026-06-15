@@ -155,10 +155,10 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 onClose();
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setFocusedIndex(prev => (prev < allItems?.length || 0 - 1 ? prev + 1 : 0));
+                setFocusedIndex(prev => (prev < (allItems?.length || 0) - 1 ? prev + 1 : 0));
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setFocusedIndex(prev => (prev > 0 ? prev - 1 : allItems?.length || 0 - 1));
+                setFocusedIndex(prev => (prev > 0 ? prev - 1 : (allItems?.length || 0) - 1));
             } else if (e.key === 'Enter' && focusedIndex >= 0) {
                 e.preventDefault();
                 const selectedItem = allItems[focusedIndex];
@@ -205,6 +205,11 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                     <input
                         ref={inputRef}
                         type="text"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        aria-expanded="true"
+                        aria-controls="search-results-list"
+                        aria-activedescendant={focusedIndex >= 0 ? `search-result-${focusedIndex}` : undefined}
                         placeholder="Search sprints, tasks, agents..."
                         value={searchQuery}
                         onInput={(e) => onSearchChange(e.currentTarget.value)}
@@ -265,26 +270,27 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                             </div>
                         </div>
                     ) : isLoading ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
                             <Loader2 className="w-8 h-8 mb-4 animate-spin opacity-50" />
                             <span className="text-sm">Searching...</span>
                         </div>
+                    ) : allItems.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
+                            <Inbox className="w-8 h-8 mb-4 opacity-50" />
+                            <span className="text-sm">No results found for '{searchQuery}'</span>
+                        </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-2">
-                            {CATEGORIES.map((category) => (
-                                <div key={category.id} className="flex flex-col">
-                                    <div className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                                        <category.icon className="w-4 h-4" />
-                                        {category.title}
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                        {category.items?.length === 0 ? (
-                                            <div className="flex flex-col items-center justify-center py-4 text-slate-500 dark:text-slate-400">
-                                                <Inbox className="w-5 h-5 mb-2 opacity-50" />
-                                                <span className="text-xs">No results found for '{searchQuery}'</span>
-                                            </div>
-                                        ) : (
-                                            category.items.map((item) => {
+                        <div id="search-results-list" role="listbox" className="grid grid-cols-1 md:grid-cols-2 gap-4 p-2">
+                            {CATEGORIES.map((category) => {
+                                if (category.items?.length === 0) return null;
+                                return (
+                                    <div key={category.id} className="flex flex-col">
+                                        <div className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                                            <category.icon className="w-4 h-4" />
+                                            {category.title}
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            {category.items.map((item) => {
                                                 const isFocused = focusedIndex === globalItemIndex;
                                                 const currentIndex = globalItemIndex++;
 
@@ -293,17 +299,19 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                                         key={item.id}
                                                         item={item}
                                                         categoryType={category.id}
+                                                        searchQuery={searchQuery}
+                                                        globalItemIndex={currentIndex}
                                                         isFocused={isFocused}
                                                         onFocus={() => setFocusedIndex(currentIndex)}
                                                         activeItemRef={isFocused ? activeItemRef : null}
                                                         onClick={() => handleSelect({ ...item, category: category.id })}
                                                     />
                                                 );
-                                            })
-                                        )}
+                                            })}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
