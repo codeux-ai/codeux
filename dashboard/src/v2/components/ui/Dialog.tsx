@@ -10,7 +10,13 @@ interface DialogProps {
   children: ComponentChildren;
   className?: string;
   disableBackdropClick?: boolean;
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
+  ariaDescribedBy?: string;
+  initialFocusRef?: { current: HTMLElement | null };
+  /** @deprecated use ariaLabelledBy */
   ariaLabelledby?: string;
+  /** @deprecated use ariaDescribedBy */
   ariaDescribedby?: string;
 }
 
@@ -20,6 +26,10 @@ export const Dialog: FunctionComponent<DialogProps> = ({
   children,
   className = "",
   disableBackdropClick = false,
+  ariaLabel,
+  ariaLabelledBy,
+  ariaDescribedBy,
+  initialFocusRef,
   ariaLabelledby,
   ariaDescribedby,
 }) => {
@@ -27,7 +37,7 @@ export const Dialog: FunctionComponent<DialogProps> = ({
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [visible, setVisible] = useState(isOpen);
 
-  const trapRef = useFocusTrap(isOpen, { onClose, restoreFocus: true });
+  const trapRef = useFocusTrap(isOpen, { onClose, restoreFocus: true, initialFocusRef });
 
   useEffect(() => {
     if (isOpen) {
@@ -54,9 +64,11 @@ export const Dialog: FunctionComponent<DialogProps> = ({
         ref={trapRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={ariaLabelledby}
-        aria-describedby={ariaDescribedby}
-        className={`relative z-50 bg-white dark:bg-void-800 rounded-[1.75rem] shadow-2xl border border-black/[0.06] dark:border-white/[0.06] ${className}`}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy || ariaLabelledby}
+        aria-describedby={ariaDescribedBy || ariaDescribedby}
+        tabIndex={-1}
+        className={`relative z-50 bg-white dark:bg-void-800 rounded-[1.75rem] shadow-2xl border border-black/[0.06] dark:border-white/[0.06] outline-none ${className}`}
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'scale(1)' : 'scale(0.95)',

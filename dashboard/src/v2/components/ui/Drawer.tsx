@@ -12,7 +12,13 @@ interface DrawerProps {
   className?: string;
   position?: "left" | "right";
   disableBackdropClick?: boolean;
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
+  ariaDescribedBy?: string;
+  initialFocusRef?: { current: HTMLElement | null };
+  /** @deprecated use ariaLabelledBy */
   ariaLabelledby?: string;
+  /** @deprecated use ariaDescribedBy */
   ariaDescribedby?: string;
 }
 
@@ -23,13 +29,17 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
   className = "",
   position = "right",
   disableBackdropClick = false,
+  ariaLabel,
+  ariaLabelledBy,
+  ariaDescribedBy,
+  initialFocusRef,
   ariaLabelledby,
   ariaDescribedby,
 }) => {
   const reducedMotion = useReducedMotion();
   const [shouldRender, setShouldRender] = useState(isOpen);
   const cardRef = useRef<HTMLDivElement>(null);
-  const trapRef = useFocusTrap(isOpen, { onClose, restoreFocus: true });
+  const trapRef = useFocusTrap(isOpen, { onClose, restoreFocus: true, initialFocusRef });
 
   const isRight = position === "right";
   const alignmentClass = isRight ? "right-0" : "left-0";
@@ -79,9 +89,11 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
         }}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={ariaLabelledby}
-        aria-describedby={ariaDescribedby}
-        className={`fixed top-0 bottom-0 ${alignmentClass} z-50 w-full max-w-md bg-white dark:bg-void-800 rounded-[12px] shadow-lg border-x border-black/[0.06] dark:border-white/[0.06] ${className}`}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy || ariaLabelledby}
+        aria-describedby={ariaDescribedBy || ariaDescribedby}
+        tabIndex={-1}
+        className={`fixed top-0 bottom-0 ${alignmentClass} z-50 w-full max-w-md bg-white dark:bg-void-800 rounded-[12px] shadow-lg border-x border-black/[0.06] dark:border-white/[0.06] outline-none ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

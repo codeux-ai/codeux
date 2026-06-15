@@ -11,7 +11,13 @@ interface ModalProps {
   children: ComponentChildren;
   className?: string;
   disableBackdropClick?: boolean;
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
+  ariaDescribedBy?: string;
+  initialFocusRef?: { current: HTMLElement | null };
+  /** @deprecated use ariaLabelledBy */
   ariaLabelledby?: string;
+  /** @deprecated use ariaDescribedBy */
   ariaDescribedby?: string;
 }
 
@@ -21,13 +27,17 @@ export const Modal: FunctionComponent<ModalProps> = ({
   children,
   className = "",
   disableBackdropClick = false,
+  ariaLabel,
+  ariaLabelledBy,
+  ariaDescribedBy,
+  initialFocusRef,
   ariaLabelledby,
   ariaDescribedby,
 }) => {
   const reducedMotion = useReducedMotion();
   const [shouldRender, setShouldRender] = useState(isOpen);
   const cardRef = useRef<HTMLDivElement>(null);
-  const trapRef = useFocusTrap(isOpen, { onClose, restoreFocus: true });
+  const trapRef = useFocusTrap(isOpen, { onClose, restoreFocus: true, initialFocusRef });
 
   useEffect(() => {
     if (isOpen) {
@@ -73,9 +83,11 @@ export const Modal: FunctionComponent<ModalProps> = ({
         }}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={ariaLabelledby}
-        aria-describedby={ariaDescribedby}
-        className={`relative z-50 bg-white dark:bg-void-800 rounded-[12px] shadow-lg border border-black/[0.06] dark:border-white/[0.06] ${className}`}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy || ariaLabelledby}
+        aria-describedby={ariaDescribedBy || ariaDescribedby}
+        tabIndex={-1}
+        className={`relative z-50 bg-white dark:bg-void-800 rounded-[12px] shadow-lg border border-black/[0.06] dark:border-white/[0.06] outline-none ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

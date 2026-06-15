@@ -206,7 +206,7 @@ describe("AgentPresetEditorPanel", () => {
 
     expect(screen.getByText("Both tiers · All categories")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Manage Memory" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Manage Memory" })[0]);
 
     const longTermButton = await screen.findByRole("button", { name: "Long Term" });
     fireEvent.click(longTermButton);
