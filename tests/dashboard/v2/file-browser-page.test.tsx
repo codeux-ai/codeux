@@ -149,7 +149,7 @@ describe("FileBrowserPage", () => {
     render(<FileBrowserPage />);
 
     const pageRoot = screen.getByTestId("file-browser-page-root");
-    expect(pageRoot.className).toContain("px-8");
+    expect(pageRoot.className).toContain("px-4");
     expect(pageRoot.className).toContain("py-12");
     expect(pageRoot.className).toContain("md:px-20");
     expect(screen.getByTestId("file-browser-page-header")).toBeInTheDocument();

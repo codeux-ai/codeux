@@ -17,7 +17,7 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
     const queuedCount = allTasks.filter((t: Task) => t.status === "pending" && activeSprintIds.has(t.sprintId)).length;
 
     return (
-        <div className="hidden items-center gap-0.5 rounded-xl border border-black/[0.04] bg-black/[0.02] px-1 dark:border-white/[0.04] dark:bg-white/[0.02] lg:flex">
+        <div className="hidden items-center gap-0.5 rounded-xl border border-black/[0.04] bg-black/[0.02] px-1 dark:border-white/[0.04] dark:bg-white/[0.02] xl:flex">
             {/* Running tasks */}
             <div className="flex items-center gap-2 px-2.5 py-1.5">
                 <span className="relative flex h-2 w-2">

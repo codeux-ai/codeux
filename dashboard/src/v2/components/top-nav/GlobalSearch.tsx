@@ -134,7 +134,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     return (
         <>
             {/* Search Bar */}
-            <div ref={searchBarContainerRef} className="relative group w-full max-w-[140px] sm:max-w-xs hidden sm:block rounded-xl">
+            <div ref={searchBarContainerRef} className="relative group w-full max-w-[140px] sm:max-w-xs hidden md:block rounded-xl">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
                     <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
                 </div>
@@ -156,6 +156,15 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                     </kbd>
                 </div>
             </div>
+            {/* Mobile/Tablet Search Trigger */}
+            <button
+                type="button"
+                onClick={() => setIsSearchOpen(true)}
+                aria-label="Open search"
+                className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 md:hidden shrink-0"
+            >
+                <Search aria-hidden="true" className="w-4 h-4 text-slate-600 dark:text-slate-300" strokeWidth={2} />
+            </button>
 
             <SearchOverlay
                 anchorRef={searchBarContainerRef}

@@ -49,7 +49,7 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
                         className="relative z-10 transition-transform duration-500 ease-out group-hover:scale-[1.06]"
                     />
                 </div>
-                <span className="font-display font-bold text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-0.5 sm:flex">
+                <span className="font-display font-bold text-base tracking-tight text-slate-900 dark:text-white hidden sm:flex items-center gap-0.5">
                     Code<span className="text-signal-500">UX</span>
                 </span>
             </Link>

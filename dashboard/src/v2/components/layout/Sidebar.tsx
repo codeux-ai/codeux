@@ -141,9 +141,9 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             id="primary-navigation"
             aria-label="Primary Navigation"
             ref={sidebarRef}
-            className={`h-full shrink-0 border-r border-black/[0.05] dark:border-white/[0.04] bg-[#F5F3EF]/60 dark:bg-void-900 flex flex-col justify-between py-8 z-50 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+            className={`${isMobile ? 'h-[100dvh]' : 'h-full'} shrink-0 border-r border-black/[0.05] dark:border-white/[0.04] bg-[#F5F3EF]/60 dark:bg-void-900 flex flex-col justify-between py-8 z-50 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
                 isMobile 
-                    ? 'fixed left-0 top-0 w-[260px] -translate-x-full opacity-0 shadow-2xl bg-[#F5F3EF] dark:bg-void-900' 
+                    ? 'fixed left-0 top-0 w-[260px] -translate-x-full opacity-0 shadow-2xl bg-[#F5F3EF] dark:bg-void-900 overflow-y-auto overflow-x-hidden'
                     : (isMinimized ? 'relative w-[88px]' : 'relative w-[260px]')
             }`}
         >

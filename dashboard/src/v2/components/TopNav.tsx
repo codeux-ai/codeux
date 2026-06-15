@@ -264,13 +264,13 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 Skip to main content
             </a>
             <nav aria-label="Primary navigation" className="contents">
-            <div className="flex items-center gap-4 md:gap-10 flex-1">
+            <div className="flex items-center gap-4 md:gap-10 flex-1 min-w-0">
                 <BrandSection isMobile={isMobile} onMenuToggle={onMenuToggle} hideLogo={hideLogo} isMobileMenuOpen={isMobileMenuOpen} />
 
                 <GlobalSearch projectId={projectId} selectedProject={selectedProject} sprints={sprints} />
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-3">
+            <div className="flex items-center gap-1 sm:gap-3 shrink-0">
                 {/* Project Selector */}
                 <div className="relative hidden md:block" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
                     <button

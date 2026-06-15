@@ -402,7 +402,7 @@ describe("UI Components Coverage", () => {
     );
     const element = container.firstChild as HTMLElement;
     expect(element).toBeDefined();
-    expect(element.className).toContain("px-8");
+    expect(element.className).toContain("px-4");
     expect(element.className).toContain("py-12");
     expect(element.className).toContain("md:px-20");
     expect(element.className).not.toContain("px-6");

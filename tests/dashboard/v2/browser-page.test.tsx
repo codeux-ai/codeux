@@ -202,7 +202,7 @@ describe("BrowserPage", () => {
 
     expect(screen.getByText("Build previews per sprint, isolated by container.")).toBeInTheDocument();
     const pageRoot = screen.getByTestId("browser-page-root");
-    expect(pageRoot.className).toContain("px-8");
+    expect(pageRoot.className).toContain("px-4");
     expect(pageRoot.className).toContain("py-12");
     expect(pageRoot.className).toContain("md:px-20");
     expect(screen.getByTestId("browser-page-header")).toBeInTheDocument();
