@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { FunctionComponent } from "preact";
+import { prefetchRoute } from "../../router/route-prefetch.js";
 
 interface NavItemProps {
     item: {
@@ -18,19 +19,18 @@ export const NavItem: FunctionComponent<NavItemProps> = ({ item, isActive, isMin
         <Link
             to={item.path}
             onClick={isMobile ? onClose : undefined}
+            onMouseEnter={() => prefetchRoute(item.path)}
+            onPointerDown={() => prefetchRoute(item.path)}
+            onFocus={() => prefetchRoute(item.path)}
             aria-current={isActive ? "page" : undefined}
             data-tour-id={`nav-${item.label.toLowerCase()}`}
+            data-nav-item
             className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-3 min-h-[44px] rounded-2xl transition-all duration-300 group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none`}
         >
-            <div className={`absolute inset-0 rounded-2xl transition-all duration-300 pointer-events-none origin-left ${isActive ? 'bg-signal-500/[0.10] dark:bg-signal-500/[0.10] opacity-100 translate-x-0' : 'bg-black/[0.05] dark:bg-white/[0.05] opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100'}`} />
-            <div className={`absolute inset-0 rounded-2xl pointer-events-none transition-all duration-300 ${isActive ? 'shadow-[inset_0_0_0_1px_rgba(0,224,160,0.12)] dark:shadow-[inset_0_0_0_1px_rgba(0,224,160,0.1)]' : 'shadow-none'}`} />
+            {/* Hover state background - always present, but only visible on hover */}
+            <div className={`absolute inset-0 rounded-2xl transition-all duration-300 pointer-events-none origin-left bg-black/[0.05] dark:bg-white/[0.05] opacity-0 group-hover:opacity-100`} />
 
-            {/* Vertical Accent Indicator */}
-            {isActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-1 bg-signal-500 rounded-r-full shadow-[0_0_8px_rgba(0,224,160,0.6)]" />
-            )}
-
-            <item.icon aria-hidden="true" className={`relative z-10 w-4 h-4 transition-all duration-300 shrink-0 ${isActive ? 'text-signal-600 dark:text-signal-400 drop-shadow-[0_0_8px_rgba(0,224,160,0.5)]' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} strokeWidth={isActive ? 2 : 1.5} />
+            <item.icon aria-hidden="true" className={`relative z-10 w-4 h-4 transition-all duration-300 shrink-0 ${isActive ? 'text-signal-600 dark:text-signal-400 drop-shadow-[0_0_8px_rgba(0,224,160,0.5)]' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} strokeWidth={isActive ? 2 : 1.5} />
 
             <div className={`relative z-10 overflow-hidden transition-all duration-500 ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'opacity-100'}`}>
                 <span className={`font-medium text-sm tracking-wide transition-colors duration-300 whitespace-nowrap ${isActive ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`}>

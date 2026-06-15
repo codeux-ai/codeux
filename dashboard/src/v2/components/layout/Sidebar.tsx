@@ -7,6 +7,8 @@ import { Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Comp
 import { useProjectData } from "../../context/project-data.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { NavItem } from "./NavItem.js";
+import { useAnimatedActiveIndicator } from "../../lib/motion/index.js";
 import { RobotLogo } from "../brand/RobotLogo.js";
 
 const ALL_NAV_ITEMS = [
@@ -56,7 +58,9 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
     const matches = useRouterState({ select: (s) => s.matches });
     const currentPath = (matches && matches.length > 0) ? (matches[matches.length - 1]?.pathname || "/") : "/";
-    const activeIndex = Math.max(0, navItems.findIndex(i => i.path === currentPath));
+    const activeIndex = navItems.findIndex(i => i.path === currentPath);
+
+    const indicator = useAnimatedActiveIndicator(navRef, activeIndex, '[data-nav-item]', 'vertical');
 
     useEffect(() => {
         if (!isMobile && sidebarRef.current) {
@@ -161,46 +165,26 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                 <h2 className={`px-8 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.16em] mb-3 transition-all duration-500 overflow-hidden ${isMinimized && !isMobile ? 'w-0 h-0 opacity-0 m-0' : 'opacity-100'}`}>
                     Workspace
                 </h2>
-                {navItems.map((item, idx) => {
-                    const isActive = activeIndex === idx;
-                    return (
-                        <Link
-                            key={item.label}
-                            to={item.path}
-                            onClick={isMobile ? onClose : undefined}
-                            onMouseEnter={() => prefetchRoute(item.path)}
-                            onPointerDown={() => prefetchRoute(item.path)}
-                            onFocus={() => prefetchRoute(item.path)}
-                            aria-current={isActive ? "page" : undefined}
-                            data-tour-id={`nav-${item.label.toLowerCase()}`}
-                            className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-3 min-h-[44px] rounded-2xl transition-all duration-300 group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none`}
-                        >
-                            <div className={`absolute inset-0 rounded-2xl transition-all duration-300 pointer-events-none origin-left ${isActive ? 'bg-signal-500/[0.10] dark:bg-signal-500/[0.10] opacity-100 translate-x-0' : 'bg-black/[0.05] dark:bg-white/[0.05] opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100'}`} />
-                            <div className={`absolute inset-0 rounded-2xl pointer-events-none transition-all duration-300 ${isActive ? 'shadow-[inset_0_0_0_1px_rgba(0,224,160,0.12)] dark:shadow-[inset_0_0_0_1px_rgba(0,224,160,0.1)]' : 'shadow-none'}`} />
 
-                            {/* Vertical Accent Indicator */}
-                            {isActive && (
-                                <div className="absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-1 bg-signal-500 rounded-r-full shadow-[0_0_8px_rgba(0,224,160,0.6)]" />
-                            )}
+                {/* Sliding Active Indicator */}
+                <div
+                    className="absolute left-4 right-4 z-0 rounded-2xl bg-signal-500/[0.10] dark:bg-signal-500/[0.10] pointer-events-none transition-all"
+                    style={indicator.style as any}
+                >
+                    {/* Vertical Accent Indicator inside the sliding block */}
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-1 bg-signal-500 rounded-r-full shadow-[0_0_8px_rgba(0,224,160,0.6)]" />
+                </div>
 
-                            <item.icon aria-hidden="true" className={`relative z-10 w-4 h-4 transition-all duration-300 shrink-0 ${isActive ? 'text-signal-600 dark:text-signal-400 drop-shadow-[0_0_8px_rgba(0,224,160,0.5)]' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} strokeWidth={isActive ? 2 : 1.5} />
-
-                            <div className={`relative z-10 overflow-hidden transition-all duration-500 ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'opacity-100'}`}>
-                                <span className={`font-medium text-sm tracking-wide transition-colors duration-300 whitespace-nowrap ${isActive ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`}>
-                                    {item.label}
-                                </span>
-                            </div>
-
-                            {/* Award Winning Tooltip for Minimized State */}
-                            {isMinimized && !isMobile && (
-                                <div className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold tracking-wide rounded-lg opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none shadow-xl z-[100] whitespace-nowrap flex items-center gap-2">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-signal-500/80 shadow-[0_0_6px_rgba(0,224,160,0.6)]"></span>
-                                    {item.label}
-                                </div>
-                            )}
-                        </Link>
-                    );
-                })}
+                {navItems.map((item, idx) => (
+                    <NavItem
+                        key={item.label}
+                        item={item}
+                        isActive={activeIndex === idx}
+                        isMinimized={isMinimized}
+                        isMobile={isMobile}
+                        onClose={onClose}
+                    />
+                ))}
             </nav>
 
             {/* Settings & Toggle */}
