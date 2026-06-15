@@ -1,6 +1,6 @@
 import { runCompletionStep } from "../../../sprint/steps/completion-step.js";
 import type { SprintAgentArgs } from "../../../sprint/sprint-types.js";
-import { runCommandStrict } from "../../../services/cli-process-runner.js";
+import { getCheckedOutRef, mergeBranchLocally, restoreCheckedOutRef } from "../../../infrastructure/git/local-merge.js";
 import { determineNextState, WatchLoopState } from "./watch-loop-state-machine.js";
 import type { Subtask,
   AutomationInterventionsSettings,
@@ -561,25 +561,28 @@ export class WatchLoopRunner {
         }
 
         if (githubMode === "LOCAL") {
-          try {
-            this.deps.logger.info(`LOCAL Mode: Merging feature branch ${defaultFeatureBranch} into default branch ${defaultBranch}`);
-            await runCommandStrict("git", ["checkout", defaultBranch], repoPath);
-            await runCommandStrict(
-              "git",
-              ["merge", "--no-ff", "-m", `Merge branch '${defaultFeatureBranch}' into ${defaultBranch}`, defaultFeatureBranch],
-              repoPath
-            );
+          this.deps.logger.info(`LOCAL Mode: Merging feature branch ${defaultFeatureBranch} into default branch ${defaultBranch}`);
+          // Restore whichever branch the user had checked out — the host repo is their
+          // working directory, so finalizing the sprint must not silently park it on the
+          // default branch.
+          const originalRef = await getCheckedOutRef(repoPath);
+          const mainMerge = await mergeBranchLocally({
+            repoPath,
+            targetBranch: defaultBranch,
+            sourceBranch: defaultFeatureBranch,
+            commitMessage: `Merge branch '${defaultFeatureBranch}' into ${defaultBranch}`,
+          });
+          await restoreCheckedOutRef(repoPath, originalRef);
+
+          if (mainMerge.ok) {
             report += `- ✅ **Merged locally:** Sprint feature branch \`${defaultFeatureBranch}\` merged into default branch \`${defaultBranch}\`.\n`;
             resolveMainMergeConflictAttentionItems(
               this.deps.projectAttentionService,
               scopedExecutionContext.project.id,
               sprintRunId,
             );
-          } catch (err: any) {
-            this.deps.logger.error(`LOCAL Mode: Failed to merge feature branch ${defaultFeatureBranch} into ${defaultBranch}`, err);
-            try {
-              await runCommandStrict("git", ["merge", "--abort"], repoPath);
-            } catch (abortErr) {}
+          } else {
+            this.deps.logger.error(`LOCAL Mode: Failed to merge feature branch ${defaultFeatureBranch} into ${defaultBranch}: ${mainMerge.error}`);
 
             const isWorkerOwned = ciIntelligence.resolveMainMergeConflicts;
             if (activeMainMergeAttentionItems.length === 0) {
@@ -593,7 +596,7 @@ export class WatchLoopRunner {
                 title: `Main merge conflict for ${scopedExecutionContext.sprint.name}`,
                 summaryMarkdown: isWorkerOwned
                   ? `LOCAL Mode: Merge conflict merging feature branch \`${defaultFeatureBranch}\` into default branch \`${defaultBranch}\`. Virtual worker will attempt to resolve it automatically.`
-                  : `LOCAL Mode: Merge conflict merging feature branch \`${defaultFeatureBranch}\` into default branch \`${defaultBranch}\`. Resolve it locally.\n\nError: ${err.message || String(err)}`,
+                  : `LOCAL Mode: Merge conflict merging feature branch \`${defaultFeatureBranch}\` into default branch \`${defaultBranch}\`. Resolve it locally.\n\nError: ${mainMerge.error}`,
                 payload: {
                   repoPath,
                   workingDirectoryHint: `cd ${repoPath}`,

@@ -573,6 +573,40 @@ jobs:
     );
     expect(result.reportText).toContain("Merged locally");
   });
+
+  it("recovers a lost worker branch from local refs and merges it in LOCAL mode", async () => {
+    context.githubMode = "LOCAL";
+    subtasks[0].status = "CODING_COMPLETED";
+    subtasks[0].session_state = "COMPLETED";
+    subtasks[0].worker_branch = undefined; // evidence lost
+    subtasks[0].record_id = "rec-1";
+    subtasks[0].is_merged = false;
+
+    const updateTaskRun = vi.fn();
+    context.executionRepository = {
+      getLatestTaskRun: vi.fn().mockReturnValue({ id: "run-1", workerBranch: null }),
+      appendTaskRunEvent: vi.fn(),
+      updateTaskRun,
+    } as any;
+
+    const recovered = "task/feature-sprint1-t1-qwen-code-abcd";
+    vi.mocked(runCommandStrict).mockImplementation((_cmd: string, args: string[]) => {
+      const a = (args || []).join(" ");
+      if (a.includes("for-each-ref")) return Promise.resolve({ stdout: `${recovered}\nmain\nfeature/sprint1`, stderr: "" } as any);
+      if (a.startsWith("rev-list --count")) return Promise.resolve({ stdout: "2", stderr: "" } as any);
+      if (a.startsWith("log -1")) return Promise.resolve({ stdout: "1700000000", stderr: "" } as any);
+      if (a.startsWith("symbolic-ref")) return Promise.resolve({ stdout: "main", stderr: "" } as any);
+      return Promise.resolve({ stdout: "", stderr: "" } as any);
+    });
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: recovered });
+    expect(result.subtasks[0].worker_branch).toBe(recovered);
+    expect(result.subtasks[0].is_merged).toBe(true);
+    expect(result.subtasks[0].merge_indicator).toBe("MERGED");
+    expect(result.reportText).toContain("Merged locally");
+  });
 });
 
 async function createTempRepoWithWorkflow(workflowContent: string): Promise<string> {

@@ -126,8 +126,12 @@ export const getExecutionEventText = (event: ExecutionRuntimeEventSummary): stri
             return `${String(payload.provider || event.provider || "provider")} stage completed`;
         case "cli_git_no_changes":
             return "No file changes produced";
-        case "cli_git_pushed":
-            return `Pushed ${String(payload.pushedBranch || event.workerBranch || "worker branch")} to origin`;
+        case "cli_git_pushed": {
+            const branch = String(payload.pushedBranch || event.workerBranch || "worker branch");
+            return payload.pushedToRemote === false
+                ? `Committed ${branch} locally`
+                : `Pushed ${branch} to origin`;
+        }
         case "cli_pr_finalized":
             return payload.prUrl ? `Feature PR ready ${String(payload.prUrl)}` : "Workflow completed without PR";
         case "cli_workflow_completed":

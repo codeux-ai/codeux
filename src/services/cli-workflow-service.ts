@@ -368,6 +368,9 @@ export class CliWorkflowService {
         provider: args.provider,
         committedChanges,
         pushedBranch: pushedBranch || args.workerBranch,
+        // In LOCAL mode the worker branch is committed locally and never pushed to a
+        // remote — surface that so the activity feed doesn't claim a phantom origin push.
+        pushedToRemote: ctx.settings.git?.githubMode !== "LOCAL",
         ...(stats || {}),
         sourceEventKey: eventKey,
       }, eventKey);

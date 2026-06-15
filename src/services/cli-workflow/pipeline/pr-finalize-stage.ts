@@ -3,7 +3,13 @@ import type { PipelineContext } from "./pipeline-context.js";
 export async function executePrFinalizeStage(ctx: PipelineContext): Promise<{ prUrl?: string }> {
   let prUrl: string | undefined;
 
-  if (ctx.settings.git.autoCreatePr) {
+  // In LOCAL git mode there is no remote host to open a PR against — the worker
+  // branch stays local and the feature-PR gate merges it into the feature branch
+  // with a local `git merge --no-ff`. Attempting a remote PR here hits the no-op
+  // LocalHostCli and fails the whole workflow ("Host CLI unavailable for local
+  // provider"), so skip PR creation entirely and let the task settle as
+  // CODING_COMPLETED awaiting the local merge.
+  if (ctx.settings.git.autoCreatePr && ctx.settings.git.githubMode !== "LOCAL") {
     const sprint = ctx.task.sprint_id ? ctx.deps.projectManagementRepository?.getSprint(ctx.task.sprint_id) : null;
     prUrl = await ctx.prService.resolveOrCreateFeaturePr(
       {
@@ -31,7 +37,9 @@ export async function executePrFinalizeStage(ctx: PipelineContext): Promise<{ pr
     originator: "system",
     description: prUrl
       ? `Workflow completed. PR: ${prUrl}`
-      : "Workflow completed without PR because auto-create PRs are disabled.",
+      : ctx.settings.git.githubMode === "LOCAL"
+        ? `Workflow completed. Worker branch ${ctx.workerBranch} is ready to merge locally into ${ctx.featureBranch}.`
+        : "Workflow completed without PR because auto-create PRs are disabled.",
   });
 
   ctx.workflowSucceeded = true;

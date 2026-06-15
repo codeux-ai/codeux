@@ -61,7 +61,7 @@ export class MainMergeGateService {
 
     if (githubMode === "LOCAL") {
       return {
-        text: `\n### Main Merge\n- ℹ️ **Local Mode:** To finalize this sprint, run \`git checkout ${defaultBranch} && git merge ${featureBranch}\` locally.\n`,
+        text: `\n### Main Merge\n- ℹ️ **Local Mode:** No remote PR is created. Once every task is merged into \`${featureBranch}\`, the orchestrator merges it into \`${defaultBranch}\` automatically (local \`--no-ff\` merge). Nothing to run manually.\n`,
         state: "ready_for_merge",
         prNumber: null,
         prUrl: null,

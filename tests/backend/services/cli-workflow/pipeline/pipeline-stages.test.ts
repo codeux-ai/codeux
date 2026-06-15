@@ -577,6 +577,7 @@ describe("executeGitFinalizeStage", () => {
 describe("executePrFinalizeStage", () => {
   it("resolves PR and updates session state to COMPLETED", async () => {
     const ctx = createMockContext();
+    ctx.settings.git.githubMode = "REMOTE";
     vi.mocked(ctx.prService.resolveOrCreateFeaturePr).mockResolvedValue("https://github.com/pr/1");
 
     await executePrFinalizeStage(ctx);
@@ -606,6 +607,7 @@ describe("executePrFinalizeStage", () => {
 
   it("skips PR creation if autoCreatePr is false", async () => {
     const ctx = createMockContext();
+    ctx.settings.git.githubMode = "REMOTE";
     ctx.settings.git.autoCreatePr = false;
 
     await executePrFinalizeStage(ctx);
@@ -617,8 +619,24 @@ describe("executePrFinalizeStage", () => {
     }));
   });
 
+  it("skips remote PR creation in LOCAL git mode and reports the local merge handoff", async () => {
+    const ctx = createMockContext();
+    ctx.settings.git.githubMode = "LOCAL";
+    ctx.settings.git.autoCreatePr = true;
+
+    await executePrFinalizeStage(ctx);
+
+    expect(ctx.prService.resolveOrCreateFeaturePr).not.toHaveBeenCalled();
+    expect(ctx.workflowSucceeded).toBe(true);
+    expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED", prUrl: undefined });
+    expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
+      description: "Workflow completed. Worker branch worker-branch is ready to merge locally into feature-branch.",
+    }));
+  });
+
   it("fails loudly if autoCreatePr is enabled but no PR URL is returned", async () => {
     const ctx = createMockContext();
+    ctx.settings.git.githubMode = "REMOTE";
     vi.mocked(ctx.prService.resolveOrCreateFeaturePr).mockResolvedValue(undefined);
 
     await expect(executePrFinalizeStage(ctx))

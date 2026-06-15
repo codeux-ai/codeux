@@ -45,11 +45,21 @@ export const sanitizeToken = (value: string): string =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
 
-export const buildWorkerBranch = (featureBranch: string, taskId: string, provider: ProviderId): string => {
+/**
+ * The stable portion of a worker branch name — everything {@link buildWorkerBranch}
+ * produces except the trailing time-based suffix. Used to find an existing worker
+ * branch for a task by prefix when the recorded `worker_branch` evidence was lost
+ * (e.g. cleared during a LOCAL-mode QA re-run cycle).
+ */
+export const buildWorkerBranchPrefix = (featureBranch: string, taskId: string, provider?: ProviderId): string => {
   const feature = sanitizeToken(featureBranch.replace(/\//g, "-"));
   const task = sanitizeToken(taskId);
+  return provider ? `task/${feature}-${task}-${provider}-` : `task/${feature}-${task}-`;
+};
+
+export const buildWorkerBranch = (featureBranch: string, taskId: string, provider: ProviderId): string => {
   const suffix = Date.now().toString(36);
-  return `task/${feature}-${task}-${provider}-${suffix}`;
+  return `${buildWorkerBranchPrefix(featureBranch, taskId, provider)}${suffix}`;
 };
 
 export const buildProviderPrompt = (prompt: string, thinkingMode: ThinkingMode): string => {

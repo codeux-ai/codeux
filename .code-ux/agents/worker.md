@@ -40,6 +40,18 @@ A subtask is NOT complete until the following gates are green:
 2.  **Unit & Integration**: `npm run test` and `npm run test:coverage` must pass.
 3. **Build** :  `npm run build`  must pass.
 
+## 3. Git & Workspace Protocol (Critical)
+
+The orchestrator owns all version control. Your only job is to leave the correct
+file changes in the working directory — it captures them automatically and handles
+branching, committing, and merging for you.
+
+- **Do NOT run git write commands.** No `git checkout`/`switch`, `git branch`, `git add`, `git commit`, `git merge`, `git rebase`, `git push`, `git stash`, or `git reset`. Creating your own branch or committing your work **hides it from the orchestrator** and the change is lost.
+- **Do NOT open pull requests** or run `gh`/`glab`. There may be no remote at all (local git mode); a PR is never your responsibility.
+- **Stay on the branch you start on.** Read-only git (`git status`, `git diff`, `git log`) is fine for inspection.
+- **Just edit files.** Create and modify files in place at the repository root / working directory. When you are done, simply stop — leaving the edited files untracked or modified is exactly what the orchestrator expects.
+- If the subtask prompt says to "commit", "create a branch", or "open a PR", treat that as the orchestrator's job that is already handled — **do not do it yourself**; only produce the file changes it describes.
+
 ## 4. Problem Solving Strategy
 
 1.  **Research**: Map the existing codebase and validate all assumptions using grep and read_file.
