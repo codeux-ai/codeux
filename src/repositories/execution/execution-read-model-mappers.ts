@@ -64,6 +64,7 @@ export function mapProviderInvocationUsageRow(row: ProviderInvocationUsageRow): 
     outputTokens: toNumber(row.output_tokens),
     reasoningOutputTokens: toNumber(row.reasoning_output_tokens),
     totalTokens: toNumber(row.total_tokens),
+    toolCallCount: toNumber((row as any).tool_call_count),
     julesTokens: toNumber(row.jules_tokens),
     invocationSource: row.invocation_source as any,
     startedAt: row.started_at,

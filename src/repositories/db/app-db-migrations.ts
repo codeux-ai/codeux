@@ -46,6 +46,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   // The current phase 1 approach calls schema definitions directly, but these ensure*
   // helpers allow progressive column additions safely.
 
+  ensureColumn(db, "provider_invocations", "tool_call_count", "INTEGER NOT NULL DEFAULT 0");
+
   ensureColumn(db, "sprints", "showcase_pinned", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "sprints", "original_prompt", "TEXT");
   ensureColumn(db, "sprints", "base_commit_sha", "TEXT");

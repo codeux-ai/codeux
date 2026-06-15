@@ -369,6 +369,45 @@ describe("collectProviderUsageTelemetry", () => {
     });
   });
 
+  it("parses the exec --json thread/item stream into turns when no rollout file exists", async () => {
+    const stdout = [
+      JSON.stringify({ type: "thread.started", thread_id: "thr_abc" }),
+      JSON.stringify({ type: "turn.started" }),
+      JSON.stringify({ type: "item.completed", item: { id: "item_0", type: "agent_message", text: "Let me inspect the layout." } }),
+      JSON.stringify({ type: "item.started", item: { id: "item_1", type: "command_execution", command: "ls -la", aggregated_output: "", exit_code: null, status: "in_progress" } }),
+      JSON.stringify({ type: "item.completed", item: { id: "item_1", type: "command_execution", command: "ls -la", aggregated_output: "file-a\nfile-b", exit_code: 0, status: "completed" } }),
+      JSON.stringify({ type: "item.completed", item: { id: "item_2", type: "agent_message", text: "{\"plan\":\"done\"}" } }),
+      JSON.stringify({ type: "turn.completed", usage: { input_tokens: 300, cached_input_tokens: 40, output_tokens: 60 } }),
+    ].join("\n");
+
+    const result = await collectProviderUsageTelemetry({
+      provider: "codex",
+      model: "gpt-5.5",
+      prompt: "Make a plan.",
+      cwd: "/workspace/repo",
+      stdout,
+      stderr: "",
+      // No capturedText and no rollout file — the previous behaviour dumped the
+      // entire JSON stream as one assistant message.
+    });
+
+    expect(result.usageSource).toBe("reported");
+    expect(result.nativeSessionId).toBe("thr_abc");
+    // Conversation is broken into proper turns (not one raw JSON blob).
+    expect(result.conversation.map((t) => t.kind)).toEqual([
+      "user",
+      "assistant",
+      "tool_call",
+      "tool_result",
+      "assistant",
+    ]);
+    expect(result.conversation[2]).toMatchObject({ kind: "tool_call", toolName: "shell", toolArguments: "ls -la" });
+    expect(result.conversation[3]).toMatchObject({ kind: "tool_result", toolOutput: "file-a\nfile-b", toolStatus: "completed" });
+    // Transcript is the clean final agent_message, not the raw event stream.
+    expect(result.transcriptText).toBe("{\"plan\":\"done\"}");
+    expect(result.transcriptText).not.toContain("thread.started");
+  });
+
   it("isolates the current run's conversation turns using startTimeMs", async () => {
     const result = await collectProviderUsageTelemetry({
       provider: "codex",

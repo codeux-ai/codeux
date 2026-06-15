@@ -355,16 +355,26 @@ export async function collectProviderUsageTelemetry(args: {
   }
 
   if (args.provider === "codex") {
-    const transcriptText = args.capturedText?.trim() || fallbackOutput;
     // The rollout JSONL session file is the richest source (usage + full
-    // conversation). Fall back to the exec stdout stream for usage only.
+    // conversation). The exec `--json` stdout stream is parsed as a fallback so
+    // the transcript is broken into proper turns even when the rollout file is
+    // unavailable — otherwise the raw JSON event stream would be persisted as a
+    // single unreadable message.
     const rollout = args.codexSessionJson
       ? parseCodexRolloutJsonl(args.codexSessionJson, args.startTimeMs)
       : null;
-    const stdoutUsage = parseCodexExecStdout(args.stdout);
-    const usage = rollout?.usage ?? stdoutUsage.usage;
-    const rawUsageJson = rollout?.usage ? rollout.rawUsageJson : stdoutUsage.rawUsageJson;
-    const conversation = withLeadingUserTurn(rollout?.conversation ?? [], args.prompt);
+    const stdout = parseCodexExecStdout(args.stdout);
+    const parsedConversation = (rollout?.conversation && rollout.conversation.length > 0)
+      ? rollout.conversation
+      : stdout.conversation;
+    const conversation = withLeadingUserTurn(parsedConversation, args.prompt);
+    // Prefer the captured `--output-last-message` file; otherwise derive a clean
+    // assistant transcript from the parsed turns rather than dumping raw stdout.
+    const lastAssistantText = [...parsedConversation].reverse().find((t) => t.kind === "assistant")?.text?.trim();
+    const transcriptText = args.capturedText?.trim() || lastAssistantText || fallbackOutput;
+    const usage = rollout?.usage ?? stdout.usage;
+    const rawUsageJson = rollout?.usage ? rollout.rawUsageJson : stdout.rawUsageJson;
+    const nativeSessionId = rollout?.nativeSessionId ?? stdout.nativeSessionId ?? args.nativeSessionId ?? null;
     if (usage) {
       return {
         ...emptyTelemetry(),
@@ -376,12 +386,12 @@ export async function collectProviderUsageTelemetry(args: {
         usageSource: "reported",
         rawUsageJson,
         transcriptText,
-        nativeSessionId: rollout?.nativeSessionId ?? stdoutUsage.nativeSessionId ?? args.nativeSessionId ?? null,
+        nativeSessionId,
         conversation,
       };
     }
     const estimated = estimateTelemetry("codex", args.model, args.prompt, transcriptText);
-    estimated.nativeSessionId = rollout?.nativeSessionId ?? stdoutUsage.nativeSessionId ?? args.nativeSessionId ?? null;
+    estimated.nativeSessionId = nativeSessionId;
     estimated.conversation = conversation;
     return estimated;
   }

@@ -262,6 +262,7 @@ CREATE TABLE IF NOT EXISTS provider_invocations (
         output_tokens INTEGER NOT NULL DEFAULT 0,
         reasoning_output_tokens INTEGER NOT NULL DEFAULT 0,
         total_tokens INTEGER NOT NULL DEFAULT 0,
+        tool_call_count INTEGER NOT NULL DEFAULT 0,
         jules_tokens INTEGER NOT NULL DEFAULT 0,
         usage_source TEXT NOT NULL DEFAULT 'unavailable',
         invocation_source TEXT NOT NULL DEFAULT 'internal',

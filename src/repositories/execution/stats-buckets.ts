@@ -24,6 +24,7 @@ export function createEmptyUsageTotals(): ExecutionUsageTotals {
     outputTokens: 0,
     reasoningOutputTokens: 0,
     totalTokens: 0,
+    toolCallCount: 0,
     reportedInvocationCount: 0,
     estimatedInvocationCount: 0,
     unavailableInvocationCount: 0,

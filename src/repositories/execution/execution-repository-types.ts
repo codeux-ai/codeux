@@ -118,6 +118,7 @@ export interface ProviderInvocationUsageRow {
   output_tokens: number | string;
   reasoning_output_tokens: number | string;
   total_tokens: number | string;
+  tool_call_count?: number | string;
   jules_tokens: number | string;
   usage_source: string;
   invocation_source: string;

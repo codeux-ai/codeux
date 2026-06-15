@@ -4,23 +4,23 @@ import type { JulesClient } from "../../../src/domain/jules/jules-client.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import type { Logger } from "../../../src/shared/logging/logger.js";
 import type { JulesActivity } from "../../../src/contracts/app-types.js";
-import { getEncoding } from "js-tiktoken";
 
 describe("JulesUsageService", () => {
-  let julesClientMock: ReturnType<typeof vi.fn>;
-  let julesClientGetSessionMock: ReturnType<typeof vi.fn>;
-  
-  let executionRepositoryGetLatestMock: ReturnType<typeof vi.fn>;
-  let executionRepositoryCreateMock: ReturnType<typeof vi.fn>;
-  let executionRepositoryUpdateMock: ReturnType<typeof vi.fn>;
-  let listExecutionInvocationsMock: ReturnType<typeof vi.fn>;
-  let createExecutionInvocationMock: ReturnType<typeof vi.fn>;
-  let updateExecutionInvocationMock: ReturnType<typeof vi.fn>;
-  let clearExecutionInvocationMessagesMock: ReturnType<typeof vi.fn>;
-  let appendExecutionInvocationMessageMock: ReturnType<typeof vi.fn>;
-  
+  let getFullConversationMock: ReturnType<typeof vi.fn>;
+  let getSessionMock: ReturnType<typeof vi.fn>;
+
+  let getLatestMock: ReturnType<typeof vi.fn>;
+  let createUsageMock: ReturnType<typeof vi.fn>;
+  let updateUsageMock: ReturnType<typeof vi.fn>;
+  let listExecMock: ReturnType<typeof vi.fn>;
+  let createExecMock: ReturnType<typeof vi.fn>;
+  let updateExecMock: ReturnType<typeof vi.fn>;
+  let clearMessagesMock: ReturnType<typeof vi.fn>;
+  let appendMessageMock: ReturnType<typeof vi.fn>;
+
   let loggerInfoMock: ReturnType<typeof vi.fn>;
   let loggerErrorMock: ReturnType<typeof vi.fn>;
+  let loggerWarnMock: ReturnType<typeof vi.fn>;
 
   let julesClient: JulesClient;
   let executionRepository: ExecutionRepository;
@@ -28,337 +28,168 @@ describe("JulesUsageService", () => {
   let service: JulesUsageService;
 
   beforeEach(() => {
-    julesClientMock = vi.fn();
-    julesClientGetSessionMock = vi.fn().mockResolvedValue({ prompt: "Initial prompt for testing" });
+    getFullConversationMock = vi.fn().mockResolvedValue([]);
+    getSessionMock = vi.fn().mockResolvedValue({ prompt: "Initial prompt for testing" });
+
+    getLatestMock = vi.fn().mockReturnValue(null);
+    createUsageMock = vi.fn().mockReturnValue({ id: "mock-record-id", createdAt: "2026-05-21T07:29:52.209Z" });
+    updateUsageMock = vi.fn();
+    listExecMock = vi.fn().mockReturnValue([]);
+    createExecMock = vi.fn().mockReturnValue({ id: "mock-exec-id" });
+    updateExecMock = vi.fn();
+    clearMessagesMock = vi.fn();
+    appendMessageMock = vi.fn();
+
     loggerInfoMock = vi.fn();
     loggerErrorMock = vi.fn();
-    
-    executionRepositoryGetLatestMock = vi.fn().mockReturnValue(null);
-    executionRepositoryCreateMock = vi.fn().mockReturnValue({ id: "mock-record-id", createdAt: "2026-05-21T07:29:52.209Z" });
-    executionRepositoryUpdateMock = vi.fn();
-    listExecutionInvocationsMock = vi.fn().mockReturnValue([]);
-    createExecutionInvocationMock = vi.fn().mockReturnValue({ id: "mock-exec-id" });
-    updateExecutionInvocationMock = vi.fn();
-    clearExecutionInvocationMessagesMock = vi.fn();
-    appendExecutionInvocationMessageMock = vi.fn();
+    loggerWarnMock = vi.fn();
 
     julesClient = {
-      getFullConversation: julesClientMock,
-      getSession: julesClientGetSessionMock
+      getFullConversation: getFullConversationMock,
+      getSession: getSessionMock,
     } as unknown as JulesClient;
 
     executionRepository = {
-      getLatestProviderInvocationUsageBySession: executionRepositoryGetLatestMock,
-      createProviderInvocationUsage: executionRepositoryCreateMock,
-      updateProviderInvocationUsage: executionRepositoryUpdateMock,
-      listExecutionInvocationsByProviderInvocationId: listExecutionInvocationsMock,
-      createExecutionInvocation: createExecutionInvocationMock,
-      updateExecutionInvocation: updateExecutionInvocationMock,
-      clearExecutionInvocationMessages: clearExecutionInvocationMessagesMock,
-      appendExecutionInvocationMessage: appendExecutionInvocationMessageMock,
+      getLatestProviderInvocationUsageBySession: getLatestMock,
+      createProviderInvocationUsage: createUsageMock,
+      updateProviderInvocationUsage: updateUsageMock,
+      listExecutionInvocationsByProviderInvocationId: listExecMock,
+      createExecutionInvocation: createExecMock,
+      updateExecutionInvocation: updateExecMock,
+      clearExecutionInvocationMessages: clearMessagesMock,
+      appendExecutionInvocationMessage: appendMessageMock,
     } as unknown as ExecutionRepository;
 
     logger = {
       info: loggerInfoMock,
       error: loggerErrorMock,
       debug: vi.fn(),
-      warn: vi.fn(),
-      child: vi.fn().mockReturnThis()
+      warn: loggerWarnMock,
+      child: vi.fn().mockReturnThis(),
     } as unknown as Logger;
 
     service = new JulesUsageService(julesClient, executionRepository, logger);
   });
 
-  it("should calculate tokens and save usage successfully", async () => {
-    const mockActivities: JulesActivity[] = [
-      { id: "1", name: "1", createTime: "now", userMessaged: { userMessage: "Hello Jules" } },
-      { id: "2", name: "2", createTime: "now", agentMessaged: { agentMessage: "Hello! How can I help?" } }
-    ];
-
-    julesClientMock.mockResolvedValue(mockActivities);
-
-    await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
-
-    expect(julesClientMock).toHaveBeenCalledWith("session-1");
-    expect(julesClientGetSessionMock).toHaveBeenCalledWith("session-1");
-
-    expect(executionRepositoryGetLatestMock).toHaveBeenCalledWith("session-1", "task_coding");
-
-    expect(executionRepositoryCreateMock).toHaveBeenCalledWith({
-      projectId: "proj-1",
-      taskId: "task-1",
-      sessionId: "session-1",
-      provider: "jules",
-      purpose: "task_coding",
-      status: "completed",
-      invocationSource: "EXTERNAL_API"
-    });
-
-    const encoder = getEncoding("cl100k_base");
-    const expectedInitialTokens = encoder.encode("Initial prompt for testing").length;
-    const expectedInputTokens = expectedInitialTokens + encoder.encode("Hello Jules").length;
-    const expectedOutputTokens = encoder.encode("Hello! How can I help?").length;
-
-    expect(executionRepositoryUpdateMock).toHaveBeenCalledWith("mock-record-id", {
-      status: "completed",
-      inputTokens: expectedInputTokens,
-      outputTokens: expectedOutputTokens,
-      totalTokens: expectedInputTokens + expectedOutputTokens,
-      julesTokens: expectedInputTokens + expectedOutputTokens,
-      usageSource: "estimated",
-      transcriptChars: "Hello! How can I help?".length,
-      invocationSource: "EXTERNAL_API",
-      rawUsageJson: {
-        gitMetrics: {
-          insertions: 0,
-          deletions: 0,
-          filesChanged: 0
-        }
-      }
-    });
-
-    // Check ExecutionInvocationRecord and messages
-    expect(createExecutionInvocationMock).toHaveBeenCalledWith({
-      projectId: "proj-1",
-      taskId: "task-1",
-      providerInvocationId: "mock-record-id",
-      type: "task_coding",
-      status: "completed",
-      provider: "jules",
-      model: "jules-agent",
-      invocationSource: "EXTERNAL_API",
-      startedAt: "2026-05-21T07:29:52.209Z"
-    });
-
-    expect(clearExecutionInvocationMessagesMock).toHaveBeenCalledWith("mock-exec-id");
-    
-    // Initial prompt + mockActivities user/agent messages
-    expect(appendExecutionInvocationMessageMock).toHaveBeenCalledTimes(3);
-
-    expect(loggerInfoMock).toHaveBeenCalledWith("Saved Jules usage telemetry and conversation transcript for task", expect.any(Object));
-  });
-
-  it("should be idempotent and update existing usage if record already exists", async () => {
-    const mockActivities: JulesActivity[] = [
-      { id: "1", name: "1", createTime: "now", userMessaged: { userMessage: "Hello Jules" } },
-    ];
-    julesClientMock.mockResolvedValue(mockActivities);
-
-    executionRepositoryGetLatestMock.mockReturnValue({ id: "existing-record-id", createdAt: "2026-05-21T07:29:52.209Z" });
-    listExecutionInvocationsMock.mockReturnValue([{ id: "existing-exec-id" }]);
-
-    await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
-
-    expect(executionRepositoryGetLatestMock).toHaveBeenCalledWith("session-1", "task_coding");
-    expect(executionRepositoryCreateMock).not.toHaveBeenCalled();
-
-    const encoder = getEncoding("cl100k_base");
-    const expectedInitialTokens = encoder.encode("Initial prompt for testing").length;
-    const expectedInputTokens = expectedInitialTokens + encoder.encode("Hello Jules").length;
-
-    expect(executionRepositoryUpdateMock).toHaveBeenCalledWith("existing-record-id", {
-      status: "completed",
-      inputTokens: expectedInputTokens,
-      outputTokens: 0,
-      totalTokens: expectedInputTokens,
-      julesTokens: expectedInputTokens,
-      usageSource: "estimated",
-      transcriptChars: 0,
-      invocationSource: "EXTERNAL_API",
-      rawUsageJson: {
-        gitMetrics: {
-          insertions: 0,
-          deletions: 0,
-          filesChanged: 0
-        }
-      }
-    });
-
-    expect(updateExecutionInvocationMock).toHaveBeenCalledWith("existing-exec-id", expect.objectContaining({
-      status: "completed"
-    }));
-  });
-
-  it("should extract git code churn and factor it into output tokens and rawUsageJson", async () => {
-    const mockActivities: JulesActivity[] = [
-      { id: "1", name: "1", createTime: "now", userMessaged: { userMessage: "Hello Jules" } },
-    ];
-    julesClientMock.mockResolvedValue(mockActivities);
-
-    julesClientGetSessionMock.mockResolvedValue({
-      prompt: "Initial prompt for testing",
-      outputs: [
+  describe("calculateAndSaveUsageForTask (terminal)", () => {
+    it("estimates usage and saves an estimated, completed record with tool-call tracking", async () => {
+      const activities: JulesActivity[] = [
+        { id: "1", name: "1", createTime: "2026-06-01T00:00:00Z", userMessaged: { userMessage: "Hello Jules" } },
+        { id: "2", name: "2", createTime: "2026-06-01T00:00:01Z", agentMessaged: { agentMessage: "Hello! How can I help?" } },
         {
-          pullRequest: {
-            url: "https://example.com/pr/123",
-            workerBranch: "feature-branch",
-            filesChanged: 4,
-            insertions: 50,
-            deletions: 20
-          }
-        }
-      ]
+          id: "3",
+          name: "3",
+          createTime: "2026-06-01T00:00:02Z",
+          progressUpdated: { title: "Editing files", description: "Applying changes" },
+        },
+      ];
+      getFullConversationMock.mockResolvedValue(activities);
+
+      await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
+
+      expect(getFullConversationMock).toHaveBeenCalledWith("session-1");
+      expect(getSessionMock).toHaveBeenCalledWith("session-1");
+
+      expect(createUsageMock).toHaveBeenCalledWith({
+        projectId: "proj-1",
+        taskId: "task-1",
+        sessionId: "session-1",
+        provider: "jules",
+        purpose: "task_coding",
+        status: "completed",
+        invocationSource: "EXTERNAL_API",
+      });
+
+      const update = updateUsageMock.mock.calls[0];
+      expect(update[0]).toBe("mock-record-id");
+      const payload = update[1];
+      expect(payload.status).toBe("completed");
+      expect(payload.usageSource).toBe("estimated");
+      expect(payload.invocationSource).toBe("EXTERNAL_API");
+      // Agentic runs are input-heavy: input (context replay) exceeds output.
+      expect(payload.inputTokens).toBeGreaterThan(payload.outputTokens);
+      expect(payload.totalTokens).toBe(payload.inputTokens + payload.outputTokens);
+      expect(payload.julesTokens).toBe(payload.totalTokens);
+      // One progress update => one tool-style operation.
+      expect(payload.toolCallCount).toBe(1);
+      expect(payload.rawUsageJson.estimator).toBe("turn-accumulation-v1");
+
+      // Transcript rebuilt: prompt + 3 activity messages.
+      expect(clearMessagesMock).toHaveBeenCalledWith("mock-exec-id");
+      expect(appendMessageMock).toHaveBeenCalledTimes(4);
+      const roles = appendMessageMock.mock.calls.map((c) => c[1].role);
+      expect(roles).toEqual(["user", "user", "assistant", "tool"]);
+      // Progress updates carry the tool_call chat indicator.
+      const progressMsg = appendMessageMock.mock.calls[3][1];
+      expect(progressMsg.metadata.kind).toBe("tool_call");
     });
 
-    await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
+    it("is idempotent — skips remote calls when a non-zero estimate already exists", async () => {
+      getLatestMock.mockReturnValue({ id: "existing", createdAt: "2026-05-21T07:29:52.209Z", totalTokens: 1500 });
 
-    const encoder = getEncoding("cl100k_base");
-    const expectedInitialTokens = encoder.encode("Initial prompt for testing").length;
-    const expectedInputTokens = expectedInitialTokens + encoder.encode("Hello Jules").length;
+      await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
 
-    // git insertions (50) + git deletions (20) = 70 lines.
-    // 70 lines * 10 tokens/line = 700 churn tokens.
-    const expectedOutputTokens = 700;
+      expect(getFullConversationMock).not.toHaveBeenCalled();
+      expect(getSessionMock).not.toHaveBeenCalled();
+      expect(createUsageMock).not.toHaveBeenCalled();
+      expect(updateUsageMock).not.toHaveBeenCalled();
+      expect(loggerInfoMock).toHaveBeenCalledWith(
+        "Jules usage telemetry already calculated and saved for session",
+        { sessionId: "session-1" },
+      );
+    });
 
-    expect(executionRepositoryUpdateMock).toHaveBeenCalledWith("mock-record-id", {
-      status: "completed",
-      inputTokens: expectedInputTokens,
-      outputTokens: expectedOutputTokens,
-      totalTokens: expectedInputTokens + expectedOutputTokens,
-      julesTokens: expectedInputTokens + expectedOutputTokens,
-      usageSource: "estimated",
-      transcriptChars: 0,
-      invocationSource: "EXTERNAL_API",
-      rawUsageJson: {
-        gitMetrics: {
-          insertions: 50,
-          deletions: 20,
-          filesChanged: 4
-        }
-      }
+    it("renders code artifacts as tool_result messages", async () => {
+      getFullConversationMock.mockResolvedValue([
+        {
+          id: "1",
+          name: "1",
+          createTime: "2026-06-01T00:00:00Z",
+          artifacts: [{ changeSet: { gitPatch: { unidiffPatch: "diff --git a/f b/f\n+const a = 1;" } } }],
+        },
+      ] as JulesActivity[]);
+
+      await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1", "Initial prompt for testing");
+
+      const toolMsg = appendMessageMock.mock.calls.find((c) => c[1].metadata?.kind === "tool_result");
+      expect(toolMsg).toBeDefined();
+      expect(toolMsg![1].metadata.toolName).toBe("apply_patch");
+    });
+
+    it("handles API failure gracefully and logs an error", async () => {
+      getFullConversationMock.mockRejectedValue(new Error("API Error"));
+
+      await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
+
+      expect(createUsageMock).not.toHaveBeenCalled();
+      expect(loggerErrorMock).toHaveBeenCalledWith(
+        "Failed to calculate and save Jules usage telemetry",
+        expect.objectContaining({ projectId: "proj-1", taskId: "task-1", sessionId: "session-1", error: expect.any(Error) }),
+      );
     });
   });
 
-  it("should handle API failure gracefully and log an error", async () => {
-    julesClientMock.mockRejectedValue(new Error("API Error"));
+  describe("syncLiveInvocation", () => {
+    it("persists a running estimate and is throttled per session", async () => {
+      getFullConversationMock.mockResolvedValue([
+        { id: "1", name: "1", createTime: "2026-06-01T00:00:00Z", agentMessaged: { agentMessage: "working" } },
+      ] as JulesActivity[]);
 
-    await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
+      await service.syncLiveInvocation("proj-1", "task-1", "session-1", "Build it");
+      // Second immediate call is throttled — no additional fetch.
+      await service.syncLiveInvocation("proj-1", "task-1", "session-1", "Build it");
 
-    expect(executionRepositoryCreateMock).not.toHaveBeenCalled();
-    expect(loggerErrorMock).toHaveBeenCalledWith("Failed to calculate and save Jules usage telemetry", expect.objectContaining({
-      projectId: "proj-1",
-      taskId: "task-1",
-      sessionId: "session-1",
-      error: expect.any(Error)
-    }));
-  });
-
-  it("should skip remote API calls and early-return if a record with totalTokens already exists", async () => {
-    executionRepositoryGetLatestMock.mockReturnValue({
-      id: "existing-record-id",
-      createdAt: "2026-05-21T07:29:52.209Z",
-      totalTokens: 1500
+      expect(getFullConversationMock).toHaveBeenCalledTimes(1);
+      expect(getSessionMock).not.toHaveBeenCalled();
+      expect(createUsageMock).toHaveBeenCalledWith(expect.objectContaining({ status: "running" }));
+      expect(updateUsageMock.mock.calls[0][1].status).toBe("running");
     });
 
-    await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
-
-    expect(executionRepositoryGetLatestMock).toHaveBeenCalledWith("session-1", "task_coding");
-    expect(julesClientMock).not.toHaveBeenCalled();
-    expect(julesClientGetSessionMock).not.toHaveBeenCalled();
-    expect(executionRepositoryCreateMock).not.toHaveBeenCalled();
-    expect(executionRepositoryUpdateMock).not.toHaveBeenCalled();
-    expect(loggerInfoMock).toHaveBeenCalledWith("Jules usage telemetry already calculated and saved for session", { sessionId: "session-1" });
-  });
-
-  it("should calculate high-fidelity tokens for rich activities (plans, progress, git patches, media)", async () => {
-    const mockActivities: JulesActivity[] = [
-      {
-        id: "1",
-        name: "act-1",
-        createTime: "now",
-        planGenerated: {
-          plan: {
-            steps: [
-              { title: "Fix alignment" },
-              { title: "Run linter" }
-            ]
-          }
-        }
-      },
-      {
-        id: "2",
-        name: "act-2",
-        createTime: "now",
-        planApproved: { planId: "plan-xyz" }
-      },
-      {
-        id: "3",
-        name: "act-3",
-        createTime: "now",
-        progressUpdated: { title: "Step 1 complete", description: "Aligned the buttons nicely" }
-      },
-      {
-        id: "4",
-        name: "act-4",
-        createTime: "now",
-        description: "Executing validation suite"
-      },
-      {
-        id: "5",
-        name: "act-5",
-        createTime: "now",
-        artifacts: [
-          {
-            changeSet: {
-              gitPatch: {
-                unidiffPatch: "diff --git a/file.ts b/file.ts\n+const a = 1;",
-                suggestedCommitMessage: "feat: add a constant"
-              }
-            },
-            media: {
-              data: "base64-image-data-here"
-            }
-          }
-        ]
-      }
-    ];
-
-    julesClientMock.mockResolvedValue(mockActivities);
-
-    await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1", "Initial prompt for testing", {
-      insertions: 50,
-      deletions: 20,
-      filesChanged: 4
-    });
-
-    const encoder = getEncoding("cl100k_base");
-    
-    // Input tokens
-    const promptTokenCount = encoder.encode("Initial prompt for testing").length;
-    const approvalTokenCount = encoder.encode("Approved plan (ID: plan-xyz)").length;
-    const expectedInputTokens = promptTokenCount + approvalTokenCount;
-
-    // Output tokens
-    const planText = "Proposed plan:\n\n- Step 1: Fix alignment\n- Step 2: Run linter";
-    const planTokenCount = encoder.encode(planText).length;
-
-    const progressText = "Progress updated: **Step 1 complete**\nAligned the buttons nicely";
-    const progressTokenCount = encoder.encode(progressText).length;
-
-    const descriptionTokenCount = encoder.encode("Executing validation suite").length;
-
-    const patchTokenCount = encoder.encode("diff --git a/file.ts b/file.ts\n+const a = 1;").length;
-    const msgTokenCount = encoder.encode("feat: add a constant").length;
-    const visionTokenCount = 765;
-
-    const expectedOutputTokens = planTokenCount + progressTokenCount + descriptionTokenCount + patchTokenCount + msgTokenCount + visionTokenCount;
-
-    expect(executionRepositoryUpdateMock).toHaveBeenCalledWith("mock-record-id", {
-      status: "completed",
-      inputTokens: expectedInputTokens,
-      outputTokens: expectedOutputTokens,
-      totalTokens: expectedInputTokens + expectedOutputTokens,
-      julesTokens: expectedInputTokens + expectedOutputTokens,
-      usageSource: "estimated",
-      transcriptChars: planText.length + progressText.length + "Executing validation suite".length + "diff --git a/file.ts b/file.ts\n+const a = 1;".length + "feat: add a constant".length,
-      invocationSource: "EXTERNAL_API",
-      rawUsageJson: {
-        gitMetrics: {
-          insertions: 50,
-          deletions: 20,
-          filesChanged: 4
-        }
-      }
+    it("does not throttle distinct sessions", async () => {
+      getFullConversationMock.mockResolvedValue([]);
+      await service.syncLiveInvocation("proj-1", "task-1", "session-a", "x");
+      await service.syncLiveInvocation("proj-1", "task-2", "session-b", "y");
+      expect(getFullConversationMock).toHaveBeenCalledTimes(2);
     });
   });
 });

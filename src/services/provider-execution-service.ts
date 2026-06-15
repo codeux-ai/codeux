@@ -21,6 +21,14 @@ import type { CreateProviderInvocationUsageInput } from "../contracts/execution-
 import { sanitizeInvocationOutputText } from "./invocation-output-sanitizer.js";
 import { conversationTurnToMessage } from "./provider-conversation-message-mapper.js";
 
+/** Counts tool-call turns in a parsed provider conversation, for tool-call stats. */
+function countConversationToolCalls(conversation: ParsedConversationTurn[] | undefined | null): number {
+  if (!conversation) {
+    return 0;
+  }
+  return conversation.reduce((count, turn) => (turn.kind === "tool_call" ? count + 1 : count), 0);
+}
+
 export interface ProviderExecutionServiceDeps {
   executionRepository?: ExecutionRepository;
   sessionTracking?: SessionTrackingRepository;
@@ -281,6 +289,7 @@ export class ProviderExecutionService {
               outputTokens: telemetry.outputTokens,
               reasoningOutputTokens: telemetry.reasoningOutputTokens,
               totalTokens: telemetry.totalTokens,
+              toolCallCount: countConversationToolCalls(telemetry.conversation),
               usageSource: telemetry.usageSource,
               rawUsageJson: telemetry.rawUsageJson || undefined,
             });
@@ -368,6 +377,7 @@ export class ProviderExecutionService {
             outputTokens: result.usageTelemetry.outputTokens,
             reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
             totalTokens: result.usageTelemetry.totalTokens,
+            toolCallCount: countConversationToolCalls(result.usageTelemetry.conversation),
             usageSource: result.usageTelemetry.usageSource,
             rawUsageJson: result.usageTelemetry.rawUsageJson,
           });

@@ -932,8 +932,8 @@ export class ExecutionRepository {
           id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id, task_run_id, attention_item_id,
           session_id, provider, purpose, status, model, execution_mode, native_session_id, started_at, finished_at, duration_ms,
           prompt_chars, transcript_chars, input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens,
-          total_tokens, jules_tokens, usage_source, invocation_source, raw_usage_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          total_tokens, tool_call_count, jules_tokens, usage_source, invocation_source, raw_usage_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         input.projectId,
@@ -954,6 +954,7 @@ export class ExecutionRepository {
         null,
         null,
         input.promptChars ?? 0,
+        0,
         0,
         0,
         0,
@@ -1031,7 +1032,7 @@ export class ExecutionRepository {
         UPDATE provider_invocations
         SET status = ?, model = ?, execution_mode = ?, native_session_id = ?, finished_at = ?, duration_ms = ?, transcript_chars = ?,
           input_tokens = ?, cached_input_tokens = ?, output_tokens = ?, reasoning_output_tokens = ?, total_tokens = ?,
-          jules_tokens = ?, usage_source = ?, invocation_source = ?, raw_usage_json = ?, updated_at = ?
+          tool_call_count = ?, jules_tokens = ?, usage_source = ?, invocation_source = ?, raw_usage_json = ?, updated_at = ?
         WHERE id = ?
       `).run(
         input.status || current.status,
@@ -1046,6 +1047,7 @@ export class ExecutionRepository {
         input.outputTokens === undefined ? current.outputTokens : input.outputTokens,
         input.reasoningOutputTokens === undefined ? current.reasoningOutputTokens : input.reasoningOutputTokens,
         input.totalTokens === undefined ? current.totalTokens : input.totalTokens,
+        input.toolCallCount === undefined ? current.toolCallCount : input.toolCallCount,
         input.julesTokens === undefined ? current.julesTokens : input.julesTokens,
         input.usageSource === undefined ? current.usageSource : input.usageSource,
         input.invocationSource === undefined ? current.invocationSource : input.invocationSource,
@@ -1684,6 +1686,7 @@ export class ExecutionRepository {
           SUM(output_tokens) as outputTokens,
           SUM(reasoning_output_tokens) as reasoningOutputTokens,
           SUM(total_tokens) as totalTokens,
+          SUM(tool_call_count) as toolCallCount,
           SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
           SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
           SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
@@ -1706,6 +1709,7 @@ export class ExecutionRepository {
         outputTokens: toNumber(row.outputTokens),
         reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
         totalTokens: toNumber(row.totalTokens),
+        toolCallCount: toNumber(row.toolCallCount),
         reportedInvocationCount: toNumber(row.reportedInvocationCount),
         estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
         unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),
@@ -1730,6 +1734,7 @@ export class ExecutionRepository {
           SUM(output_tokens) as outputTokens,
           SUM(reasoning_output_tokens) as reasoningOutputTokens,
           SUM(total_tokens) as totalTokens,
+          SUM(tool_call_count) as toolCallCount,
           SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
           SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
           SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
@@ -1752,6 +1757,7 @@ export class ExecutionRepository {
         outputTokens: toNumber(row.outputTokens),
         reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
         totalTokens: toNumber(row.totalTokens),
+        toolCallCount: toNumber(row.toolCallCount),
         reportedInvocationCount: toNumber(row.reportedInvocationCount),
         estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
         unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),

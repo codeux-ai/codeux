@@ -1,6 +1,11 @@
 import type { ParsedConversationTurn } from "../infrastructure/providers/cli/provider-usage.js";
 import type { AppendExecutionInvocationMessageInput } from "../contracts/invocation-types.js";
 import { sanitizeInvocationOutputText } from "./invocation-output-sanitizer.js";
+import {
+  MAX_MESSAGE_CONTENT_CHARS,
+  MAX_TOOL_PAYLOAD_CHARS,
+  truncateForStorage,
+} from "./invocation-message-limits.js";
 
 /**
  * Maps a parsed provider conversation turn to an invocation message. Reasoning
@@ -13,9 +18,15 @@ export function conversationTurnToMessage(
   provider: string,
   model: string | null,
 ): AppendExecutionInvocationMessageInput {
-  const sanitizedTurnText = sanitizeInvocationOutputText(turn.text || "");
+  const sanitizedTurnText = truncateForStorage(
+    sanitizeInvocationOutputText(turn.text || ""),
+    MAX_MESSAGE_CONTENT_CHARS,
+  );
   const base: Record<string, unknown> = { provider, model };
   if (turn.toolCallId) base.toolCallId = turn.toolCallId;
+
+  const capPayload = (value: string | null | undefined): string | null =>
+    value == null ? null : truncateForStorage(value, MAX_TOOL_PAYLOAD_CHARS);
 
   switch (turn.kind) {
     case "user":
@@ -28,7 +39,7 @@ export function conversationTurnToMessage(
       return {
         role: "tool",
         contentMarkdown: sanitizedTurnText,
-        toolCallsJson: { arguments: turn.toolArguments ?? null, callId: turn.toolCallId ?? null },
+        toolCallsJson: { arguments: capPayload(turn.toolArguments), callId: turn.toolCallId ?? null },
         metadata: {
           ...base,
           kind: "tool_call",
@@ -41,7 +52,7 @@ export function conversationTurnToMessage(
       return {
         role: "tool",
         contentMarkdown: sanitizedTurnText,
-        toolCallsJson: { output: turn.toolOutput ?? null },
+        toolCallsJson: { output: capPayload(turn.toolOutput) },
         metadata: { ...base, kind: "tool_result", toolName: turn.toolName ?? null },
       };
   }

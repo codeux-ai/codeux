@@ -372,6 +372,9 @@ export interface ExecutionUsageTotals {
   outputTokens: number;
   reasoningOutputTokens: number;
   totalTokens: number;
+  /** Total tool-style operations across the aggregated invocations. Optional so
+   *  existing literal consumers stay valid; backend aggregators populate it. */
+  toolCallCount?: number;
   reportedInvocationCount: number;
   estimatedInvocationCount: number;
   unavailableInvocationCount: number;

@@ -320,9 +320,15 @@ export class ProviderRunner implements IProviderRunner {
 
     let accumulatedStdout = "";
     let accumulatedStderr = "";
+    // Raw stdout including structured JSON lines that are suppressed from the
+    // activity feed. The codex live-telemetry watcher parses this so the
+    // conversation is built from the exec --json stream in real time even when
+    // the rollout file isn't yet readable.
+    let accumulatedRawStdout = "";
     const trackingOnActivity = (desc: string, originator?: string) => {
       if (originator === "agent") {
         accumulatedStdout += desc + "\n";
+        accumulatedRawStdout += desc + "\n";
       } else if (originator === "provider") {
         accumulatedStderr += desc + "\n";
       }
@@ -348,6 +354,9 @@ export class ProviderRunner implements IProviderRunner {
         signal,
         onStdoutLine: (line) => {
           if (this.shouldSuppressStructuredStdout(provider, line)) {
+            // Keep the structured line out of the activity feed but retain it
+            // for the telemetry watcher's stream parsing.
+            accumulatedRawStdout += line + "\n";
             return;
           }
           trackingOnActivity(line, "agent");
@@ -398,7 +407,7 @@ export class ProviderRunner implements IProviderRunner {
               model: runModel,
               prompt,
               cwd,
-              stdout: accumulatedStdout,
+              stdout: accumulatedRawStdout,
               stderr: accumulatedStderr,
               capturedText: "",
               nativeSessionId: resolvedNativeSessionId || nativeSessionId,

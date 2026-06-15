@@ -14,6 +14,7 @@ export interface UsageRowRaw {
   output_tokens?: number | null;
   reasoning_output_tokens?: number | null;
   total_tokens?: number | null;
+  tool_call_count?: number | null;
   reported_invocation_count?: number | null;
   estimated_invocation_count?: number | null;
   unsupported_invocation_count?: number | null;
@@ -29,6 +30,7 @@ export const USAGE_AGGREGATION_SQL = `SELECT
       SUM(output_tokens) as output_tokens,
       SUM(reasoning_output_tokens) as reasoning_output_tokens,
       SUM(total_tokens) as total_tokens,
+      SUM(tool_call_count) as tool_call_count,
       SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reported_invocation_count,
       SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimated_invocation_count,
       SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupported_invocation_count,
@@ -49,6 +51,7 @@ export function mapUsageRowToTotals(row: UsageRowRaw | null | undefined): Execut
     outputTokens: Number(row.output_tokens) || 0,
     reasoningOutputTokens: Number(row.reasoning_output_tokens) || 0,
     totalTokens: Number(row.total_tokens) || 0,
+    toolCallCount: Number(row.tool_call_count) || 0,
     reportedInvocationCount: Number(row.reported_invocation_count) || 0,
     estimatedInvocationCount: Number(row.estimated_invocation_count) || 0,
     unsupportedInvocationCount: Number(row.unsupported_invocation_count) || 0,
@@ -64,6 +67,7 @@ export function mergeUsageTotals(target: ExecutionUsageTotals, invocation: Provi
   target.outputTokens += invocation.outputTokens;
   target.reasoningOutputTokens += invocation.reasoningOutputTokens;
   target.totalTokens += invocation.totalTokens;
+  target.toolCallCount = (target.toolCallCount ?? 0) + (invocation.toolCallCount ?? 0);
   switch (invocation.usageSource) {
     case "reported":
       target.reportedInvocationCount += 1;

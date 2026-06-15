@@ -42,5 +42,12 @@ export interface SessionSyncDependencies {
       sessionPrompt?: string,
       gitMetrics?: { insertions?: number; deletions?: number; filesChanged?: number } | null
     ) => Promise<void>;
+    syncLiveInvocation: (
+      projectId: string,
+      taskId: string,
+      sessionId: string,
+      sessionPrompt?: string,
+      gitMetrics?: { insertions?: number; deletions?: number; filesChanged?: number } | null
+    ) => Promise<void>;
   };
 }

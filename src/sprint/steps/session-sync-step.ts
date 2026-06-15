@@ -300,6 +300,22 @@ const syncExecutionRunState = async (
   const isTerminal = nextRunState === "COMPLETED" || nextRunState === "FAILED";
   const transitionedToTerminal = !wasTerminal && isTerminal;
 
+  // Live invocation sync: while a Jules session is still active, refresh its
+  // conversation transcript and running usage estimate so the dashboard shows
+  // messages and token counts in real time (matching the CLI providers). The
+  // service throttles per session, so calling this every sync tick is cheap.
+  if (!isTerminal && deps.julesUsage?.syncLiveInvocation && task.project_id && task.record_id && sessionId) {
+    deps.julesUsage.syncLiveInvocation(
+      task.project_id,
+      task.record_id,
+      sessionId,
+      session.prompt,
+      extractGitMetrics(session) as { insertions?: number; deletions?: number; filesChanged?: number } | null,
+    ).catch((err) => {
+      deps.logger.warn("Failed non-blocking live Jules invocation sync", { error: err });
+    });
+  }
+
   if (transitionedToTerminal && deps.getSession && deps.listAllActivities) {
     try {
       const gitMetrics = extractGitMetrics(session);

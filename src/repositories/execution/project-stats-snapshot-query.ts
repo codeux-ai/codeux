@@ -66,6 +66,7 @@ export function queryProjectStatsSnapshot(
     SUM(output_tokens) as outputTokens,
     SUM(reasoning_output_tokens) as reasoningOutputTokens,
     SUM(total_tokens) as totalTokens,
+    SUM(tool_call_count) as toolCallCount,
     SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
     SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
     SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
@@ -81,6 +82,7 @@ export function queryProjectStatsSnapshot(
     outputTokens: toNumber(row.outputTokens),
     reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
     totalTokens: toNumber(row.totalTokens),
+    toolCallCount: toNumber(row.toolCallCount),
     reportedInvocationCount: toNumber(row.reportedInvocationCount),
     estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
     unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),
@@ -95,6 +97,7 @@ export function queryProjectStatsSnapshot(
     target.outputTokens += source.outputTokens;
     target.reasoningOutputTokens += source.reasoningOutputTokens;
     target.totalTokens += source.totalTokens;
+    target.toolCallCount = (target.toolCallCount ?? 0) + (source.toolCallCount ?? 0);
     target.reportedInvocationCount += source.reportedInvocationCount;
     target.estimatedInvocationCount += source.estimatedInvocationCount;
     target.unsupportedInvocationCount += source.unsupportedInvocationCount;
