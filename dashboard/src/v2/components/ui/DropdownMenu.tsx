@@ -1,4 +1,4 @@
-import { h, ComponentChildren, RefObject } from "preact";
+import { h, ComponentChildren, RefObject, isValidElement, cloneElement } from "preact";
 import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
@@ -6,6 +6,7 @@ import { calculatePosition, Position, Alignment } from "../../lib/positioning/in
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface DropdownMenuProps {
+  asChild?: boolean;
   children: ComponentChildren;
   content: ComponentChildren;
   position?: Position;
@@ -30,6 +31,7 @@ interface DropdownMenuProps {
 }
 
 export const DropdownMenu = ({
+  asChild = false,
   children,
   content,
   position = "bottom",
@@ -43,7 +45,7 @@ export const DropdownMenu = ({
 }: DropdownMenuProps) => {
   const isReducedMotion = useReducedMotion();
   const [isRendered, setIsRendered] = useState(false);
-  const localTriggerRef = useRef<HTMLDivElement>(null);
+  const localTriggerRef = useRef<any>(null);
   const triggerRef = externalTriggerRef || localTriggerRef;
   const menuRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
@@ -173,16 +175,52 @@ export const DropdownMenu = ({
 
   return (
     <>
-      <div
-        ref={externalTriggerRef ? undefined : localTriggerRef}
-        className="inline-flex cursor-pointer"
-        onClick={(e) => { e.stopPropagation(); onOpenChange(!isOpen); }}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
-        aria-controls={isOpen ? menuId : undefined}
-      >
-        {children}
-      </div>
+      {asChild && isValidElement(children) ? (
+        cloneElement(children as any, {
+          ref: externalTriggerRef ? undefined : localTriggerRef,
+          onClick: (e: any) => {
+            e.stopPropagation();
+            onOpenChange(!isOpen);
+            if ((children.props as any).onClick) (children.props as any).onClick(e);
+          },
+          onKeyDown: (e: any) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onOpenChange(!isOpen);
+            }
+            if (e.key === "ArrowDown" && !isOpen) {
+              e.preventDefault();
+              onOpenChange(true);
+            }
+            if ((children.props as any).onKeyDown) (children.props as any).onKeyDown(e);
+          },
+          "aria-haspopup": "menu",
+          "aria-expanded": isOpen,
+          "aria-controls": isOpen ? menuId : undefined,
+        })
+      ) : (
+        <button
+          type="button"
+          ref={externalTriggerRef ? undefined : localTriggerRef}
+          className="inline-flex cursor-pointer text-left"
+          onClick={(e) => { e.stopPropagation(); onOpenChange(!isOpen); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onOpenChange(!isOpen);
+            }
+            if (e.key === "ArrowDown" && !isOpen) {
+              e.preventDefault();
+              onOpenChange(true);
+            }
+          }}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? menuId : undefined}
+        >
+          {children}
+        </button>
+      )}
 
       {isRendered && typeof document !== "undefined" &&
         createPortal(
