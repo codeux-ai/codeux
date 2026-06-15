@@ -614,7 +614,7 @@ export const TasksPage: FunctionComponent = () => {
   const handleDragStart = useCallback((taskId: string, e: DragEvent) => {
     if (reducedMotion) return;
     setDraggedTaskId(taskId);
-    e.dataTransfer.effectAllowed = 'move';
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
     // e.dataTransfer.setDragImage(new Image(), 0, 0); // optional: hide default ghost
   }, [reducedMotion]);
 
@@ -625,7 +625,7 @@ export const TasksPage: FunctionComponent = () => {
 
   const handleDragOver = useCallback((status: TaskStatus, index: number, e: any) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     setDropTargetContext({ status, index });
   }, []);
 

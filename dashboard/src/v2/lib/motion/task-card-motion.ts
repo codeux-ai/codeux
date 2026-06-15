@@ -38,7 +38,7 @@ export function useTaskCardDragMotion(ref: RefObject<HTMLElement>, isDragging: b
         opacity: 0.6,
         boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
         duration: MOTION_TOKENS.timing.fast,
-        ease: MOTION_TOKENS.easing.snappy,
+        ease: MOTION_TOKENS.easing.standard,
       });
     } else {
       gsap.to(ref.current, {
