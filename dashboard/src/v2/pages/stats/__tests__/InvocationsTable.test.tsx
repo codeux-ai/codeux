@@ -123,11 +123,22 @@ describe("InvocationsTable", () => {
     const { getByText, queryByText, getByRole } = render(<Harness />);
 
     // The first 5 buttons are sort headers in the thead
-    const expandButton = getByRole("button", { name: "Expand invocation inv-1" });
+    const expandButton = getByRole("button", { name: "Expand details for invocation inv-1" });
+
+    expect(expandButton.getAttribute("aria-expanded")).toBe("false");
+    expect(expandButton.getAttribute("aria-controls")).toBe("invocation-panel-inv-1");
+
     fireEvent.click(expandButton);
+
+    expect(expandButton.getAttribute("aria-expanded")).toBe("true");
+
     await waitFor(() => {
       expect(getByText("Loading messages")).toBeTruthy();
     });
+
+    const panelRegion = getByRole("region", { name: "Message transcript" });
+    expect(panelRegion).toBeTruthy();
+    expect(panelRegion.getAttribute("id")).toBe("invocation-panel-inv-1");
 
     fireEvent.click(expandButton);
     await waitFor(() => {
@@ -143,5 +154,22 @@ describe("InvocationsTable", () => {
   it("renders empty state", () => {
     const { getByText } = render(<Harness invocations={[]} />);
     expect(getByText("No invocations match the current filters")).toBeTruthy();
+  });
+
+  it("announces failed invocations with alert role", () => {
+    const { getByRole, getByText } = render(<Harness />);
+    const alertRegion = getByRole("alert");
+    expect(alertRegion).toBeTruthy();
+    expect(getByText("Error:")).toBeTruthy();
+    expect(getByText("Rate limited")).toBeTruthy();
+  });
+
+  it("sets aria-sort on sortable headers", () => {
+    const { getByRole } = render(<Harness />);
+    const timeHeader = getByRole("columnheader", { name: /Time/i });
+    expect(timeHeader.getAttribute("aria-sort")).toBe("descending");
+
+    const inHeader = getByRole("columnheader", { name: /In/i });
+    expect(inHeader.getAttribute("aria-sort")).toBe("none");
   });
 });

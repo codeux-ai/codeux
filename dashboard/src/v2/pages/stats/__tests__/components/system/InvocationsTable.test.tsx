@@ -165,7 +165,7 @@ describe("InvocationsTable", () => {
       expect(within(root).getByText("No messages recorded for this invocation")).toBeTruthy();
     });
 
-    fireEvent.click(within(root).getByRole("button", { name: "Collapse invocation inv-expand" }));
+    fireEvent.click(within(root).getByRole("button", { name: "Collapse details for invocation inv-expand" }));
     expect(onRowExpand).toHaveBeenCalledWith(null);
   });
 

@@ -78,7 +78,8 @@ export const NotificationPanel: FunctionComponent<{
   return (
     <div
       ref={panelRef}
-      role="menu"
+      id="notification-panel"
+      role="dialog"
       aria-label="Notifications Panel"
       className="absolute right-0 top-full mt-2 w-[23rem] overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_20px_40px_rgba(0,0,0,0.12)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/95 dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] z-50 flex flex-col"
     >
@@ -114,9 +115,9 @@ export const NotificationPanel: FunctionComponent<{
         </div>
       </div>
 
-      <div className="dashboard-scrollbar max-h-96 overflow-y-auto p-2">
+      <ul className="dashboard-scrollbar max-h-96 overflow-y-auto p-2 m-0 list-none">
         {notifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center px-5 py-10 text-center">
+          <li className="flex flex-col items-center justify-center px-5 py-10 text-center">
             <div className="rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-700 dark:text-signal-300">
               Clear
             </div>
@@ -124,7 +125,7 @@ export const NotificationPanel: FunctionComponent<{
             <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
               Startup checks are healthy and there is nothing waiting for operator attention.
             </div>
-          </div>
+          </li>
         ) : notifications.map((notification) => {
           const classes = severityClasses[notification.severity];
           const Icon = notification.icon;
@@ -133,16 +134,19 @@ export const NotificationPanel: FunctionComponent<{
           const iconClass = notification.iconColor ?? classes.icon;
 
           return (
-            <div
+            <li
               key={notification.id}
               data-notification-item
-              role="menuitem"
+
               tabIndex={0}
               onFocus={() => onMarkRead(notification.id)}
               className="group relative mb-2 rounded-2xl border border-black/[0.05] bg-white/75 p-3 text-left transition-colors hover:border-black/[0.1] hover:bg-black/[0.025] last:mb-0 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.1] dark:hover:bg-white/[0.06]"
             >
               {notification.unread ? (
-                <div className={`absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full ${accentClass}`} />
+                <>
+                  <span className="sr-only">Unread</span>
+                  <div className={`absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full ${accentClass}`} />
+                </>
               ) : null}
               <div className="flex items-start gap-3">
                 <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${classes.badge}`}>
@@ -193,10 +197,10 @@ export const NotificationPanel: FunctionComponent<{
                   </div>
                 </div>
               </div>
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </div>
   );
 };

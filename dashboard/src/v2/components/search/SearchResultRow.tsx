@@ -5,6 +5,7 @@ import { AgentAvatarSvg } from "../agents/AgentAvatarSvg.js";
 import type { SearchItem } from "./SearchOverlay";
 
 interface SearchResultRowProps {
+    id?: string;
     item: SearchItem;
     categoryType: string;
     isFocused: boolean;
@@ -14,6 +15,7 @@ interface SearchResultRowProps {
 }
 
 export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
+    id,
     item,
     categoryType,
     isFocused,
@@ -92,6 +94,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
             aria-label={`${categoryType} result: ${title}`}
             role="option"
             aria-selected={isFocused}
+            id={id}
             className={`group relative flex items-center justify-between w-full text-left px-4 py-3 rounded-[1.25rem] transition-all duration-200 overflow-hidden ${
                 isFocused
                     ? 'bg-signal-500/8 dark:bg-signal-500/10 border-signal-500/20 shadow-[0_0_20px_rgba(0,224,160,0.08)] backdrop-blur-2xl'

@@ -1,10 +1,11 @@
-import { h, ComponentChildren, RefObject, isValidElement } from "preact";
+import { h, ComponentChildren, RefObject, isValidElement, cloneElement } from "preact";
 import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
 
 interface PopoverProps {
+  asChild?: boolean;
   children: ComponentChildren;
   content: ComponentChildren;
   position?: Position;
@@ -18,6 +19,7 @@ interface PopoverProps {
 }
 
 export const Popover = ({
+  asChild = false,
   children,
   content,
   position = "bottom",
@@ -153,31 +155,50 @@ export const Popover = ({
 
   return (
     <>
-      {isValidElement(children) && (children.type === 'button' || (children.props as any).role === 'button') ? (
-        <div
-            ref={externalTriggerRef ? undefined : (localTriggerRef as unknown as RefObject<HTMLDivElement>)}
-            className="inline-flex cursor-pointer text-left"
-            onClick={(e) => {
-                onOpenChange(!isOpen);
-            }}
-            aria-haspopup={isTooltip ? "true" : "dialog"}
-            aria-expanded={isOpen}
-            aria-controls={isOpen ? popoverId : undefined}
-        >
-            {children}
-        </div>
+      {asChild && isValidElement(children) ? (
+        cloneElement(children as any, {
+          ref: externalTriggerRef ? undefined : localTriggerRef,
+          onClick: (e: any) => {
+            onOpenChange(!isOpen);
+            if ((children.props as any).onClick) (children.props as any).onClick(e);
+          },
+          onKeyDown: (e: any) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onOpenChange(!isOpen);
+            }
+            if (e.key === "ArrowDown" && !isOpen) {
+              e.preventDefault();
+              onOpenChange(true);
+            }
+            if ((children.props as any).onKeyDown) (children.props as any).onKeyDown(e);
+          },
+          "aria-haspopup": isTooltip ? "true" : "dialog",
+          "aria-expanded": isOpen,
+          "aria-controls": isOpen ? popoverId : undefined,
+        })
       ) : (
-      <button
-        type="button"
-        ref={externalTriggerRef ? undefined : localTriggerRef}
-        className="inline-flex cursor-pointer text-left"
-        onClick={() => onOpenChange(!isOpen)}
-        aria-haspopup={isTooltip ? "true" : "dialog"}
-        aria-expanded={isOpen}
-        aria-controls={isOpen ? popoverId : undefined}
-      >
-        {children}
-      </button>
+        <button
+          type="button"
+          ref={externalTriggerRef ? undefined : localTriggerRef}
+          className="inline-flex cursor-pointer text-left"
+          onClick={() => onOpenChange(!isOpen)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onOpenChange(!isOpen);
+            }
+            if (e.key === "ArrowDown" && !isOpen) {
+              e.preventDefault();
+              onOpenChange(true);
+            }
+          }}
+          aria-haspopup={isTooltip ? "true" : "dialog"}
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? popoverId : undefined}
+        >
+          {children}
+        </button>
       )}
 
       {isRendered &&

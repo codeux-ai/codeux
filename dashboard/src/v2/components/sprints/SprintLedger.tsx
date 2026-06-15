@@ -313,7 +313,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   : <Square className="h-4 w-4" strokeWidth={2.2} />}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[80px] min-w-[80px]">
+            <TableCell isHeader className="group w-[80px] min-w-[80px]" aria-sort={sort.key === "showcasePinned" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("showcasePinned")}
@@ -323,7 +323,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 {renderSortIndicator("showcasePinned")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]" aria-sort={sort.key === "sprintKey" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("sprintKey")}
@@ -333,7 +333,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 {renderSortIndicator("sprintKey")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[220px] min-w-[220px]">
+            <TableCell isHeader className="group w-[220px] min-w-[220px]" aria-sort={sort.key === "name" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("name")}
@@ -343,7 +343,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 {renderSortIndicator("name")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]" aria-sort={sort.key === "status" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("status")}
@@ -353,7 +353,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 {renderSortIndicator("status")}
               </button>
             </TableCell>
-            <TableCell isHeader align="right" className="group w-[100px] min-w-[100px]">
+            <TableCell isHeader align="right" className="group w-[100px] min-w-[100px]" aria-sort={sort.key === "tasksCount" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("tasksCount")}
@@ -363,7 +363,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 Tasks
               </button>
             </TableCell>
-            <TableCell isHeader align="right" className="group w-[140px] min-w-[140px]">
+            <TableCell isHeader align="right" className="group w-[140px] min-w-[140px]" aria-sort={sort.key === "completion" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("completion")}
@@ -373,7 +373,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 Completion
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]" aria-sort={sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("createdAt")}

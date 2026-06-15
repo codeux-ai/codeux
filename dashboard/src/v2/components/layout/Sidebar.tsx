@@ -64,7 +64,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             if (prefersReducedMotion) {
                 gsap.set(sidebarRef.current, { x: 0, opacity: 1 });
             } else {
-                gsap.fromTo(sidebarRef.current, { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power4.out" });
+                if (prefersReducedMotion) { gsap.set(sidebarRef.current, { x: 0, opacity: 1 }); } else { gsap.fromTo(sidebarRef.current, { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power4.out" }); }
             }
         }
     }, [isMobile, prefersReducedMotion]);

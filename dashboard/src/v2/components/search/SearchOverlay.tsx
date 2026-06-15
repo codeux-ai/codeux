@@ -155,10 +155,18 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 onClose();
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setFocusedIndex(prev => (prev < allItems?.length || 0 - 1 ? prev + 1 : 0));
+                setFocusedIndex(prev => {
+                    const maxIndex = (allItems?.length || 0) - 1;
+                    if (maxIndex < 0) return -1;
+                    return prev < maxIndex ? prev + 1 : 0;
+                });
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setFocusedIndex(prev => (prev > 0 ? prev - 1 : allItems?.length || 0 - 1));
+                setFocusedIndex(prev => {
+                    const maxIndex = (allItems?.length || 0) - 1;
+                    if (maxIndex < 0) return -1;
+                    return prev > 0 ? prev - 1 : maxIndex;
+                });
             } else if (e.key === 'Enter' && focusedIndex >= 0) {
                 e.preventDefault();
                 const selectedItem = allItems[focusedIndex];
@@ -175,13 +183,21 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     // Track active item ref to ensure it's in view
     const activeItemRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
-        if (activeItemRef.current) {
+        if (activeItemRef.current && typeof activeItemRef.current.scrollIntoView === 'function') {
             activeItemRef.current.scrollIntoView({ block: 'nearest' });
         }
     }, [focusedIndex]);
 
 
     let globalItemIndex = 0;
+
+    // Live region status
+    let liveRegionText = '';
+    if (isLoading) liveRegionText = 'Searching...';
+    else if (searchQuery.length > 0) {
+        if (allItems.length === 0) liveRegionText = `No results found for '${searchQuery}'`;
+        else liveRegionText = `${allItems.length} results found.`;
+    }
 
     return (
         <div
@@ -196,9 +212,14 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
 
             <div
                 ref={containerRef}
+                role="dialog"
+                aria-modal={!anchorRef ? "true" : undefined}
+                aria-labelledby="search-dialog-title"
                 className={anchorRef ? "flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10" : "relative w-full max-w-4xl mx-auto flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10"}
                 style={anchorRef ? modalStyle : {}}
             >
+                <h2 id="search-dialog-title" className="sr-only">Search</h2>
+                <div aria-live="polite" className="sr-only">{liveRegionText}</div>
                 {/* Search Header */}
                 <div className="flex items-center px-4 py-4 border-b border-black/5 dark:border-white/5">
                     <Search className="w-5 h-5 text-slate-400 mr-3" />
@@ -208,10 +229,16 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                         placeholder="Search sprints, tasks, agents..."
                         value={searchQuery}
                         onInput={(e) => onSearchChange(e.currentTarget.value)}
+                        role="combobox"
+                        aria-expanded={isOpen}
+                        aria-controls="search-results-listbox"
+                        aria-autocomplete="list"
+                        aria-activedescendant={focusedIndex >= 0 ? `search-result-item-${focusedIndex}` : undefined}
                         className="flex-1 bg-transparent border-none outline-none text-lg text-slate-900 dark:text-white placeholder-slate-400"
                     />
                     <button
                         onClick={onClose}
+                        aria-label="Close search"
                         className="p-2 ml-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
                     >
                         <X className="w-5 h-5" />
@@ -219,7 +246,9 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 </div>
 
                 {/* Results Area */}
-                <div className="flex-1 max-h-[60vh] overflow-y-auto dashboard-scrollbar p-2">
+                <div id="search-results-listbox"
+                    role="listbox"
+                    className="flex-1 max-h-[60vh] overflow-y-auto dashboard-scrollbar p-2">
                     {searchQuery.length === 0 ? (
                         <div className="flex flex-col">
                             <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 px-3 py-2">
@@ -266,7 +295,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                         </div>
                     ) : isLoading ? (
                         <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400">
-                            <Loader2 className="w-8 h-8 mb-4 animate-spin opacity-50" />
+                            <Loader2 className={`w-8 h-8 mb-4 opacity-50 ${reducedMotion ? "" : "animate-spin"}`} />
                             <span className="text-sm">Searching...</span>
                         </div>
                     ) : (
@@ -291,6 +320,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                                 return (
                                                     <SearchResultRow
                                                         key={item.id}
+                                                        id={`search-result-item-${currentIndex}`}
                                                         item={item}
                                                         categoryType={category.id}
                                                         isFocused={isFocused}

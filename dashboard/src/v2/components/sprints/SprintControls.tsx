@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { Loader2, Pause, Play, Square } from "lucide-preact";
 
 export interface SprintControlsProps {
+  ariaLabelPrefix?: string;
   isActive: boolean;
   isPaused: boolean;
   isStartStopPending: boolean;
@@ -11,6 +12,7 @@ export interface SprintControlsProps {
 }
 
 export const SprintControls: FunctionComponent<SprintControlsProps> = ({
+  ariaLabelPrefix,
   isActive,
   isPaused,
   isStartStopPending,
@@ -26,6 +28,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         type="button"
         onClick={onPauseResume}
         disabled={!canPauseResume || isPauseResumePending || isStartStopPending}
+        aria-label={ariaLabelPrefix ? `${isPaused ? "Resume" : "Pause"} ${ariaLabelPrefix}` : undefined}
         className={`inline-flex h-10 min-w-[6.25rem] flex-1 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isPaused
             ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
@@ -46,6 +49,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         type="button"
         onClick={onStartStop}
         disabled={isStartStopPending || isPauseResumePending}
+        aria-label={ariaLabelPrefix ? `${isActive ? "Stop" : "Start"} ${ariaLabelPrefix}` : undefined}
         className={`inline-flex h-10 min-w-[6rem] flex-1 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isActive
             ? "border-status-red/20 bg-status-red/[0.1] text-status-red hover:bg-status-red/[0.14]"

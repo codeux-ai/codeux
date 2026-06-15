@@ -18,6 +18,7 @@ import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
 import { Tooltip } from "./ui/Tooltip.js";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { useNotifications } from "../hooks/use-notifications.js";
 import { useThemeSetting } from "../hooks/useThemeSetting.js";
 import { useIsDark } from "../hooks/use-is-dark.js";
@@ -105,6 +106,7 @@ interface TopNavProps {
 }
 
 export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile, hideLogo, isMobileMenuOpen }) => {
+    const prefersReducedMotion = useReducedMotion();
     const navRef = useRef<HTMLElement>(null);
 
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -160,7 +162,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && isNotificationMenuVisible) {
                 setNotificationInteractionState('closed');
-                const triggerBtn = notificationContainerRef.current?.querySelector('button');
+                const triggerBtn = notificationContainerRef.current?.querySelector('#notification-trigger') as HTMLElement;
                 setTimeout(() => triggerBtn?.focus(), 0);
             }
         };
@@ -215,9 +217,13 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     useLayoutEffect(() => {
         if (navRef.current) {
-            gsap.fromTo(navRef.current, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" });
+            if (prefersReducedMotion) {
+                gsap.set(navRef.current, { y: 0, opacity: 1 });
+            } else {
+                gsap.fromTo(navRef.current, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" });
+            }
         }
-    }, []);
+    }, [prefersReducedMotion]);
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -482,8 +488,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             onClick={toggleNotificationMenu}
                             onFocus={handleNotificationFocus}
                             onBlur={handleNotificationBlur}
-                            aria-haspopup="menu"
+                            aria-haspopup="dialog"
                             aria-expanded={isNotificationMenuVisible}
+                            aria-controls="notification-panel"
+                            id="notification-trigger"
                             aria-label="Notifications"
                             className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:ring-2 focus-visible:ring-signal-500/30"
                         >
