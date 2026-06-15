@@ -896,11 +896,17 @@ export const TasksPage: FunctionComponent = () => {
               onDragOver={(e) => handleDragOver(status, columnTasks.length, e)}
               onDrop={(e) => handleDrop(status, columnTasks.length, e)}
             >
-                <SkeletonLoader show={showSkeletons} className="col-start-1 row-start-1 flex flex-col gap-4">
-                  <SkeletonCard />
-                  <SkeletonCard />
-                  <SkeletonCard />
-                </SkeletonLoader>
+                <SkeletonLoader
+                  show={showSkeletons}
+                  className="col-start-1 row-start-1"
+                  skeleton={(
+                    <div className="flex flex-col gap-4">
+                      <SkeletonCard />
+                      <SkeletonCard />
+                      <SkeletonCard />
+                    </div>
+                  )}
+                >
                 {!loading && columnTasks.length === 0 ? (
                   <div className="col-start-1 row-start-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed border-black/[0.04] dark:border-white/[0.04] rounded-[1rem]">
                     No {status.replace("_", " ")} tasks
@@ -946,6 +952,7 @@ export const TasksPage: FunctionComponent = () => {
                       )}
                   </div>
                 ) : null}
+                </SkeletonLoader>
               </div>
             </div>
           ))}

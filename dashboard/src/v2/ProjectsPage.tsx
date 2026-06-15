@@ -662,12 +662,18 @@ export const ProjectsPage: FunctionComponent = () => {
 
                 {/* ── Cards Grid ──────────────────────────────────────── */}
                 <div ref={gridRef} className="grid grid-cols-1 grid-rows-1 relative">
-                    <SkeletonLoader show={showSkeletons} className="col-start-1 row-start-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                        <SkeletonPanel />
-                        <SkeletonPanel />
-                        <SkeletonPanel />
-                        <SkeletonPanel />
-                    </SkeletonLoader>
+                    <SkeletonLoader
+                        show={showSkeletons}
+                        className="col-start-1 row-start-1"
+                        skeleton={(
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                                <SkeletonPanel />
+                                <SkeletonPanel />
+                                <SkeletonPanel />
+                                <SkeletonPanel />
+                            </div>
+                        )}
+                    >
                     {!loading ? (
                         <div className="col-start-1 row-start-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                             {filtered.map(source => (
@@ -701,6 +707,7 @@ export const ProjectsPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : null}
+                    </SkeletonLoader>
                 </div>
             </PageContainer>
 

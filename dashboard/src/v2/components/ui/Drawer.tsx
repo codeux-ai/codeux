@@ -2,6 +2,7 @@ import { h, ComponentChildren, FunctionComponent } from "preact";
 import { useEffect, useState, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { Overlay } from "./Overlay.js";
 
 interface DrawerProps {
@@ -24,6 +25,25 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
   const reducedMotion = useReducedMotion();
   const [shouldRender, setShouldRender] = useState(isOpen);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const trapRef = useFocusTrap(isOpen, {
+    onClose: () => {
+      if (!disableBackdropClick) {
+        onClose();
+      }
+    }
+  });
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
 
   const isRight = position === "right";
   const alignmentClass = isRight ? "right-0" : "left-0";
@@ -67,7 +87,10 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
     <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur exitDuration={250}>
       <div className="absolute inset-0 bg-slate-900/50 pointer-events-none" />
       <div
-        ref={cardRef}
+        ref={(el) => {
+          if (cardRef) (cardRef as any).current = el;
+          if (trapRef) (trapRef as any).current = el;
+        }}
         role="dialog"
         aria-modal="true"
         className={`fixed top-0 bottom-0 ${alignmentClass} z-50 w-full max-w-md bg-white dark:bg-void-800 rounded-[12px] shadow-lg border-x border-black/[0.06] dark:border-white/[0.06] ${className}`}

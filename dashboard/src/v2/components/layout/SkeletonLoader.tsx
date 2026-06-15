@@ -7,23 +7,39 @@ const Shimmer = () => (
   />
 );
 
-export const SkeletonLoader: FunctionComponent<{ show: boolean; children: ComponentChildren; className?: string }> = ({ show, children, className }) => {
-  const [shouldRender, setShouldRender] = useState(show);
+export const SkeletonLoader: FunctionComponent<{ show: boolean; children?: ComponentChildren; skeleton?: ComponentChildren; className?: string }> = ({ show, children, skeleton, className }) => {
+  const [renderSkeleton, setRenderSkeleton] = useState(show);
+  const [renderChildren, setRenderChildren] = useState(!show);
 
   useEffect(() => {
     if (show) {
-      setShouldRender(true);
+      setRenderSkeleton(true);
+      const timeout = setTimeout(() => setRenderChildren(false), 200);
+      return () => clearTimeout(timeout);
     } else {
-      const timeout = setTimeout(() => setShouldRender(false), 200);
+      setRenderChildren(true);
+      const timeout = setTimeout(() => setRenderSkeleton(false), 200);
       return () => clearTimeout(timeout);
     }
   }, [show]);
 
-  if (!shouldRender) return null;
-
   return (
-    <div className={`transition-opacity duration-200 ease-in-out pointer-events-none ${show ? 'opacity-100' : 'opacity-0'} ${className || ''}`}>
-      {children}
+    <div className={`grid grid-cols-1 grid-rows-1 ${className || ''}`}>
+      {renderSkeleton && (
+        <div className={`col-start-1 row-start-1 transition-opacity duration-200 ease-in-out ${show ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          {skeleton || children}
+        </div>
+      )}
+      {renderChildren && children && skeleton && (
+        <div className={`col-start-1 row-start-1 transition-opacity duration-200 ease-in-out ${!show ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          {children}
+        </div>
+      )}
+      {!skeleton && children && (
+        <div className={`col-start-1 row-start-1 transition-opacity duration-200 ease-in-out ${!show ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          {children}
+        </div>
+      )}
     </div>
   );
 };
