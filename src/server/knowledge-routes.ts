@@ -6,7 +6,8 @@ import type { KnowledgeService } from "../services/knowledge-service.js";
 import type { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { KnowledgeDocumentSummary } from "../contracts/knowledge-types.js";
-import { asyncRoute, syncRoute, requireTrimmedString, toErrorResponse } from "./route-utils.js";
+import { asyncRoute, syncRoute, toErrorResponse } from "./route-utils.js";
+import { requireTrimmedString } from "./request-parsers.js";
 
 const MODEL_REQUIRED_MESSAGE =
   "No embedding model is loaded. Download and select one under Settings → Memory before adding documents.";

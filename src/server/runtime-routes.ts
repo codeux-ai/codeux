@@ -1,14 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import {
-  asyncRoute,
-  parseTrimmedString,
-  requireTrimmedString,
-  syncRoute,
-  parsePreferredWorkerAssignment,
-  parseClaimAttentionItemPayload,
-  parseResolveAttentionItemPayload,
-} from "./route-utils.js";
+import { asyncRoute, syncRoute } from "./route-utils.js";
+import { parseTrimmedString, requireTrimmedString, parsePreferredWorkerAssignment, parseClaimAttentionItemPayload, parseResolveAttentionItemPayload } from "./request-parsers.js";
 import type { ProjectStatsQuery, ProjectStatsWindow } from "../contracts/app-types.js";
 
 export function parseProjectStatsQuery(query: Record<string, unknown>): ProjectStatsQuery {

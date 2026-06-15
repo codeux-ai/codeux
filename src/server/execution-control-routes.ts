@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { asyncRoute, requireTrimmedString, parseRerunTaskOptions } from "./route-utils.js";
+import { asyncRoute } from "./route-utils.js";
+import { requireTrimmedString, parseRerunTaskOptions } from "./request-parsers.js";
 
 export function registerExecutionControlRoutes(app: Express, options: DashboardDependencies): void {
   app.post("/api/tasks/:taskId/rerun", asyncRoute(async (req, res) => {

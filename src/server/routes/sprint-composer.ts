@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "../dashboard-server.js";
-import { asyncRoute, requireTrimmedString } from "../route-utils.js";
+import { asyncRoute } from "../route-utils.js";
+import { requireTrimmedString } from "../request-parsers.js";
 import { fetchProjectPlanningMetrics } from "../../domain/planning/invocation-metrics.js";
 import { PlanningEtaEstimator } from "../../domain/sprint/composer/eta-estimator.js";
 

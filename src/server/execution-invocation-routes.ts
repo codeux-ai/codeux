@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { syncRoute, requireTrimmedString } from "./route-utils.js";
+import { syncRoute } from "./route-utils.js";
+import { requireTrimmedString } from "./request-parsers.js";
 
 export function registerExecutionInvocationRoutes(router: Express, deps: DashboardDependencies): void {
   router.get("/api/projects/:projectId/execution/invocations", syncRoute((req, res) => {

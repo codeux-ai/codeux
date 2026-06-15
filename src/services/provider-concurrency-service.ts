@@ -22,11 +22,20 @@ export class ProviderConcurrencyService {
    * @param limit The maximum number of concurrent invocations allowed (0 = infinite)
    * @param signal Optional AbortSignal to cancel waiting
    */
-  async waitForSlot(provider: ProviderId, limit: number, signal?: AbortSignal): Promise<void> {
+  async waitForSlot(provider: ProviderId, limit: number, signal?: AbortSignal, maxWaitMs?: number): Promise<void> {
     if (limit <= 0) return;
 
+    const startMs = Date.now();
+    let lastLogMs = 0;
+
     while (true) {
-      if (signal?.aborted) throw new Error("AbortSignal triggered");
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason || "AbortSignal triggered"));
+      }
+
+      if (maxWaitMs !== undefined && Date.now() - startMs >= maxWaitMs) {
+        throw new Error(`Provider concurrency wait timed out after ${maxWaitMs}ms`);
+      }
 
       // Count running invocations across ALL projects in the repository
       const runningInvocations = this.deps.executionRepository.listRunningProviderInvocationUsages([provider]);
@@ -36,14 +45,24 @@ export class ProviderConcurrencyService {
         return;
       }
 
-      this.deps.logger.info("Provider concurrency cap reached, waiting for slot", {
-        provider,
-        limit,
-        currentCount,
-      });
+      const now = Date.now();
+      if (now - lastLogMs >= 10000) {
+        this.deps.logger.info("Provider concurrency cap reached, waiting for slot", {
+          provider,
+          limit,
+          currentCount,
+        });
+        lastLogMs = now;
+      }
+
+      let delayMs = 2000;
+      if (maxWaitMs !== undefined) {
+        const remainingMs = maxWaitMs - (Date.now() - startMs);
+        delayMs = Math.min(delayMs, Math.max(0, remainingMs));
+      }
 
       // Wait before checking again.
-      await sleepWithSignal(2000, signal);
+      await sleepWithSignal(delayMs, signal);
     }
   }
 
@@ -54,30 +73,50 @@ export class ProviderConcurrencyService {
     provider: ProviderId,
     limit: number,
     input: CreateProviderInvocationUsageInput,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    maxWaitMs?: number
   ): Promise<ProviderInvocationUsageRecord> {
     if (limit <= 0) {
       return this.deps.executionRepository.createProviderInvocationUsage(input);
     }
 
+    const startMs = Date.now();
+    let lastLogMs = 0;
+
     while (true) {
-      if (signal?.aborted) throw new Error("AbortSignal triggered");
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason || "AbortSignal triggered"));
+      }
+
+      if (maxWaitMs !== undefined && Date.now() - startMs >= maxWaitMs) {
+        throw new Error(`Provider concurrency wait timed out after ${maxWaitMs}ms`);
+      }
 
       const invocation = this.deps.executionRepository.tryCreateProviderInvocationUsage(input, limit);
       if (invocation) {
         return invocation;
       }
 
-      // Count for logging/tracking purposes
-      const runningCount = this.deps.executionRepository.listRunningProviderInvocationUsages([provider]).length;
+      const now = Date.now();
+      if (now - lastLogMs >= 10000) {
+        // Count for logging/tracking purposes
+        const runningCount = this.deps.executionRepository.listRunningProviderInvocationUsages([provider]).length;
 
-      this.deps.logger.info("Provider concurrency cap reached, waiting for slot", {
-        provider,
-        limit,
-        currentCount: runningCount,
-      });
+        this.deps.logger.info("Provider concurrency cap reached, waiting for slot", {
+          provider,
+          limit,
+          currentCount: runningCount,
+        });
+        lastLogMs = now;
+      }
 
-      await sleepWithSignal(2000, signal);
+      let delayMs = 2000;
+      if (maxWaitMs !== undefined) {
+        const remainingMs = maxWaitMs - (Date.now() - startMs);
+        delayMs = Math.min(delayMs, Math.max(0, remainingMs));
+      }
+
+      await sleepWithSignal(delayMs, signal);
     }
   }
 

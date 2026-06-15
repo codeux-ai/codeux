@@ -18,6 +18,10 @@ Repo-path ingestion resolves `path` inside the selected project's `baseDir`, rej
 
 Project imports copy extracted document text into the target project as `sourceType: "project"` documents. The target project embeds the copied documents with the active embedding model and still deduplicates by content hash inside that project.
 
+## Memory Auto-Capture
+
+Agent auto-captured learnings (`.task-learnings.md`) are persisted via batch processing to ensure reliability and determinism. When learning files are ingested, all entries are parsed and committed together in a single operation. The caller receives the exact count of successfully persisted memory records rather than relying on fire-and-forget loops.
+
 ## Code UX Internal Docs
 
 Every project can receive a grouped Code UX internal documentation entry:

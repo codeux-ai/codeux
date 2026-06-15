@@ -472,6 +472,8 @@ Add server-side limits for:
 - max websocket clients
 - max subscriptions per client
 - max replay window size per reconnect
+- max websocket accumulated buffer size (1MB): closes socket on violation to prevent OOM
+- max websocket frame payload size (512KB): closes socket on violation to prevent OOM
 
 ### Observability
 

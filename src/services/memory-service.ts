@@ -121,26 +121,27 @@ export class MemoryService {
       return 0;
     }
 
-    let captured = 0;
-    for (const entry of entries) {
-      this.createMemory(projectId, {
-        scope: "sprint",
-        sprintId,
-        agentPresetId,
-        content: entry.content,
-        category: entry.category,
-        strength: 0.6,
-        source: {
-          type: "auto_capture",
-          originType: "worker_learnings_file",
-          originId,
-        },
-      }).catch((err) => {
-        this.logger.warn(`Failed to capture worker learning memory for origin ${originId}: ${err instanceof Error ? err.message : String(err)}`);
-      });
-      captured++;
+    const inputs: CreateMemoryInput[] = entries.map((entry) => ({
+      scope: "sprint",
+      sprintId,
+      agentPresetId,
+      content: entry.content,
+      category: entry.category,
+      strength: 0.6,
+      source: {
+        type: "auto_capture",
+        originType: "worker_learnings_file",
+        originId,
+      },
+    }));
+
+    try {
+      const records = await this.createMemories(projectId, inputs);
+      return records.length;
+    } catch (err) {
+      this.logger.warn(`Failed to capture worker learning memory for origin ${originId}: ${err instanceof Error ? err.message : String(err)}`);
+      return 0;
     }
-    return captured;
   }
 
   async createMemory(projectId: string, input: CreateMemoryInput): Promise<MemoryRecord> {
@@ -246,6 +247,7 @@ export class MemoryService {
     const minSim = query.minSimilarity ?? 0.3;
 
     for (const candidate of candidates) {
+      if (candidate.embeddingDimension !== dimension) continue;
       const vec = bufferToFloat32(candidate.embeddingBlob, candidate.embeddingDimension);
       const sim = cosineSimilarity(queryEmbedding, vec);
       if (sim >= minSim) {

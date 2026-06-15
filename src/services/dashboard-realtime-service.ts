@@ -242,6 +242,95 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     }, Math.max(0, dueAt - Date.now()));
   }
 
+  private buildPublishTask<T>(options: {
+    now: number;
+    lastPublishedAt: number;
+    minIntervalMs: number;
+    scopeType: DashboardRealtimeScopeType;
+    scopeId: string;
+    eventType: string;
+    entityType: string;
+    entityId: string;
+    projectId?: string;
+    loader: () => Promise<T> | T;
+    cacheKey?: string;
+    skipDuplicate?: boolean;
+    sprintIdExtractor?: (payload: T) => string | undefined;
+    logType?: "realtime_snapshot_published" | "realtime_background_refresh";
+    logPayloadSize?: boolean;
+    onPublished: (now: number) => void;
+  }): { task: Promise<void> | null; waitMs: number } {
+    const waitMs = this.getThrottleDelay(options.lastPublishedAt, options.minIntervalMs, options.now);
+    if (waitMs > 0) {
+      return { task: null, waitMs };
+    }
+
+    const task = (async () => {
+      try {
+        const payload = await Promise.resolve(options.loader());
+        let sprintId: string | undefined;
+        if (options.sprintIdExtractor) {
+          sprintId = options.sprintIdExtractor(payload);
+        }
+
+        let payloadSizeBytes: number | undefined;
+
+        if (options.cacheKey && options.skipDuplicate) {
+          const fingerprint = this.getFingerprint(payload);
+          if (this.lastPayloadFingerprints.get(options.cacheKey) === fingerprint) {
+            this.logger.debug("skipping_duplicate_realtime_snapshot", {
+              type: options.eventType,
+              ...(options.projectId ? { projectId: options.projectId } : {}),
+            });
+            options.onPublished(options.now);
+            return;
+          }
+          this.lastPayloadFingerprints.set(options.cacheKey, fingerprint);
+          if (options.logPayloadSize) {
+            payloadSizeBytes = Buffer.byteLength(fingerprint, "utf8");
+          }
+        } else if (options.logPayloadSize) {
+          const fingerprint = this.getFingerprint(payload);
+          payloadSizeBytes = Buffer.byteLength(fingerprint, "utf8");
+        }
+
+        this.publishRawEvent({
+          scopeType: options.scopeType,
+          scopeId: options.scopeId,
+          eventType: options.eventType,
+          entityType: options.entityType,
+          entityId: options.entityId,
+          ...(options.projectId ? { projectId: options.projectId } : {}),
+          ...(sprintId ? { sprintId } : {}),
+          payload,
+          replayable: false,
+        });
+
+        if (options.logType) {
+          if (options.logType === "realtime_snapshot_published") {
+            this.logger.info(options.logType, {
+              type: options.eventType,
+              ...(payloadSizeBytes !== undefined ? { sizeBytes: payloadSizeBytes } : {}),
+              ...(options.projectId ? { projectId: options.projectId } : {}),
+              publishFrequencyMs: options.lastPublishedAt > 0 ? options.now - options.lastPublishedAt : 0,
+            });
+          } else {
+            this.logger.info(options.logType, { type: options.entityId });
+          }
+        }
+
+        options.onPublished(options.now);
+      } catch (error) {
+        this.logger.error(`Failed to publish ${options.eventType.replace(/\./g, " ")} realtime snapshot`, {
+          ...(options.projectId ? { projectId: options.projectId } : {}),
+          error,
+        });
+      }
+    })();
+
+    return { task, waitMs: 0 };
+  }
+
   private async flushScheduledSnapshots(): Promise<void> {
     const loaders = this.snapshotLoaders;
     if (!loaders) {
@@ -275,90 +364,58 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     const publishTasks: Array<Promise<void>> = [];
 
     if (shouldPublishProjects) {
-      const waitMs = this.getThrottleDelay(this.projectsPublishedAt, PROJECTS_MIN_INTERVAL_MS, now);
-      if (waitMs > 0) {
+      const result = this.buildPublishTask({
+        now,
+        lastPublishedAt: this.projectsPublishedAt,
+        minIntervalMs: PROJECTS_MIN_INTERVAL_MS,
+        scopeType: "projects",
+        scopeId: "projects",
+        eventType: "projects.updated",
+        entityType: "project_collection",
+        entityId: "projects",
+        loader: () => loaders.getProjectsSnapshot(),
+        logType: "realtime_background_refresh",
+        onPublished: (publishedAt) => {
+          this.projectsPublishedAt = publishedAt;
+        },
+      });
+
+      if (result.waitMs > 0) {
         this.pendingProjects = true;
-        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
-      } else {
-        publishTasks.push(
-          (async () => {
-            try {
-              const projects = await Promise.resolve(loaders.getProjectsSnapshot());
-              this.publishRawEvent({
-                scopeType: "projects",
-                scopeId: "projects",
-                eventType: "projects.updated",
-                entityType: "project_collection",
-                entityId: "projects",
-                payload: projects,
-                replayable: false,
-              });
-              this.logger.info("realtime_background_refresh", { type: "projects" });
-              this.projectsPublishedAt = now;
-            } catch (error) {
-              this.logger.error("Failed to publish projects realtime snapshot", {
-                error,
-              });
-            }
-          })()
-        );
+        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
+      } else if (result.task) {
+        publishTasks.push(result.task);
       }
     }
 
     for (const projectId of projectLiveIds) {
-      const lastPublishedAt = this.projectLivePublishedAt.get(projectId) ?? 0;
-      const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_LIVE_MIN_INTERVAL_MS, now);
-      if (waitMs > 0) {
+      const result = this.buildPublishTask({
+        now,
+        lastPublishedAt: this.projectLivePublishedAt.get(projectId) ?? 0,
+        minIntervalMs: PROJECT_LIVE_MIN_INTERVAL_MS,
+        scopeType: "project",
+        scopeId: projectId,
+        eventType: "project.live.updated",
+        entityType: "project_live",
+        entityId: projectId,
+        projectId,
+        loader: () => loaders.getProjectLiveSnapshot(projectId),
+        cacheKey: `project:${projectId}:project.live.updated`,
+        skipDuplicate: true,
+        sprintIdExtractor: (payload: any) => payload.selectedSprintId,
+        logType: "realtime_snapshot_published",
+        logPayloadSize: true,
+        onPublished: (publishedAt) => {
+          this.projectLivePublishedAt.set(projectId, publishedAt);
+        },
+      });
+
+      if (result.waitMs > 0) {
         this.pendingProjectLiveIds.add(projectId);
-        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
-        continue;
+        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
+      } else if (result.task) {
+        publishTasks.push(result.task);
       }
-
-      publishTasks.push(
-        (async () => {
-          try {
-            const snapshot = await Promise.resolve(loaders.getProjectLiveSnapshot(projectId));
-            const fingerprint = this.getFingerprint(snapshot);
-            const cacheKey = `project:${projectId}:project.live.updated`;
-
-            if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
-              this.logger.debug("skipping_duplicate_realtime_snapshot", {
-                type: "project.live.updated",
-                projectId,
-              });
-              this.projectLivePublishedAt.set(projectId, now);
-              return;
-            }
-
-            const payloadSizeBytes = Buffer.byteLength(JSON.stringify(snapshot), "utf8");
-            this.publishRawEvent({
-              scopeType: "project",
-              scopeId: projectId,
-              eventType: "project.live.updated",
-              entityType: "project_live",
-              entityId: projectId,
-              projectId,
-              sprintId: snapshot.selectedSprintId,
-              payload: snapshot,
-              replayable: false,
-            });
-            this.lastPayloadFingerprints.set(cacheKey, fingerprint);
-
-            this.logger.info("realtime_snapshot_published", {
-              type: "project.live.updated",
-              sizeBytes: payloadSizeBytes,
-              projectId,
-              publishFrequencyMs: lastPublishedAt > 0 ? now - lastPublishedAt : 0,
-            });
-            this.projectLivePublishedAt.set(projectId, now);
-          } catch (error) {
-            this.logger.error("Failed to publish project live realtime snapshot", {
-              projectId,
-              error,
-            });
-          }
-        })()
-      );
     }
 
     for (const projectId of projectGitIds) {
@@ -366,205 +423,136 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       if (!loadGit) {
         break;
       }
-      const lastPublishedAt = this.projectGitPublishedAt.get(projectId) ?? 0;
-      const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_GIT_MIN_INTERVAL_MS, now);
-      if (waitMs > 0) {
+      const result = this.buildPublishTask({
+        now,
+        lastPublishedAt: this.projectGitPublishedAt.get(projectId) ?? 0,
+        minIntervalMs: PROJECT_GIT_MIN_INTERVAL_MS,
+        scopeType: "project",
+        scopeId: projectId,
+        eventType: "project.git.updated",
+        entityType: "project_git",
+        entityId: projectId,
+        projectId,
+        loader: () => loadGit(projectId),
+        cacheKey: `project:${projectId}:project.git.updated`,
+        skipDuplicate: true,
+        onPublished: (publishedAt) => {
+          this.projectGitPublishedAt.set(projectId, publishedAt);
+        },
+      });
+
+      if (result.waitMs > 0) {
         this.pendingProjectGitIds.add(projectId);
-        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
-        continue;
+        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
+      } else if (result.task) {
+        publishTasks.push(result.task);
       }
-
-      publishTasks.push(
-        (async () => {
-          try {
-            const gitStatus = await Promise.resolve(loadGit(projectId));
-            const fingerprint = this.getFingerprint(gitStatus);
-            const cacheKey = `project:${projectId}:project.git.updated`;
-
-            if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
-              this.projectGitPublishedAt.set(projectId, now);
-              return;
-            }
-
-            this.publishRawEvent({
-              scopeType: "project",
-              scopeId: projectId,
-              eventType: "project.git.updated",
-              entityType: "project_git",
-              entityId: projectId,
-              projectId,
-              payload: gitStatus,
-              replayable: false,
-            });
-            this.lastPayloadFingerprints.set(cacheKey, fingerprint);
-            this.projectGitPublishedAt.set(projectId, now);
-          } catch (error) {
-            this.logger.error("Failed to publish project git realtime snapshot", {
-              projectId,
-              error,
-            });
-          }
-        })()
-      );
     }
 
     for (const projectId of projectIds) {
-      const lastPublishedAt = this.projectExecutionPublishedAt.get(projectId) ?? 0;
-      const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_EXECUTION_MIN_INTERVAL_MS, now);
-      if (waitMs > 0) {
+      const result = this.buildPublishTask({
+        now,
+        lastPublishedAt: this.projectExecutionPublishedAt.get(projectId) ?? 0,
+        minIntervalMs: PROJECT_EXECUTION_MIN_INTERVAL_MS,
+        scopeType: "project",
+        scopeId: projectId,
+        eventType: "project.execution.updated",
+        entityType: "project",
+        entityId: projectId,
+        projectId,
+        loader: () => loaders.getProjectExecutionSnapshot(projectId),
+        cacheKey: `project:${projectId}:project.execution.updated`,
+        skipDuplicate: true,
+        onPublished: (publishedAt) => {
+          this.projectExecutionPublishedAt.set(projectId, publishedAt);
+        },
+      });
+
+      if (result.waitMs > 0) {
         this.pendingProjectIds.add(projectId);
-        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
-        continue;
+        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
+      } else if (result.task) {
+        publishTasks.push(result.task);
       }
-
-      publishTasks.push(
-        (async () => {
-          try {
-            const snapshot = await Promise.resolve(loaders.getProjectExecutionSnapshot(projectId));
-            const fingerprint = this.getFingerprint(snapshot);
-            const cacheKey = `project:${projectId}:project.execution.updated`;
-
-            if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
-              this.logger.debug("skipping_duplicate_realtime_snapshot", {
-                type: "project.execution.updated",
-                projectId,
-              });
-              this.projectExecutionPublishedAt.set(projectId, now);
-              return;
-            }
-
-            this.publishRawEvent({
-              scopeType: "project",
-              scopeId: projectId,
-              eventType: "project.execution.updated",
-              entityType: "project",
-              entityId: projectId,
-              projectId,
-              payload: snapshot,
-              replayable: false,
-            });
-            this.lastPayloadFingerprints.set(cacheKey, fingerprint);
-            this.projectExecutionPublishedAt.set(projectId, now);
-          } catch (error) {
-            this.logger.error("Failed to publish project execution realtime snapshot", {
-              projectId,
-              error,
-            });
-          }
-        })()
-      );
     }
 
     for (const projectId of projectStatusIds) {
-      const lastPublishedAt = this.projectRuntimeStatusPublishedAt.get(projectId) ?? 0;
-      const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_RUNTIME_STATUS_MIN_INTERVAL_MS, now);
-      if (waitMs > 0) {
-        this.pendingProjectStatusIds.add(projectId);
-        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
-        continue;
-      }
+      const result = this.buildPublishTask({
+        now,
+        lastPublishedAt: this.projectRuntimeStatusPublishedAt.get(projectId) ?? 0,
+        minIntervalMs: PROJECT_RUNTIME_STATUS_MIN_INTERVAL_MS,
+        scopeType: "project",
+        scopeId: projectId,
+        eventType: "project.runtime_status.updated",
+        entityType: "project_status",
+        entityId: projectId,
+        projectId,
+        loader: () => loaders.getProjectStatusSnapshot(projectId),
+        onPublished: (publishedAt) => {
+          this.projectRuntimeStatusPublishedAt.set(projectId, publishedAt);
+        },
+      });
 
-      publishTasks.push(
-        (async () => {
-          try {
-            const snapshot = await Promise.resolve(loaders.getProjectStatusSnapshot(projectId));
-            this.publishRawEvent({
-              scopeType: "project",
-              scopeId: projectId,
-              eventType: "project.runtime_status.updated",
-              entityType: "project_status",
-              entityId: projectId,
-              projectId,
-              payload: snapshot,
-              replayable: false,
-            });
-            this.projectRuntimeStatusPublishedAt.set(projectId, now);
-          } catch (error) {
-            this.logger.error("Failed to publish project runtime status realtime snapshot", {
-              projectId,
-              error,
-            });
-          }
-        })()
-      );
+      if (result.waitMs > 0) {
+        this.pendingProjectStatusIds.add(projectId);
+        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
+      } else if (result.task) {
+        publishTasks.push(result.task);
+      }
     }
 
     for (const projectId of projectStructureIds) {
-      const lastPublishedAt = this.projectStructurePublishedAt.get(projectId) ?? 0;
-      const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_STRUCTURE_MIN_INTERVAL_MS, now);
-      if (waitMs > 0) {
-        this.pendingProjectStructureIds.add(projectId);
-        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
-        continue;
-      }
+      const result = this.buildPublishTask({
+        now,
+        lastPublishedAt: this.projectStructurePublishedAt.get(projectId) ?? 0,
+        minIntervalMs: PROJECT_STRUCTURE_MIN_INTERVAL_MS,
+        scopeType: "project",
+        scopeId: projectId,
+        eventType: "project.structure.updated",
+        entityType: "project",
+        entityId: projectId,
+        projectId,
+        loader: () => ({
+          projectId,
+          updatedAt: new Date().toISOString(),
+        }),
+        onPublished: (publishedAt) => {
+          this.projectStructurePublishedAt.set(projectId, publishedAt);
+        },
+      });
 
-      publishTasks.push(
-        (async () => {
-          try {
-            this.publishRawEvent({
-              scopeType: "project",
-              scopeId: projectId,
-              eventType: "project.structure.updated",
-              entityType: "project",
-              entityId: projectId,
-              projectId,
-              payload: {
-                projectId,
-                updatedAt: new Date().toISOString(),
-              },
-              replayable: false,
-            });
-            this.projectStructurePublishedAt.set(projectId, now);
-          } catch (error) {
-            this.logger.error("Failed to publish project structure realtime snapshot", {
-              projectId,
-              error,
-            });
-          }
-        })()
-      );
+      if (result.waitMs > 0) {
+        this.pendingProjectStructureIds.add(projectId);
+        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
+      } else if (result.task) {
+        publishTasks.push(result.task);
+      }
     }
 
     if (shouldPublishOverview) {
-      const waitMs = this.getThrottleDelay(this.overviewPublishedAt, OVERVIEW_MIN_INTERVAL_MS, now);
-      if (waitMs > 0) {
+      const result = this.buildPublishTask({
+        now,
+        lastPublishedAt: this.overviewPublishedAt,
+        minIntervalMs: OVERVIEW_MIN_INTERVAL_MS,
+        scopeType: "overview",
+        scopeId: "overview",
+        eventType: "overview.telemetry.updated",
+        entityType: "overview",
+        entityId: "overview",
+        loader: () => loaders.getOverviewTelemetrySnapshot(),
+        cacheKey: `overview:overview:overview.telemetry.updated`,
+        skipDuplicate: true,
+        logType: "realtime_background_refresh",
+        onPublished: (publishedAt) => {
+          this.overviewPublishedAt = publishedAt;
+        },
+      });
+
+      if (result.waitMs > 0) {
         this.pendingOverview = true;
-        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
-      } else {
-        publishTasks.push(
-          (async () => {
-            try {
-              const telemetry = await Promise.resolve(loaders.getOverviewTelemetrySnapshot());
-              const fingerprint = this.getFingerprint(telemetry);
-              const cacheKey = `overview:overview:overview.telemetry.updated`;
-
-              if (this.lastPayloadFingerprints.get(cacheKey) === fingerprint) {
-                this.logger.debug("skipping_duplicate_realtime_snapshot", {
-                  type: "overview.telemetry.updated",
-                });
-                this.overviewPublishedAt = now;
-                return;
-              }
-
-              this.publishRawEvent({
-                scopeType: "overview",
-                scopeId: "overview",
-                eventType: "overview.telemetry.updated",
-                entityType: "overview",
-                entityId: "overview",
-                payload: telemetry,
-                replayable: false,
-              });
-              this.lastPayloadFingerprints.set(cacheKey, fingerprint);
-              this.logger.info("realtime_background_refresh", { type: "overview" });
-              this.overviewPublishedAt = now;
-            } catch (error) {
-              this.logger.error("Failed to publish overview telemetry realtime snapshot", {
-                error,
-              });
-            }
-          })()
-        );
+        nextDelayMs = this.getNextDelay(nextDelayMs, result.waitMs);
+      } else if (result.task) {
+        publishTasks.push(result.task);
       }
     }
 

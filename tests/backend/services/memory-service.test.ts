@@ -793,4 +793,105 @@ describe("MemoryService", () => {
       expect(m1m2Edge).toBeDefined();
     });
   });
+
+  describe("captureMemoriesFromContent", () => {
+    it("returns 0 when entries are empty", async () => {
+      const raw = "";
+      const result = await service.captureMemoriesFromContent("proj-1", "sprint-1", "agent-1", raw, "origin-1");
+      expect(result).toBe(0);
+      expect(mockRepo.createMemories).not.toHaveBeenCalled();
+    });
+
+    it("maps entries to a single batch CreateMemoryInput array", async () => {
+      const raw = `
+## Insights
+* [context] This is a context memory
+* [workflow] This is a workflow memory
+`;
+      const inputs = [
+        {
+          scope: "sprint",
+          sprintId: "sprint-1",
+          agentPresetId: "agent-1",
+          content: "[context] This is a context memory",
+          category: "learning",
+          strength: 0.6,
+          source: { type: "auto_capture", originType: "worker_learnings_file", originId: "origin-1" },
+        },
+        {
+          scope: "sprint",
+          sprintId: "sprint-1",
+          agentPresetId: "agent-1",
+          content: "[workflow] This is a workflow memory",
+          category: "learning",
+          strength: 0.6,
+          source: { type: "auto_capture", originType: "worker_learnings_file", originId: "origin-1" },
+        }
+      ];
+
+      const records = [makeMemoryRecord({ id: "mem-1" }), makeMemoryRecord({ id: "mem-2" })];
+      mockRepo.createMemories.mockReturnValue(records);
+
+      const result = await service.captureMemoriesFromContent("proj-1", "sprint-1", "agent-1", raw, "origin-1");
+
+      expect(mockRepo.createMemories).toHaveBeenCalledWith("proj-1", inputs);
+      expect(result).toBe(2);
+    });
+
+    it("returns 0 and logs warning if repository throws an error", async () => {
+      const raw = `
+## Insights
+* [context] This is a context memory
+`;
+      mockRepo.createMemories.mockImplementation(() => {
+        throw new Error("DB Error");
+      });
+
+      const result = await service.captureMemoriesFromContent("proj-1", "sprint-1", "agent-1", raw, "origin-1");
+
+      expect(mockRepo.createMemories).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to capture worker learning memory for origin origin-1"));
+      expect(result).toBe(0);
+    });
+  });
+
+  describe("captureMemoriesFromWorktree", () => {
+    it("reads file, delegates to captureMemoriesFromContent, and deletes the file", async () => {
+      const raw = `
+## Insights
+* [context] Something
+`;
+      const worktreePath = "/tmp/worktree";
+      const filePath = `${worktreePath}/.task-learnings.md`;
+
+      // We will mock fs/promises instead of mutating the file system
+      vi.doMock("fs/promises", () => ({
+        readFile: vi.fn().mockResolvedValue(raw),
+        unlink: vi.fn().mockResolvedValue(undefined),
+      }));
+
+      // We need to re-import the service to use the mocked fs module
+      const { MemoryService } = await import("../../../src/services/memory-service.js?mock=${Math.random()}");
+
+      const { readFile, unlink } = await import("fs/promises");
+      (readFile as any).mockResolvedValue(raw);
+      (unlink as any).mockResolvedValue(undefined);
+
+      service = new MemoryService(mockRepo as any, mockEmbeddingService as any, mockLogger as any);
+
+      const records = [makeMemoryRecord({ id: "mem-1" })];
+      mockRepo.createMemories.mockReturnValue(records);
+
+      const result = await service.captureMemoriesFromWorktree("proj-1", "sprint-1", "agent-1", worktreePath, "origin-1");
+
+      expect(mockRepo.createMemories).toHaveBeenCalled();
+      expect(result).toBe(1);
+
+      // Verify file was cleaned up
+      expect(unlink).toHaveBeenCalledWith(filePath);
+
+      vi.resetModules();
+      vi.doUnmock("fs/promises");
+    });
+  });
 });

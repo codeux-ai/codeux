@@ -132,7 +132,7 @@ describe("PlanningAgentService Integration", () => {
           goal: "Updated sprint goal",
           tasks: [
             {
-              key: "TASK-1",
+              key: "T01",
               title: "T1",
               description: "D1",
               promptMarkdown: validPromptMarkdown,
@@ -141,13 +141,13 @@ describe("PlanningAgentService Integration", () => {
               dependsOn: [],
             },
             {
-              key: "TASK-2",
+              key: "T02",
               title: "T2",
               description: "D2",
               promptMarkdown: validPromptMarkdown,
               priority: "medium",
               executorType: "docker_cli",
-              dependsOn: ["TASK-1"],
+              dependsOn: ["T01"],
             },
           ]
         }),
@@ -170,13 +170,13 @@ describe("PlanningAgentService Integration", () => {
     const tasks = projectRepository.listTasks(project.id, sprint.id);
     expect(tasks).toHaveLength(2);
 
-    // TASK-1 should have no dependencies
+    // T01 should have no dependencies
     const task1 = tasks.find(t => t.title === "T1")!;
     expect(task1).toBeDefined();
     expect(task1.dependsOnTaskIds || []).toEqual([]);
     expect(task1.priority).toBe("high");
 
-    // TASK-2 should depend on TASK-1
+    // T02 should depend on T01
     const task2 = tasks.find(t => t.title === "T2")!;
     expect(task2).toBeDefined();
     expect(task2.dependsOnTaskIds || []).toEqual([task1.id]);
@@ -256,7 +256,7 @@ describe("PlanningAgentService Integration", () => {
             goal: "Updated sprint goal",
             tasks: [
               {
-                key: "TASK-1",
+                key: "T01",
                 title: "T1",
                 description: "D1",
                 promptMarkdown: validPromptMarkdown,

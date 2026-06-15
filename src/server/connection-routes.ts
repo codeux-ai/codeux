@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { syncRoute, requireTrimmedString } from "./route-utils.js";
+import { syncRoute } from "./route-utils.js";
+import { requireTrimmedString } from "./request-parsers.js";
 import type { UpdateMcpConnectionInput } from "../contracts/connection-chat-types.js";
 
 export function registerConnectionRoutes(router: Express, deps: DashboardDependencies): void {

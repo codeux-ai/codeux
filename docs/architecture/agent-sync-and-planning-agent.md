@@ -187,13 +187,13 @@ Existing sprints can be explicitly replanned. When the `replan` flag is set, Cod
 
 ### Planning Contracts
 
-The planning contract is now strictly enforced by the `PlanningPayloadValidator` during ingestion. The validator ensures that the planner emits database-ready tasks without improvising formatting, and triggers automatic JSON retries with explicit error guidance if the contract is violated:
+The planning contract is now strictly enforced by the `PlanningPayloadValidator` during ingestion. The validator ensures that the planner emits deterministic DAG payloads without improvising formatting, and triggers automatic JSON retries with explicit error guidance if the contract is violated:
 
-- task keys should use `T01`, `T02`, `T03`, ... in topological order
+- task keys must use `T01`, `T02`, `T03`, ... in strict topological order (no gaps)
 - the `tasks` array itself is the DAG order
-- dependencies must only reference keys defined earlier in the task list (forward references are rejected)
+- dependencies must only reference unique keys defined earlier in the task list (forward references and duplicate dependencies are rejected)
 - every task must include `title`, `description`, `promptMarkdown`, `priority`, `executorType`, and `dependsOn`
-- `priority` and `executorType` are validated against allowed enum values
+- `priority` and `executorType` are strictly validated against allowed enum values (unsupported values are rejected rather than coerced)
 - `promptMarkdown` is standardized to five sections in this exact order:
   - `## Objective`
   - `## Scope`

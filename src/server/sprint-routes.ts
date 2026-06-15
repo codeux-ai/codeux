@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { asyncRoute, toErrorResponse, syncRoute, requireTrimmedString, parseTrimmedString } from "./route-utils.js";
+import { asyncRoute, toErrorResponse, syncRoute } from "./route-utils.js";
+import { requireTrimmedString, parseTrimmedString } from "./request-parsers.js";
 import type {
   CreateSprintInput,
   IssuePromptContextInput,

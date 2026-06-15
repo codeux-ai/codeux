@@ -1,3 +1,4 @@
+import type { TaskPriority } from "../../contracts/project-management-types.js";
 export interface QaReviewResultPayload {
   verdict?: unknown;
   summary?: unknown;
@@ -22,7 +23,7 @@ export interface NormalizedQaFollowUpTask {
   promptMarkdown: string;
   description: string | null;
   dependsOnTaskKeys: string[];
-  priority: "critical" | "high" | "medium" | "low";
+  priority: TaskPriority;
 }
 
 export interface NormalizedQaReviewResult {

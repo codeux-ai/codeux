@@ -104,7 +104,7 @@ describe("PlanningAgentService", () => {
               goal: "Sharper sprint prompt from the Planning agent.",
               tasks: [
                 {
-                  key: "TASK-1",
+                  key: "T01",
                   title: "Redesign sprint gallery",
                   description: "Refresh the top sprint cells and completed-state visuals.",
                   promptMarkdown: "## Objective\nUpdate the sprint gallery UI and completed-state styling.\n\n## Scope\n- UI components\n\n## Implementation Requirements\n1. Refresh cells\n\n## Constraints\n- Keep it fast\n\n## Verification\n- Visual check",
@@ -113,13 +113,13 @@ describe("PlanningAgentService", () => {
                   dependsOn: [],
                 },
                 {
-                  key: "TASK-2",
+                  key: "T02",
                   title: "Wire planning actions",
                   description: "Connect improve and planning flows to the isolated runtime.",
                   promptMarkdown: "## Objective\nHook the sprint modal into Planning agent endpoints and verify behavior.\n\n## Scope\n- Modal components\n\n## Implementation Requirements\n1. Connect actions\n\n## Constraints\n- Use isolated runtime\n\n## Verification\n- Integration test",
                   priority: "medium",
                   executorType: "docker_cli",
-                  dependsOn: ["TASK-1"],
+                  dependsOn: ["T01"],
                 },
               ],
             }),
@@ -129,7 +129,7 @@ describe("PlanningAgentService", () => {
             goal: "Sharper sprint prompt from the Planning agent.",
             tasks: [
               {
-                key: "TASK-1",
+                key: "T01",
                 title: "Redesign sprint gallery",
                 description: "Refresh the top sprint cells and completed-state visuals.",
                 promptMarkdown: "## Objective\nUpdate the sprint gallery UI and completed-state styling.\n\n## Scope\n- UI components\n\n## Implementation Requirements\n1. Refresh cells\n\n## Constraints\n- Keep it fast\n\n## Verification\n- Visual check",
@@ -138,13 +138,13 @@ describe("PlanningAgentService", () => {
                 dependsOn: [],
               },
               {
-                key: "TASK-2",
+                key: "T02",
                 title: "Wire planning actions",
                 description: "Connect improve and planning flows to the isolated runtime.",
                 promptMarkdown: "## Objective\nHook the sprint modal into Planning agent endpoints and verify behavior.\n\n## Scope\n- Modal components\n\n## Implementation Requirements\n1. Connect actions\n\n## Constraints\n- Use isolated runtime\n\n## Verification\n- Integration test",
                 priority: "medium",
                 executorType: "docker_cli",
-                dependsOn: ["TASK-1"],
+                dependsOn: ["T01"],
               },
             ],
           }),
@@ -264,7 +264,7 @@ describe("PlanningAgentService", () => {
               goal: "Virtual worker improved sprint prompt.",
               tasks: [
                 {
-                  key: "TASK-1",
+                  key: "T01",
                   title: "Plan via virtual worker",
                   description: "Ensure planning runs without a connected MCP listener.",
                   promptMarkdown: "## Objective\nUse the virtual worker runtime to produce sprint tasks.\n\n## Scope\n- Planning service\n\n## Implementation Requirements\n1. Run virtual\n\n## Constraints\n- No live MCP\n\n## Verification\n- Tasks created",
@@ -280,7 +280,7 @@ describe("PlanningAgentService", () => {
             goal: "Virtual worker improved sprint prompt.",
             tasks: [
               {
-                key: "TASK-1",
+                key: "T01",
                 title: "Plan via virtual worker",
                 description: "Ensure planning runs without a connected MCP listener.",
                 promptMarkdown: "## Objective\nUse the virtual worker runtime to produce sprint tasks.\n\n## Scope\n- Planning service\n\n## Implementation Requirements\n1. Run virtual\n\n## Constraints\n- No live MCP\n\n## Verification\n- Tasks created",
@@ -645,7 +645,7 @@ describe("PlanningAgentService", () => {
             '  "goal": "Loose improved prompt",',
             '  "tasks": [',
             "    {",
-            '      "key": "TASK-1",',
+            '      "key": "T01",',
             '      "title": "First task",',
             '      "description": "Setup work",',
             '      "promptMarkdown": "## Objective\\nPerform the setup work\\n\\n## Scope\\n- Setup\\n\\n## Implementation Requirements\\n1. Setup\\n\\n## Constraints\\n- None\\n\\n## Verification\\n- Done",',
@@ -654,11 +654,11 @@ describe("PlanningAgentService", () => {
             '      "dependsOn": []',
             "    },",
             "    {",
-            '      "key": "TASK-2",',
+            '      "key": "T02",',
             '      "title": "Second task",',
             '      "description": "Follow-up",',
             '      "promptMarkdown": "## Objective\\nFinish the follow-up work\\n\\n## Scope\\n- Follow-up\\n\\n## Implementation Requirements\\n1. Follow-up\\n\\n## Constraints\\n- None\\n\\n## Verification\\n- Done",',
-            '      "dependsOn": ["TASK-1"],',
+            '      "dependsOn": ["T01"],',
             '      "executorType": "MCP_WORKER"',
             "    }",
             "  ]",
@@ -1522,4 +1522,308 @@ describe("PlanningAgentService", () => {
       rawResponse: "This is completely malformed text that has no JSON."
     });
   }, 30000);
+
+  it("cleans up workspace and reports cleanup failures without masking original error", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-cleanup-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const connectionRepository = new ConnectionChatRepository(storage);
+
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockRejectedValue(new Error("Provider failed completely")),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    vi.spyOn((service as any).workspaceManager, 'removeWorktree').mockRejectedValue(new Error("Cleanup failed horribly"));
+
+    const project = projectRepository.createProject({
+      name: "Cleanup Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Cleanup Sprint",
+      goal: "Goal",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      cliWorkflow: { executionMode: "DOCKER" },
+    });
+
+    const promise = service.planSprint(project.id, sprint.id, { autoStart: false });
+
+    await expect(promise).rejects.toThrow("Provider failed completely");
+
+    const invocations = executionRepository.listExecutionInvocations({ projectId: project.id, limit: 10 });
+    const invocation = invocations[0];
+
+    expect(invocation?.status).toBe("failed");
+    expect(invocation?.finishedAt).toBeDefined();
+    expect(invocation?.errorMessage).toContain("Provider failed completely");
+  });
+
+
+  it("finalizes successfully without errors and reports cleanup failures", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-success-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const connectionRepository = new ConnectionChatRepository(storage);
+
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        text: JSON.stringify({
+          goal: "Goal",
+          tasks: [{ key: "T01", title: "Task 1", description: "D", promptMarkdown: "## Objective\nP\n\n## Scope\n- S\n\n## Implementation Requirements\n1. R\n\n## Constraints\n- C\n\n## Verification\n- V", priority: "high", executorType: "auto", dependsOn: [] }],
+        }),
+        usageTelemetry: { inputTokens: 50, cachedInputTokens: 0, outputTokens: 40, reasoningOutputTokens: 0, totalTokens: 90, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: "native-123" },
+        nativeSessionId: "native-123",
+      }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    vi.spyOn((service as any).workspaceManager, 'removeWorktree').mockRejectedValue(new Error("Cleanup failed on success"));
+
+    const project = projectRepository.createProject({
+      name: "Cleanup Project 2",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Cleanup Sprint 2",
+      goal: "Goal",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      cliWorkflow: { executionMode: "DOCKER" },
+    });
+
+    await service.planSprint(project.id, sprint.id, { autoStart: false });
+
+    const invocations = executionRepository.listExecutionInvocations({ projectId: project.id, limit: 10 });
+    const invocation = invocations[0];
+
+    expect(invocation?.status).toBe("completed");
+    expect(invocation?.finishedAt).toBeDefined();
+    expect(invocation?.errorMessage).toBeNull();
+  });
+
+
+  it("cleans up workspace and reports cleanup failures without masking original error", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-cleanup-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const connectionRepository = new ConnectionChatRepository(storage);
+
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockRejectedValue(new Error("Provider failed completely")),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    vi.spyOn((service as any).workspaceManager, 'removeWorktree').mockRejectedValue(new Error("Cleanup failed horribly"));
+
+    const project = projectRepository.createProject({
+      name: "Cleanup Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Cleanup Sprint",
+      goal: "Goal",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      cliWorkflow: { executionMode: "DOCKER" },
+    });
+
+    const promise = service.planSprint(project.id, sprint.id, { autoStart: false });
+
+    await expect(promise).rejects.toThrow("Provider failed completely");
+
+    const invocations = executionRepository.listExecutionInvocations({ projectId: project.id, limit: 10 });
+    const invocation = invocations[0];
+
+    expect(invocation?.status).toBe("failed");
+    expect(invocation?.finishedAt).toBeDefined();
+    expect(invocation?.errorMessage).toContain("Provider failed completely");
+  });
+
+
+  it("finalizes successfully without errors and reports cleanup failures", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-planning-success-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".code-ux", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".code-ux", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const connectionRepository = new ConnectionChatRepository(storage);
+
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        text: JSON.stringify({
+          goal: "Goal",
+          tasks: [{ key: "T01", title: "Task 1", description: "D", promptMarkdown: "## Objective\nP\n\n## Scope\n- S\n\n## Implementation Requirements\n1. R\n\n## Constraints\n- C\n\n## Verification\n- V", priority: "high", executorType: "auto", dependsOn: [] }],
+        }),
+        usageTelemetry: { inputTokens: 50, cachedInputTokens: 0, outputTokens: 40, reasoningOutputTokens: 0, totalTokens: 90, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: "native-123" },
+        nativeSessionId: "native-123",
+      }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    vi.spyOn((service as any).workspaceManager, 'removeWorktree').mockRejectedValue(new Error("Cleanup failed on success"));
+
+    const project = projectRepository.createProject({
+      name: "Cleanup Project 2",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Cleanup Sprint 2",
+      goal: "Goal",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      cliWorkflow: { executionMode: "DOCKER" },
+    });
+
+    await service.planSprint(project.id, sprint.id, { autoStart: false });
+
+    const invocations = executionRepository.listExecutionInvocations({ projectId: project.id, limit: 10 });
+    const invocation = invocations[0];
+
+    expect(invocation?.status).toBe("completed");
+    expect(invocation?.finishedAt).toBeDefined();
+    expect(invocation?.errorMessage).toBeNull();
+  });
+
 });

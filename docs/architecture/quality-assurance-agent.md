@@ -169,6 +169,8 @@ The QA provider is prompted to return JSON only with:
 - `shouldHavePr`
 - `followUpTasks`
 
+Result parsing and structure normalization are fully delegated to `src/domain/qa-review/qa-review-result-normalizer.ts`.
+
 That contract keeps the follow-up automation deterministic instead of scraping prose heuristically.
 
 QA agent responses are processed using the shared structured response helper (`StructuredProviderResponseService`). This ensures that if the agent returns malformed JSON or omits required fields, Code UX automatically triggers an in-session retry to correct the output shape before failing the review.

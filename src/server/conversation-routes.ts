@@ -1,14 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import {
-  asyncRoute,
-  requireTrimmedString,
-  syncRoute,
-  parseThreadRouteInput,
-  parseCreateConversationThreadInput,
-  parseUpdateConversationThreadInput,
-  parseCreateDashboardConversationMessageInput,
-} from "./route-utils.js";
+import { asyncRoute, syncRoute } from "./route-utils.js";
+import { requireTrimmedString, parseThreadRouteInput, parseCreateConversationThreadInput, parseUpdateConversationThreadInput, parseCreateDashboardConversationMessageInput } from "./request-parsers.js";
 
 export function registerConversationRoutes(app: Express, options: DashboardDependencies): void {
   app.get("/api/projects/:projectId/conversations/threads", syncRoute((req, res) => {

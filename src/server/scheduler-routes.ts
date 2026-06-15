@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { asyncRoute, requireTrimmedString, syncRoute } from "./route-utils.js";
+import { asyncRoute, syncRoute } from "./route-utils.js";
+import { requireTrimmedString } from "./request-parsers.js";
 import type { CreateSchedulerEntryInput, UpdateSchedulerEntryInput } from "../contracts/scheduler-types.js";
 
 function defaultScheduleWindow(): { from: string; to: string } {

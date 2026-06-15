@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { asyncRoute, toErrorResponse, syncRoute, requireTrimmedString, parseTrimmedString } from "./route-utils.js";
+import { asyncRoute, toErrorResponse, syncRoute } from "./route-utils.js";
+import { requireTrimmedString, parseTrimmedString } from "./request-parsers.js";
 import type { CreateProjectInput, ProjectSetupRequestInput, UpdateProjectInput } from "../contracts/project-management-types.js";
 import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.js";
 import { initializeProject } from "../domain/projects/project-initializer.js";

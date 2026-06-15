@@ -133,8 +133,8 @@ describe("Dashboard Execution Invocation API", () => {
 
       const response = await request(app).get("/api/projects/proj-1/execution/invocations");
 
-      expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: "DB Error" });
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: "Internal Server Error" });
     });
   });
 
@@ -160,8 +160,8 @@ describe("Dashboard Execution Invocation API", () => {
 
       const response = await request(app).get("/api/execution/invocations/inv-1/messages");
 
-      expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: "DB Error" });
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: "Internal Server Error" });
     });
   });
 });

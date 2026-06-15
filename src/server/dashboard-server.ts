@@ -113,7 +113,8 @@ import type { MemoryPromotionService } from "../services/memory-promotion-servic
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
 import type { EmbeddingService } from "../services/embedding-service.js";
 import type { KnowledgeService } from "../services/knowledge-service.js";
-import { asyncRoute, parseTrimmedString, requireTrimmedString, syncRoute, toErrorResponse } from "./route-utils.js";
+import { asyncRoute, syncRoute, toErrorResponse } from "./route-utils.js";
+import { parseTrimmedString, requireTrimmedString } from "./request-parsers.js";
 import { parsePreviewSessionIdFromHost, pipePreviewUpgradeRequest } from "./preview-host-utils.js";
 
 export type DashboardDependencies = Omit<

@@ -139,7 +139,7 @@ That makes multi-sprint and worker execution visible without reconstructing stat
 
 ## Backend Read-Model Optimizations
 
-To support the dashboard resource layer and page-scoped module boundaries, the backend read-model optimizations project data efficiently without altering the underlying data structures. **API routes and backend contracts remain unchanged.**
+To support the dashboard resource layer and page-scoped module boundaries, the backend read-model optimizations project data efficiently without altering the underlying data structures. **API routes and backend contracts remain unchanged.** This includes optimizing the project execution snapshot path by deduplicating sprint run and task IDs before making secondary aggregation queries for usage and wall-time.
 
 The v2 stats page reads the adjacent project statistics snapshot and renders:
 

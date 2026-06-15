@@ -14,7 +14,8 @@ import type {
 } from "../contracts/memory-types.js";
 import { MEMORY_SCOPES, MEMORY_CATEGORIES, EMBEDDING_MODEL_IDS } from "../contracts/memory-types.js";
 import { EMBEDDING_MODEL_CATALOG } from "../services/embedding-model-catalog.js";
-import { toErrorResponse, syncRoute, asyncRoute, requireTrimmedString, parseTrimmedString } from "./route-utils.js";
+import { toErrorResponse, syncRoute, asyncRoute } from "./route-utils.js";
+import { requireTrimmedString, parseTrimmedString } from "./request-parsers.js";
 
 export interface MemoryRouteDependencies {
   memoryService: MemoryService;

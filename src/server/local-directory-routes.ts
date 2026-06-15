@@ -3,7 +3,8 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import type { LocalDirectoryBrowserResponse } from "../contracts/app-types.js";
-import { asyncRoute, parseTrimmedString, toErrorResponse } from "./route-utils.js";
+import { asyncRoute, toErrorResponse } from "./route-utils.js";
+import { parseTrimmedString } from "./request-parsers.js";
 import { expandHomePath } from "../shared/config/home-path.js";
 
 export function registerLocalDirectoryRoutes(router: Express): void {

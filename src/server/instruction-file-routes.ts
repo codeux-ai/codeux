@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { asyncRoute, requireTrimmedString } from "./route-utils.js";
+import { asyncRoute } from "./route-utils.js";
+import { requireTrimmedString } from "./request-parsers.js";
 
 export function registerInstructionFileRoutes(router: Express, deps: DashboardDependencies): void {
   router.get("/api/projects/:projectId/instruction-files", asyncRoute(async (req, res) => {

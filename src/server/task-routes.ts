@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { toErrorResponse, syncRoute, requireTrimmedString, parseTrimmedString } from "./route-utils.js";
+import { toErrorResponse, syncRoute } from "./route-utils.js";
+import { requireTrimmedString, parseTrimmedString } from "./request-parsers.js";
 import type { CreateTaskInput, UpdateTaskInput } from "../contracts/project-management-types.js";
 
 export function registerTaskRoutes(router: Express, deps: DashboardDependencies): void {

@@ -42,11 +42,14 @@ export function queryProjectExecutionSnapshot(
     runtimeEvents,
   );
 
-  const usageBySprintRunId = deps.getUsageTotalsBySprintRunIds(projectId, sprintRuns.map((row) => row.id));
+  const uniqueSprintRunIds = Array.from(new Set(sprintRuns.map((row) => row.id)));
+  const uniqueTaskIds = Array.from(new Set(taskDispatches.map((row) => row.task_id)));
+
+  const usageBySprintRunId = deps.getUsageTotalsBySprintRunIds(projectId, uniqueSprintRunIds);
   const nowIso = new Date().toISOString();
-  const usageByTaskId = deps.getUsageTotalsByTaskIds(projectId, taskDispatches.map((row) => row.task_id));
-  const wallTimeBySprintRunId = deps.getWallTimeTotalsBySprintRunIds(projectId, sprintRuns.map((row) => row.id), nowIso);
-  const wallTimeByTaskId = deps.getWallTimeTotalsByTaskIds(projectId, taskDispatches.map((row) => row.task_id), nowIso);
+  const usageByTaskId = deps.getUsageTotalsByTaskIds(projectId, uniqueTaskIds);
+  const wallTimeBySprintRunId = deps.getWallTimeTotalsBySprintRunIds(projectId, uniqueSprintRunIds, nowIso);
+  const wallTimeByTaskId = deps.getWallTimeTotalsByTaskIds(projectId, uniqueTaskIds, nowIso);
 
   return {
     projectId: projectRow?.id || null,

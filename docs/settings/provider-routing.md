@@ -29,6 +29,9 @@ Backend types:
 Routing implementation:
 - `src/services/provider-routing.ts`
 
+Provider CLI command generation and configuration utilities:
+- `src/infrastructure/providers/cli/provider-command-specs.ts`
+
 Each `aiProvider.invocationRouting.<routeId>` entry contains:
 - `profile`
   - `GLOBAL`: baseline comes from top-level `aiProvider`
@@ -118,7 +121,7 @@ The v2 settings page exposes:
 - AI routing console with global/worker anchors, provider-instance counts, enabled-provider counts, and route totals
 - global default instance and model
 - worker default instance and model
-- base provider instance defaults for model, thinking mode, weight, enabled state, and concurrency
+- base provider instance defaults for model, thinking mode, weight, enabled state, and concurrency (with wait loops optionally bounded by `maxWaitMs` and cancellable via `AbortSignal`)
 - invocation route profile and strategy
 - per-route provider-instance subset selection
 - per-route model and thinking-mode overrides

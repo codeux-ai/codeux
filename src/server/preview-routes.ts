@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { asyncRoute, requireTrimmedString } from "./route-utils.js";
+import { asyncRoute } from "./route-utils.js";
+import { requireTrimmedString } from "./request-parsers.js";
 
 export function registerPreviewRoutes(app: Express, deps: DashboardDependencies): void {
   app.get("/api/projects/:projectId/preview/sessions", asyncRoute(async (req, res) => {

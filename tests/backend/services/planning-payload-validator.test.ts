@@ -11,7 +11,7 @@ describe("PlanningPayloadValidator", () => {
       goal: "Test Goal",
       tasks: [
         {
-          key: "T1",
+          key: "T01",
           title: "Task 1",
           description: "Description 1",
           promptMarkdown: validPromptMarkdown,
@@ -24,18 +24,18 @@ describe("PlanningPayloadValidator", () => {
     const result = validator.validate(validPayload);
     expect(result.goal).toEqual("Test Goal");
     expect(result.tasks.length).toEqual(1);
-    expect(result.tasks[0]?.key).toEqual("T1");
+    expect(result.tasks[0]?.key).toEqual("T01");
   });
 
   it("should reject payloads with aliased input fields", () => {
     const payloadsWithAliases = [
       { goal: "Goal", subtasks: [] },
-      { goal: "Goal", tasks: [{ id: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }] },
-      { goal: "Goal", tasks: [{ key: "T1", name: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }] },
-      { goal: "Goal", tasks: [{ key: "T1", title: "Task 1", description: "Desc", prompt: validPromptMarkdown }] },
-      { goal: "Goal", tasks: [{ key: "T1", title: "Task 1", description: "Desc", instructions: validPromptMarkdown }] },
-      { goal: "Goal", tasks: [{ key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, depends_on: [] }] },
-      { goal: "Goal", tasks: [{ key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependencies: [] }] }
+      { goal: "Goal", tasks: [{ id: "T01", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }] },
+      { goal: "Goal", tasks: [{ key: "T01", name: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }] },
+      { goal: "Goal", tasks: [{ key: "T01", title: "Task 1", description: "Desc", prompt: validPromptMarkdown }] },
+      { goal: "Goal", tasks: [{ key: "T01", title: "Task 1", description: "Desc", instructions: validPromptMarkdown }] },
+      { goal: "Goal", tasks: [{ key: "T01", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, depends_on: [] }] },
+      { goal: "Goal", tasks: [{ key: "T01", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependencies: [] }] }
     ];
 
     for (const payload of payloadsWithAliases) {
@@ -47,32 +47,32 @@ describe("PlanningPayloadValidator", () => {
     const invalidTasks = [
       { title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }, // missing key
       { key: 123, title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }, // numeric key
-      { key: "T1", description: "Desc", promptMarkdown: validPromptMarkdown }, // missing title
-      { key: "T1", title: 123, description: "Desc", promptMarkdown: validPromptMarkdown }, // numeric title
-      { key: "T1", title: "Task 1", promptMarkdown: validPromptMarkdown }, // missing description
-      { key: "T1", title: "Task 1", description: 123, promptMarkdown: validPromptMarkdown }, // numeric description
-      { key: "T1", title: "Task 1", description: "Desc" }, // missing promptMarkdown
-      { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: 123 }, // numeric promptMarkdown
+      { key: "T01", description: "Desc", promptMarkdown: validPromptMarkdown }, // missing title
+      { key: "T01", title: 123, description: "Desc", promptMarkdown: validPromptMarkdown }, // numeric title
+      { key: "T01", title: "Task 1", promptMarkdown: validPromptMarkdown }, // missing description
+      { key: "T01", title: "Task 1", description: 123, promptMarkdown: validPromptMarkdown }, // numeric description
+      { key: "T01", title: "Task 1", description: "Desc" }, // missing promptMarkdown
+      { key: "T01", title: "Task 1", description: "Desc", promptMarkdown: 123 }, // numeric promptMarkdown
     ];
 
     for (const task of invalidTasks) {
-      expect(() => validator.validate({ goal: "Goal", tasks: [task] })).toThrow(/(must have a|is missing a)/i);
+      expect(() => validator.validate({ goal: "Goal", tasks: [task] })).toThrow(/(must have a|is missing a|has invalid key)/i);
     }
   });
 
   it("should reject malformed dependsOn arrays", () => {
     const invalidDependencies = [
-      "T1", // String instead of array
+      "T01", // String instead of array
       [123], // Number in array
-      [{ key: "T1" }] // Object in array
+      [{ key: "T01" }] // Object in array
     ];
 
     for (const dependsOn of invalidDependencies) {
       expect(() => validator.validate({
         goal: "Goal",
         tasks: [
-          { key: "T0", title: "Task 0", description: "Desc", promptMarkdown: validPromptMarkdown },
-          { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn }
+          { key: "T01", title: "Task 0", description: "Desc", promptMarkdown: validPromptMarkdown },
+          { key: "T02", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn }
         ]
       })).toThrow(/must be an array of strings/i);
     }
@@ -96,7 +96,7 @@ describe("PlanningPayloadValidator", () => {
     const badPayload = {
       tasks: [
         {
-          key: "T1",
+          key: "T01",
           title: "Task 1",
           description: "Desc",
           promptMarkdown: "## Objective\n1\n## Implementation Requirements\n2\n## Scope\n3\n## Constraints\n4\n## Verification\n5",
@@ -110,7 +110,7 @@ describe("PlanningPayloadValidator", () => {
     const badPayload = {
       tasks: [
         {
-          key: "T1",
+          key: "T01",
           title: "Task 1",
           description: "Desc",
           promptMarkdown: "## Objective\n1\n## Scope\n2",
@@ -123,55 +123,80 @@ describe("PlanningPayloadValidator", () => {
   it("should reject duplicate task keys", () => {
     const duplicatePayload = {
       tasks: [
-        { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown },
-        { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }
+        { key: "T01", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown },
+        { key: "T01", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }
       ]
     };
-    expect(() => validator.validate(duplicatePayload)).toThrow("Duplicate task key: T1");
+    // Rejects because the second item has an invalid key "T01" while "T02" is expected.
+    expect(() => validator.validate(duplicatePayload)).toThrow('Task at index 1 has invalid key "T01". Expected "T02"');
   });
 
   it("should reject forward references", () => {
     const forwardPayload = {
       tasks: [
-        { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn: ["T2"] },
-        { key: "T2", title: "Task 2", description: "Desc", promptMarkdown: validPromptMarkdown }
+        { key: "T01", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn: ["T02"] },
+        { key: "T02", title: "Task 2", description: "Desc", promptMarkdown: validPromptMarkdown }
       ]
     };
-    expect(() => validator.validate(forwardPayload)).toThrow('Task "T1" depends on "T2" which is missing or defined later. Forward references are not allowed.');
+    expect(() => validator.validate(forwardPayload)).toThrow('Task "T01" depends on "T02" which is missing or defined later. Forward references are not allowed.');
   });
 
   it("should reject self dependencies", () => {
     const selfPayload = {
       tasks: [
-        { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn: ["T1"] }
+        { key: "T01", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn: ["T01"] }
       ]
     };
-    expect(() => validator.validate(selfPayload)).toThrow('Task "T1" cannot depend on itself.');
+    expect(() => validator.validate(selfPayload)).toThrow('Task "T01" cannot depend on itself.');
   });
 
-  it("normalizes priority and executorType with defaults", () => {
-    const payload = {
+  it("normalizes legacy mcp_worker to auto but rejects invalid executorType and priority", () => {
+    const payloadInvalidPriority = {
       tasks: [
         {
-          key: "T1",
+          key: "T01",
           title: "Task 1",
           description: "Desc",
           promptMarkdown: validPromptMarkdown,
-          priority: "INVALID",
-          executorType: "worker"
+          priority: "INVALID"
         }
       ]
     };
-    const result = validator.validate(payload);
-    expect(result.tasks[0]?.priority).toEqual("medium");
-    expect(result.tasks[0]?.executorType).toEqual("auto"); // worker translates to auto
+    expect(() => validator.validate(payloadInvalidPriority)).toThrow('Task "T01" has invalid priority "INVALID".');
+
+    const payloadInvalidExecutor = {
+      tasks: [
+        {
+          key: "T01",
+          title: "Task 1",
+          description: "Desc",
+          promptMarkdown: validPromptMarkdown,
+          executorType: "INVALID"
+        }
+      ]
+    };
+    expect(() => validator.validate(payloadInvalidExecutor)).toThrow('Task "T01" has invalid executorType "INVALID".');
+
+    const payloadWorkerFallback = {
+      tasks: [
+        {
+          key: "T01",
+          title: "Task 1",
+          description: "Desc",
+          promptMarkdown: validPromptMarkdown,
+          executorType: "mcp_worker"
+        }
+      ]
+    };
+    const result = validator.validate(payloadWorkerFallback);
+    expect(result.tasks[0]?.executorType).toEqual("auto"); // mcp_worker translates to auto
   });
 
   it("accepts allowed agentPresetId and rejects unlisted agents", () => {
     const payload = {
       tasks: [
         {
-          key: "T1",
+          key: "T01",
           title: "Task 1",
           description: "Desc",
           promptMarkdown: validPromptMarkdown,
@@ -182,5 +207,25 @@ describe("PlanningPayloadValidator", () => {
 
     expect(validator.validate(payload, { allowedAgentPresetIds: ["frontend-agent"] }).tasks[0]?.agentPresetId).toBe("frontend-agent");
     expect(() => validator.validate(payload, { allowedAgentPresetIds: ["backend-agent"] })).toThrow("not in the allowed coding-agent roster");
+  });
+
+  it("should reject gaps or out of order task keys", () => {
+    const badPayload = {
+      tasks: [
+        { key: "T01", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown },
+        { key: "T03", title: "Task 2", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn: ["T01"] }
+      ]
+    };
+    expect(() => validator.validate(badPayload)).toThrow('Task at index 1 has invalid key "T03". Expected "T02" in strict DAG order.');
+  });
+
+  it("should reject duplicate dependency elements", () => {
+    const badPayload = {
+      tasks: [
+        { key: "T01", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown },
+        { key: "T02", title: "Task 2", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn: ["T01", "T01"] }
+      ]
+    };
+    expect(() => validator.validate(badPayload)).toThrow('Task "T02" has duplicate dependency "T01".');
   });
 });

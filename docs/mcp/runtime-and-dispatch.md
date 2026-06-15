@@ -12,6 +12,7 @@ Startup sequence:
 4. `src/server/code-ux-server.ts` registers MCP request handlers.
 5. `src/server/code-ux-server.ts` starts dashboard server.
    - Dashboard API routes (such as project, sprint, task, conversation, and planning endpoints) are broken out into modular route files for maintainability.
+   - Route wrappers and body request parsers are maintained as separate server-layer boundaries.
 6. `src/server/code-ux-server.ts` connects MCP stdio transport.
 7. `src/server/code-ux-server.ts` optionally starts the MCP HTTP transport with the same project-manager tool surface.
 

@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import type { Response } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { asyncRoute, requireTrimmedString, parseImprovePromptInput, parsePlanSprintOptions } from "./route-utils.js";
+import { asyncRoute } from "./route-utils.js";
+import { requireTrimmedString, parseImprovePromptInput, parsePlanSprintOptions } from "./request-parsers.js";
 import type {
   ImprovePromptInput,
   PlanSprintOptions,

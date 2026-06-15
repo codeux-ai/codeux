@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { asyncRoute, requireTrimmedString } from "./route-utils.js";
+import { asyncRoute } from "./route-utils.js";
+import { requireTrimmedString } from "./request-parsers.js";
 import type { CreateAgentPresetInput, UpdateAgentPresetInput } from "../contracts/agent-preset-types.js";
 
 export function registerAgentPresetRoutes(router: Express, deps: DashboardDependencies): void {

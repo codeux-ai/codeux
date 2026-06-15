@@ -186,7 +186,7 @@ describe("DashboardRealtimeService Extra Coverage", () => {
       await Promise.resolve();
 
       expect(fastResolved).toBe(true);
-      expect(logger.error).toHaveBeenCalledWith("Failed to publish project execution realtime snapshot", expect.any(Object));
+      expect(logger.error).toHaveBeenCalledWith("Failed to publish project execution updated realtime snapshot", expect.any(Object));
     });
   });
 });
