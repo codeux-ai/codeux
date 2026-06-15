@@ -97,4 +97,40 @@ describe("FieldWrapper", () => {
     const parentDiv = container.querySelector('label')?.nextElementSibling;
     expect(parentDiv?.className).toContain("animate-form-shake");
   });
+
+  it("renders helperText and wires aria-describedby correctly", () => {
+    render(
+      <FieldWrapper label="Test Label" htmlFor="test-input" helperText="This is a helper">
+        <Input id="test-input" />
+      </FieldWrapper>
+    );
+
+    const helperElement = screen.getByText("This is a helper");
+    expect(helperElement).toBeInTheDocument();
+
+    const input = screen.getByRole("textbox");
+    const ariaDescribedby = input.getAttribute("aria-describedby");
+    expect(ariaDescribedby).not.toBeNull();
+    expect(helperElement.getAttribute("id")).toEqual(ariaDescribedby);
+  });
+
+  it("hides helperText when error is present", () => {
+    render(
+      <FieldWrapper label="Test Label" htmlFor="test-input" helperText="Helper" error="Error msg">
+        <Input id="test-input" />
+      </FieldWrapper>
+    );
+
+    const helperElement = screen.getByText("Helper");
+    const errorElement = screen.getByText("Error msg");
+
+    expect(helperElement).toBeInTheDocument();
+    expect(errorElement).toBeInTheDocument();
+
+    expect(helperElement.className).toContain("opacity-0");
+    expect(helperElement.className).toContain("invisible");
+
+    expect(errorElement.className).toContain("opacity-100");
+    expect(errorElement.className).toContain("visible");
+  });
 });
