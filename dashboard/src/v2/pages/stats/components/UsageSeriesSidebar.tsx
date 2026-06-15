@@ -9,7 +9,7 @@ export const UsageSeriesSidebar: FunctionComponent<{
   const visibleSeries = series.filter(s => enabledSeries[s.id]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:flex xl:flex-col gap-4">
       {visibleSeries.map((s) => {
         const currentValue = s.values[activeIndex] || 0;
 
@@ -20,10 +20,10 @@ export const UsageSeriesSidebar: FunctionComponent<{
           >
             <div className="flex items-center gap-3">
               <span className="h-2.5 w-2.5 rounded-full ring-2 ring-white/10" style={{ backgroundColor: s.accentHex }} />
-              <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">{s.label}</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)] truncate">{s.label}</span>
             </div>
             <div className="mt-4 flex items-end justify-between gap-4">
-              <div className="text-xl font-black text-[var(--stats-value-color)]">{s.formatter(currentValue)}</div>
+              <div className="text-xl font-black text-[var(--stats-value-color)] truncate">{s.formatter(currentValue)}</div>
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)] opacity-70">{s.signalLabel || 'Metric'}</div>
             </div>
           </div>

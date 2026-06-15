@@ -65,7 +65,7 @@ export const InteractiveUsageChart: FunctionComponent<{
 
   const buckets = stats.buckets;
 
-  const dimensionsRef = useRef({ width: 1200, height: 540 });
+  const dimensionsRef = useRef({ width: 1200, height: 256 });
   const statsRef = useRef(stats);
   const viewStartRef = useRef(zoomRange?.start ?? 0);
   const viewEndRef = useRef(zoomRange?.end ?? Math.max(0, buckets.length - 1));
@@ -174,7 +174,7 @@ export const InteractiveUsageChart: FunctionComponent<{
       const entry = entries[0];
       if (entry && entry.contentRect.width > 0) {
         const newWidth = entry.contentRect.width;
-        const newHeight = Math.max(540, entry.contentRect.height);
+        const newHeight = Math.max(256, entry.contentRect.height);
 
         // Only update if dimensions actually changed
         if (dimensionsRef.current.width !== newWidth || dimensionsRef.current.height !== newHeight) {
@@ -291,7 +291,7 @@ export const InteractiveUsageChart: FunctionComponent<{
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
           <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Tokens</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatTokens(peakTokens)}</div>
@@ -314,14 +314,14 @@ export const InteractiveUsageChart: FunctionComponent<{
           </div>
         </div>
 
-        <div className="grid gap-8 items-start xl:grid-cols-[minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="grid grid-cols-1 gap-8 items-start xl:grid-cols-[minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
           <div className={`${SUBPANEL_CLASS} flex flex-col border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/20 p-5 md:p-6`}>
             <div className="mb-6 flex flex-wrap items-center gap-4">
               <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">Interactive Plot</div>
-              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 ${CHIP_CLASS}`}>
+              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 ${CHIP_CLASS} truncate max-w-full`}>
                 Hover buckets for exact values
               </div>
-              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 ${CHIP_CLASS}`}>
+              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 ${CHIP_CLASS} truncate max-w-full`}>
                 {zoomLabel}
               </div>
               <button
@@ -346,7 +346,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                 </button>
               ) : null}
             </div>
-            <div ref={svgContainerRef} className="relative flex-1 min-h-[36rem] w-full">
+            <div ref={svgContainerRef} className="relative flex-1 min-h-[16rem] sm:min-h-[24rem] md:min-h-[30rem] lg:min-h-[36rem] w-full">
               {error ? (
                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--stats-card-bg)]/50 backdrop-blur-sm">
                   <UsageGraphError message={error} onRetry={() => { refresh().catch(() => {}); }} />
@@ -527,7 +527,7 @@ export const InteractiveUsageChart: FunctionComponent<{
             ) : null}
           </div>
 
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6 w-full xl:w-auto">
             <UsageSeriesSidebar
               series={chartData}
               enabledSeries={enabledSeries}
