@@ -66,11 +66,6 @@ export const Toast: FunctionComponent<ToastProps> = ({
           scale: 1,
           duration: reducedMotion ? 0 : 0.4,
           ease: GSAP_EASINGS.smooth, // smooth easing curve
-          onComplete: () => {
-            if (type === "error" && actionButtonRef.current) {
-              actionButtonRef.current.focus();
-            }
-          }
         }
       );
     });
@@ -142,7 +137,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
           handleDismiss();
         }}
         className="shrink-0 p-1 rounded-md opacity-70 hover:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
-        aria-label="Dismiss toast"
+        aria-label={`Dismiss ${type} message`}
       >
         <X className="w-4 h-4" />
       </button>
