@@ -120,10 +120,10 @@ describe("InvocationsTable", () => {
 
   it("handles row expansion", async () => {
     mockedFetchInvocationMessages.mockResolvedValue([]);
-    const { getByText, queryByText, getByRole } = render(<Harness />);
+    const { getByText, queryByText, getAllByRole } = render(<Harness />);
 
     // The first 5 buttons are sort headers in the thead
-    const expandButton = getByRole("button", { name: "Expand invocation inv-1" });
+    const expandButton = getAllByRole("button", { name: "Expand invocation inv-1" })[0];
     fireEvent.click(expandButton);
     await waitFor(() => {
       expect(getByText("Loading messages")).toBeTruthy();

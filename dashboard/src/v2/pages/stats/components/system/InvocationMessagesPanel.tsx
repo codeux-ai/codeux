@@ -118,7 +118,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
   };
 
   return (
-    <div className="mt-2 rounded-2xl bg-slate-950/70 border border-white/[0.05] p-4 space-y-3">
+    <div className="mt-2 rounded-2xl bg-slate-950/70 border border-white/[0.05] p-4 space-y-3 w-full min-w-0 max-w-full">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
@@ -199,7 +199,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                   </div>
                 </div>
 
-                <pre className="whitespace-pre-wrap text-xs text-slate-300 mt-2" style={contentStyle}>
+                <pre className="whitespace-pre-wrap break-words text-xs text-slate-300 mt-2 overflow-x-auto" style={contentStyle}>
                   {message.contentMarkdown}
                 </pre>
 

@@ -127,8 +127,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-y-2">
-        <thead className="sticky top-0 z-10 bg-white/80 backdrop-blur-md dark:bg-[#0E0C0A]/80">
+      <table className="w-full border-separate border-spacing-y-2 block lg:table">
+        <thead className="sticky top-0 z-10 bg-white/80 backdrop-blur-md dark:bg-[#0E0C0A]/80 hidden lg:table-header-group">
           <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
             <th className="pb-2 pl-6">
               <button
@@ -183,7 +183,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
             <th className="pb-2 pr-6 text-right">Expand</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="block lg:table-row-group">
           {invocations.map((invocation) => {
             const isExpanded = expandedId === invocation.id;
             const { icon: ProviderIcon, bg: providerBg, text: providerText } = getProviderIcon(invocation.provider);
@@ -193,60 +193,107 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
             return (
               <>
-                <tr key={invocation.id}>
-                  <td colSpan={11} className="p-0">
+                <tr key={invocation.id} className="block lg:table-row">
+                  <td colSpan={11} className="p-0 block lg:table-cell">
                     <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-6`}>
-                      <div className="grid w-full grid-cols-2 gap-4 lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center lg:gap-2">
-                        {/* Time */}
-                        <div className="text-[11px] font-mono text-slate-400">
+                      <div className="flex flex-col gap-3 lg:grid lg:w-full lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center lg:gap-2">
+                        {/* Header Row: Time and Expand */}
+                        <div className="flex items-center justify-between lg:contents">
+                          {/* Time */}
+                          <div className="text-[11px] font-mono text-slate-400">
+
                           {formatDateTime(invocation.startedAt)}
+
+                          </div>
+                          {/* Expand Toggle Mobile */}
+                          <div className="flex justify-end lg:hidden">
+                            <button
+                              type="button"
+                              onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
+                              aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
+                              className={`rounded-full p-2 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/5 ${
+                                isExpanded ? "text-signal-500" : "text-slate-400"
+                              }`}
+                            >
+                              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            </button>
+                          </div>
                         </div>
 
-                        {/* Status */}
-                        <div>{renderStatusChip(invocation.status)}</div>
+                        {/* Status & Type Row */}
+                        <div className="flex items-center gap-2 lg:contents">
+                          {/* Status */}
+                          <div>{renderStatusChip(invocation.status)}</div>
 
                         {/* Type */}
-                        <div className="flex">
+                          <div className="flex">
+
                           <div className={`${CHIP_CLASS} px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
                             {invocation.type?.replace(/_/g, " ") || "unknown"}
                           </div>
                         </div>
+                        </div>
 
-                        {/* Model */}
-                        <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                        {/* Model & Duration Row */}
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:contents">
+                          {/* Model */}
+                          <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+
                           <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
                             <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
                           </div>
                           <span className="truncate">{invocation.model || "—"}</span>
-                        </div>
+                          </div>
 
-                        {/* In Tokens */}
-                        <div className="text-[11px] text-blue-600 dark:text-blue-400">
+                        {/* Token Stats Row */}
+                        <div className="grid grid-cols-4 gap-2 rounded-lg border border-slate-200/60 bg-slate-50 p-2 dark:border-white/5 dark:bg-white/[0.02] lg:contents lg:border-0 lg:bg-transparent lg:p-0">
+                          {/* In Tokens */}
+                          <div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">In</div>
+                            <div className="text-[11px] text-blue-600 dark:text-blue-400">
+
                           {formatTokens(invocation.inputTokens ?? 0)}
                         </div>
+                          </div>
 
                         {/* Out Tokens */}
-                        <div className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                          <div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Out</div>
+                            <div className="text-[11px] text-emerald-600 dark:text-emerald-400">
+
                           {formatTokens(invocation.outputTokens ?? 0)}
                         </div>
+                          </div>
 
                         {/* Cached Tokens */}
-                        <div className="text-[11px] text-purple-600 dark:text-purple-400">
+                          <div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Cached</div>
+                            <div className="text-[11px] text-purple-600 dark:text-purple-400">
+
                           {formatTokens(invocation.cachedInputTokens ?? 0)}
                         </div>
+                          </div>
 
                         {/* Total Tokens */}
-                        <div className="text-[11px] font-bold text-slate-900 dark:text-white">
+                          <div>
+                            <div className="mb-1 text-[9px] font-bold uppercase text-slate-400 lg:hidden">Total</div>
+                            <div className="text-[11px] font-bold text-slate-900 dark:text-white">
+
                           {formatTokens(invocation.totalTokens ?? 0)}
+                        </div>
+                          </div>
                         </div>
 
                         {/* Duration */}
-                        <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-blue-600 dark:text-blue-400"}`}>
+                          <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-blue-600 dark:text-blue-400"}`}>
+
                           {duration}
+                        </div>
                         </div>
 
                         {/* Context Chips */}
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1 lg:contents">
+                          <div className="flex flex-wrap gap-1">
                           {(invocation.sprintNumber !== null || invocation.taskKey !== null) && (
                             <>
                               {invocation.sprintNumber !== null && (
@@ -262,9 +309,11 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                             </>
                           )}
                         </div>
+                        </div>
 
-                        {/* Expand Toggle */}
-                        <div className="flex justify-end">
+                        {/* Expand Toggle Desktop */}
+                        <div className="hidden lg:flex lg:justify-end">
+
                           <button
                             type="button"
                             onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
@@ -293,8 +342,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
                 {/* Expanded Detail Row */}
                 {isExpanded && expandedInvocation ? (
-                  <tr key={`${invocation.id}-detail`}>
-                    <td colSpan={11} className="px-6 pb-2">
+                  <tr key={`${invocation.id}-detail`} className="block lg:table-row">
+                    <td colSpan={11} className="px-0 pb-2 lg:px-6 block lg:table-cell">
                       <InvocationMessagesPanel invocation={expandedInvocation} />
                     </td>
                   </tr>

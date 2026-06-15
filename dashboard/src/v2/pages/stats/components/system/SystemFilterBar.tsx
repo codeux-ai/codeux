@@ -59,7 +59,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
 
   return (
     <div className={`${SUBPANEL_CLASS} flex flex-wrap items-center gap-3 p-4`}>
-      <div className="relative min-w-0 flex-1 basis-[18rem]">
+      <div className="relative min-w-0 w-full lg:flex-1 lg:basis-[18rem]">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
         <input
           type="search"
@@ -145,7 +145,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         </div>
       ) : null}
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="flex w-full items-center justify-between gap-2 lg:ml-auto lg:w-auto lg:justify-end">
         {hasActiveFilters ? (
           <button
             type="button"
