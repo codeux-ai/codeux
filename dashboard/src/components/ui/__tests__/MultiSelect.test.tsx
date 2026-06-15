@@ -34,6 +34,26 @@ describe('MultiSelect', () => {
     expect(getByText('feature')).toBeInTheDocument();
   });
 
+  it('has correct aria properties', () => {
+    const { getByRole } = render(
+      <MultiSelect options={options} value={['bug']} onChange={() => {}} ariaLabel="Tag selection" />
+    );
+    const combobox = getByRole('combobox');
+    expect(combobox).toHaveAttribute('aria-label', 'Tag selection');
+    expect(combobox).toHaveAttribute('aria-describedby');
+  });
+
+  it('announces added tags', () => {
+    const onChange = vi.fn();
+    const { getByText } = render(
+      <MultiSelect options={options} value={[]} onChange={onChange} />
+    );
+    fireEvent.click(getByText('Select...'));
+    fireEvent.click(getByText('bug'));
+    expect(onChange).toHaveBeenCalledWith(['bug']);
+    expect(getByText('Added bug')).toBeInTheDocument();
+  });
+
   it('selects an option', () => {
     const onChange = vi.fn();
     const { getByText } = render(
