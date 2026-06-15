@@ -384,11 +384,11 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         >
             <div
                 ref={cardRef}
-                className="relative flex w-full max-w-2xl lg:max-w-3xl max-h-[calc(100vh-2rem)] overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
+                className="relative flex flex-col sm:flex-row w-[calc(100vw-2rem)] sm:w-full max-w-2xl lg:max-w-3xl max-h-[calc(100dvh-2rem)] overflow-hidden sm:overflow-y-auto rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
                 style={{ minHeight: modalMinHeight }}
             >
                 {/* ── Left decorative panel ── */}
-                <div className="relative w-52 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">
+                <div className="relative hidden sm:flex w-52 shrink-0 bg-void-900 dark:bg-void-950 flex-col justify-between p-8 overflow-hidden">
                     <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
                         ADD
                     </span>
@@ -411,7 +411,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                 </div>
 
                 {/* ── Right form panel ── */}
-                <div className="flex-1 overflow-y-auto bg-white/98 dark:bg-void-800/98 p-7 lg:p-8 flex flex-col">
+                <div className="flex-1 overflow-y-auto bg-white/98 dark:bg-void-800/98 p-5 sm:p-7 lg:p-8 flex flex-col">
                     {/* Header */}
                     <div className="flex items-start justify-between mb-6 lg:mb-8">
                         <div>

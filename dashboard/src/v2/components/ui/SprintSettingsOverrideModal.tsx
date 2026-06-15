@@ -133,7 +133,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
     >
       <div
         ref={cardRef}
-        className="flex max-h-[92vh] w-full max-w-7xl cursor-default flex-col overflow-hidden rounded-[2.5rem] bg-[#f9f8f4] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:bg-void-900 dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
+        className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] sm:w-full max-w-7xl cursor-default flex-col overflow-hidden rounded-[2.5rem] bg-[#f9f8f4] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:bg-void-900 dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
       >
         <SettingsHeader
           icon={SlidersHorizontal}

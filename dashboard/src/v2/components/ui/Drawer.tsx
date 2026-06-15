@@ -81,7 +81,7 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
         aria-modal="true"
         aria-labelledby={ariaLabelledby}
         aria-describedby={ariaDescribedby}
-        className={`fixed top-0 bottom-0 ${alignmentClass} z-50 w-full max-w-md bg-white dark:bg-void-800 rounded-[12px] shadow-lg border-x border-black/[0.06] dark:border-white/[0.06] ${className}`}
+        className={`fixed top-0 bottom-0 ${alignmentClass} z-50 w-[calc(100vw-2rem)] sm:w-full max-w-md bg-white dark:bg-void-800 rounded-[12px] shadow-lg border-x border-black/[0.06] dark:border-white/[0.06] h-[100dvh] overflow-y-auto ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

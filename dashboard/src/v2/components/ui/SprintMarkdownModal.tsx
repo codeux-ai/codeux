@@ -145,9 +145,9 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     >
       <div
         ref={cardRef}
-        className="relative flex w-full max-w-5xl cursor-default overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
+        className="relative flex flex-col sm:flex-row w-[calc(100vw-2rem)] sm:w-full max-w-5xl max-h-[calc(100dvh-2rem)] cursor-default overflow-hidden sm:overflow-y-auto rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
       >
-        <div className="relative w-56 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">
+        <div className="relative hidden sm:flex w-56 shrink-0 bg-void-900 dark:bg-void-950 flex-col justify-between p-8 overflow-hidden">
           <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
             {mode === "import" ? "LOAD" : "SAVE"}
           </span>

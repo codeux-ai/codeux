@@ -145,3 +145,4 @@ These docs cover:
 - Operational and development workflows.
 
 These docs do not replace the source code. They are designed to make the source easier to navigate and safer to change.
+- [Mobile Responsiveness](./dashboard/mobile-responsiveness.md)

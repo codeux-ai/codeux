@@ -63,3 +63,4 @@
 - [Documentation Standards](./development/documentation-standards.md)
 - [Glossary](./reference/glossary.md)
 - [Atomic Refactor Notes](./yourdocs.md)
+- [Mobile Responsiveness](./dashboard/mobile-responsiveness.md)

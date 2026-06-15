@@ -62,9 +62,21 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
 
     const [modalStyle, setModalStyle] = useState({});
 
+
     const updatePosition = () => {
         if (anchorRef && anchorRef.current && isOpen) {
             const rect = anchorRef.current.getBoundingClientRect();
+            // Fallback to centered mobile mode if narrow screen or insufficient height
+            if (window.innerWidth < 768 || window.innerHeight - rect.bottom < 300) {
+                setModalStyle({
+                    width: 'calc(100vw - 2rem)',
+                    maxHeight: 'calc(100dvh - 2rem)',
+                    margin: '0 auto',
+                    position: 'relative'
+                });
+                return;
+            }
+
             const top = rect.bottom + 8;
             let left = rect.left;
 
@@ -80,12 +92,13 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 top: `${top}px`,
                 left: `${left}px`,
                 width: `${modalWidth}px`,
-                maxHeight: `calc(100vh - ${top + 16}px)`
+                maxHeight: `calc(100dvh - ${top + 16}px)`
             });
         } else if (!anchorRef && isOpen) {
             setModalStyle({});
         }
     };
+
 
     useLayoutEffect(() => {
         updatePosition();
@@ -186,7 +199,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     return (
         <div
             ref={overlayRef}
-            className={anchorRef ? "fixed inset-0 z-[100] hidden" : "fixed inset-0 z-[100] hidden items-start justify-center pt-16 px-4 sm:px-6"}
+            className={anchorRef ? "fixed inset-0 z-[100] hidden items-start justify-center px-4 sm:px-6 sm:pt-16" : "fixed inset-0 z-[100] hidden items-start justify-center pt-16 px-4 sm:px-6"}
             style={{ display: 'none' }}
         >
             <div
@@ -196,7 +209,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
 
             <div
                 ref={containerRef}
-                className={anchorRef ? "flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10" : "relative w-full max-w-4xl mx-auto flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10"}
+                className={anchorRef ? "flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)]" : "relative w-full max-w-4xl mx-auto flex flex-col bg-white dark:bg-void-800 rounded-2xl shadow-2xl overflow-hidden border border-black/5 dark:border-white/10 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)]"}
                 style={anchorRef ? modalStyle : {}}
             >
                 {/* Search Header */}
