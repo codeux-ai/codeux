@@ -305,7 +305,7 @@ export const ChatPage: FunctionComponent = () => {
                 value={input}
                 rows={1}
                 placeholder={activeConnection ? "Send a dashboard message to the active listener…" : "Write a project note or queue a message for a future listener…"}
-                className="max-h-[180px] min-h-[38px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600"
+                className="max-h-[180px] min-h-[38px] w-full resize-none bg-transparent px-2 py-2 text-[15px] min-w-0 leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600"
                 onInput={(event) => {
                   const element = event.currentTarget;
                   element.style.height = "auto";
@@ -322,7 +322,7 @@ export const ChatPage: FunctionComponent = () => {
                   }
                 }}
               />
-              <div className="mt-3 flex items-center justify-between">
+              <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="text-[10px] font-mono text-slate-400">
                   {activeConnection
                     ? `${activeConnection.displayName} · ${activeConnection.status} · Enter sends`
@@ -332,7 +332,7 @@ export const ChatPage: FunctionComponent = () => {
                   type="button"
                   onClick={() => void handleSend()}
                   disabled={!selectedProject || !input.trim() || sending}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-[1rem] bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-black/[0.06] disabled:text-slate-400 disabled:shadow-none dark:disabled:bg-white/[0.06]"
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-black/[0.06] disabled:text-slate-400 disabled:shadow-none dark:disabled:bg-white/[0.06] self-end sm:self-auto"
                 >
                   {sending ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} /> : <ArrowUp className="h-4 w-4" strokeWidth={2.5} />}
                 </button>
@@ -391,7 +391,7 @@ export const ChatPage: FunctionComponent = () => {
               </div>
             ) : null}
 
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 break-words">
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
                 <span>Active Invocation</span>
                 {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null) && (
@@ -432,7 +432,7 @@ export const ChatPage: FunctionComponent = () => {
 
               {/* Clean horizontal stat strip */}
               {headerStats.length > 0 && (
-                <div className="mt-3 flex w-full items-stretch divide-x divide-black/[0.06] overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.02] dark:divide-white/[0.06] dark:border-white/[0.06] dark:bg-white/[0.02]">
+                <div className="mt-3 flex w-full flex-wrap items-stretch divide-x-0 sm:divide-x divide-y sm:divide-y-0 divide-black/[0.06] overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.02] dark:divide-white/[0.06] dark:border-white/[0.06] dark:bg-white/[0.02]">
                   {headerStats.map((stat) => (
                     <div key={stat.label} className="flex flex-1 flex-col gap-0.5 whitespace-nowrap px-3.5 py-2">
                       <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">

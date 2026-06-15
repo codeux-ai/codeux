@@ -55,11 +55,11 @@ export const ChatWidgetFrame: FunctionComponent<ChatWidgetFrameProps> = ({
           {header}
         </div>
       )}
-      <div class="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+      <div class="px-4 py-3 text-sm text-slate-700 dark:text-slate-300 min-w-0 overflow-wrap-anywhere">
         {children}
       </div>
       {footer && (
-        <div class="px-4 py-2 border-t border-black/[0.04] dark:border-white/[0.04] text-[11px] text-slate-400 dark:text-slate-500">
+        <div class="px-4 py-2 border-t border-black/[0.04] dark:border-white/[0.04] text-[11px] text-slate-400 dark:text-slate-500 truncate">
           {footer}
         </div>
       )}

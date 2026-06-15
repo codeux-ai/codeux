@@ -51,7 +51,7 @@ export const ChatPageShell: FunctionComponent<{
   }, [prefersReducedMotion]);
 
   return (
-    <PageContainer padding="chat" className="h-[calc(100vh-48px)] gap-8">
+    <PageContainer padding="chat" className="min-h-0 flex-1 flex flex-col gap-6 lg:gap-8 h-full">
       <div ref={headerRef} className="shrink-0 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
@@ -68,7 +68,7 @@ export const ChatPageShell: FunctionComponent<{
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
           <div className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
             <button
               type="button"
@@ -136,9 +136,9 @@ export const ChatPageShell: FunctionComponent<{
         </div>
       )}
 
-      <div className="flex-1 min-h-[70vh] flex flex-col lg:grid lg:grid-cols-[360px_minmax(0,1fr)] gap-6 pb-6">
+      <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[360px_minmax(0,1fr)] gap-6 pb-6">
         {railSlot}
-        <section className="flex flex-col min-h-[70vh] flex-1 rounded-[1.9rem] border border-black/[0.06] bg-white/80 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+        <section className="flex flex-col min-h-0 flex-1 rounded-[1.9rem] border border-black/[0.06] bg-white/80 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
           {detailSlot}
         </section>
       </div>
