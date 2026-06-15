@@ -8,9 +8,10 @@ interface BrandSectionProps {
     isMobile?: boolean;
     onMenuToggle?: () => void;
     hideLogo?: boolean;
+    isMobileMenuOpen?: boolean;
 }
 
-export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, onMenuToggle, hideLogo }) => {
+export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, onMenuToggle, hideLogo, isMobileMenuOpen }) => {
     const [brandActive, setBrandActive] = useState(false);
 
     if (hideLogo && !isMobile) {
@@ -23,7 +24,9 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
                 <button
                     type="button"
                     onClick={onMenuToggle}
-                    aria-label="Toggle Navigation Menu"
+                    aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+                    aria-expanded={!!isMobileMenuOpen}
+                    aria-controls="primary-navigation"
                     className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 shrink-0"
                 >
                     <Menu aria-hidden="true" className="w-5 h-5 text-slate-600 dark:text-slate-300" strokeWidth={2} />

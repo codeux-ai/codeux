@@ -101,9 +101,10 @@ interface TopNavProps {
     onMenuToggle?: () => void;
     isMobile?: boolean;
     hideLogo?: boolean;
+    isMobileMenuOpen?: boolean;
 }
 
-export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile, hideLogo }) => {
+export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile, hideLogo, isMobileMenuOpen }) => {
     const navRef = useRef<HTMLElement>(null);
 
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -264,7 +265,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             </a>
             <nav aria-label="Primary navigation" className="contents">
             <div className="flex items-center gap-4 md:gap-10 flex-1">
-                <BrandSection isMobile={isMobile} onMenuToggle={onMenuToggle} hideLogo={hideLogo} />
+                <BrandSection isMobile={isMobile} onMenuToggle={onMenuToggle} hideLogo={hideLogo} isMobileMenuOpen={isMobileMenuOpen} />
 
                 <GlobalSearch projectId={projectId} selectedProject={selectedProject} sprints={sprints} />
             </div>
@@ -297,6 +298,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             <div className="px-2 pb-2">
                                 <input
                                     type="text"
+                                    aria-label="Filter projects"
                                     placeholder="Filter projects..."
                                     value={projectFilter}
                                     onInput={(e) => setProjectFilter(e.currentTarget.value)}

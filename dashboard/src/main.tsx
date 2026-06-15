@@ -213,6 +213,7 @@ const AppLayout = () => {
             onMenuToggle={() => setIsMobileSidebarOpen(prev => !prev)}
             isMobile={isMobile}
             hideLogo={!isMobile && navMode === "SIDEBAR"}
+            isMobileMenuOpen={isMobileSidebarOpen}
           />
 
           <main id="main-content" tabIndex={-1} aria-label="Main content" className={`flex-1 overflow-y-auto dashboard-scrollbar relative ${showSidebar ? '' : 'pb-32'}`} style={{ contain: 'layout style' }}>
