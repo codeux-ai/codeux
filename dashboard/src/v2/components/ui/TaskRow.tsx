@@ -16,18 +16,11 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
     const busy = state?.busy ?? false;
     return (
     <div
-        className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.06] dark:border-white/[0.06] last:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 focus-visible:z-10 focus-visible:rounded-xl"
-        tabIndex={0}
-        role="button"
-        onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                if (e.key === ' ') e.preventDefault();
-            }
-        }}
+        className="group relative flex items-center justify-between py-5 border-b border-black/[0.06] dark:border-white/[0.06] last:border-0 focus-within:ring-2 focus-within:ring-signal-500/30 focus-within:ring-offset-2 focus-within:z-10 focus-within:rounded-xl"
     >
         {/* Hover backdrop */}
-        <div className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
-        <div className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-xl" />
+        <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
+        <div aria-hidden="true" className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-xl" />
 
         <div className="flex-1 grid grid-cols-12 gap-3 md:gap-5 items-center min-w-0">
             {/* ID */}
@@ -94,6 +87,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                         className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95"
                         title={isRunning ? "Stop task" : "Rerun task"}
                         aria-label={isRunning ? "Stop task" : "Rerun task"}
+                        aria-busy={busy}
                         disabled={busy || !onPlayStop}
                         onClick={(event) => {
                             event.stopPropagation();
