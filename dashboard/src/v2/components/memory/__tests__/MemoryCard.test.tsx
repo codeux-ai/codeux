@@ -11,6 +11,17 @@ expect.extend(matchers);
 
 
 
+vi.mock("../../../hooks/use-confirm-dialog.js", () => ({
+    useConfirmDialog: () => ({
+        isOpen: false,
+        options: null,
+        requestConfirm: vi.fn().mockResolvedValue(true),
+        handleConfirm: vi.fn(),
+        handleCancel: vi.fn(),
+        triggerRef: { current: null }
+    })
+}));
+
 describe("MemoryCard", () => {
     const mockRemoveMemory = vi.fn();
     memoryMutationsSignal.value = { removeMemory: mockRemoveMemory, addMemory: vi.fn(), feedback: null, clearFeedback: vi.fn() };

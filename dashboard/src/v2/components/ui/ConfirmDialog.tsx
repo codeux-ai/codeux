@@ -155,17 +155,27 @@ interface ConfirmDialogProps {
   options: ConfirmDialogOptions | null;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
+  triggerRef?: { current: HTMLElement | null };
 }
 
-export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef }: ConfirmDialogProps) {
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const backdropRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const trapRef = useFocusTrap(shouldRender && !isClosing, () => handleClose(onCancel));
+  const fallbackTriggerRef = useRef<HTMLElement | null>(null);
+  const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus: false });
   const reducedMotion = useReducedMotion();
+
+  const actualTriggerRef = triggerRef || fallbackTriggerRef;
+
+  useLayoutEffect(() => {
+    if (isOpen && !shouldRender) {
+      actualTriggerRef.current = document.activeElement as HTMLElement | null;
+    }
+  }, [isOpen, shouldRender, actualTriggerRef]);
 
   useEffect(() => {
     if (isOpen) {
@@ -217,30 +227,33 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
         gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
       }
 
+      const onExitComplete = () => {
+        setShouldRender(false);
+        setIsClosing(false);
+
+        if (actualTriggerRef.current) {
+          actualTriggerRef.current.focus();
+          actualTriggerRef.current = null;
+        }
+
+        if (pendingCallback.current) {
+          pendingCallback.current();
+          pendingCallback.current = null;
+        }
+      };
+
       if (backdropRef.current) {
         gsap.to(backdropRef.current, {
           opacity: 0,
           duration: d,
           delay: reducedMotion ? 0 : 0.05,
-          onComplete: () => {
-            setShouldRender(false);
-            setIsClosing(false);
-            if (pendingCallback.current) {
-              pendingCallback.current();
-              pendingCallback.current = null;
-            }
-          }
+          onComplete: onExitComplete
         });
       } else {
-        setShouldRender(false);
-        setIsClosing(false);
-        if (pendingCallback.current) {
-          pendingCallback.current();
-          pendingCallback.current = null;
-        }
+        onExitComplete();
       }
     }
-  }, [isClosing, reducedMotion]);
+  }, [isClosing, reducedMotion, actualTriggerRef]);
 
   if (!shouldRender || !options) return null;
 

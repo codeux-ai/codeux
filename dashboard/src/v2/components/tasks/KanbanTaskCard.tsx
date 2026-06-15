@@ -9,6 +9,8 @@ import type { Task } from "../../types.js";
 import { PRIORITY_CFG, STATUS_CFG } from "../../lib/tasks-constants.js";
 import { useTaskCardMotion } from "../../lib/motion/task-card-motion.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
+import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { type TaskCardViewModel, formatTimeAgo } from "../../lib/tasks/task-card-view-model.js";
 import { useState, useEffect } from "preact/hooks";
 import { DependencyStatusIndicators } from "./DependencyStatusIndicators.js";
@@ -29,6 +31,7 @@ export const KanbanTaskCard: FunctionComponent<{
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
   const isReducedMotion = useReducedMotion();
+  const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
 
   const [flashTriggerCount, setFlashTriggerCount] = useState(0);
   const prevStatusRef = useRef(task.status);
@@ -199,11 +202,31 @@ export const KanbanTaskCard: FunctionComponent<{
           type="button"
           className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
           title="Delete task"
-          onClick={() => onDelete(task)}
+          onClick={async (e) => {
+            e.stopPropagation();
+            const confirmed = await requestConfirm({
+              title: "Delete Task",
+              body: `Are you sure you want to delete "${task.title}"?`,
+              confirmLabel: "Delete Task",
+              cancelLabel: "Cancel",
+              destructive: true
+            });
+            if (confirmed) {
+              onDelete(task);
+            }
+          }}
         >
           <Trash2 className="w-3 h-3" />
         </button>
       </div>
+
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        options={confirmOptions}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+        triggerRef={triggerRef}
+      />
     </div>
   );
 }, (prev, next) => {

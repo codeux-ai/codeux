@@ -1,4 +1,4 @@
-import { useState, useCallback } from "preact/hooks";
+import { useState, useCallback, useRef } from "preact/hooks";
 
 export interface ConfirmDialogOptions {
   title: string;
@@ -32,11 +32,14 @@ export function useConfirmDialog() {
     setIsOpen(false);
   }, [resolvePromise]);
 
+  const triggerRef = useRef<HTMLElement | null>(null);
+
   return {
     isOpen,
     options,
     requestConfirm,
     handleConfirm,
-    handleCancel
+    handleCancel,
+    triggerRef
   };
 }

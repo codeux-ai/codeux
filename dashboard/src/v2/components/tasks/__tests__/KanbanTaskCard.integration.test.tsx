@@ -9,6 +9,17 @@ import type { TaskCardViewModel } from "../../../lib/tasks/task-card-view-model.
 
 expect.extend(matchers);
 
+vi.mock("../../../hooks/use-confirm-dialog.js", () => ({
+  useConfirmDialog: () => ({
+    isOpen: false,
+    options: null,
+    requestConfirm: vi.fn().mockResolvedValue(true),
+    handleConfirm: vi.fn(),
+    handleCancel: vi.fn(),
+    triggerRef: { current: null }
+  })
+}));
+
 // Mock gsap since it's used heavily in motion hooks
 vi.mock("gsap", () => {
   return {
