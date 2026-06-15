@@ -48,7 +48,7 @@ export function useDropdownKeyboard(
             return;
         }
 
-        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
             e.preventDefault();
 
             const focusableElements = Array.from(
@@ -66,6 +66,10 @@ export function useDropdownKeyboard(
                 nextIndex = currentIndex < focusableElements.length - 1 ? currentIndex + 1 : 0;
             } else if (e.key === "ArrowUp") {
                 nextIndex = currentIndex > 0 ? currentIndex - 1 : focusableElements.length - 1;
+            } else if (e.key === "Home") {
+                nextIndex = 0;
+            } else if (e.key === "End") {
+                nextIndex = focusableElements.length - 1;
             }
 
             focusableElements[nextIndex]?.focus();
@@ -286,6 +290,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         data-tour-id="project-selector"
                         aria-haspopup="listbox"
                         aria-expanded={dropdownOpen}
+                        id="project-selector-button"
+                        aria-label={`Selected project: ${selectedProject?.name || "None"}`}
+                        aria-controls="project-listbox"
+                        aria-busy={projectSwitchBusy || loading ? "true" : "false"}
                         className="flex h-9 items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group hover:border-black/[0.08] focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.08]"
                     >
                         <StatusDot status={selectedProject?.status || "idle"} />
@@ -297,14 +305,16 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                     {/* Project Dropdown */}
                     {dropdownOpen && (
-                        <div role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/97 dark:bg-void-800/97 backdrop-blur-md border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+                        <div id="project-listbox" role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/97 dark:bg-void-800/97 backdrop-blur-md border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Projects</span>
                             </div>
                             <div className="px-2 pb-2">
                                 <input
                                     type="text"
+                                    id="project-filter-input"
                                     aria-label="Filter projects"
+                                    aria-controls="project-listbox"
                                     placeholder="Filter projects..."
                                     value={projectFilter}
                                     onInput={(e) => setProjectFilter(e.currentTarget.value)}
@@ -372,6 +382,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             onKeyDown={sprintKb.onToggleKeyDown}
                             aria-haspopup="listbox"
                             aria-expanded={sprintDropdownOpen}
+                            id="sprint-selector-button"
+                            aria-label={`Selected sprint: ${sprintsLoading ? "Loading..." : selectedSprint ? formatSprintDisplay(selectedSprint, sprintKeyPrefix) : "All Sprints"}`}
+                            aria-controls="sprint-listbox"
+                            aria-busy={sprintSwitchBusy || sprintsLoading ? "true" : "false"}
                             onClick={(e) => {
                                 if (sprints.length === 0) {
                                     e.preventDefault();
@@ -399,13 +413,16 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                         {/* Sprint Dropdown */}
                         {sprintDropdownOpen && sprints.length > 0 && (
-                            <div role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 bg-white/97 dark:bg-void-800/97 backdrop-blur-md border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
+                            <div id="sprint-listbox" role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 bg-white/97 dark:bg-void-800/97 backdrop-blur-md border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
                                 <div className="px-3 pt-3 pb-1.5">
                                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Scope</span>
                                 </div>
                                 <div className="px-2 pb-2">
                                     <input
                                         type="text"
+                                        id="sprint-filter-input"
+                                        aria-label="Filter sprints"
+                                        aria-controls="sprint-listbox"
                                         placeholder="Filter sprints..."
                                         value={sprintFilter}
                                         onInput={(e) => setSprintFilter(e.currentTarget.value)}
