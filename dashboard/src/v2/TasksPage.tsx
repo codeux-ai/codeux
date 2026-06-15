@@ -1,3 +1,6 @@
+// We need to define getLane since it's only in task-board-state.ts
+const getLane = (status: string) => (status === "coding_completed" || status === "QA_REVIEW_FAILED") ? "in_progress" : status;
+
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "preact/hooks";
@@ -370,6 +373,8 @@ export const TasksPage: FunctionComponent = () => {
   const [showComposer, setShowComposer] = useState(false);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dropTargetContext, setDropTargetContext] = useState<{ status: TaskStatus, index: number } | null>(null);
   const [optimisticTasks, setOptimisticTasks] = useState<Task[]>([]);
   const [resolvedTaskId, setResolvedTaskId] = useState<string | null>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -605,6 +610,89 @@ export const TasksPage: FunctionComponent = () => {
     }
   }, [selectedProject, editingTask, refreshTasks, refreshSprints, sprints]);
 
+
+  const handleDragStart = useCallback((taskId: string, e: DragEvent) => {
+    if (reducedMotion) return;
+    setDraggedTaskId(taskId);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+    // e.dataTransfer.setDragImage(new Image(), 0, 0); // optional: hide default ghost
+  }, [reducedMotion]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedTaskId(null);
+    setDropTargetContext(null);
+  }, []);
+
+  const handleDragOver = useCallback((status: TaskStatus, index: number, e: any) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    setDropTargetContext({ status, index });
+  }, []);
+
+  const handleDrop = useCallback(async (status: TaskStatus, insertIndex: number, e: DragEvent) => {
+    e.preventDefault();
+    if (!draggedTaskId) return;
+
+    const draggedTask = tasks.find(t => t.recordId === draggedTaskId);
+    if (!draggedTask) return;
+
+    // We don't have sortOrder on Task currently, but we might just update the status for now
+    // Actually, in the task board state it usually filters by getLane(task.status).
+    // Let's just update the status if it changed lane, and for reordering, update sorting if we had it.
+    // For now we will just use updateTask(task.id, { status })
+    // If the dropped column is 'completed', and original isn't... etc.
+    const newStatus = status === "in_progress" && draggedTask.status !== "coding_completed" && draggedTask.status !== "QA_REVIEW_FAILED"
+      ? "in_progress"
+      : status === "pending" ? "pending" : status === "completed" ? "completed" : draggedTask.status;
+
+    // Actually, let's just forcefully set the status to the column's default status if we moved between columns.
+    const laneMap: Record<string, TaskStatus> = {
+      pending: "pending",
+      in_progress: "in_progress",
+      completed: "completed"
+    };
+
+    // Even if it's the same lane, we should allow it.
+    // However, updating the order within the same column via updateTask might not be fully supported by the API yet if it lacks an 'order' field.
+    // Assuming we want to optimistically update or at least support cross-status drops in the same lane.
+    if (getLane(draggedTask.status) !== status) {
+      const targetStatus = laneMap[status] || draggedTask.status;
+
+      // Optimistic update
+      const updatedTask = { ...draggedTask, status: targetStatus };
+      setOptimisticTasks(prev => {
+        const filtered = prev.filter(t => t.recordId !== updatedTask.recordId);
+        return [updatedTask, ...filtered];
+      });
+
+      try {
+        await updateTask(draggedTask.recordId, { status: targetStatus });
+        await refreshTasks();
+      } finally {
+        setOptimisticTasks(prev => prev.filter(t => t.recordId !== updatedTask.recordId));
+      }
+    } else {
+      // Logic for reordering within the same lane
+      const targetStatus = laneMap[status] || draggedTask.status;
+      if (draggedTask.status !== targetStatus) {
+        const updatedTask = { ...draggedTask, status: targetStatus };
+        setOptimisticTasks(prev => {
+          const filtered = prev.filter(t => t.recordId !== updatedTask.recordId);
+          // Insert at the new index position? For now, we are just appending it at the top as an optimistic update
+          return [updatedTask, ...filtered];
+        });
+        try {
+          await updateTask(draggedTask.recordId, { status: targetStatus });
+          await refreshTasks();
+        } finally {
+          setOptimisticTasks(prev => prev.filter(t => t.recordId !== updatedTask.recordId));
+        }
+      }
+    }
+    setDraggedTaskId(null);
+    setDropTargetContext(null);
+  }, [draggedTaskId, tasks, refreshTasks]);
+
   const handleDeleteTask = useCallback(async (task: Task) => {
     await deleteTask(task.recordId);
     await Promise.all([refreshTasks(), refreshSprints()]);
@@ -803,7 +891,11 @@ export const TasksPage: FunctionComponent = () => {
           {columns.map(({ status, count, tasks: columnTasks }) => (
             <div key={status} className="flex flex-col">
               <ColumnHeader status={status} count={count} />
-              <div className="flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border border-black/[0.03] dark:border-white/[0.03]">
+              <div
+              className="flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border border-black/[0.03] dark:border-white/[0.03] relative"
+              onDragOver={(e) => handleDragOver(status, columnTasks.length, e)}
+              onDrop={(e) => handleDrop(status, columnTasks.length, e)}
+            >
                 <SkeletonLoader show={showSkeletons} className="col-start-1 row-start-1 flex flex-col gap-4">
                   <SkeletonCard />
                   <SkeletonCard />
@@ -818,11 +910,22 @@ export const TasksPage: FunctionComponent = () => {
                 ) : !loading ? (
                   <div className="col-start-1 row-start-1 flex flex-col gap-4">
                     {columnTasks.map((task, index) => {
+                      const isDraggedOver = dropTargetContext?.status === status && dropTargetContext?.index === index;
                       const viewModel = taskViewModels.get(task.recordId);
                       if (!viewModel) return null;
 
                       return (
-                        <div key={task.recordId} className="task-card-entry" data-task-id={task.recordId}>
+                        <div key={task.recordId} className="contents">
+                          {isDraggedOver && draggedTaskId !== task.recordId && (
+                        <div className="h-24 mb-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
+                      )}
+                      <div
+                        key={task.recordId}
+                        className="task-card-entry"
+                        data-task-id={task.recordId}
+                        onDragOver={(e) => { e.stopPropagation(); handleDragOver(status, index, e); }}
+                        onDrop={(e) => { e.stopPropagation(); handleDrop(status, index, e); }}
+                      >
                           <KanbanTaskCard
                             viewModel={viewModel}
                             index={index}
@@ -830,10 +933,17 @@ export const TasksPage: FunctionComponent = () => {
                             onDelete={handleDeleteTask}
                             agentPresetName={task.agentPresetId ? agentPresetsMap.get(task.agentPresetId)?.name ?? null : null}
                             agentPresetAvatarConfig={task.agentPresetId ? agentPresetsMap.get(task.agentPresetId)?.avatarConfig : undefined}
+                            isDragging={draggedTaskId === task.recordId}
+                            onDragStart={(e) => handleDragStart(task.recordId, e)}
+                            onDragEnd={handleDragEnd}
                           />
+                        </div>
                         </div>
                       );
                     })}
+                    {dropTargetContext?.status === status && dropTargetContext?.index === columnTasks.length && (
+                        <div className="h-24 mt-4 rounded-[1.5rem] border-2 border-dashed border-signal-500/50 bg-signal-500/10 transition-all duration-300" />
+                      )}
                   </div>
                 ) : null}
               </div>
