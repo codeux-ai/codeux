@@ -402,9 +402,9 @@ export const ChatPage: FunctionComponent = () => {
               </div>
 
               {/* Title: purpose */}
-              <h2 className="mt-1.5 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+              <h1 className="mt-1.5 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
                 {formatInvocationPurpose(selectedInvocation?.type)}
-              </h2>
+              </h1>
 
               {/* Provider · model subline */}
               {selectedInvocation && (
