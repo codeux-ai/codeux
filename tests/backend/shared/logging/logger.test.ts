@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -11,7 +11,20 @@ import {
 import { createLogger } from "../../../../src/shared/logging/logger.js";
 
 describe("createLogger", () => {
+  // The global test setup forces console logging to "error" via CODEUX_FORCE_LOG_LEVEL
+  // to keep the reporter clean. These tests verify the real level-resolution logic,
+  // so they opt out of the global override and restore it afterward.
+  const savedForcedLogLevel = process.env.CODEUX_FORCE_LOG_LEVEL;
+  beforeEach(() => {
+    delete process.env.CODEUX_FORCE_LOG_LEVEL;
+  });
+
   afterEach(() => {
+    if (savedForcedLogLevel === undefined) {
+      delete process.env.CODEUX_FORCE_LOG_LEVEL;
+    } else {
+      process.env.CODEUX_FORCE_LOG_LEVEL = savedForcedLogLevel;
+    }
     vi.restoreAllMocks();
   });
 

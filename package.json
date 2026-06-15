@@ -19,7 +19,7 @@
     "codeux": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc && tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo && vite build",
+    "build": "tsc --incremental --tsBuildInfoFile .cache/tsc/server-build.tsbuildinfo && tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo && vite build",
     "start": "node dist/index.js",
     "dev": "node --import ./scripts/tsnode-register.mjs src/index.ts",
     "electron:generate-icons": "node scripts/generate-electron-icons.mjs",
@@ -45,7 +45,7 @@
     "ci": "pnpm run lint && pnpm run test:backend:coverage && pnpm run test:dashboard && pnpm run build",
     "audit": "pnpm audit --audit-level=high",
     "smoke-test": "node dist/index.js --help",
-    "build:server": "tsc",
+    "build:server": "tsc --incremental --tsBuildInfoFile .cache/tsc/server-build.tsbuildinfo",
     "build:dashboard": "tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo && vite build",
     "dev:dashboard": "vite",
     "typecheck:dashboard": "tsc -p dashboard/tsconfig.json --noEmit --incremental --tsBuildInfoFile .cache/tsc/dashboard.tsbuildinfo"

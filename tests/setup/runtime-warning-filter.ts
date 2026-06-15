@@ -29,6 +29,12 @@ process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
 }) as typeof process.emitWarning;
 
 process.env.LOG_LEVEL = originalLogLevel ?? "error";
+// Force console verbosity to error level regardless of any persisted dashboard
+// `consoleLogLevel` setting that services load at runtime. Without this, services
+// that boot maintenance/cleanup routines (database maintenance, docker prune,
+// sprint preview cleanup) spew INFO logs into the test reporter. Honor an explicit
+// caller override so suites that assert on logging can opt back in.
+process.env.CODEUX_FORCE_LOG_LEVEL = process.env.CODEUX_FORCE_LOG_LEVEL ?? "error";
 
 const isWindowsTempLockError = (error: unknown, targetPath: unknown): boolean => {
   if (process.platform !== "win32" || !error || typeof error !== "object") {

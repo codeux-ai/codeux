@@ -137,18 +137,26 @@ describe("ProviderConcurrencyService", () => {
     });
 
     it("should wait and retry if tryCreate returns null", async () => {
-      const input = { provider: "jules" } as any;
-      executionRepository.tryCreateProviderInvocationUsage
-        .mockReturnValueOnce(null)
-        .mockReturnValueOnce({ id: "inv-2" });
-      
-      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([{}, {}, {}, {}, {}]); // 5 running
+      vi.useFakeTimers();
+      try {
+        const input = { provider: "jules" } as any;
+        executionRepository.tryCreateProviderInvocationUsage
+          .mockReturnValueOnce(null)
+          .mockReturnValueOnce({ id: "inv-2" });
 
-      const result = await service.waitForSlotAndClaim("jules", 5, input);
+        executionRepository.listRunningProviderInvocationUsages.mockReturnValue([{}, {}, {}, {}, {}]); // 5 running
 
-      expect(result.id).toBe("inv-2");
-      expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledTimes(2);
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("cap reached"), expect.anything());
+        const promise = service.waitForSlotAndClaim("jules", 5, input);
+        // Advance past the 2s poll delay so the retry fires without a real wait.
+        await vi.advanceTimersByTimeAsync(2000);
+        const result = await promise;
+
+        expect(result.id).toBe("inv-2");
+        expect(executionRepository.tryCreateProviderInvocationUsage).toHaveBeenCalledTimes(2);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("cap reached"), expect.anything());
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should handle simultaneous claims by retrying if tryCreate fails", async () => {

@@ -10,6 +10,18 @@ vi.mock("../../../src/app/lifecycle/mcp-lifecycle-service.js", () => ({
   bootMcpTransport: vi.fn().mockResolvedValue(undefined),
   bootMcpHttpTransport: vi.fn().mockResolvedValue(null)
 }));
+// `server.run()` triggers startup maintenance (sprint-preview/file-browser cleanup,
+// docker asset prune) that shells out to the real `docker` CLI. Stub the process
+// runner so these become instant no-ops — otherwise the suite spawns real Docker
+// commands, making it slow (~8s) and flaky/CI-dependent.
+vi.mock("../../../src/services/cli-process-runner.js", () => {
+  const ok = async () => ({ ok: true, stdout: "", stderr: "", code: 0, signal: null });
+  return {
+    runCommandStrict: vi.fn(ok),
+    runStreamingCommand: vi.fn(ok),
+    commandRunner: { run: vi.fn(ok), runStrict: vi.fn(ok) },
+  };
+});
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from "vitest";
 import { CodeUxServer } from "../../../src/server/code-ux-server.js";

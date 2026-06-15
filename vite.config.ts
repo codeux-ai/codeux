@@ -21,7 +21,13 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    chunkSizeWarningLimit: 510,
+    // monaco-editor ships self-hosted language workers (notably ts.worker at
+    // ~6.9MB) plus a large lazy-loaded editor chunk. They are fetched on demand
+    // when the in-app code editor opens — never part of the initial page load —
+    // and cannot be split further without dropping language IntelliSense. The
+    // limit is set above those known chunks so the build stays clean while still
+    // surfacing unexpected growth in regular application code.
+    chunkSizeWarningLimit: 7000,
     rolldownOptions: {
       output: {
         manualChunks(id) {

@@ -265,7 +265,22 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
   const shouldLogBySeverity = (level: LogLevel, minLevel: RuntimeLogLevel): boolean => (
     minLevel !== "off" && LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minLevel]
   );
-  const resolveConsoleLogLevel = (): RuntimeLogLevel => normalizeRuntimeLogLevel(getConsoleLogLevel?.(), staticConsoleLogLevel);
+  // An explicit env override always wins over both programmatic options and
+  // runtime settings. This lets operators (and the test runner) force a console
+  // verbosity regardless of the persisted dashboard setting or per-logger
+  // configuration — e.g. fully silencing logs during unit tests.
+  const resolveForcedConsoleLogLevel = (): RuntimeLogLevel | undefined => {
+    const forced = process.env.CODEUX_FORCE_LOG_LEVEL;
+    if (!forced) {
+      return undefined;
+    }
+    const normalized = forced.toLowerCase();
+    return normalized === "off" || normalized === "debug" || normalized === "info" || normalized === "warn" || normalized === "error"
+      ? normalized
+      : undefined;
+  };
+  const resolveConsoleLogLevel = (): RuntimeLogLevel =>
+    resolveForcedConsoleLogLevel() ?? normalizeRuntimeLogLevel(getConsoleLogLevel?.(), staticConsoleLogLevel);
   const resolveDebugLogFileLevel = (): RuntimeLogLevel => normalizeRuntimeLogLevel(getDebugLogFileLevel?.(), staticDebugLogFileLevel);
   const resolveConsoleLogMode = (): ConsoleLogMode => normalizeConsoleLogMode(getConsoleLogMode?.() ?? staticConsoleLogMode);
   const shouldLogToConsole = (level: LogLevel, purpose: LogPurpose): boolean => {
