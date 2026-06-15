@@ -134,8 +134,9 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
   return (
     <div
       ref={containerRef}
-      role="status"
+      role={displayedStatus === "error" ? "alert" : "status"}
       aria-live={ariaLive}
+      aria-atomic="true"
       className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl border ${config.colors} ${className}`}
     >
       <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out]`} />
@@ -150,6 +151,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
             type="button"
             onClick={retryAction}
             className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors"
+            aria-label={`${retryLabel || "Retry"} ${displayedStatus} action`}
           >
             <RotateCcw className="w-3.5 h-3.5" />
             {retryLabel || "Retry"}
@@ -167,7 +169,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
               onDismiss?.();
             }}
             className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-            aria-label="Dismiss message"
+            aria-label={`Dismiss ${displayedStatus} message`}
           >
             <X className="w-4 h-4" />
           </button>

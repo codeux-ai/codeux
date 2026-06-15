@@ -27,18 +27,20 @@ describe("ActionFeedbackRegion", () => {
     expect(screen.getByText("Saved successfully")).toBeInTheDocument();
     const region = screen.getByRole("status");
     expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toHaveAttribute("aria-atomic", "true");
   });
 
   it("uses assertive aria-live for errors", () => {
     render(<ActionFeedbackRegion status="error" message="Failed to save" />);
-    const region = screen.getByRole("status");
+    const region = screen.getByRole("alert");
     expect(region).toHaveAttribute("aria-live", "assertive");
+    expect(region).toHaveAttribute("aria-atomic", "true");
   });
 
   it("calls onDismiss when dismiss button is clicked", () => {
     const handleDismiss = vi.fn();
     render(<ActionFeedbackRegion status="warning" message="Watch out" onDismiss={handleDismiss} />);
-    const dismissBtn = screen.getByRole("button", { name: "Dismiss message" });
+    const dismissBtn = screen.getByRole("button", { name: "Dismiss warning message" });
     fireEvent.click(dismissBtn);
     expect(handleDismiss).toHaveBeenCalledTimes(1);
   });
@@ -46,7 +48,7 @@ describe("ActionFeedbackRegion", () => {
   it("renders retry action and executes it on click", () => {
     const handleRetry = vi.fn();
     render(<ActionFeedbackRegion status="error" message="Failed to load" retryAction={handleRetry} retryLabel="Try Again" />);
-    const retryBtn = screen.getByRole("button", { name: "Try Again" });
+    const retryBtn = screen.getByRole("button", { name: "Try Again error action" });
     fireEvent.click(retryBtn);
     expect(handleRetry).toHaveBeenCalledTimes(1);
   });
