@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preac
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
+import { GSAP_DURATIONS, GSAP_EASINGS } from "../../lib/motion/constants.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface PopoverProps {
   children: ComponentChildren;
@@ -29,6 +31,7 @@ export const Popover = ({
   triggerRef: externalTriggerRef,
   isTooltip = false,
 }: PopoverProps) => {
+  const isReducedMotion = useReducedMotion();
   const [isRendered, setIsRendered] = useState(false);
   const localTriggerRef = useRef<HTMLButtonElement>(null);
   const triggerRef = externalTriggerRef || localTriggerRef;
@@ -99,20 +102,20 @@ export const Popover = ({
           opacity: 1,
           scale: 1,
           y: 0,
-          duration: 0.3,
-          ease: "back.out(1.7)",
+          duration: isReducedMotion ? 0 : GSAP_DURATIONS.slow,
+          ease: GSAP_EASINGS.spring,
         }
       );
     } else if (isRendered) {
       gsap.to(popoverRef.current, {
         opacity: 0,
         scale: 0.95,
-        duration: 0.15,
+        duration: isReducedMotion ? 0 : GSAP_DURATIONS.fast,
         ease: "power2.in",
         onComplete: () => setIsRendered(false),
       });
     }
-  }, [isOpen, isRendered, position]);
+  }, [isOpen, isRendered, position, isReducedMotion]);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
