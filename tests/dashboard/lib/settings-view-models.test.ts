@@ -15,8 +15,39 @@ import {
   thinkingModeOptions,
   providerLabels,
   createSystemProviderDraft,
+  sortProviderConfigEntries,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints } from "../../../dashboard/src/types.js";
+
+describe("sortProviderConfigEntries", () => {
+  it("keeps the primary first and orders added instances by creation, not by name", () => {
+    const entries: Array<[string, { provider: "gemini"; name: string }]> = [
+      // Intentionally out of order with names that would sort differently than creation.
+      ["gemini-zzzz1111-aaaaa", { provider: "gemini", name: "Aardvark" }],
+      ["gemini", { provider: "gemini", name: "Gemini Primary" }],
+      ["gemini-mmmm0000-bbbbb", { provider: "gemini", name: "Zebra" }],
+    ];
+    const sorted = sortProviderConfigEntries(entries).map(([id]) => id);
+    expect(sorted).toEqual([
+      "gemini", // seeded primary always leads
+      "gemini-mmmm0000-bbbbb", // earlier base36 timestamp
+      "gemini-zzzz1111-aaaaa", // later base36 timestamp
+    ]);
+  });
+
+  it("is stable: renaming an instance does not change its position", () => {
+    const before: Array<[string, { provider: "codex"; name: string }]> = [
+      ["codex", { provider: "codex", name: "Codex Primary" }],
+      ["codex-aaaa1111-x", { provider: "codex", name: "Codex 2" }],
+    ];
+    const after: Array<[string, { provider: "codex"; name: string }]> = [
+      ["codex", { provider: "codex", name: "Codex Primary" }],
+      ["codex-aaaa1111-x", { provider: "codex", name: "Renamed To Top" }],
+    ];
+    expect(sortProviderConfigEntries(before).map(([id]) => id))
+      .toEqual(sortProviderConfigEntries(after).map(([id]) => id));
+  });
+});
 
 describe("settings view model source helpers", () => {
   it("returns the direct field source when a leaf path is present", () => {

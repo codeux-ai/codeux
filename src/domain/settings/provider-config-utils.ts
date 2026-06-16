@@ -213,7 +213,14 @@ export const normalizeSystemIntegrationProviders = (
       apiKey: typeof rawValue.apiKey === "string" ? rawValue.apiKey : "",
       mountAuth: providerId === "jules"
         ? false
-        : (typeof rawValue.mountAuth === "boolean" ? rawValue.mountAuth : (authType === "apiKey" ? false : true)),
+        // Dashboard login exists solely to mount the credentials it saves under
+        // ~/.code-ux/credentials, so it must always enable the mount. Honoring a
+        // stale/seeded mountAuth=false here (primaries seed false) would leave the
+        // instance unmounted at runtime AND ineligible for routing, which is why
+        // dashboard login appeared to work for added instances but not primaries.
+        : authType === "dashboardAuth"
+          ? true
+          : (typeof rawValue.mountAuth === "boolean" ? rawValue.mountAuth : (authType === "apiKey" ? false : true)),
       authPath: authType === "dashboardAuth"
         ? `~/.code-ux/credentials/${providerConfigId}`
         : normalizeProviderAuthPath(providerId, rawValue.authPath),
