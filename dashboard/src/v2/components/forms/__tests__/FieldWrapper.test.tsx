@@ -33,7 +33,7 @@ describe("FieldWrapper", () => {
   });
 
   it("wires label, input, and error message with auto-generated id after blur", () => {
-    render(
+    const { rerender } = render(
       <FieldWrapper label="Email" error="Required">
         <Input />
       </FieldWrapper>
@@ -56,6 +56,12 @@ describe("FieldWrapper", () => {
     // Trigger blur to show error
     input.focus();
     input.blur();
+
+    rerender(
+      <FieldWrapper label="Email" error="Required">
+        <Input />
+      </FieldWrapper>
+    );
 
     expect(input).toHaveAttribute("aria-invalid", "true");
 
@@ -139,7 +145,7 @@ describe("FieldWrapper", () => {
   });
 
   it("hides helperText when error is present and touched", () => {
-    render(
+    const { rerender } = render(
       <FieldWrapper label="Test Label" htmlFor="test-input" helperText="Helper" error="Error msg">
         <Input id="test-input" />
       </FieldWrapper>
@@ -152,6 +158,13 @@ describe("FieldWrapper", () => {
     input.focus();
     input.blur();
 
+    // Need to trigger a rerender since the touched state update takes effect in the next pass
+    rerender(
+      <FieldWrapper label="Test Label" htmlFor="test-input" helperText="Helper" error="Error msg">
+        <Input id="test-input" />
+      </FieldWrapper>
+    );
+
     const errorElement = screen.getByText("Error msg");
 
     expect(helperElement).toBeInTheDocument();
@@ -160,6 +173,7 @@ describe("FieldWrapper", () => {
     expect(helperElement.className).toContain("opacity-0");
     expect(helperElement.className).toContain("invisible");
 
-    expect(errorElement.className).toContain("animate-form-slide-down");
+    expect(errorElement.className).toContain("opacity-100");
+    expect(errorElement.className).toContain("visible");
   });
 });

@@ -15,14 +15,6 @@ import gsap from "gsap";
 vi.spyOn(useReducedMotionModule, 'useReducedMotion').mockReturnValue(false);
 
 vi.mock("gsap", () => ({
-    gsap: {
-      set: vi.fn(),
-      to: vi.fn(),
-      fromTo: vi.fn(),
-      killTweensOf: vi.fn(),
-      registerPlugin: vi.fn(),
-      context: vi.fn((fn) => { if (fn) fn(); return { revert: vi.fn() }; })
-    },
     default: {
         registerPlugin: vi.fn(),
         set: vi.fn(),

@@ -28,13 +28,11 @@ vi.mock("../../../dashboard/src/hooks/use-overview-telemetry.js", async (importO
   };
 });
 
-vi.mock("../../../dashboard/src/v2/context/project-data.js", async (importOriginal) => {
-  const actual = await importOriginal<any>();
-  return {
-    ...actual,
-    useProjectData: vi.fn(),
-  };
-});
+vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
+
+
+  useProjectData: vi.fn(),
+}));
 
 describe("OverviewTelemetry Component", () => {
   beforeEach(() => {
