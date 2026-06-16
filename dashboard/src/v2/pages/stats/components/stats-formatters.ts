@@ -33,6 +33,16 @@ export function formatHourTick(value: string): string {
   return `${date.getHours()}:00`;
 }
 
+export function formatMinuteTick(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
 export function formatShortDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -50,6 +60,9 @@ export function toTimestamp(value: string | null): number {
 }
 
 export function getAxisLabelStep(stats: ProjectExecutionStatsSnapshot["range"]): number {
+  if (stats.resolution === "5min") {
+    return 3;
+  }
   if (stats.resolution === "hour") {
     return stats.bucketCount > 18 ? 3 : 1;
   }
@@ -60,6 +73,9 @@ export function getAxisLabelStep(stats: ProjectExecutionStatsSnapshot["range"]):
 }
 
 export function formatAxisLabel(bucket: ExecutionUsageBucketSummary, range: ProjectExecutionStatsSnapshot["range"]): string {
+  if (range.resolution === "5min") {
+    return formatMinuteTick(bucket.bucketStart);
+  }
   if (range.resolution === "hour") {
     return formatHourTick(bucket.bucketStart);
   }
