@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
 import {
+  Brain,
   Activity,
   Clock3,
   Cpu,
@@ -10,7 +11,7 @@ import {
   Zap,
 } from "lucide-preact";
 import type { ExecutionModelStatsSummary, ProjectExecutionStatsSnapshot } from "../../../types.js";
-import { formatDuration, formatTokens, formatDateTime } from "../stats-utils.js";
+import { formatDuration, formatTokens, formatDateTime, formatPercent } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   SUBPANEL_CLASS,
@@ -22,6 +23,8 @@ import {
 } from "./StatsShared.js";
 import {
   buildModelHighlights,
+  buildVelocityHighlight,
+  buildReasoningHighlight,
   buildModelSegments,
   computeUsageEfficiency,
   formatSuccessRate,
@@ -95,6 +98,9 @@ const ModelCard: FunctionComponent<{
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start">
+<div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${CHIP_CLASS}`}>
+            #{rank} by volume
+          </div>
           <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
             <span className="text-base font-black normal-case tracking-tight text-slate-900 dark:text-white">
               {formatTokens(model.usage.totalTokens)}
@@ -131,14 +137,30 @@ const ModelCard: FunctionComponent<{
         />
         <ModelMetric
           label="Output Velocity"
-          value={efficiency.outputTokensPerMinute !== null ? `${formatTokens(Math.round(efficiency.outputTokensPerMinute))}/min` : "—"}
-          detail="output tokens per active minute"
+          value={model.usage.outputTokens > 0 && model.usage.activeTimeMs > 0 ? formatTokens(Math.round(model.usage.outputTokens / (model.usage.activeTimeMs / 1000))) + "/s" : "—"}
+          detail="tok/s output"
         />
         <ModelMetric
           label="Reasoning Share"
-          value={efficiency.reasoningShare !== null ? `${Math.round(efficiency.reasoningShare * 100)}%` : "—"}
-          detail={`${formatTokens(model.usage.reasoningOutputTokens)} reasoning`}
+          value={model.usage.reasoningOutputTokens > 0 && model.usage.outputTokens > 0 ? formatPercent((model.usage.reasoningOutputTokens / model.usage.outputTokens) * 100) : "—"}
+          detail="of output"
         />
+      </div>
+
+
+      <div className={`${SUBPANEL_CLASS} mt-5 grid grid-cols-2 p-4`}>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">p50</div>
+          <div className="mt-1 text-base font-black text-slate-900 dark:text-white">
+            {model.duration.sampleCount > 0 ? formatDuration(model.duration.p50Ms) : "—"}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">p95</div>
+          <div className="mt-1 text-base font-black text-slate-900 dark:text-white">
+            {model.duration.sampleCount > 0 ? formatDuration(model.duration.p95Ms) : "—"}
+          </div>
+        </div>
       </div>
 
       <div className="mt-5">
@@ -186,6 +208,8 @@ export const ModelsStudio: FunctionComponent<{
   const models = stats.models || [];
   const segments = buildModelSegments(models);
   const highlights = buildModelHighlights(models);
+  const velocityHighlight = buildVelocityHighlight(models);
+  const reasoningHighlight = buildReasoningHighlight(models);
   const totalTokens = models.reduce((sum, model) => sum + model.usage.totalTokens, 0);
   const sorted = [...models].sort((left, right) => right.usage.totalTokens - left.usage.totalTokens);
 
@@ -244,6 +268,18 @@ export const ModelsStudio: FunctionComponent<{
                   label="Best Cache Efficiency"
                   highlight={highlights.bestCache}
                   tone="text-amber-600 dark:text-amber-400"
+                />
+                <HighlightTile
+                  icon={Zap}
+                  label="Highest Velocity"
+                  highlight={velocityHighlight}
+                  tone="text-cyan-600 dark:text-cyan-400"
+                />
+                <HighlightTile
+                  icon={Brain}
+                  label="Highest Reasoning"
+                  highlight={reasoningHighlight}
+                  tone="text-rose-600 dark:text-rose-400"
                 />
               </div>
               <div className={`${SUBPANEL_CLASS} mt-4 p-4`}>
