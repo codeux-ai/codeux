@@ -124,7 +124,7 @@ describe("Terminal Routes", () => {
     const runArgs = runCall![1] as string[];
     expect(runArgs).not.toContain("some/custom-image:latest");
     expect(runArgs).not.toContain("node:24-bookworm");
-    expect(runArgs.some((arg) => arg.startsWith("code-ux-login-base:") || arg === "node:24-bookworm-slim")).toBe(true);
+    expect(runArgs.some((arg) => arg.startsWith("code-ux-login-base-node-24-bookworm-slim:") || arg === "node:24-bookworm-slim")).toBe(true);
 
     // The login container command defines ensure_curl so the curl-based provider
     // installers resolve instead of failing with "ensure_curl: command not found".
@@ -135,6 +135,8 @@ describe("Terminal Routes", () => {
   it("should bake only the apt prerequisites into the login image, not the providers", () => {
     const dockerfile = buildLoginDockerfile();
     expect(dockerfile).toContain("FROM node:24-bookworm-slim");
+    expect(dockerfile).toContain('LABEL org.opencontainers.image.title="Code UX login base"');
+    expect(dockerfile).toContain('LABEL ai.codeux.role="login-base"');
     // curl + keyring stack are baked in (can't be installed at runtime non-root)
     expect(dockerfile).toContain("curl");
     expect(dockerfile).toContain("gnome-keyring");

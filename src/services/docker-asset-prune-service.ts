@@ -14,7 +14,6 @@ export interface DockerAssetPruneResult {
 }
 
 const WORKSPACE_VOLUME_PREFIX = "code-ux-";
-const SETUP_IMAGE_PREFIX = "code-ux-setup-cache:";
 
 export class DockerAssetPruneService {
   constructor(
@@ -34,7 +33,7 @@ export class DockerAssetPruneService {
     // mounted, which would otherwise block the volume removal below.
     const prunedHelperContainers = await this.pruneOrphanedHelperContainers();
     const prunedWorkspaceVolumes = await this.pruneWorkspaceVolumes(activeSessionIds);
-    const prunedSetupImages = await this.pruneSetupImages();
+    const prunedSetupImages: string[] = [];
     const prunedLoginContainers = await this.pruneOrphanedLoginContainers();
     const prunedTempCredentialsDirs = await this.pruneTemporaryCredentialsDirectories();
 
@@ -86,28 +85,6 @@ export class DockerAssetPruneService {
       const removed = await this.runDocker(["volume", "rm", "-f", volumeName]);
       if (removed?.ok) {
         pruned.push(volumeName);
-      }
-    }
-
-    return pruned;
-  }
-
-  private async pruneSetupImages(): Promise<string[]> {
-    const result = await this.runDocker(["image", "ls", "--format", "{{.Repository}}:{{.Tag}}"]);
-    if (!result) {
-      return [];
-    }
-
-    const imageRefs = result.stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith(SETUP_IMAGE_PREFIX));
-    const pruned: string[] = [];
-
-    for (const imageRef of imageRefs) {
-      const removed = await this.runDocker(["image", "rm", "-f", imageRef]);
-      if (removed?.ok) {
-        pruned.push(imageRef);
       }
     }
 

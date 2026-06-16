@@ -20,6 +20,7 @@ import { CONTAINER_SETUP_SCRIPT } from "../../../services/cli-workflow-utils.js"
 import { DockerBootstrapBuilder } from "./docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.js";
 import { DockerSetupImageCache } from "./docker-setup-image-cache.js";
+import { resolveDockerRuntimeRoot } from "./docker-runtime-paths.js";
 import { WorkspaceManager } from "./workspace-manager.js";
 import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
@@ -130,6 +131,7 @@ export class DockerRunner implements IDockerRunner {
 
     const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, onActivity);
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-docker-"));
+    const runtimeRoot = resolveDockerRuntimeRoot(repoPath);
     const baseImage = workflowSettings.containerImage.trim() || "node:24-bookworm";
 
     try {
@@ -137,7 +139,7 @@ export class DockerRunner implements IDockerRunner {
         baseImage,
         setupScriptPath,
         cacheEnabled: workflowSettings.containerCacheSetupScriptImage,
-        runtimeRoot: tempRoot,
+        runtimeRoot,
         repoPath,
         signal,
         onActivity,
@@ -153,6 +155,8 @@ export class DockerRunner implements IDockerRunner {
         "run",
         "--rm",
         "-i",
+        "--name",
+        this.buildContainerName(providerLabel, sessionId),
         "--network",
         "host",
         "--workdir",
@@ -262,6 +266,15 @@ export class DockerRunner implements IDockerRunner {
       `CODE_UX_PROVIDER_ARGS=(${quotedArgs})`,
       "",
     ].join("\n");
+  }
+
+  private buildContainerName(
+    providerLabel: "gemini" | "codex" | "claude-code" | "qwen-code" | "opencode" | "antigravity",
+    sessionId: string,
+  ): string {
+    const safeProvider = providerLabel.replace(/[^a-zA-Z0-9_.-]+/g, "-").toLowerCase();
+    const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_.-]+/g, "-").toLowerCase().slice(0, 48);
+    return `code-ux-${safeProvider}-${safeSessionId || "session"}`.slice(0, 120);
   }
 
   private shellSingleQuote(value: string): string {

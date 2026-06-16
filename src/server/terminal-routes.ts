@@ -57,6 +57,7 @@ const LOGIN_BASE_IMAGE = "node:24-bookworm-slim";
 const LOGIN_IMAGE_PACKAGES = "curl ca-certificates dbus gnome-keyring libsecret-1-0 xdg-utils";
 // Memoized tag of the most recently verified/built login base image.
 let cachedLoginImageTag: string | null = null;
+let pendingLoginImageBuild: Promise<string> | null = null;
 
 const LOGIN_SESSION_MAX_AGE_MS = 30 * 60 * 1000;
 const LOGIN_SESSION_HEARTBEAT_TTL_MS = 20 * 1000;
@@ -343,6 +344,10 @@ export function buildLoginDockerfile(): string {
   // the user live, faster feedback about what's being installed.
   return [
     `FROM ${LOGIN_BASE_IMAGE}`,
+    `LABEL org.opencontainers.image.title="Code UX login base"`,
+    `LABEL org.opencontainers.image.description="Prebuilt Code UX interactive provider login prerequisites"`,
+    `LABEL ai.codeux.role="login-base"`,
+    `LABEL ai.codeux.base-image="${LOGIN_BASE_IMAGE}"`,
     "USER root",
     `RUN if command -v apt-get >/dev/null 2>&1; then apt-get update -qy && apt-get install -qy --no-install-recommends ${LOGIN_IMAGE_PACKAGES} && rm -rf /var/lib/apt/lists/*; fi`,
   ].join("\n");
@@ -360,7 +365,7 @@ export function buildLoginDockerfile(): string {
 async function ensureLoginBaseImage(logger?: Logger): Promise<string> {
   const dockerfile = buildLoginDockerfile();
   const cacheKey = createHash("sha1").update(dockerfile).digest("hex").slice(0, 24);
-  const imageTag = `code-ux-login-base:${cacheKey}`;
+  const imageTag = `code-ux-login-base-node-24-bookworm-slim:${cacheKey}`;
 
   if (cachedLoginImageTag === imageTag) {
     return imageTag;
@@ -377,6 +382,19 @@ async function ensureLoginBaseImage(logger?: Logger): Promise<string> {
     return imageTag;
   }
 
+  if (pendingLoginImageBuild) {
+    return pendingLoginImageBuild;
+  }
+
+  pendingLoginImageBuild = buildLoginBaseImage(imageTag, dockerfile, logger);
+  try {
+    return await pendingLoginImageBuild;
+  } finally {
+    pendingLoginImageBuild = null;
+  }
+}
+
+async function buildLoginBaseImage(imageTag: string, dockerfile: string, logger?: Logger): Promise<string> {
   logger?.info(`Building login base image ${imageTag} from ${LOGIN_BASE_IMAGE}...`);
   const built = await new Promise<boolean>((resolve) => {
     const proc = spawn("docker", ["build", "-t", imageTag, "-"], { stdio: ["pipe", "pipe", "pipe"] });

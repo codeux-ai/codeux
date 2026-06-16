@@ -130,7 +130,9 @@ Startup cleanup prunes orphaned `virtual_cli` endpoints from previous runs.
 Startup cleanup also aggressively removes stale Code UX Docker assets:
 
 - stale workspace volumes for finished, failed, unrecoverable, or outdated sessions
-- cached setup-script Docker images from previous runs
+- orphaned helper/login containers from previous runs
+
+Cached setup-script Docker images are content-addressed by base image, setup script content, and setup-cache Dockerfile content. They are preserved across dashboard restarts and reused until one of those inputs changes or Docker no longer has the image.
 
 Interrupted Docker-backed sessions that were running before restart are treated as failed during recovery unless a live backing container is still present. This keeps restart recovery deterministic and prevents dead sessions from holding disk space or waiting forever for callbacks that will never arrive.
 
@@ -150,4 +152,3 @@ When running inside isolated or containerized worker environments (e.g., Gemini 
 - **Virtual Worker Claiming**: Virtual workers (using claim reason prefixes starting with `virtual_worker_`) or automated attention types (`ci_fix_required`, `merge_conflict`) can bypass the `assignedWorkerEndpointId` mismatch check. This ensures that when a virtual worker reconciles and attempts to claim/reclaim an attention item that was originally opened/assigned to a different containerized worker endpoint, the claim is successfully allowed instead of stalling.
 - **Path and Workspace Normalization**: Remote origins and git remote URLs under `/workspace` container directories are dynamically resolved to correctly identify the host repository name. This allows `buildTaskRunKey` to match and reuse the correct containerized workspace targets when runs are resumed.
 - **POSIX and Windows Path Matching**: CLI session queries in the tracking repository match using both Windows and POSIX-normalized host paths, falling back to `/workspace` when matching containerized sessions.
-

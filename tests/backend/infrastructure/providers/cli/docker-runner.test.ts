@@ -32,8 +32,12 @@ vi.mock("../../../../../src/infrastructure/providers/cli/docker-setup-image-cach
     };
   }),
 }));
+vi.mock("../../../../../src/infrastructure/providers/cli/docker-runtime-paths.js", () => ({
+  resolveDockerRuntimeRoot: vi.fn(() => "/runtime-root"),
+}));
 
 import { runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
+import { DockerSetupImageCache } from "../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js";
 
 describe("DockerRunner", () => {
   let runner: DockerRunner;
@@ -126,6 +130,8 @@ describe("DockerRunner", () => {
       expect.arrayContaining([
         "run",
         "--rm",
+        "--name",
+        "code-ux-gemini-session-1",
         "--workdir",
         "/workspace",
         "--label",
@@ -138,6 +144,8 @@ describe("DockerRunner", () => {
     const dockerArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] as string[];
     expect(dockerArgs.some((arg) => arg.includes("type=volume") && arg.includes("source=workspace-1"))).toBe(true);
     expect(dockerArgs).toContain("HOME=/workspace/.code-ux-home");
+    const cacheInstance = vi.mocked(DockerSetupImageCache).mock.results[0]?.value as any;
+    expect(cacheInstance.resolveImage).toHaveBeenCalledWith(expect.objectContaining({ runtimeRoot: "/runtime-root" }));
   });
 
   it("mounts provider argv from a file so long prompts do not enter the host docker command line", async () => {

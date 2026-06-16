@@ -19,7 +19,7 @@ describe("DockerAssetPruneService", () => {
     vi.clearAllMocks();
   });
 
-  it("prunes stale workspace volumes and cached setup images on startup", async () => {
+  it("prunes stale workspace volumes while preserving cached setup images on startup", async () => {
     const sessionTracking = {
       listTrackedCliSessions: vi.fn(() => [
         { id: "cli-codex-active", state: "RUNNING", provider: "codex", repoPath: "/repo/a", updateTime: "" },
@@ -38,17 +38,6 @@ describe("DockerAssetPruneService", () => {
           code: 0,
         } as any;
       }
-      if (args[0] === "image" && args[1] === "ls") {
-        return {
-          ok: true,
-          stdout: [
-            "code-ux-setup-cache:abc123",
-            "node:24-bookworm",
-          ].join("\n"),
-          stderr: "",
-          code: 0,
-        } as any;
-      }
       return {
         ok: true,
         stdout: "",
@@ -60,9 +49,9 @@ describe("DockerAssetPruneService", () => {
     const result = await new DockerAssetPruneService(sessionTracking).cleanupOnStartup();
 
     expect(result.prunedWorkspaceVolumes).toEqual(["code-ux-repo-aaaaaaaaaaaa-cli-codex-stale"]);
-    expect(result.prunedSetupImages).toEqual(["code-ux-setup-cache:abc123"]);
+    expect(result.prunedSetupImages).toEqual([]);
     expect(runCommandStrict).toHaveBeenCalledWith("docker", ["volume", "rm", "-f", "code-ux-repo-aaaaaaaaaaaa-cli-codex-stale"], expect.any(String));
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", ["image", "rm", "-f", "code-ux-setup-cache:abc123"], expect.any(String));
+    expect(runCommandStrict).not.toHaveBeenCalledWith("docker", ["image", "rm", "-f", expect.any(String)], expect.any(String));
   });
 
   it("prunes orphaned login containers on startup", async () => {
