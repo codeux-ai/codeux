@@ -10,9 +10,10 @@ export interface FieldWrapperProps {
   children: ComponentChildren;
   htmlFor?: string;
   required?: boolean;
+  valid?: boolean;
 }
 
-export function FieldWrapper({ label, error, children, htmlFor, required, helperTextId, helperText }: FieldWrapperProps) {
+export function FieldWrapper({ label, error, children, htmlFor, required, helperTextId, helperText, valid }: FieldWrapperProps) {
   const [shake, setShake] = useState(false);
   const [previousError, setPreviousError] = useState<string | undefined>(undefined);
   const generatedId = useId();
@@ -47,6 +48,7 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
     ...(ariaDescribedBy ? { "aria-describedby": ariaDescribedBy } : {}),
     "aria-errormessage": errorId,
     ...(required ? { "aria-required": true } : {}),
+    valid: !error ? valid : undefined,
   }) : children;
 
   return (
