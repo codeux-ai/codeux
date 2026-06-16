@@ -2,12 +2,6 @@
   width: 100%;
 }
 
-.telemetryStack {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
 .purposeSection {
   border: 1px solid var(--stats-card-border);
   background: color-mix(in srgb, var(--stats-card-bg) 88%, transparent);
