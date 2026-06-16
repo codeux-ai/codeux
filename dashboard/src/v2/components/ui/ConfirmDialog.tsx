@@ -163,6 +163,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [confirmFlash, setConfirmFlash] = useState(false);
 
   const backdropRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -213,6 +214,9 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
     setIsProcessing(true);
     try {
       await callback();
+      if (callback === onConfirm) {
+        setConfirmFlash(true);
+      }
     } finally {
       setIsProcessing(false);
       pendingCallback.current = callback;
@@ -298,7 +302,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
             type="button"
             onClick={() => handleClose(onCancel)}
             disabled={isProcessing}
-            className="px-4 py-2 text-sm font-medium rounded-[1rem] border border-black/[0.06] dark:border-white/[0.06] hover:bg-black/5 dark:hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm font-medium rounded-[1rem] border border-black/[0.06] dark:border-white/[0.06] hover:bg-black/5 dark:hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.97] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {cancelLabel}
           </button>
@@ -315,7 +319,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
               onClick={() => handleClose(onConfirm)}
               disabled={isProcessing}
               aria-busy={isProcessing}
-              className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-signal-500 text-white hover:bg-signal-600 dark:hover:bg-signal-400 shadow-[0_4px_12px_rgba(0,224,160,0.25)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className={`px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 motion-safe:active:scale-[0.97] bg-signal-500 text-white hover:bg-signal-600 dark:hover:bg-signal-400 shadow-[0_4px_12px_rgba(0,224,160,0.25)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${confirmFlash ? '!bg-status-green !text-white !border-transparent' : ''}`}
             >
               {isProcessing && <><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /><span className="sr-only">Processing, please wait</span></>}
               {isProcessing ? "Processing..." : confirmLabel}
