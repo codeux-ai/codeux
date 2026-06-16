@@ -34,6 +34,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
     const [coords, setCoords] = useState({ top: 0, left: 0 });
     const durations = useGsapDurations();
     const gsapCtx = useRef<gsap.Context | null>(null);
+    const [tooltipId] = useState(() => `tooltip-${Math.random().toString(36).substr(2, 9)}`);
 
     const handlePointerEnter = (e: PointerEvent) => {
         if (e.pointerType === "mouse" || e.pointerType === "pen") {
@@ -134,10 +135,6 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
 
     // Return just the children if no content
     if (!content) return <>{children}</>;
-
-    // Generate unique ID for ARIA wiring
-    const id = useId();
-    const tooltipId = `tooltip-${id}`;
 
     return (
         <div
