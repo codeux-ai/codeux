@@ -157,7 +157,7 @@ export const TrendStudio: FunctionComponent<{
 
   return (
   <section className="space-y-6">
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-8">
       <TrendKpiTile
         label="Total Tokens"
         value={formatTokens(stats.usage.totalTokens)}
@@ -193,8 +193,18 @@ export const TrendStudio: FunctionComponent<{
         value={finishedCount > 0 ? formatPercent((statusCounts!.completed / finishedCount) * 100) : "—"}
         detail={finishedCount > 0 ? `${statusCounts!.failed} failed of ${finishedCount}` : "nothing finished yet"}
       />
+      <TrendKpiTile
+        label="Output Velocity"
+        value={stats.usage.activeTimeMs > 0 ? `${Math.round(stats.usage.outputTokens / Math.max(1, stats.usage.activeTimeMs / 1000))} tok/s` : "0 tok/s"}
+      />
+      <TrendKpiTile
+        label="Reasoning Share"
+        value={stats.usage.reasoningOutputTokens > 0 ? formatPercent((stats.usage.reasoningOutputTokens / stats.usage.outputTokens) * 100) : "—"}
+        detail="of output tokens"
+      />
     </div>
     <div className="flex flex-wrap gap-3">
+      <div className={`self-start px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 bg-amber-500/10 ${CHIP_CLASS}`}>Trend</div>
       <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
         {stats.range.label}
       </div>
@@ -213,12 +223,31 @@ export const TrendStudio: FunctionComponent<{
       chartState={chartState}
     />
     <div className="mt-6">
-      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Purpose Activity</div>
+      <div className="flex items-center gap-3">
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Purpose Activity</div>
+        <div className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500 ${CHIP_CLASS}`}>
+          {stats.purposes.length} purposes
+        </div>
+      </div>
       <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
         Token volume and active time by invocation purpose over the selected window.
       </div>
-      <div className="mt-4">
-        <PurposeRibbon purposes={stats.purposes} />
+      <div className="mt-4 flex flex-col gap-2">
+        {stats.purposes.map((purpose) => (
+          <div key={purpose.id} className={`${LEDGER_ROW_MODERN_CLASS} flex items-center justify-between`}>
+            <div className="text-sm font-bold capitalize text-slate-900 dark:text-white">
+              {purpose.label.replace(/_/g, " ")}
+            </div>
+            <div className="flex items-center gap-6 text-sm text-slate-500">
+              <div>
+                <span className="font-medium text-slate-700 dark:text-slate-300">{(purpose.usage?.invocationCount || 0).toLocaleString()}</span> invocations
+              </div>
+              <div>
+                <span className="font-medium text-slate-700 dark:text-slate-300">{formatDuration(purpose.usage?.activeTimeMs || 0)}</span> active time
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   </section>
@@ -269,6 +298,7 @@ export const CompositionStudio: FunctionComponent<{
                 Input
               </div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatTokens(stats.usage.inputTokens)}</div>
+          <div className="mt-1 text-[10px] text-slate-400">{stats.usage.totalTokens > 0 ? Math.round((stats.usage.inputTokens / stats.usage.totalTokens) * 100) : 0}% of total</div>
             </div>
             <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/10 p-4">
               <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-600 dark:text-cyan-400">
@@ -276,6 +306,7 @@ export const CompositionStudio: FunctionComponent<{
                 Cached
               </div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatTokens(stats.usage.cachedInputTokens)}</div>
+          <div className="mt-1 text-[10px] text-slate-400">{stats.usage.totalTokens > 0 ? Math.round((stats.usage.cachedInputTokens / stats.usage.totalTokens) * 100) : 0}% of total</div>
             </div>
             <div className="rounded-2xl border border-amber-500/16 bg-amber-500/10 p-4">
               <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">
@@ -283,6 +314,7 @@ export const CompositionStudio: FunctionComponent<{
                 Output
               </div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatTokens(stats.usage.outputTokens)}</div>
+          <div className="mt-1 text-[10px] text-slate-400">{stats.usage.totalTokens > 0 ? Math.round((stats.usage.outputTokens / stats.usage.totalTokens) * 100) : 0}% of total</div>
             </div>
             <div className="rounded-2xl border border-rose-500/16 bg-rose-500/10 p-4">
               <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-rose-600 dark:text-rose-400">
@@ -290,6 +322,7 @@ export const CompositionStudio: FunctionComponent<{
                 Reasoning
               </div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatTokens(stats.usage.reasoningOutputTokens)}</div>
+          <div className="mt-1 text-[10px] text-slate-400">{stats.usage.totalTokens > 0 ? Math.round((stats.usage.reasoningOutputTokens / stats.usage.totalTokens) * 100) : 0}% of total</div>
             </div>
             <div className="col-span-2 rounded-2xl border border-slate-500/16 bg-slate-500/10 p-4">
               <div className="flex items-center justify-between gap-4">
@@ -307,8 +340,8 @@ export const CompositionStudio: FunctionComponent<{
           <div className={`${SUBPANEL_CLASS} mt-4 p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Cache Efficiency</div>
             <div className="mt-2 text-3xl font-black text-slate-900 dark:text-white">{cacheRate.toFixed(1)}%</div>
-            <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              {`${formatTokens(stats.usage.cachedInputTokens)} tokens saved from cache`}
+        <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
+          ~{formatTokens(stats.usage.cachedInputTokens)} tokens saved
             </div>
             <div className="mt-4">
               <TokenFlowBar
@@ -344,10 +377,11 @@ export const CompositionStudio: FunctionComponent<{
               const providerTokensPerCall = provider.usage.invocationCount > 0
                 ? Math.round(provider.usage.totalTokens / provider.usage.invocationCount)
                 : null;
+          const providerModelsCount = (stats.models || []).filter(m => m.provider === provider.id).length;
 
               return (
                 <div key={provider.id} className={LEDGER_ROW_MODERN_CLASS}>
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(5,minmax(0,auto))] lg:items-start">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(6,minmax(0,auto))] lg:items-start">
                     <div className="flex min-w-0 items-start gap-4">
                       <div className={`rounded-xl p-2 ${bg} ${text}`}>
                         <Icon className="h-4 w-4" strokeWidth={2.1} />
@@ -369,6 +403,10 @@ export const CompositionStudio: FunctionComponent<{
                       <div className="text-lg font-black text-slate-900 dark:text-white">{formatDuration(provider.usage.activeTimeMs)}</div>
                       <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">active</div>
                     </div>
+                <div className="text-right">
+                  <div className="text-lg font-black text-slate-900 dark:text-white">{providerModelsCount}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">model count</div>
+                </div>
                     <div className="text-right">
                       <div className="text-lg font-black text-slate-900 dark:text-white">{providerCacheRate !== null ? `${providerCacheRate}%` : "—"}</div>
                       <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">cache hit</div>
@@ -401,7 +439,10 @@ export const ReliabilityStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
   providerSegments: SegmentDefinition[];
   sourceSegments: SegmentDefinition[];
-}> = ({ stats, providerSegments, sourceSegments }) => (
+}> = ({ stats, providerSegments, sourceSegments }) => {
+  const totalConfidence = (stats.usage.reportedInvocationCount || 0) + (stats.usage.estimatedInvocationCount || 0) + (stats.usage.unavailableInvocationCount || 0) + (stats.usage.unsupportedInvocationCount || 0);
+
+  return (
   <section className="space-y-6">
     <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
       <DonutCard
@@ -431,18 +472,30 @@ export const ReliabilityStudio: FunctionComponent<{
           <div className="rounded-2xl border border-status-green/16 bg-status-green/10 p-4">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-status-green">Reported</div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.reportedInvocationCount}</div>
+          <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-status-green/20">
+            <div className="h-full bg-status-green" style={{ width: `${totalConfidence > 0 ? ((stats.usage.reportedInvocationCount || 0) / totalConfidence) * 100 : 0}%` }} />
+          </div>
           </div>
           <div className="rounded-2xl border border-amber-500/16 bg-amber-500/10 p-4">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">Estimated</div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.estimatedInvocationCount}</div>
+          <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-amber-500/20">
+            <div className="h-full bg-amber-500" style={{ width: `${totalConfidence > 0 ? ((stats.usage.estimatedInvocationCount || 0) / totalConfidence) * 100 : 0}%` }} />
+          </div>
           </div>
           <div className="rounded-2xl border border-rose-500/16 bg-rose-500/10 p-4">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-rose-600 dark:text-rose-400">Unavailable</div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.unavailableInvocationCount}</div>
+          <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-rose-500/20">
+            <div className="h-full bg-rose-500" style={{ width: `${totalConfidence > 0 ? ((stats.usage.unavailableInvocationCount || 0) / totalConfidence) * 100 : 0}%` }} />
+          </div>
           </div>
           <div className="rounded-2xl border border-slate-500/16 bg-slate-500/10 p-4">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600 dark:text-slate-300">Unsupported</div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.unsupportedInvocationCount}</div>
+          <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-slate-500/20">
+            <div className="h-full bg-slate-500" style={{ width: `${totalConfidence > 0 ? ((stats.usage.unsupportedInvocationCount || 0) / totalConfidence) * 100 : 0}%` }} />
+          </div>
           </div>
         </div>
       </div>
@@ -492,6 +545,13 @@ export const ReliabilityStudio: FunctionComponent<{
               const avgLatencyMs = latencySamples > 0
                 ? providerModels.reduce((sum, model) => sum + model.duration.avgMs * model.duration.sampleCount, 0) / latencySamples
                 : null;
+          const failedCount = providerModels.reduce((sum, model) => sum + (model.statusCounts?.failed ?? 0), 0);
+          const reliabilityScore = provider.usage.invocationCount > 0 ? 1 - (failedCount / provider.usage.invocationCount) : 1;
+          const successTone = reliabilityScore >= 0.95
+            ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
+            : reliabilityScore >= 0.8
+              ? "text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20"
+              : "text-red-500 dark:text-red-400 bg-red-500/10 border border-red-500/20";
 
               return (
                 <div key={provider.id} className={`${PANEL_CLASS} p-5`}>
@@ -505,11 +565,16 @@ export const ReliabilityStudio: FunctionComponent<{
                         <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">{provider.secondaryLabel ?? ""}</div>
                       </div>
                     </div>
-                    <div className={`inline-flex items-center gap-2 self-start rounded-full px-3 py-1.5 text-right text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
-                      <span className="text-base font-black normal-case tracking-tight text-slate-900 dark:text-white">
-                        {formatTokens(provider.usage.totalTokens)}
-                      </span>
-                      <span className="text-slate-400">tokens</span>
+                <div className="flex flex-wrap items-center gap-2 self-start">
+                  <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-right text-[10px] font-bold uppercase tracking-[0.18em] ${successTone}`}>
+                    {formatPercent(reliabilityScore * 100)}
+                  </div>
+                  <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-right text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+                    <span className="text-base font-black normal-case tracking-tight text-slate-900 dark:text-white">
+                      {formatTokens(provider.usage.totalTokens)}
+                    </span>
+                    <span className="text-slate-400">tokens</span>
+                  </div>
                     </div>
                   </div>
                   <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -563,4 +628,5 @@ export const ReliabilityStudio: FunctionComponent<{
       )}
     </div>
   </section>
-);
+  );
+};
