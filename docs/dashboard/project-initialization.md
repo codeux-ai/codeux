@@ -50,7 +50,6 @@ When selected, setup can create or update:
 
 - `.code-ux/agents/*.md` through the normal agent preset sync path
 - `.code-ux/quicksprints/templates/*.md` custom project templates and project-level overrides
-- `.code-ux/quicksprints/templates/*.json` and `.quicksprints/*.json` legacy custom project templates, still read for backward compatibility
 - `.code-ux/browser/start-preview.sh`
 - `.github/workflows/code-ux-basic-checks.yml`
 - `.gitlab-ci.yml`

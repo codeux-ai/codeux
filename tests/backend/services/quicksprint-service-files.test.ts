@@ -80,18 +80,14 @@ describe("QuicksprintService file-backed templates", () => {
     expect(byId.get("qs-project-only")?.projectId).toBe("project-1");
   });
 
-  it("prefers mixed Markdown over legacy JSON for the same template id", async () => {
-    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-qs-mixed-"));
+  it("ignores JSON files in quicksprint template directories", async () => {
+    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-qs-json-ignored-"));
     tempDirs.push(repoRoot);
     const dir = path.join(repoRoot, ".code-ux", "quicksprints", "templates");
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, "qs-shared.json"), JSON.stringify(template({
-      id: "qs-shared",
-      name: "Legacy JSON",
-    })), "utf8");
-    await fs.writeFile(path.join(dir, "qs-shared.md"), formatQuicksprintTemplateMarkdown(template({
-      id: "qs-shared",
-      name: "Mixed Markdown",
+    await fs.writeFile(path.join(dir, "qs-json-only.json"), JSON.stringify(template({
+      id: "qs-json-only",
+      name: "JSON Only",
     })), "utf8");
 
     const service = new QuicksprintService(
@@ -100,8 +96,8 @@ describe("QuicksprintService file-backed templates", () => {
       async () => undefined,
     );
 
-    const resolved = await service.getTemplate("project-1", "qs-shared");
-    expect(resolved?.name).toBe("Mixed Markdown");
+    const resolved = await service.getTemplate("project-1", "qs-json-only");
+    expect(resolved).toBeNull();
   });
 
   it("writes custom templates to project .code-ux quicksprint templates", async () => {

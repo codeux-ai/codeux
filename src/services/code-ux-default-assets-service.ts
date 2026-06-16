@@ -169,8 +169,7 @@ async function copyIfMissing(
 }
 
 function isQuicksprintTemplateFile(fileName: string): boolean {
-  const lower = fileName.toLowerCase();
-  return lower.endsWith(".md") || lower.endsWith(".json");
+  return fileName.toLowerCase().endsWith(".md");
 }
 
 async function copyOrUpdateSetupScript(

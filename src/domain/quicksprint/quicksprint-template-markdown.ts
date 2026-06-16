@@ -23,14 +23,6 @@ export function parseQuicksprintTemplateMarkdown(rawContent: string): ParsedQuic
     };
   }
 
-  const legacyJson = parseMetadata(rawContent);
-  if (Object.keys(legacyJson).length > 0) {
-    return {
-      metadata: legacyJson,
-      agentInstructionMarkdown: normalizeMarkdown(legacyJson.agentInstructionMarkdown),
-    };
-  }
-
   return {
     metadata: {},
     agentInstructionMarkdown: rawContent.trim(),

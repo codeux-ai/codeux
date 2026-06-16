@@ -38,7 +38,7 @@ function readTemplateDirectory(directory: string): QuicksprintTemplateRecord[] {
 
   const now = new Date().toISOString();
   const templates: QuicksprintTemplateRecord[] = [];
-  for (const file of files.filter(isSupportedTemplateFile).sort(compareTemplateFileNames)) {
+  for (const file of files.filter(isTemplateFile).sort()) {
     try {
       const filePath = path.join(directory, file);
       const parsed = parseQuicksprintTemplateMarkdown(fs.readFileSync(filePath, "utf8"));
@@ -86,26 +86,12 @@ function readTemplateDirectory(directory: string): QuicksprintTemplateRecord[] {
   });
 }
 
-function isSupportedTemplateFile(fileName: string): boolean {
-  const lower = fileName.toLowerCase();
-  return lower.endsWith(".md") || lower.endsWith(".json");
+function isTemplateFile(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith(".md");
 }
 
 function stripTemplateExtension(fileName: string): string {
-  return fileName.replace(/\.(md|json)$/i, "");
-}
-
-function compareTemplateFileNames(left: string, right: string): number {
-  const leftId = stripTemplateExtension(left);
-  const rightId = stripTemplateExtension(right);
-  if (leftId !== rightId) {
-    return leftId.localeCompare(rightId);
-  }
-  return templateFileExtensionRank(left) - templateFileExtensionRank(right);
-}
-
-function templateFileExtensionRank(fileName: string): number {
-  return fileName.toLowerCase().endsWith(".md") ? 0 : 1;
+  return fileName.replace(/\.md$/i, "");
 }
 
 function readBuiltInTemplates(): QuicksprintTemplateRecord[] {

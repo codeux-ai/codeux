@@ -20,7 +20,7 @@ interface QuicksprintServiceOptions {
   logger?: Pick<Logger, "info" | "warn">;
 }
 
-type QuicksprintTemplateSourceScope = "project" | "legacy_project" | "home" | "default" | "fallback";
+type QuicksprintTemplateSourceScope = "project" | "home" | "default" | "fallback";
 
 interface TemplateDirectory {
   directory: string;
@@ -90,11 +90,9 @@ export class QuicksprintService {
   }
 
   private async resolveTemplateDirectories(projectId: string): Promise<TemplateDirectory[]> {
-    const baseDir = this.projectBaseDirResolver(projectId);
     const projectTemplateDir = await this.getQuicksprintsDir(projectId);
     const directories: TemplateDirectory[] = [
       { directory: projectTemplateDir, sourceScope: "project", isBuiltIn: false, projectId, ensure: true },
-      { directory: path.join(baseDir, ".quicksprints"), sourceScope: "legacy_project", isBuiltIn: false, projectId },
     ];
 
     if (this.options.projectRoot) {
@@ -117,7 +115,7 @@ export class QuicksprintService {
       const stat = await fs.stat(directory.directory).catch(() => null);
       const files = await fs.readdir(directory.directory).catch(() => []);
       const fileParts: string[] = [];
-      for (const file of files.filter((entry) => this.isSupportedTemplateFile(entry)).sort()) {
+      for (const file of files.filter((entry) => this.isTemplateFile(entry)).sort()) {
         const fileStat = await fs.stat(path.join(directory.directory, file)).catch(() => null);
         fileParts.push(`${file}:${fileStat?.mtimeMs ?? "missing"}`);
       }
@@ -134,7 +132,7 @@ export class QuicksprintService {
     const files = await fs.readdir(source.directory).catch(() => []);
     const templates: QuicksprintTemplateRecord[] = [];
 
-    for (const file of files.filter((entry) => this.isSupportedTemplateFile(entry)).sort((left, right) => this.compareTemplateFileNames(left, right))) {
+    for (const file of files.filter((entry) => this.isTemplateFile(entry)).sort()) {
       const filePath = path.join(source.directory, file);
       try {
         const content = await fs.readFile(filePath, "utf-8");
@@ -203,26 +201,12 @@ export class QuicksprintService {
     }));
   }
 
-  private isSupportedTemplateFile(fileName: string): boolean {
-    const lower = fileName.toLowerCase();
-    return lower.endsWith(".md") || lower.endsWith(".json");
+  private isTemplateFile(fileName: string): boolean {
+    return fileName.toLowerCase().endsWith(".md");
   }
 
   private stripTemplateExtension(fileName: string): string {
-    return fileName.replace(/\.(md|json)$/i, "");
-  }
-
-  private compareTemplateFileNames(left: string, right: string): number {
-    const leftId = this.stripTemplateExtension(left);
-    const rightId = this.stripTemplateExtension(right);
-    if (leftId !== rightId) {
-      return leftId.localeCompare(rightId);
-    }
-    return this.templateFileExtensionRank(left) - this.templateFileExtensionRank(right);
-  }
-
-  private templateFileExtensionRank(fileName: string): number {
-    return fileName.toLowerCase().endsWith(".md") ? 0 : 1;
+    return fileName.replace(/\.md$/i, "");
   }
 
   async createCustomTemplate(projectId: string, input: CreateQuicksprintTemplateInput): Promise<QuicksprintTemplateRecord> {
@@ -279,20 +263,7 @@ export class QuicksprintService {
     try {
       await fs.unlink(filePath);
     } catch {
-      const legacyProjectCodeUxFilePath = path.join(dir, `${templateId}.json`);
-      try {
-        await fs.unlink(legacyProjectCodeUxFilePath);
-        this.templateCache.delete(projectId);
-        return;
-      } catch {
-        // Fall through to the pre-.code-ux legacy location below.
-      }
-      const legacyFilePath = path.join(this.projectBaseDirResolver(projectId), ".quicksprints", `${templateId}.json`);
-      try {
-        await fs.unlink(legacyFilePath);
-      } catch {
-        throw new Error(`Template ${templateId} not found`);
-      }
+      throw new Error(`Template ${templateId} not found`);
     }
     this.templateCache.delete(projectId);
   }

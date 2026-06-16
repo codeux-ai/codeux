@@ -15,10 +15,6 @@ Project overrides and custom project templates live in:
 Home-level overrides live in:
 - `~/.code-ux/quicksprints/templates/*.md`
 
-Legacy JSON templates are still read from:
-- `<project>/.code-ux/quicksprints/templates/*.json`
-- `<project>/.quicksprints/*.json`
-
 The TypeScript catalog in `src/domain/quicksprint/quicksprint-catalog.ts` is now only a compatibility fallback that loads the bundled `.code-ux/quicksprints/templates` files.
 
 The shared template record contract lives in:
@@ -44,6 +40,8 @@ Write the full agentInstructionMarkdown body here.
 ```
 
 Everything above the second `---` is JSON metadata. Everything below it is the prompt body persisted as `agentInstructionMarkdown` in the runtime API.
+
+Adding a new `.md` file to a resolved template directory is enough for it to appear in Quicksprints. The file must include at least a stable `id`, `name`, and a non-empty Markdown body. Unsupported file extensions, including `.json`, are ignored.
 
 ## Dashboard Behavior
 
@@ -97,7 +95,6 @@ The runtime appends the exact subtask count for the specific execution, so templ
 
 Templates are resolved by stable `id` in this order:
 - project `.code-ux/quicksprints/templates`
-- legacy project `.quicksprints`
 - home `.code-ux/quicksprints/templates`
 - bundled `.code-ux/quicksprints/templates`
 - TypeScript fallback catalog
