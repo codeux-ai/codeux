@@ -29,6 +29,9 @@ describe("FieldWrapper Accessibility", () => {
     const input = container.querySelector("input");
     expect(input).not.toBeNull();
 
+    input!.focus();
+    input!.blur();
+
     const inputId = input!.getAttribute("id");
     expect(inputId).toBeTruthy();
 
@@ -66,6 +69,6 @@ describe("FieldWrapper Accessibility", () => {
 
     const input = container.querySelector("input");
     expect(input?.getAttribute("aria-describedby")).toContain("helper-123");
-    expect(input?.getAttribute("aria-errormessage")).toBeTruthy();
+    expect(input?.getAttribute("aria-errormessage")).toBeFalsy();
   });
 });

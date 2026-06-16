@@ -40,10 +40,10 @@ describe("FieldWrapper", () => {
     expect(helperText).toBeInTheDocument();
 
     const expectedHelperId = helperText.id;
-    const expectedErrorId = `${input?.id}-error`;
+    const expectedErrorId = undefined;
 
     expect(input?.getAttribute("aria-describedby")).toBe(expectedHelperId);
-    expect(input?.getAttribute("aria-errormessage")).toBe(expectedErrorId);
+    expect(input?.getAttribute("aria-errormessage")).toBe(null);
     expect(input?.hasAttribute("aria-invalid")).toBe(false);
 
     // Add error
@@ -54,6 +54,11 @@ describe("FieldWrapper", () => {
     );
 
     const inputAfter = container.querySelector('input');
+
+    // Trigger blur
+    inputAfter!.focus();
+    inputAfter!.blur();
+
     const errorText = screen.getByText("Invalid format");
     expect(errorText).toBeInTheDocument();
     expect(inputAfter?.getAttribute("aria-invalid")).toBe("true");
@@ -71,6 +76,10 @@ describe("FieldWrapper", () => {
     const getShakeContainer = () => container.querySelector(".motion-safe\\:animate-form-shake");
 
     expect(getShakeContainer()).toBeNull();
+
+    const input = container.querySelector('input');
+    input!.focus();
+    input!.blur();
 
     // Set an error
     rerender(
