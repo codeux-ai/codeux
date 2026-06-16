@@ -387,6 +387,29 @@ export const createSystemProviderDraft = (
   return base;
 };
 
+/**
+ * Derives a stable ordering key for a provider instance. Instances must keep a
+ * fixed position so that adding a second/third credential — or renaming one —
+ * never reshuffles the list. Ordering by the (user-editable) display name caused
+ * exactly that: "Gemini 2" sorted ahead of "Gemini Primary" and positions swapped
+ * mid-edit. Instead we lead with the seeded primary (whose config id is the bare
+ * provider id) and then fall back to the base36 creation timestamp embedded in
+ * added config ids (`${type}-${base36ts}-${rand}`).
+ */
+const getProviderInstanceSortKey = (
+  providerConfigId: ProviderConfigId,
+  providerType: ProviderId,
+): { isPrimary: number; createdAt: number } => {
+  if (providerConfigId === providerType) {
+    return { isPrimary: 0, createdAt: 0 };
+  }
+  const suffix = providerConfigId.startsWith(`${providerType}-`)
+    ? providerConfigId.slice(providerType.length + 1)
+    : providerConfigId;
+  const createdAt = Number.parseInt(suffix.split("-")[0], 36);
+  return { isPrimary: 1, createdAt: Number.isFinite(createdAt) ? createdAt : Number.MAX_SAFE_INTEGER };
+};
+
 export const sortProviderConfigEntries = <T extends { provider: ProviderId; name: string }>(
   entries: Array<[ProviderConfigId, T]>,
 ): Array<[ProviderConfigId, T]> => (
@@ -395,7 +418,16 @@ export const sortProviderConfigEntries = <T extends { provider: ProviderId; name
     if (providerCompare !== 0) {
       return providerCompare;
     }
-    return left[1].name.localeCompare(right[1].name);
+    const leftKey = getProviderInstanceSortKey(left[0], left[1].provider);
+    const rightKey = getProviderInstanceSortKey(right[0], right[1].provider);
+    if (leftKey.isPrimary !== rightKey.isPrimary) {
+      return leftKey.isPrimary - rightKey.isPrimary;
+    }
+    if (leftKey.createdAt !== rightKey.createdAt) {
+      return leftKey.createdAt - rightKey.createdAt;
+    }
+    // Final tiebreak on the immutable config id so order never depends on the name.
+    return left[0].localeCompare(right[0]);
   })
 );
 

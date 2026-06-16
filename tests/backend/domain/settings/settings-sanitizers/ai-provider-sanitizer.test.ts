@@ -149,6 +149,26 @@ describe("sanitizeAiProvider", () => {
       expect(result.codex.mountAuth).toBe(true);
     });
 
+    it("forces mountAuth on for dashboardAuth instances even when a stale mountAuth=false is stored", () => {
+      const input = {
+        providers: {
+          // Primaries seed mountAuth=false; switching them to dashboard login must
+          // still mount the saved credentials (and keep the instance routable).
+          gemini: {
+            provider: "gemini",
+            name: "Gemini Primary",
+            apiKey: "",
+            mountAuth: false,
+            authType: "dashboardAuth",
+          },
+        },
+      };
+      const result = normalizeSystemIntegrationProviders(input);
+      expect(result.gemini.authType).toBe("dashboardAuth");
+      expect(result.gemini.mountAuth).toBe(true);
+      expect(result.gemini.authPath).toBe("~/.code-ux/credentials/gemini");
+    });
+
     it("does not automatically readd default providers like gemini when they are omitted in a modern providers payload", () => {
       const input = {
         providers: {
