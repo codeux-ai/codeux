@@ -3,6 +3,8 @@ import { useEffect, useState, useId } from "preact/hooks";
 import { FormError } from "./FormError";
 
 export interface FieldWrapperProps {
+  helperTextId?: string;
+  helperText?: ComponentChildren;
   label: string;
   error?: string;
   children: ComponentChildren;
@@ -10,10 +12,11 @@ export interface FieldWrapperProps {
   required?: boolean;
 }
 
-export function FieldWrapper({ label, error, children, htmlFor, required }: FieldWrapperProps) {
+export function FieldWrapper({ label, error, children, htmlFor, required, helperTextId, helperText }: FieldWrapperProps) {
   const [shake, setShake] = useState(false);
   const [previousError, setPreviousError] = useState<string | undefined>(undefined);
   const generatedId = useId();
+  const generatedHelperId = `${generatedId}-helper`;
   const inputId = htmlFor ?? generatedId;
 
   useEffect(() => {
@@ -29,12 +32,20 @@ export function FieldWrapper({ label, error, children, htmlFor, required }: Fiel
     }
   }, [error, previousError]);
 
-  const errorId = error ? `${inputId}-error` : undefined;
+  const errorId = `${inputId}-error`;
+
+  // Combine multiple aria-describedby ids if needed
+  const actualHelperId = helperText ? (helperTextId || generatedHelperId) : helperTextId;
+  let ariaDescribedBy: string | undefined = undefined;
+  if (actualHelperId || errorId) {
+    ariaDescribedBy = [actualHelperId, errorId].filter(Boolean).join(' ');
+  }
 
   // Clone children to append aria attributes if valid
   const child = isValidElement(children) ? cloneElement(children as VNode<any>, {
     id: inputId,
     "aria-invalid": !!error,
+    ...(ariaDescribedBy ? { "aria-describedby": ariaDescribedBy } : {}),
     ...(errorId ? { "aria-errormessage": errorId } : {}),
     ...(required ? { "aria-required": true } : {}),
   }) : children;
@@ -61,6 +72,11 @@ export function FieldWrapper({ label, error, children, htmlFor, required }: Fiel
           {child}
         </div>
       </div>
+      {helperText && (
+        <p id={actualHelperId} class="text-xs text-slate-500 mt-1">
+          {helperText}
+        </p>
+      )}
       <FormError error={error} id={errorId} />
     </div>
   );

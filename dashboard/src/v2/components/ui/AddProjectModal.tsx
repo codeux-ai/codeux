@@ -5,6 +5,7 @@ import { AlertCircle, Bot, Check, ChevronUp, Cloud, FolderOpen, GitBranch, Folde
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { FormError } from "../forms/FormError.js";
 import { fetchLocalDirectories } from "../../lib/project-api.js";
 import type { LocalDirectoryBrowserResponse } from "../../types.js";
 
@@ -151,6 +152,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const submitProject = async () => {
         setIsSubmitting(true);
         setSubmitError(null);
+        setTouched(prev => ({ ...prev, path: true }));
         try {
             if (sourceType === 'new_project') {
                 await Promise.resolve(onAdd({
@@ -190,6 +192,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const handleSubmit = async (e: Event) => {
         e.preventDefault();
 
+        setTouched(prev => ({ ...prev, path: true }));
         if (Object.keys(validationErrors).length > 0) {
             setTouched({ name: true, path: sourceType === 'new_project' ? newInitMode === 'new-local' : true });
             return;
@@ -330,7 +333,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     </button>
                 </div>
                 {directoryPickerError ? (
-                    <div className="flex items-center gap-2 px-3 py-3 text-xs font-semibold text-status-red">
+                    <div id="directory-picker-error" role="alert" aria-live="assertive" className="flex items-center gap-2 px-3 py-3 text-xs font-semibold text-status-red">
                         <AlertCircle className="h-4 w-4 shrink-0" />
                         <span>{directoryPickerError}</span>
                     </div>
@@ -445,7 +448,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             {/* Project Name */}
                             <div className="group/field">
                                 <label htmlFor="add-project-name" className={fieldLabelClass}>
-                                    Project Name
+                                    Project Name <span className="sr-only">(required)</span>
                                 </label>
                                 <input
                                     id="add-project-name"
@@ -463,11 +466,14 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     className={projectNameInputClass}
                                     required
                                     autoFocus
+                                    autoComplete="off"
                                     aria-invalid={!!validationErrors.name && touched.name}
+                                    aria-errormessage="project-name-error"
                                     aria-describedby={validationErrors.name && touched.name ? "project-name-error" : undefined}
+                                    aria-required="true"
                                     onBlur={() => setTouched(prev => ({ ...prev, name: true }))}
                                 />
-                                {validationErrors.name && touched.name && <div id="project-name-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.name}</div>}
+                                <FormError id="project-name-error" error={touched.name ? validationErrors.name : undefined} />
                             </div>
 
                             {/* Source Type Toggle */}
@@ -503,7 +509,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             {sourceType === 'local' && (
                                 <div className="group/field">
                                     <label htmlFor="add-project-path" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                        <FolderInput className="w-3 h-3" /> Directory Path
+                                        <FolderInput className="w-3 h-3" /> Directory Path <span className="sr-only">(required)</span>
                                     </label>
                                     <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-stretch">
                                         <input
@@ -516,8 +522,11 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             }}
                                             placeholder="/home/user/projects/my-project"
                                             className={`${detailInputSurfaceClass} min-w-0 flex-1`}
+                                            autoComplete="off"
                                             aria-invalid={!!validationErrors.path && touched.path}
+                                            aria-errormessage="project-path-error"
                                             aria-describedby={validationErrors.path && touched.path ? "project-path-error" : undefined}
+                                            aria-required="true"
                                             onBlur={() => setTouched(prev => ({ ...prev, path: true }))}
                                         />
                                         <button
@@ -533,7 +542,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         </button>
                                     </div>
                                     {renderDirectoryPicker('localPath')}
-                                    {validationErrors.path && touched.path && <div id="project-path-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.path}</div>}
+                                    <FormError id="project-path-error" error={touched.path ? validationErrors.path : undefined} />
                                 </div>
                             )}
 
@@ -541,7 +550,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <>
                                     <div className="group/field">
                                         <label htmlFor="add-project-git-url" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                            <Link2 className="w-3 h-3" /> Repository URL
+                                            <Link2 className="w-3 h-3" /> Repository URL <span className="sr-only">(required)</span>
                                         </label>
                                         <input
                                             id="add-project-git-url"
@@ -554,11 +563,14 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             placeholder="https://github.com/user/repo.git"
                                             className={detailInputClass}
                                             required
+                                            autoComplete="url"
                                             aria-invalid={!!validationErrors.path && touched.path}
+                                            aria-errormessage="project-git-error"
                                             aria-describedby={validationErrors.path && touched.path ? "project-git-error" : undefined}
+                                            aria-required="true"
                                             onBlur={() => setTouched(prev => ({ ...prev, path: true }))}
                                         />
-                                        {validationErrors.path && touched.path && <div id="project-git-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.path}</div>}
+                                        <FormError id="project-git-error" error={touched.path ? validationErrors.path : undefined} />
                                     </div>
                                     <div className="group/field">
                                         <label htmlFor="add-project-clone-dir" className={`${fieldLabelClass} flex items-center gap-1.5`}>
@@ -572,6 +584,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 value={cloneDir}
                                                 onInput={(e) => setCloneDir((e.target as HTMLInputElement).value)}
                                                 placeholder="/home/user/projects"
+                                                autoComplete="off"
                                                 className={`${detailInputSurfaceClass} min-w-0 flex-1`}
                                             />
                                             <button

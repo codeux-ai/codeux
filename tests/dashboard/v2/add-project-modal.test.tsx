@@ -41,7 +41,7 @@ describe("AddProjectModal", () => {
   it("prefers the autofocus field when the modal opens", () => {
     render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} />);
 
-    const nameInput = screen.getByLabelText("Project Name");
+    const nameInput = screen.getByLabelText(/Project Name/i);
 
     vi.advanceTimersByTime(60);
 
@@ -51,7 +51,7 @@ describe("AddProjectModal", () => {
   it("keeps focus on the name field while typing", () => {
     render(<AddProjectModal onClose={vi.fn()} onAdd={vi.fn()} />);
 
-    const nameInput = screen.getByLabelText("Project Name") as HTMLInputElement;
+    const nameInput = screen.getByLabelText(/Project Name/i) as HTMLInputElement;
     nameInput.focus();
 
     fireEvent.input(nameInput, { target: { value: "A" } });
@@ -89,9 +89,9 @@ describe("AddProjectModal", () => {
     expect(screen.queryByLabelText(/repository url/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/clone into directory/i)).not.toBeInTheDocument();
 
-    fireEvent.input(screen.getByLabelText("Project Name"), { target: { value: "Alpha" } });
+    fireEvent.input(screen.getByLabelText(/Project Name/i), { target: { value: "Alpha" } });
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.submit(screen.getByLabelText("Project Name").closest("form")!);
+    fireEvent.submit(screen.getByLabelText(/Project Name/i).closest("form")!);
 
     await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
     expect(onAdd).toHaveBeenCalledWith({
@@ -114,11 +114,11 @@ describe("AddProjectModal", () => {
     const onAdd = vi.fn().mockResolvedValue(undefined);
     render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} initialSourceType="new_project" />);
 
-    fireEvent.input(screen.getByLabelText("Project Name"), { target: { value: "Alpha" } });
+    fireEvent.input(screen.getByLabelText(/Project Name/i), { target: { value: "Alpha" } });
     fireEvent.input(screen.getByLabelText(/Directory Path/i), { target: { value: "/tmp/alpha" } });
-    await waitFor(() => expect(screen.getByLabelText("Project Name")).toHaveValue("Alpha"));
+    await waitFor(() => expect(screen.getByLabelText(/Project Name/i)).toHaveValue("Alpha"));
     await waitFor(() => expect(screen.getByLabelText(/Directory Path/i)).toHaveValue("/tmp/alpha"));
-    const form = screen.getByLabelText("Project Name").closest("form");
+    const form = screen.getByLabelText(/Project Name/i).closest("form");
     expect(form).not.toBeNull();
     fireEvent.submit(form!);
 
@@ -161,7 +161,7 @@ describe("AddProjectModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^use$/i }));
 
-    expect(screen.getByLabelText("Directory Path")).toHaveValue("/home/user/project");
+    expect(screen.getByLabelText(/Directory Path/i)).toHaveValue("/home/user/project");
   });
 
   it("applies the directory picker selection to the optional clone directory", async () => {
