@@ -1,4 +1,8 @@
 import type { FunctionComponent, ComponentProps } from "preact";
+import { useLayoutEffect, useRef } from "preact/hooks";
+import gsap from "gsap";
+import { useGsapDurations } from "../../lib/motion/constants.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 export interface ToggleProps extends Omit<ComponentProps<"button">, "value" | "onChange"> {
   value: boolean;
@@ -7,13 +11,35 @@ export interface ToggleProps extends Omit<ComponentProps<"button">, "value" | "o
 }
 
 export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger, disabled, className = "", ...props }) => {
+  const thumbRef = useRef<HTMLSpanElement>(null);
+  const durations = useGsapDurations();
+  const reducedMotion = useReducedMotion();
+  const isInitialMount = useRef(true);
+
+  useLayoutEffect(() => {
+    gsap.set(thumbRef.current, { x: value ? 20 : 0 });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    gsap.to(thumbRef.current, {
+      x: value ? 20 : 0,
+      duration: reducedMotion ? 0 : durations.base,
+      ease: reducedMotion ? 'none' : 'back.out(1.7)',
+      overwrite: true
+    });
+  }, [value, reducedMotion, durations.base]);
+
   return (
     <button
       {...props}
       type="button"
       onClick={() => onChange(!value)}
       disabled={disabled}
-      className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus-visible:ring-[var(--color-accent-primary)] disabled:cursor-not-allowed disabled:opacity-50 motion-safe:enabled:active:scale-[0.98] ${
+      className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus-visible:ring-[var(--color-accent-primary)] disabled:cursor-not-allowed disabled:opacity-50 motion-safe:enabled:active:scale-[0.98] ${
         value
           ? danger
             ? "border-status-red/40 bg-status-red shadow-[0_0_16px_rgba(227,0,15,0.24)] enabled:hover:bg-status-red/90"
@@ -27,8 +53,9 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
         className={`absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.28),rgba(255,255,255,0))] transition-opacity ${value ? "opacity-100" : "opacity-40"}`}
       />
       <span
-        className={`absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-[0_2px_7px_rgba(0,0,0,0.18)] transition-all duration-300 ease-out motion-safe:ease-[cubic-bezier(0.34,1.56,0.64,1)] group-enabled:group-active:w-6 ${
-          value ? "translate-x-5 group-enabled:group-active:translate-x-4" : "translate-x-0"
+        ref={thumbRef}
+        className={`absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-[0_2px_7px_rgba(0,0,0,0.18)] group-enabled:group-active:w-6 ${
+          value ? "group-enabled:group-active:translate-x-4" : ""
         }`}
       >
         <svg

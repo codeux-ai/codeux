@@ -1,3 +1,4 @@
+/** @vitest-environment jsdom */
 /** @vitest-environment happy-dom */
 /** @jsx h */
 /** @jsxFrag Fragment */
@@ -17,6 +18,7 @@ vi.mock("gsap", () => {
   return {
     default: {
       set: vi.fn((target: unknown, props: Record<string, unknown>) => applyStyles(target, props)),
+      to: vi.fn((target: unknown, props: Record<string, unknown>) => applyStyles(target, props)),
       timeline: vi.fn(() => {
         const timeline = {
           to: (target: unknown, props: Record<string, unknown>) => {
