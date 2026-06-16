@@ -160,7 +160,6 @@ describe("FieldWrapper", () => {
     expect(helperElement.className).toContain("opacity-0");
     expect(helperElement.className).toContain("invisible");
 
-    expect(errorElement.className).toContain("opacity-100");
-    expect(errorElement.className).toContain("visible");
+    expect(errorElement.className).toContain("animate-form-slide-down");
   });
 });

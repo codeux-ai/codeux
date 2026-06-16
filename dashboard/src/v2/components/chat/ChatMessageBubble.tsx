@@ -1,4 +1,6 @@
 import { type FunctionComponent } from "preact";
+import { useLayoutEffect, useRef } from "preact/hooks";
+import gsap from "gsap";
 import { Check, CheckCheck, XCircle, Loader2 } from "lucide-preact";
 import type { ChatMessageRecord, AgentAvatarConfig } from "../../types.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
@@ -7,12 +9,15 @@ import { formatChatTime } from "../../lib/chat-time.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
 import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 import { resolveDisplayDeliveryStatus } from "../../hooks/use-chat-thread-data.js";
+import { useGsapDurations } from "../../lib/motion/constants.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 export interface ChatMessageBubbleProps {
   message: ChatMessageRecord;
   allMessages?: ChatMessageRecord[];
   agentAvatarConfig?: AgentAvatarConfig;
   agentName?: string;
+  animationDelay?: number;
 }
 
 export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
@@ -20,9 +25,24 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
   allMessages = [],
   agentAvatarConfig,
   agentName,
+  animationDelay = 0,
 }) => {
   const fromDashboard = message.direction === "dashboard_to_connection";
   const widgetData = getChatWidgetData(message);
+
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const durations = useGsapDurations();
+  const reducedMotion = useReducedMotion();
+
+  useLayoutEffect(() => {
+    if (bubbleRef.current) {
+      gsap.fromTo(
+        bubbleRef.current,
+        { opacity: 0, y: reducedMotion ? 0 : 8 },
+        { opacity: 1, y: 0, duration: durations.base, ease: 'power2.out', delay: animationDelay }
+      );
+    }
+  }, []);
 
   let role: AvatarRole = "agent";
   if (fromDashboard) {
@@ -46,7 +66,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({
     : "opacity-100";
 
   return (
-    <div className={`flex ${fromDashboard ? "justify-end" : "justify-start"} ${opacityClass}`}>
+    <div ref={bubbleRef} className={`flex ${fromDashboard ? "justify-end" : "justify-start"} ${opacityClass}`}>
       <div className={`flex max-w-[760px] items-start gap-3 w-full ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
           <ChatAvatar
