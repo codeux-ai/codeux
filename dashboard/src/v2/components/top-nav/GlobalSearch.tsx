@@ -134,7 +134,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     return (
         <>
             {/* Search Bar */}
-            <div ref={searchBarContainerRef} className="relative group w-full max-w-[140px] sm:max-w-xs hidden sm:block rounded-xl">
+            <div ref={searchBarContainerRef} role="search" className="relative group w-full max-w-[140px] sm:max-w-xs hidden sm:block rounded-xl">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
                     <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
                 </div>
