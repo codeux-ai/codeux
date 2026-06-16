@@ -352,7 +352,7 @@ export function useSystemViewData(projectId: string) {
 
       totalTasks += 1;
       if (record.status === "running") runningTasks += 1;
-      if (record.status === "blocked") blockedTasks += 1;
+      if (record.status === "paused") blockedTasks += 1;
     }
 
     let activeSprints = 0;
