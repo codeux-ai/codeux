@@ -1,4 +1,4 @@
-import { h, ComponentChildren, RefObject } from "preact";
+import { h, ComponentChildren, RefObject, isValidElement } from "preact";
 import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
@@ -165,16 +165,30 @@ export const Menu = ({
 
   return (
     <>
-      <div
-        ref={externalTriggerRef ? undefined : localTriggerRef}
-        className="inline-flex cursor-pointer"
-        onClick={() => onOpenChange(!isOpen)}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
-        aria-controls={isOpen ? menuId : undefined}
-      >
-        {children}
-      </div>
+      {isValidElement(children) && (children.type === 'button' || (children.props as any).role === 'button') ? (
+        <div
+          ref={externalTriggerRef ? undefined : (localTriggerRef as unknown as RefObject<HTMLDivElement>)}
+          className="inline-flex cursor-pointer"
+          onClick={() => onOpenChange(!isOpen)}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? menuId : undefined}
+        >
+          {children}
+        </div>
+      ) : (
+        <button
+          type="button"
+          ref={externalTriggerRef ? undefined : (localTriggerRef as unknown as RefObject<HTMLButtonElement>)}
+          className="inline-flex cursor-pointer text-left"
+          onClick={() => onOpenChange(!isOpen)}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? menuId : undefined}
+        >
+          {children}
+        </button>
+      )}
 
       {isRendered &&
         createPortal(

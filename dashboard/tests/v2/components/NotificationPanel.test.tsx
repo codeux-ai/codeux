@@ -57,7 +57,7 @@ describe("NotificationPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("menu", { name: "Notifications Panel" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Notifications Panel")).toBeInTheDocument();
     expect(screen.getByText("Cluster not ready")).toBeInTheDocument();
     expect(screen.queryByText("Deployment successful")).not.toBeInTheDocument();
 
