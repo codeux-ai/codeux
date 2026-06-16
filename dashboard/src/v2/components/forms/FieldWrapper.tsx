@@ -25,10 +25,10 @@ export function FieldWrapper({ label, error, helperText, children, htmlFor, requ
       }, 400); // Must be slightly longer than animation duration
       setPreviousError(error);
       return () => clearTimeout(timer);
-    } else if (!error) {
+    } else if (!error && previousError !== undefined) {
       setPreviousError(undefined);
     }
-  }, [error, previousError]);
+  }, [error]);
 
   const errorId = error ? `${inputId}-error` : undefined;
   const helperId = helperText ? `${inputId}-helper` : undefined;
