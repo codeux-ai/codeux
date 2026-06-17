@@ -81,6 +81,10 @@ export function getLedgerSortValue(item: ExecutionStatsEntitySummary, key: Ledge
       return item.usage.outputTokens;
     case "name":
       return item.label.toLowerCase();
+    case "p50":
+      return (item as any).duration?.p50Ms ?? 0;
+    case "p95":
+      return (item as any).duration?.p95Ms ?? 0;
     case "last":
     default:
       return toTimestamp(item.lastActivityAt);
