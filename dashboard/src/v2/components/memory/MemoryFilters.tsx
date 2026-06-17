@@ -39,14 +39,19 @@ export const MemoryFilters: FunctionComponent<{
                         ? (stats.sprint + stats.agent)
                         : stats.project;
                     return (
-                        <span key={tab.key} className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer transition-all duration-200
+                        <button
+                            key={tab.key}
+                            role="tab"
+                            aria-selected={activeTier === tab.key}
+                            aria-controls="memory-panel"
+                            className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                             ${activeTier === tab.key
                                 ? "bg-signal-500/[0.12] border border-signal-500/30 text-signal-500"
-                                : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
                             }`}
                             onClick={() => activeTierSignal.value = tab.key}>
                             {tab.label} · {count}
-                        </span>
+                        </button>
                     );
                 })}
             </div>

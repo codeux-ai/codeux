@@ -1,6 +1,8 @@
 import { FunctionComponent } from "preact";
 import { X } from "lucide-react";
 import type { MemNode, Edge } from "../../lib/memory-graph.js";
+import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
     architecture: { label: "Architecture", hex: "#E8A317", r: 232, g: 163, b: 23 },
@@ -21,6 +23,21 @@ export const Inspector: FunctionComponent<{
     onClose: () => void;
     onDelete: (id: string) => void;
 }> = ({ node, allNodes, edges, lobotomize, onClose, onDelete }) => {
+    const { isOpen, options, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
+
+    const handleDeleteClick = async () => {
+        if (!node) return;
+        const confirmed = await requestConfirm({
+            title: "Excise Memory",
+            body: "Are you sure you want to delete this memory? This action cannot be undone.",
+            confirmLabel: "Excise",
+            destructive: true
+        });
+        if (confirmed) {
+            onDelete(node.id);
+        }
+    };
+
     const cat = node ? (CAT[node.category] || CAT.context) : CAT.architecture;
     const nodeIdx = node ? allNodes.findIndex(n => n.id === node.id) : -1;
     const connected = node ? edges
@@ -105,14 +122,24 @@ export const Inspector: FunctionComponent<{
                         </div>
                     )}
                     {lobotomize && (
-                        <button onClick={() => onDelete(node.id)}
-                            className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl
-                                       bg-status-red text-white font-bold text-xs
-                                       shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
-                                       transition-shadow duration-300">
-                            <X className="w-3.5 h-3.5" strokeWidth={2.5} />
-                            Excise Memory
-                        </button>
+                        <>
+                            <button onClick={handleDeleteClick}
+                                ref={triggerRef as any}
+                                className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl
+                                           bg-status-red text-white font-bold text-xs
+                                           shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
+                                           transition-shadow duration-300">
+                                <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+                                Excise Memory
+                            </button>
+                            <ConfirmDialog
+                                isOpen={isOpen}
+                                options={options}
+                                onConfirm={handleConfirm}
+                                onCancel={handleCancel}
+                                triggerRef={triggerRef}
+                            />
+                        </>
                     )}
                 </>
             )}

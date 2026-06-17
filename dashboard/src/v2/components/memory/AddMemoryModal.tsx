@@ -71,11 +71,13 @@ export const AddMemoryModal: FunctionComponent<{
                                    transition-colors duration-200">
                         Cancel
                     </button>
-                    <button onClick={handleSubmit} disabled={!content.trim() || saving}
+                    <button onClick={handleSubmit}
+                        disabled={!content.trim() || saving}
+                        aria-disabled={!content.trim() || saving}
                         className="flex-1 py-2.5 rounded-xl text-xs font-bold
                                    bg-signal-500 text-void-900 hover:bg-signal-400
                                    shadow-[0_2px_12px_rgba(0,224,160,0.3)]
-                                   transition-colors duration-200 disabled:opacity-50">
+                                   transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                         {saving ? "Saving…" : "Add Memory"}
                     </button>
                 </div>

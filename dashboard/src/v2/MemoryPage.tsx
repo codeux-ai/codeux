@@ -184,24 +184,39 @@ export const MemoryPage: FunctionComponent = () => {
         s.searchMatch = null;
         activeMemoryIdSignal.value = null;
 
-        // Animate entrance
-        gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
-        const tl = gsap.timeline();
-        tl.to(s.cam, { zoom: 1, duration: 1.8, ease: "power2.out" }, 0);
-        s.graph.nodes.forEach((node, i) => {
-            tl.to(node, {
-                x: node.targetX, y: node.targetY,
-                scale: 1, opacity: 1,
-                duration: 1.2, ease: "power3.out",
-            }, 0.15 + Math.min(i, 20) * 0.03);
-        });
-        s.entranceDone = true;
+        const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-        return () => {
-            tl.kill();
-            gsap.killTweensOf(s.cam);
-            s.graph.nodes.forEach(node => gsap.killTweensOf(node));
-        };
+        // Animate entrance
+        if (prefersReducedMotion) {
+            s.cam.x = 0;
+            s.cam.y = 0;
+            s.cam.zoom = 1;
+            s.graph.nodes.forEach(node => {
+                node.x = node.targetX;
+                node.y = node.targetY;
+                node.scale = 1;
+                node.opacity = 1;
+            });
+            s.entranceDone = true;
+        } else {
+            gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
+            const tl = gsap.timeline();
+            tl.to(s.cam, { zoom: 1, duration: 1.8, ease: "power2.out" }, 0);
+            s.graph.nodes.forEach((node, i) => {
+                tl.to(node, {
+                    x: node.targetX, y: node.targetY,
+                    scale: 1, opacity: 1,
+                    duration: 1.2, ease: "power3.out",
+                }, 0.15 + Math.min(i, 20) * 0.03);
+            });
+            s.entranceDone = true;
+
+            return () => {
+                tl.kill();
+                gsap.killTweensOf(s.cam);
+                s.graph.nodes.forEach(node => gsap.killTweensOf(node));
+            };
+        }
     }, [graphData]);
 
 /* ── Canvas setup & render loop ───────────────────────────────────── */
@@ -380,7 +395,7 @@ export const MemoryPage: FunctionComponent = () => {
                 const effOpacity = dimmed ? n.opacity * 0.12 : n.opacity;
 
                 const glR = r * (3 + n.glow * 2.5);
-                const glAlpha = (n.glow * 0.12 + (isHov ? 0.14 : 0) + (isSel ? 0.1 : 0)) * effOpacity;
+                const glAlpha = (n.glow * 0.12 + (isHov ? 0.18 : 0) + (isSel ? 0.15 : 0)) * effOpacity;
                 const gl = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glR);
                 gl.addColorStop(0, lob ? `rgba(227,0,15,${glAlpha})` : `rgba(${cc.r},${cc.g},${cc.b},${glAlpha})`);
                 gl.addColorStop(1, "transparent");
@@ -391,24 +406,26 @@ export const MemoryPage: FunctionComponent = () => {
 
                 ctx.beginPath();
                 ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-                const bodyAlpha = (0.65 + n.strength * 0.35) * effOpacity;
+                const bodyAlpha = isHov || isSel
+                    ? Math.min(1, (0.75 + n.strength * 0.45) * effOpacity)
+                    : (0.65 + n.strength * 0.35) * effOpacity;
                 ctx.fillStyle = lob
                     ? `rgba(227,0,15,${bodyAlpha})`
                     : `rgba(${cc.r},${cc.g},${cc.b},${bodyAlpha})`;
                 if (isHov || isSel) {
-                    ctx.shadowBlur = 22;
-                    ctx.shadowColor = lob ? "rgba(227,0,15,0.6)" : cc.hex;
+                    ctx.shadowBlur = isSel ? 28 : 22;
+                    ctx.shadowColor = lob ? "rgba(227,0,15,0.8)" : `rgba(${cc.r},${cc.g},${cc.b},0.8)`;
                 }
                 ctx.fill();
                 ctx.shadowBlur = 0;
 
                 if (isSel) {
                     ctx.beginPath();
-                    ctx.arc(n.x, n.y, r + 5, 0, Math.PI * 2);
+                    ctx.arc(n.x, n.y, r + 6, 0, Math.PI * 2);
                     ctx.strokeStyle = lob
-                        ? "rgba(227,0,15,0.4)"
-                        : `rgba(${cc.r},${cc.g},${cc.b},0.4)`;
-                    ctx.lineWidth = 1.5;
+                        ? "rgba(227,0,15,0.6)"
+                        : `rgba(${cc.r},${cc.g},${cc.b},0.6)`;
+                    ctx.lineWidth = 2.0;
                     ctx.setLineDash([4, 4]);
                     ctx.stroke();
                     ctx.setLineDash([]);
