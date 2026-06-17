@@ -108,12 +108,12 @@ describe("InvocationsTable", () => {
       />
     );
 
-    const inHeader = getByRole("button", { name: "In" });
+    const inHeader = getByRole("button", { name: "In sortable" });
     fireEvent.click(inHeader);
     expect(onSortChange).toHaveBeenCalledWith({ key: "inputTokens", dir: "desc" });
 
     // Click again to toggle direction
-    const timeHeader = getByRole("button", { name: "Time" });
+    const timeHeader = getByRole("button", { name: "Time sorted descending" });
     fireEvent.click(timeHeader);
     expect(onSortChange).toHaveBeenCalledWith({ key: "startedAt", dir: "asc" });
   });
@@ -137,7 +137,7 @@ describe("InvocationsTable", () => {
 
   it("renders loading skeleton", () => {
     const { container } = render(<Harness loading={true} />);
-    expect(container.querySelectorAll(".animate-pulse").length).toBe(6);
+    expect(container.querySelectorAll(".motion-safe\\:animate-pulse").length).toBe(6);
   });
 
   it("renders empty state", () => {

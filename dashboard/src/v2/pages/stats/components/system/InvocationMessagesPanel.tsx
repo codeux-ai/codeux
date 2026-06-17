@@ -145,7 +145,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
             type="button"
             onClick={() => navigator.clipboard.writeText(JSON.stringify(messages, null, 2))}
             aria-label="Copy as JSON"
-            className="text-slate-400 hover:text-slate-200"
+            className="text-slate-400 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded p-1"
           >
             <Clipboard className="h-4 w-4" />
           </button>
@@ -176,7 +176,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
 
       {loading ? (
         <div className="flex items-center gap-2 rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-3 text-sm text-slate-400">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-4 w-4 motion-safe:animate-spin" />
           Loading messages
         </div>
       ) : error ? (
@@ -229,7 +229,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
                   <button
                     type="button"
                     onClick={() => toggleSystemMessage(message.id)}
-                    className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-white"
+                    className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded px-1"
                   >
                     {isExpanded ? "Show less" : "Show more"}
                   </button>
@@ -242,7 +242,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
             <button
               type="button"
               onClick={() => setShowAllMessages(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500"
             >
               <ExternalLink className="h-3.5 w-3.5" />
               Show all {messages.length} messages

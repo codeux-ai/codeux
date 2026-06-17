@@ -26,7 +26,14 @@ vi.mock("gsap", () => ({
       fromTo: vi.fn(),
       kill: vi.fn()
     }),
-    context: vi.fn().mockImplementation((cb) => { cb(); return { revert: vi.fn() }; })
+    context: vi.fn().mockImplementation((cb) => { cb(); return { revert: vi.fn() }; }),
+    matchMedia: vi.fn().mockReturnValue({
+      add: vi.fn().mockImplementation((_q, cb) => {
+        // Run no-preference block by default in tests
+        if (_q.includes("no-preference")) cb();
+      }),
+      revert: vi.fn()
+    })
   }
 }));
 

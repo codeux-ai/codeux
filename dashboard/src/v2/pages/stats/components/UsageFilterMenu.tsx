@@ -28,23 +28,39 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   useLayoutEffect(() => {
     if (!menuRef.current) return;
 
+    const ctx = gsap.matchMedia();
+    ctx.add("(prefers-reduced-motion: no-preference)", () => {
+      if (isOpen) {
+        gsap.fromTo(
+          menuRef.current,
+          { opacity: 0, scale: 0.95, y: -10 },
+          { opacity: 1, scale: 1, y: 0, duration: 0.25, ease: 'power2.out' }
+        );
+      } else {
+        gsap.to(menuRef.current, {
+          opacity: 0,
+          scale: 0.95,
+          y: -10,
+          duration: 0.2,
+          ease: 'power2.in',
+        });
+      }
+    });
+
+    ctx.add("(prefers-reduced-motion: reduce)", () => {
+      if (isOpen) {
+        gsap.set(menuRef.current, { opacity: 1, scale: 1, y: 0 });
+      } else {
+        gsap.set(menuRef.current, { opacity: 0, scale: 0.95, y: -10 });
+      }
+    });
+
     if (isOpen) {
-      gsap.fromTo(
-        menuRef.current,
-        { opacity: 0, scale: 0.95, y: -10 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.25, ease: 'power2.out' }
-      );
       // Focus the close button when opened for keyboard support
       closeButtonRef.current?.focus();
-    } else {
-      gsap.to(menuRef.current, {
-        opacity: 0,
-        scale: 0.95,
-        y: -10,
-        duration: 0.2,
-        ease: 'power2.in',
-      });
     }
+
+    return () => ctx.revert();
   }, [isOpen]);
 
   useEffect(() => {
@@ -77,7 +93,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
               <button
                 type="button"
                 onClick={() => setEnabledSeries({})}
-                className="text-xs text-slate-400 transition-colors hover:text-amber-600"
+                className="text-xs text-slate-400 transition-colors hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 rounded"
               >
                 Reset filters
               </button>
@@ -87,7 +103,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200"
+            className="rounded-full p-1 text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
           >
             <X className="h-4 w-4" />
           </button>
@@ -140,7 +156,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                                 setEnabledSeries((curr) => ({ ...curr, [s.id]: !curr[s.id] }));
                               }}
                               disabled={disabled}
-                              className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all ${
+                              className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
                                 active
                                   ? 'border-amber-500/28 bg-amber-500/12 text-amber-700 dark:text-amber-300'
                                   : 'border-black/[0.05] bg-transparent text-slate-500 hover:border-black/[0.1] dark:border-white/[0.05] dark:text-slate-400'

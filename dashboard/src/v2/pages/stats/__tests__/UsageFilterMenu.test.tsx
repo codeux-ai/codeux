@@ -3,6 +3,20 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/preact';
+import gsap from 'gsap';
+
+vi.mock('gsap', () => ({
+  default: {
+    matchMedia: vi.fn().mockReturnValue({
+      add: vi.fn().mockImplementation((_q, cb) => { if (_q.includes('no-preference')) cb(); }),
+      revert: vi.fn()
+    }),
+    fromTo: vi.fn(),
+    to: vi.fn(),
+    set: vi.fn(),
+    getProperty: vi.fn()
+  }
+}));
 import { UsageFilterMenu } from '../components/UsageFilterMenu.js';
 
 describe('UsageFilterMenu', () => {
