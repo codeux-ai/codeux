@@ -109,11 +109,10 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     };
 
     return (
-        <Link
-            to={targetTo as any}
-            search={targetSearch as any}
+        <button
+            type="button"
             onClick={onClick}
-            id={`search-result-${globalItemIndex}`}
+            id={`search-result-${itemId}`}
             ref={activeItemRef as any}
             onMouseEnter={onFocus}
             aria-label={`${categoryType} result: ${title}`}
@@ -181,6 +180,6 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                     <ArrowRight className="w-5 h-5" strokeWidth={2} />
                 </div>
             </div>
-        </Link>
+        </button>
     );
 };
