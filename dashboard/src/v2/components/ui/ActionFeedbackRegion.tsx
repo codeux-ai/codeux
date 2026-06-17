@@ -129,13 +129,13 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
   const config = statusConfig[displayedStatus === "idle" ? "pending" : displayedStatus];
   const Icon = config.icon;
 
-  const ariaLive = displayedStatus === "error" ? "assertive" : "polite";
+  const isError = displayedStatus === "error";
 
   return (
     <div
       ref={containerRef}
-      role="status"
-      aria-live={ariaLive}
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
       className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl border ${config.colors} ${className}`}
     >
       <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out]`} />

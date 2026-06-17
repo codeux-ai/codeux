@@ -9,6 +9,8 @@ import { useReducedMotion } from "../../../dashboard/src/v2/hooks/use-reduced-mo
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/preact";
 import { PlanningProgressOverlay } from "../../../dashboard/src/v2/components/ui/PlanningProgressOverlay.js";
+import { ToastProvider, useToast } from "../../../dashboard/src/v2/components/feedback/ToastProvider.js";
+import { ActionFeedbackRegion } from "../../../dashboard/src/v2/components/ui/ActionFeedbackRegion.js";
 import { SkeletonRow, SkeletonCard, SkeletonPanel } from "../../../dashboard/src/v2/components/layout/SkeletonLoader.js";
 import { AvantgardeSelect } from "../../../dashboard/src/v2/components/ui/AvantgardeSelect.js";
 import { FilterStrip } from "../../../dashboard/src/v2/components/ui/FilterStrip.js";
@@ -69,6 +71,75 @@ global.ResizeObserver = class ResizeObserver {
 };
 
 describe("UI Components Coverage", () => {
+
+  describe("Feedback Components", () => {
+    it("handles toast overflow dismissal properly", () => {
+      vi.useFakeTimers();
+      const TestToast = () => {
+        const { addToast } = useToast();
+        return (
+          <button onClick={() => addToast({ type: 'success', message: 'Test message' })}>
+            Add
+          </button>
+        );
+      };
+
+      render(
+        <ToastProvider>
+          <TestToast />
+        </ToastProvider>
+      );
+
+      const btn = screen.getByText("Add");
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+
+      expect(screen.getAllByText("Test message")).toHaveLength(4);
+      act(() => { vi.advanceTimersByTime(500); });
+      vi.useRealTimers();
+    });
+
+    it("ensures persistent error retry action does not auto-dismiss", () => {
+      vi.useFakeTimers();
+      const TestToastError = () => {
+        const { addToast } = useToast();
+        return (
+          <button onClick={() => addToast({ type: 'error', message: 'Error message', action: { label: 'Retry', onClick: vi.fn() } })}>
+            Add Error
+          </button>
+        );
+      };
+
+      render(
+        <ToastProvider>
+          <TestToastError />
+        </ToastProvider>
+      );
+
+      const btn = screen.getByText("Add Error");
+      fireEvent.click(btn);
+      expect(screen.getByText("Error message")).toBeInTheDocument();
+
+      act(() => { vi.advanceTimersByTime(10000); });
+      expect(screen.getByText("Error message")).toBeInTheDocument();
+      vi.useRealTimers();
+    });
+
+    it("verifies inline feedback live-region semantics", () => {
+      const { rerender } = render(
+        <ActionFeedbackRegion status="success" message="Saved successfully" />
+      );
+
+      let regions = screen.getAllByRole("status");
+      expect(regions[0]).toHaveAttribute("aria-live", "polite");
+
+      rerender(<ActionFeedbackRegion status="error" message="Failed to save" />);
+      let alertRegions = screen.getAllByRole("alert");
+      expect(alertRegions[0]).toHaveAttribute("aria-live", "assertive");
+    });
+  });
 
   it("verifies ARIA state transitions in FilterStrip", () => {
     const options = [{ value: "1", label: "Opt 1" }, { value: "2", label: "Opt 2" }];

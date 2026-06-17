@@ -68,7 +68,11 @@ export const Toast: FunctionComponent<ToastProps> = ({
           ease: GSAP_EASINGS.smooth, // smooth easing curve
           onComplete: () => {
             if (type === "error" && actionButtonRef.current) {
-              actionButtonRef.current.focus();
+              const activeTag = document.activeElement?.tagName.toLowerCase();
+              const isTyping = activeTag === 'input' || activeTag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable;
+              if (!isTyping) {
+                actionButtonRef.current.focus();
+              }
             }
           }
         }
