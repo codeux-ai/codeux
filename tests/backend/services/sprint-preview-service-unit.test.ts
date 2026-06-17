@@ -150,6 +150,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
       getSessionByProjectSprint: vi.fn(() => null),
       createSession: vi.fn((input: Record<string, unknown>) => makeSession(input as Partial<SprintPreviewSession>)),
       updateSession: vi.fn((id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch })),
+      deleteSession: vi.fn(),
     },
     projectManagementRepository: {
       getProject: vi.fn(() => ({
@@ -720,7 +721,7 @@ describe("SprintPreviewService unit tests", () => {
       );
     });
 
-    it("skips session when sprint not found", async () => {
+    it("prunes the orphaned session when its sprint no longer exists", async () => {
       const session = makeSession();
       deps.sprintPreviewRepository.listSessions.mockReturnValue([session]);
       deps.projectManagementRepository.getSprint.mockReturnValue(null);
@@ -728,7 +729,29 @@ describe("SprintPreviewService unit tests", () => {
 
       const service = new SprintPreviewService(deps as any);
       await service.reconcileSessions();
-      // Should not throw, just skip
+
+      expect(deps.sprintPreviewRepository.deleteSession).toHaveBeenCalledWith(session.id);
+    });
+
+    it("prunes a stopped session whose sprint is terminal with no active run", async () => {
+      const session = makeSession({ status: "stopped", containerId: null, containerName: null });
+      deps.sprintPreviewRepository.listSessions.mockReturnValue([session]);
+      deps.projectManagementRepository.getSprint.mockReturnValue({
+        id: "sprint-1",
+        projectId: "proj-1",
+        name: "Sprint 1",
+        number: 1,
+        status: "completed",
+        featureBranch: "feature/sprint-1",
+      });
+      deps.projectManagementRepository.listProjects.mockReturnValue({ projects: [] });
+
+      const service = new SprintPreviewService(deps as any);
+      await service.reconcileSessions();
+
+      expect(deps.sprintPreviewRepository.deleteSession).toHaveBeenCalledWith(session.id);
+      // The expensive per-session work is skipped once we decide to prune.
+      expect(deps.sprintPreviewRepository.updateSession).not.toHaveBeenCalled();
     });
 
     it("updates task count when session is running and no triggers match", async () => {

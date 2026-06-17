@@ -402,10 +402,18 @@ export class SprintFileBrowserService {
     for (const session of sessions) {
       const sprint = this.deps.projectManagementRepository.getSprint(session.sprintId);
       if (!sprint) {
+        // Sprint was deleted — drop the orphaned session record.
+        this.deps.sprintFileBrowserRepository.deleteSession(session.id);
         continue;
       }
       const refreshed = await this.refreshRuntimeState(session, containers);
       if (refreshed.status !== "running") {
+        // Prune dead records for finished sprints so they don't accumulate and get reconciled
+        // forever; recreated on demand if the file browser is opened again.
+        const sprintTerminal = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
+        if (sprintTerminal && !refreshed.containerId && !refreshed.containerName) {
+          this.deps.sprintFileBrowserRepository.deleteSession(refreshed.id);
+        }
         continue;
       }
 

@@ -559,14 +559,38 @@ export class SprintPreviewService {
     for (const session of sessions) {
       const sprint = this.deps.projectManagementRepository.getSprint(session.sprintId);
       if (!sprint) {
+        // Sprint was deleted — drop the orphaned session record so we stop reconciling it.
+        this.deps.sprintPreviewRepository.deleteSession(session.id);
         continue;
       }
-      const settings = this.resolveSettings(session.projectId, session.sprintId).sprintPreview;
       const refreshed = await this.refreshRuntimeState(session, containers);
-      const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
       const activeRun = getExecutionSnapshot(session.projectId)
         .sprintRuns
         .some((run) => run.sprintId === session.sprintId && run.status === "running");
+
+      // Prune dead sessions for finished sprints. Once a sprint is terminal and has no running
+      // container, the session can never auto-start again, so reconciling it every 15s (settings
+      // resolution + completed-task counts) is pure waste — these stopped records otherwise
+      // accumulate indefinitely. They are recreated on demand if a preview is started again.
+      const sprintTerminal = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
+      const isDeadSession = (refreshed.status === "stopped" || refreshed.status === "error")
+        && !refreshed.containerId && !refreshed.containerName;
+      if (sprintTerminal && !activeRun && isDeadSession) {
+        this.deps.sprintPreviewRepository.deleteSession(refreshed.id);
+        continue;
+      }
+
+      // A non-running session can only be acted on this cycle if it can be auto-started, which needs
+      // an active sprint run. Without one, every downstream branch is a no-op for it (stop/rebuild/
+      // autoStop only apply to running sessions, and the task-count update is gated on running too),
+      // so skip the expensive settings resolution + completed-task count entirely.
+      const isRunningOrStarting = refreshed.status === "running" || refreshed.status === "starting";
+      if (!isRunningOrStarting && !activeRun) {
+        continue;
+      }
+
+      const settings = this.resolveSettings(session.projectId, session.sprintId).sprintPreview;
+      const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
 
       if (settings.enabled === false) {
         if (refreshed.status === "running" || refreshed.status === "starting") {
