@@ -1,4 +1,4 @@
-import type { DockerContainerSummary } from "./docker-session-lifecycle.js";
+import { DockerContainerSummary, DockerSessionLifecycle, sanitizeContainerNameComponent } from "./docker-session-lifecycle.js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as pathPosix from "path/posix";
@@ -61,7 +61,7 @@ interface GitRunResult {
 }
 
 export class SprintFileBrowserService {
-  private readonly sessionLocks = new Map<string, Promise<unknown>>();
+  private readonly lifecycle = new DockerSessionLifecycle();
 
   constructor(private readonly deps: SprintFileBrowserServiceDeps) {}
 
@@ -78,7 +78,7 @@ export class SprintFileBrowserService {
   }
 
   async startSession(projectId: string, sprintId: string, options?: { rebuild?: boolean }): Promise<FileBrowserSession> {
-    return await this.withSessionLock(this.buildSessionLockKey(projectId, sprintId), async () => {
+    return await this.lifecycle.withSessionLock(`${projectId}:${sprintId}`, async () => {
       const project = this.requireProject(projectId);
       const sprint = this.requireSprint(projectId, sprintId);
       const effectiveSettings = this.resolveSettings(projectId, sprintId);
@@ -129,8 +129,8 @@ export class SprintFileBrowserService {
       });
 
       try {
-        await this.removeContainerIfPresent(existing?.containerId || existing?.containerName || containerName, project.baseDir);
-        await this.removeContainerIfPresent(containerName, project.baseDir);
+        await this.lifecycle.removeContainerIfPresent(existing?.containerId || existing?.containerName || containerName, project.baseDir);
+        await this.lifecycle.removeContainerIfPresent(containerName, project.baseDir);
 
         await this.materializeWorkspace(
           project.baseDir,
@@ -186,7 +186,7 @@ export class SprintFileBrowserService {
         return await this.refreshRuntimeState(updated);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        await this.removeContainerIfPresent(containerName, project.baseDir);
+        await this.lifecycle.removeContainerIfPresent(containerName, project.baseDir);
         return this.deps.sprintFileBrowserRepository.updateSession(session.id, {
           ...basePatch,
           status: "error",
@@ -205,9 +205,9 @@ export class SprintFileBrowserService {
 
   async stopSession(sessionId: string): Promise<FileBrowserSession> {
     const session = await this.requireSession(sessionId);
-    return await this.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
+    return await this.lifecycle.withSessionLock(`${session.projectId}:${session.sprintId}`, async () => {
       const containerRef = session.containerId || session.containerName || this.buildContainerName(session.projectId, session.sprintId);
-      await this.removeContainerIfPresent(containerRef, process.cwd());
+      await this.lifecycle.removeContainerIfPresent(containerRef, process.cwd());
       return this.deps.sprintFileBrowserRepository.updateSession(sessionId, {
         status: "stopped",
         containerId: null,
@@ -220,9 +220,9 @@ export class SprintFileBrowserService {
 
   async removeSession(sessionId: string): Promise<void> {
     const session = await this.requireSession(sessionId);
-    await this.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
+    await this.lifecycle.withSessionLock(`${session.projectId}:${session.sprintId}`, async () => {
       const containerRef = session.containerId || session.containerName || this.buildContainerName(session.projectId, session.sprintId);
-      await this.removeContainerIfPresent(containerRef, process.cwd());
+      await this.lifecycle.removeContainerIfPresent(containerRef, process.cwd());
       await runCommandStrict("docker", ["volume", "rm", `code-ux-file-browser-volume-${session.sprintId}`], process.cwd()).catch(() => undefined);
       this.deps.sprintFileBrowserRepository.deleteSession(sessionId);
     });
@@ -364,7 +364,7 @@ export class SprintFileBrowserService {
   }
 
   async cleanupStaleContainersOnStartup(): Promise<void> {
-    const containerIds = await this.listFileBrowserContainerIds();
+    const containerIds = (await this.listFileBrowserContainers(process.cwd())).map((c) => c.id);
     for (const containerId of containerIds) {
       await runCommandStrict("docker", ["rm", "-f", containerId], process.cwd()).catch(() => undefined);
     }
@@ -790,7 +790,7 @@ export class SprintFileBrowserService {
       if (sameProject && sameSprint) {
         continue;
       }
-      await this.removeContainerIfPresent(container.id, cwd);
+      await this.lifecycle.removeContainerIfPresent(container.id, cwd);
     }
 
     const sessions = this.deps.sprintFileBrowserRepository.listSessions();
@@ -810,19 +810,6 @@ export class SprintFileBrowserService {
     }
   }
 
-  private async listFileBrowserContainerIds(): Promise<string[]> {
-    try {
-      const result = await runCommandStrict(
-        "docker",
-        ["ps", "-aq", "--filter", `label=${FILE_BROWSER_LABEL}`],
-        process.cwd(),
-      );
-      return result.stdout.split("\n").map((line) => line.trim()).filter(Boolean);
-    } catch {
-      return [];
-    }
-  }
-
   private async listFileBrowserContainers(cwd: string): Promise<DockerContainerSummary[]> {
     try {
       const result = await runCommandStrict(
@@ -836,23 +823,7 @@ export class SprintFileBrowserService {
         ],
         cwd,
       );
-      return result.stdout
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const [id, name, rawStatus, projectId, sprintId, sessionId] = line.split("\t");
-          return {
-            id,
-            name: name || null,
-            status: this.normalizeDockerState(rawStatus),
-            labels: {
-              "code-ux.project-id": projectId || "",
-              "code-ux.sprint-id": sprintId || "",
-              "code-ux.session-id": sessionId || "",
-            },
-          } satisfies DockerContainerSummary;
-        });
+      return this.lifecycle.parseDockerPsOutput(result.stdout, false);
     } catch {
       return [];
     }
@@ -883,56 +854,6 @@ export class SprintFileBrowserService {
       container.id === session.containerId
       || (session.containerName ? container.name === session.containerName : false),
     ) || null;
-  }
-
-  private normalizeDockerState(rawStatus: string | null | undefined): string | null {
-    const normalized = String(rawStatus || "").trim().toLowerCase();
-    if (!normalized) {
-      return null;
-    }
-    if (normalized.startsWith("up ")) {
-      return "running";
-    }
-    if (normalized.startsWith("exited ")) {
-      return "exited";
-    }
-    if (normalized.startsWith("created")) {
-      return "created";
-    }
-    if (normalized.startsWith("restarting")) {
-      return "restarting";
-    }
-    return normalized;
-  }
-
-  private async removeContainerIfPresent(containerRef: string, cwd: string): Promise<void> {
-    if (!containerRef.trim()) {
-      return;
-    }
-    await runCommandStrict("docker", ["rm", "-f", containerRef], cwd).catch(() => undefined);
-  }
-
-  private buildSessionLockKey(projectId: string, sprintId: string): string {
-    return `${projectId}:${sprintId}`;
-  }
-
-  private async withSessionLock<T>(lockKey: string, operation: () => Promise<T>): Promise<T> {
-    const previous = this.sessionLocks.get(lockKey) || Promise.resolve();
-    let release: (() => void) | undefined;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const queued = previous.finally(() => gate);
-    this.sessionLocks.set(lockKey, queued);
-    await previous.catch(() => undefined);
-    try {
-      return await operation();
-    } finally {
-      release?.();
-      if (this.sessionLocks.get(lockKey) === queued) {
-        this.sessionLocks.delete(lockKey);
-      }
-    }
   }
 
   private normalizeRelativePath(requestedPath: string): string {
@@ -1034,8 +955,7 @@ export class SprintFileBrowserService {
   }
 
   private buildContainerName(projectId: string, sprintId: string): string {
-    const sanitize = (value: string) => value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").slice(0, 22);
-    return `code-ux-filebrowser-${sanitize(projectId)}-${sanitize(sprintId)}`.slice(0, 63);
+    return `code-ux-filebrowser-${sanitizeContainerNameComponent(projectId, 22)}-${sanitizeContainerNameComponent(sprintId, 22)}`.slice(0, 63);
   }
 
 }
