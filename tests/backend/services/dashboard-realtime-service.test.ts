@@ -333,9 +333,7 @@ describe("DashboardRealtimeService extracted publisher helper", () => {
     } as any);
 
     service.scheduleProjectExecutionRefresh("proj-1", { includeOverview: false });
-    vi.advanceTimersByTime(100);
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(100);
 
     // The first execution refresh queues an execution_refresh event in the debouncer,
     // plus a project.execution.updated AND a project.live.updated.
@@ -344,10 +342,9 @@ describe("DashboardRealtimeService extracted publisher helper", () => {
     // Trigger second publish attempt
     service.scheduleProjectExecutionRefresh("proj-1", { includeOverview: false });
 
-    // Advance timers way past the throttle limit
-    vi.advanceTimersByTime(5000);
-    await Promise.resolve();
-    await Promise.resolve();
+    // Advance well past the throttle window (PROJECT_LIVE_MIN_INTERVAL_MS is 5s); the async variant
+    // also flushes the loader microtasks so the re-attempted publish actually runs.
+    await vi.advanceTimersByTimeAsync(6000);
 
     // We should get another execution_refresh event (since it doesn't skip dupes)
     // but NO new project.execution.updated or project.live.updated events.

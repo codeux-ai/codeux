@@ -109,6 +109,7 @@ export class CodeUxServer {
   private static readonly GIT_STATUS_CACHE_MS = 10_000;
   private static readonly RUNTIME_CLEANUP_INTERVAL_MS = 15_000;
   private static readonly LIVE_SNAPSHOT_REFRESH_INTERVAL_MS = 30_000;
+  private static readonly WAL_CHECKPOINT_INTERVAL_MS = 60_000;
   private static activeSigintHandler: (() => void) | null = null;
   private readonly projectRoot: string;
   private readonly appConfig: AppConfig;
@@ -165,6 +166,7 @@ export class CodeUxServer {
   private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
   private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
+  private walCheckpointInterval: ReturnType<typeof setInterval> | null = null;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private dashboardHandle: DashboardServerHandle | null = null;
   private mcpServiceBound = false;
@@ -279,6 +281,10 @@ export class CodeUxServer {
     if (this.liveSnapshotInterval) {
       clearInterval(this.liveSnapshotInterval);
       this.liveSnapshotInterval = null;
+    }
+    if (this.walCheckpointInterval) {
+      clearInterval(this.walCheckpointInterval);
+      this.walCheckpointInterval = null;
     }
     if (this.mcpHttpHandle) {
       await this.mcpHttpHandle.close().catch(() => undefined);
@@ -400,6 +406,30 @@ export class CodeUxServer {
     initialTimer.unref?.();
     this.liveSnapshotInterval = setInterval(refreshLiveSnapshot, CodeUxServer.LIVE_SNAPSHOT_REFRESH_INTERVAL_MS);
     this.liveSnapshotInterval.unref?.();
+  }
+
+  private startWalCheckpointLoop(): void {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.walCheckpointInterval) {
+      return;
+    }
+
+    const maintenance = new DatabaseMaintenanceService({
+      appDbStorage: this.appDbStorage,
+      sessionTracking: this.sessionTracking,
+      settingsRepository: this.settingsRepository,
+      logger: this.logger.child({ component: "database-maintenance-service" }),
+    });
+
+    const checkpoint = (): void => {
+      try {
+        maintenance.checkpointWalDatabases();
+      } catch (error) {
+        this.logger.error("WAL checkpoint sweep failed", { error });
+      }
+    };
+
+    this.walCheckpointInterval = setInterval(checkpoint, CodeUxServer.WAL_CHECKPOINT_INTERVAL_MS);
+    this.walCheckpointInterval.unref?.();
   }
 
   private createContext(): ServerContext {
@@ -1098,6 +1128,7 @@ export class CodeUxServer {
     this.startRuntimeCleanupLoop();
     this.startSprintPreviewLoop();
     this.startLiveSnapshotLoop();
+    this.startWalCheckpointLoop();
     this.virtualWorkerService.start();
   }
 }

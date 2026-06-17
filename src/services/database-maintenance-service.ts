@@ -108,6 +108,31 @@ export class DatabaseMaintenanceService {
     });
   }
 
+  /**
+   * Truncates each database's write-ahead log back into the main file. SQLite only resets the WAL
+   * high-water mark on a TRUNCATE checkpoint; without periodic checkpoints a long-lived process lets
+   * the WAL grow to hundreds of MB (observed: a 39MB session-tracking.db with a 267MB WAL), which
+   * bloats memory/disk and slows every read. Cheap and non-destructive — a checkpoint that cannot
+   * complete (busy) is a no-op rather than an error, so this is safe to call on a timer.
+   */
+  checkpointWalDatabases(): void {
+    const targets: Array<{ label: string; db: { exec: (sql: string) => void } }> = [
+      { label: "app.db", db: this.deps.appDbStorage.getDatabase() },
+      { label: "session-tracking.db", db: this.deps.sessionTracking.getDatabase() },
+      { label: "settings.db", db: this.deps.settingsRepository.getDatabase() },
+    ];
+    for (const target of targets) {
+      try {
+        target.db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+      } catch (error) {
+        this.deps.logger.warn("WAL checkpoint failed", {
+          database: target.label,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
   private vacuumDatabases(): void {
     this.deps.logger.info("Executing VACUUM on app.db...");
     this.deps.appDbStorage.getDatabase().exec("VACUUM;");

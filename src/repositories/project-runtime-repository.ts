@@ -540,11 +540,14 @@ export class ProjectRuntimeRepository {
   }
 
   private insertRunEvent(taskRunId: string, eventType: string, payload: Record<string, unknown>, createdAt: string): void {
+    // project_id is denormalized from the parent task_run (PK lookup, negligible cost) so the live
+    // execution feed can read a project's recent events straight off idx_task_run_events_project_created.
     this.db.prepare(`
-      INSERT INTO task_run_events (id, task_run_id, event_type, originator, payload_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO task_run_events (id, task_run_id, project_id, event_type, originator, payload_json, created_at)
+      VALUES (?, ?, (SELECT project_id FROM task_runs WHERE id = ?), ?, ?, ?, ?)
     `).run(
       randomUUID(),
+      taskRunId,
       taskRunId,
       eventType,
       "system",

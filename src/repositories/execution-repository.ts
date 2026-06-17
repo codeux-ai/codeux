@@ -1368,11 +1368,12 @@ export class ExecutionRepository {
     if (taskRun.taskId) this.taskWallTimeCache.delete(taskRun.taskId);
     if (taskRun.sprintRunId) this.sprintRunWallTimeCache.delete(taskRun.sprintRunId);
     const result = this.db.prepare(`
-      INSERT OR IGNORE INTO task_run_events (id, task_run_id, event_type, originator, payload_json, source_event_key, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO task_run_events (id, task_run_id, project_id, event_type, originator, payload_json, source_event_key, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       randomUUID(),
       taskRunId,
+      taskRun.projectId ?? null,
       eventType,
       originator,
       JSON.stringify(payload),

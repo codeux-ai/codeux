@@ -164,15 +164,25 @@ export function bootDashboardRealtimeWebSocketServer(args: {
   const clients = new Map<Socket, RealtimeClientState>();
 
   const unsubscribe = args.realtimeService.subscribe((event) => {
+    // The serialized frame is identical for every subscriber of this scope, so encode it once
+    // (lazily, only if at least one client is subscribed) and reuse the same Buffer for all of them.
+    // The live snapshot can be ~480KB; re-running JSON.stringify + frame encoding per connected tab
+    // was pure duplicated CPU/allocation that scaled with the number of open dashboards.
+    let frame: Buffer | null = null;
     for (const client of clients.values()) {
       if (!client.subscriptions.has(event.scope)) {
         continue;
       }
+      if (frame === null) {
+        frame = encodeFrame(JSON.stringify({ type: "event", event } satisfies DashboardRealtimeServerMessage));
+      }
       client.lastPushedSequence = event.sequence;
-      sendJson(client.socket, {
-        type: "event",
-        event,
-      });
+      try {
+        client.socket.write(frame);
+      } catch {
+        // A failed write means the socket is already torn down; the close/error handlers
+        // remove it from the client set, so there is nothing to do here.
+      }
     }
   });
 

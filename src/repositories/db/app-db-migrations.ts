@@ -141,6 +141,23 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_execution_leases_scope", "execution_leases", "scope_type, scope_id");
   ensureIndex(db, "idx_task_run_events_task_run_created", "task_run_events", "task_run_id, created_at DESC");
   ensureUniqueIndex(db, "idx_task_run_events_source_event", "task_run_events", "task_run_id, source_event_key");
+  // Denormalize project_id onto task_run_events so the live execution feed can fetch a project's
+  // most-recent events via an index walk instead of joining task_runs, scanning every event for the
+  // project, and sorting the whole set in a temp B-tree on every dashboard tick (~50ms → ~1.5ms on
+  // a busy project). Both insert paths (ExecutionRepository.appendTaskRunEvent and
+  // ProjectRuntimeRepository.insertRunEvent) now write project_id directly; the backfill below
+  // repairs any remaining NULLs (pre-migration rows, or rows written by an older build between
+  // upgrades). Once the index exists, `project_id IS NULL` is an indexed lookup, so re-running this
+  // on every startup is cheap — it only touches stragglers. Events whose task_run was already pruned
+  // stay NULL (correctly excluded from the feed — they have no resolvable project).
+  ensureColumn(db, "task_run_events", "project_id", "TEXT");
+  ensureIndex(db, "idx_task_run_events_project_created", "task_run_events", "project_id, created_at DESC, id DESC");
+  db.exec(`
+    UPDATE task_run_events
+    SET project_id = (SELECT tr.project_id FROM task_runs tr WHERE tr.id = task_run_events.task_run_id)
+    WHERE project_id IS NULL
+      AND EXISTS (SELECT 1 FROM task_runs tr WHERE tr.id = task_run_events.task_run_id)
+  `);
   ensureIndex(db, "idx_sprint_run_events_sprint_run_created", "sprint_run_events", "sprint_run_id, created_at DESC");
   ensureUniqueIndex(db, "idx_sprint_run_events_source_event", "sprint_run_events", "sprint_run_id, source_event_key");
   ensureIndex(db, "idx_execution_invocations_project_started", "execution_invocations", "project_id, started_at DESC");
