@@ -14,6 +14,13 @@ import {
 import { toNumber } from "./execution-utils.js";
 import { StatsEntityMetadata, ProjectStatsQueryDependencies } from "./execution-stats-types.js";
 import {
+  usageFields,
+  mapAggregatedUsage,
+  mergeAggregatedUsage,
+  accumulateBucketUsage,
+  mapEntityUsage,
+} from "./project-stats-aggregation.js";
+import {
   addStatusCount,
   buildModelStatsKey,
   buildModelStatsLabel,
@@ -59,52 +66,6 @@ export function queryProjectStatsSnapshot(
     normalized.bucketSizeMs,
     firstBucketStartMs
   );
-
-  const usageFields = `
-    COUNT(*) as invocationCount,
-    SUM(COALESCE(duration_ms, 0)) as activeTimeMs,
-    SUM(input_tokens) as inputTokens,
-    SUM(cached_input_tokens) as cachedInputTokens,
-    SUM(output_tokens) as outputTokens,
-    SUM(reasoning_output_tokens) as reasoningOutputTokens,
-    SUM(total_tokens) as totalTokens,
-    SUM(tool_call_count) as toolCallCount,
-    SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
-    SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
-    SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
-    SUM(CASE WHEN usage_source NOT IN ('reported', 'estimated', 'unsupported') THEN 1 ELSE 0 END) as unavailableInvocationCount
-  `;
-
-  const mapAggregatedUsage = (row: any): ExecutionUsageTotals => ({
-    invocationCount: toNumber(row.invocationCount),
-    activeTimeMs: toNumber(row.activeTimeMs),
-    wallTimeMs: 0,
-    inputTokens: toNumber(row.inputTokens),
-    cachedInputTokens: toNumber(row.cachedInputTokens),
-    outputTokens: toNumber(row.outputTokens),
-    reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
-    totalTokens: toNumber(row.totalTokens),
-    toolCallCount: toNumber(row.toolCallCount),
-    reportedInvocationCount: toNumber(row.reportedInvocationCount),
-    estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
-    unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),
-    unavailableInvocationCount: toNumber(row.unavailableInvocationCount),
-  });
-
-  const mergeAggregatedUsage = (target: ExecutionUsageTotals, source: ExecutionUsageTotals) => {
-    target.invocationCount += source.invocationCount;
-    target.activeTimeMs += source.activeTimeMs;
-    target.inputTokens += source.inputTokens;
-    target.cachedInputTokens += source.cachedInputTokens;
-    target.outputTokens += source.outputTokens;
-    target.reasoningOutputTokens += source.reasoningOutputTokens;
-    target.totalTokens += source.totalTokens;
-    target.toolCallCount = (target.toolCallCount ?? 0) + (source.toolCallCount ?? 0);
-    target.reportedInvocationCount += source.reportedInvocationCount;
-    target.estimatedInvocationCount += source.estimatedInvocationCount;
-    target.unsupportedInvocationCount += source.unsupportedInvocationCount;
-    target.unavailableInvocationCount += source.unavailableInvocationCount;
-  };
 
   const usage = createEmptyUsageTotals();
   const taskUsage = new Map<string, ExecutionUsageTotals>();
@@ -202,12 +163,7 @@ export function queryProjectStatsSnapshot(
 
     // Buckets
     if (buckets.length > 0 && row.bucketIndex >= 0 && row.bucketIndex < buckets.length) {
-      const bucket = buckets[row.bucketIndex];
-      mergeAggregatedUsage(bucket.usage, u);
-      bucket.providerTokens.set(row.provider, (bucket.providerTokens.get(row.provider) || 0) + u.totalTokens);
-      bucket.purposeTime.set(row.purpose, (bucket.purposeTime.get(row.purpose) || 0) + u.activeTimeMs);
-      bucket.purposeInvocations.set(row.purpose, (bucket.purposeInvocations.get(row.purpose) || 0) + u.invocationCount);
-      bucket.modelTokens.set(modelKey, (bucket.modelTokens.get(modelKey) || 0) + u.totalTokens);
+      accumulateBucketUsage(buckets[row.bucketIndex], u, row.provider, row.purpose, modelKey);
     }
   }
 
@@ -358,22 +314,6 @@ export function queryProjectStatsSnapshot(
       data: buckets.map((b) => b.purposeInvocations.get(purposeId) || 0), formatter: 'number' as const
     })),
   ];
-
-  const mapEntityUsage = (map: Map<string, ExecutionUsageTotals>, activityMap: Map<string, string>, getMeta?: (id: string) => StatsEntityMetadata | undefined) => {
-    return Array.from(map.entries()).map(([id, usage]) => {
-      const meta = getMeta ? getMeta(id) : undefined;
-      return {
-        id,
-        label: meta?.label || id,
-        secondaryLabel: meta?.secondaryLabel || null,
-        status: (meta?.status || null) as any,
-        purpose: (meta?.purpose || null) as any,
-        provider: (meta?.provider || null) as any,
-        usage,
-        lastActivityAt: activityMap.get(id) || null,
-      };
-    }).sort((a, b) => b.usage.totalTokens - a.usage.totalTokens);
-  };
 
   return {
     projectId: projectRow?.id || projectId,

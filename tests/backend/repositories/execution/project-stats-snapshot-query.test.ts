@@ -4,6 +4,7 @@ import { ProjectStatsQueryDependencies } from "../../../../src/repositories/exec
 import { mapProviderInvocationUsageRow, mapExecutionSprintRunSummaryRow } from "../../../../src/repositories/execution/execution-read-model-mappers.js";
 import { ProviderInvocationUsageRow, ExecutionSprintRunSummaryRow } from "../../../../src/repositories/execution/execution-repository-types.js";
 import { ExecutionUsageTotals } from "../../../../src/contracts/app-types.js";
+import { usageFields } from "../../../../src/repositories/execution/project-stats-aggregation.js";
 
 describe("execution-read-model-mappers", () => {
   it("mapProviderInvocationUsageRow coerces fields and produces the correct shape", () => {
@@ -183,5 +184,11 @@ describe("queryProjectStatsSnapshot", () => {
     expect(snapshot.chartSeries.find(s => s.id === 'git_deletions')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: true });
     expect(snapshot.chartSeries.find(s => s.id === 'git_prs')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: false });
     expect(snapshot.chartSeries.find(s => s.id === 'git_merges')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: false });
+  });
+});
+
+describe("queryProjectStatsSnapshot extracted helpers", () => {
+  it("imports usageFields correctly", () => {
+    expect(typeof usageFields).toBe("string");
   });
 });
