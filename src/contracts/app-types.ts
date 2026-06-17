@@ -372,6 +372,10 @@ export interface ExecutionUsageTotals {
   outputTokens: number;
   reasoningOutputTokens: number;
   totalTokens: number;
+  inputCostUsd: number;
+  outputCostUsd: number;
+  cachedInputCostUsd: number;
+  totalCostUsd: number;
   /** Total tool-style operations across the aggregated invocations. Optional so
    *  existing literal consumers stay valid; backend aggregators populate it. */
   toolCallCount?: number;
@@ -627,6 +631,12 @@ export interface AutomationInterventionsSettings {
   clarificationCooldownSeconds: number;
 }
 
+export interface TokenPricing {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+}
+
 export interface ProviderSettings {
   provider: ProviderId;
   name: string;
@@ -642,6 +652,7 @@ export interface ProviderSettings {
   /** Custom model identifier sent to the CLI when routing through a custom base URL (claude-code, codex). */
   customModel?: string;
   maxConcurrentTasks: number;
+  pricing?: TokenPricing;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;

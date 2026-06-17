@@ -24,6 +24,7 @@ import type {
   JiraSettings,
 } from "./app-types.js";
 import type { MemorySettings } from "./memory-types.js";
+import type { TokenPricing } from "./app-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
 
 export type { WorkerRuntimeSettings };
@@ -108,6 +109,7 @@ export interface SystemProviderCredentialSettings {
   customBaseUrl?: string;
   /** Custom model identifier sent to the CLI when routing through a custom base URL (claude-code, codex). */
   customModel?: string;
+  pricing?: TokenPricing;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;

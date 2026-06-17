@@ -84,6 +84,10 @@ export function queryProjectStatsSnapshot(
     outputTokens: toNumber(row.outputTokens),
     reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
     totalTokens: toNumber(row.totalTokens),
+    inputCostUsd: 0,
+    outputCostUsd: 0,
+    cachedInputCostUsd: 0,
+    totalCostUsd: 0,
     toolCallCount: toNumber(row.toolCallCount),
     reportedInvocationCount: toNumber(row.reportedInvocationCount),
     estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
@@ -99,6 +103,10 @@ export function queryProjectStatsSnapshot(
     target.outputTokens += source.outputTokens;
     target.reasoningOutputTokens += source.reasoningOutputTokens;
     target.totalTokens += source.totalTokens;
+    target.inputCostUsd += source.inputCostUsd;
+    target.outputCostUsd += source.outputCostUsd;
+    target.cachedInputCostUsd += source.cachedInputCostUsd;
+    target.totalCostUsd += source.totalCostUsd;
     target.toolCallCount = (target.toolCallCount ?? 0) + (source.toolCallCount ?? 0);
     target.reportedInvocationCount += source.reportedInvocationCount;
     target.estimatedInvocationCount += source.estimatedInvocationCount;
@@ -147,6 +155,15 @@ export function queryProjectStatsSnapshot(
 
   for (const row of mainAggs) {
     const u = mapAggregatedUsage(row);
+    if (row.provider) {
+      const pricing = deps.getProviderPricing?.(row.provider, row.model);
+      if (pricing) {
+        u.inputCostUsd = (u.inputTokens / 1_000_000) * (pricing.inputTokens || 0);
+        u.outputCostUsd = (u.outputTokens / 1_000_000) * (pricing.outputTokens || 0);
+        u.cachedInputCostUsd = (u.cachedInputTokens / 1_000_000) * (pricing.cachedInputTokens || 0);
+        u.totalCostUsd = u.inputCostUsd + u.outputCostUsd + u.cachedInputCostUsd;
+      }
+    }
     mergeAggregatedUsage(usage, u);
 
     // Task aggregations
@@ -208,6 +225,8 @@ export function queryProjectStatsSnapshot(
       bucket.purposeTime.set(row.purpose, (bucket.purposeTime.get(row.purpose) || 0) + u.activeTimeMs);
       bucket.purposeInvocations.set(row.purpose, (bucket.purposeInvocations.get(row.purpose) || 0) + u.invocationCount);
       bucket.modelTokens.set(modelKey, (bucket.modelTokens.get(modelKey) || 0) + u.totalTokens);
+      bucket.providerCost.set(row.provider, (bucket.providerCost.get(row.provider) || 0) + u.totalCostUsd);
+      bucket.modelCost.set(modelKey, (bucket.modelCost.get(modelKey) || 0) + u.totalCostUsd);
     }
   }
 
@@ -315,6 +334,7 @@ export function queryProjectStatsSnapshot(
 
   const chartSeries: ProjectExecutionStatsChartSeries[] = [
     { id: "core_total_tokens", label: "Total Tokens", grouping: "totals", defaultEnabled: true, data: buckets.map((b) => b.usage.totalTokens), color: '#00E0A0', signalLabel: 'Throughput', formatter: 'tokens' },
+    { id: "core_total_cost", label: "Total Cost (USD)", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.totalCostUsd), color: '#10B981', signalLabel: 'Cost', formatter: 'number' },
     { id: "core_active_time", label: "Active Time (ms)", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.activeTimeMs), color: '#FFB800', signalLabel: 'Latency', formatter: 'duration' },
     { id: "core_invocations", label: "Invocations", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.invocationCount), color: '#0EA5E9', signalLabel: 'Volume', formatter: 'number' },
     { id: "core_input_tokens", label: "Input Tokens", grouping: "details", defaultEnabled: false, data: buckets.map((b) => b.usage.inputTokens), formatter: 'tokens' },
@@ -338,6 +358,10 @@ export function queryProjectStatsSnapshot(
       id: `provider_${providerId}`, label: `${providerId} Tokens`, grouping: "providers", defaultEnabled: false,
       data: buckets.map((b) => b.providerTokens.get(providerId) || 0), formatter: 'tokens' as const
     })),
+    ...Array.from(providerUsage.keys()).map((providerId) => ({
+      id: `provider_cost_${providerId}`, label: `${providerId} Cost (USD)`, grouping: "providers_cost", defaultEnabled: false,
+      data: buckets.map((b) => b.providerCost.get(providerId) || 0), formatter: 'number' as const
+    })),
     ...Array.from(modelUsage.keys()).map((modelKey) => {
       const meta = modelMeta.get(modelKey);
       return {
@@ -347,6 +371,17 @@ export function queryProjectStatsSnapshot(
         defaultEnabled: false,
         data: buckets.map((b) => b.modelTokens.get(modelKey) || 0),
         formatter: 'tokens' as const,
+      };
+    }),
+    ...Array.from(modelUsage.keys()).map((modelKey) => {
+      const meta = modelMeta.get(modelKey);
+      return {
+        id: `model_cost_${modelKey}`,
+        label: `${buildModelStatsLabel(meta?.provider, meta?.model)} Cost (USD)`,
+        grouping: "models_cost",
+        defaultEnabled: false,
+        data: buckets.map((b) => b.modelCost.get(modelKey) || 0),
+        formatter: 'number' as const,
       };
     }),
     ...Array.from(purposeUsage.keys()).map((purposeId) => ({

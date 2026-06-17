@@ -9,9 +9,11 @@ import { startOfUtcDay } from "./project-stats-query.js";
 export interface InternalStatsBucket extends ExecutionUsageBucketSummary {
   bucketStartMs: number;
   providerTokens: Map<string, number>;
+  providerCost: Map<string, number>;
   purposeTime: Map<string, number>;
   purposeInvocations: Map<string, number>;
   modelTokens: Map<string, number>;
+  modelCost: Map<string, number>;
 }
 
 export function createEmptyUsageTotals(): ExecutionUsageTotals {
@@ -24,6 +26,10 @@ export function createEmptyUsageTotals(): ExecutionUsageTotals {
     outputTokens: 0,
     reasoningOutputTokens: 0,
     totalTokens: 0,
+    inputCostUsd: 0,
+    outputCostUsd: 0,
+    cachedInputCostUsd: 0,
+    totalCostUsd: 0,
     toolCallCount: 0,
     reportedInvocationCount: 0,
     estimatedInvocationCount: 0,
@@ -50,9 +56,11 @@ export function createUsageBuckets(
       label,
       usage: createEmptyUsageTotals(),
       providerTokens: new Map<string, number>(),
+      providerCost: new Map<string, number>(),
       purposeTime: new Map<string, number>(),
       purposeInvocations: new Map<string, number>(),
       modelTokens: new Map<string, number>(),
+      modelCost: new Map<string, number>(),
     });
   }
   return buckets;

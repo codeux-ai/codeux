@@ -13,6 +13,30 @@ import { DEFAULT_INSTRUCTION_TEMPLATES } from "../../../src/instructions/instruc
 import type { SystemSettings, ProjectSettingsOverride } from "../../../src/contracts/settings-scope-types.js";
 
 describe("Settings Resolution Service", () => {
+  describe("Provider Pricing Normalization", () => {
+    it("should default pricing to zero if not provided", () => {
+      const systemSettings = sanitizeSystemSettings({ integrations: { providers: { jules: { provider: "jules" } } } } as any);
+      expect(systemSettings.integrations.providers["jules"].pricing).toEqual({ inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 });
+    });
+
+    it("should preserve explicitly configured pricing", () => {
+      const pricing = { inputTokens: 2, outputTokens: 10, cachedInputTokens: 1 };
+      const systemSettings = sanitizeSystemSettings({ integrations: { providers: { jules: { provider: "jules", pricing } } } } as any);
+      expect(systemSettings.integrations.providers["jules"].pricing).toEqual(pricing);
+    });
+
+    it("should pass pricing through dashboard provider settings resolution", () => {
+      const pricing = { inputTokens: 3, outputTokens: 15, cachedInputTokens: 0 };
+      const systemSettings = {
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
+        integrations: { providers: { jules: { provider: "jules", pricing } }, githubToken: "" },
+      };
+      const systemSettingsMock = sanitizeSystemSettings(systemSettings as any);
+      systemSettingsMock.integrations.providers["jules"].pricing = pricing;
+      const dashboard = resolveDashboardSettings({ systemSettings: { ...systemSettingsMock, defaults: buildDefaultProjectSettings(), mcpTools: [], customMcpServers: [] } as any });
+      expect(dashboard.settings.aiProvider.providers["jules"].pricing).toEqual(pricing);
+    });
+  });
   describe("buildDefaultProjectSettings", () => {
     it("should return a complete ProjectSettings with all required fields populated", () => {
       const settings = buildDefaultProjectSettings();

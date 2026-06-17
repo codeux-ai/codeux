@@ -1,4 +1,4 @@
-import { ExecutionUsageTotals } from "../../contracts/app-types.js";
+import { ExecutionUsageTotals, TokenPricing } from "../../contracts/app-types.js";
 import { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { ProviderInvocationUsageRow } from "./execution-repository-types.js";
 
@@ -18,4 +18,5 @@ export interface ProjectStatsQueryDependencies {
   getTaskMetadata: (id: string, ids: string[]) => Map<string, StatsEntityMetadata>;
   getSprintMetadata: (id: string, ids: string[]) => Map<string, StatsEntityMetadata>;
   updateLastActivity: (map: Map<string, string>, key: string | null, date: string | null) => void;
+  getProviderPricing?: (providerId: string, model: string | null) => TokenPricing | undefined;
 }
