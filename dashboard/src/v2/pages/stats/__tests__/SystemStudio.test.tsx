@@ -109,8 +109,11 @@ describe("SystemStudio", () => {
 
     expect(container.querySelectorAll(".text-red-600").length).toBeGreaterThan(0);
     expect(container.querySelectorAll(".text-blue-600").length).toBeGreaterThan(0);
+    expect(container.textContent).toContain("Sprint Overview");
     expect(container.textContent).toContain("Status Distribution");
     expect(container.textContent).toContain("Success Rate");
+    expect(container.textContent).toContain("Error Log");
+    expect(container.textContent).toContain("Detailed Log");
 
     fireEvent.click(screen.getByRole("button", { name: "Errors" }));
 
