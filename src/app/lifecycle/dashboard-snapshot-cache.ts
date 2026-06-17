@@ -208,6 +208,8 @@ export class DashboardSnapshotCache {
     this.projectsSnapshotCache = null;
   }
 
+
+
   invalidateAll(): void {
     this.projectExecutionSnapshotCache.clear();
     this.projectStatsSnapshotCache.clear();

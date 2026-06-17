@@ -15,6 +15,13 @@ import {
 
 type MaybePromise<T> = T | Promise<T>;
 
+export interface DashboardSnapshotCacheInvalidator {
+  invalidateProjectExecution(projectId: string): void;
+  invalidateProjectStats(projectId: string): void;
+  invalidateOverview(): void;
+  invalidateProjects(): void;
+}
+
 export interface DashboardRealtimeSnapshotLoaders {
   getProjectsSnapshot: () => MaybePromise<ProjectCollectionResponse>;
   getProjectExecutionSnapshot: (projectId: string) => MaybePromise<ExecutionDashboardSnapshot>;
@@ -74,6 +81,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
   private projectsPublishedAt = 0;
   private overviewPublishedAt = 0;
   private snapshotLoaders: DashboardRealtimeSnapshotLoaders | null = null;
+  private cacheInvalidator: DashboardSnapshotCacheInvalidator | null = null;
 
   private executionRefreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private queuedExecutionRefreshProjectIds = new Set<string>();
@@ -83,6 +91,10 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     private readonly logger: Logger,
   ) {
     this.latestSequence = this.eventRepository.getLatestSequence() ?? 0;
+  }
+
+  setCacheInvalidator(invalidator: DashboardSnapshotCacheInvalidator): void {
+    this.cacheInvalidator = invalidator;
   }
 
   setSnapshotLoaders(loaders: DashboardRealtimeSnapshotLoaders): void {
@@ -143,6 +155,16 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     const normalizedProjectId = String(projectId || "").trim();
     if (!normalizedProjectId) {
       return;
+    }
+
+    this.cacheInvalidator?.invalidateProjectExecution(normalizedProjectId);
+    this.cacheInvalidator?.invalidateProjectStats(normalizedProjectId);
+
+    if (options?.includeOverview !== false) {
+       this.cacheInvalidator?.invalidateOverview();
+    }
+    if (options?.includeProjects === true) {
+       this.cacheInvalidator?.invalidateProjects();
     }
 
     this.pendingProjectLiveIds.add(normalizedProjectId);
@@ -228,11 +250,13 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
   }
 
   scheduleOverviewRefresh(): void {
+    this.cacheInvalidator?.invalidateOverview();
     this.pendingOverview = true;
     this.scheduleFlush();
   }
 
   scheduleProjectsRefresh(): void {
+    this.cacheInvalidator?.invalidateProjects();
     this.pendingProjects = true;
     this.scheduleFlush();
 
