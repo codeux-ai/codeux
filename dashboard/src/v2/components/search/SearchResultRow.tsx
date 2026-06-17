@@ -112,10 +112,11 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
         <Link
             to={targetTo as any}
             search={targetSearch as any}
-            onClick={onClick}
+            onClick={item.status === 'unavailable' || item.status === 'disabled' ? (e: any) => e.preventDefault() : onClick}
             id={`search-result-${globalItemIndex}`}
             ref={activeItemRef as any}
             onMouseEnter={onFocus}
+            aria-disabled={item.status === 'unavailable' || item.status === 'disabled' ? 'true' : undefined}
             aria-label={`${categoryType} result: ${title}`}
             role="option"
             aria-selected={isFocused}
@@ -123,7 +124,7 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
                 isFocused
                     ? 'bg-signal-500/8 dark:bg-signal-500/10 border-signal-500/20 shadow-[0_0_20px_rgba(0,224,160,0.08)] backdrop-blur-2xl'
                     : 'bg-white/50 dark:bg-void-800/40 hover:bg-white/80 dark:hover:bg-void-700/60 border-black/5 dark:border-white/5 backdrop-blur-xl'
-            } border`}
+            } border aria-disabled:opacity-50 aria-disabled:pointer-events-none`}
         >
             {/* Hover/Focus Background Glow */}
             {isFocused && (

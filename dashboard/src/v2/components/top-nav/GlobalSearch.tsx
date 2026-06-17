@@ -43,6 +43,10 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     useEffect(() => {
         const handleCmdK = (e: KeyboardEvent) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                const target = e.target as HTMLElement;
+                if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+                    return;
+                }
                 e.preventDefault();
                 setIsSearchOpen(true);
             }
@@ -63,7 +67,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     };
 
     const handleSearchLeave = () => {
-        if (!searchBarContainerRef.current) return;
+        if (!searchBarContainerRef.current || isSearchOpen) return;
         gsap.to(searchBarContainerRef.current, {
             scaleX: 1,
             duration: 0.35,
@@ -72,6 +76,14 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
             overwrite: "auto"
         });
     };
+
+    useEffect(() => {
+        if (!isSearchOpen) {
+            handleSearchLeave();
+        } else {
+            handleSearchEnter();
+        }
+    }, [isSearchOpen]);
 
     const searchResults = useMemo(() => {
         if (!debouncedQuery.trim()) {
