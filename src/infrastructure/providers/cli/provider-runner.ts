@@ -1,3 +1,4 @@
+import { ProviderTelemetryWatcher } from "./provider-telemetry-watcher.js";
 import { CliWorkflowSettings, ProviderId } from "../../../contracts/app-types.js";
 import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
 import { buildProviderMcpConfigArtifact, buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
@@ -366,71 +367,31 @@ export class ProviderRunner implements IProviderRunner {
     };
 
     let tempDbPath: string | null = null;
-    let watcherTempDbPath: string | null = null;
-    let activeWatcher = true;
-    let watcherPromise: Promise<void> | null = null;
+    let watcher: ProviderTelemetryWatcher | null = null;
 
     if (input.onTelemetry) {
-      const watcherLoop = async () => {
-        // Small initial delay to let the process spin up and start writing logs
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        while (activeWatcher && !signal?.aborted) {
-          try {
-            let claudeSessionJsonl: string | null = null;
-            let codexSessionJson: string | null = null;
-            let qwenLog: { usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null = null;
-            let antigravityTranscriptJsonl: string | null = null;
-            let resolvedNativeSessionId = nativeSessionId;
-
-            if (provider === "claude-code" && nativeSessionId) {
-              claudeSessionJsonl = await this.readClaudeSessionJsonl(cwd, nativeSessionId, workflowSettings.executionMode);
-            } else if (provider === "codex") {
-              codexSessionJson = await this.readCodexLatestSessionJson(cwd, workflowSettings.executionMode);
-            } else if (provider === "qwen-code") {
-              qwenLog = await this.readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs);
-            } else if (provider === "antigravity") {
-              if (!resolvedNativeSessionId && antigravityLogPath) {
-                resolvedNativeSessionId = await this.parseAntigravityConversationId(cwd, antigravityLogPath, workflowSettings.executionMode);
-              }
-              if (resolvedNativeSessionId) {
-                antigravityTranscriptJsonl = await this.readAntigravityTranscript(cwd, resolvedNativeSessionId, workflowSettings.executionMode);
-                if (!watcherTempDbPath) {
-                  const safeSession = resolvedNativeSessionId.replace(/[^A-Za-z0-9_-]/g, "_");
-                  watcherTempDbPath = path.join(os.tmpdir(), `agy-temp-watcher-${safeSession}-${randomUUID()}.db`);
-                }
-                await this.resolveAntigravityDatabase(cwd, resolvedNativeSessionId, workflowSettings.executionMode, watcherTempDbPath);
-              }
-            }
-
-            const telemetry = await collectProviderUsageTelemetry({
-              provider,
-              model: runModel,
-              prompt,
-              cwd,
-              stdout: accumulatedRawStdout,
-              stderr: accumulatedStderr,
-              capturedText: "",
-              nativeSessionId: resolvedNativeSessionId || nativeSessionId,
-              claudeSessionJsonl,
-              codexSessionJson,
-              qwenReportedUsage: qwenLog?.usage ?? null,
-              qwenConversation: qwenLog?.conversation ?? null,
-              startTimeMs: startedMs,
-              executionMode: workflowSettings.executionMode,
-              antigravitySessionDbPath: watcherTempDbPath,
-              antigravityTranscriptJsonl,
-            });
-
-            if (input.onTelemetry) {
-              input.onTelemetry(telemetry);
-            }
-          } catch (err) {
-            // Swallow background watcher errors
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        }
-      };
-      watcherPromise = watcherLoop();
+      watcher = new ProviderTelemetryWatcher({
+        provider,
+        model: runModel,
+        prompt,
+        cwd,
+        startedMs,
+        workflowSettings,
+        signal,
+        onTelemetry: input.onTelemetry,
+        getAccumulatedRawStdout: () => accumulatedRawStdout,
+        getAccumulatedStderr: () => accumulatedStderr,
+        nativeSessionId,
+        sessionId,
+        antigravityLogPath,
+        readClaudeSessionJsonl: async (id) => this.readClaudeSessionJsonl(cwd, id, workflowSettings.executionMode),
+        readCodexLatestSessionJson: async () => this.readCodexLatestSessionJson(cwd, workflowSettings.executionMode),
+        readQwenLogData: async () => this.readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs),
+        parseAntigravityConversationId: async (logPath) => this.parseAntigravityConversationId(cwd, logPath, workflowSettings.executionMode),
+        readAntigravityTranscript: async (resolvedId) => this.readAntigravityTranscript(cwd, resolvedId, workflowSettings.executionMode),
+        resolveAntigravityDatabase: async (resolvedId, destPath) => this.resolveAntigravityDatabase(cwd, resolvedId, workflowSettings.executionMode, destPath),
+      });
+      watcher.start();
     }
 
     try {
@@ -540,12 +501,8 @@ export class ProviderRunner implements IProviderRunner {
         nativeSessionId: usageTelemetry.nativeSessionId || resolvedNativeSessionId || nativeSessionId,
       };
     } finally {
-      activeWatcher = false;
-      if (watcherPromise) {
-        await watcherPromise.catch(() => undefined);
-      }
-      if (watcherTempDbPath) {
-        await fs.rm(watcherTempDbPath, { force: true }).catch(() => undefined);
+      if (watcher) {
+        await watcher.stop();
       }
       if (tempDbPath) {
         await fs.rm(tempDbPath, { force: true }).catch(() => undefined);
