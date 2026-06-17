@@ -256,6 +256,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     projectAttentionRepository: deps.projectAttentionRepository,
   });
 
+  deps.dashboardRealtimeService.setCacheInvalidator(cache);
+
   deps.dashboardRealtimeService.setSnapshotLoaders({
     getProjectsSnapshot: cache.getProjectsSnapshot,
     getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
