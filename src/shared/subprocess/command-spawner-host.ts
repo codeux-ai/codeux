@@ -78,6 +78,8 @@ function runJob(message: SpawnerRunMessage): void {
   let stderr = "";
   let stdoutLineBuffer = "";
   let stderrLineBuffer = "";
+  let stdoutClipped = false;
+  let stderrClipped = false;
   let timedOut = false;
   let settled = false;
   let killTimer: NodeJS.Timeout | null = null;
@@ -110,8 +112,16 @@ function runJob(message: SpawnerRunMessage): void {
     const text = data.toString();
     if (appendTo === "stdout") {
       stdout += text;
+      if (options.maxStdoutChars !== undefined && stdout.length > options.maxStdoutChars) {
+        stdout = stdout.slice(-options.maxStdoutChars);
+        stdoutClipped = true;
+      }
     } else {
       stderr += text;
+      if (options.maxStderrChars !== undefined && stderr.length > options.maxStderrChars) {
+        stderr = stderr.slice(-options.maxStderrChars);
+        stderrClipped = true;
+      }
     }
     if (!streamLines) {
       return;
@@ -136,6 +146,8 @@ function runJob(message: SpawnerRunMessage): void {
   child.stderr?.on("data", (data: Buffer) => handleData(data, "stderr", "stderrLine", options.streamStderrLines));
 
   const finish = (result: SpawnerRawResult): void => {
+    if (stdoutClipped) result.stdoutClipped = true;
+    if (stderrClipped) result.stderrClipped = true;
     if (settled) {
       return;
     }
