@@ -79,12 +79,14 @@ class DashboardRealtimeClient {
     this.socket = socket;
 
     socket.addEventListener("open", () => {
+      if (this.socket !== socket) return;
       this.reconnectAttempt = 0;
       this.setTransportState("connected");
       this.scheduleSubscriptionSync();
     });
 
     socket.addEventListener("message", (event) => {
+      if (this.socket !== socket) return;
       try {
         const payload = JSON.parse(String(event.data || "")) as DashboardRealtimeServerMessage;
         if (payload.type === "event") {
@@ -99,12 +101,11 @@ class DashboardRealtimeClient {
     });
 
     socket.addEventListener("close", () => {
-      if (this.socket === socket) {
-        this.socket = null;
-        this.lastSentScopesKey = "";
-        if (this.subscriptions.size === 0) {
-          this.setTransportState("disconnected");
-        }
+      if (this.socket !== socket) return;
+      this.socket = null;
+      this.lastSentScopesKey = "";
+      if (this.subscriptions.size === 0) {
+        this.setTransportState("disconnected");
       }
       if (this.subscriptions.size > 0) {
         this.scheduleReconnect();
@@ -112,6 +113,7 @@ class DashboardRealtimeClient {
     });
 
     socket.addEventListener("error", () => {
+      if (this.socket !== socket) return;
       socket.close();
     });
   }
@@ -199,9 +201,11 @@ class DashboardRealtimeClient {
     }
     this.lastSentScopesKey = "";
     if (this.socket) {
-      this.socket.close();
+      const socket = this.socket;
       this.socket = null;
+      socket.close();
     }
+    this.setTransportState("disconnected");
   }
 
   private scheduleDisconnectCheck(): void {

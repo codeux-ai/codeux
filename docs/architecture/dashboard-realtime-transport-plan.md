@@ -292,6 +292,8 @@ Create one dashboard-side client module responsible for:
 - sending subscribe and unsubscribe messages
 - tracking `lastSequence`
 - notifying consumers
+- filtering out stale socket events via strict identity checks
+- completely cleaning up timers and cleanly resetting state on disconnect
 
 This should be shared across dashboard pages instead of each page opening its own socket.
 
