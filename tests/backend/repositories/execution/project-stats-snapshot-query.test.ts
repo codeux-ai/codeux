@@ -136,10 +136,18 @@ describe("execution-read-model-mappers", () => {
 describe("queryProjectStatsSnapshot", () => {
   it("computes stats snapshot calling the expected dependencies", () => {
     const dbMock = {
-      prepare: vi.fn().mockImplementation((query) => {
+      prepare: vi.fn().mockImplementation((query: string) => {
         return {
           get: vi.fn().mockReturnValue({ id: "proj-1", name: "Project 1", sprint_id: "sprint-1", sprint_name: "Sprint 1", sprint_number: 1 }),
-          all: vi.fn().mockReturnValue([]),
+          all: vi.fn().mockImplementation(() => {
+            if (query.includes("AVG(duration_ms)")) {
+              return [{ provider: "openai", model: "gpt-4", sampleCount: 1, minMs: 100, maxMs: 100, avgMs: 100 }];
+            }
+            if (query.includes("duration_ms as durationMs")) {
+              return [{ provider: "openai", model: "gpt-4", durationMs: 100 }];
+            }
+            return [];
+          }),
         };
       })
     };
@@ -166,7 +174,8 @@ describe("queryProjectStatsSnapshot", () => {
     // Model + reliability analytics are present even on an empty window
     expect(snapshot.models).toEqual([]);
     expect(snapshot.statusCounts).toEqual({ completed: 0, failed: 0, cancelled: 0, running: 0, paused: 0 });
-    expect(snapshot.duration).toEqual({ sampleCount: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0 });
+    // Duration reflects the mock data injected via the aggregate query
+    expect(snapshot.duration).toEqual({ sampleCount: 1, avgMs: 100, p50Ms: 100, p95Ms: 100, maxMs: 100 });
     expect(snapshot.chartSeries.find(s => s.id === 'core_cache_hit')).toMatchObject({ grouping: 'details', formatter: 'percent', defaultEnabled: false });
 
     // Assert git series

@@ -908,3 +908,73 @@ describe("ProviderRunner", () => {
     await expect(fs.access(mcpConfigPath)).rejects.toThrow();
   });
 });
+
+
+describe("ProviderRunner MCP config generation", () => {
+  let runner: any;
+
+  beforeEach(() => {
+    runner = new ProviderRunner();
+    const mockMkdir = vi.spyOn(fs, 'mkdir');
+    mockMkdir.mockResolvedValue(undefined);
+    const mockReadFile = vi.spyOn(fs, 'readFile');
+    mockReadFile.mockResolvedValue(null as any);
+    const mockWriteFile = vi.spyOn(fs, 'writeFile');
+    mockWriteFile.mockResolvedValue(undefined);
+  });
+
+  const writeConfig = (conn: any, cwd: string, provider: any, qwenSettings?: string, customServers: any[] = []) =>
+    runner.writeLocalMcpConfig(conn, cwd, provider, qwenSettings, customServers);
+
+  const getWrittenContent = (filename: string): string | undefined => {
+    const call = vi.mocked(fs.writeFile).mock.calls.find(([target]) => String(target).endsWith(filename));
+    return call ? String(call[1]) : undefined;
+  };
+
+  it("writes local claude config with merged servers", async () => {
+    await writeConfig({ url: "http://127.0.0.1/mcp", authToken: "sec" }, "/tmp/cwd", "claude-code", undefined, [
+      { id: "1", name: "tool", url: "http://tool/mcp", enabled: true, headers: { auth: "bearer 123" } }
+    ]);
+    const json = JSON.parse(getWrittenContent(".claude/settings.local.json")!);
+    expect(json.mcpServers.code_ux).toEqual({ type: "http", url: "http://127.0.0.1/mcp", headers: { Authorization: "Bearer sec" } });
+    expect(json.mcpServers.tool).toEqual({ type: "http", url: "http://tool/mcp", headers: { auth: "bearer 123" } });
+  });
+
+  it("writes local gemini config with merged servers", async () => {
+    await writeConfig(null, "/tmp/cwd", "gemini", undefined, [
+      { id: "1", name: "tool", transport: "stdio", command: "ls", args: ["-la"], enabled: true }
+    ]);
+    const json = JSON.parse(getWrittenContent(".gemini/settings.json")!);
+    expect(json.mcpServers.tool).toEqual({ command: "ls", args: ["-la"] });
+  });
+
+  it("writes local qwen config with merged existing settings", async () => {
+    await writeConfig(null, "/tmp/cwd", "qwen-code", JSON.stringify({ enableOpenAILogging: true, customOpt: "abc" }), [
+      { id: "1", name: "tool", transport: "stdio", command: "echo", enabled: true }
+    ]);
+    const json = JSON.parse(getWrittenContent(".qwen/settings.json")!);
+    expect(json.enableOpenAILogging).toBeUndefined();
+    expect(json.customOpt).toBe("abc");
+    expect(json.mcpServers.tool).toEqual({ command: "echo" });
+  });
+
+  it("writes local codex config", async () => {
+    await writeConfig({ url: "http://127.0.0.1/mcp" }, "/tmp/cwd", "codex", undefined, [
+      { id: "1", name: "tool", transport: "stdio", command: "cat", enabled: true }
+    ]);
+    const toml = getWrittenContent(".codex/config.toml")!;
+    expect(toml).toContain('[mcp_servers.code-ux]');
+    expect(toml).toContain('url = "http://127.0.0.1/mcp"');
+    expect(toml).toContain('[mcp_servers.tool]');
+    expect(toml).toContain('command = "cat"');
+  });
+
+  it("writes local antigravity config", async () => {
+    await writeConfig({ url: "http://127.0.0.1/mcp" }, "/tmp/cwd", "antigravity", undefined, [
+      { id: "1", name: "tool", transport: "stdio", command: "bash", args: ["-c", "echo hello"], enabled: true }
+    ]);
+    const json = JSON.parse(getWrittenContent(".agents/mcp_config.json")!);
+    expect(json.mcpServers.code_ux).toEqual({ serverUrl: "http://127.0.0.1/mcp" });
+    expect(json.mcpServers.tool).toEqual({ command: "bash", args: ["-c", "echo hello"] });
+  });
+});

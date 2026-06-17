@@ -1,6 +1,8 @@
 import type { ManageCodeUxArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
 import type { AgentAvatarConfig } from "../../contracts/agent-preset-types.js";
+import { parseRequiredString, parseOptionalString, parseOptionalStringArray, parseOptionalBoolean, parseOptionalObject } from "./payload-parsers.js";
+
 
 interface UpdateAgentInput {
   name?: string;
@@ -36,15 +38,13 @@ export class AgentActions {
   }
 
   private async listAgents(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    if (!projectId) throw new Error("projectId is required");
+    const projectId = parseRequiredString(payload, "projectId");
     const agents = await this.agentPresetSyncService.listAgentPresets(projectId);
     return { result: { agents } };
   }
 
   private async getAgent(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const presetId = typeof payload.presetId === "string" ? payload.presetId : undefined;
-    if (!presetId) throw new Error("presetId is required");
+    const presetId = parseRequiredString(payload, "presetId");
 
     // We get the specific preset ID directly through the sync service to make sure it exists and gets decorated properly if possible.
     // However, the service doesn't have a direct `getAgentPresetById` that we can access publicly except via specific flows.
@@ -52,8 +52,7 @@ export class AgentActions {
     // Since this is management, we might just list and filter if there's no direct getter, but wait, `AgentPresetRepository` has `getAgentPreset`.
     // Actually, `AgentPresetSyncService` has methods like `resolveTargetedQualityAssuranceAgent` but that's specific.
     // Let's use `listAgentPresets` to find it, which is fully decorated.
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    if (!projectId) throw new Error("projectId is required");
+    const projectId = parseRequiredString(payload, "projectId");
 
     const agents = await this.agentPresetSyncService.listAgentPresets(projectId);
     const agent = agents.find((a: any) => a.id === presetId);
@@ -66,8 +65,7 @@ export class AgentActions {
   }
 
   private async syncAgents(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    if (!projectId) throw new Error("projectId is required");
+    const projectId = parseRequiredString(payload, "projectId");
 
     // The service supports full project sync via `syncProjectAgents`
     // Explicit preset sync can be handled by just syncing the whole project
@@ -77,46 +75,49 @@ export class AgentActions {
   }
 
   private async createAgent(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    if (!projectId) throw new Error("projectId is required");
+    const projectId = parseRequiredString(payload, "projectId");
 
-    const name = typeof payload.name === "string" ? payload.name : "New Agent";
-    const instructionMarkdown = typeof payload.instructionMarkdown === "string" ? payload.instructionMarkdown : "";
-    const avatarConfig = (typeof payload.avatarConfig === "object" && payload.avatarConfig !== null) ? payload.avatarConfig as AgentAvatarConfig : undefined;
+    const name = parseOptionalString(payload, "name") ?? "New Agent";
+    const instructionMarkdown = parseOptionalString(payload, "instructionMarkdown") ?? "";
+    const avatarConfig = parseOptionalObject<AgentAvatarConfig>(payload, "avatarConfig");
 
     const agent = await this.agentPresetSyncService.createAgentPreset(projectId, {
       name,
       instructionMarkdown,
-      labels: Array.isArray(payload.labels) ? payload.labels.filter((l: any) => typeof l === "string") : [],
+      labels: parseOptionalStringArray(payload, "labels") ?? [],
       avatarConfig,
-      memoryTemplateOverrideEnabled: typeof payload.memoryTemplateOverrideEnabled === "boolean" ? payload.memoryTemplateOverrideEnabled : undefined,
-      memoryTemplateMarkdown: typeof payload.memoryTemplateMarkdown === "string" ? payload.memoryTemplateMarkdown : undefined,
+      memoryTemplateOverrideEnabled: parseOptionalBoolean(payload, "memoryTemplateOverrideEnabled"),
+      memoryTemplateMarkdown: parseOptionalString(payload, "memoryTemplateMarkdown"),
     });
 
     return { result: { agent } };
   }
 
   private async updateAgent(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    const presetId = typeof payload.presetId === "string" ? payload.presetId : undefined;
-    if (!projectId || !presetId) throw new Error("projectId and presetId are required");
+    const projectId = parseRequiredString(payload, "projectId");
+    const presetId = parseRequiredString(payload, "presetId");
 
     const updateInput: UpdateAgentInput = {};
-    if (typeof payload.name === "string") updateInput.name = payload.name;
-    if (typeof payload.instructionMarkdown === "string") updateInput.instructionMarkdown = payload.instructionMarkdown;
-    if (Array.isArray(payload.labels)) updateInput.labels = payload.labels.filter((l: any) => typeof l === "string");
-    if (typeof payload.avatarConfig === "object" && payload.avatarConfig !== null) updateInput.avatarConfig = payload.avatarConfig as AgentAvatarConfig;
-    if (typeof payload.memoryTemplateOverrideEnabled === "boolean") updateInput.memoryTemplateOverrideEnabled = payload.memoryTemplateOverrideEnabled;
-    if (typeof payload.memoryTemplateMarkdown === "string") updateInput.memoryTemplateMarkdown = payload.memoryTemplateMarkdown;
+    const name = parseOptionalString(payload, "name");
+    if (name !== undefined) updateInput.name = name;
+    const instructionMarkdown = parseOptionalString(payload, "instructionMarkdown");
+    if (instructionMarkdown !== undefined) updateInput.instructionMarkdown = instructionMarkdown;
+    const labels = parseOptionalStringArray(payload, "labels");
+    if (labels !== undefined) updateInput.labels = labels;
+    const avatarConfig = parseOptionalObject<AgentAvatarConfig>(payload, "avatarConfig");
+    if (avatarConfig !== undefined) updateInput.avatarConfig = avatarConfig;
+    const memoryTemplateOverrideEnabled = parseOptionalBoolean(payload, "memoryTemplateOverrideEnabled");
+    if (memoryTemplateOverrideEnabled !== undefined) updateInput.memoryTemplateOverrideEnabled = memoryTemplateOverrideEnabled;
+    const memoryTemplateMarkdown = parseOptionalString(payload, "memoryTemplateMarkdown");
+    if (memoryTemplateMarkdown !== undefined) updateInput.memoryTemplateMarkdown = memoryTemplateMarkdown;
 
     const agent = await this.agentPresetSyncService.updateAgentPreset(presetId, updateInput);
     return { result: { agent } };
   }
 
   private async deleteAgent(args: ManageCodeUxArgs, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    const presetId = typeof payload.presetId === "string" ? payload.presetId : undefined;
-    if (!projectId || !presetId) throw new Error("projectId and presetId are required");
+    const projectId = parseRequiredString(payload, "projectId");
+    const presetId = parseRequiredString(payload, "presetId");
 
     if (args.approval?.confirmed !== true) {
       return { approvalRequired: true, approvalMessage: `Are you sure you want to delete agent ${presetId}?` };

@@ -25,6 +25,13 @@ import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import type { MemoryService } from "./memory-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
+import {
+  QA_INFRA_FAILURE_GRACE,
+  RECOVERED_STALE_QA_SUMMARY_PREFIX,
+  evaluateQaReviewBudget,
+  isRecoveredStaleQaRun
+} from "../domain/qa-review/qa-review-budget.js";
+
 import { parseQaError, type QaReviewError } from "../domain/qa-review/qa-review-types.js";
 import { normalizeQaReviewResult } from "../domain/qa-review/qa-review-result-normalizer.js";
 import type { NormalizedQaReviewResult } from "../domain/qa-review/qa-review-types.js";
@@ -36,7 +43,6 @@ type CliQaProvider = Exclude<ProviderId, "jules">;
 const SPRINT_RUN_KEEPALIVE_MS = 30_000;
 const SPRINT_LEASE_EXTENSION_MS = 5 * 60 * 1000;
 const QA_RUN_START_TIMEOUT_MS = 60_000;
-const RECOVERED_STALE_QA_SUMMARY_PREFIX = "Recovered stale QA review run";
 /**
  * How many extra QA attempts beyond `maxTaskReviewRuns` we tolerate when the
  * reviewer keeps failing for infrastructure reasons (auth/config/container).
@@ -45,7 +51,6 @@ const RECOVERED_STALE_QA_SUMMARY_PREFIX = "Recovered stale QA review run";
  * reviewer must still stop retrying eventually and escalate the task to a human
  * (QA_REVIEW_FAILED) rather than loop forever or — worse — fail open.
  */
-const QA_INFRA_FAILURE_GRACE = 3;
 
 export interface TaskQaReviewOutcome {
   reviewed: boolean;
@@ -182,13 +187,13 @@ export class QualityAssuranceService {
     // attempts (including reviewer infra crashes) hit the infra ceiling. Until
     // then, keep retrying — a reviewer that crashed on auth/config produced no
     // verdict and the task still needs reviewing before it can merge.
-    const budgetSpent = decisiveRuns >= qaSettings.maxTaskReviewRuns
-      || existingRuns >= qaSettings.maxTaskReviewRuns + QA_INFRA_FAILURE_GRACE;
-    const allowPostContinuationVerification = budgetSpent
-      && this.shouldVerifyContinuedQaFix(latestRun);
-    const allowRecoveredStaleRetry = budgetSpent
-      && this.isRecoveredStaleQaRun(latestRun);
-    if (budgetSpent && !allowPostContinuationVerification && !allowRecoveredStaleRetry) {
+    const budget = evaluateQaReviewBudget({
+      existingRuns,
+      decisiveRuns,
+      maxTaskReviewRuns: qaSettings.maxTaskReviewRuns,
+      latestRun,
+    });
+    if (!budget.allowed) {
       await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
@@ -465,7 +470,7 @@ export class QualityAssuranceService {
         ? latestTaskSnapshot !== currentTaskSnapshot
         : hasTaskUpdatesSinceLatestRun)
       : true;
-    const recoveredStaleLatestRun = this.isRecoveredStaleQaRun(latestRun);
+    const recoveredStaleLatestRun = isRecoveredStaleQaRun(latestRun);
     // Only count the budget as exhausted when the latest run actually produced a
     // verdict (`completed`) at/over the cap. A reviewer that crashed for infra
     // reasons (`failed`) yielded no judgement and must not let the sprint settle
@@ -722,7 +727,7 @@ export class QualityAssuranceService {
       };
     }
 
-    const recoveredStaleLatestRun = this.isRecoveredStaleQaRun(latestRun);
+    const recoveredStaleLatestRun = isRecoveredStaleQaRun(latestRun);
 
     // Only runs that produced a real verdict (pass / changes_requested) spend
     // the review budget. Reviewer crashes (missing auth, container/parse
@@ -990,16 +995,6 @@ export class QualityAssuranceService {
       summaryMarkdown,
       finishedAt,
     });
-  }
-
-  private isRecoveredStaleQaRun(run: QaReviewRunRecord | null): boolean {
-    return typeof run?.summaryMarkdown === "string" && run.summaryMarkdown.startsWith(RECOVERED_STALE_QA_SUMMARY_PREFIX);
-  }
-
-  private shouldVerifyContinuedQaFix(run: QaReviewRunRecord | null): boolean {
-    return run?.status === "completed"
-      && run.outcome === "changes_requested"
-      && run.payload?.continued === true;
   }
 
   private findLatestQaExecutionInvocation(run: QaReviewRunRecord): ExecutionInvocationRecord | null {

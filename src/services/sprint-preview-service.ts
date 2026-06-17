@@ -36,6 +36,7 @@ import {
 } from "./sprint-preview-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
+import { buildSprintPreviewDockerCreateArgs, CONTAINER_PREVIEW_PROXY_PORT, CONTAINER_PREVIEW_RUNTIME_ROOT, PREVIEW_LOG_DRIVER } from "./sprint-preview-docker-plan.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "./code-ux-default-assets-service.js";
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
@@ -44,12 +45,9 @@ const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../.code-ux/container/setup.sh",
 );
-const CONTAINER_PREVIEW_PROXY_PORT = 39000;
 const PREVIEW_READINESS_TIMEOUT_MS = 300_000;
 const PREVIEW_LOG_TAIL_LINES = 200;
-const PREVIEW_LOG_DRIVER = "local";
 const ORPHANED_SETUP_CONTAINER_COMMAND = "bash /tmp/code-ux-setup.sh && rm -f /tmp/code-ux-setup.sh";
-const CONTAINER_PREVIEW_RUNTIME_ROOT = "/code-ux-preview-runtime";
 
 export interface SprintPreviewProxyResponse {
   status: number;
@@ -247,72 +245,31 @@ export class SprintPreviewService {
           ], project.baseDir).catch(() => undefined);
         }
 
-        const dockerArgs = [
-          "create",
-          "--name", containerName,
-          "--log-driver", PREVIEW_LOG_DRIVER,
-          "-p", `127.0.0.1:${hostPort}:${CONTAINER_PREVIEW_PROXY_PORT}`,
-          "--workdir", containerWorkspacePath,
-          "--label", "code-ux.preview=true",
-          "--label", `code-ux.project-id=${projectId}`,
-          "--label", `code-ux.sprint-id=${sprintId}`,
-          "--label", `code-ux.session-id=${session.id}`,
-          "--label", `code-ux.host-port=${hostPort}`,
-          "--mount", toDockerMountArg({ type: "volume", source: volumeName, destination: CONTAINER_PREVIEW_RUNTIME_ROOT, readonly: false }),
-          "-e", `HOME=${containerRuntimeHome}`,
-          "-e", "HOST=0.0.0.0",
-          "-e", `PORT=${settings.containerAppPort}`,
-          "-e", "DASHBOARD_HOST=0.0.0.0",
-          "-e", `DASHBOARD_PORT=${settings.containerAppPort}`,
-          "-e", `SPRINT_PREVIEW_PORT=${settings.containerAppPort}`,
-          "-e", `SPRINT_PREVIEW_PROXY_PORT=${CONTAINER_PREVIEW_PROXY_PORT}`,
-          "-e", `SPRINT_PREVIEW_WORKSPACE=${containerWorkspacePath}`,
-          "-e", `SPRINT_PREVIEW_WORKTREE=${containerWorkspacePath}`,
-          "-e", `SPRINT_PREVIEW_INSTALL_COMMAND=${effectiveInstallCommand || ""}`,
-          "-e", `SPRINT_PREVIEW_BUILD_COMMAND=${preparedScript.buildCommand || ""}`,
-          "-e", `SPRINT_PREVIEW_RUN_COMMAND=${preparedScript.runCommand || ""}`,
-        ];
-
-        if (userSpec) {
-          dockerArgs.push("--user", userSpec);
-        }
-
-        if (setupScriptPath && shouldRunSetupScriptAtRuntime) {
-          const setupScriptSource = this.mapDockerSourcePathForDaemon(setupScriptPath, project.baseDir);
-          dockerArgs.push("--mount", toDockerMountArg({ source: setupScriptSource, destination: CONTAINER_SETUP_SCRIPT, readonly: true }));
-        }
-
-        for (const variable of pickContainerEnv(process.env)) {
-          dockerArgs.push("-e", `${variable.key}=${variable.value}`);
-        }
-        dockerArgs.push(
-          "-e", `CODE_UX_GIT_USER_NAME=${workflowSettings.containerGitUserName}`,
-          "-e", `CODE_UX_GIT_USER_EMAIL=${workflowSettings.containerGitUserEmail}`,
-        );
-
-        for (const mount of credentialMounts) {
-          dockerArgs.push("--mount", toDockerMountArg({
+        const dockerArgs = buildSprintPreviewDockerCreateArgs({
+          projectId,
+          sprintId,
+          sessionId: session.id,
+          containerName,
+          hostPort,
+          containerAppPort: settings.containerAppPort,
+          containerWorkspacePath,
+          containerRuntimeHome,
+          volumeName,
+          userSpec,
+          setupScriptSource: setupScriptPath ? this.mapDockerSourcePathForDaemon(setupScriptPath, project.baseDir) : null,
+          shouldRunSetupScriptAtRuntime,
+          containerGitUserName: workflowSettings.containerGitUserName,
+          containerGitUserEmail: workflowSettings.containerGitUserEmail,
+          credentialMounts: credentialMounts.map((mount) => ({
             ...mount,
             source: this.mapDockerSourcePathForDaemon(mount.source, project.baseDir),
-          }));
-        }
-
-        const containerStartScript = [
-          `mkdir -p "${containerWorkspacePath}"`,
-          `tar -xf /tmp/workspace.tar -C "${containerWorkspacePath}"`,
-          `exec bash /tmp/preview-start.sh`,
-        ].join(" && ");
-
-        dockerArgs.push(
-          resolvedImage.image,
-          "bash",
-          "-c",
+          })),
+          effectiveInstallCommand,
+          buildCommand: preparedScript.buildCommand,
+          runCommand: preparedScript.runCommand,
+          resolvedImage: resolvedImage.image,
           bootstrapScript,
-          "preview-runner",
-          "bash",
-          "-c",
-          containerStartScript,
-        );
+        });
 
         const startResult = await runCommandStrict("docker", dockerArgs, project.baseDir);
         const containerId = startResult.stdout.trim();

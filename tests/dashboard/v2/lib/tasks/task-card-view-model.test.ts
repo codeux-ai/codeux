@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { getTaskLane } from "../../../../../dashboard/src/v2/lib/task-board-state.js";
 import {
   formatTimeAgo,
   getExecutorLabel,
@@ -153,3 +154,17 @@ describe("task-card-view-model", () => {
     });
   });
 });
+
+  describe("getTaskLane via view-model context", () => {
+    it("maps coding_completed to in_progress lane", () => {
+      expect(getTaskLane("coding_completed")).toBe("in_progress");
+    });
+    it("maps QA_REVIEW_FAILED to in_progress lane", () => {
+      expect(getTaskLane("QA_REVIEW_FAILED")).toBe("in_progress");
+    });
+    it("maps pending, completed, in_progress to themselves", () => {
+      expect(getTaskLane("pending")).toBe("pending");
+      expect(getTaskLane("completed")).toBe("completed");
+      expect(getTaskLane("in_progress")).toBe("in_progress");
+    });
+  });

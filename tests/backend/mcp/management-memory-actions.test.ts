@@ -39,6 +39,25 @@ describe("MemoryActions", () => {
     );
   });
 
+  it("rejects searching with missing query", async () => {
+    await expect(actions.handleMemoryAction({
+      domain: "memory",
+      action: "search",
+      payload: { projectId: "proj-1" },
+    })).rejects.toThrow("query is required");
+  });
+
+  it("handles invalid limits gracefully by dropping them", async () => {
+    await actions.handleMemoryAction({
+      domain: "memory",
+      action: "search",
+      payload: { projectId: "proj-1", query: "test", limit: "invalid" },
+    });
+    expect(memoryService.search).toHaveBeenCalledWith(expect.objectContaining({
+      limit: undefined,
+    }));
+  });
+
   it("handles searching memories", async () => {
     const res = await actions.handleMemoryAction({
       domain: "memory",

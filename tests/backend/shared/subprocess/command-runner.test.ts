@@ -105,6 +105,23 @@ describe("CommandRunner", () => {
     }
   });
 
+  it("should clip stdout if too long", async () => {
+    const result = await runner.run(node, ["-e", "process.stdout.write('b'.repeat(100))"], {
+      maxStdoutChars: 10,
+    });
+    expect(result.stdout.length).toBeLessThanOrEqual(13); // "..." + 10 chars
+    expect(result.stdout.startsWith("...")).toBe(true);
+    expect(result.stdout.endsWith("bbbbbbbbbb")).toBe(true);
+  });
+
+  it("should not clip small stdout", async () => {
+    const result = await runner.run(node, ["-e", "process.stdout.write('b'.repeat(5))"], {
+      maxStdoutChars: 10,
+    });
+    expect(result.stdout).toBe("bbbbb");
+    expect(result.stdout.startsWith("...")).toBe(false);
+  });
+
   it("should clip stderr if too long", async () => {
     const result = await runner.run(node, ["-e", "process.stderr.write('a'.repeat(100))"], {
       maxStderrChars: 10,
@@ -112,6 +129,61 @@ describe("CommandRunner", () => {
     expect(result.stderr.length).toBeLessThanOrEqual(13); // "..." + 10 chars
     expect(result.stderr.startsWith("...")).toBe(true);
     expect(result.stderr.endsWith("aaaaaaaaaa")).toBe(true);
+  });
+
+  it("should format timeout message and retain clipped outputs correctly", async () => {
+    const result = await runner.run(node, ["-e", "process.stderr.write('x'.repeat(100)); setTimeout(() => {}, 10_000)"], {
+      timeout: 100,
+      maxStderrChars: 10,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.stderr.startsWith("...")).toBe(true);
+    expect(result.stderr).toContain("xxxxxxxxxx\nCommand timed out after 100ms");
+  });
+
+  it("should have parity between raw spawner finalization and inline result shaping", () => {
+    const options = { timeout: 100, maxStderrChars: 5, maxStdoutChars: 5 };
+    const rawResult = {
+      code: 0,
+      stdout: "hello world",
+      stderr: "big error",
+      stdoutClipped: true,
+      stderrClipped: true,
+      timedOut: true,
+      aborted: false,
+    };
+
+    // Test the internal finalizeResult shaping logic directly.
+    const shaped = (runner as any).finalizeResult(rawResult, options);
+
+    expect(shaped.ok).toBe(false);
+    expect(shaped.stdout).toBe("...hello world");
+    expect(shaped.stderr).toBe("...big error\nCommand timed out after 100ms");
+  });
+
+  it("should pass full lines to streaming callbacks even when stdout/stderr buffer is clipped", async () => {
+    const stdoutLines: string[] = [];
+    const stderrLines: string[] = [];
+    const script = `
+      process.stdout.write('first line\\n');
+      process.stdout.write('second line that makes it too long\\n');
+      process.stderr.write('error line one\\n');
+      process.stderr.write('error line two too long\\n');
+    `;
+    const result = await runner.run(node, ["-e", script], {
+      maxStdoutChars: 10,
+      maxStderrChars: 10,
+      onStdoutLine: (line) => stdoutLines.push(line),
+      onStderrLine: (line) => stderrLines.push(line),
+    });
+
+    expect(stdoutLines).toEqual(["first line", "second line that makes it too long"]);
+    expect(result.stdout.startsWith("...")).toBe(true);
+    expect(result.stdout.endsWith("o long")).toBe(true);
+
+    expect(stderrLines).toEqual(["error line one", "error line two too long"]);
+    expect(result.stderr.startsWith("...")).toBe(true);
+    expect(result.stderr.endsWith("o long")).toBe(true);
   });
 
   it("runStrict should throw on failure", async () => {

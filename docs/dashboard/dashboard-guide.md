@@ -694,6 +694,7 @@ For provider-backed runs, session polling is now used to ingest durable runtime 
 - Immutable settings state updates are centralized in `dashboard/src/lib/settings-updaters.ts`; settings sections consume these typed helpers instead of manually reconstructing nested objects.
 - Task cards use button semantics and ARIA expansion state for title/details/log toggles.
 - The v2 frontend is organized into page-scoped module boundaries (overview, sprints, tasks, stats, live), exclusively loading resources they need.
+- The Sprints page uses a data/view-model split: `useSprintsPageData` manages side effects and API calls, while deterministic derived state like counts, mappings, and display overrides is extracted into pure view-model helpers (`sprints-page-view-models.ts`).
 - A shared dashboard resource layer manages resource keys, caching, and invalidation, deduplicating fetches and avoiding UI flashing during background updates.
 - Heavy list views use a progressive list strategy (`useProgressiveList`) with an intersection observer to render items in batches and prevent main-thread blocking.
 - Backend read-model optimizations efficiently project data to support the resource layer while leaving API routes and backend contracts entirely unchanged.
@@ -712,3 +713,4 @@ This dashboard enforces accessibility best practices to ensure an inclusive expe
 - **Tables & Ledgers**: Complex data displays like the Sprint Ledger use semantic HTML (`<table>`, `<th>`, `<td>`) or explicit ARIA grid roles to support screen reader cell navigation.
 - **Charts**: Data visualizations are wrapped in a region with `role="region"` and an `aria-label`, providing an accessible name for the visual content.
 - **Reduced Motion**: Component animations using GSAP and Tailwind respect user preferences via the `prefers-reduced-motion` media query, disabling unnecessary visual transitions where appropriate.
+- **Task Board State Ownership:** To prevent lane mapping drift across views, `dashboard/src/v2/lib/task-board-state.ts` is the strict single source of truth for all task status to lane derivations (via `getTaskLane`). It correctly groups transient implementation statuses like `coding_completed` and `QA_REVIEW_FAILED` into the "in_progress" lane for consistent Kanban rendering.

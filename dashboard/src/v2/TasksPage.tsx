@@ -1,5 +1,3 @@
-// We need to define getLane since it's only in task-board-state.ts
-const getLane = (status: string) => (status === "coding_completed" || status === "QA_REVIEW_FAILED") ? "in_progress" : status;
 
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
@@ -35,7 +33,7 @@ import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
 import { useProjectTasks } from "./hooks/use-project-tasks.js";
 import { createTask, deleteTask, updateTask } from "./lib/project-api.js";
-import { deriveTaskBoardState } from "./lib/task-board-state.js";
+import { deriveTaskBoardState, getTaskLane } from "./lib/task-board-state.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
 import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
 import { SkeletonCard, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
@@ -637,7 +635,7 @@ export const TasksPage: FunctionComponent = () => {
     if (!draggedTask) return;
 
     // We don't have sortOrder on Task currently, but we might just update the status for now
-    // Actually, in the task board state it usually filters by getLane(task.status).
+    // Actually, in the task board state it usually filters by getTaskLane(task.status).
     // Let's just update the status if it changed lane, and for reordering, update sorting if we had it.
     // For now we will just use updateTask(task.id, { status })
     // If the dropped column is 'completed', and original isn't... etc.
@@ -655,7 +653,7 @@ export const TasksPage: FunctionComponent = () => {
     // Even if it's the same lane, we should allow it.
     // However, updating the order within the same column via updateTask might not be fully supported by the API yet if it lacks an 'order' field.
     // Assuming we want to optimistically update or at least support cross-status drops in the same lane.
-    if (getLane(draggedTask.status) !== status) {
+    if (getTaskLane(draggedTask.status) !== status) {
       const targetStatus = laneMap[status] || draggedTask.status;
 
       // Optimistic update

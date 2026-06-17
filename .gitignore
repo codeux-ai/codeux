@@ -32,3 +32,6 @@ logs/openai/
 /playwright/.cache/
 /playwright/.auth/
 .qwen
+# Local scratch files
+/test-*
+/tmp*

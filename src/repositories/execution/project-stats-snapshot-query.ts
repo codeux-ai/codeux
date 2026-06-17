@@ -18,8 +18,10 @@ import {
   buildModelStatsKey,
   buildModelStatsLabel,
   computeDurationStats,
+  computeDurationStatsFromAggregates,
   computeSuccessRate,
   createEmptyStatusCounts,
+  ExecutionDurationAggregates,
 } from "./model-stats.js";
 import {
   ExecutionInvocationStatusCounts,
@@ -209,17 +211,71 @@ export function queryProjectStatsSnapshot(
     }
   }
 
+  // Duration distribution aggregates
+  const durationAggRows = db.prepare(`
+    SELECT
+      provider,
+      model,
+      COUNT(duration_ms) as sampleCount,
+      MIN(duration_ms) as minMs,
+      MAX(duration_ms) as maxMs,
+      AVG(duration_ms) as avgMs
+    FROM provider_invocations
+    WHERE project_id = ? AND started_at >= ? AND started_at < ?
+      AND duration_ms IS NOT NULL AND duration_ms > 0
+    GROUP BY provider, model
+  `).all(projectId, rangeStartIso, rangeEndIso) as Array<{
+    provider: string | null;
+    model: string | null;
+    sampleCount: number;
+    minMs: number;
+    maxMs: number;
+    avgMs: number;
+  }>;
+
+  const modelDurationAggs = new Map<string, ExecutionDurationAggregates>();
+  let overallSampleCount = 0;
+  let overallMinMs = Number.MAX_SAFE_INTEGER;
+  let overallMaxMs = 0;
+  let overallSumMs = 0;
+
+  for (const row of durationAggRows) {
+    const key = buildModelStatsKey(row.provider, row.model);
+    modelDurationAggs.set(key, {
+      sampleCount: toNumber(row.sampleCount),
+      minMs: toNumber(row.minMs),
+      maxMs: toNumber(row.maxMs),
+      avgMs: toNumber(row.avgMs),
+    });
+
+    const count = toNumber(row.sampleCount);
+    overallSampleCount += count;
+    overallMinMs = Math.min(overallMinMs, toNumber(row.minMs));
+    overallMaxMs = Math.max(overallMaxMs, toNumber(row.maxMs));
+    overallSumMs += toNumber(row.avgMs) * count;
+  }
+
+  const overallDurationAggs: ExecutionDurationAggregates = {
+    sampleCount: overallSampleCount,
+    minMs: overallSampleCount > 0 ? overallMinMs : 0,
+    maxMs: overallMaxMs,
+    avgMs: overallSampleCount > 0 ? overallSumMs / overallSampleCount : 0,
+  };
+
   // Duration distribution per model (percentiles need raw samples, not SUM aggregates)
-  const durationRows = db.prepare(`
+  // Bound to the most recent 10000 invocations to prevent unbounded memory growth
+  const durationSampleRows = db.prepare(`
     SELECT provider, model, duration_ms as durationMs
     FROM provider_invocations
     WHERE project_id = ? AND started_at >= ? AND started_at < ?
       AND duration_ms IS NOT NULL AND duration_ms > 0
+    ORDER BY started_at DESC
+    LIMIT 10000
   `).all(projectId, rangeStartIso, rangeEndIso) as Array<{ provider: string | null; model: string | null; durationMs: number | string }>;
 
   const allDurations: number[] = [];
   const modelDurations = new Map<string, number[]>();
-  for (const row of durationRows) {
+  for (const row of durationSampleRows) {
     const durationMs = toNumber(row.durationMs);
     if (durationMs <= 0) continue;
     allDurations.push(durationMs);
@@ -363,12 +419,12 @@ export function queryProjectStatsSnapshot(
         usage: modelTotals,
         statusCounts: counts,
         successRate: computeSuccessRate(counts),
-        duration: computeDurationStats(modelDurations.get(key) || []),
+        duration: computeDurationStatsFromAggregates(modelDurationAggs.get(key), modelDurations.get(key) || []),
         lastActivityAt: modelLastActivity.get(key) || null,
       };
     }).sort((a, b) => b.usage.totalTokens - a.usage.totalTokens),
     statusCounts,
-    duration: computeDurationStats(allDurations),
+    duration: computeDurationStatsFromAggregates(overallDurationAggs, allDurations),
     tokenSources: Array.from(tokenSourceCounts.entries()).map(([source, count]) => ({ source: source as any, count })).sort((a, b) => b.count - a.count),
     chartSeries,
   };

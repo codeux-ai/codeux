@@ -163,7 +163,7 @@ The dashboard must show these states explicitly and must not invent fake precisi
 
 ## Dashboard API Surface
 
-Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets.
+Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets. The duration aggregation strategy bounds memory usage by using pre-aggregated metrics coupled with bounded percentile sampling.
 
 Usage data now appears in two read models:
 
@@ -254,3 +254,8 @@ The telemetry model is designed for future exact reporting across:
 - per week
 
 Because the canonical source is per invocation, additional reporting surfaces can be added later without changing how usage is recorded.
+
+
+### ProviderTelemetryWatcher
+
+Live provider telemetry polling is extracted into `ProviderTelemetryWatcher`. This helper is responsible for the periodic read of provider log artifacts during an active session (e.g. while `provider-runner` waits for the CLI to complete). It handles the polling loop, background error swallowing, and temporary database cleanup without affecting the core completion result. Note that telemetry emitted by `ProviderTelemetryWatcher` is best-effort for live dashboarding; the final usage data collected by `ProviderRunner` after process exit remains authoritative.

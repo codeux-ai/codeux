@@ -24,6 +24,7 @@ export interface SpawnerCommandOptions {
   timeout?: number;
   stdinFile?: string;
   trimOutput?: boolean;
+  maxStdoutChars?: number;
   maxStderrChars?: number;
   /** Whether the main side registered an onStdoutLine callback (host streams lines back if so). */
   streamStdoutLines?: boolean;
@@ -59,6 +60,8 @@ export interface SpawnerRawResult {
   code: number | null;
   stdout: string;
   stderr: string;
+  stdoutClipped?: boolean;
+  stderrClipped?: boolean;
   timedOut: boolean;
   aborted: boolean;
   /** Set when the child could not be spawned at all (e.g. ENOENT); becomes a failed CommandResult. */

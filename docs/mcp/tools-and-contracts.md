@@ -149,6 +149,14 @@ Dashboard calls can add `background: true` to the HTTP setup request. In that mo
 
 ### Sprint, Task, and Settings Payload Normalization
 
+For payload normalization in management tools, Code UX centralizes parsing behavior:
+- **Required Strings**: Extracted via `parseRequiredString`. Must be present and non-blank (e.g. `"  "` is rejected). Returns trimmed string.
+- **Optional Strings**: Extracted via `parseOptionalString`. Returns trimmed string, or `undefined` if blank.
+- **Optional String Arrays**: Extracted via `parseOptionalStringArray`. Filters out non-string items and trims, returning `undefined` if the resulting array is empty.
+- **Optional Numbers**: Extracted via `parseOptionalNumber`. Validates finiteness and optional min/max constraints.
+- **Optional Enums**: Extracted via `parseOptionalEnum`. Normalizes case and whitespace to match allowed literal types.
+
+
 The dedicated management tools (`manage_sprints`, `manage_tasks`, `manage_quicksprints`, `manage_scheduler`, `manage_settings`) and the legacy `manage_code_ux` dispatcher share the same action handlers.
 
 For sprint create/update calls:
