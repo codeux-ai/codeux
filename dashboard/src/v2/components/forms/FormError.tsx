@@ -25,21 +25,16 @@ export function FormError({ id, error, helperId, helperText }: FormErrorProps) {
       >
         {helperText}
       </div>
-      <div
-        id={id}
-        role={error ? "alert" : undefined}
-        aria-live={error ? "assertive" : undefined}
-        class={`
-          col-start-1 row-start-1
-          text-xs font-medium text-status-red
-          motion-safe:transition-all motion-safe:duration-200 ease-in-out
-          ${error
-            ? 'opacity-100 translate-y-0 visible'
-            : 'opacity-0 translate-y-1 invisible pointer-events-none'}
-        `}
-      >
-        {error}
-      </div>
+      {error && (
+        <div
+          id={id}
+          role="alert"
+          aria-live="assertive"
+          class="col-start-1 row-start-1 text-xs font-medium text-status-red motion-safe:animate-form-slide-down"
+        >
+          {error}
+        </div>
+      )}
     </div>
   );
 }

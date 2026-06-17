@@ -11,9 +11,10 @@ export interface FieldWrapperProps {
   htmlFor?: string;
   required?: boolean;
   forceTouch?: boolean;
+  valid?: boolean;
 }
 
-export function FieldWrapper({ label, error, children, htmlFor, required, helperTextId, helperText, forceTouch }: FieldWrapperProps) {
+export function FieldWrapper({ label, error, children, htmlFor, required, helperTextId, helperText, forceTouch, valid }: FieldWrapperProps) {
   const [shake, setShake] = useState(false);
   const [touched, setTouched] = useState(false);
 
@@ -64,7 +65,8 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
     onBlur: (e: any) => {
       setTouched(true);
       existingOnBlur?.(e);
-    }
+    },
+    valid: !error ? valid : undefined,
   }) : children;
 
   return (
