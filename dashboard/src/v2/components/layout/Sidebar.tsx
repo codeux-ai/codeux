@@ -224,7 +224,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                 {navItems.map((item, idx) => (
                     <NavItem
                         key={item.label}
-                        elementRef={(el) => (navItemRefs.current[idx] = el as HTMLElement)}
+                        elementRef={(el) => { navItemRefs.current[idx] = el as HTMLElement | null; }}
                         item={item}
                         isActive={activeIndex === idx}
                         isMinimized={isMinimized}
