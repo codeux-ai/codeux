@@ -13,6 +13,7 @@ export interface SystemFilters {
   status: ExecutionInvocationStatus[];
   purpose: string[];
   provider: string[];
+  errorCategories?: string[];
 }
 
 export interface ExternalApiMetrics {
@@ -63,6 +64,7 @@ const EMPTY_FILTERS: SystemFilters = {
   status: [],
   purpose: [],
   provider: [],
+  errorCategories: [],
 };
 
 const normalizeText = (value: string | null | undefined): string => (value || "").trim().toLowerCase();
@@ -148,6 +150,19 @@ export function useSystemViewData(projectId: string) {
       const providerValue = (record.provider || "").trim();
       if (filters.provider.length > 0 && !filters.provider.includes(providerValue)) {
         return false;
+      }
+
+      if (filters.errorCategories && filters.errorCategories.length > 0) {
+        const msg = (record.lastErrorMessage || "").toLowerCase();
+        let matched = false;
+        for (const cat of filters.errorCategories) {
+          if (cat === "timeout" && msg.includes("timeout")) matched = true;
+          else if (cat === "rateLimit" && (msg.includes("rate") || msg.includes("429"))) matched = true;
+          else if (cat === "modelError" && msg.includes("model")) matched = true;
+          else if (cat === "apiError" && (msg.includes("api") || msg.includes("http"))) matched = true;
+          else if (cat === "cancelled" && (msg.includes("cancel") || record.status === "cancelled")) matched = true;
+        }
+        if (!matched) return false;
       }
 
       if (normalizedSearch.length === 0) {
