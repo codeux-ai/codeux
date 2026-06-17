@@ -62,6 +62,16 @@ describe("RuntimeEventFeed", () => {
         vi.spyOn(useReducedMotionModule, 'useReducedMotion').mockReturnValue(false); // reset
     });
 
+
+    it("applies the flash background color during entry animation", () => {
+        render(<RuntimeEventFeed events={mockEvents} />);
+        expect(gsap.fromTo).toHaveBeenCalledWith(
+            expect.any(Array),
+            expect.objectContaining({ backgroundColor: 'rgba(0,224,160,0.1)' }),
+            expect.objectContaining({ backgroundColor: 'transparent' })
+        );
+    });
+
     it("handles undefined events gracefully", () => {
         render(<RuntimeEventFeed events={undefined} />);
         expect(gsap.fromTo).not.toHaveBeenCalled();

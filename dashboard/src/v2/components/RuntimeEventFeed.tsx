@@ -25,8 +25,8 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
 
             if (newElements.length > 0) {
                 gsap.fromTo(newElements,
-                    { opacity: 0, x: 10, scale: 0.98, filter: 'blur(2px)' },
-                    { opacity: 1, x: 0, scale: 1, filter: 'blur(0px)', duration: 0.4, stagger: 0.05, ease: "power3.out" }
+                    { opacity: 0, x: 10, scale: 0.98, filter: 'blur(2px)', backgroundColor: 'rgba(0,224,160,0.1)' },
+                    { opacity: 1, x: 0, scale: 1, filter: 'blur(0px)', backgroundColor: 'transparent', duration: 0.8, stagger: 0.05, ease: "power3.out" }
                 );
                 newElements.forEach(el => el.setAttribute('data-entered', 'true'));
             }
@@ -58,11 +58,12 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
         <div ref={feedRef} className="max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1" aria-live="polite">
             {events.map((event) => {
                 const cfg = getOriginatorCfg(event.originator || "system");
+                const isError = event.eventType.toLowerCase().includes("error") || event.eventType.toLowerCase().includes("fail");
                 return (
-                    <div key={event.id} className={`flex gap-3 border-l-2 ${cfg.border} pl-3 py-2 group/entry hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-r-lg transition-colors duration-200`}>
+                    <div key={event.id} className={`flex gap-3 border-l-2 ${isError ? 'border-status-red' : cfg.border} ${isError ? 'bg-status-red/[0.04]' : ''} pl-3 py-2 group/entry hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-r-lg transition-colors duration-200`}>
                         <div className="flex-grow min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
-                                <span className={`text-[9px] font-bold uppercase tracking-[0.14em] ${cfg.text}`}>
+                                <span className={`text-[9px] font-bold uppercase tracking-[0.14em] ${isError ? 'text-status-red' : cfg.text}`}>
                                     {cfg.label}
                                 </span>
                                 <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">

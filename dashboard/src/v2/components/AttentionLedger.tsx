@@ -217,7 +217,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                         disabled={pendingActionIds.has(claimActionId)}
                                                         className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 transition-colors hover:bg-signal-500/15 disabled:opacity-50"
                                                     >
-                                                        <Bot className="h-3 w-3" strokeWidth={2} />
+                                                        <Bot className={`h-3 w-3 ${pendingActionIds.has(claimActionId) ? "animate-pulse" : ""}`} strokeWidth={2} />
                                                         {pendingActionIds.has(claimActionId) ? "Claiming" : "Claim"}
                                                     </button>
                                                 )}
@@ -228,7 +228,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                         disabled={pendingActionIds.has(resolveActionId)}
                                                         className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-green transition-colors hover:bg-status-green/15 disabled:opacity-50"
                                                     >
-                                                        <CheckCircle2 className="h-3 w-3" strokeWidth={2} />
+                                                        <CheckCircle2 className={`h-3 w-3 ${pendingActionIds.has(resolveActionId) ? "animate-spin" : ""}`} strokeWidth={2} />
                                                         {pendingActionIds.has(resolveActionId) ? "Resolving" : "Resolve"}
                                                     </button>
                                                 )}
@@ -239,7 +239,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                         disabled={pendingActionIds.has(dismissActionId)}
                                                         className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.05] disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.05]"
                                                     >
-                                                        <XCircle className="h-3 w-3" strokeWidth={2} />
+                                                        <XCircle className={`h-3 w-3 ${pendingActionIds.has(dismissActionId) ? "animate-spin" : ""}`} strokeWidth={2} />
                                                         {pendingActionIds.has(dismissActionId) ? "Dismissing" : "Dismiss"}
                                                     </button>
                                                 )}

@@ -495,7 +495,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             icon={CheckCheck}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-green hover:border-status-green/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
-                            Force complete
+                            {isForceCompleting ? "Force completing" : "Force complete"}
                         </Button>
                         <Button
                             type="button"
@@ -505,7 +505,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             icon={RotateCcw}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
-                            Rerun
+                            {isRerunning ? "Rerunning" : "Rerun"}
                         </Button>
                     </div>
                     {task.pr_url && (
