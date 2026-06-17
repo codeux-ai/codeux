@@ -7,7 +7,6 @@ import { CliProviderId, enabledCustomServersFor, isOpenCodeNativeSessionId, Prov
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import type { IDockerRunner } from "./docker-runner.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
-import { resultHasSilentQuotaSignal } from "../../../shared/providers/provider-error-classifier.js";
 import { sanitizeInvocationOutputText } from "../../../services/invocation-output-sanitizer.js";
 import * as fs from "fs/promises";
 import * as os from "os";
@@ -15,6 +14,7 @@ import * as path from "path";
 import * as pathPosix from "path/posix";
 import { randomUUID } from "crypto";
 import { getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
+import { runProviderExecutionLoop } from "./provider-execution-loop.js";
 import {
   CONTAINER_RUNTIME_HOME,
   CONTAINER_WORKSPACE_ROOT,
@@ -372,20 +372,10 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     try {
-      let result = await runCmd();
-      if (!result.ok && provider === "codex" && this.isTransientCodexTransportError(result)) {
-        trackingOnActivity("Codex transport disconnected. Retrying once automatically...");
-        await new Promise(r => setTimeout(r, 1500));
-        result = await runCmd();
-      }
-      // `claude --resume <id>` fails with "No conversation found" when the prior
-      // conversation is gone (e.g. the DOCKER container that held it was torn
-      // down between retries). Resuming a lost session can never recover, so it
-      // would fail identically every attempt until the coding guardrail caps the
-      // task and parks it. Retry once with a fresh session instead.
-      if (!result.ok && provider === "claude-code" && continueSession && this.isClaudeConversationNotFoundError(result)) {
-        trackingOnActivity("Claude Code could not resume the previous conversation (no conversation found). Retrying once with a fresh session...", "provider");
-        const freshSpec = this.buildCommandSpec(
+      const isTransientCodexTransportError = (r: CommandResult) => this.isTransientCodexTransportError(r);
+      const isClaudeConversationNotFoundError = (r: CommandResult) => this.isClaudeConversationNotFoundError(r);
+      const buildFreshClaudeSpec = () => {
+        return this.buildCommandSpec(
           provider,
           runModel,
           prompt,
@@ -399,31 +389,29 @@ export class ProviderRunner implements IProviderRunner {
           codexProviderArgs,
           antigravityLogPath,
         );
-        command = freshSpec.command;
-        args = freshSpec.args;
-        result = await runCmd();
-      }
-      // Antigravity's `agy` CLI writes quota/auth/executor failures only to its log file
-      // and exits 0, so an exhausted run would otherwise be reported as a successful but
-      // empty "completion" — finishing the task unfinished. Read the captured log, surface
-      // any error into stderr, and demote to a failure so the shared classification/quota
-      // path (the same one other providers use) puts the task on hold until quota resets.
-      if (provider === "antigravity" && antigravityLogPath) {
-        const diagnostics = await this.readAntigravityDiagnostics(cwd, antigravityLogPath, workflowSettings.executionMode);
-        if (diagnostics) {
-          result = {
-            ...result,
-            stderr: [result.stderr, diagnostics].filter(Boolean).join("\n"),
-          };
-          if (result.ok) {
-            const reason = resultHasSilentQuotaSignal(provider, result)
-              ? "Quota limit reached"
-              : "Provider reported an error";
-            trackingOnActivity(`[${provider}] ${reason}; provider stopped before completing the task.`, "provider");
-            result = { ...result, ok: false };
-          }
-        }
-      }
+      };
+      const readAntigravityDiagnostics = async () => {
+        return await this.readAntigravityDiagnostics(cwd, antigravityLogPath!, workflowSettings.executionMode);
+      };
+
+      const result = await runProviderExecutionLoop({
+        provider,
+        command,
+        args,
+        continueSession: !!continueSession,
+        antigravityLogPath,
+        runCmd: async (cmd, a) => {
+          command = cmd;
+          args = a;
+          return await runCmd();
+        },
+        trackingOnActivity,
+        isTransientCodexTransportError,
+        isClaudeConversationNotFoundError,
+        buildFreshClaudeSpec,
+        readAntigravityDiagnostics,
+      });
+
       const capturedText = input.codexOutputPath
         ? await this.readProviderOutputPath(cwd, input.codexOutputPath, workflowSettings.executionMode)
         : "";

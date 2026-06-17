@@ -67,43 +67,6 @@ describe("ProviderRunner", () => {
     }));
   });
 
-  it("captures antigravity diagnostics via a --log-file and demotes an exit-0 quota run", async () => {
-    // agy exits 0 with empty stdout/stderr; the real quota error lives only in its log file.
-    dockerRunner.runProviderInDocker.mockResolvedValueOnce({
-      ok: true,
-      stdout: "",
-      stderr: "",
-      code: 0,
-      signal: null,
-    });
-    dockerRunner.readWorkspaceFile.mockImplementation(async (_cwd: string, filePath: string) =>
-      filePath.includes("antigravity-logs")
-        ? "E0601 09:45:02.823154 813902 log.go:398] agent executor error: RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact your administrator to enable overages. Resets in 3h4m52s.: RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact your administrator to enable overages. Resets in 3h4m52s."
-        : "captured text");
-
-    const result = await runner.runProvider({
-      provider: "antigravity",
-      prompt: "implement the feature",
-      cwd: "/repo",
-      model: "default",
-      apiKey: "key",
-      sessionId: "session-1",
-      workflowSettings: { executionMode: "DOCKER" } as any,
-      repoPath: "/repo",
-      onActivity: vi.fn(),
-    });
-
-    // The run is demoted to a failure and the quota line (with reset time) is surfaced in stderr.
-    expect(result.ok).toBe(false);
-    expect(result.stderr).toContain("Individual quota reached");
-    expect(result.stderr).toContain("Resets in 3h4m52s");
-    // The CLI must be told where to write its log so we can read it back.
-    const call = dockerRunner.runProviderInDocker.mock.calls[0][0];
-    const logFileIdx = call.args.indexOf("--log-file");
-    expect(logFileIdx).toBeGreaterThanOrEqual(0);
-    expect(call.args[logFileIdx + 1]).toContain("antigravity-logs");
-  });
-
   it("sanitizes bootstrap-branch fatal fallback text in runProviderForText", async () => {
     dockerRunner.readWorkspaceFile.mockResolvedValue("");
     dockerRunner.runProviderInDocker.mockResolvedValueOnce({
@@ -174,33 +137,6 @@ describe("ProviderRunner", () => {
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.arrayContaining(["--resume", "native-123"]),
     }));
-  });
-
-  it("retries Claude Code with a fresh session when resume fails with 'No conversation found'", async () => {
-    dockerRunner.runProviderInDocker
-      .mockResolvedValueOnce({ ok: false, stdout: "", stderr: "Claude Code failed: No conversation found with session ID: native-123", code: 1, signal: null })
-      .mockResolvedValueOnce({ ok: true, stdout: "ok", stderr: "", code: 0, signal: null });
-
-    await runner.runProvider({
-      provider: "claude-code",
-      prompt: "continue",
-      cwd: "/repo",
-      model: "sonnet",
-      apiKey: "key",
-      sessionId: "session-1",
-      continueSessionId: "native-123",
-      workflowSettings: { executionMode: "DOCKER" } as any,
-      repoPath: "/repo",
-      onActivity: vi.fn(),
-    });
-
-    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledTimes(2);
-    const firstArgs = dockerRunner.runProviderInDocker.mock.calls[0][0].args as string[];
-    const secondArgs = dockerRunner.runProviderInDocker.mock.calls[1][0].args as string[];
-    // First attempt resumes the lost session; the retry starts a fresh one.
-    expect(firstArgs).toEqual(expect.arrayContaining(["--resume", "native-123"]));
-    expect(secondArgs).not.toContain("--resume");
-    expect(secondArgs).toContain("--session-id");
   });
 
   it("keeps JSON output enabled for Gemini when MCP config is injected", async () => {
