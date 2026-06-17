@@ -31,14 +31,14 @@ describe("ActionFeedbackRegion", () => {
 
   it("uses assertive aria-live for errors", () => {
     render(<ActionFeedbackRegion status="error" message="Failed to save" />);
-    const region = screen.getByRole("status");
+    const region = screen.getByRole("alert");
     expect(region).toHaveAttribute("aria-live", "assertive");
   });
 
   it("calls onDismiss when dismiss button is clicked", () => {
     const handleDismiss = vi.fn();
     render(<ActionFeedbackRegion status="warning" message="Watch out" onDismiss={handleDismiss} />);
-    const dismissBtn = screen.getByRole("button", { name: "Dismiss message" });
+    const dismissBtn = screen.getByRole("button", { name: "Dismiss: Watch out" });
     fireEvent.click(dismissBtn);
     expect(handleDismiss).toHaveBeenCalledTimes(1);
   });
@@ -46,7 +46,7 @@ describe("ActionFeedbackRegion", () => {
   it("renders retry action and executes it on click", () => {
     const handleRetry = vi.fn();
     render(<ActionFeedbackRegion status="error" message="Failed to load" retryAction={handleRetry} retryLabel="Try Again" />);
-    const retryBtn = screen.getByRole("button", { name: "Try Again" });
+    const retryBtn = screen.getByRole("button", { name: "Retry: Failed to load" });
     fireEvent.click(retryBtn);
     expect(handleRetry).toHaveBeenCalledTimes(1);
   });
