@@ -31,6 +31,7 @@ Routing implementation:
 
 Provider CLI command generation and configuration utilities:
 - `src/infrastructure/providers/cli/provider-command-specs.ts`
+- `src/infrastructure/providers/cli/mcp-config-format.ts` (Local and Docker provider MCP config generation share one contract via `buildProviderMcpConfigArtifact`)
 
 Each `aiProvider.invocationRouting.<routeId>` entry contains:
 - `profile`

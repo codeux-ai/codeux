@@ -351,6 +351,29 @@ describe("DockerRunner custom MCP server injection", () => {
     expect(toml).toContain('"Authorization" = "Bearer secret"');
   });
 
+
+  it("injects custom servers alongside code_ux for qwen-code and merges with existing settings", async () => {
+    await build("qwen-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret" }, [
+      { id: "1", name: "docs", url: "https://docs.example/mcp", enabled: true, headers: { Authorization: "Bearer t" } },
+    ], { QWEN_SETTINGS_CONTENT: JSON.stringify({ enableOpenAILogging: true, someOtherSetting: "value" }) });
+    const json = JSON.parse(writtenFor("qwen-settings.json")!);
+    expect(json.enableOpenAILogging).toBeUndefined(); // It should strip this based on formatting logic
+    expect(json.someOtherSetting).toBe("value");
+    expect(json.mcpServers.code_ux).toMatchObject({ httpUrl: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.docs).toEqual({ httpUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
+  });
+
+  it("injects custom servers alongside code_ux for antigravity", async () => {
+    await build("antigravity", { url: "http://127.0.0.1:3000/mcp", authToken: "secret" }, [
+      { id: "1", name: "docs", url: "https://docs.example/mcp", enabled: true, headers: { Authorization: "Bearer t" } },
+      { id: "2", name: "localtool", transport: "stdio", command: "python", args: ["script.py"], enabled: true }
+    ]);
+    const json = JSON.parse(writtenFor("antigravity-mcp.json")!);
+    expect(json.mcpServers.code_ux).toMatchObject({ serverUrl: "http://127.0.0.1:3000/mcp" });
+    expect(json.mcpServers.docs).toEqual({ serverUrl: "https://docs.example/mcp", headers: { Authorization: "Bearer t" } });
+    expect(json.mcpServers.localtool).toEqual({ command: "python", args: ["script.py"] });
+  });
+
   it("omits the agent header when no agent id is set", async () => {
     await build("claude-code", { url: "http://127.0.0.1:3000/mcp", authToken: "secret" }, []);
     const json = JSON.parse(writtenFor("claude-mcp.json")!);

@@ -1,6 +1,6 @@
 import { CliWorkflowSettings, ProviderId } from "../../../contracts/app-types.js";
 import type { CustomMcpServer, QwenModelProviderSettings } from "../../../contracts/app-types.js";
-import { buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
+import { buildProviderMcpConfigArtifact, buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import { CliProviderId, enabledCustomServersFor, isOpenCodeNativeSessionId, ProviderCommandSpec, providerSpecs } from "./provider-command-specs.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
@@ -1381,128 +1381,44 @@ export class ProviderRunner implements IProviderRunner {
     qwenSettingsContent?: string,
     customServers: CustomMcpServer[] = [],
   ): Promise<Array<{ path: string; originalContent: string | null }>> {
-    const headers: Record<string, string> = {};
-    if (conn?.authToken) {
-      headers["Authorization"] = `Bearer ${conn.authToken}`;
-    }
-    if (conn?.agentId) {
-      headers["X-Code-Ux-Agent"] = conn.agentId;
-    }
-    const created: Array<{ path: string; originalContent: string | null }> = [];
+    let dirPath: string | null = null;
+    let expectedFilename: string | null = null;
 
     if (provider === "claude-code") {
-      const mcpServers: Record<string, unknown> = {};
-      if (conn) {
-        mcpServers.code_ux = {
-          type: "http",
-          url: conn.url,
-          ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        };
-      }
-      for (const server of customServers) {
-        mcpServers[server.name] = buildClaudeMcpServerEntry(server);
-      }
-      if (Object.keys(mcpServers).length === 0) {
-        return created;
-      }
-      const dirPath = path.join(cwd, ".claude");
-      await fs.mkdir(dirPath, { recursive: true });
-      const configPath = path.join(dirPath, "settings.local.json");
-      let existing: Record<string, unknown> = {};
-      const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
-      if (originalContent) {
-        try { existing = JSON.parse(originalContent); } catch { /* ignore parse errors */ }
-      }
-      existing.mcpServers = { ...(existing.mcpServers as Record<string, unknown> || {}), ...mcpServers };
-      await fs.writeFile(configPath, JSON.stringify(existing, null, 2));
-      created.push({ path: configPath, originalContent });
-    } else if (provider === "gemini" || provider === "qwen-code") {
-      const dirPath = path.join(cwd, provider === "gemini" ? ".gemini" : ".qwen");
-      await fs.mkdir(dirPath, { recursive: true });
-      const configPath = path.join(dirPath, "settings.json");
-      // Merge with existing project-level settings to preserve other config (e.g. general.maxAttempts)
-      let existing: Record<string, unknown> = {};
-      const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
-      if (originalContent) {
-        try { existing = JSON.parse(originalContent); } catch { /* ignore parse errors */ }
-      }
-      if (provider === "qwen-code" && qwenSettingsContent) {
-        try {
-          existing = { ...existing, ...(JSON.parse(qwenSettingsContent) as Record<string, unknown>) };
-        } catch {
-          // ignore parse errors and preserve existing settings
-        }
-        delete existing.enableOpenAILogging;
-      }
-      const mcpServers: Record<string, unknown> = { ...(existing.mcpServers as Record<string, unknown> || {}) };
-      if (conn) {
-        mcpServers.code_ux = {
-          httpUrl: conn.url,
-          ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        };
-      }
-      for (const server of customServers) {
-        mcpServers[server.name] = buildGeminiMcpServerEntry(server);
-      }
-      if (Object.keys(mcpServers).length > 0) {
-        existing.mcpServers = mcpServers;
-      }
-      await fs.writeFile(configPath, JSON.stringify(existing, null, 2));
-      created.push({ path: configPath, originalContent });
-    } else if (provider === "codex" && (conn || customServers.length > 0)) {
-      const dirPath = path.join(cwd, ".codex");
-      await fs.mkdir(dirPath, { recursive: true });
-      const configPath = path.join(dirPath, "config.toml");
-      const lines: string[] = [];
-      if (conn) {
-        lines.push("[mcp_servers.code-ux]", `url = "${escapeTomlString(conn.url)}"`);
-        const codexHeaderParts: string[] = [];
-        if (conn.authToken) {
-          codexHeaderParts.push(`"Authorization" = "Bearer ${escapeTomlString(conn.authToken)}"`);
-        }
-        if (conn.agentId) {
-          codexHeaderParts.push(`"X-Code-Ux-Agent" = "${escapeTomlString(conn.agentId)}"`);
-        }
-        if (codexHeaderParts.length > 0) {
-          lines.push(`http_headers = { ${codexHeaderParts.join(", ")} }`);
-        }
-      }
-      for (const server of customServers) {
-        lines.push(...buildCodexMcpServerTomlLines(server.name, server));
-      }
-      const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
-      await fs.writeFile(configPath, lines.join("\n") + "\n");
-      created.push({ path: configPath, originalContent });
-    } else if (provider === "antigravity" && (conn || customServers.length > 0)) {
-      const dirPath = path.join(cwd, ".agents");
-      await fs.mkdir(dirPath, { recursive: true });
-      const configPath = path.join(dirPath, "mcp_config.json");
-      const mcpServers: Record<string, unknown> = {};
-      if (conn) {
-        mcpServers.code_ux = {
-          serverUrl: conn.url,
-          ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        };
-      }
-      for (const server of customServers) {
-        if (server.transport === "stdio") {
-          mcpServers[server.name] = {
-            command: server.command,
-            ...(server.args && server.args.length > 0 ? { args: server.args } : {}),
-            ...(server.env && Object.keys(server.env).length > 0 ? { env: server.env } : {}),
-          };
-        } else {
-          mcpServers[server.name] = {
-            serverUrl: server.url,
-            ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
-          };
-        }
-      }
-      const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
-      await fs.writeFile(configPath, JSON.stringify({ mcpServers }, null, 2));
-      created.push({ path: configPath, originalContent });
+      dirPath = path.join(cwd, ".claude");
+      expectedFilename = "settings.local.json";
+    } else if (provider === "gemini") {
+      dirPath = path.join(cwd, ".gemini");
+      expectedFilename = "settings.json";
+    } else if (provider === "qwen-code") {
+      dirPath = path.join(cwd, ".qwen");
+      expectedFilename = "settings.json";
+    } else if (provider === "codex") {
+      dirPath = path.join(cwd, ".codex");
+      expectedFilename = "config.toml";
+    } else if (provider === "antigravity") {
+      dirPath = path.join(cwd, ".agents");
+      expectedFilename = "mcp_config.json";
     }
 
-    return created;
+    if (!dirPath || !expectedFilename) {
+      return [];
+    }
+
+    const configPath = path.join(dirPath, expectedFilename);
+    const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
+
+    const artifact = buildProviderMcpConfigArtifact(provider, conn, customServers, {
+      qwenSettingsContent,
+      existingContent: originalContent,
+    });
+
+    if (!artifact) {
+      return [];
+    }
+
+    await fs.mkdir(dirPath, { recursive: true });
+    await fs.writeFile(configPath, artifact.content);
+    return [{ path: configPath, originalContent }];
   }
 }
