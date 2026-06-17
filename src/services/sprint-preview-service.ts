@@ -1,3 +1,4 @@
+import type { DockerContainerSummary } from "./docker-session-lifecycle.js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as pathPosix from "path/posix";
@@ -72,13 +73,6 @@ interface PreparedStartupScript {
   runCommand: string | null;
 }
 
-interface DockerContainerSummary {
-  id: string;
-  name: string | null;
-  status: string | null;
-  hostPort?: number | null;
-  labels: Record<string, string>;
-}
 
 export class SprintPreviewService {
   private readonly sessionLocks = new Map<string, Promise<unknown>>();

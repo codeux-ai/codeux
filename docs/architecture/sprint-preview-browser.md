@@ -137,6 +137,7 @@ Current preview controls include:
 - `startupScriptPath`
 
 Startup hygiene:
+- Docker session lifecycle management (such as `docker ps` parsing, lock acquisition for atomic container operations, container removal, and name sanitization) has been extracted to `DockerSessionLifecycle` in `src/services/docker-session-lifecycle.ts` so both preview and file-browser share identical mechanics without diverging.
 - Code UX now removes any existing `code-ux.preview=true` containers on server startup before the preview reconciliation loop begins
 - Code UX also removes orphaned unlabeled setup-helper containers that were created by older inline setup-image preview flows
 - persisted preview sessions are reset back to `stopped` during that startup cleanup so stale containers do not survive process restarts

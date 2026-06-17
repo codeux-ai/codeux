@@ -1,3 +1,4 @@
+import type { DockerContainerSummary } from "./docker-session-lifecycle.js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as pathPosix from "path/posix";
@@ -52,12 +53,6 @@ interface SprintFileBrowserServiceDeps {
   logger?: Logger;
 }
 
-interface DockerContainerSummary {
-  id: string;
-  name: string | null;
-  status: string | null;
-  labels: Record<string, string>;
-}
 
 interface GitRunResult {
   ok: boolean;
