@@ -1,7 +1,7 @@
 import express from "express";
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "http";
 import type { AddressInfo } from "net";
-import { randomUUID } from "crypto";
+import { randomUUID, timingSafeEqual, createHash } from "crypto";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -38,22 +38,39 @@ export interface McpHttpTransportHandle {
 interface McpHttpSessionEntry {
   server: McpServer;
   transport: StreamableHTTPServerTransport;
+  lastAccessed: number;
 }
 
 function readSessionIdHeader(req: IncomingMessage): string | null {
   const header = req.headers["mcp-session-id"];
+  let value: string | null = null;
   if (Array.isArray(header)) {
-    return header[0]?.trim() || null;
+    value = header[0]?.trim() || null;
+  } else if (typeof header === "string") {
+    value = header.trim() || null;
   }
-  return typeof header === "string" ? header.trim() || null : null;
+  if (value) {
+    if (value.length > 100 || !/^[a-zA-Z0-9-]+$/.test(value)) {
+      throw new Error("Invalid mcp-session-id");
+    }
+  }
+  return value;
 }
 
 function readAgentIdHeader(req: IncomingMessage): string | null {
   const header = req.headers["x-code-ux-agent"];
+  let value: string | null = null;
   if (Array.isArray(header)) {
-    return header[0]?.trim() || null;
+    value = header[0]?.trim() || null;
+  } else if (typeof header === "string") {
+    value = header.trim() || null;
   }
-  return typeof header === "string" ? header.trim() || null : null;
+  if (value) {
+    if (value.length > 100 || !/^[a-zA-Z0-9-]+$/.test(value)) {
+      throw new Error("Invalid x-code-ux-agent");
+    }
+  }
+  return value;
 }
 
 function isAuthorizedRequest(req: IncomingMessage, authToken: string | null): boolean {
@@ -67,7 +84,12 @@ function isAuthorizedRequest(req: IncomingMessage, authToken: string | null): bo
   }
 
   const expected = `Bearer ${authToken}`;
-  return header.trim() === expected;
+  const actualStr = header.trim();
+
+  const expectedHash = createHash("sha256").update(expected).digest();
+  const actualHash = createHash("sha256").update(actualStr).digest();
+
+  return timingSafeEqual(expectedHash, actualHash);
 }
 
 function respondUnauthorized(res: ServerResponse): void {
@@ -128,6 +150,8 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
   app.use(express.json({ limit: "1mb" }));
 
   const sessions = new Map<string, McpHttpSessionEntry>();
+  const MAX_SESSIONS = 100;
+  const SESSION_TIMEOUT_MS = 60 * 60 * 1000;
 
   const closeSession = async (sessionId: string): Promise<void> => {
     const entry = sessions.get(sessionId);
@@ -140,22 +164,48 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
 
   app.all(deps.path, async (req, res) => {
     if (!isAuthorizedRequest(req, deps.authToken)) {
+      deps.logger.warn("Unauthorized MCP HTTPS request", { path: req.path, method: req.method });
       respondUnauthorized(res);
       return;
     }
 
     try {
-      const sessionId = readSessionIdHeader(req);
+      let sessionId: string | null = null;
+      try {
+        sessionId = readSessionIdHeader(req);
+        // Also validate agent header early to catch errors
+        readAgentIdHeader(req);
+      } catch (err: any) {
+        deps.logger.warn("Rejected request due to invalid identifier", { path: req.path, method: req.method });
+        respondBadRequest(res, "Bad Request: Invalid identifier");
+        return;
+      }
+
       let entry = sessionId ? sessions.get(sessionId) : undefined;
 
+      if (sessionId && !entry) {
+        deps.logger.warn("Unknown MCP session id", { path: req.path, method: req.method });
+        respondBadRequest(res, "Bad Request: Unknown MCP session id");
+        return;
+      }
+
       if (!entry) {
-        if (sessionId) {
-          respondBadRequest(res, "Bad Request: Unknown MCP session id");
+        if (req.method !== "POST" || !isInitializeRequest(req.body)) {
+          respondBadRequest(res, "Bad Request: No valid MCP session is active and request is not an initialize call");
           return;
         }
 
-        if (req.method !== "POST" || !isInitializeRequest(req.body)) {
-          respondBadRequest(res, "Bad Request: No valid MCP session is active and request is not an initialize call");
+        // Cleanup idle sessions
+        const now = Date.now();
+        for (const [id, session] of sessions.entries()) {
+          if (now - session.lastAccessed > SESSION_TIMEOUT_MS) {
+            closeSession(id).catch(() => undefined);
+          }
+        }
+
+        if (sessions.size >= MAX_SESSIONS) {
+          deps.logger.warn("MCP HTTPS session cap reached", { path: req.path, method: req.method });
+          respondBadRequest(res, "Bad Request: Too many active sessions");
           return;
         }
 
@@ -163,7 +213,7 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (initializedSessionId) => {
-            sessions.set(initializedSessionId, { server, transport });
+            sessions.set(initializedSessionId, { server, transport, lastAccessed: Date.now() });
           },
         });
         transport.onclose = () => {
@@ -173,9 +223,10 @@ export async function bootMcpHttpTransport(deps: BootMcpHttpTransportDeps): Prom
           }
         };
         await server.connect(transport);
-        entry = { server, transport };
+        entry = { server, transport, lastAccessed: Date.now() };
       }
 
+      entry.lastAccessed = Date.now();
       await runWithMcpAgentContext(readAgentIdHeader(req), () => entry!.transport.handleRequest(req, res, req.body));
 
       if (req.method === "DELETE") {
