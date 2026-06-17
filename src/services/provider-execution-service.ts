@@ -301,7 +301,12 @@ export class ProviderExecutionService {
             && this.isExecutionInvocationStillRunning(execInvocationId)
           ) {
             if (args.trackAssistantInInvocation !== false) {
-              if (!args.expectTextOutput && telemetry.conversation && telemetry.conversation.length > 0) {
+              // Record the full parsed agent session for every invocation type —
+              // including text-output (QA / planning / setup) runs, which are
+              // just as agentic but were previously collapsed to prompt + final
+              // answer. The structured callers parse their result from the
+              // returned text, not from these messages, so this is display-only.
+              if (telemetry.conversation && telemetry.conversation.length > 0) {
                 this.deps.executionRepository.clearExecutionInvocationMessages(execInvocationId);
                 for (const turn of telemetry.conversation) {
                   this.deps.executionRepository.appendExecutionInvocationMessage(
@@ -459,9 +464,10 @@ export class ProviderExecutionService {
           }
           if (args.trackAssistantInInvocation !== false) {
             const conversation = providerResult.usageTelemetry.conversation;
-            if (!args.expectTextOutput && conversation && conversation.length > 0) {
+            if (conversation && conversation.length > 0) {
               // Replace the placeholder message(s) with the full parsed agent
-              // session (user prompt, reasoning, tool calls/results, assistant).
+              // session (user prompt, reasoning, tool calls/results, assistant)
+              // for every invocation type, not just coding runs.
               this.deps.executionRepository?.clearExecutionInvocationMessages(execInvocationId);
               for (const turn of conversation) {
                 this.deps.executionRepository?.appendExecutionInvocationMessage(
