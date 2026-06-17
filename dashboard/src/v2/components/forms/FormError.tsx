@@ -19,7 +19,7 @@ export function FormError({ id, error, helperId, helperText }: FormErrorProps) {
           text-xs text-slate-500 dark:text-slate-400
           motion-safe:transition-all motion-safe:duration-200 ease-in-out
           ${error
-            ? 'opacity-0 -translate-y-1 invisible pointer-events-none'
+            ? 'opacity-0 -translate-y-1 pointer-events-none'
             : 'opacity-100 translate-y-0 visible'}
         `}
       >

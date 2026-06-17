@@ -171,9 +171,46 @@ describe("FieldWrapper", () => {
     expect(errorElement).toBeInTheDocument();
 
     expect(helperElement.className).toContain("opacity-0");
-    expect(helperElement.className).toContain("invisible");
+    expect(helperElement.className).toContain("pointer-events-none");
 
-    expect(errorElement.className).toContain("opacity-100");
-    expect(errorElement.className).toContain("visible");
+    expect(errorElement.className).not.toContain("pointer-events-none");
+  });
+
+  it("correctly handles and wires multiple children", () => {
+    const { rerender } = render(
+      <FieldWrapper label="Test Label" htmlFor="test-input" error="Required">
+        <Input id="test-input" />
+        <Input id="test-input-2" />
+      </FieldWrapper>
+    );
+
+    const inputs = screen.getAllByRole("textbox");
+    expect(inputs).toHaveLength(2);
+
+    // Initial state
+    expect(inputs[0]).toHaveAttribute("id", "test-input"); // Only the first valid child receives the ID
+    expect(inputs[1]).toHaveAttribute("id", "test-input-2"); // Subsequent children retain their original IDs
+
+    inputs.forEach(input => {
+      expect(input).not.toHaveAttribute("aria-invalid", "true");
+    });
+
+    // Trigger blur on first input
+    inputs[0].focus();
+    inputs[0].blur();
+
+    rerender(
+      <FieldWrapper label="Test Label" htmlFor="test-input" error="Required">
+        <Input id="test-input" />
+        <Input id="test-input-2" />
+      </FieldWrapper>
+    );
+
+    // Both should receive error states
+    const rerenderedInputs = screen.getAllByRole("textbox");
+    rerenderedInputs.forEach(input => {
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input.getAttribute("aria-errormessage")).not.toBeNull();
+    });
   });
 });

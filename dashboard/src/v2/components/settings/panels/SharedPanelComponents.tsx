@@ -157,7 +157,7 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
   );
 };
 
-export const OverrideBadge: FunctionComponent<{ label: string; onReset?: () => void }> = ({ label, onReset }) => (
+export const OverrideBadge: FunctionComponent<{ label: string; contextLabel?: string; onReset?: () => void }> = ({ label, contextLabel, onReset }) => (
   <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
     <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300" />
     {label}
@@ -169,6 +169,7 @@ export const OverrideBadge: FunctionComponent<{ label: string; onReset?: () => v
           onReset();
         }}
         title="Delete project override (revert to system default)"
+        aria-label={`Delete project override for ${contextLabel || "setting"}`}
         className="ml-1 rounded-full p-0.5 text-amber-600 hover:bg-amber-500/20 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-300/25 dark:hover:text-amber-100 transition-colors duration-150 cursor-pointer"
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" className="h-2.5 w-2.5">
@@ -191,7 +192,7 @@ export const Row: FunctionComponent<{
   info?: ComponentChildren;
   onReset?: () => void;
 }> = ({ label, description, children, badge, last, info, onReset }) => (
-  <SharedRow label={label} description={description} badge={badge ? <OverrideBadge label={badge} onReset={onReset} /> : undefined} last={last} info={info}>
+  <SharedRow label={label} description={description} badge={badge ? <OverrideBadge label={badge} contextLabel={label} onReset={onReset} /> : undefined} last={last} info={info}>
     {children}
   </SharedRow>
 );

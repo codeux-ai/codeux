@@ -1,4 +1,4 @@
-import { h, ComponentChildren, VNode, cloneElement, isValidElement } from "preact";
+import { h, ComponentChildren, VNode, cloneElement, isValidElement, toChildArray } from "preact";
 import { useEffect, useState, useId } from "preact/hooks";
 import { FormError } from "./FormError";
 
@@ -55,19 +55,30 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
   }
 
   // Clone children to append aria attributes if valid
-  const existingOnBlur = (children as any)?.props?.onBlur;
-  const child = isValidElement(children) ? cloneElement(children as VNode<any>, {
-    id: inputId,
-    "aria-invalid": showError ? "true" : undefined,
-    ...(ariaDescribedBy ? { "aria-describedby": ariaDescribedBy } : {}),
-    "aria-errormessage": errorId,
-    ...(required ? { "aria-required": true } : {}),
-    onBlur: (e: any) => {
-      setTouched(true);
-      existingOnBlur?.(e);
-    },
-    valid: !error ? valid : undefined,
-  }) : children;
+  let idAssigned = false;
+  const child = toChildArray(children).map(child => {
+    if (!isValidElement(child)) return child;
+    const existingOnBlur = (child as any)?.props?.onBlur;
+
+    const childProps: any = {
+      "aria-invalid": showError ? "true" : undefined,
+      ...(ariaDescribedBy ? { "aria-describedby": ariaDescribedBy } : {}),
+      "aria-errormessage": errorId,
+      ...(required ? { "aria-required": true } : {}),
+      onBlur: (e: any) => {
+        setTouched(true);
+        existingOnBlur?.(e);
+      },
+      valid: !error ? valid : undefined,
+    };
+
+    if (!idAssigned) {
+      childProps.id = inputId;
+      idAssigned = true;
+    }
+
+    return cloneElement(child as VNode<any>, childProps);
+  });
 
   return (
     <div class="flex flex-col mb-4">

@@ -28,6 +28,8 @@ export const SprintKeyEditor: FunctionComponent<SprintKeyEditorProps> = ({
         value={value}
         onChange={handleChange}
         mono
+        aria-label="Sprint key prefix"
+        aria-description="Prefix used when generating sprint keys (e.g. SPR-1)."
       />
     </Row>
   );
