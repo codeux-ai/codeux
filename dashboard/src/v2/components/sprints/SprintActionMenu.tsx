@@ -21,6 +21,7 @@ export interface SprintActionMenuProps {
   isCompleted?: boolean;
   showcaseBusy?: boolean;
   markCompletedDisabled?: boolean;
+  deleteBusy?: boolean;
   // Run controls (rendered only when the matching handler is provided)
   isRunning?: boolean;
   isPaused?: boolean;
@@ -51,6 +52,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   isCompleted = false,
   showcaseBusy = false,
   markCompletedDisabled = false,
+  deleteBusy = false,
   isRunning = false,
   isPaused = false,
   primaryBusy = false,
@@ -68,11 +70,17 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
   onClose,
   markCompletedIcon = "circle",
   role,
-  buttonClassName = "flex w-full items-center gap-2 rounded-[1rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2",
+  buttonClassName = "flex w-full items-center gap-2 rounded-[1rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2",
 }) => {
   const handleDeleteClassName = buttonClassName.replace(
-    /text-slate-600.*hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white\/\[0\.05\] dark:hover:text-white/,
+    /text-slate-600 transition-colors hover:bg-black\/\[0\.04\] hover:text-slate-900/,
     "text-status-red hover:bg-status-red/10"
+  ).replace(
+    /dark:text-slate-300 dark:hover:bg-white\/\[0\.05\] dark:hover:text-white/,
+    ""
+  ).replace(
+    /focus-visible:ring-signal-500\/30/,
+    "focus-visible:ring-status-red/30"
   );
   const disabledClassName = `${buttonClassName} disabled:cursor-not-allowed disabled:opacity-40`;
 
@@ -232,10 +240,15 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onClose?.();
           onDelete?.();
         }}
-        className={handleDeleteClassName}
+        disabled={deleteBusy}
+        className={deleteBusy ? `${handleDeleteClassName} disabled:cursor-not-allowed disabled:opacity-40` : handleDeleteClassName}
       >
-        <XCircle className="h-3.5 w-3.5" strokeWidth={2.1} />
-        Delete
+        {deleteBusy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
+        ) : (
+          <XCircle className="h-3.5 w-3.5" strokeWidth={2.1} />
+        )}
+        {deleteBusy ? "Deleting..." : "Delete"}
       </button>
     </>
   );

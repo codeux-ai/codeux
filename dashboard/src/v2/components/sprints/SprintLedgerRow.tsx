@@ -362,11 +362,12 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                   isCompleted={isCompleted}
                   showcaseBusy={isPinPending}
                   markCompletedDisabled={false}
+                  deleteBusy={isDeletePending}
                   onToggleShowcase={() => onToggleShowcase(sprint)}
                   onClose={() => setMenuOpen(false)}
                   markCompletedIcon="square"
                   role="menuitem"
-                  buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                  buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none"
                 />
               }
             >

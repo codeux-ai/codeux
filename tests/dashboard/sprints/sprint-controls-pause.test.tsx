@@ -52,6 +52,6 @@ describe("SprintControls pause and resume actions", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: "Pausing" }).getAttribute("disabled")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Pausing..." }).getAttribute("disabled")).not.toBeNull();
   });
 });

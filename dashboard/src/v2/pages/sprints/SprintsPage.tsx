@@ -36,6 +36,8 @@ import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsO
 import { SprintImportMenu } from "../../components/sprints/SprintImportMenu.js";
 import { SprintIssueImportModal } from "../../components/sprints/SprintIssueImportModal.js";
 import { SprintJiraImportModal } from "../../components/sprints/SprintJiraImportModal.js";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog.js";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { useProgressiveList } from "../../hooks/use-progressive-list.js";
@@ -141,6 +143,7 @@ const SprintsProjectPlaceholder: FunctionComponent<{
 );
 
 export const SprintsPage: FunctionComponent = () => {
+  const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
   const searchParams = useSearch({ strict: false });
   const headerRef = useRef<HTMLDivElement>(null);
   const bubblesRef = useRef<HTMLDivElement>(null);
@@ -363,6 +366,13 @@ export const SprintsPage: FunctionComponent = () => {
       execution={execution}
       pendingActionIds={pendingActionIds}
     >
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        options={confirmOptions}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
+
       <PageContainer padding={selectedProject ? "standard" : "sprintsEmpty"} className={selectedProject ? "gap-20" : "gap-4"}>
         <div ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
           <div className="flex flex-col gap-5">
@@ -520,7 +530,19 @@ export const SprintsPage: FunctionComponent = () => {
                           setShowCreateComposer(false);
                           setLinkedIssues(sprint.linkedIssues || []);
                         }}
-                        onDelete={() => { void handleDeleteSprint(sprint.id); }}
+                        onDelete={() => {
+                          void requestConfirm({
+                            title: "Delete Sprint?",
+                            body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
+                            confirmLabel: "Delete Sprint",
+                            cancelLabel: "Cancel",
+                            destructive: true,
+                          }).then((confirmed) => {
+                            if (confirmed) {
+                              void handleDeleteSprint(sprint.id);
+                            }
+                          });
+                        }}
                         onExport={() => { void handleOpenExport(sprint.id, sprint.name); }}
                         onOverrides={() => { setOverrideSprint(sprint); }}
                         onToggleShowcase={() => { void handleToggleShowcase(sprint); }}
@@ -668,7 +690,17 @@ export const SprintsPage: FunctionComponent = () => {
                   void handleMarkCompleted(sprintId);
                 }}
                 onDeleteSprint={(sprintId) => {
-                  void handleDeleteSprint(sprintId);
+                  void requestConfirm({
+                    title: "Delete Sprint?",
+                    body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
+                    confirmLabel: "Delete Sprint",
+                    cancelLabel: "Cancel",
+                    destructive: true,
+                  }).then((confirmed) => {
+                    if (confirmed) {
+                      void handleDeleteSprint(sprintId);
+                    }
+                  });
                 }}
                 onBulkStart={handleBulkStart}
                 onBulkDelete={handleBulkDelete}
@@ -797,11 +829,21 @@ export const SprintsPage: FunctionComponent = () => {
                 void handleMarkCompleted(activeRowMenuSprint.id);
               }}
               onDelete={() => {
-                void handleDeleteSprint(activeRowMenuSprint.id);
+                void requestConfirm({
+                  title: "Delete Sprint?",
+                  body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
+                  confirmLabel: "Delete Sprint",
+                  cancelLabel: "Cancel",
+                  destructive: true,
+                }).then((confirmed) => {
+                  if (confirmed) {
+                    void handleDeleteSprint(activeRowMenuSprint.id);
+                  }
+                });
               }}
               onClose={() => setRowMenu(null)}
               markCompletedIcon="square"
-              buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none"
             />
           </div>
         </div>,
