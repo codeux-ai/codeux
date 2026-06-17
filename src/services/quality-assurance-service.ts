@@ -198,18 +198,6 @@ export class QualityAssuranceService {
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
 
-    // Separate per-task QA guardrail (independent of the QA agent's own maxTaskReviewRuns).
-    const qaGuardrail = this.deps.guardrailService.evaluateQa(scope, taskId);
-    if (!qaGuardrail.allowed && qaGuardrail.action !== "WARN_ONLY") {
-      await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
-      this.deps.logger?.info("QA review skipped: guardrail cap reached", {
-        taskId,
-        count: qaGuardrail.count,
-        cap: qaGuardrail.cap,
-      });
-      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
-    }
-
     const taskRun = this.resolveTaskRunForSubtask(args.task, args.sprintRunId);
     const project = this.deps.projectManagementRepository.getProject(args.projectId);
     const sprint = this.deps.projectManagementRepository.getSprint(args.sprintId);
@@ -249,9 +237,6 @@ export class QualityAssuranceService {
         runIndex: existingRuns + 1,
       },
     });
-
-    // Record the QA invocation against the per-task guardrail ledger.
-    this.deps.guardrailService.record(scope, taskId, "qa_review");
 
     // Signal that the task has entered the QA stage so the live view advances
     // from coding-completed → QA and starts timing the review immediately
@@ -457,7 +442,7 @@ export class QualityAssuranceService {
       || `${settings.git.featureBranchPrefix || "feature/"}sprint-${sprint.number ?? 0}`;
 
     const latestRun = this.reconcileRunningQaRun(this.deps.qaReviewRepository.getLatestSprintRun(args.sprintId));
-    const maxRuns = qaSettings.maxTaskReviewRuns;
+    const maxRuns = qaSettings.maxSprintReviewRuns;
     const latestTaskSnapshot = readSprintQaSnapshot(latestRun);
     const currentTaskSnapshot = buildSprintQaSnapshot(args.subtasks);
     const latestTaskUpdatedAt = this.getLatestSprintTaskUpdatedAt(args.projectId, args.sprintId);
@@ -716,17 +701,6 @@ export class QualityAssuranceService {
       };
     }
 
-    if (latestRun?.outcome === "changes_requested") {
-      return {
-        mergeAllowed: false,
-        reason: "changes_requested",
-        summary: latestRun.summaryMarkdown || "QA requested follow-up fixes.",
-        latestRun,
-        runsUsed,
-        maxRuns,
-      };
-    }
-
     const recoveredStaleLatestRun = isRecoveredStaleQaRun(latestRun);
 
     // Only runs that produced a real verdict (pass / changes_requested) spend
@@ -736,17 +710,31 @@ export class QualityAssuranceService {
     // stops and escalates instead of looping or failing open.
     const decisiveRuns = this.deps.qaReviewRepository.countDecisiveTaskRuns(taskId);
     const infraCeiling = maxRuns + QA_INFRA_FAILURE_GRACE;
+    const budgetExhausted = (maxRuns > 0 && decisiveRuns >= maxRuns) || runsUsed >= infraCeiling;
 
-    // Fail CLOSED on exhaustion. A genuine pass returns above, so reaching here
-    // means QA never affirmatively cleared the task. Never let an exhausted gate
-    // allow the merge/settle — that is exactly what silently shipped tasks with
-    // no PR. Hold the merge; the orchestrator escalates the task to a human.
-    if (decisiveRuns >= maxRuns || runsUsed >= infraCeiling) {
+    // Exhaustion is checked BEFORE the changes_requested verdict on purpose: a
+    // task that keeps getting "changes requested" until its budget is spent must
+    // surface as `retries_exhausted` so the orchestrator can apply the configured
+    // exhaustion policy. Otherwise the gate stays on `changes_requested` forever
+    // (the bug that hung sprints when a weak agent never landed the change).
+    // A genuine pass returns above, so reaching here means QA never cleared it.
+    if (budgetExhausted) {
       return {
         mergeAllowed: false,
         reason: "retries_exhausted",
         summary: latestRun?.summaryMarkdown
           || `QA could not clear this task (${decisiveRuns}/${maxRuns} verdicts, ${runsUsed} attempts) — human attention required.`,
+        latestRun,
+        runsUsed,
+        maxRuns,
+      };
+    }
+
+    if (latestRun?.outcome === "changes_requested") {
+      return {
+        mergeAllowed: false,
+        reason: "changes_requested",
+        summary: latestRun.summaryMarkdown || "QA requested follow-up fixes.",
         latestRun,
         runsUsed,
         maxRuns,

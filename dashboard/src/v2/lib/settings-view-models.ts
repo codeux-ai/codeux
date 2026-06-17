@@ -143,6 +143,8 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     qualityAssurance: {
       enabled: settings.agents.qualityAssurance.enabled,
       maxTaskReviewRuns: settings.agents.qualityAssurance.maxTaskReviewRuns,
+      maxSprintReviewRuns: settings.agents.qualityAssurance.maxSprintReviewRuns,
+      exhaustionPolicy: settings.agents.qualityAssurance.exhaustionPolicy,
       taskCompletion: { ...settings.agents.qualityAssurance.taskCompletion },
       sprintCompletion: { ...settings.agents.qualityAssurance.sprintCompletion },
       completedTaskWithoutPr: { ...settings.agents.qualityAssurance.completedTaskWithoutPr },
@@ -193,6 +195,8 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     qualityAssurance: {
       enabled: settings.agents.qualityAssurance.enabled,
       maxTaskReviewRuns: settings.agents.qualityAssurance.maxTaskReviewRuns,
+      maxSprintReviewRuns: settings.agents.qualityAssurance.maxSprintReviewRuns,
+      exhaustionPolicy: settings.agents.qualityAssurance.exhaustionPolicy,
       taskCompletion: { ...settings.agents.qualityAssurance.taskCompletion },
       sprintCompletion: { ...settings.agents.qualityAssurance.sprintCompletion },
       completedTaskWithoutPr: { ...settings.agents.qualityAssurance.completedTaskWithoutPr },

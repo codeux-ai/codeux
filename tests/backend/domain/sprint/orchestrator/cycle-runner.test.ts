@@ -1399,6 +1399,103 @@ describe("CycleRunner attention sync", () => {
     );
   });
 
+  describe("QA exhaustion policy", () => {
+    const runExhaustedPolicy = async (
+      exhaustionPolicy: "ESCALATE_TO_HUMAN" | "FAIL_TASK" | "FINISH_TASK",
+    ) => {
+      const deps = buildDeps();
+      deps.qualityAssuranceService = {
+        getTaskMergeGateStatus: vi.fn().mockReturnValue({
+          mergeAllowed: false,
+          reason: "retries_exhausted",
+          summary: "QA could not clear this task.",
+          latestRun: { id: "qa-run-1" },
+          runsUsed: 5,
+          maxRuns: 5,
+        }),
+        reviewCompletedTask: vi.fn(),
+      } as any;
+      deps.getDashboardSettings = vi.fn().mockReturnValue({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            exhaustionPolicy,
+          },
+        },
+      });
+
+      const runner = new CycleRunner(deps);
+      const task: any = {
+        id: "T1",
+        record_id: "task-1",
+        title: "Exhausted task",
+        prompt: "do work",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "codex",
+      };
+
+      await (runner as any).reviewCompletedTasks(
+        [task],
+        new Map([["T1", "CODING_COMPLETED"]]),
+        {
+          executionContext: {
+            project: { id: "project-1", name: "Project 1" } as any,
+            sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+            sprintNumber: 1,
+            repoPath: "/repo/project-1",
+            featureBranch: "feature/sprint-1",
+            defaultBranch: "main",
+          },
+          repoPath: "/repo/project-1",
+          sprintRunId: "run-1",
+        } as any,
+        deps.getDashboardSettings(),
+      );
+
+      return { deps, task };
+    };
+
+    it("ESCALATE_TO_HUMAN parks the task in QA_REVIEW_FAILED and opens a human-attention item", async () => {
+      const { deps, task } = await runExhaustedPolicy("ESCALATE_TO_HUMAN");
+      expect(task.status).toBe("QA_REVIEW_FAILED");
+      expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith(
+        "task-1",
+        expect.objectContaining({ status: "QA_REVIEW_FAILED" }),
+      );
+      expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ attentionType: "human_escalation_required", taskId: "task-1" }),
+      ]));
+      expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
+    });
+
+    it("FAIL_TASK marks the run FAILED so the sprint can finish, without a human gate", async () => {
+      const { deps, task } = await runExhaustedPolicy("FAIL_TASK");
+      expect(task.status).toBe("FAILED");
+      expect(deps.executionRepository.updateTaskRun).toHaveBeenCalledWith(
+        "task-run-1",
+        expect.objectContaining({ state: "FAILED" }),
+      );
+      expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
+      expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
+    });
+
+    it("FINISH_TASK marks the task COMPLETED despite no QA pass", async () => {
+      const { deps, task } = await runExhaustedPolicy("FINISH_TASK");
+      expect(task.status).toBe("COMPLETED");
+      expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith(
+        "task-1",
+        expect.objectContaining({ status: "completed" }),
+      );
+      expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
+      expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
+    });
+  });
+
   it("does not rerun task QA after a passing review even if the task becomes code-complete again", async () => {
     const deps = buildDeps();
     deps.qualityAssuranceService = {

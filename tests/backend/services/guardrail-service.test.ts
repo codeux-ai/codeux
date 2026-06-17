@@ -85,16 +85,6 @@ describe("GuardrailService.evaluate", () => {
   });
 });
 
-describe("GuardrailService.evaluateQa", () => {
-  it("uses the dedicated qaRunsCap", () => {
-    const repo = makeRepo({ "t1:qa_review": 10 });
-    const service = new GuardrailService(repo, () => settings({ qaRunsCap: 10, qaRunsOnLimit: "BLOCK_AND_ESCALATE" }));
-    const result = service.evaluateQa(scope, "t1");
-    expect(result.allowed).toBe(false);
-    expect(result.cap).toBe(10);
-  });
-});
-
 describe("GuardrailService.record / reset", () => {
   it("delegates record and reset to the repository", () => {
     const repo = makeRepo();

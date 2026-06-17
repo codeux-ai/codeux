@@ -726,8 +726,9 @@ export interface CiIntelligenceSettings {
 /**
  * Agent job types tracked and capped by the unified guardrail layer. A subset of
  * {@link ProviderInvocationPurpose} (execution-types.ts). `qa_review` is intentionally
- * excluded: QA review caps are handled by the dedicated `qaRunsCap` to avoid two
- * competing caps colliding with `agents.qualityAssurance.maxTaskReviewRuns`.
+ * excluded: QA review budgets are owned entirely by
+ * `agents.qualityAssurance.maxTaskReviewRuns` / `maxSprintReviewRuns`, so the
+ * guardrail layer never caps QA (this avoids two competing caps).
  */
 export type GuardrailJobType =
   | "task_coding"
@@ -753,9 +754,6 @@ export interface GuardrailSettings {
   /** Optional hard cap on total agent invocations per task across all job types. 0 = unlimited. */
   perTaskTotalCeiling: number;
   jobs: Record<GuardrailJobType, GuardrailJobConfig>;
-  /** Separate per-task QA-review cap. Distinct from agents.qualityAssurance.maxTaskReviewRuns. 0 = unlimited. */
-  qaRunsCap: number;
-  qaRunsOnLimit: GuardrailOnLimitAction;
 }
 
 export interface SprintLoopStepSettings {
@@ -836,9 +834,24 @@ export interface QualityAssuranceTriggerSettings {
   agentPresetId: string | null;
 }
 
+/**
+ * What to do with a code-complete task once its QA review budget is spent
+ * without ever earning a pass. Replaces the previous fail-closed-only behaviour
+ * with an explicit, configurable policy.
+ */
+export type QaExhaustionPolicy =
+  | "ESCALATE_TO_HUMAN" // hold in QA_REVIEW_FAILED + raise a human-attention item (fail closed)
+  | "FAIL_TASK" // mark the task FAILED and let the sprint move on
+  | "FINISH_TASK"; // mark the task COMPLETED despite no QA pass (fail open)
+
 export interface QualityAssuranceSettings {
   enabled: boolean;
+  /** Per-task QA review budget (Task QA Max Runs). 0 = unlimited. */
   maxTaskReviewRuns: number;
+  /** Sprint-completion QA review budget (Sprint QA Max Runs). 0 = unlimited. */
+  maxSprintReviewRuns: number;
+  /** What happens when a task exhausts its QA budget without a pass. */
+  exhaustionPolicy: QaExhaustionPolicy;
   taskCompletion: QualityAssuranceTriggerSettings;
   sprintCompletion: QualityAssuranceTriggerSettings;
   completedTaskWithoutPr: QualityAssuranceTriggerSettings;
