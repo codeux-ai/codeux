@@ -81,6 +81,27 @@ function Harness({
   );
 }
 
+const longInvocations = Array.from({ length: 40 }).map((_, i) => ({
+  ...mockInvocations[0],
+  id: `inv-long-${i}`,
+  sprintNumber: null,
+  taskKey: null,
+}));
+
+function LongHarness() {
+  const [sort, setSort] = useState<SystemSort>({ key: "startedAt", dir: "desc" });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  return (
+    <InvocationsTable
+      invocations={longInvocations}
+      sort={sort}
+      onSortChange={setSort}
+      expandedId={expandedId}
+      onRowExpand={setExpandedId}
+    />
+  );
+}
+
 describe("InvocationsTable", () => {
   it("renders invocations correctly", () => {
     const { getByText, getAllByText } = render(<Harness />);
@@ -133,6 +154,28 @@ describe("InvocationsTable", () => {
     await waitFor(() => {
       expect(queryByText("Loading messages")).toBeNull();
     });
+  });
+
+  it("initially limits rows and reveals more", () => {
+    const { queryAllByText, getByRole, queryByRole } = render(<LongHarness />);
+
+    // initial window is 20, so we should see 20 instances of gemini-1.5-pro
+    expect(queryAllByText("gemini-1.5-pro").length).toBe(20);
+
+    const revealBtn = getByRole("button", { name: "Show more invocations" });
+    fireEvent.click(revealBtn);
+
+    expect(queryAllByText("gemini-1.5-pro").length).toBe(40);
+    expect(queryByRole("button", { name: "Show more invocations" })).toBeNull();
+  });
+
+  it("preserves expanded invocation even if outside initial window", () => {
+    mockedFetchInvocationMessages.mockResolvedValue([]);
+    // Pass an expanded ID that is at the very end of the list (index 39)
+    const { queryAllByText, getByRole } = render(
+      <InvocationsTable invocations={longInvocations} sort={{ key: "startedAt", dir: "desc" }} onSortChange={vi.fn()} expandedId="inv-long-39" onRowExpand={vi.fn()} />
+    );
+    expect(queryAllByText("gemini-1.5-pro").length).toBeGreaterThan(20);
   });
 
   it("renders loading skeleton", () => {

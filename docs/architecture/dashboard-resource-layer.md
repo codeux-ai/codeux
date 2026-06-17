@@ -63,3 +63,4 @@ Heavy list views, such as the sprint registry or stats ledgers, utilize a progre
 - Lists render an initial lightweight viewport of items.
 - As the user scrolls, an intersection observer triggers progressive unrolling of the remaining items in batches.
 - This prevents main-thread blocking when rendering hundreds of tasks or sprint rows, while still allowing the full dataset to be available for client-side search and sorting.
+- Heavy lists within complex components, such as the `InvocationsTable`, utilize a simpler `useInvocationsWindow` custom hook to deterministically limit row rendering and lazily append more records on user interaction.
