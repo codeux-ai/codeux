@@ -11,12 +11,12 @@ export class ExecutionWallTimeQuery {
     private readonly storage: AppDbStorage
   ) {}
 
-  invalidateTask(taskId: string): void {
-    this.taskWallTimeCache.delete(taskId);
+  invalidateTask(projectId: string, taskId: string): void {
+    this.taskWallTimeCache.delete(`${projectId}:${taskId}`);
   }
 
-  invalidateSprintRun(sprintRunId: string): void {
-    this.sprintRunWallTimeCache.delete(sprintRunId);
+  invalidateSprintRun(projectId: string, sprintRunId: string): void {
+    this.sprintRunWallTimeCache.delete(`${projectId}:${sprintRunId}`);
   }
 
   getWallTimeTotalsByTaskIds(projectId: string, taskIds: string[], nowIso: string): Map<string, number> {
@@ -26,8 +26,9 @@ export class ExecutionWallTimeQuery {
     const activeTaskIds: string[] = [];
 
     for (const taskId of taskIds) {
-      if (this.taskWallTimeCache.has(taskId)) {
-        const cache = this.taskWallTimeCache.get(taskId)!;
+      const cacheKey = `${projectId}:${taskId}`;
+      if (this.taskWallTimeCache.has(cacheKey)) {
+        const cache = this.taskWallTimeCache.get(cacheKey)!;
         result.set(taskId, cache.finishedMs);
         if (cache.hasActive) {
           activeTaskIds.push(taskId);
@@ -53,9 +54,10 @@ export class ExecutionWallTimeQuery {
       const finishedMap = new Map(finishedRows.map(r => [r.task_id, Math.max(0, Number(r.total_duration_ms) || 0)]));
 
       for (const taskId of missingTaskIds) {
+        const cacheKey = `${projectId}:${taskId}`;
         const finishedMs = finishedMap.get(taskId) || 0;
         const hasActive = activeMap.has(taskId);
-        this.taskWallTimeCache.set(taskId, { finishedMs, hasActive });
+        this.taskWallTimeCache.set(cacheKey, { finishedMs, hasActive });
         result.set(taskId, finishedMs);
         if (hasActive) {
           activeTaskIds.push(taskId);
@@ -85,8 +87,9 @@ export class ExecutionWallTimeQuery {
     const activeIds: string[] = [];
 
     for (const sprintRunId of sprintRunIds) {
-      if (this.sprintRunWallTimeCache.has(sprintRunId)) {
-        const cache = this.sprintRunWallTimeCache.get(sprintRunId)!;
+      const cacheKey = `${projectId}:${sprintRunId}`;
+      if (this.sprintRunWallTimeCache.has(cacheKey)) {
+        const cache = this.sprintRunWallTimeCache.get(cacheKey)!;
         result.set(sprintRunId, cache.finishedMs);
         if (cache.hasActive) {
           activeIds.push(sprintRunId);
@@ -112,9 +115,10 @@ export class ExecutionWallTimeQuery {
       const finishedMap = new Map(finishedRows.map(r => [r.sprint_run_id, Math.max(0, Number(r.total_duration_ms) || 0)]));
 
       for (const sprintRunId of missingIds) {
+        const cacheKey = `${projectId}:${sprintRunId}`;
         const finishedMs = finishedMap.get(sprintRunId) || 0;
         const hasActive = activeMap.has(sprintRunId);
-        this.sprintRunWallTimeCache.set(sprintRunId, { finishedMs, hasActive });
+        this.sprintRunWallTimeCache.set(cacheKey, { finishedMs, hasActive });
         result.set(sprintRunId, finishedMs);
         if (hasActive) {
           activeIds.push(sprintRunId);
