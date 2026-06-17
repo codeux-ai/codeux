@@ -13,6 +13,7 @@ import type {
   GitTrackingStatus,
   SprintLoopStepSettings,
   ProviderId,
+  QaExhaustionPolicy,
   Subtask,
 } from "../../../contracts/app-types.js";
 import type { TaskStatus as PlanningTaskStatus } from "../../../contracts/project-management-types.js";
@@ -543,12 +544,115 @@ export class CycleRunner {
   }
 
   /**
-   * Park a code-complete task that QA could never clear into QA_REVIEW_FAILED
-   * and raise a human-escalation attention item. This is the fail-closed end of
-   * the QA gate: rather than letting an exhausted/unverified task settle as
-   * COMPLETED (which silently shipped tasks with no PR), we hold it for a human.
-   * Idempotent — the status flip and the deduped attention item make repeat
-   * cycles no-ops once the task is already escalated.
+   * Apply the configured QA exhaustion policy to a code-complete task whose QA
+   * review budget is spent without a pass. Returns true when the policy moved the
+   * task to a resting state (so the caller should skip further QA scheduling).
+   * Idempotent — once the task already rests in the policy's target state this is
+   * a no-op and returns false so normal processing continues.
+   */
+  private applyQaExhaustionPolicy(
+    task: Subtask,
+    qaGate: TaskQaMergeGateStatus,
+    args: CycleRunnerArgs,
+    policy: QaExhaustionPolicy,
+  ): boolean {
+    switch (policy) {
+      case "FINISH_TASK":
+        if (task.status === "COMPLETED") {
+          return false;
+        }
+        this.finishUnverifiedTask(task, qaGate, args);
+        return true;
+      case "FAIL_TASK":
+        if (task.status === "FAILED") {
+          return false;
+        }
+        this.failUnverifiedTask(task, qaGate, args);
+        return true;
+      case "ESCALATE_TO_HUMAN":
+      default:
+        if (task.status === "QA_REVIEW_FAILED") {
+          return false;
+        }
+        this.escalateUnverifiedTaskToHuman(task, qaGate, args);
+        return true;
+    }
+  }
+
+  /**
+   * FINISH_TASK policy: mark the task COMPLETED despite no QA pass (fail open).
+   * Clears intervention metadata so the merge gate can settle it normally.
+   */
+  private finishUnverifiedTask(
+    task: Subtask,
+    qaGate: TaskQaMergeGateStatus,
+    args: CycleRunnerArgs,
+  ): void {
+    const taskId = task.record_id?.trim();
+    task.status = "COMPLETED";
+    task.intervention_owner = undefined;
+    task.intervention_hint = undefined;
+    if (taskId) {
+      this.deps.projectManagementRepository.updateTask(taskId, { status: "completed" });
+    }
+    this.deps.logger.warn("QA exhausted without clearing task — finished anyway (FINISH_TASK policy)", {
+      projectId: args.executionContext.project.id,
+      sprintId: args.executionContext.sprint.id,
+      sprintRunId: args.sprintRunId,
+      taskId,
+      taskKey: task.id,
+      qaReason: qaGate.reason,
+      runsUsed: qaGate.runsUsed,
+      maxRuns: qaGate.maxRuns,
+    });
+  }
+
+  /**
+   * FAIL_TASK policy: mark the task FAILED and let the sprint move on. No human
+   * gate — the work is discarded rather than held.
+   */
+  private failUnverifiedTask(
+    task: Subtask,
+    qaGate: TaskQaMergeGateStatus,
+    args: CycleRunnerArgs,
+  ): void {
+    const taskId = task.record_id?.trim();
+    const hint = "QA could not verify this task and the review budget is exhausted. Marked FAILED per the QA exhaustion policy.";
+    task.status = "FAILED";
+    task.merge_indicator = undefined;
+    task.intervention_owner = undefined;
+    task.intervention_hint = hint;
+    // Runtime FAILED is carried by the task-run state (there is no planning
+    // "failed" status). Persisting the run state makes the sprint count this task
+    // as terminal (see sprint-state-evaluator) so the sprint can finish, and the
+    // state survives a reload.
+    if (taskId) {
+      const taskRun = this.deps.executionRepository.getLatestTaskRun(taskId, args.sprintRunId);
+      if (taskRun) {
+        this.deps.executionRepository.updateTaskRun(taskRun.id, {
+          state: "FAILED",
+          finishedAt: taskRun.finishedAt ?? new Date().toISOString(),
+        });
+      }
+    }
+    this.deps.logger.warn("QA exhausted without clearing task — failed (FAIL_TASK policy)", {
+      projectId: args.executionContext.project.id,
+      sprintId: args.executionContext.sprint.id,
+      sprintRunId: args.sprintRunId,
+      taskId,
+      taskKey: task.id,
+      qaReason: qaGate.reason,
+      runsUsed: qaGate.runsUsed,
+      maxRuns: qaGate.maxRuns,
+    });
+  }
+
+  /**
+   * ESCALATE_TO_HUMAN policy: park the task in QA_REVIEW_FAILED and raise a
+   * human-escalation attention item. This is the fail-closed end of the QA gate:
+   * rather than letting an exhausted/unverified task settle as COMPLETED (which
+   * silently shipped tasks with no PR), we hold it for a human. Idempotent — the
+   * status flip and deduped attention item make repeat cycles no-ops.
    */
   private escalateUnverifiedTaskToHuman(
     task: Subtask,
@@ -636,13 +740,14 @@ export class CycleRunner {
       });
       const taskIsCodeComplete = isTaskCodeComplete(task);
 
-      // Fail closed: QA spent its budget without ever clearing this task (no
-      // pass — either changes still outstanding at the cap or the reviewer kept
-      // failing for infra reasons). Never let it quietly settle as completed:
-      // hold it in QA_REVIEW_FAILED and raise a human-escalation attention item.
-      if (taskIsCodeComplete && qaGate.reason === "retries_exhausted" && task.status !== "QA_REVIEW_FAILED") {
-        this.escalateUnverifiedTaskToHuman(task, qaGate, args);
-        continue;
+      // QA spent its budget without ever clearing this task (no pass — either
+      // changes still outstanding at the cap or the reviewer kept failing for
+      // infra reasons). Apply the configured exhaustion policy instead of letting
+      // it quietly settle as completed or loop forever.
+      if (taskIsCodeComplete && qaGate.reason === "retries_exhausted") {
+        if (this.applyQaExhaustionPolicy(task, qaGate, args, settings.agents.qualityAssurance.exhaustionPolicy)) {
+          continue;
+        }
       }
 
       const newlyCodeComplete = taskIsCodeComplete && !isTaskCodeComplete({ status: prev });

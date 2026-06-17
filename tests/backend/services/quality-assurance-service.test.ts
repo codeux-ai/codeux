@@ -421,7 +421,7 @@ describe("QualityAssuranceService", () => {
     expect(providerRunner.runProviderForText).not.toHaveBeenCalled();
   });
 
-  it("does not rerun sprint QA after fixes when maxTaskReviewRuns is 1", async () => {
+  it("does not rerun sprint QA after fixes when maxSprintReviewRuns is 1", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-max-runs-"));
     tempDirs.push(dir);
     const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -475,6 +475,7 @@ describe("QualityAssuranceService", () => {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
             maxTaskReviewRuns: 1,
+            maxSprintReviewRuns: 1,
           },
         },
       }),
@@ -684,6 +685,7 @@ describe("QualityAssuranceService", () => {
           runIndex: 3,
         }),
         countTaskRuns: vi.fn().mockReturnValue(3),
+        countDecisiveTaskRuns: vi.fn().mockReturnValue(3),
       } as any,
       taskService: {} as any,
       agentPresetSyncService: {} as any,
@@ -719,7 +721,10 @@ describe("QualityAssuranceService", () => {
     });
 
     expect(gate.mergeAllowed).toBe(false);
-    expect(gate.reason).toBe("changes_requested");
+    // At the retry cap with changes still outstanding the gate now reports
+    // exhaustion (not changes_requested) so the orchestrator applies the
+    // exhaustion policy instead of looping forever.
+    expect(gate.reason).toBe("retries_exhausted");
     expect(gate.runsUsed).toBe(3);
     expect(gate.maxRuns).toBe(3);
   });

@@ -19,12 +19,17 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 // Mock GSAP
-vi.mock("gsap", () => ({
-  default: {
+// FilterStrip imports gsap as a named export; other components import the
+// default — expose both so the mock works regardless of import style. The mock
+// object is built inside the factory because vi.mock is hoisted above any
+// top-level variables.
+vi.mock("gsap", () => {
+  const gsapMock = {
     context: vi.fn((fn) => {
       if (fn) fn();
       return { revert: vi.fn() };
     }),
+    set: vi.fn(),
     to: vi.fn().mockImplementation((el, config) => {
       if (config?.onComplete) config.onComplete();
     }),
@@ -32,8 +37,9 @@ vi.mock("gsap", () => ({
       if (to?.onComplete) to.onComplete();
     }),
     killTweensOf: vi.fn(),
-  },
-}));
+  };
+  return { default: gsapMock, gsap: gsapMock };
+});
 
 vi.mock("../../context/project-data.js", () => {
   const ProjectDataContext = createContext(null);

@@ -135,6 +135,8 @@ function cloneQualityAssuranceSettings(
   return {
     enabled: settings.enabled,
     maxTaskReviewRuns: settings.maxTaskReviewRuns,
+    maxSprintReviewRuns: settings.maxSprintReviewRuns,
+    exhaustionPolicy: settings.exhaustionPolicy,
     taskCompletion: { ...settings.taskCompletion },
     sprintCompletion: { ...settings.sprintCompletion },
     completedTaskWithoutPr: { ...settings.completedTaskWithoutPr },
@@ -375,8 +377,16 @@ function sanitizeQualityAssuranceSettings(
       ? input.enabled
       : defaults.enabled,
     maxTaskReviewRuns: typeof input.maxTaskReviewRuns === "number" && Number.isFinite(input.maxTaskReviewRuns)
-      ? Math.max(1, Math.min(10, Math.round(input.maxTaskReviewRuns)))
+      ? Math.max(1, Math.min(20, Math.round(input.maxTaskReviewRuns)))
       : defaults.maxTaskReviewRuns,
+    maxSprintReviewRuns: typeof input.maxSprintReviewRuns === "number" && Number.isFinite(input.maxSprintReviewRuns)
+      ? Math.max(1, Math.min(20, Math.round(input.maxSprintReviewRuns)))
+      : defaults.maxSprintReviewRuns,
+    exhaustionPolicy: input.exhaustionPolicy === "ESCALATE_TO_HUMAN"
+      || input.exhaustionPolicy === "FAIL_TASK"
+      || input.exhaustionPolicy === "FINISH_TASK"
+      ? input.exhaustionPolicy
+      : defaults.exhaustionPolicy,
     taskCompletion: sanitizeQualityAssuranceTriggerSettings(input.taskCompletion, defaults.taskCompletion),
     sprintCompletion: sanitizeQualityAssuranceTriggerSettings(input.sprintCompletion, defaults.sprintCompletion),
     completedTaskWithoutPr: sanitizeQualityAssuranceTriggerSettings(input.completedTaskWithoutPr, defaults.completedTaskWithoutPr),

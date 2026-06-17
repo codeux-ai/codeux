@@ -319,6 +319,7 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
                 label="Per-task total ceiling"
                 description="Optional hard cap on total agent invocations per task across all job types. 0 disables."
                 badge={getFieldBadge("guardrails.perTaskTotalCeiling")}
+                last
               >
                 <NumberInput
                   value={editableSettings.guardrails.perTaskTotalCeiling}
@@ -330,31 +331,6 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
                   }))}
                 />
               </Row>
-
-              <Row
-                label="Max QA runs (guardrail)"
-                description="Hard per-task cap on QA review runs. Separate from the QA agent's own max runs. 0 = unlimited."
-                badge={getFieldBadge("guardrails.qaRunsCap")}
-                last
-              >
-                <NumberInput
-                  value={editableSettings.guardrails.qaRunsCap}
-                  min={0}
-                  max={100}
-                  onChange={(value) => updateEditableSettings((current) => ({
-                    ...current,
-                    guardrails: { ...current.guardrails, qaRunsCap: value },
-                  }))}
-                />
-              </Row>
-
-              {editableSettings.guardrails.qaRunsCap > 0
-                && editableSettings.guardrails.qaRunsCap < editableSettings.agents.qualityAssurance.maxTaskReviewRuns ? (
-                <div className="rounded-[1.15rem] border border-amber-500/25 bg-amber-500/[0.08] px-4 py-3 text-xs leading-relaxed text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/[0.08] dark:text-amber-200">
-                  The QA guardrail cap ({editableSettings.guardrails.qaRunsCap}) is lower than the QA agent&apos;s configured max runs
-                  ({editableSettings.agents.qualityAssurance.maxTaskReviewRuns}). The guardrail will cut QA short before it completes its configured review passes.
-                </div>
-              ) : null}
             </>
           ) : null}
         </SectionCard>
