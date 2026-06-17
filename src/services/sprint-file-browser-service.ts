@@ -72,7 +72,9 @@ export class SprintFileBrowserService {
 
   async listSessions(projectId?: string): Promise<FileBrowserSession[]> {
     const sessions = this.deps.sprintFileBrowserRepository.listSessions(projectId);
-    return await Promise.all(sessions.map((session) => this.refreshRuntimeState(session)));
+    // One `docker ps` for the whole batch instead of one per session.
+    const containers = await this.listFileBrowserContainers(process.cwd());
+    return await Promise.all(sessions.map((session) => this.refreshRuntimeState(session, containers)));
   }
 
   async getSession(sessionId: string): Promise<FileBrowserSession | null> {
@@ -395,13 +397,23 @@ export class SprintFileBrowserService {
 
   async reconcileSessions(): Promise<void> {
     const sessions = this.deps.sprintFileBrowserRepository.listSessions();
+    // Fetch the file-browser container listing once for the whole pass (was one `docker ps` per session).
+    const containers = await this.listFileBrowserContainers(process.cwd());
     for (const session of sessions) {
       const sprint = this.deps.projectManagementRepository.getSprint(session.sprintId);
       if (!sprint) {
+        // Sprint was deleted — drop the orphaned session record.
+        this.deps.sprintFileBrowserRepository.deleteSession(session.id);
         continue;
       }
-      const refreshed = await this.refreshRuntimeState(session);
+      const refreshed = await this.refreshRuntimeState(session, containers);
       if (refreshed.status !== "running") {
+        // Prune dead records for finished sprints so they don't accumulate and get reconciled
+        // forever; recreated on demand if the file browser is opened again.
+        const sprintTerminal = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
+        if (sprintTerminal && !refreshed.containerId && !refreshed.containerName) {
+          this.deps.sprintFileBrowserRepository.deleteSession(refreshed.id);
+        }
         continue;
       }
 
@@ -436,8 +448,11 @@ export class SprintFileBrowserService {
     }
   }
 
-  private async refreshRuntimeState(session: FileBrowserSession): Promise<FileBrowserSession> {
-    const container = await this.findManagedContainerForSession(session);
+  private async refreshRuntimeState(
+    session: FileBrowserSession,
+    preFetchedContainers?: DockerContainerSummary[],
+  ): Promise<FileBrowserSession> {
+    const container = await this.findManagedContainerForSession(session, preFetchedContainers);
     if (!container) {
       if (!session.containerId && !session.containerName) {
         return session;
@@ -848,8 +863,13 @@ export class SprintFileBrowserService {
     }
   }
 
-  private async findManagedContainerForSession(session: FileBrowserSession): Promise<DockerContainerSummary | null> {
-    const containers = await this.listFileBrowserContainers(process.cwd());
+  private async findManagedContainerForSession(
+    session: FileBrowserSession,
+    preFetchedContainers?: DockerContainerSummary[],
+  ): Promise<DockerContainerSummary | null> {
+    // Callers reconciling/listing many sessions pass one shared container listing so we run a single
+    // `docker ps` per pass instead of one per session (was an N+1 spawning hundreds of `docker ps`).
+    const containers = preFetchedContainers ?? await this.listFileBrowserContainers(process.cwd());
     const bySession = containers.find((container) => container.labels["code-ux.session-id"] === session.id);
     if (bySession) {
       return bySession;

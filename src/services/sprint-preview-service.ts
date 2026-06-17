@@ -89,7 +89,9 @@ export class SprintPreviewService {
 
   async listSessions(projectId?: string): Promise<SprintPreviewSession[]> {
     const sessions = this.deps.sprintPreviewRepository.listSessions(projectId);
-    return await Promise.all(sessions.map((session) => this.refreshRuntimeState(session)));
+    // One `docker ps` for the whole batch instead of one per session.
+    const containers = await this.listPreviewContainers(process.cwd());
+    return await Promise.all(sessions.map((session) => this.refreshRuntimeState(session, containers)));
   }
 
   async getSession(sessionId: string): Promise<SprintPreviewSession | null> {
@@ -541,17 +543,54 @@ export class SprintPreviewService {
 
   async reconcileSessions(): Promise<void> {
     const sessions = this.deps.sprintPreviewRepository.listSessions();
+    // Fetch the preview container listing once for the whole pass (was one `docker ps` per session).
+    const containers = await this.listPreviewContainers(process.cwd());
+    // Memoize the per-project execution snapshot within this pass; many sessions share a project and
+    // it is an expensive DB rollup, so recomputing it per session was a second N+1.
+    const executionSnapshotByProject = new Map<string, ReturnType<typeof this.deps.executionRepository.getProjectExecutionSnapshot>>();
+    const getExecutionSnapshot = (projectId: string) => {
+      let snapshot = executionSnapshotByProject.get(projectId);
+      if (!snapshot) {
+        snapshot = this.deps.executionRepository.getProjectExecutionSnapshot(projectId);
+        executionSnapshotByProject.set(projectId, snapshot);
+      }
+      return snapshot;
+    };
     for (const session of sessions) {
       const sprint = this.deps.projectManagementRepository.getSprint(session.sprintId);
       if (!sprint) {
+        // Sprint was deleted — drop the orphaned session record so we stop reconciling it.
+        this.deps.sprintPreviewRepository.deleteSession(session.id);
         continue;
       }
-      const settings = this.resolveSettings(session.projectId, session.sprintId).sprintPreview;
-      const refreshed = await this.refreshRuntimeState(session);
-      const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
-      const activeRun = this.deps.executionRepository.getProjectExecutionSnapshot(session.projectId)
+      const refreshed = await this.refreshRuntimeState(session, containers);
+      const activeRun = getExecutionSnapshot(session.projectId)
         .sprintRuns
         .some((run) => run.sprintId === session.sprintId && run.status === "running");
+
+      // Prune dead sessions for finished sprints. Once a sprint is terminal and has no running
+      // container, the session can never auto-start again, so reconciling it every 15s (settings
+      // resolution + completed-task counts) is pure waste — these stopped records otherwise
+      // accumulate indefinitely. They are recreated on demand if a preview is started again.
+      const sprintTerminal = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
+      const isDeadSession = (refreshed.status === "stopped" || refreshed.status === "error")
+        && !refreshed.containerId && !refreshed.containerName;
+      if (sprintTerminal && !activeRun && isDeadSession) {
+        this.deps.sprintPreviewRepository.deleteSession(refreshed.id);
+        continue;
+      }
+
+      // A non-running session can only be acted on this cycle if it can be auto-started, which needs
+      // an active sprint run. Without one, every downstream branch is a no-op for it (stop/rebuild/
+      // autoStop only apply to running sessions, and the task-count update is gated on running too),
+      // so skip the expensive settings resolution + completed-task count entirely.
+      const isRunningOrStarting = refreshed.status === "running" || refreshed.status === "starting";
+      if (!isRunningOrStarting && !activeRun) {
+        continue;
+      }
+
+      const settings = this.resolveSettings(session.projectId, session.sprintId).sprintPreview;
+      const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
 
       if (settings.enabled === false) {
         if (refreshed.status === "running" || refreshed.status === "starting") {
@@ -615,7 +654,7 @@ export class SprintPreviewService {
 
     const projects = this.deps.projectManagementRepository.listProjects().projects;
     for (const project of projects) {
-      const execution = this.deps.executionRepository.getProjectExecutionSnapshot(project.id);
+      const execution = getExecutionSnapshot(project.id);
       const activeSprintRunIds = new Set(
         execution.sprintRuns
           .filter((run) => run.status === "running")
@@ -637,8 +676,11 @@ export class SprintPreviewService {
     }
   }
 
-  private async refreshRuntimeState(session: SprintPreviewSession): Promise<SprintPreviewSession> {
-    const container = await this.findManagedContainerForSession(session);
+  private async refreshRuntimeState(
+    session: SprintPreviewSession,
+    preFetchedContainers?: DockerContainerSummary[],
+  ): Promise<SprintPreviewSession> {
+    const container = await this.findManagedContainerForSession(session, preFetchedContainers);
     if (!container) {
       if (!session.containerId && !session.containerName) {
         return session;
@@ -818,8 +860,14 @@ export class SprintPreviewService {
     }
   }
 
-  private async findManagedContainerForSession(session: SprintPreviewSession): Promise<DockerContainerSummary | null> {
-    const containers = await this.listPreviewContainers(process.cwd());
+  private async findManagedContainerForSession(
+    session: SprintPreviewSession,
+    preFetchedContainers?: DockerContainerSummary[],
+  ): Promise<DockerContainerSummary | null> {
+    // Callers reconciling/listing many sessions pass a single shared container listing so we run one
+    // `docker ps` for the whole pass instead of one per session (previously an N+1 that, with a few
+    // hundred sessions, spawned hundreds of identical `docker ps` per 15s reconcile cycle).
+    const containers = preFetchedContainers ?? await this.listPreviewContainers(process.cwd());
     const bySession = containers.find((container) => container.labels["code-ux.session-id"] === session.id);
     if (bySession) {
       return bySession;

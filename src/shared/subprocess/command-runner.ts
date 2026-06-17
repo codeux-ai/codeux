@@ -7,6 +7,11 @@ import {
   DockerHelperContainerPool,
   HELPER_LABEL,
 } from "../../infrastructure/providers/cli/docker-helper-pool.js";
+import {
+  CommandSpawnerClient,
+  HostUnavailableError,
+} from "./command-spawner-client.js";
+import type { SpawnerCommandOptions, SpawnerRawResult } from "./command-spawner-protocol.js";
 
 export interface CommandResult {
   ok: boolean;
@@ -109,6 +114,14 @@ export async function releaseGitHelperForCwd(cwd: string): Promise<void> {
 export class CommandRunner {
   private static readonly DEFAULT_MAX_STDERR_CHARS = 4096;
   private static readonly MAX_COMMAND_DISPLAY_CHARS = 2000;
+  // The out-of-process spawner is a performance layer only. Disabled under tests (which spawn
+  // in-process for determinism) and via the CODE_UX_SPAWNER_HOST=0 kill-switch for instant rollback.
+  private static readonly spawnerEnabled =
+    process.env.CODE_UX_SPAWNER_HOST !== "0"
+    && !process.env.VITEST
+    && process.env.NODE_ENV !== "test";
+
+  private spawner: CommandSpawnerClient | null = null;
 
   /**
    * Runs a command and returns a Promise that resolves with the execution result.
@@ -177,7 +190,112 @@ export class CommandRunner {
     return result;
   }
 
-  private spawnProcess(
+  /**
+   * Spawning a child does `fork()` of the calling process inline on the event loop, and `fork()`
+   * cost scales with this (large) process's memory. Delegate to the out-of-process spawner host so
+   * the fork happens off the main event loop and from a small address space. Falls back to spawning
+   * in-process if the host is unavailable (disabled in tests, after a host crash, or by kill-switch),
+   * so the spawner is purely a performance layer.
+   */
+  private async spawnProcess(
+    resolvedCommand: ResolvedCommand,
+    options: CommandOptions = {},
+  ): Promise<CommandResult> {
+    const spawner = this.getSpawner();
+    if (spawner) {
+      try {
+        const spawnerOptions: SpawnerCommandOptions = {
+          ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+          ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
+          ...(options.stdinFile !== undefined ? { stdinFile: options.stdinFile } : {}),
+          ...(options.trimOutput !== undefined ? { trimOutput: options.trimOutput } : {}),
+          ...(options.maxStderrChars !== undefined ? { maxStderrChars: options.maxStderrChars } : {}),
+          streamStdoutLines: Boolean(options.onStdoutLine),
+          streamStderrLines: Boolean(options.onStderrLine),
+          ...spawner.buildEnvPayload(options.env),
+        };
+        const raw = await spawner.run(
+          resolvedCommand.command,
+          resolvedCommand.args,
+          spawnerOptions,
+          {
+            onStdoutLine: options.onStdoutLine,
+            onStderrLine: options.onStderrLine,
+            signal: options.signal,
+          },
+        );
+        return this.finalizeResult(raw, options, resolvedCommand.containerHostCwd);
+      } catch (error) {
+        if (!(error instanceof HostUnavailableError)) {
+          throw error;
+        }
+        // Host unavailable/aborted-before-dispatch: fall through to the in-process path.
+      }
+    }
+    return this.spawnProcessInline(resolvedCommand, options);
+  }
+
+  /**
+   * Shapes a raw spawner result into a CommandResult using the same trim/clip/container-path-mapping
+   * rules as the in-process path, so both routes are behaviourally identical.
+   */
+  private finalizeResult(
+    raw: SpawnerRawResult,
+    options: CommandOptions,
+    containerHostCwd?: string,
+  ): CommandResult {
+    const {
+      timeout,
+      trimOutput = true,
+      maxStderrChars = CommandRunner.DEFAULT_MAX_STDERR_CHARS,
+    } = options;
+
+    let ok: boolean;
+    let extra: string | undefined;
+    if (raw.spawnError !== undefined) {
+      ok = false;
+      extra = raw.spawnError;
+    } else {
+      ok = raw.code === 0 && !raw.timedOut && !raw.aborted;
+      extra = raw.timedOut
+        ? `Command timed out after ${timeout}ms`
+        : raw.aborted
+          ? "Command aborted"
+          : undefined;
+    }
+
+    let finalStderr = trimOutput ? raw.stderr.trim() : raw.stderr;
+    if (extra) {
+      const separator = finalStderr.length > 0 && !finalStderr.endsWith("\n") ? "\n" : "";
+      finalStderr = `${finalStderr}${separator}${extra}`;
+    }
+    const clippedStderr = finalStderr.length > maxStderrChars
+      ? `...${finalStderr.slice(-maxStderrChars)}`
+      : finalStderr;
+
+    const normalizedStdout = containerHostCwd
+      ? this.mapContainerStdoutToHost(raw.stdout, containerHostCwd)
+      : raw.stdout;
+
+    return {
+      ok,
+      code: raw.code,
+      stdout: trimOutput ? normalizedStdout.trim() : normalizedStdout,
+      stderr: clippedStderr,
+    };
+  }
+
+  private getSpawner(): CommandSpawnerClient | null {
+    if (!CommandRunner.spawnerEnabled) {
+      return null;
+    }
+    if (!this.spawner) {
+      this.spawner = new CommandSpawnerClient();
+    }
+    return this.spawner.isAvailable() ? this.spawner : null;
+  }
+
+  private spawnProcessInline(
     resolvedCommand: ResolvedCommand,
     options: CommandOptions = {},
   ): Promise<CommandResult> {
