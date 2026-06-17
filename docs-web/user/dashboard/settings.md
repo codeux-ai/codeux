@@ -24,7 +24,7 @@ The category rail on the left includes:
 
 | Category | What it covers |
 | --- | --- |
-| **AI providers** | Provider configs (model, thinking mode, weight, API key, auth path, max concurrency). |
+| **AI providers** | Provider configs (model, thinking mode, weight, API key, auth path, max concurrency, token pricing). |
 | **Routing** | Per-invocation-type routing (`task_coding`, `planning`, …). Profiles: `GLOBAL` and `WORKER`. |
 | **Workers** | Virtual worker provider, execution mode (DOCKER/HOST), Docker image, mount paths. |
 | **CI & Merge** | `ciIntelligence` block — autofix retries, comment resolution, auto-merge modes. |

@@ -1,9 +1,10 @@
 import type { FunctionComponent } from "preact";
 import { useState } from "preact/hooks";
-import { Terminal, Trash2 } from "lucide-preact";
+import { Terminal, Trash2, Banknote } from "lucide-preact";
 import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
 import { getProviderDefaultAuthPath, getProviderTypeLabel } from "../../lib/settings-view-models.js";
 import { TerminalLoginModal } from "./TerminalLoginModal.js";
+import { TokenPricingModal } from "./TokenPricingModal.js";
 import {
   buildOpenCodeConfigPreview,
   buildQwenSettingsPreview,
@@ -35,6 +36,7 @@ export const ProviderInstanceCard: FunctionComponent<{
   total?: number;
 }> = ({ providerConfigId, provider, providerModel, dockerExecutionEnabled, onUpdate, onRemove, isLast = true, enabled, onToggleEnabled, index, total }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showPricingModal, setShowPricingModal] = useState(false);
 
   const currentAuthType = provider.authType || (provider.mountAuth ? "localAuth" : "apiKey");
 
@@ -54,13 +56,23 @@ export const ProviderInstanceCard: FunctionComponent<{
           </div>
         </div>
         <div className="flex items-center gap-2">
+
           {onToggleEnabled ? (
             <label className="flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
               Enabled
               <Toggle value={enabled ?? true} onChange={() => onToggleEnabled(!(enabled ?? true))} />
             </label>
           ) : null}
+          <button
+            type="button"
+            onClick={() => setShowPricingModal(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/[0.04] dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.06]"
+          >
+            <Banknote className="h-3.5 w-3.5" />
+            Token pricing
+          </button>
           {onRemove ? (
+
             <button
               type="button"
               onClick={onRemove}
@@ -75,6 +87,20 @@ export const ProviderInstanceCard: FunctionComponent<{
 
       <Row label="Display name" description="Used throughout AI Models and runtime route summaries.">
         <TextInput value={provider.name} onChange={(value) => onUpdate({ name: value })} />
+        <div className="mt-2 flex flex-wrap gap-2">
+          {provider.tokenPricing ? (
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-[10px] font-semibold text-signal-600 dark:border-signal-400/20 dark:bg-signal-400/10 dark:text-signal-400">
+              <Banknote className="h-3 w-3" />
+              ${provider.tokenPricing.inputTokens}/M in • ${provider.tokenPricing.outputTokens}/M out
+              {provider.tokenPricing.cachedInputTokens > 0 ? ` • ${provider.tokenPricing.cachedInputTokens}/M cached` : ""}
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-black/[0.06] bg-black/[0.02] px-2 py-1 text-[10px] font-semibold text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
+              <Banknote className="h-3 w-3" />
+              Unset pricing
+            </div>
+          )}
+        </div>
       </Row>
 
       {provider.provider !== "jules" ? (
@@ -340,6 +366,14 @@ export const ProviderInstanceCard: FunctionComponent<{
             // Trigger an update with a new lastLoginAt timestamp to make the form dirty so the user can Save Changes
             onUpdate({ lastLoginAt: Date.now() });
           }}
+        />
+      )}
+      {showPricingModal && (
+        <TokenPricingModal
+          isOpen={showPricingModal}
+          onClose={() => setShowPricingModal(false)}
+          pricing={provider.tokenPricing}
+          onSave={(pricing) => onUpdate({ tokenPricing: pricing })}
         />
       )}
     </div>

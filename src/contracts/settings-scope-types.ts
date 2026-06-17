@@ -109,7 +109,7 @@ export interface SystemProviderCredentialSettings {
   customBaseUrl?: string;
   /** Custom model identifier sent to the CLI when routing through a custom base URL (claude-code, codex). */
   customModel?: string;
-  pricing?: TokenPricing;
+  tokenPricing?: TokenPricing;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
