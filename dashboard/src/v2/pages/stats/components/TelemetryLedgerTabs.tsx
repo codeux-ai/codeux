@@ -4,6 +4,7 @@ import { GitBranch, ListTodo, Rows3 } from "lucide-preact";
 import type { ProjectExecutionStatsSnapshot } from "../../../types.js";
 import { TelemetryLedger } from "./TelemetryLedger.js";
 import { GitTelemetryTab } from "./GitTelemetryTab.js";
+import { CHIP_CLASS } from "./StatsShared.js";
 
 export interface TelemetryLedgerTabsProps {
   stats: ProjectExecutionStatsSnapshot;
@@ -14,10 +15,10 @@ type LedgerTab = "tasks" | "sprints" | "git";
 export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = ({ stats }) => {
   const [activeTab, setActiveTab] = useState<LedgerTab>("tasks");
 
-  const tabs: Array<{ id: LedgerTab; label: string; icon: typeof ListTodo; count: number | null }> = [
-    { id: "tasks", label: "Task Telemetry", icon: ListTodo, count: stats.tasks.length },
-    { id: "sprints", label: "Sprint Telemetry", icon: Rows3, count: stats.sprints.length },
-    ...(stats.git ? [{ id: "git" as const, label: "Git Telemetry", icon: GitBranch, count: null }] : []),
+  const tabs: Array<{ id: LedgerTab; label: string; icon: typeof ListTodo; badge: string | null }> = [
+    { id: "tasks", label: "Task Telemetry", icon: ListTodo, badge: `${stats.tasks.length} tasks` },
+    { id: "sprints", label: "Sprint Telemetry", icon: Rows3, badge: `${stats.sprints.length} sprints` },
+    ...(stats.git ? [{ id: "git" as const, label: "Git Telemetry", icon: GitBranch, badge: null }] : []),
   ];
 
   return (
@@ -40,13 +41,13 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
             >
               <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
               {tab.label}
-              {tab.count !== null ? (
-                <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${
+              {tab.badge !== null ? (
+                <span className={`px-2 py-0.5 text-[9px] font-black tracking-wider ${CHIP_CLASS} ${
                   isActive
                     ? "bg-white/20 text-white dark:bg-void-900/15 dark:text-void-900"
-                    : "bg-black/[0.05] text-slate-500 dark:bg-white/[0.08] dark:text-slate-400"
+                    : "text-slate-500 dark:text-slate-400"
                 }`}>
-                  {tab.count}
+                  {tab.badge}
                 </span>
               ) : null}
             </button>

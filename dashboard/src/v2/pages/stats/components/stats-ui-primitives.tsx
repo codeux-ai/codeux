@@ -48,7 +48,7 @@ import {
 import type { DonutSliceGeometry, ChartPoint } from "./stats-geometry.js";
 export type StatsVisualMode = "trend" | "composition" | "models" | "reliability" | "ledgers" | "system";
 export type ChartSeriesId = "tokens" | "active" | "invocations";
-export type LedgerSortKey = "last" | "tokens" | "active" | "input" | "output" | "name";
+export type LedgerSortKey = "last" | "tokens" | "active" | "input" | "output" | "name" | "p50" | "p95";
 
 export interface ChartSeriesDefinition {
   id: ChartSeriesId;
