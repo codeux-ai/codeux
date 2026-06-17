@@ -98,6 +98,38 @@ describe('StatsPage visual tests', () => {
     expect(getByText('Output Tokens')).toBeTruthy();
   });
 
+  it('renders empty states with new amber visual language', () => {
+    vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValueOnce({
+      stats: null,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+      usage: null as any,
+      tokenSeries: [],
+      activeTimeSeries: [],
+      wallTimeSeries: [],
+      planningUsage: null,
+      activeQuery: { window: '24h' },
+      customFrom: '2026-01-01',
+      setCustomFrom: vi.fn(),
+      customTo: '2026-01-02',
+      setCustomTo: vi.fn(),
+      visualMode: 'trend',
+      setVisualMode: vi.fn(),
+      chartState: { enabledSeries: {} } as any,
+      providerSegments: [],
+      sourceSegments: [],
+      tokenSegments: [],
+      applyPresetWindow: vi.fn(),
+      applyCustomRange: vi.fn(),
+      completionConfidence: '100%'
+    });
+
+    const { getByText, queryByText } = render(<StatsPage />);
+    expect(getByText('Select a project')).toBeTruthy();
+    expect(queryByText('Time-series and throughput analysis')).toBeNull();
+  });
+
   it('renders the system studio without crashing', () => {
     vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValueOnce({
       stats: {

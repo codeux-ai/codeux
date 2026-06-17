@@ -8,8 +8,8 @@ import {
   CompositionStudio,
   ReliabilityStudio,
   StudioHeader,
-  PANEL_CLASS,
 } from "./StatsShared.js";
+import { PANEL_CLASS } from "./stats-ui-primitives.js";
 import { SystemStudio } from "./system/SystemStudio.js";
 import { ModelsStudio } from "./ModelsStudio.js";
 import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
@@ -61,19 +61,24 @@ export const AnalysisStudioSection: FunctionComponent<AnalysisStudioSectionProps
   chartState,
 }) => {
   const renderEmptyState = (mode: StatsVisualMode) => (
-    <div className="rounded-[2rem] border border-dashed border-black/[0.08] bg-white/68 px-8 py-16 text-center text-sm text-slate-500 dark:border-white/[0.08] dark:bg-void-800/68">
-      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-void-700">
-        <Layers3 className="h-6 w-6 text-slate-400" />
+    <div className={`${PANEL_CLASS} flex flex-col items-center justify-center py-20 text-center`}>
+      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[1.25rem] border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+        <Layers3 className="h-8 w-8" strokeWidth={2} />
       </div>
-      {STUDIO_EMPTY_MESSAGES[mode]}
+      <div className="text-base font-bold text-slate-900 dark:text-white">Waiting for Telemetry</div>
+      <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">{STUDIO_EMPTY_MESSAGES[mode]}</div>
     </div>
   );
 
   return (
     <div key={visualMode} className="animate-in fade-in duration-200">
-      <div className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-        {STUDIO_SUBTITLES[visualMode]}
+      <div className="mb-6">
+        <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">
+          <Layers3 className="h-3 w-3" strokeWidth={2.5} />
+          {STUDIO_SUBTITLES[visualMode]}
+        </div>
       </div>
+
 
       {visualMode === "trend" ? (
         stats ? (
