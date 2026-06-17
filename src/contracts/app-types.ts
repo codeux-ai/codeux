@@ -458,7 +458,7 @@ export interface ExecutionStatsEntitySummary {
 }
 
 export type ProjectStatsWindow = "1h" | "24h" | "7d" | "30d" | "all" | "custom";
-export type ProjectStatsResolution = "hour" | "day" | "week";
+export type ProjectStatsResolution = "5min" | "hour" | "day" | "week";
 
 export interface ProjectStatsQuery {
   window: ProjectStatsWindow;

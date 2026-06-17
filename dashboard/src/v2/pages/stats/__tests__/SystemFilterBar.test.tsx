@@ -60,7 +60,7 @@ describe("SystemFilterBar", () => {
     fireEvent.click(clearSearch);
     expect(searchInput.value).toBe("");
 
-    const clearAll = getByRole("button", { name: "Clear" });
+    const clearAll = getByRole("button", { name: "Clear all" });
     fireEvent.click(clearAll);
 
     expect(runningButton.className).not.toContain("border-blue-500/40");

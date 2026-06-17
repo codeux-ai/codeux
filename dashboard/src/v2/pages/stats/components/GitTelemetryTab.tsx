@@ -9,6 +9,7 @@ import {
   INPUT_CLASS,
   LEDGER_ROW_MODERN_CLASS,
   PANEL_CLASS,
+  SUBPANEL_CLASS,
   SignalMetricCard,
   SortButton,
   TokenChip,
@@ -94,6 +95,10 @@ export const GitTelemetryLedger: FunctionComponent<{
     scrollContainerRef,
   } = useProgressiveList(filteredItems, { initialCount: 12, stepCount: 8 });
 
+  const totalPRs = items.reduce((s, i) => s + i.metrics.prCount, 0);
+  const mergedPRs = items.reduce((s, i) => s + i.metrics.mergedCount, 0);
+  const totalInsertions = items.reduce((s, i) => s + i.metrics.insertions, 0);
+
   return (
     <div className={`${PANEL_CLASS} p-6`}>
       <div className="flex flex-col gap-5">
@@ -107,6 +112,25 @@ export const GitTelemetryLedger: FunctionComponent<{
           </div>
           <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
             {filteredItems.length} {kindLabel}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Total PRs</div>
+            <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{totalPRs.toLocaleString()}</div>
+          </div>
+          <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merged PRs</div>
+            <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{mergedPRs.toLocaleString()}</div>
+          </div>
+          <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Merge Rate</div>
+            <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{formatPercent(mergedPRs / Math.max(1, totalPRs))}</div>
+          </div>
+          <div className={`${SUBPANEL_CLASS} flex flex-col items-center justify-center text-center !p-4`}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">+lines</div>
+            <div className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">{totalInsertions.toLocaleString()}</div>
           </div>
         </div>
 
@@ -163,19 +187,27 @@ export const GitTelemetryLedger: FunctionComponent<{
                           </div>
                           <div className="min-w-0">
                             <div className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white">{item.label}</div>
-                            {item.secondaryLabel ? (
-                              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                              {item.secondaryLabel ? (
                                 <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
                                   {item.secondaryLabel}
                                 </span>
-                              </div>
-                            ) : null}
+                              ) : null}
+                              <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                                {item.metrics.filesChanged} Files Changed
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        <div className="hidden shrink-0 grid-cols-3 gap-6 text-right lg:grid">
+                        <div className="hidden shrink-0 grid-cols-4 gap-6 text-right lg:grid">
                           <div>
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Churn</div>
-                            <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{itemChurn.toLocaleString()}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Code Churn</div>
+                            <div className="mt-1 flex items-center justify-end gap-3 text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                              {itemChurn.toLocaleString()}
+                              <div className="w-16 h-1.5">
+                                <ChurnFlowBar insertions={item.metrics.insertions} deletions={item.metrics.deletions} />
+                              </div>
+                            </div>
                           </div>
                           <div>
                             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">PRs</div>
@@ -188,10 +220,15 @@ export const GitTelemetryLedger: FunctionComponent<{
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-4 lg:hidden">
+                      <div className="grid grid-cols-4 gap-4 lg:hidden">
                         <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Churn</div>
-                          <div className="mt-1 text-lg font-black tracking-tight text-slate-900 dark:text-white">{itemChurn.toLocaleString()}</div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Code Churn</div>
+                          <div className="mt-1 flex items-center gap-3 text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                            {itemChurn.toLocaleString()}
+                            <div className="w-16 h-1.5">
+                              <ChurnFlowBar insertions={item.metrics.insertions} deletions={item.metrics.deletions} />
+                            </div>
+                          </div>
                         </div>
                         <div>
                           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">PRs</div>

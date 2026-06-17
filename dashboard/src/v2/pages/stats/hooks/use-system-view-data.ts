@@ -13,6 +13,33 @@ export interface SystemFilters {
   status: ExecutionInvocationStatus[];
   purpose: string[];
   provider: string[];
+  errorCategories?: string[];
+}
+
+export interface ExternalApiMetrics {
+  git: { calls: number; avgDurationMs: number };
+  jules: { calls: number; avgDurationMs: number };
+  jira: { calls: number; avgDurationMs: number };
+  other: { calls: number; avgDurationMs: number };
+}
+
+export interface SprintStateSummary {
+  totalSprints: number;
+  activeSprints: number;
+  completedSprints: number;
+  failedSprints: number;
+  totalTasks: number;
+  runningTasks: number;
+  blockedTasks: number;
+}
+
+export interface ErrorsByCategory {
+  timeout: number;
+  rateLimit: number;
+  apiError: number;
+  modelError: number;
+  cancelled: number;
+  other: number;
 }
 
 export interface SystemSummaryMetrics {
@@ -37,6 +64,7 @@ const EMPTY_FILTERS: SystemFilters = {
   status: [],
   purpose: [],
   provider: [],
+  errorCategories: [],
 };
 
 const normalizeText = (value: string | null | undefined): string => (value || "").trim().toLowerCase();
@@ -122,6 +150,19 @@ export function useSystemViewData(projectId: string) {
       const providerValue = (record.provider || "").trim();
       if (filters.provider.length > 0 && !filters.provider.includes(providerValue)) {
         return false;
+      }
+
+      if (filters.errorCategories && filters.errorCategories.length > 0) {
+        const msg = (record.lastErrorMessage || "").toLowerCase();
+        let matched = false;
+        for (const cat of filters.errorCategories) {
+          if (cat === "timeout" && msg.includes("timeout")) matched = true;
+          else if (cat === "rateLimit" && (msg.includes("rate") || msg.includes("429"))) matched = true;
+          else if (cat === "modelError" && msg.includes("model")) matched = true;
+          else if (cat === "apiError" && (msg.includes("api") || msg.includes("http"))) matched = true;
+          else if (cat === "cancelled" && (msg.includes("cancel") || record.status === "cancelled")) matched = true;
+        }
+        if (!matched) return false;
       }
 
       if (normalizedSearch.length === 0) {
@@ -261,6 +302,128 @@ export function useSystemViewData(projectId: string) {
     return Array.from(purposes).sort((left, right) => left.localeCompare(right));
   }, [allInvocations]);
 
+  const externalApiMetrics = useMemo<ExternalApiMetrics>(() => {
+    const metrics: ExternalApiMetrics = {
+      git: { calls: 0, avgDurationMs: 0 },
+      jules: { calls: 0, avgDurationMs: 0 },
+      jira: { calls: 0, avgDurationMs: 0 },
+      other: { calls: 0, avgDurationMs: 0 },
+    };
+
+    const totals = { git: 0, jules: 0, jira: 0, other: 0 };
+    const finishedCounts = { git: 0, jules: 0, jira: 0, other: 0 };
+
+    for (const record of allInvocations) {
+      const type = (record.type || "").toLowerCase();
+      const purpose = ((record as any).purpose || "").toLowerCase();
+      const provider = (record.provider || "").toLowerCase();
+      const isModel = type === "coding" || type === "planning" || type === "qa";
+
+      let category: keyof ExternalApiMetrics | null = null;
+
+      if (type.includes("git") || purpose.includes("git")) {
+        category = "git";
+      } else if (provider === "jules" || type.includes("jules")) {
+        category = "jules";
+      } else if (type.includes("jira") || purpose.includes("jira")) {
+        category = "jira";
+      } else if (!isModel) {
+        category = "other";
+      }
+
+      if (category) {
+        metrics[category].calls += 1;
+        if (record.finishedAt) {
+          totals[category] += getDurationMs(record);
+          finishedCounts[category] += 1;
+        }
+      }
+    }
+
+    for (const key of ["git", "jules", "jira", "other"] as const) {
+      if (finishedCounts[key] > 0) {
+        metrics[key].avgDurationMs = totals[key] / finishedCounts[key];
+      }
+    }
+
+    return metrics;
+  }, [allInvocations]);
+
+  const sprintStateSummary = useMemo<SprintStateSummary>(() => {
+    const sprintMap = new Map<string, { statusCounts: Record<string, number> }>();
+    let totalTasks = 0;
+    let runningTasks = 0;
+    let blockedTasks = 0;
+
+    for (const record of allInvocations) {
+      const sprintId = record.sprintId || (record as any).projectRunId || "";
+
+      if (!sprintMap.has(sprintId)) {
+        sprintMap.set(sprintId, { statusCounts: {} });
+      }
+
+      const sprintData = sprintMap.get(sprintId)!;
+      sprintData.statusCounts[record.status] = (sprintData.statusCounts[record.status] || 0) + 1;
+
+      totalTasks += 1;
+      if (record.status === "running") runningTasks += 1;
+      if (record.status === "paused") blockedTasks += 1;
+    }
+
+    let activeSprints = 0;
+    let completedSprints = 0;
+    let failedSprints = 0;
+
+    for (const [sprintId, data] of sprintMap.entries()) {
+      if (!sprintId) continue;
+
+      const counts = data.statusCounts;
+      const totalInSprint = Object.values(counts).reduce((sum, c) => sum + c, 0);
+
+      if (counts["running"] > 0) activeSprints += 1;
+      if (counts["failed"] > 0) failedSprints += 1;
+      if (counts["completed"] === totalInSprint && totalInSprint > 0) completedSprints += 1;
+    }
+
+    const uniqueSprintCount = Array.from(sprintMap.keys()).filter(id => id !== "").length;
+
+    return {
+      totalSprints: uniqueSprintCount,
+      activeSprints,
+      completedSprints,
+      failedSprints,
+      totalTasks,
+      runningTasks,
+      blockedTasks,
+    };
+  }, [allInvocations]);
+
+  const errorsByCategory = useMemo<ErrorsByCategory>(() => {
+    const counts: ErrorsByCategory = {
+      timeout: 0,
+      rateLimit: 0,
+      apiError: 0,
+      modelError: 0,
+      cancelled: 0,
+      other: 0,
+    };
+
+    for (const record of allInvocations) {
+      if (record.status === "failed" || record.status === "cancelled") {
+        const msg = (record.lastErrorMessage || "").toLowerCase();
+
+        if (msg.includes("timeout")) counts.timeout += 1;
+        else if (msg.includes("rate") || msg.includes("429")) counts.rateLimit += 1;
+        else if (msg.includes("model")) counts.modelError += 1;
+        else if (msg.includes("api") || msg.includes("http")) counts.apiError += 1;
+        else if (msg.includes("cancel") || record.status === "cancelled") counts.cancelled += 1;
+        else counts.other += 1;
+      }
+    }
+
+    return counts;
+  }, [allInvocations]);
+
   const availableProviders = useMemo(() => {
     const providers = new Set<string>();
     for (const record of allInvocations) {
@@ -291,5 +454,8 @@ export function useSystemViewData(projectId: string) {
     loading,
     error,
     refetch,
+    externalApiMetrics,
+    sprintStateSummary,
+    errorsByCategory,
   };
 }

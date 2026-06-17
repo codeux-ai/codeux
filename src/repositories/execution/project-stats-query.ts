@@ -41,8 +41,8 @@ export function normalizeProjectStatsQuery(
   if (query.window === "1h") {
     const alignedEnd = new Date(now);
     alignedEnd.setMinutes(0, 0, 0);
-    const bucketSizeMs = 60 * 60 * 1000;
-    const bucketCount = 1;
+    const bucketSizeMs = 5 * 60 * 1000;
+    const bucketCount = 12;
     const start = new Date(alignedEnd.getTime() - (bucketCount - 1) * bucketSizeMs);
     return buildStatsRange({
       query,
@@ -50,9 +50,9 @@ export function normalizeProjectStatsQuery(
       from: start,
       bucketSizeMs,
       bucketCount,
-      resolution: "hour",
+      resolution: "5min",
       label: "Last 1 hour",
-      resolutionLabel: "Hourly telemetry buckets",
+      resolutionLabel: "5-minute telemetry buckets",
     });
   }
 

@@ -69,9 +69,20 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
     >
       <div className={styles.content}>
         <div className={`${styles.header} flex items-center justify-between`}>
-          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
-            Graph Filters
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
+              Graph Filters
+            </span>
+            {activeSeriesCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setEnabledSeries({})}
+                className="text-xs text-slate-400 transition-colors hover:text-amber-600"
+              >
+                Reset filters
+              </button>
+            )}
+          </div>
           <button
             ref={closeButtonRef}
             type="button"
@@ -119,6 +130,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                         {groups[groupKey].map((s) => {
                           const active = enabledSeries[s.id] || false;
                           const disabled = activeSeriesCount === 1 && active;
+                          const groupActiveCount = groups[groupKey].filter((item) => enabledSeries[item.id]).length;
                           return (
                             <button
                               key={s.id}
@@ -130,7 +142,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                               disabled={disabled}
                               className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all ${
                                 active
-                                  ? 'border-signal-500/20 bg-signal-500/[0.03] text-slate-900 dark:text-white'
+                                  ? 'border-amber-500/28 bg-amber-500/12 text-amber-700 dark:text-amber-300'
                                   : 'border-black/[0.05] bg-transparent text-slate-500 hover:border-black/[0.1] dark:border-white/[0.05] dark:text-slate-400'
                               } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
                             >
@@ -144,7 +156,14 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                                 </span>
                               </div>
                               {active && (
-                                <div className="h-1.5 w-1.5 rounded-full bg-signal-500" />
+                                <div className="flex items-center gap-1.5">
+                                  {groupActiveCount > 1 && (
+                                    <div className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[8px] font-bold text-amber-700 dark:bg-amber-500/30 dark:text-amber-200">
+                                      +{groupActiveCount - 1}
+                                    </div>
+                                  )}
+                                  <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                </div>
                               )}
                             </button>
                           );

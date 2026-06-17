@@ -9,7 +9,7 @@ export const UsageGraphHeader: FunctionComponent<{
   return (
     <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
       <div className="max-w-3xl">
-        <div className="inline-flex items-center gap-2.5 rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)] shadow-sm">
+        <div className="inline-flex items-center gap-2.5 rounded-full border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)] shadow-sm ring-1 ring-amber-500/40">
           <Activity className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
           Usage Graph
         </div>

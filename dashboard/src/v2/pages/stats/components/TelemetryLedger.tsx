@@ -99,6 +99,16 @@ export const TelemetryLedger: FunctionComponent<{
     });
   }, [items, query, sortKey, sortDir]);
 
+  const globalTotals = useMemo(() => {
+    let totalTokens = 0;
+    let totalActiveMs = 0;
+    for (const item of items) {
+      totalTokens += item.usage.totalTokens;
+      totalActiveMs += item.usage.activeTimeMs;
+    }
+    return { totalTokens, totalActiveMs };
+  }, [items]);
+
   const totals = useMemo(() => {
     let tokens = 0;
     let activeTimeMs = 0;
@@ -151,32 +161,34 @@ export const TelemetryLedger: FunctionComponent<{
           </div>
         </div>
 
-        {filteredItems.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <LedgerSummaryTile
-              icon={Zap}
-              label="Tokens"
-              value={formatTokens(totals.tokens)}
-              detail={`across ${filteredItems.length} ${kindLabel}`}
-            />
-            <LedgerSummaryTile
-              icon={Clock3}
-              label="Active Time"
-              value={formatDuration(totals.activeTimeMs)}
-              detail="combined compute"
-            />
-            <LedgerSummaryTile
-              icon={Hash}
-              label="Invocations"
-              value={totals.calls.toLocaleString()}
-              detail="total calls"
-            />
-            <LedgerSummaryTile
-              icon={Activity}
-              label="Heaviest"
-              value={topItem && totals.tokens > 0 ? formatPercent((topItem.usage.totalTokens / totals.tokens) * 100) : "—"}
-              detail={topItem ? `of volume: ${topItem.label.length > 24 ? `${topItem.label.slice(0, 24)}…` : topItem.label}` : "no volume"}
-            />
+        {items.length > 0 ? (
+          <div className={`${SUBPANEL_CLASS} p-2`}>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <LedgerSummaryTile
+                icon={Hash}
+                label="Total"
+                value={items.length.toLocaleString()}
+                detail={kindLabel}
+              />
+              <LedgerSummaryTile
+                icon={Zap}
+                label="Avg Tokens"
+                value={formatTokens(globalTotals.totalTokens / Math.max(1, items.length))}
+                detail={`per ${kindLabel.replace(/s$/, "")}`}
+              />
+              <LedgerSummaryTile
+                icon={Clock3}
+                label="Avg Active"
+                value={formatDuration(globalTotals.totalActiveMs / Math.max(1, items.length))}
+                detail={`per ${kindLabel.replace(/s$/, "")}`}
+              />
+              <LedgerSummaryTile
+                icon={Activity}
+                label="Most Recent"
+                value={items[0]?.lastActivityAt ? formatDateTime(items[0].lastActivityAt) : "—"}
+                detail="last activity"
+              />
+            </div>
           </div>
         ) : null}
 
@@ -199,13 +211,15 @@ export const TelemetryLedger: FunctionComponent<{
               ["input", "Input"],
               ["output", "Output"],
               ["name", "Name"],
+              ["p50", "p50"],
+              ["p95", "p95"],
             ] as const).map(([value, label]) => (
               <SortButton
                 key={value}
                 label={label}
                 active={sortKey === value}
                 direction={sortKey === value ? sortDir : null}
-                onClick={() => handleSort(value)}
+                onClick={() => handleSort(value as LedgerSortKey)}
               />
             ))}
           </div>
@@ -232,6 +246,11 @@ export const TelemetryLedger: FunctionComponent<{
                           </div>
                           <div className="min-w-0">
                             <div className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white">{item.label}</div>
+                            {kindLabel === "sprints" ? (
+                              <div className="text-[10px] text-slate-400">
+                                {formatTokens(item.usage.totalTokens / Math.max(1, item.usage.invocationCount))}/call
+                              </div>
+                            ) : null}
                             <div className="mt-1.5 flex flex-wrap items-center gap-2">
                               {item.provider ? (() => {
                                 const pIcon = getProviderIcon(item.provider as string);

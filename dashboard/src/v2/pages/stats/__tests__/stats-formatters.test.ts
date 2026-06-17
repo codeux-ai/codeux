@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   formatDay,
   formatHourTick,
+  formatMinuteTick,
   formatShortDate,
   toTimestamp,
   getAxisLabelStep,
@@ -31,6 +32,17 @@ describe("stats-formatters", () => {
     });
   });
 
+  describe("formatMinuteTick", () => {
+    it("returns formatted minute", () => {
+      const formatted = formatMinuteTick("2023-10-15T14:35:00Z");
+      expect(formatted).toMatch(/^\d{2}:\d{2}$/);
+    });
+
+    it("returns original value on invalid date", () => {
+      expect(formatMinuteTick("invalid")).toBe("invalid");
+    });
+  });
+
   describe("formatShortDate", () => {
     it("returns formatted short date", () => {
       expect(formatShortDate("2023-10-15T00:00:00Z")).toMatch(/Oct 14|Oct 15/);
@@ -56,6 +68,10 @@ describe("stats-formatters", () => {
   });
 
   describe("getAxisLabelStep", () => {
+    it("calculates step correctly for 5min resolution", () => {
+      expect(getAxisLabelStep({ resolution: "5min", bucketCount: 12 } as any)).toBe(3);
+    });
+
     it("calculates step correctly for hour resolution", () => {
       expect(getAxisLabelStep({ resolution: "hour", bucketCount: 10 } as any)).toBe(1);
       expect(getAxisLabelStep({ resolution: "hour", bucketCount: 20 } as any)).toBe(3);
@@ -90,6 +106,10 @@ describe("stats-formatters", () => {
         unsupportedInvocationCount: 0,
       },
     };
+
+    it("formats 5min correctly", () => {
+      expect(formatAxisLabel(bucket, { resolution: "5min", bucketCount: 12 } as any)).toMatch(/^\d{2}:\d{2}$/);
+    });
 
     it("formats hour correctly", () => {
       expect(formatAxisLabel(bucket, { resolution: "hour", bucketCount: 1 } as any)).toMatch(/^\d{1,2}:00$/);

@@ -130,4 +130,34 @@ describe("useSystemViewData", () => {
     expect(result.current.invocations[0]?.status).toBe("failed");
     expect(result.current.invocations.every((invocation) => invocation.status === "failed")).toBe(true);
   });
+
+  it("calculates derived metrics (externalApiMetrics, sprintStateSummary, errorsByCategory)", async () => {
+    mockedFetchProjectInvocations.mockResolvedValue([
+      createInvocation({ id: "inv-1", type: "git_push", sprintId: "sprint-1", status: "completed", finishedAt: "2026-06-01T10:05:00.000Z" }),
+      createInvocation({ id: "inv-2", type: "jira_sync", sprintId: "sprint-1", status: "running", finishedAt: null }),
+      createInvocation({ id: "inv-3", type: "coding", provider: "jules", sprintId: "sprint-2", status: "failed", lastErrorMessage: "timeout error" }),
+      createInvocation({ id: "inv-4", type: "planning", sprintId: "sprint-2", status: "failed", lastErrorMessage: "Rate limit exceeded (429)" }),
+      createInvocation({ id: "inv-5", type: "custom_type", sprintId: "sprint-3", status: "completed" }),
+      createInvocation({ id: "inv-6", type: "custom_type", sprintId: "sprint-3", status: "cancelled", lastErrorMessage: "user cancelled" }),
+    ]);
+
+    const { result } = renderHook(() => useSystemViewData("project-1"));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.externalApiMetrics.git.calls).toBe(1);
+    expect(result.current.externalApiMetrics.jira.calls).toBe(1);
+    expect(result.current.externalApiMetrics.jules.calls).toBe(1);
+    expect(result.current.externalApiMetrics.other.calls).toBe(2);
+
+    expect(result.current.sprintStateSummary.totalSprints).toBe(3);
+    expect(result.current.sprintStateSummary.activeSprints).toBe(1);
+    expect(result.current.sprintStateSummary.failedSprints).toBe(1);
+
+    expect(result.current.errorsByCategory.timeout).toBe(1);
+    expect(result.current.errorsByCategory.rateLimit).toBe(1);
+    expect(result.current.errorsByCategory.cancelled).toBe(1);
+  });
 });

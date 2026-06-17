@@ -2,6 +2,7 @@ import type { FunctionComponent, JSX } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import {
   Bot,
+  Clipboard,
   Code2,
   ExternalLink,
   Loader2,
@@ -119,14 +120,35 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
 
   return (
     <div className="mt-2 rounded-2xl bg-slate-950/70 border border-white/[0.05] p-4 space-y-3 w-full min-w-0 max-w-full">
+      {invocation.lastErrorMessage ? (
+        <details className="mb-4 group">
+          <summary className="cursor-pointer list-none text-sm font-bold uppercase tracking-[0.16em] text-red-500 dark:text-red-400 hover:text-red-600 transition-colors">
+            Error Summary
+          </summary>
+          <div className="mt-2 rounded-2xl bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-600 dark:text-red-300">
+            {invocation.lastErrorMessage}
+          </div>
+        </details>
+      ) : null}
+
       <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-            Message transcript
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+              Message transcript
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {formatDateTime(invocation.lastMessageAt)}
+            </div>
           </div>
-          <div className="text-[11px] text-slate-500">
-            {formatDateTime(invocation.lastMessageAt)}
-          </div>
+          <button
+            type="button"
+            onClick={() => navigator.clipboard.writeText(JSON.stringify(messages, null, 2))}
+            aria-label="Copy as JSON"
+            className="text-slate-400 hover:text-slate-200"
+          >
+            <Clipboard className="h-4 w-4" />
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -167,7 +189,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
         </div>
       ) : (
         <div className="space-y-3">
-          {visibleMessages.map((message) => {
+          {visibleMessages.map((message, index) => {
             const isSystem = message.role === "system";
             const isExpanded = Boolean(expandedSystemMessages[message.id]);
             const contentStyle = isSystem && !isExpanded
@@ -180,7 +202,7 @@ export const InvocationMessagesPanel: FunctionComponent<InvocationMessagesPanelP
               : undefined;
 
             return (
-              <div key={message.id} className={ROLE_CARD_CLASS[message.role]}>
+              <div key={message.id} className={`${ROLE_CARD_CLASS[message.role]} ${index % 2 === 1 ? "bg-transparent" : "bg-black/[0.015] dark:bg-white/[0.015]"} ${(message.role as any) === "error" || message.contentMarkdown?.includes("Error") ? "border-l-2 border-red-400 text-red-600 dark:text-red-300" : ""}`}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${ROLE_ICON_CLASS[message.role]}`}>

@@ -116,6 +116,44 @@ const MODEL_SEGMENT_TEXT = [
   "text-violet-600 dark:text-violet-400",
 ];
 
+export function buildVelocityHighlight(models: ExecutionModelStatsSummary[]): ModelHighlight | null {
+  const eligible = models.filter((model) => model.usage.invocationCount >= MIN_HIGHLIGHT_CALLS);
+  const pool = eligible.length > 0 ? eligible : models;
+
+  const valid = pool.filter((model) => model.usage.outputTokens > 0 && model.usage.activeTimeMs > 0);
+  if (valid.length === 0) {
+    return null;
+  }
+
+  const best = valid.reduce((best, model) => {
+    const bestVelocity = best.usage.outputTokens / Math.max(1, best.usage.activeTimeMs / 1000);
+    const velocity = model.usage.outputTokens / Math.max(1, model.usage.activeTimeMs / 1000);
+    return velocity > bestVelocity ? model : best;
+  });
+
+  const velocity = Math.round(best.usage.outputTokens / Math.max(1, best.usage.activeTimeMs / 1000));
+  return { model: best, value: `${velocity} tok/s` };
+}
+
+export function buildReasoningHighlight(models: ExecutionModelStatsSummary[]): ModelHighlight | null {
+  const eligible = models.filter((model) => model.usage.invocationCount >= MIN_HIGHLIGHT_CALLS);
+  const pool = eligible.length > 0 ? eligible : models;
+
+  const valid = pool.filter((model) => model.usage.reasoningOutputTokens > 0 && model.usage.outputTokens > 0);
+  if (valid.length === 0) {
+    return null;
+  }
+
+  const best = valid.reduce((best, model) => {
+    const bestShare = best.usage.reasoningOutputTokens / Math.max(1, best.usage.outputTokens);
+    const share = model.usage.reasoningOutputTokens / Math.max(1, model.usage.outputTokens);
+    return share > bestShare ? model : best;
+  });
+
+  const share = Math.round((best.usage.reasoningOutputTokens / Math.max(1, best.usage.outputTokens)) * 100);
+  return { model: best, value: `${share}% reasoning` };
+}
+
 export function buildModelSegments(models: ExecutionModelStatsSummary[], top = 5): SegmentDefinition[] {
   const sorted = [...models].sort((left, right) => right.usage.totalTokens - left.usage.totalTokens);
   const head = sorted.slice(0, top);

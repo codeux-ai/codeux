@@ -65,6 +65,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
       case "running":
         return (
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-blue-500/40 bg-blue-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300`}>
+            <div className="h-2 w-2 rounded-full bg-blue-500" />
             <Loader2 className="h-3 w-3 animate-spin" />
             Running
           </div>
@@ -72,6 +73,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
       case "completed":
         return (
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300`}>
+            <div className="h-2 w-2 rounded-full bg-emerald-500" />
             <CheckCircle2 className="h-3 w-3" />
             Completed
           </div>
@@ -79,6 +81,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
       case "failed":
         return (
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-red-500/40 bg-red-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-300`}>
+            <div className="h-2 w-2 rounded-full bg-red-500" />
             <XCircle className="h-3 w-3" />
             Failed
           </div>
@@ -86,6 +89,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
       case "cancelled":
         return (
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-slate-500/40 bg-slate-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300`}>
+            <div className="h-2 w-2 rounded-full bg-slate-500" />
             <MinusCircle className="h-3 w-3" />
             Cancelled
           </div>
@@ -93,6 +97,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
       case "paused":
         return (
           <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300`}>
+            <div className="h-2 w-2 rounded-full bg-amber-500" />
             <PauseCircle className="h-3 w-3" />
             Paused
           </div>
@@ -128,7 +133,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-separate border-spacing-y-2 block lg:table">
-        <thead className="sticky top-0 z-10 bg-white/80 backdrop-blur-md dark:bg-[#0E0C0A]/80 hidden lg:table-header-group">
+        <thead className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm dark:bg-void-900/80 hidden lg:table-header-group">
           <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
             <th className="pb-2 pl-6">
               <button
@@ -170,13 +175,13 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 Total {renderSortIcon("totalTokens")}
               </button>
             </th>
-            <th className="pb-2">
+            <th className="hidden pb-2 md:table-cell">
               <button
                 type="button"
                 onClick={() => handleSort("durationMs")}
                 className="flex items-center hover:text-slate-900 dark:hover:text-white"
               >
-                Duration {renderSortIcon("durationMs")}
+                Avg Duration {renderSortIcon("durationMs")}
               </button>
             </th>
             <th className="pb-2">Context</th>
@@ -285,7 +290,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         </div>
 
                         {/* Duration */}
-                          <div className={`text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-blue-600 dark:text-blue-400"}`}>
+                          <div className={`hidden md:block text-[11px] ${invocation.finishedAt ? "text-slate-600 dark:text-slate-300" : "text-blue-600 dark:text-blue-400"}`}>
 
                           {duration}
                         </div>

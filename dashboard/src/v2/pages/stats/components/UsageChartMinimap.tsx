@@ -142,9 +142,8 @@ export const UsageChartMinimap: FunctionComponent<{
                 y="1"
                 width={Math.max(4, indexToX(windowBounds.end) - indexToX(windowBounds.start))}
                 height={MINIMAP_HEIGHT - 2}
-                fill="rgba(0,224,160,0.08)"
-                stroke={accentHex}
-                stroke-opacity="0.65"
+                fill="rgba(255, 184, 0, 0.12)"
+                stroke="rgba(255, 184, 0, 0.5)"
                 stroke-width="1.5"
                 rx="6"
                 vector-effect="non-scaling-stroke"

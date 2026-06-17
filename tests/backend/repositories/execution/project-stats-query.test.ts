@@ -41,8 +41,8 @@ describe("project-stats-query", () => {
     const now = new Date("2023-01-30T10:15:00Z");
 
     const r1h = normalizeProjectStatsQuery(dbMock, "proj1", "1h", now);
-    expect(r1h.range.resolution).toBe("hour");
-    expect(r1h.range.bucketCount).toBe(1);
+    expect(r1h.range.resolution).toBe("5min");
+    expect(r1h.range.bucketCount).toBe(12);
     expect(r1h.range.label).toBe("Last 1 hour");
 
     const r24h = normalizeProjectStatsQuery(dbMock, "proj1", "24h", now);

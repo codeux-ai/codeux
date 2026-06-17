@@ -42,9 +42,6 @@ export const StatsPage: FunctionComponent = () => {
     completionConfidence,
   } = useStatsPageData(selectedProject?.id || null);
 
-
-
-
   useLayoutEffect(() => {
     if (!rootRef.current || reducedMotion || !stats || hasAnimated.current) {
       return;
@@ -60,7 +57,7 @@ export const StatsPage: FunctionComponent = () => {
   }, [stats, reducedMotion]);
 
   return (
-    <PageContainer containerRef={rootRef} padding="stats" className={`gap-16 ${styles.pageRoot}`}>
+    <PageContainer containerRef={rootRef} padding="stats" className={`gap-8 xl:gap-12 ${styles.pageRoot}`}>
       <StatsPageHero
         selectedProject={selectedProject}
         stats={stats}
@@ -100,9 +97,6 @@ export const StatsPage: FunctionComponent = () => {
             sourceSegments={sourceSegments}
           />
 
-          <section className={styles.telemetryStack}>
-
-
             <AnalysisStudioSection
               stats={stats}
               loading={loading}
@@ -117,9 +111,7 @@ export const StatsPage: FunctionComponent = () => {
               setVisualMode={setVisualMode}
               chartState={chartState}
             />
-          </section>
-
-                  </>
+          </>
       ) : null}
     </PageContainer>
   );
