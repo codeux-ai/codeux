@@ -31,6 +31,7 @@ import type {
 } from "../../../types.js";
 import {
   formatTokens,
+  formatCost,
   formatDuration,
   formatPercent,
   formatDateTime,
@@ -158,6 +159,24 @@ export const TrendStudio: FunctionComponent<{
   return (
   <section className="space-y-6">
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-8">
+      <TrendKpiTile
+        label="Total Cost"
+        value={stats.usage.totalCostUsd > 0 ? formatCost(stats.usage.totalCostUsd) : (stats.usage.totalTokens > 0 ? "No pricing configured" : "$0.00")}
+        delta={undefined}
+        detail="across all providers"
+      />
+      <TrendKpiTile
+        label="Cost per Invocation"
+        value={stats.usage.totalCostUsd > 0 && stats.usage.invocationCount > 0 ? formatCost(stats.usage.totalCostUsd / stats.usage.invocationCount) : "—"}
+      />
+      <TrendKpiTile
+        label="Cost per Active Hour"
+        value={stats.usage.totalCostUsd > 0 && stats.usage.activeTimeMs > 0 ? formatCost(stats.usage.totalCostUsd / (stats.usage.activeTimeMs / 3600000)) : "—"}
+      />
+      <TrendKpiTile
+        label="Peak Bucket Cost"
+        value={(chartState as any)?.metrics?.peakCostUsd > 0 ? formatCost((chartState as any)?.metrics?.peakCostUsd) : "—"}
+      />
       <TrendKpiTile
         label="Total Tokens"
         value={formatTokens(stats.usage.totalTokens)}
@@ -390,6 +409,10 @@ export const CompositionStudio: FunctionComponent<{
                         <div className="truncate text-base font-black text-slate-900 dark:text-white">{provider.label}</div>
                         <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">{provider.secondaryLabel ?? ""}</div>
                       </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-black text-slate-900 dark:text-white">{provider.usage.totalCostUsd > 0 ? formatCost(provider.usage.totalCostUsd) : "—"}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">cost</div>
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-black text-slate-900 dark:text-white">{formatTokens(provider.usage.totalTokens)}</div>

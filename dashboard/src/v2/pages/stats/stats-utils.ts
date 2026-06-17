@@ -50,6 +50,18 @@ export function formatTokens(value: number): string {
   return NUMBER_FORMATTER.format(value);
 }
 
+
+export function formatCost(usd: number | null | undefined): string {
+  if (usd === null || usd === undefined) return "—";
+  if (usd === 0) return "$0.00";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4
+  }).format(usd);
+}
+
 export function formatDuration(value: number): string {
   const seconds = Math.max(0, Math.round(value / 1000));
   const hours = Math.floor(seconds / 3600);
