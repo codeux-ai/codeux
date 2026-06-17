@@ -119,12 +119,14 @@ describe("SystemStudio", () => {
 
     await waitFor(() => {
       expect(screen.getByText("1 of 2")).toBeTruthy();
+      expect(container.textContent).toContain("Rate limited");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "System Msgs" }));
 
     await waitFor(() => {
       expect(screen.getByText("1 of 2")).toBeTruthy();
+      expect(container.textContent).toContain("System Msgs");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "All" }));
