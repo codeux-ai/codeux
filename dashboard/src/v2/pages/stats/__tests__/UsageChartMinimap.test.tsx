@@ -27,7 +27,7 @@ function createBuckets(count: number): ExecutionUsageBucketSummary[] {
       reportedInvocationCount: 0,
       estimatedInvocationCount: 0,
       unavailableInvocationCount: 0,
-      unsupportedInvocationCount: 0,
+      unsupportedInvocationCount: 0, inputCostUsd: 0, outputCostUsd: 0, cachedInputCostUsd: 0, totalCostUsd: 0,
     },
   }));
 }

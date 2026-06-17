@@ -32,6 +32,10 @@ export const EMPTY_USAGE: ExecutionUsageTotals = {
   estimatedInvocationCount: 0,
   unavailableInvocationCount: 0,
   unsupportedInvocationCount: 0,
+  inputCostUsd: 0,
+  outputCostUsd: 0,
+  cachedInputCostUsd: 0,
+  totalCostUsd: 0,
 };
 
 export const NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
@@ -97,6 +101,10 @@ export function sumUsage(items: ExecutionStatsEntitySummary[]): ExecutionUsageTo
     estimatedInvocationCount: accumulator.estimatedInvocationCount + item.usage.estimatedInvocationCount,
     unavailableInvocationCount: accumulator.unavailableInvocationCount + item.usage.unavailableInvocationCount,
     unsupportedInvocationCount: accumulator.unsupportedInvocationCount + item.usage.unsupportedInvocationCount,
+    inputCostUsd: accumulator.inputCostUsd + item.usage.inputCostUsd,
+    outputCostUsd: accumulator.outputCostUsd + item.usage.outputCostUsd,
+    cachedInputCostUsd: accumulator.cachedInputCostUsd + item.usage.cachedInputCostUsd,
+    totalCostUsd: accumulator.totalCostUsd + item.usage.totalCostUsd,
   }), { ...EMPTY_USAGE });
 }
 
