@@ -927,18 +927,7 @@ describe("SprintPreviewService unit tests", () => {
       expect(key).toBe("proj-1:sprint-1");
     });
 
-    it("normalizeDockerState maps status strings correctly", () => {
-      const service = new SprintPreviewService(deps as any);
-      const normalize = (service as any).normalizeDockerState.bind(service);
-      expect(normalize("Up 5 minutes")).toBe("running");
-      expect(normalize("Exited (1) 2 hours ago")).toBe("exited");
-      expect(normalize("Created")).toBe("created");
-      expect(normalize("Restarting (1) 5 seconds ago")).toBe("restarting");
-      expect(normalize("")).toBeNull();
-      expect(normalize(null)).toBeNull();
-      expect(normalize(undefined)).toBeNull();
-      expect(normalize("paused")).toBe("paused");
-    });
+
 
     it("extractPreviewError finds error lines", () => {
       const service = new SprintPreviewService(deps as any);
@@ -983,17 +972,7 @@ describe("SprintPreviewService unit tests", () => {
       expect(rewrite('href="//cdn.example.com"', prefix)).toBe('href="//cdn.example.com"');
     });
 
-    it("removeContainerIfPresent skips empty ref", async () => {
-      const service = new SprintPreviewService(deps as any);
-      await (service as any).removeContainerIfPresent("  ", "/cwd");
-      expect(runCommandStrict).not.toHaveBeenCalled();
-    });
 
-    it("removeContainerIfPresent calls docker rm", async () => {
-      const service = new SprintPreviewService(deps as any);
-      await (service as any).removeContainerIfPresent("container-123", "/cwd");
-      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "container-123"], "/cwd");
-    });
 
     it("countCompletedTasks counts correctly", () => {
       deps.projectManagementRepository.listTasks.mockReturnValue([
@@ -1104,46 +1083,7 @@ describe("SprintPreviewService unit tests", () => {
     });
   });
 
-  describe("withSessionLock", () => {
-    it("serializes concurrent operations on the same key", async () => {
-      const service = new SprintPreviewService(deps as any);
-      const order: number[] = [];
 
-      const op1 = (service as any).withSessionLock("key1", async () => {
-        await new Promise((r) => setTimeout(r, 20));
-        order.push(1);
-        return 1;
-      });
-      const op2 = (service as any).withSessionLock("key1", async () => {
-        order.push(2);
-        return 2;
-      });
-
-      const [r1, r2] = await Promise.all([op1, op2]);
-      expect(r1).toBe(1);
-      expect(r2).toBe(2);
-      expect(order).toEqual([1, 2]);
-    });
-
-    it("allows parallel operations on different keys", async () => {
-      const service = new SprintPreviewService(deps as any);
-      const order: string[] = [];
-
-      const op1 = (service as any).withSessionLock("key-a", async () => {
-        await new Promise((r) => setTimeout(r, 10));
-        order.push("a");
-        return "a";
-      });
-      const op2 = (service as any).withSessionLock("key-b", async () => {
-        order.push("b");
-        return "b";
-      });
-
-      await Promise.all([op1, op2]);
-      // b should complete before a since they run in parallel
-      expect(order[0]).toBe("b");
-    });
-  });
 
   describe("listPreviewContainers parsing", () => {
     it("parses docker ps output into container summaries", async () => {

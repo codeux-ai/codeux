@@ -1,4 +1,5 @@
 import type { DockerContainerSummary } from "./docker-session-lifecycle.js";
+import { DockerSessionLifecycle } from "./docker-session-lifecycle.js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as pathPosix from "path/posix";
@@ -75,7 +76,7 @@ interface PreparedStartupScript {
 
 
 export class SprintPreviewService {
-  private readonly sessionLocks = new Map<string, Promise<unknown>>();
+  private readonly lifecycle = new DockerSessionLifecycle();
 
   constructor(private readonly deps: SprintPreviewServiceDeps) {}
 
@@ -92,7 +93,7 @@ export class SprintPreviewService {
   }
 
   async startSession(projectId: string, sprintId: string, options?: { rebuild?: boolean }): Promise<SprintPreviewSession> {
-    return await this.withSessionLock(this.buildSessionLockKey(projectId, sprintId), async () => {
+    return await this.lifecycle.withSessionLock(this.buildSessionLockKey(projectId, sprintId), async () => {
       const project = this.requireProject(projectId);
       const sprint = this.requireSprint(projectId, sprintId);
       const effectiveSettings = this.resolveSettings(projectId, sprintId);
@@ -173,9 +174,9 @@ export class SprintPreviewService {
 
       try {
         if (existing?.containerId || existing?.containerName || options?.rebuild) {
-          await this.removeContainerIfPresent(existing?.containerId || existing?.containerName || containerName, project.baseDir);
+          await this.lifecycle.removeContainerIfPresent(existing?.containerId || existing?.containerName || containerName, project.baseDir);
         }
-        await this.removeContainerIfPresent(containerName, project.baseDir);
+        await this.lifecycle.removeContainerIfPresent(containerName, project.baseDir);
         await fs.mkdir(runtimeHome, { recursive: true });
         await fs.mkdir(runtimeNpmPrefix, { recursive: true });
         await fs.mkdir(runtimeNpmCache, { recursive: true });
@@ -290,7 +291,7 @@ export class SprintPreviewService {
         return await this.refreshRuntimeState(updated);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        await this.removeContainerIfPresent(containerName, project.baseDir);
+        await this.lifecycle.removeContainerIfPresent(containerName, project.baseDir);
         return this.deps.sprintPreviewRepository.updateSession(session.id, {
           ...sessionBasePatch,
           status: "error",
@@ -345,9 +346,9 @@ export class SprintPreviewService {
 
   async stopSession(sessionId: string): Promise<SprintPreviewSession> {
     const session = await this.requireSession(sessionId);
-    return await this.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
+    return await this.lifecycle.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
       const containerRef = session.containerId || session.containerName || this.buildContainerName(session.projectId, session.sprintId);
-      await this.removeContainerIfPresent(containerRef, process.cwd());
+      await this.lifecycle.removeContainerIfPresent(containerRef, process.cwd());
       return this.deps.sprintPreviewRepository.updateSession(sessionId, {
         status: "stopped",
         containerId: null,
@@ -361,9 +362,9 @@ export class SprintPreviewService {
 
   async removeSession(sessionId: string): Promise<void> {
     const session = await this.requireSession(sessionId);
-    await this.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
+    await this.lifecycle.withSessionLock(this.buildSessionLockKey(session.projectId, session.sprintId), async () => {
       const containerRef = session.containerId || session.containerName || this.buildContainerName(session.projectId, session.sprintId);
-      await this.removeContainerIfPresent(containerRef, process.cwd());
+      await this.lifecycle.removeContainerIfPresent(containerRef, process.cwd());
       await runCommandStrict("docker", ["volume", "rm", `code-ux-preview-volume-${session.sprintId}`], process.cwd()).catch(() => undefined);
       this.deps.sprintPreviewRepository.deleteSession(sessionId);
     });
@@ -787,25 +788,7 @@ export class SprintPreviewService {
         ],
         cwd,
       );
-      return result.stdout
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const [id, name, rawStatus, projectId, sprintId, sessionId, hostPortStr] = line.split("\t");
-          const parsedPort = hostPortStr ? parseInt(hostPortStr, 10) : NaN;
-          return {
-            id,
-            name: name || null,
-            status: this.normalizeDockerState(rawStatus),
-            hostPort: !isNaN(parsedPort) ? parsedPort : null,
-            labels: {
-              "code-ux.project-id": projectId || "",
-              "code-ux.sprint-id": sprintId || "",
-              "code-ux.session-id": sessionId || "",
-            },
-          } satisfies DockerContainerSummary;
-        });
+      return this.lifecycle.parseDockerPsOutput(result.stdout, true);
     } catch {
       return [];
     }
@@ -840,32 +823,9 @@ export class SprintPreviewService {
     return matchingRef || null;
   }
 
-  private normalizeDockerState(rawStatus: string | null | undefined): string | null {
-    const normalized = String(rawStatus || "").trim().toLowerCase();
-    if (!normalized) {
-      return null;
-    }
-    if (normalized.startsWith("up ")) {
-      return "running";
-    }
-    if (normalized.startsWith("exited ")) {
-      return "exited";
-    }
-    if (normalized.startsWith("created")) {
-      return "created";
-    }
-    if (normalized.startsWith("restarting")) {
-      return "restarting";
-    }
-    return normalized;
-  }
 
-  private async removeContainerIfPresent(containerRef: string, cwd: string): Promise<void> {
-    if (!containerRef.trim()) {
-      return;
-    }
-    await runCommandStrict("docker", ["rm", "-f", containerRef], cwd).catch(() => undefined);
-  }
+
+
 
   private async readContainerLogs(containerRef: string, tail: number, cwd: string): Promise<string> {
     const result = await runCommandStrict(
@@ -927,7 +887,7 @@ export class SprintPreviewService {
           continue;
         }
         if (command.join(" ").includes(ORPHANED_SETUP_CONTAINER_COMMAND)) {
-          await this.removeContainerIfPresent(containerId, cwd);
+          await this.lifecycle.removeContainerIfPresent(containerId, cwd);
         }
       }
     } catch {
@@ -939,24 +899,7 @@ export class SprintPreviewService {
     return `${projectId}:${sprintId}`;
   }
 
-  private async withSessionLock<T>(lockKey: string, operation: () => Promise<T>): Promise<T> {
-    const previous = this.sessionLocks.get(lockKey) || Promise.resolve();
-    let release: (() => void) | undefined;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const queued = previous.finally(() => gate);
-    this.sessionLocks.set(lockKey, queued);
-    await previous.catch(() => undefined);
-    try {
-      return await operation();
-    } finally {
-      release?.();
-      if (this.sessionLocks.get(lockKey) === queued) {
-        this.sessionLocks.delete(lockKey);
-      }
-    }
-  }
+
 
   private async cleanupLegacyPreviewWorkspaces(repoPath: string): Promise<void> {
     const legacyRoot = path.join(repoPath, ".code-ux", "worktrees");
