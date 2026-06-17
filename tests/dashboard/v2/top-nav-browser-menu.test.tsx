@@ -47,7 +47,7 @@ describe("BrowserSessionsMenu", () => {
 
         render(<BrowserSessionsMenu />);
 
-        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
         expect(button).toBeInTheDocument();
     });
 
@@ -59,7 +59,7 @@ describe("BrowserSessionsMenu", () => {
         render(<BrowserSessionsMenu />);
 
         // Trigger click
-        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
         fireEvent.click(button);
 
         await waitFor(() => {
@@ -77,7 +77,7 @@ describe("BrowserSessionsMenu", () => {
         render(<BrowserSessionsMenu />);
 
         // Trigger click
-        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
         fireEvent.click(button);
 
         await waitFor(() => {
@@ -119,7 +119,7 @@ describe("BrowserSessionsMenu", () => {
 
         render(<BrowserSessionsMenu />);
 
-        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
         fireEvent.click(button);
 
         await waitFor(() => {
@@ -151,7 +151,7 @@ describe("BrowserSessionsMenu", () => {
         vi.mocked(useProjectData).mockReturnValue({ selectedProject: null } as any);
 
         render(<BrowserSessionsMenu enabled={true} />);
-        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
 
         expect(button).toHaveAttribute("aria-expanded", "false");
 
@@ -204,7 +204,7 @@ describe("BrowserSessionsMenu", () => {
 
         render(<BrowserSessionsMenu />);
 
-        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+        const button = screen.getByRole("button", { name: /Browser Sessions:/i });
 
         // Open menu via keyboard
         await act(async () => {
