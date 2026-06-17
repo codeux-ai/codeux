@@ -295,13 +295,33 @@ export const InteractiveUsageChart: FunctionComponent<{
       <div className="relative flex flex-col gap-8">
         {/* Screen reader summary */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
-          <h2 className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
+          <h2 id="chart-summary-heading" className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
           <p>
             Currently showing {visibleBuckets.length} buckets.
             {activeBucket ? `Focused bucket: ${activeBucket.label}. Tokens: ${activeBucket.usage.totalTokens}` : "No bucket focused."}
             Active series: {visibleSeries.map(s => s.label).join(", ")}.
             Peak Tokens: {formatTokens(peakTokens)}. Peak Time: {formatDuration(peakTime)}. Average Tokens: {formatTokens(averageTokens)}. Peak Invocations: {peakInvocations.toLocaleString()}.
           </p>
+          <table className="sr-only">
+            <thead>
+              <tr>
+                <th>Time</th>
+                {visibleSeries.map(s => (
+                  <th key={s.id}>{s.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleBuckets.map((bucket, i) => (
+                <tr key={bucket.bucketStart}>
+                  <td>{bucket.label}</td>
+                  {visibleSeries.map(s => (
+                    <td key={s.id}>{s.formatter(s.values[i] ?? 0)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
         <UsageGraphHeader
           title={zoomRange ? "Zoomed telemetry window" : stats.range.label}
@@ -420,7 +440,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                   <UsageGraphEmpty />
                 </div>
               ) : (
-                <svg aria-hidden="true" viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
+                <svg role="img" aria-labelledby="chart-summary-heading" viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
                   <defs>
                     {chartData.map((series) => (
                       <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">
