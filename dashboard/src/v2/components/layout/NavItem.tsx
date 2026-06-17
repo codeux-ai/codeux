@@ -12,11 +12,13 @@ interface NavItemProps {
     isMinimized: boolean;
     isMobile?: boolean;
     onClose?: () => void;
+    elementRef?: preact.Ref<HTMLAnchorElement>;
 }
 
-export const NavItem: FunctionComponent<NavItemProps> = ({ item, isActive, isMinimized, isMobile, onClose }) => {
+export const NavItem: FunctionComponent<NavItemProps> = ({ item, isActive, isMinimized, isMobile, onClose, elementRef }) => {
     return (
         <Link
+            ref={elementRef}
             to={item.path}
             onClick={isMobile ? onClose : undefined}
             onMouseEnter={() => prefetchRoute(item.path)}
