@@ -16,6 +16,18 @@ import * as pathPosix from "path/posix";
 import { randomUUID } from "crypto";
 import { getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import {
+  CONTAINER_RUNTIME_HOME,
+  CONTAINER_WORKSPACE_ROOT,
+  CONTAINER_QWEN_OPENAI_LOG_DIR,
+  resolveCodexOutputPath,
+  cleanupCodexOutputPath,
+  resolveQwenHostLogDir,
+  resetQwenOpenAiLogDir,
+  resolveAntigravityHostLogPath,
+  resolveAntigravityContainerLogPath,
+  cleanupProviderRuntimeArtifacts
+} from "./provider-runtime-artifacts.js";
+import {
   collectProviderUsageTelemetry,
   readQwenOpenAiLogRecords,
   buildQwenConversation,
@@ -25,15 +37,6 @@ import {
   type ParsedConversationTurn,
 } from "./provider-usage.js";
 
-const CONTAINER_WORKSPACE_ROOT = "/workspace";
-const CONTAINER_RUNTIME_HOME = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".code-ux-home");
-// qwen-code's OpenAI logger defaults to `<cwd>/logs/openai`, which lands inside the
-// worker's git worktree and gets committed. We redirect it to a controlled location
-// outside the committed tree and read provider-reported usage back from there.
-const QWEN_OPENAI_LOG_DIRNAME = "qwen-openai-logs";
-// Inside the container, logs live under HOME (.code-ux-home) — on the workspace
-// volume (so the host can read them) but excluded from exported patches.
-const CONTAINER_QWEN_OPENAI_LOG_DIR = pathPosix.join(CONTAINER_RUNTIME_HOME, QWEN_OPENAI_LOG_DIRNAME);
 
 export interface ProviderRunResult extends CommandResult {
   usageTelemetry: ProviderUsageTelemetry;
@@ -128,7 +131,7 @@ export class ProviderRunner implements IProviderRunner {
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
-    const outputPath = this.resolveCodexOutputPath(input);
+    const outputPath = resolveCodexOutputPath(input);
 
     if (outputPath && !outputPath.startsWith("/workspace/")) {
       await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -142,7 +145,7 @@ export class ProviderRunner implements IProviderRunner {
       });
     } finally {
       await prepared.cleanup();
-      await this.cleanupCodexOutputPath(outputPath, input.workflowSettings.executionMode, prepared.cwd);
+      await cleanupCodexOutputPath(outputPath,  input.workflowSettings.executionMode,  prepared.cwd, this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined);
     }
   }
 
@@ -158,7 +161,7 @@ export class ProviderRunner implements IProviderRunner {
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
-    const outputPath = this.resolveCodexOutputPath(input);
+    const outputPath = resolveCodexOutputPath(input);
 
     if (outputPath && !outputPath.startsWith("/workspace/")) {
       await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -183,39 +186,13 @@ export class ProviderRunner implements IProviderRunner {
       };
     } finally {
       await prepared.cleanup();
-      await this.cleanupCodexOutputPath(outputPath, input.workflowSettings.executionMode, prepared.cwd);
+      await cleanupCodexOutputPath(outputPath,  input.workflowSettings.executionMode,  prepared.cwd, this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined);
     }
-  }
-
-  private resolveCodexOutputPath(input: ProviderRunInput): string | null {
-    if (input.provider !== "codex") {
-      return null;
-    }
-    return input.workflowSettings.executionMode === "DOCKER"
-      ? pathPosix.join("/workspace", `provider-last-message-${input.sessionId}.txt`)
-      : path.join(os.tmpdir(), `provider-last-message-${input.sessionId}.txt`);
   }
 
   private shouldPreserveSessionWorkspace(input: ProviderRunInput): boolean {
     return input.workflowSettings.executionMode === "DOCKER"
       && !input.cwd.startsWith("docker-volume://");
-  }
-
-  private async cleanupCodexOutputPath(
-    outputPath: string | null,
-    executionMode: CliWorkflowSettings["executionMode"],
-    preparedCwd: string,
-  ): Promise<void> {
-    if (!outputPath) {
-      return;
-    }
-    if (executionMode === "DOCKER") {
-      if (this.dockerRunner.removeWorkspaceDir) {
-        await this.dockerRunner.removeWorkspaceDir(preparedCwd, outputPath).catch(() => undefined);
-      }
-    } else {
-      await fs.rm(outputPath, { force: true }).catch(() => undefined);
-    }
   }
 
   private async runProviderInternal(input: {
@@ -262,15 +239,15 @@ export class ProviderRunner implements IProviderRunner {
     const qwenProcessLogDir = provider === "qwen-code"
       ? (workflowSettings.executionMode === "DOCKER"
         ? CONTAINER_QWEN_OPENAI_LOG_DIR
-        : this.resolveQwenHostLogDir(sessionId))
+        : resolveQwenHostLogDir(sessionId))
       : undefined;
     // Antigravity's `agy` CLI writes its real diagnostics (quota/auth/executor errors)
     // only to a glog log file — never to stdout/stderr — and exits 0 regardless. Point
     // it at a controlled path we can read back so those failures aren't lost.
     const antigravityLogPath = provider === "antigravity"
       ? (workflowSettings.executionMode === "DOCKER"
-        ? this.resolveAntigravityContainerLogPath(sessionId)
-        : this.resolveAntigravityHostLogPath(sessionId))
+        ? resolveAntigravityContainerLogPath(sessionId)
+        : resolveAntigravityHostLogPath(sessionId))
       : null;
     const providerEnv = this.withProviderEnv(provider, runModel, apiKey, workflowSettings, githubToken, providerMountAuth, input, qwenProcessLogDir, gitlabToken);
     const nativeSessionId = provider === "opencode"
@@ -316,7 +293,7 @@ export class ProviderRunner implements IProviderRunner {
     // Start each qwen run from an empty log directory so usage aggregation only
     // counts this invocation (the directory is reused across a session's runs).
     if (provider === "qwen-code") {
-      await this.resetQwenOpenAiLogDir(cwd, workflowSettings.executionMode, sessionId);
+      await resetQwenOpenAiLogDir(cwd,  workflowSettings.executionMode,  sessionId, this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined);
     }
 
     let accumulatedStdout = "";
@@ -517,16 +494,7 @@ export class ProviderRunner implements IProviderRunner {
       for (const cleanupPath of localRuntimeCleanup) {
         await fs.rm(cleanupPath, { force: true }).catch(() => undefined);
       }
-      if (provider === "qwen-code" && workflowSettings.executionMode !== "DOCKER") {
-        await fs.rm(this.resolveQwenHostLogDir(sessionId), { recursive: true, force: true }).catch(() => undefined);
-      }
-      if (provider === "antigravity" && antigravityLogPath) {
-        if (workflowSettings.executionMode === "DOCKER") {
-          await this.dockerRunner.removeWorkspaceDir?.(cwd, antigravityLogPath).catch(() => undefined);
-        } else {
-          await fs.rm(antigravityLogPath, { force: true }).catch(() => undefined);
-        }
-      }
+      await cleanupProviderRuntimeArtifacts(provider, workflowSettings.executionMode, sessionId, cwd, antigravityLogPath, this.dockerRunner.removeWorkspaceDir ? this.dockerRunner.removeWorkspaceDir.bind(this.dockerRunner) : undefined);
     }
   }
 
@@ -555,19 +523,6 @@ export class ProviderRunner implements IProviderRunner {
     }
 
     return (await fs.readFile(outputPath, "utf8").catch(() => "")).trim();
-  }
-
-  /** Host-side path for antigravity's glog log file in non-Docker runs, kept outside the worktree. */
-  private resolveAntigravityHostLogPath(sessionId: string): string {
-    const safeSession = (sessionId || "session").replace(/[^A-Za-z0-9_-]/g, "_");
-    return path.join(os.tmpdir(), "code-ux-antigravity-logs", `${safeSession}.log`);
-  }
-
-  /** Container path for antigravity's glog log file — under HOME on the workspace volume
-   *  (so the host can read it back) and excluded from exported patches. */
-  private resolveAntigravityContainerLogPath(sessionId: string): string {
-    const safeSession = (sessionId || "session").replace(/[^A-Za-z0-9_-]/g, "_");
-    return pathPosix.join(CONTAINER_RUNTIME_HOME, "antigravity-logs", `${safeSession}.log`);
   }
 
   /** Reads antigravity's captured log file and extracts only the meaningful failure lines
@@ -611,27 +566,6 @@ export class ProviderRunner implements IProviderRunner {
     return lines.join("\n");
   }
 
-  /** Host-side directory for qwen-code OpenAI logs in non-Docker runs, kept outside the worktree. */
-  private resolveQwenHostLogDir(sessionId: string): string {
-    const safeSession = (sessionId || "session").replace(/[^A-Za-z0-9_-]/g, "_");
-    return path.join(os.tmpdir(), "code-ux-qwen-openai-logs", safeSession);
-  }
-
-  /** Clears stale qwen OpenAI logs before a run so usage aggregation is per-invocation. */
-  private async resetQwenOpenAiLogDir(
-    cwd: string,
-    executionMode: CliWorkflowSettings["executionMode"],
-    sessionId: string,
-  ): Promise<void> {
-    if (executionMode === "DOCKER") {
-      await this.dockerRunner.removeWorkspaceDir?.(cwd, CONTAINER_QWEN_OPENAI_LOG_DIR).catch(() => undefined);
-      return;
-    }
-    const logDir = this.resolveQwenHostLogDir(sessionId);
-    await fs.rm(logDir, { recursive: true, force: true }).catch(() => undefined);
-    await fs.mkdir(logDir, { recursive: true }).catch(() => undefined);
-  }
-
   /** Aggregates provider-reported usage and the conversation from qwen-code
    *  OpenAI logs for both execution modes. Reads the log records once so usage
    *  and the parsed conversation come from the same set of files. */
@@ -652,7 +586,7 @@ export class ProviderRunner implements IProviderRunner {
         return null;
       }
     } else {
-      records = await readQwenOpenAiLogRecords(this.resolveQwenHostLogDir(sessionId), startTimeMs);
+      records = await readQwenOpenAiLogRecords(resolveQwenHostLogDir(sessionId), startTimeMs);
     }
     if (records.length === 0) {
       return null;
