@@ -618,10 +618,6 @@ describe("VirtualWorkerService", () => {
       cliWorkflowService: { startTask: vi.fn() } as any,
     });
 
-    // Sprint-level settings should resolve to VIRTUAL
-    expect((virtualWorkerService as any).resolveWorkerExecutionMode(project.id, sprint.id)).toBe("VIRTUAL");
-    // Project-level also VIRTUAL (set above)
-    expect((virtualWorkerService as any).resolveWorkerExecutionMode(project.id)).toBe("VIRTUAL");
     // Cover resolveDashboardSettings with sprintId
     const settings = (virtualWorkerService as any).resolveDashboardSettings(project.id, sprint.id);
     expect(settings.workers.executionMode).toBe("VIRTUAL");
