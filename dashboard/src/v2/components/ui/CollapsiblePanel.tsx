@@ -44,8 +44,16 @@ export const CollapsiblePanel: FunctionComponent<{
             </button>
 
             {/* Collapsible body */}
-            <div id={contentId} className={`collapsible-section ${open ? "open" : ""}`}>
-                <div className="collapsible-content relative z-10 px-5 pb-5 pt-0">
+            <div
+                id={contentId}
+                aria-hidden={!open}
+                className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+            >
+                <div
+                    className={`relative z-10 px-5 pt-0 overflow-hidden transition-all duration-300 ease-in-out ${
+                        open ? "opacity-100 translate-y-0 pb-5" : "opacity-0 -translate-y-2 pb-0"
+                    }`}
+                >
                     {children}
                 </div>
             </div>

@@ -58,13 +58,13 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
         if (containerRef.current) {
           gsap.fromTo(containerRef.current,
             { x: xStart },
-            { x: "0%", duration: reducedMotion ? 0 : MODAL_MOTION.overlay.cardEntry, ease: MODAL_MOTION.overlay.cardEntryEase }
+            { x: "0%", duration: reducedMotion ? 0 : MODAL_MOTION.entry.duration, ease: MODAL_MOTION.entry.ease }
           );
         }
         if (backdropRef.current) {
           gsap.fromTo(backdropRef.current,
             { opacity: 0 },
-            { opacity: 1, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.entry, ease: MODAL_MOTION.overlay.entryEase }
+            { opacity: 1, duration: reducedMotion ? 0 : MODAL_MOTION.backdrop.duration, ease: MODAL_MOTION.backdrop.ease }
           );
         }
       });
@@ -80,16 +80,16 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
       if (containerRef.current) {
         tl.to(containerRef.current, {
           x: xEnd,
-          duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit,
-          ease: MODAL_MOTION.overlay.exitEase,
+          duration: reducedMotion ? 0 : MODAL_MOTION.exit.duration,
+          ease: MODAL_MOTION.exit.ease,
         }, 0);
       }
 
       if (backdropRef.current) {
         tl.to(backdropRef.current, {
           opacity: 0,
-          duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit,
-          ease: MODAL_MOTION.overlay.exitEase,
+          duration: reducedMotion ? 0 : MODAL_MOTION.backdrop.duration,
+          ease: MODAL_MOTION.backdrop.ease,
         }, 0);
       }
 

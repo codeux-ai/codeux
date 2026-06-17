@@ -93,7 +93,11 @@ export function useFocusTrap(
       if (restoreFocus && triggerRef.current) {
         // Defer focus restoration to ensure element is re-enabled or DOM is updated
         const trigger = triggerRef.current;
-        window.setTimeout(() => trigger.focus(), 0);
+        window.setTimeout(() => {
+          if (trigger.isConnected) {
+            trigger.focus();
+          }
+        }, 0);
       }
     };
   }, [active]);
