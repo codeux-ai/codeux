@@ -138,8 +138,8 @@ describe("InvocationsTable", () => {
     );
     const root = container as HTMLElement;
 
-    fireEvent.click(within(root).getByRole("button", { name: "Time" }));
-    fireEvent.click(within(root).getByRole("button", { name: "In" }));
+    fireEvent.click(within(root).getByRole("button", { name: /Time/ }));
+    fireEvent.click(within(root).getByRole("button", { name: /In/ }));
 
     expect(onSortChange).toHaveBeenNthCalledWith(1, { key: "startedAt", dir: "asc" });
     expect(onSortChange).toHaveBeenNthCalledWith(2, { key: "inputTokens", dir: "desc" });
@@ -193,6 +193,6 @@ describe("InvocationsTable", () => {
       />,
     );
 
-    expect(container.querySelectorAll(".animate-pulse").length).toBe(6);
+    expect(container.querySelectorAll(".motion-safe\\:animate-pulse").length).toBe(6);
   });
 });

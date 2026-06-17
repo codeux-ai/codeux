@@ -23,6 +23,11 @@ window.SVGElement.prototype.getTotalLength = () => 100;
 
 vi.mock("gsap", () => ({
   default: {
+    matchMedia: vi.fn().mockReturnValue({
+      add: vi.fn().mockImplementation((_q, cb) => { if (_q.includes("no-preference")) cb(); }),
+      revert: vi.fn()
+    }),
+    gsap: { set: vi.fn(), timeline: vi.fn() },
     timeline: () => ({
       to: vi.fn().mockReturnThis(),
       fromTo: vi.fn().mockReturnThis(),

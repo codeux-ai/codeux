@@ -52,11 +52,11 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   };
 
   const renderSortIcon = (key: SystemSortKey) => {
-    if (sort.key !== key) return <ArrowUpDown className="ml-1 h-3 w-3" />;
+    if (sort.key !== key) return <ArrowUpDown aria-label="sortable" className="ml-1 h-3 w-3" />;
     return sort.dir === "asc" ? (
-      <ArrowUp className="ml-1 h-3 w-3 text-signal-500" />
+      <ArrowUp aria-label="sorted ascending" className="ml-1 h-3 w-3 text-signal-500" />
     ) : (
-      <ArrowDown className="ml-1 h-3 w-3 text-signal-500" />
+      <ArrowDown aria-label="sorted descending" className="ml-1 h-3 w-3 text-signal-500" />
     );
   };
 
@@ -115,7 +115,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     return (
       <div className="space-y-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 animate-pulse bg-slate-100/50 dark:bg-white/5`} />
+          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 motion-safe:animate-pulse bg-slate-100/50 dark:bg-white/5`} />
         ))}
       </div>
     );
@@ -216,7 +216,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                               type="button"
                               onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
                               aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                              className={`rounded-full p-2 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/5 ${
+                              className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
                                 isExpanded ? "text-signal-500" : "text-slate-400"
                               }`}
                             >
@@ -323,7 +323,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                             type="button"
                             onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
                             aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                            className={`rounded-full p-2 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/5 ${
+                            className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
                               isExpanded ? "text-signal-500" : "text-slate-400"
                             }`}
                           >

@@ -40,8 +40,8 @@ function toggleValue<T extends string>(values: T[], value: T): T[] {
 function buildChipClass(active: boolean, activeClass: string): string {
   return [
     CHIP_CLASS,
-    "inline-flex items-center gap-2 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.16em] transition-all active:scale-[0.98]",
-    active ? activeClass : "text-slate-500 hover:border-black/[0.1] hover:text-slate-900 dark:text-slate-400 dark:hover:text-white",
+    "inline-flex items-center gap-2 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.16em] transition-all motion-safe:active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900",
+    active ? activeClass : "text-slate-500 hover:bg-black/[0.05] hover:border-black/[0.1] hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white",
   ].join(" ");
 }
 
@@ -73,7 +73,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
             type="button"
             onClick={() => onSearchChange("")}
             aria-label="Clear search"
-            className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+            className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
           >
             <X className="h-4 w-4" />
           </button>

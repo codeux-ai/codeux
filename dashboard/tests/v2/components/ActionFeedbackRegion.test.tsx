@@ -25,13 +25,13 @@ describe("ActionFeedbackRegion", () => {
   it("displays the correct message and status", () => {
     render(<ActionFeedbackRegion status="success" message="Saved successfully" />);
     expect(screen.getByText("Saved successfully")).toBeInTheDocument();
-    const region = screen.getByRole("status");
+    const region = screen.getByText(/Saved successfully/).closest("div[role=\"status\"]");
     expect(region).toHaveAttribute("aria-live", "polite");
   });
 
   it("uses assertive aria-live for errors", () => {
     render(<ActionFeedbackRegion status="error" message="Failed to save" />);
-    const region = screen.getByRole("status");
+    const region = screen.getByRole("alert");
     expect(region).toHaveAttribute("aria-live", "assertive");
   });
 
