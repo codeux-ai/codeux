@@ -32,8 +32,8 @@ describe("FieldWrapper", () => {
     expect(screen.getByText("Test Label")).toBeInTheDocument();
   });
 
-  it("wires label, input, and error message with auto-generated id", () => {
-    render(
+  it("wires label, input, and error message with auto-generated id after blur", () => {
+    const { rerender } = render(
       <FieldWrapper label="Email" error="Required">
         <Input />
       </FieldWrapper>
@@ -49,6 +49,19 @@ describe("FieldWrapper", () => {
     expect(htmlFor).not.toBe("");
     expect(htmlFor).not.toBe("undefined");
     expect(htmlFor).toEqual(id);
+
+    // Error is hidden before blur
+    expect(input).not.toHaveAttribute("aria-invalid", "true");
+
+    // Trigger blur to show error
+    input.focus();
+    input.blur();
+
+    rerender(
+      <FieldWrapper label="Email" error="Required">
+        <Input />
+      </FieldWrapper>
+    );
 
     expect(input).toHaveAttribute("aria-invalid", "true");
 
@@ -73,7 +86,7 @@ describe("FieldWrapper", () => {
     expect(input.getAttribute("id")).toBe("my-email");
   });
 
-  it("adds error styling and animations when error is present", async () => {
+  it("adds error styling and animations when error is present and touched", async () => {
     const { container, rerender } = render(
       <FieldWrapper label="Test Label" htmlFor="test-input">
         <input id="test-input" type="text" />
@@ -82,6 +95,10 @@ describe("FieldWrapper", () => {
 
     // No error initially
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    const input = screen.getByRole("textbox");
+    input.focus();
+    input.blur();
 
     // Rerender with error
     rerender(
@@ -96,6 +113,19 @@ describe("FieldWrapper", () => {
     // Verify shake animation exists when error appears
     const parentDiv = container.querySelector('label')?.nextElementSibling;
     expect(parentDiv?.className).toContain("animate-form-shake");
+  });
+
+  it("shows error immediately when forceTouch is true", () => {
+    render(
+      <FieldWrapper label="Test Label" htmlFor="test-input" error="Forced error" forceTouch={true}>
+        <input id="test-input" type="text" />
+      </FieldWrapper>
+    );
+
+    // Error is shown immediately without needing blur
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Forced error");
   });
 
   it("renders helperText and wires aria-describedby correctly", () => {
@@ -114,14 +144,27 @@ describe("FieldWrapper", () => {
     expect(helperElement.getAttribute("id")).toEqual(ariaDescribedby);
   });
 
-  it("hides helperText when error is present", () => {
-    render(
+  it("hides helperText when error is present and touched", () => {
+    const { rerender } = render(
       <FieldWrapper label="Test Label" htmlFor="test-input" helperText="Helper" error="Error msg">
         <Input id="test-input" />
       </FieldWrapper>
     );
 
     const helperElement = screen.getByText("Helper");
+
+    // Trigger blur to show error
+    const input = screen.getByRole("textbox");
+    input.focus();
+    input.blur();
+
+    // Need to trigger a rerender since the touched state update takes effect in the next pass
+    rerender(
+      <FieldWrapper label="Test Label" htmlFor="test-input" helperText="Helper" error="Error msg">
+        <Input id="test-input" />
+      </FieldWrapper>
+    );
+
     const errorElement = screen.getByText("Error msg");
 
     expect(helperElement).toBeInTheDocument();

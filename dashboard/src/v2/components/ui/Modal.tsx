@@ -15,6 +15,7 @@ interface ModalProps {
   ariaLabelledBy?: string;
   ariaDescribedBy?: string;
   initialFocusRef?: { current: HTMLElement | null };
+  titleId?: string;
   /** @deprecated use ariaLabelledBy */
   ariaLabelledby?: string;
   /** @deprecated use ariaDescribedBy */
@@ -31,13 +32,14 @@ export const Modal: FunctionComponent<ModalProps> = ({
   ariaLabelledBy,
   ariaDescribedBy,
   initialFocusRef,
+  titleId,
   ariaLabelledby,
   ariaDescribedby,
 }) => {
   const reducedMotion = useReducedMotion();
   const [shouldRender, setShouldRender] = useState(isOpen);
   const cardRef = useRef<HTMLDivElement>(null);
-  const trapRef = useFocusTrap(isOpen, { onClose, restoreFocus: true, initialFocusRef });
+  const trapRef = useFocusTrap(isOpen && shouldRender, onClose);
 
   useEffect(() => {
     if (isOpen) {
@@ -79,12 +81,12 @@ export const Modal: FunctionComponent<ModalProps> = ({
       <div
         ref={(el) => {
           (cardRef as any).current = el;
-          (trapRef as any).current = el;
+          if (trapRef) (trapRef as any).current = el;
         }}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        aria-labelledby={ariaLabelledBy || ariaLabelledby}
+        aria-labelledby={titleId || ariaLabelledBy || ariaLabelledby}
         aria-describedby={ariaDescribedBy || ariaDescribedby}
         tabIndex={-1}
         className={`relative z-50 bg-white dark:bg-void-800 rounded-[12px] shadow-lg border border-black/[0.06] dark:border-white/[0.06] outline-none max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto ${className}`}

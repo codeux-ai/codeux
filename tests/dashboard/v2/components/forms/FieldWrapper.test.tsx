@@ -26,7 +26,7 @@ describe("FieldWrapper", () => {
     expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
 
-  it("passes helperText, error, and aria attributes properly", () => {
+  it("passes helperText, error, and aria attributes properly", async () => {
     const { rerender, container } = render(
       <FieldWrapper label="Email" helperText="Enter a valid email">
         <input type="text" />
@@ -40,10 +40,9 @@ describe("FieldWrapper", () => {
     expect(helperText).toBeInTheDocument();
 
     const expectedHelperId = helperText.id;
-    const expectedErrorId = `${input?.id}-error`;
 
     expect(input?.getAttribute("aria-describedby")).toBe(expectedHelperId);
-    expect(input?.getAttribute("aria-errormessage")).toBe(expectedErrorId);
+    expect(input?.getAttribute("aria-errormessage")).toBe(null);
     expect(input?.hasAttribute("aria-invalid")).toBe(false);
 
     // Add error
@@ -53,7 +52,20 @@ describe("FieldWrapper", () => {
       </FieldWrapper>
     );
 
-    const inputAfter = container.querySelector('input');
+    let inputAfter = container.querySelector('input');
+
+    // Trigger blur to make error visible
+    inputAfter!.focus();
+    inputAfter!.blur();
+
+    // Re-render again after state update (blur -> touched=true) to apply ARIA correctly from touched state change
+    rerender(
+      <FieldWrapper label="Email" helperText="Enter a valid email" error="Invalid format">
+        <input type="text" />
+      </FieldWrapper>
+    );
+
+    inputAfter = container.querySelector('input');
     const errorText = screen.getByText("Invalid format");
     expect(errorText).toBeInTheDocument();
     expect(inputAfter?.getAttribute("aria-invalid")).toBe("true");
@@ -72,6 +84,17 @@ describe("FieldWrapper", () => {
 
     expect(getShakeContainer()).toBeNull();
 
+    const input = container.querySelector('input');
+    input!.focus();
+    input!.blur();
+
+    // Re-render after state change to lock in touched state
+    rerender(
+      <FieldWrapper label="Email">
+        <input type="text" />
+      </FieldWrapper>
+    );
+
     // Set an error
     rerender(
       <FieldWrapper label="Email" error="First error">
@@ -84,13 +107,27 @@ describe("FieldWrapper", () => {
     // Advance time past the shake timer (400ms)
     vi.advanceTimersByTime(450);
 
+    // We must flush promises to let the state update from setTimeout run
+    await Promise.resolve();
+
+    // Wait for the shake to finish
+    vi.runAllTimers();
+    await Promise.resolve();
+
+    // Verify it stopped shaking
+    expect(getShakeContainer()).toBeNull();
+
+    // Rerender with SAME error should NOT shake
     rerender(
       <FieldWrapper label="Email" error="First error">
         <input type="text" />
       </FieldWrapper>
     );
 
-    // Should NOT shake again because error is the same
+    // Give effect a moment to run if it mistakenly does
+    vi.runAllTimers();
+    await Promise.resolve();
+
     expect(getShakeContainer()).toBeNull();
 
     // Change error message

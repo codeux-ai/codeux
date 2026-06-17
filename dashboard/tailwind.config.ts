@@ -57,12 +57,17 @@ export default {
           "0%": { opacity: "0", transform: "translateY(-4px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        "skeleton-shimmer": {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
       },
       animation: {
         "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         "signal-ping": "ping 2.5s cubic-bezier(0, 0, 0.2, 1) infinite",
         "form-shake": "form-shake 0.3s cubic-bezier(.36,.07,.19,.97) both",
         "form-slide-down": "form-slide-down 0.2s ease-out both",
+        "skeleton-shimmer": "skeleton-shimmer 1.5s ease-in-out infinite",
       },
     },
   },

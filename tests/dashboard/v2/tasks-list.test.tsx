@@ -14,14 +14,19 @@ import gsap from "gsap";
 
 vi.spyOn(useReducedMotionModule, 'useReducedMotion').mockReturnValue(false);
 
-vi.mock("gsap", () => ({
-    default: {
+vi.mock("gsap", () => {
+    const gsapMock = {
         registerPlugin: vi.fn(),
         set: vi.fn(),
         fromTo: vi.fn(),
         to: vi.fn()
-    }
-}));
+    };
+    return {
+        default: gsapMock,
+        gsap: gsapMock,
+        ...gsapMock
+    };
+});
 vi.mock("gsap/Flip", () => ({
     Flip: {
         getState: vi.fn(() => ({})),

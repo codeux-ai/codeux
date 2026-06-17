@@ -10,7 +10,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 
 import { OverviewTelemetry } from "../../../dashboard/src/v2/components/OverviewTelemetry.js";
 import { useOverviewTelemetry } from "../../../dashboard/src/hooks/use-overview-telemetry.js";
-import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
+import { useProjectData, ProjectDataContext } from "../../../dashboard/src/v2/context/project-data.js";
 import type { OverviewTelemetrySnapshot } from "../../../dashboard/src/types.js";
 import * as api from "../../../dashboard/src/lib/api/dashboard-api.js";
 import * as realtime from "../../../dashboard/src/lib/realtime/dashboard-realtime-client.js";
@@ -29,9 +29,8 @@ vi.mock("../../../dashboard/src/hooks/use-overview-telemetry.js", async (importO
 });
 
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
-
-
   useProjectData: vi.fn(),
+  ProjectDataContext: { Provider: ({children}: any) => children, Consumer: ({children}: any) => children } as any
 }));
 
 describe("OverviewTelemetry Component", () => {

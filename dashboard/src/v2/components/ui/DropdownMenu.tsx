@@ -8,6 +8,10 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface DropdownMenuProps {
   children: ComponentChildren;
+  /**
+   * The content of the dropdown menu.
+   * Note: All interactive items within content must have `role="menuitem"` for keyboard navigation to work.
+   */
   content: ComponentChildren;
   position?: Position;
   align?: Alignment;
@@ -91,10 +95,6 @@ export const DropdownMenu = ({
     if (isOpen) {
       setIsRendered(true);
       previousFocusRef.current = document.activeElement as HTMLElement | null;
-      setTimeout(() => {
-        const first = menuRef.current?.querySelector('[role="menuitem"]:not([aria-disabled="true"])') as HTMLElement | null;
-        first?.focus();
-      }, 0);
     } else if (isRendered) { // Only restore if it was previously open
       // Restore focus on close
       if (previousFocusRef.current) {
@@ -145,6 +145,7 @@ export const DropdownMenu = ({
           ease: MOTION_TOKENS.easing.standard,
         }
       );
+      requestAnimationFrame(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
     } else if (isRendered) {
       gsap.to(menuRef.current, {
         opacity: 0,
@@ -186,7 +187,7 @@ export const DropdownMenu = ({
 
       if (!menuRef.current) return;
 
-      const items = Array.from(menuRef.current.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"]), button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')) as HTMLElement[];
+      const items = Array.from(menuRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]')) as HTMLElement[];
       if (items.length === 0) return;
 
       const currentIndex = items.findIndex((item) => item === document.activeElement);
@@ -233,6 +234,14 @@ export const DropdownMenu = ({
         ref={externalTriggerRef ? undefined : localTriggerRef}
         className="inline-flex cursor-pointer"
         onClick={(e) => { e.stopPropagation(); onOpenChange(!isOpen); }}
+        onKeyDown={(e) => {
+          if (!externalTriggerRef && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onOpenChange(!isOpen);
+          }
+        }}
+        tabIndex={!externalTriggerRef ? 0 : undefined}
+        role={!externalTriggerRef ? "button" : undefined}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-controls={isOpen ? menuId : undefined}

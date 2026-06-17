@@ -10,43 +10,63 @@ export interface FieldWrapperProps {
   children: ComponentChildren;
   htmlFor?: string;
   required?: boolean;
+  forceTouch?: boolean;
+  valid?: boolean;
 }
 
-export function FieldWrapper({ label, error, children, htmlFor, required, helperTextId, helperText }: FieldWrapperProps) {
+export function FieldWrapper({ label, error, children, htmlFor, required, helperTextId, helperText, forceTouch, valid }: FieldWrapperProps) {
   const [shake, setShake] = useState(false);
-  const [previousError, setPreviousError] = useState<string | undefined>(undefined);
+  const [touched, setTouched] = useState(false);
+
   const generatedId = useId();
   const inputId = htmlFor ?? generatedId;
-  const errorId = `${inputId}-error`;
+  const showError = (touched || !!forceTouch) && !!error;
+  const errorId = showError ? `${inputId}-error` : undefined;
   const actualHelperId = helperText ? (helperTextId || `${inputId}-helper`) : helperTextId;
 
+  const [previousError, setPreviousError] = useState<string | undefined>(undefined);
+  const [previousShowError, setPreviousShowError] = useState<boolean>(false);
+
   useEffect(() => {
-    if (error && error !== previousError) {
+    let timer: any;
+
+    if (showError && (error !== previousError || !previousShowError)) {
       setShake(true);
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
         setShake(false);
       }, 400); // Must be slightly longer than animation duration
       setPreviousError(error);
-      return () => clearTimeout(timer);
-    } else if (!error && previousError !== undefined) {
-      setPreviousError(undefined);
+      setPreviousShowError(true);
+    } else if (!showError) {
+      if (previousError !== undefined) setPreviousError(undefined);
+      if (previousShowError) setPreviousShowError(false);
     }
-  }, [error]);
+
+    return () => {
+        if (timer) clearTimeout(timer);
+    }
+  }, [showError, error]); // ONLY depend on the current values to avoid re-triggering from state setter delays
 
   // Combine multiple aria-describedby ids if needed
   let ariaDescribedBy: string | undefined = undefined;
-  const ids = [actualHelperId, error ? errorId : undefined].filter(Boolean);
+  const ids = [actualHelperId, showError ? errorId : undefined].filter(Boolean);
   if (ids.length > 0) {
     ariaDescribedBy = ids.join(' ');
   }
 
   // Clone children to append aria attributes if valid
+  const existingOnBlur = (children as any)?.props?.onBlur;
   const child = isValidElement(children) ? cloneElement(children as VNode<any>, {
     id: inputId,
-    "aria-invalid": error ? "true" : undefined,
+    "aria-invalid": showError ? "true" : undefined,
     ...(ariaDescribedBy ? { "aria-describedby": ariaDescribedBy } : {}),
     "aria-errormessage": errorId,
     ...(required ? { "aria-required": true } : {}),
+    onBlur: (e: any) => {
+      setTouched(true);
+      existingOnBlur?.(e);
+    },
+    valid: !error ? valid : undefined,
   }) : children;
 
   return (
@@ -59,19 +79,19 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
       <div
         class={`
           relative rounded-md
-          ${shake ? 'motion-safe:animate-form-shake' : ''}
-          ${error ? 'ring-1 ring-status-red transition-shadow duration-200 ease-in-out' : 'transition-shadow duration-200 ease-in-out'}
+          ${shake && showError ? 'motion-safe:animate-form-shake' : ''}
+          ${showError ? 'ring-1 ring-status-red transition-shadow duration-200 ease-in-out' : 'transition-shadow duration-200 ease-in-out'}
         `}
       >
         <div class={`
           [&_input]:transition-colors [&_input]:duration-200 [&_input]:ease-in-out
           [&_textarea]:transition-colors [&_textarea]:duration-200 [&_textarea]:ease-in-out
-          ${error ? '[&_input]:border-status-red [&_textarea]:border-status-red [&_input]:ring-status-red [&_textarea]:ring-status-red' : ''}
+          ${showError ? '[&_input]:border-status-red [&_textarea]:border-status-red [&_input]:ring-status-red [&_textarea]:ring-status-red' : ''}
         `}>
           {child}
         </div>
       </div>
-      <FormError error={error} id={errorId} helperText={helperText as string} helperId={actualHelperId} />
+      <FormError error={showError ? error : undefined} id={errorId} helperText={helperText as string} helperId={actualHelperId} />
     </div>
   );
 }

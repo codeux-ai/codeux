@@ -1,0 +1,26 @@
+--- dashboard/src/v2/pages/sprints/SprintsPage.tsx
++++ dashboard/src/v2/pages/sprints/SprintsPage.tsx
+@@ -361,7 +361,15 @@
+     });
+   };
+
++  const [testDialogOpen, setTestDialogOpen] = useState(true);
++
+   return (
++    <>
++      <ConfirmDialog
++        isOpen={testDialogOpen}
++        options={{ title: "Test Confirm", body: "This is a test dialog.", confirmLabel: "Submit", cancelLabel: "Dismiss" }}
++        onConfirm={() => new Promise(resolve => setTimeout(resolve, 500))}
++        onCancel={() => setTestDialogOpen(false)}
++      />
+     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
+       {/* Top Row: Quick Filters */}
+       <div className="flex-none p-3 lg:p-4 border-b border-black/[0.06] dark:border-white/[0.06]">
+@@ -998,6 +1006,7 @@
+         onClose={() => setCreateQuicksprintFromId(null)}
+       />
+     </div>
++    </>
+   );
+ };

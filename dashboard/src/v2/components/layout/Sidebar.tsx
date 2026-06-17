@@ -9,6 +9,8 @@ import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-s
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { NavItem } from "./NavItem.js";
 import { useAnimatedActiveIndicator } from "../../lib/motion/index.js";
+import { useGsapDurations } from "../../lib/motion/constants.js";
+import { useLayoutEffect } from "preact/hooks";
 import { RobotLogo } from "../brand/RobotLogo.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 
@@ -42,6 +44,9 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
     const { selectedProject } = useProjectData();
     const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
 
+    const indicatorRef = useRef<HTMLDivElement>(null);
+    const navItemRefs = useRef<(HTMLElement | null)[]>([]);
+
     const [isMinimized, setIsMinimized] = useState(() => {
         if (typeof window !== 'undefined') {
             return localStorage.getItem('codeux:sidebar:minimized') === 'true';
@@ -63,6 +68,27 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
     const matches = useRouterState({ select: (s) => s.matches });
     const currentPath = (matches && matches.length > 0) ? (matches[matches.length - 1]?.pathname || "/") : "/";
     const activeIndex = navItems.findIndex(i => i.path === currentPath);
+    const durations = useGsapDurations();
+
+    useLayoutEffect(() => {
+        const activeElement = navItemRefs.current[activeIndex];
+        if (indicatorRef.current && activeElement) {
+            const offsetTop = activeElement.offsetTop;
+            const offsetHeight = activeElement.offsetHeight;
+            const y = offsetTop + (offsetHeight / 2) - 12;
+            if (!indicatorRef.current.dataset.initialized) {
+                gsap.set(indicatorRef.current, { y, height: 24 });
+                indicatorRef.current.dataset.initialized = "true";
+            } else {
+                gsap.to(indicatorRef.current, {
+                    y,
+                    height: 24,
+                    duration: prefersReducedMotion ? 0 : durations.slow,
+                    ease: "power3.out"
+                });
+            }
+        }
+    }, [activeIndex, isMinimized, prefersReducedMotion, durations]);
 
     const indicator = useAnimatedActiveIndicator(navRef, activeIndex, '[data-nav-item]', 'vertical');
 
@@ -187,13 +213,18 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                     className="absolute left-4 right-4 z-0 rounded-2xl bg-signal-500/[0.10] dark:bg-signal-500/[0.10] pointer-events-none transition-all"
                     style={indicator.style as any}
                 >
-                    {/* Vertical Accent Indicator inside the sliding block */}
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-1 bg-signal-500 rounded-r-full shadow-[0_0_8px_rgba(0,224,160,0.6)]" />
                 </div>
+                {/* Shared Vertical Indicator */}
+                <div
+                    ref={indicatorRef}
+                    className="absolute left-0 w-0.5 bg-signal-500 rounded-r-full pointer-events-none z-10"
+                    style={{ height: "24px" }}
+                />
 
                 {navItems.map((item, idx) => (
                     <NavItem
                         key={item.label}
+                        elementRef={(el) => { navItemRefs.current[idx] = el as HTMLElement | null; }}
                         item={item}
                         isActive={activeIndex === idx}
                         isMinimized={isMinimized}

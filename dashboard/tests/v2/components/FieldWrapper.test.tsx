@@ -19,8 +19,8 @@ describe("FieldWrapper Accessibility", () => {
     expect(input?.getAttribute("aria-required")).toBe("true");
   });
 
-  it("links error message stably and supports helperTextId", () => {
-    const { container, getByText } = render(
+  it("links error message stably and supports helperTextId", async () => {
+    const { container, getByText, rerender } = render(
       <FieldWrapper label="Test" error="Invalid input" helperTextId="helper-123">
         <Input />
       </FieldWrapper>
@@ -28,6 +28,15 @@ describe("FieldWrapper Accessibility", () => {
 
     const input = container.querySelector("input");
     expect(input).not.toBeNull();
+
+    input!.focus();
+    input!.blur();
+
+    rerender(
+      <FieldWrapper label="Test" error="Invalid input" helperTextId="helper-123">
+        <Input />
+      </FieldWrapper>
+    );
 
     const inputId = input!.getAttribute("id");
     expect(inputId).toBeTruthy();
@@ -66,6 +75,6 @@ describe("FieldWrapper Accessibility", () => {
 
     const input = container.querySelector("input");
     expect(input?.getAttribute("aria-describedby")).toContain("helper-123");
-    expect(input?.getAttribute("aria-errormessage")).toBeTruthy();
+    expect(input?.getAttribute("aria-errormessage")).toBeFalsy();
   });
 });

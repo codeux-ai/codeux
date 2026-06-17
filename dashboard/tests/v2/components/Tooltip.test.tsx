@@ -22,3 +22,43 @@ describe("Tooltip", () => {
     expect(container.firstElementChild).toHaveClass("w-full");
   });
 });
+
+it("maintains a stable tooltip ID across re-renders", async () => {
+  const { waitFor } = await import("@testing-library/preact");
+  const userEvent = (await import("@testing-library/user-event")).default;
+  const user = userEvent.setup();
+  const { useState } = await import("preact/hooks");
+
+  const TestComponent = () => {
+    const [count, setCount] = useState(0);
+    return (
+      <div>
+        <button type="button" onClick={() => setCount(c => c + 1)}>Increment: {count}</button>
+        <Tooltip content="Stable content" delay={0}>
+          <span data-testid="trigger">Hover me</span>
+        </Tooltip>
+      </div>
+    );
+  };
+
+  const { getByText, getByTestId } = render(<TestComponent />);
+
+  const trigger = getByTestId("trigger");
+  await user.hover(trigger);
+
+  const wrapper = trigger.parentElement;
+
+  await waitFor(() => {
+    expect(wrapper?.getAttribute("aria-describedby")).toBeTruthy();
+  });
+
+  const tooltipId = wrapper?.getAttribute("aria-describedby");
+  expect(document.getElementById(tooltipId!)).toBeInTheDocument();
+
+  const incrementButton = getByText(/Increment: 0/);
+  await user.click(incrementButton);
+
+  // Re-verify the ID matches and component is still rendering properly
+  expect(wrapper?.getAttribute("aria-describedby")).toBe(tooltipId);
+  expect(document.getElementById(tooltipId!)).toBeInTheDocument();
+});
