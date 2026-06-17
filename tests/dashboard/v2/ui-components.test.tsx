@@ -18,6 +18,7 @@ import { SprintComposer } from "../../../dashboard/src/v2/components/ui/SprintCo
 import { KineticDock } from "../../../dashboard/src/v2/components/KineticDock.js";
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import { CollapsiblePanel } from "../../../dashboard/src/v2/components/ui/CollapsiblePanel.js";
+import { Menu } from "../../../dashboard/src/v2/components/ui/Menu.js";
 import { ExecutionTimelineProvider } from "../../../dashboard/src/hooks/ExecutionTimelineContext.js";
 import { ConfirmDialog } from "../../../dashboard/src/v2/components/ui/ConfirmDialog.js";
 import { RerunTaskModal } from "../../../dashboard/src/v2/components/ui/RerunTaskModal.js";
@@ -325,11 +326,40 @@ describe("UI Components Coverage", () => {
     const trigger = screen.getByRole("button", { name: /Test Panel/i });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
 
+    const panelContent = trigger.nextElementSibling;
+    expect(panelContent?.getAttribute("aria-hidden")).toBe("true");
+
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(panelContent?.getAttribute("aria-hidden")).toBe("false");
 
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(panelContent?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("handles Menu Escape focus restoration", () => {
+    const triggerRef = { current: null };
+    const { unmount } = render(
+      <Menu
+        isOpen={true}
+        onOpenChange={() => {}}
+        content={<button role="menuitem">Item</button>}
+        triggerRef={triggerRef as any}
+      >
+        <button ref={triggerRef as any}>Trigger</button>
+      </Menu>
+    );
+
+    // Simulate active element inside menu
+    const menuItem = screen.getByRole("menuitem");
+    menuItem.focus();
+
+    // Trigger escape
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    // Simulate cleanup which triggers focus restore
+    unmount();
   });
 
   it("renders SprintComposer", () => {

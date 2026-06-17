@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { Overlay } from "./Overlay.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface ModalProps {
   isOpen: boolean;
@@ -44,25 +45,25 @@ export const Modal: FunctionComponent<ModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
-      const duration = reducedMotion ? 0 : 0.2;
+      const duration = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
 
       // Delay slightly to ensure ref is populated before animating
       requestAnimationFrame(() => {
         if (cardRef.current) {
           gsap.fromTo(cardRef.current,
             { opacity: 0, scale: 0.95 },
-            { opacity: 1, scale: 1, duration, ease: "power2.out" }
+            { opacity: 1, scale: 1, duration, ease: MODAL_MOTION.entry.ease }
           );
         }
       });
     } else {
-      const duration = reducedMotion ? 0 : 0.15;
+      const duration = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
       if (cardRef.current) {
         gsap.to(cardRef.current, {
           opacity: 0,
           scale: 0.95,
           duration,
-          ease: "power2.in",
+          ease: MODAL_MOTION.exit.ease,
           onComplete: () => {
             setShouldRender(false);
           }

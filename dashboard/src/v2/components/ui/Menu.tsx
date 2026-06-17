@@ -64,11 +64,17 @@ export const Menu = ({
       }, 0);
     } else if (isRendered) { // Only restore if it was previously open
       // Restore focus on close
-      if (previousFocusRef.current) {
-        previousFocusRef.current.focus();
-        previousFocusRef.current = null;
-      } else if (triggerRef.current) {
-        triggerRef.current.focus();
+      if (
+        !document.activeElement ||
+        document.activeElement === document.body ||
+        (menuRef.current && menuRef.current.contains(document.activeElement))
+      ) {
+        if (previousFocusRef.current?.isConnected) {
+          previousFocusRef.current.focus();
+          previousFocusRef.current = null;
+        } else if (triggerRef.current?.isConnected) {
+          triggerRef.current.focus();
+        }
       }
     }
   }, [isOpen]);
@@ -140,12 +146,6 @@ export const Menu = ({
 
       if (e.key === "Escape") {
         onOpenChange(false);
-        if (previousFocusRef.current) {
-          previousFocusRef.current.focus();
-          previousFocusRef.current = null;
-        } else if (triggerRef.current) {
-          triggerRef.current.focus();
-        }
         return;
       }
 

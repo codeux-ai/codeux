@@ -65,11 +65,17 @@ export const Popover = ({
     } else if (isRendered) { // Only restore if it was previously open
       // Restore focus on close
       if (!isTooltip) {
-        if (previousFocusRef.current) {
-          previousFocusRef.current.focus();
-          previousFocusRef.current = null;
-        } else if (triggerRef.current) {
-          triggerRef.current.focus();
+        if (
+          !document.activeElement ||
+          document.activeElement === document.body ||
+          (popoverRef.current && popoverRef.current.contains(document.activeElement))
+        ) {
+          if (previousFocusRef.current?.isConnected) {
+            previousFocusRef.current.focus();
+            previousFocusRef.current = null;
+          } else if (triggerRef.current?.isConnected) {
+            triggerRef.current.focus();
+          }
         }
       }
     }
@@ -144,14 +150,6 @@ export const Popover = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
         onOpenChange(false);
-        if (!isTooltip) {
-        if (previousFocusRef.current) {
-          previousFocusRef.current.focus();
-          previousFocusRef.current = null;
-        } else if (triggerRef.current) {
-          triggerRef.current.focus();
-        }
-      }
       }
     };
 
