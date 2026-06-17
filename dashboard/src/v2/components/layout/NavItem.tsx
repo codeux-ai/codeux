@@ -18,6 +18,7 @@ interface NavItemProps {
 export const NavItem: FunctionComponent<NavItemProps> = ({ item, isActive, isMinimized, isMobile, onClose, elementRef }) => {
     return (
         <Link
+            aria-label={isMinimized && !isMobile ? item.label : undefined}
             ref={elementRef}
             to={item.path}
             onClick={isMobile ? onClose : undefined}
@@ -42,7 +43,7 @@ export const NavItem: FunctionComponent<NavItemProps> = ({ item, isActive, isMin
 
             {/* Award Winning Tooltip for Minimized State */}
             {isMinimized && !isMobile && (
-                <div className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold tracking-wide rounded-lg opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none shadow-xl z-[100] whitespace-nowrap flex items-center gap-2">
+                <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold tracking-wide rounded-lg opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none shadow-xl z-[100] whitespace-nowrap flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-signal-500/80 shadow-[0_0_6px_rgba(0,224,160,0.6)]"></span>
                     {item.label}
                 </div>
