@@ -545,6 +545,11 @@ describe("Chat Message Bubbles", () => {
       expect(getByText("TestWorker is preparing a reply")).toBeInTheDocument();
     });
 
+    it("renders the starting phase label when phase is starting", () => {
+      const { getByText } = render(<WorkingBubble displayName="TestWorker" runtimeState={null} phase="starting" />);
+      expect(getByText("Starting")).toBeInTheDocument();
+    });
+
     it("renders an animated planning widget when routeKind is virtual", () => {
       const runtimeState: ConversationRuntimeState = {
         routeKind: "virtual"

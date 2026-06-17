@@ -61,7 +61,7 @@ describe("ChatPageShell", () => {
   });
 
   it("renders thread mode with rail and detail slots", () => {
-    const { getByTestId, getByText, queryAllByText } = render(
+    const { container, getByTestId, getByText, queryAllByText } = render(
       <ChatPageShell
         selectedProject={mockProject}
         chatMode="threads"
@@ -86,6 +86,8 @@ describe("ChatPageShell", () => {
     expect(getByTestId("thread-list")).toBeInTheDocument();
     expect(getByTestId("thread-detail")).toBeInTheDocument();
     expect(getByText("2 pending")).toBeInTheDocument();
+    // Verify animated ping element is present for pending messages
+    expect(container.querySelector('.animate-ping')).toBeInTheDocument();
     expect(getByText("Local Worker · idle")).toBeInTheDocument();
   });
 

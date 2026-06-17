@@ -7,9 +7,10 @@ import { ChatAvatar, type AvatarRole } from "./ChatAvatar.js";
 export interface WorkingBubbleProps {
   displayName: string | null;
   runtimeState?: ConversationRuntimeState | null;
+  phase?: "starting" | "working" | null;
 }
 
-export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayName, runtimeState }) => {
+export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayName, runtimeState, phase }) => {
   const data = getWorkingBubbleData(runtimeState);
 
   let role: AvatarRole = "agent";
@@ -33,8 +34,10 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
               <div className="flex items-center gap-2">
                 <span className="text-[13px] font-medium text-slate-700 dark:text-slate-300">
                   {displayName || "Listener"} is preparing a reply
-                  <span className="ml-2 inline-flex items-center rounded-md border border-signal-500/30 bg-signal-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-signal-500">
-                    Pending Reply
+                  <span className={`ml-2 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                    phase === "starting" ? "border-slate-500/30 bg-slate-500/10 text-slate-500" : "border-signal-500/30 bg-signal-500/10 text-signal-500"
+                  }`}>
+                    {phase === "starting" ? "Starting" : "Working"}
                   </span>
                 </span>
                 <span className="flex items-center gap-1 ml-1">

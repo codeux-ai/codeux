@@ -45,9 +45,10 @@ export const ThreadListCard: FunctionComponent<{
             className={`w-full rounded-[1.75rem] p-5 pr-16 text-left transition-all duration-200
               bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl
               shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500
               ${isSelected
                 ? "border-2 border-signal-500/30 shadow-[0_0_24px_rgba(0,224,160,0.08)]"
-                : "border-2 border-black/[0.06] dark:border-white/[0.06] hover:border-slate-300 dark:hover:border-white/[0.12]"
+                : "border-2 border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
               }`}
           >
             {/* Ghost ID watermark */}
@@ -131,7 +132,7 @@ export const ThreadListCard: FunctionComponent<{
             }}
             disabled={deletingThreadId === thread.id}
             aria-label={`Delete ${thread.title}`}
-            className="absolute inset-y-0 right-0 flex w-14 translate-x-full items-center justify-center rounded-r-[1.75rem] border-l border-status-red/15 bg-status-red/10 text-status-red opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 disabled:translate-x-0 disabled:opacity-100"
+            className={`absolute inset-y-0 right-0 flex w-14 translate-x-full items-center justify-center rounded-r-[1.75rem] border-l border-status-red/15 bg-status-red/10 text-status-red opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 ${deletingThreadId === thread.id ? "translate-x-0 opacity-100 cursor-wait" : ""}`}
           >
             {deletingThreadId === thread.id
               ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.1} />

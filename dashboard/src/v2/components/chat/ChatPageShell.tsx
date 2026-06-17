@@ -98,11 +98,17 @@ export const ChatPageShell: FunctionComponent<{
               <span className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
                 {activeConnectionLabel || "Unassigned"}
               </span>
-              <span className={`rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
+              <span className={`flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
                 pendingDashboardMessages > 0
                   ? "border-status-amber/30 bg-status-amber/10 text-status-amber"
                   : "border-signal-500/20 bg-signal-500/10 text-signal-500"
               }`}>
+                {pendingDashboardMessages > 0 && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-amber opacity-75"></span>
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-status-amber"></span>
+                  </span>
+                )}
                 {pendingDashboardMessages > 0 ? `${pendingDashboardMessages} pending` : "Inbox clear"}
               </span>
             </>

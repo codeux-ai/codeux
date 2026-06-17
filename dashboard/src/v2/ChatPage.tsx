@@ -292,7 +292,7 @@ export const ChatPage: FunctionComponent = () => {
                     agentName={activeConnection?.displayName || null}
                   />
                 ) : hasWorkingReply && workingTimerPhase === "working" ? (
-                  <WorkingBubble displayName={activeConnection?.displayName || null} runtimeState={selectedThread?.runtimeState} />
+                  <WorkingBubble displayName={activeConnection?.displayName || null} runtimeState={selectedThread?.runtimeState} phase={workingTimerPhase} />
                 ) : null}
               </>
             )}
@@ -332,7 +332,13 @@ export const ChatPage: FunctionComponent = () => {
                   type="button"
                   onClick={() => void handleSend()}
                   disabled={!selectedProject || !input.trim() || sending}
-                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-black/[0.06] disabled:text-slate-400 disabled:shadow-none dark:disabled:bg-white/[0.06] self-end sm:self-auto"
+                  className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] transition-all self-end sm:self-auto ${
+                    !selectedProject || !input.trim()
+                      ? "cursor-not-allowed bg-black/[0.06] text-slate-400 shadow-none dark:bg-white/[0.06]"
+                      : sending
+                        ? "cursor-wait bg-signal-500/50 text-void-900 shadow-none"
+                        : "bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400"
+                  }`}
                 >
                   {sending ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} /> : <ArrowUp className="h-4 w-4" strokeWidth={2.5} />}
                 </button>
