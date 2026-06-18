@@ -56,3 +56,6 @@ The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned 
 
 9. **Automation Handoff Consistency:**
    When orchestration automatically approves a plan, answers a clarification, or resumes a paused task, the execution tables are updated immediately to clear the prior blocked/error dispatch state for that task run. This prevents stale "action required" warnings from surviving on Live task cards after automation has already taken ownership of the handoff.
+
+10. **Cache TTLs and Invalidation Policies:**
+    To guarantee real-time latency budgets, portions of the snapshot are aggressively cached by the `DashboardSnapshotCache`. Cache policies (TTLs and invalidation keys) are explicitly defined in `src/app/lifecycle/dashboard-snapshot-cache-policy.ts`. Current baseline TTLs are 500ms for global telemetry and 2s for project-level stats and execution snapshots. Cached snapshots are immutable to ensure safe concurrent reads without deep cloning.
