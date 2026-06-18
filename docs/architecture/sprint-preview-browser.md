@@ -187,3 +187,10 @@ Current intentional limits:
 - one persisted preview session row per project+sprint pair
 - preview host routing assumes projects use relative URLs or origin-derived absolute URLs for API/websocket traffic
 - script detection prefers production-style preview/start commands and does not automatically fall back to `dev`
+
+## File Browser Limits and Policy
+
+To harden against large repository scans, the file browser implements several limits:
+- **MAX_TREE_ENTRIES (20,000):** Limits the number of file nodes returned by the `getTree` operation.
+- **MAX_FILE_BYTES (2MB):** Caps the maximum size of a file read by `readFile` or diff generation.
+- **Pruned Directories:** Directories like `node_modules`, `.git`, `dist`, `build` are pruned at scan time to prevent unbounded tree generation and expensive reads.

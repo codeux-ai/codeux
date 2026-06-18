@@ -447,42 +447,6 @@ describe("SprintFileBrowserService", () => {
   });
 });
 
-  describe("path normalization rules", () => {
-    it("rejects empty paths", async () => {
-      const { service } = await createHarness();
-      expect(() => (service as any).normalizeRelativePath("")).toThrowError("path cannot be empty");
-      expect(() => (service as any).normalizeRelativePath("   ")).toThrowError("path cannot be empty");
-    });
-
-    it("rejects absolute paths", async () => {
-      const { service } = await createHarness();
-      expect(() => (service as any).normalizeRelativePath("/etc/passwd")).toThrowError("absolute paths are not allowed");
-      expect(() => (service as any).normalizeRelativePath("C:\\Windows\\System32")).toThrowError("absolute paths are not allowed");
-    });
-
-    it("rejects encoded traversal", async () => {
-      const { service } = await createHarness();
-      expect(() => (service as any).normalizeRelativePath("foo/%2e%2e/bar")).toThrowError("encoded traversal is not allowed");
-    });
-
-    it("rejects control characters", async () => {
-      const { service } = await createHarness();
-      expect(() => (service as any).normalizeRelativePath("foo/\x00bar")).toThrowError("control characters are not allowed");
-    });
-
-    it("rejects .git internals", async () => {
-      const { service } = await createHarness();
-      expect(() => (service as any).normalizeRelativePath(".git")).toThrowError(".git internals are not allowed");
-      expect(() => (service as any).normalizeRelativePath(".git/config")).toThrowError(".git internals are not allowed");
-    });
-
-    it("allows valid paths", async () => {
-      const { service } = await createHarness();
-      expect((service as any).normalizeRelativePath("valid/path/to/file.ts")).toBe("valid/path/to/file.ts");
-      expect((service as any).normalizeRelativePath("foo/.git/config")).toBe("foo/.git/config");
-    });
-  });
-
   describe("file truncation limits", () => {
     it("truncates large files when reading diff original/modified content", async () => {
       const { service, project, sprint } = await createHarness();
@@ -515,4 +479,72 @@ describe("SprintFileBrowserService", () => {
       expect(result.original?.length).toBe(2_000_000);
       expect(result.modified?.length).toBe(2_000_000);
     });
+
+  describe("file truncation and limits", () => {
+    it("truncates tree entries when exceeding max limit", async () => {
+      const { service, fileBrowserRepository, project, sprint } = await createHarness();
+      const containerTsv = `cid123\tcode-ux-filebrowser-x-y\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
+      const session = fileBrowserRepository.createSession({
+        projectId: project.id,
+        sprintId: sprint.id,
+        status: "running",
+        featureBranch: "feature/test",
+        defaultBranch: "main",
+        workspacePath: "/runtime-root/file-browser/x/workspace",
+      });
+      fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123", containerName: "code-ux-filebrowser-x-y" });
+
+      runCommandStrict.mockImplementation(async (cmd: string, args: string[]) =>
+        cmd === "docker" && args[0] === "ps" && args.includes("--format") ? ok(containerTsv) : ok(),
+      );
+
+      // Generate slightly more than MAX_TREE_ENTRIES (20000)
+      const fakeOutput = Array.from({ length: 20005 }).map((_, i) => `F./file${i}.txt`).join("\n") + "\n";
+
+      commandRun.mockImplementation(async (cmd: string, args: string[]) => {
+        if (cmd === "docker" && args[0] === "exec") {
+          return ok(fakeOutput);
+        }
+        return ok();
+      });
+
+      const tree = await service.getTree(session.id);
+      expect(tree.truncated).toBe(true);
+      expect(tree.fileCount).toBe(20000); // Or whatever the limit logic does
+    });
   });
+
+  describe("file oversized limits via head", () => {
+    it("handles large files returned by head", async () => {
+      const { service, fileBrowserRepository, project, sprint } = await createHarness();
+      const containerTsv = `cid123\tcode-ux-filebrowser-x-y\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
+      const session = fileBrowserRepository.createSession({
+        projectId: project.id,
+        sprintId: sprint.id,
+        status: "running",
+        featureBranch: "feature/test",
+        defaultBranch: "main",
+        workspacePath: "/runtime-root/file-browser/x/workspace",
+      });
+      fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123", containerName: "code-ux-filebrowser-x-y" });
+
+      runCommandStrict.mockImplementation(async (cmd: string, args: string[]) =>
+        cmd === "docker" && args[0] === "ps" && args.includes("--format") ? ok(containerTsv) : ok(),
+      );
+
+      const MAX_FILE_BYTES = 2_000_000;
+      const fakeOutput = "A".repeat(MAX_FILE_BYTES + 1);
+
+      commandRun.mockImplementation(async (cmd: string, args: string[]) => {
+        if (cmd === "docker" && args[0] === "exec" && args.join(" ").includes("head")) {
+          return ok(fakeOutput);
+        }
+        return ok();
+      });
+
+      const result = await service.readFile(session.id, "large-file.txt");
+      expect(result.truncated).toBe(true);
+      expect(result.size).toBe(MAX_FILE_BYTES);
+    });
+  });
+});

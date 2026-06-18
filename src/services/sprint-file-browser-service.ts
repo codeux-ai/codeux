@@ -24,27 +24,11 @@ import type { Logger } from "../shared/logging/logger.js";
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { resolveLanguageForPath } from "./file-browser-language.js";
+import { MAX_TREE_ENTRIES, MAX_FILE_BYTES, PRUNED_DIRECTORIES, normalizeAndValidatePath, isPrunedPath } from "./file-browser-scan-policy.js";
 
 const FILE_BROWSER_LABEL = "code-ux.file-browser=true";
 const FILE_BROWSER_IMAGE = "alpine:3.20";
 const CONTAINER_WORKSPACE_PATH = "/workspace";
-const MAX_TREE_ENTRIES = 20_000;
-const MAX_FILE_BYTES = 2_000_000;
-const PRUNED_DIRECTORIES = [
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  "out",
-  ".next",
-  ".nuxt",
-  "coverage",
-  ".turbo",
-  ".cache",
-  ".vite",
-  ".svelte-kit",
-  "vendor",
-];
 
 interface SprintFileBrowserServiceDeps {
   sprintFileBrowserRepository: SprintFileBrowserRepository;
@@ -255,9 +239,9 @@ export class SprintFileBrowserService {
 
   async readFile(sessionId: string, requestedPath: string): Promise<FileBrowserFileContent> {
     const session = await this.requireRunningSession(sessionId);
-    const relPath = this.normalizeRelativePath(requestedPath);
+    const relPath = normalizeAndValidatePath(requestedPath);
 
-    if (PRUNED_DIRECTORIES.some(pruned => relPath === pruned || relPath.startsWith(pruned + "/"))) {
+    if (isPrunedPath(relPath)) {
        throw new Error(`Invalid file path: ${relPath} is within a pruned directory`);
     }
 
@@ -340,7 +324,7 @@ export class SprintFileBrowserService {
     const featureBranch = session.featureBranch?.trim() || this.resolveSprintFeatureBranch(session.projectId, session.sprintId);
     const defaultBranch = session.defaultBranch?.trim() || project.defaultBranch?.trim() || "main";
     const settings = this.resolveSettings(session.projectId, session.sprintId);
-    const relPath = this.normalizeRelativePath(requestedPath);
+    const relPath = normalizeAndValidatePath(requestedPath);
 
     await this.fetchOrigin(project.baseDir, settings.git.githubMode === "REMOTE", {
       githubToken: settings.git.githubToken,
@@ -658,8 +642,8 @@ export class SprintFileBrowserService {
       return { content: null, truncated: false };
     }
 
-    const normalizedPath = this.normalizeRelativePath(filePath);
-    if (PRUNED_DIRECTORIES.some(pruned => normalizedPath === pruned || normalizedPath.startsWith(pruned + "/"))) {
+    const normalizedPath = normalizeAndValidatePath(filePath);
+    if (isPrunedPath(normalizedPath)) {
        throw new Error(`Invalid file path: ${filePath} is within a pruned directory`);
     }
 
@@ -895,40 +879,6 @@ export class SprintFileBrowserService {
       container.id === session.containerId
       || (session.containerName ? container.name === session.containerName : false),
     ) || null;
-  }
-
-  private normalizeRelativePath(requestedPath: string): string {
-    const trimmed = (requestedPath || "").trim().replace(/\\/g, "/");
-
-    if (!trimmed) {
-      throw new Error(`Invalid file path: path cannot be empty`);
-    }
-
-    const decoded = decodeURIComponent(trimmed);
-    if (decoded.includes("../") || decoded.includes("..\\") || decoded === "..") {
-      throw new Error(`Invalid file path: encoded traversal is not allowed`);
-    }
-
-    if (/^[a-zA-Z]:[\\\/]/.test(trimmed) || trimmed.startsWith("/")) {
-      throw new Error(`Invalid file path: absolute paths are not allowed`);
-    }
-
-    if (/[\x00-\x1F\x7F]/.test(trimmed)) {
-      throw new Error(`Invalid file path: control characters are not allowed`);
-    }
-
-    const withoutLeading = trimmed.replace(/^\.\//, "").replace(/^\/+/, "");
-    const normalized = pathPosix.normalize(withoutLeading);
-
-    if (!normalized || normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.includes("../")) {
-      throw new Error(`Invalid file path: ${requestedPath}`);
-    }
-
-    if (normalized === ".git" || normalized.startsWith(".git/")) {
-      throw new Error(`Invalid file path: .git internals are not allowed`);
-    }
-
-    return normalized;
   }
 
   private shellQuote(value: string): string {
