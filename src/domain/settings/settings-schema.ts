@@ -296,6 +296,7 @@ const validateCiIntelligence = (
   if (typeof value.enableLivePrMonitoring !== "boolean") issues.push({ path: `${path}.enableLivePrMonitoring`, message: "Expected a boolean" });
   if (typeof value.resolveAllCommentsBeforeMainMerge !== "boolean") issues.push({ path: `${path}.resolveAllCommentsBeforeMainMerge`, message: "Expected a boolean" });
   if (typeof value.resolveMainMergeConflicts !== "boolean") issues.push({ path: `${path}.resolveMainMergeConflicts`, message: "Expected a boolean" });
+  if (typeof value.resolveMainMergeFailedChecks !== "boolean") issues.push({ path: `${path}.resolveMainMergeFailedChecks`, message: "Expected a boolean" });
   if (typeof value.resolveAllCommentsBeforeFeatureMerge !== "boolean") issues.push({ path: `${path}.resolveAllCommentsBeforeFeatureMerge`, message: "Expected a boolean" });
   if (typeof value.resolveMergeConflicts !== "boolean") issues.push({ path: `${path}.resolveMergeConflicts`, message: "Expected a boolean" });
   if (typeof value.waitForJulesCiAutofix !== "boolean") issues.push({ path: `${path}.waitForJulesCiAutofix`, message: "Expected a boolean" });

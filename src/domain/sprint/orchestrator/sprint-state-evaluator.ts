@@ -8,12 +8,13 @@ export function isMainMergeAttentionItem(item: {
 }): boolean {
   const payload = item.payload || {};
   const isMainMergeConflict = item.attentionType === "merge_conflict" && payload.mergeStage === "main";
-  const isMainMergeConflictHandoff = (
+  const isMainMergeCiFix = item.attentionType === "ci_fix_required" && payload.mergeStage === "main";
+  const isMainMergeHandoff = (
     (item.attentionType === "human_escalation_required" || item.attentionType === "dashboard_reply_required")
-    && payload.sourceAttentionType === "merge_conflict"
+    && (payload.sourceAttentionType === "merge_conflict" || payload.sourceAttentionType === "ci_fix_required")
     && payload.mergeStage === "main"
   );
-  return isMainMergeConflict || isMainMergeConflictHandoff;
+  return isMainMergeConflict || isMainMergeCiFix || isMainMergeHandoff;
 }
 
 export function partitionSubtasksByStatus(subtasks: Subtask[]) {

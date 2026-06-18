@@ -1819,6 +1819,88 @@ describe("Watch Loop Policies", () => {
       expect(decision?.terminalState).toBe("paused");
     });
 
+    it("waits (does not pause) when a worker-owned ci_fix item is handling failing main-merge checks", () => {
+      // Auto-remediation: a worker is fixing the failing CI on the feature branch,
+      // so the sprint should stay alive rather than pause for a human.
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Failing checks",
+          state: "failed_checks",
+          prNumber: 7,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "UNSTABLE",
+          hasFailedChecks: true,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: ["Dashboard Tests"],
+        },
+        attentionItems: [{
+          id: "item-cifix-1",
+          attentionType: "ci_fix_required",
+          ownerType: "worker",
+        }],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision?.status).toBe("wait");
+      expect(decision?.terminalState).toBeUndefined();
+    });
+
+    it("pauses on failing main-merge checks when no worker is remediating", () => {
+      // With remediation disabled (or unable to open a worker item) the sprint
+      // still pauses for a human — the safe fallback.
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Failing checks",
+          state: "failed_checks",
+          prNumber: 7,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "UNSTABLE",
+          hasFailedChecks: true,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: ["Security Audit"],
+        },
+        attentionItems: [],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision?.status).toBe("exit");
+      expect(decision?.terminalState).toBe("paused");
+      expect(decision?.pauseReason).toBe("main_merge_blocked");
+    });
+
+    it("pauses once a worker escalates a failing main-merge check to a human", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Failing checks",
+          state: "failed_checks",
+          prNumber: 7,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "UNSTABLE",
+          hasFailedChecks: true,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: ["Dashboard Tests"],
+        },
+        attentionItems: [{
+          id: "item-cifix-escalated",
+          attentionType: "human_escalation_required",
+          ownerType: "human",
+        }],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision?.status).toBe("exit");
+      expect(decision?.terminalState).toBe("paused");
+    });
+
     it("returns wait decision if main merge mode is WHEN_GREEN and state is pending_checks", () => {
       const decision = decideMainMergeWaitOrPause({
         mergeFeedback: {

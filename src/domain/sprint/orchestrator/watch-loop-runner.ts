@@ -516,10 +516,69 @@ export class WatchLoopRunner {
             },
           })]);
         } else if (ciIntelligence.resolveMainMergeConflicts && !mergeFeedback.hasMergeConflict) {
-          resolveMainMergeConflictAttentionItems(
+          resolveMainMergeAttentionItems(
             this.deps.projectAttentionService,
             scopedExecutionContext.project.id,
             sprintRunId,
+            {
+              kinds: ["merge_conflict"],
+              reason: "main_merge_conflict_cleared",
+              note: "Resolved automatically because the main branch merge conflict no longer exists.",
+            },
+          );
+        }
+        // Failing CI checks on the final feature→default merge PR: dispatch a worker
+        // to fix them (bounded by the ci_fix guardrail) rather than pausing for a human.
+        // The worker escalates to a human once it exhausts its attempts.
+        if (
+          ciIntelligence.resolveMainMergeFailedChecks
+          && mergeFeedback.state === "failed_checks"
+          && mergeFeedback.hasFailedChecks
+          && activeMainMergeAttentionItems.length === 0
+        ) {
+          this.deps.projectAttentionService.openItems([buildTaskAttentionPayload({
+            projectId: scopedExecutionContext.project.id,
+            sprintId: scopedExecutionContext.sprint.id,
+            sprintRunId,
+            attentionType: "ci_fix_required",
+            severity: "high",
+            ownerType: "worker",
+            title: `Main merge CI failing for ${scopedExecutionContext.sprint.name}`,
+            summaryMarkdown: buildMainMergeCiFixSummary({
+              featureBranch: defaultFeatureBranch,
+              defaultBranch,
+              prNumber: mergeFeedback.prNumber,
+              prUrl: mergeFeedback.prUrl,
+              failedChecks: mergeFeedback.failedChecks,
+              mergedTaskContexts: selectMergedTaskContexts(subtasks, { limit: 8 }),
+            }),
+            payload: {
+              repoPath,
+              workingDirectoryHint: `cd ${repoPath}`,
+              workerBranch: defaultFeatureBranch,
+              branchName: defaultFeatureBranch,
+              featureBranch: defaultBranch,
+              defaultBranch,
+              mergeStage: "main",
+              prNumber: mergeFeedback.prNumber,
+              prUrl: mergeFeedback.prUrl,
+              mergeStateStatus: mergeFeedback.mergeStateStatus,
+              failedChecks: mergeFeedback.failedChecks,
+              sprintNumber: scopedExecutionContext.sprintNumber,
+              sprintName: scopedExecutionContext.sprint.name,
+              featureBranchTaskContexts: selectMergedTaskContexts(subtasks, { limit: 8 }),
+            },
+          })]);
+        } else if (ciIntelligence.resolveMainMergeFailedChecks && !mergeFeedback.hasFailedChecks) {
+          resolveMainMergeAttentionItems(
+            this.deps.projectAttentionService,
+            scopedExecutionContext.project.id,
+            sprintRunId,
+            {
+              kinds: ["ci_fix_required"],
+              reason: "main_merge_checks_passed",
+              note: "Resolved automatically because the main branch merge checks are no longer failing.",
+            },
           );
         }
         const remainingMainMergeAttentionItems = collectActiveMainMergeAttentionItems(
@@ -576,10 +635,15 @@ export class WatchLoopRunner {
 
           if (mainMerge.ok) {
             report += `- ✅ **Merged locally:** Sprint feature branch \`${defaultFeatureBranch}\` merged into default branch \`${defaultBranch}\`.\n`;
-            resolveMainMergeConflictAttentionItems(
+            resolveMainMergeAttentionItems(
               this.deps.projectAttentionService,
               scopedExecutionContext.project.id,
               sprintRunId,
+              {
+                kinds: ["merge_conflict", "ci_fix_required"],
+                reason: "main_merge_completed",
+                note: "Resolved automatically because the feature branch merged into the default branch.",
+              },
             );
           } else {
             this.deps.logger.error(`LOCAL Mode: Failed to merge feature branch ${defaultFeatureBranch} into ${defaultBranch}: ${mainMerge.error}`);
@@ -858,7 +922,34 @@ export class WatchLoopRunner {
     return undefined;
   }
 }
-function resolveMainMergeConflictAttentionItems(
+/**
+ * Classifies a main-merge attention item by the blocker it addresses, looking through
+ * escalation handoffs (which carry the original type on `payload.sourceAttentionType`).
+ * Returns null for items that are not main-merge blockers.
+ */
+function mainMergeAttentionItemKind(
+  item: { attentionType: string; payload: Record<string, unknown> | null },
+): "merge_conflict" | "ci_fix_required" | null {
+  if (!isMainMergeAttentionItem(item)) {
+    return null;
+  }
+  if (item.attentionType === "merge_conflict") {
+    return "merge_conflict";
+  }
+  if (item.attentionType === "ci_fix_required") {
+    return "ci_fix_required";
+  }
+  const source = (item.payload || {}).sourceAttentionType;
+  if (source === "merge_conflict") {
+    return "merge_conflict";
+  }
+  if (source === "ci_fix_required") {
+    return "ci_fix_required";
+  }
+  return null;
+}
+
+function resolveMainMergeAttentionItems(
   projectAttentionService: {
     listActiveProjectItems: (projectId: string) => Array<{
       id: string;
@@ -877,23 +968,29 @@ function resolveMainMergeConflictAttentionItems(
   },
   projectId: string,
   sprintRunId: string,
+  options: {
+    kinds: Array<"merge_conflict" | "ci_fix_required">;
+    reason: string;
+    note: string;
+  },
 ): void {
   const activeItems = projectAttentionService.listActiveProjectItems(projectId);
   for (const item of activeItems) {
     if (item.sprintRunId !== sprintRunId) {
       continue;
     }
-    if (!isMainMergeAttentionItem(item)) {
+    const kind = mainMergeAttentionItemKind(item);
+    if (!kind || !options.kinds.includes(kind)) {
       continue;
     }
 
     projectAttentionService.resolveItem(item.id, {
       status: "resolved",
-      reason: "main_merge_conflict_cleared",
+      reason: options.reason,
       resolutionSummaryMarkdown: [
         item.summaryMarkdown.trim(),
         "",
-        "Resolved automatically because the main branch merge conflict no longer exists.",
+        options.note,
       ].filter(Boolean).join("\n"),
     });
   }
@@ -953,4 +1050,33 @@ function buildMainMergeConflictSummary(args: {
     mergedTaskContexts: args.mergedTaskContexts,
     isMainMerge: true,
   });
+}
+
+function buildMainMergeCiFixSummary(args: {
+  featureBranch: string;
+  defaultBranch: string;
+  prNumber: number | null;
+  prUrl: string | null;
+  failedChecks: string[];
+  mergedTaskContexts: Array<{
+    taskKey: string;
+    taskTitle: string;
+    workerBranch: string | null;
+    prUrl: string | null;
+  }>;
+}): string {
+  const lines = [
+    `The final merge of \`${args.featureBranch}\` into \`${args.defaultBranch}\` is blocked by failing CI checks.`,
+    args.prNumber ? `PR: ${args.prUrl ?? `#${args.prNumber}`}` : null,
+    args.failedChecks.length > 0 ? `Failed checks: ${args.failedChecks.join(", ")}` : null,
+    "",
+    `Check out \`${args.featureBranch}\`, reproduce and fix the failing checks (these run against the integrated branch, so the failure may only appear when all sprint tasks are combined), then push so the checks re-run.`,
+  ];
+  if (args.mergedTaskContexts.length > 0) {
+    lines.push("", "Tasks merged into this branch:");
+    for (const ctx of args.mergedTaskContexts) {
+      lines.push(`- ${ctx.taskKey}: ${ctx.taskTitle}`);
+    }
+  }
+  return lines.filter((line) => line !== null).join("\n");
 }

@@ -913,9 +913,13 @@ export class VirtualWorkerService {
       : (settings.git.defaultBranch || "main");
 
     const guardrailScope = { projectId: item.projectId, sprintId: item.sprintId };
-    const ciFixEval = item.taskId
-      ? this.deps.guardrailService?.evaluate(guardrailScope, item.taskId, "ci_fix") ?? null
-      : null;
+    // Task-level CI fixes key the guardrail by task id. Sprint-level fixes (e.g. the
+    // final feature→default merge gate) have no task, so key by a stable synthetic id
+    // derived from the attention item — otherwise an unfixable failure would retry
+    // forever and the sprint would wait indefinitely instead of escalating.
+    const guardrailKey = item.taskId
+      || `main-merge-ci-fix:${item.sprintRunId ?? item.id}`;
+    const ciFixEval = this.deps.guardrailService?.evaluate(guardrailScope, guardrailKey, "ci_fix") ?? null;
     const retryCount = ciFixEval?.count ?? 0;
     const maxRetries = ciFixEval?.cap ?? 0;
     const capLabel = maxRetries > 0 ? String(maxRetries) : "∞";
@@ -1086,9 +1090,7 @@ export class VirtualWorkerService {
           : `CI fix run completed on ${branchName} at ${headSha}.`,
       });
 
-      if (item.taskId) {
-        this.deps.guardrailService?.record(guardrailScope, item.taskId, "ci_fix");
-      }
+      this.deps.guardrailService?.record(guardrailScope, guardrailKey, "ci_fix");
 
       this.deps.projectAttentionService.resolveItem(item.id, {
         status: "resolved",

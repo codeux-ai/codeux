@@ -178,6 +178,18 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
             }))}
           />
         </Row>
+        <Row label="Fix main merge CI failures" description="Dispatch the virtual worker to fix failing CI on the `feature -> main` merge gate before escalating to a human." badge={getFieldBadge("ciIntelligence.resolveMainMergeFailedChecks")}>
+          <Toggle aria-label="Toggle setting"             value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.ciIntelligence.resolveMainMergeFailedChecks}
+            disabled={editableSettings.git.githubMode === "LOCAL"}
+            onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              ciIntelligence: {
+                ...current.ciIntelligence,
+                resolveMainMergeFailedChecks: !current.ciIntelligence.resolveMainMergeFailedChecks,
+              },
+            }))}
+          />
+        </Row>
         <Row label="Resolve comments before feature merge" description="Do not auto-merge a feature branch until review comments are closed." badge={getFieldBadge("ciIntelligence.resolveAllCommentsBeforeFeatureMerge")}>
           <Toggle aria-label="Toggle setting"             value={editableSettings.git.githubMode === "LOCAL" ? false : editableSettings.ciIntelligence.resolveAllCommentsBeforeFeatureMerge}
             disabled={editableSettings.git.githubMode === "LOCAL"}

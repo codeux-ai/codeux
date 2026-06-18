@@ -438,6 +438,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     enableLivePrMonitoring: true,
     resolveAllCommentsBeforeMainMerge: true,
     resolveMainMergeConflicts: true,
+    resolveMainMergeFailedChecks: true,
     resolveAllCommentsBeforeFeatureMerge: true,
     resolveMergeConflicts: true,
     waitForJulesCiAutofix: false,

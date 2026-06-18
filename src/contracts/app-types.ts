@@ -726,6 +726,13 @@ export interface CiIntelligenceSettings {
   enableLivePrMonitoring: boolean;
   resolveAllCommentsBeforeMainMerge: boolean;
   resolveMainMergeConflicts: boolean;
+  /**
+   * When the final feature→default merge PR has failing CI checks, dispatch a
+   * worker to fix them (bounded by the `ci_fix` guardrail) instead of immediately
+   * pausing the sprint for a human. The sprint still escalates to a human once the
+   * worker exhausts its CI-fix attempts.
+   */
+  resolveMainMergeFailedChecks: boolean;
   resolveAllCommentsBeforeFeatureMerge: boolean;
   resolveMergeConflicts: boolean;
   waitForJulesCiAutofix: boolean;

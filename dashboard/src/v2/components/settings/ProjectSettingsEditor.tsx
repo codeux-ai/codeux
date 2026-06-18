@@ -180,6 +180,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ["enableLivePrMonitoring", "Live PR monitoring", "Track PR and CI updates while runs are active."],
           ["resolveAllCommentsBeforeMainMerge", "Resolve comments before main merge", "Require review comment resolution before main branch merge."],
           ["resolveMainMergeConflicts", "Resolve main merge conflicts", "Escalate main-branch merge conflicts to the virtual worker with branch and sprint context."],
+          ["resolveMainMergeFailedChecks", "Fix main merge CI failures", "Dispatch the virtual worker to fix failing CI on the main-branch merge gate before escalating to a human."],
           ["resolveAllCommentsBeforeFeatureMerge", "Resolve comments before feature merge", "Require review comment resolution before feature branch merge."],
           ["resolveMergeConflicts", "Resolve feature merge conflicts", "Escalate feature-branch merge conflicts to the virtual worker with branch and prompt context."],
           ["waitForJulesCiAutofix", "Wait for Jules autofix", "Allow Jules to attempt CI autofix before escalating."],

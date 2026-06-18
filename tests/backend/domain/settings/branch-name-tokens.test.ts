@@ -114,6 +114,7 @@ function makeBasePayload() {
       enableLivePrMonitoring: true,
       resolveAllCommentsBeforeMainMerge: true,
       resolveMainMergeConflicts: true,
+      resolveMainMergeFailedChecks: true,
       resolveAllCommentsBeforeFeatureMerge: true,
       resolveMergeConflicts: true,
       waitForJulesCiAutofix: true,
