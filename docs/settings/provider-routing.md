@@ -20,6 +20,10 @@ Code UX now separates:
 
 *(Note: In routing contexts, `available` means detected credentials/auth presence or local auth enabled on that exact provider instance, whereas `enabled` means user-approved routing participation.)*
 
+## Provider Runtime Artifacts
+
+Provider runtime artifacts (such as host log paths, temporary output files, and Docker paths) are owned and managed by the `provider-runtime-artifacts` module. `ProviderRunner` delegates path resolution and artifact cleanup logic to this helper to ensure safer execution boundaries and testing.
+
 ## Configuration Model
 
 Backend types:
