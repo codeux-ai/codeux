@@ -6,6 +6,7 @@ import {
 } from "./execution/execution-invocation-query.js";
 import {
   queryExecutionInvocations,
+  queryProjectInvocations,
   queryExecutionInvocationMessages,
   queryExecutionInvocationsByProviderInvocationId,
   queryRunningRetryExecutionInvocations,
@@ -444,6 +445,12 @@ export class ExecutionRepository {
     offset?: number;
   }): ExecutionInvocationRecord[] {
     return queryExecutionInvocations(this.db, params);
+  }
+
+  queryProjectInvocations(
+    params: import("../contracts/invocation-types.js").ProjectInvocationsQuery & { projectId: string }
+  ): import("../contracts/invocation-types.js").ProjectInvocationsQueryResult {
+    return queryProjectInvocations(this.db, params);
   }
 
   listRunningRetryExecutionInvocations(): ExecutionInvocationRecord[] {

@@ -2,6 +2,22 @@ import type { ProviderErrorCategory } from "../shared/providers/provider-error-c
 
 export type ExecutionInvocationStatus = "running" | "completed" | "failed" | "cancelled" | "paused";
 
+export interface ProjectInvocationsQuery {
+  limit?: number;
+  offset?: number;
+  status?: ExecutionInvocationStatus;
+  purpose?: string;
+  provider?: string;
+  search?: string;
+  sortKey?: "startedAt" | "durationMs" | "totalTokens" | "costCents";
+  sortDir?: "asc" | "desc";
+}
+
+export interface ProjectInvocationsQueryResult {
+  items: ExecutionInvocationRecord[];
+  totalCount: number;
+}
+
 export interface ExecutionInvocationRecord {
   id: string;
   projectId: string;

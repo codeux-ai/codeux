@@ -301,6 +301,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     knowledgeService: deps.knowledgeService,
     agentPresetRepository: deps.agentPresetRepository,
     projectManagementRepository: deps.projectManagementRepository,
+    executionRepository: deps.executionRepository,
     getLiveSnapshot: (projectIdHint) => getProjectLiveSnapshot({
       projectManagementRepository: deps.projectManagementRepository,
       projectRuntimeRepository: deps.projectRuntimeRepository,

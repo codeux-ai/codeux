@@ -109,3 +109,68 @@ export function queryRunningRetryExecutionInvocations(db: Database): ExecutionIn
 
   return rows.map(mapExecutionInvocationRow);
 }
+
+export function queryProjectInvocations(
+  db: import("../db/database-adapter.js").DatabaseAdapter,
+  params: import("../../contracts/invocation-types.js").ProjectInvocationsQuery & { projectId: string }
+): import("../../contracts/invocation-types.js").ProjectInvocationsQueryResult {
+  const conditions = ["execution_invocations.project_id = ?"];
+  const values = [params.projectId];
+
+  if (params.status) {
+    conditions.push("execution_invocations.status = ?");
+    values.push(params.status);
+  }
+
+  if (params.provider) {
+    conditions.push("execution_invocations.provider = ?");
+    values.push(params.provider);
+  }
+
+  if (params.purpose) {
+    conditions.push("provider_invocations.purpose = ?");
+    values.push(params.purpose);
+  }
+
+  if (params.search) {
+    conditions.push("(sprints.name LIKE ? OR sprints.slug LIKE ? OR tasks.task_key LIKE ? OR tasks.title LIKE ? OR execution_invocations.model LIKE ?)");
+    const searchTerm = `%${params.search}%`;
+    values.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+  }
+
+  const sortKeyMap = {
+    startedAt: "execution_invocations.started_at",
+    durationMs: "provider_invocations.duration_ms",
+    totalTokens: "provider_invocations.total_tokens",
+    costCents: "provider_invocations.cost_cents"
+  };
+
+  const sortCol = params.sortKey ? sortKeyMap[params.sortKey] || "execution_invocations.started_at" : "execution_invocations.started_at";
+  const sortDir = params.sortDir === "asc" ? "ASC" : "DESC";
+
+  const orderBy = `ORDER BY ${sortCol} ${sortDir}, execution_invocations.rowid DESC`;
+
+  const countSql = `
+    SELECT COUNT(*) as count
+    FROM execution_invocations${INVOCATION_JOINS}
+    WHERE ${conditions.join(" AND ")}
+  `;
+
+  const totalCount = (db.prepare(countSql).get(...values) as any).count;
+
+  const limit = params.limit ?? 100;
+  const offset = params.offset ?? 0;
+
+  const sql = `
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
+    WHERE ${conditions.join(" AND ")}
+    ${orderBy}
+    LIMIT ? OFFSET ?
+  `;
+
+  const rows = db.prepare(sql).all(...values, limit, offset) as ExecutionInvocationRow[];
+  const items = rows.map(mapExecutionInvocationRow);
+
+  return { items, totalCount };
+}
