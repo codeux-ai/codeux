@@ -218,7 +218,7 @@ describe("SprintsPage Integration Regressions", () => {
     expect(resumeBtn).toHaveAttribute('title', 'Wait for the current action to finish');
 
     // For the row menu
-    const moreTrigger = screen.getAllByRole("button", { name: /Open sprint actions/i })[0];
+    const moreTrigger = screen.getAllByRole("button", { name: /Open actions menu for sprint/i })[0];
     expect(moreTrigger).toBeDisabled(); // the trigger is disabled when isRowPending (isDeletePending)
   });
 
@@ -242,7 +242,7 @@ describe("SprintsPage Integration Regressions", () => {
     expect(clearBtn.className).toContain("focus-visible:ring-offset-2");
 
     // Check row action menu focus behavior by opening it
-    const moreTrigger = screen.getAllByRole("button", { name: /Open sprint actions/i })[0];
+    const moreTrigger = screen.getAllByRole("button", { name: /Open actions menu for sprint/i })[0];
     await userEvent.click(moreTrigger);
 
     const editBtn = await screen.findByRole('button', { name: /Edit/i });

@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 .card {
-  @apply relative overflow-hidden flex flex-col justify-between transition-all duration-300;
+  @apply relative overflow-hidden flex flex-col justify-between motion-safe:transition-all duration-300;
   background: var(--stats-card-bg);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;

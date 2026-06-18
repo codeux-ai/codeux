@@ -19,8 +19,15 @@ async function createService() {
     error: vi.fn(),
   } as any;
   const service = new DashboardRealtimeService(repository, logger);
+  const cacheInvalidator = {
+    invalidateProjectExecution: vi.fn(),
+    invalidateProjectStats: vi.fn(),
+    invalidateOverview: vi.fn(),
+    invalidateProjects: vi.fn(),
+  };
+  service.setCacheInvalidator(cacheInvalidator);
 
-  return { service, logger };
+  return { service, logger, cacheInvalidator };
 }
 
 afterEach(async () => {
@@ -390,5 +397,27 @@ describe("DashboardRealtimeService extracted publisher helper", () => {
     service.expediteProjectLiveRefresh("proj-1");
     await vi.advanceTimersByTimeAsync(100);
     expect(livePublishes()).toBe(2);
+  });
+
+
+  describe("synchronous cache invalidation", () => {
+    it("invalidates project execution caches when scheduling execution refresh", async () => {
+      const { service, cacheInvalidator } = await createService();
+      service.scheduleProjectExecutionRefresh("project-1");
+      expect(cacheInvalidator.invalidateProjectExecution).toHaveBeenCalledWith("project-1");
+      expect(cacheInvalidator.invalidateProjectStats).toHaveBeenCalledWith("project-1");
+    });
+
+    it("invalidates overview cache when scheduling overview refresh", async () => {
+      const { service, cacheInvalidator } = await createService();
+      service.scheduleOverviewRefresh();
+      expect(cacheInvalidator.invalidateOverview).toHaveBeenCalled();
+    });
+
+    it("invalidates projects cache when scheduling projects refresh", async () => {
+      const { service, cacheInvalidator } = await createService();
+      service.scheduleProjectsRefresh();
+      expect(cacheInvalidator.invalidateProjects).toHaveBeenCalled();
+    });
   });
 });

@@ -36,6 +36,12 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import { DockerService } from "./docker-service.js";
+import {
+  isOrchestratorHandledClarificationItem,
+  projectNeedsVirtualWorker,
+  peekNextWorkerAttention,
+  resolveWorkerExecutionMode,
+} from "../domain/workers/virtual-worker-scheduling-policy.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
@@ -168,12 +174,6 @@ export class VirtualWorkerService {
     });
   }
 
-  private isOrchestratorHandledClarificationItem(item: ProjectAttentionItemRecord): boolean {
-    return item.summaryMarkdown.includes("Clarification cooldown active")
-      || item.summaryMarkdown.includes("already answered automatically")
-      || item.summaryMarkdown.includes("Resume instruction already sent");
-  }
-
   start(): void {
     if (this.reconcileTimer) {
       return;
@@ -196,29 +196,29 @@ export class VirtualWorkerService {
     }
   }
 
-  scheduleProject(projectId: string, reason: string): void {
+  scheduleProject(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): void {
     if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId)) {
       return;
     }
-    if (!this.projectNeedsVirtualWorker(projectId)) {
+    if (!this.projectNeedsVirtualWorker(projectId, resolver)) {
       return;
     }
 
     this.scheduledProjects.add(projectId);
     queueMicrotask(() => {
       this.scheduledProjects.delete(projectId);
-      if (this.activeCycles.has(projectId) || !this.projectNeedsVirtualWorker(projectId)) {
+      if (this.activeCycles.has(projectId) || !this.projectNeedsVirtualWorker(projectId, resolver)) {
         return;
       }
 
-      const cycle = this.runProjectCycle(projectId, reason)
+      const cycle = this.runProjectCycle(projectId, reason, resolver)
         .catch((error) => {
           this.deps.logger?.error("Virtual worker cycle failed", { projectId, reason, error });
         })
         .finally(() => {
           this.activeCycles.delete(projectId);
-          if (this.projectNeedsVirtualWorker(projectId)) {
-            this.scheduleProject(projectId, "remaining_worker_work");
+          if (this.projectNeedsVirtualWorker(projectId, resolver)) {
+            this.scheduleProject(projectId, "remaining_worker_work", resolver);
           }
         });
 
@@ -227,35 +227,41 @@ export class VirtualWorkerService {
   }
 
   async reconcile(): Promise<void> {
+    const cycleCache = new Map<string, DashboardSettings>();
+    const resolver = (pId: string, sId?: string | null): DashboardSettings => {
+      const key = `${pId}:${sId ?? ""}`;
+      if (cycleCache.has(key)) {
+        return cycleCache.get(key)!;
+      }
+      const settings = this.resolveDashboardSettings(pId, sId);
+      cycleCache.set(key, settings);
+      return settings;
+    };
+
     for (const project of this.deps.projectManagementRepository.listProjects().projects) {
-      if (this.projectNeedsVirtualWorker(project.id)) {
-        this.scheduleProject(project.id, "reconcile");
+      if (this.projectNeedsVirtualWorker(project.id, resolver)) {
+        this.scheduleProject(project.id, "reconcile", resolver);
       }
     }
   }
 
   private projectUsesVirtualWorkers(projectId: string, sprintId?: string | null): boolean {
-    return this.resolveWorkerExecutionMode(projectId, sprintId) === "VIRTUAL";
-  }
-
-  private resolveWorkerExecutionMode(projectId: string, sprintId?: string | null): WorkerExecutionMode {
-    return resolveEffectiveDashboardSettings(this.deps.settingsRepository, projectId, sprintId).settings.workers.executionMode;
+    return resolveWorkerExecutionMode(this.resolveDashboardSettings(projectId, sprintId)) === "VIRTUAL";
   }
 
   private resolveDashboardSettings(projectId: string, sprintId?: string | null): DashboardSettings {
     return resolveEffectiveDashboardSettings(this.deps.settingsRepository, projectId, sprintId).settings;
   }
 
-  private projectNeedsVirtualWorker(projectId: string): boolean {
-    if (this.activeCycles.has(projectId)) {
-      return false;
-    }
-
-    return this.peekNextWorkerAttention(projectId) !== null;
+  private projectNeedsVirtualWorker(projectId: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): boolean {
+    return projectNeedsVirtualWorker(
+      this.activeCycles.has(projectId),
+      this.peekNextWorkerAttention(projectId, resolver)
+    );
   }
 
-  private async runProjectCycle(projectId: string, reason: string): Promise<void> {
-    const cycleSettings = this.resolveCycleSettings(projectId);
+  private async runProjectCycle(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): Promise<void> {
+    const cycleSettings = this.resolveCycleSettings(projectId, resolver);
     const cycleProviderType = cycleSettings.aiProvider.providers[cycleSettings.workers.virtualWorkerProvider]?.provider || "codex";
     const endpoint = this.deps.workerEndpointRepository.createVirtualEndpoint({
       endpointKey: `virtual:${projectId}:${Date.now().toString(36)}:${sanitizeToken(randomUUID().slice(0, 8))}`,
@@ -271,7 +277,7 @@ export class VirtualWorkerService {
     this.deps.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, endpoint.id);
 
     try {
-      const attentionItem = this.pickNextWorkerAttention(projectId);
+      const attentionItem = this.pickNextWorkerAttention(projectId, resolver);
       if (attentionItem) {
         await this.handleAttentionItem(endpoint.id, attentionItem, reason);
       }
@@ -281,46 +287,14 @@ export class VirtualWorkerService {
     }
   }
 
-  private peekNextWorkerAttention(projectId: string): ProjectAttentionItemRecord | null {
-    return this.deps.projectAttentionService.listActiveProjectItems(projectId)
-      .find((item) => {
-        if (item.ownerType !== "worker") {
-          return false;
-        }
-        if (item.status !== "open" && !(item.status === "claimed" && !item.assignedWorkerEndpointId)) {
-          return false;
-        }
-
-        // Avoid clarification/recovery items already being held in orchestrator-managed automated recovery.
-        if (this.isOrchestratorHandledClarificationItem(item)) {
-          return false;
-        }
-
-        const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
-
-        if (item.attentionType === "merge_required") {
-          return false;
-        }
-
-        if (item.attentionType === "merge_conflict") {
-          return settings.ciIntelligence.resolveMergeConflicts;
-        }
-
-        if (item.attentionType === "ci_fix_required") {
-          return settings.ciIntelligence.waitForJulesCiAutofix;
-        }
-
-        if (item.attentionType === "action_required") {
-          return settings.automationInterventions.autoAnswerClarification || settings.automationInterventions.autoApprovePlan;
-        }
-
-        // Default: worker-owned items are handleable unless explicitly excluded above
-        return true;
-      }) || null;
+  private peekNextWorkerAttention(projectId: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): ProjectAttentionItemRecord | null {
+    const items = this.deps.projectAttentionService.listActiveProjectItems(projectId);
+    const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
+    return peekNextWorkerAttention(items, effectiveResolver);
   }
 
-  private pickNextWorkerAttention(projectId: string): ProjectAttentionItemRecord | null {
-    const nextItem = this.peekNextWorkerAttention(projectId);
+  private pickNextWorkerAttention(projectId: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): ProjectAttentionItemRecord | null {
+    const nextItem = this.peekNextWorkerAttention(projectId, resolver);
 
     if (nextItem && nextItem.status === "open") {
       // Explicitly set the item's status to claimed so subsequent HI queries filter it out
@@ -455,19 +429,20 @@ export class VirtualWorkerService {
     ].filter(Boolean).join("\n");
   }
 
-  private resolveCycleSettings(projectId: string): DashboardSettings {
+  private resolveCycleSettings(projectId: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): DashboardSettings {
+    const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
     const attentionItem = this.deps.projectAttentionService.listActiveProjectItems(projectId)
       .find((item) => item.ownerType === "worker");
     if (attentionItem) {
-      return this.resolveDashboardSettings(projectId, attentionItem.sprintId);
+      return effectiveResolver(projectId, attentionItem.sprintId);
     }
 
-    return this.resolveDashboardSettings(projectId);
+    return effectiveResolver(projectId);
   }
 
   private async handleAttentionItem(workerEndpointId: string, item: ProjectAttentionItemRecord, reason: string): Promise<void> {
     // Check if it's an orchestrator-managed clarification recovery item we somehow claimed anyway.
-    if (this.isOrchestratorHandledClarificationItem(item)) {
+    if (isOrchestratorHandledClarificationItem(item.summaryMarkdown)) {
       // Just release it, don't escalate. The orchestrator will handle it.
       return;
     }

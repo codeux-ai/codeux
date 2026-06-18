@@ -13,12 +13,21 @@ export function isDeepEqual(a: any, b: any): boolean {
     return false;
   }
 
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
+
   if (Array.isArray(a)) {
     if (!Array.isArray(b) || a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) {
       if (!isDeepEqual(a[i], b[i])) return false;
     }
     return true;
+  }
+
+  const protoA = Object.getPrototypeOf(a);
+  if (protoA !== null && protoA !== Object.prototype) {
+    return false;
   }
 
   const keysA = Object.keys(a);

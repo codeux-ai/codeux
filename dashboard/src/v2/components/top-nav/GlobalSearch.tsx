@@ -159,6 +159,8 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                     onFocus={handleSearchEnter}
                     onBlur={handleSearchLeave}
                     className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl text-sm text-left text-slate-400 focus:outline-none focus-visible:outline-none transition-all relative z-0"
+                    aria-expanded={isSearchOpen}
+                    aria-haspopup="dialog"
                 >
                     Search...
                 </button>
@@ -173,6 +175,8 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                 type="button"
                 onClick={() => setIsSearchOpen(true)}
                 aria-label="Open search"
+                aria-expanded={isSearchOpen}
+                aria-haspopup="dialog"
                 className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 md:hidden shrink-0"
             >
                 <Search aria-hidden="true" className="w-4 h-4 text-slate-600 dark:text-slate-300" strokeWidth={2} />

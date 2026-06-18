@@ -108,6 +108,7 @@ export const Inspector: FunctionComponent<{
                                 <div key={cn.id} className="flex items-start gap-2 py-1">
                                     <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
                                         style={{ background: (CAT[cn.category] || CAT.context).hex }} />
+                                    <span className="sr-only">{(CAT[cn.category] || CAT.context).label}</span>
                                     <div className="flex-1 min-w-0">
                                         <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 font-medium">
                                             {cn.content}

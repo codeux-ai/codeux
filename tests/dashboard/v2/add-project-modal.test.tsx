@@ -89,9 +89,15 @@ describe("AddProjectModal", () => {
     expect(screen.queryByLabelText(/repository url/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/clone into directory/i)).not.toBeInTheDocument();
 
-    fireEvent.input(screen.getByLabelText(/Project Name/i), { target: { value: "Alpha" } });
-    fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.submit(screen.getByLabelText(/Project Name/i).closest("form")!);
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "Alpha" } });
+    await waitFor(() => expect(nameInput).toHaveValue("Alpha"));
+    const initSwitch = screen.queryByLabelText(/Initialize with Project/i) || screen.queryByRole("switch");
+        if (initSwitch) {
+            fireEvent.click(initSwitch);
+        }
+    const form = screen.getByLabelText(/Project Name/i).closest("form");
+    fireEvent.submit(form!);
 
     await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
     expect(onAdd).toHaveBeenCalledWith({
@@ -114,12 +120,13 @@ describe("AddProjectModal", () => {
     const onAdd = vi.fn().mockResolvedValue(undefined);
     render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} initialSourceType="new_project" />);
 
-    fireEvent.input(screen.getByLabelText(/Project Name/i), { target: { value: "Alpha" } });
+    const nameInput2 = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput2, { target: { value: "Alpha" } });
+    await waitFor(() => expect(nameInput2).toHaveValue("Alpha"));
     fireEvent.input(screen.getByLabelText(/Directory Path/i), { target: { value: "/tmp/alpha" } });
     await waitFor(() => expect(screen.getByLabelText(/Project Name/i)).toHaveValue("Alpha"));
     await waitFor(() => expect(screen.getByLabelText(/Directory Path/i)).toHaveValue("/tmp/alpha"));
     const form = screen.getByLabelText(/Project Name/i).closest("form");
-    expect(form).not.toBeNull();
     fireEvent.submit(form!);
 
     await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));

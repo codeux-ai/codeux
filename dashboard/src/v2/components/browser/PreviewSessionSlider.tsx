@@ -3,6 +3,7 @@ import { useRef } from "preact/hooks";
 import { ChevronLeft, ChevronRight, ExternalLink, Globe, Trash2, Loader2, CheckCircle2 } from "lucide-preact";
 import type { SprintPreviewSession } from "../../../types.js";
 import { buildPreviewOrigin } from "../../lib/preview-origin.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 interface PreviewSessionSliderProps {
   sessions: SprintPreviewSession[];
@@ -162,9 +163,9 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   {removing ? "Removing..." : "Remove"}
                 </button>
                 <a
-                  href={canOpen ? origin : undefined}
+                  href={canOpen ? getSafeUrl(origin) : undefined}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] px-3 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/50 ${!canOpen ? "pointer-events-none opacity-50" : ""}`}
                   title="Open isolated preview in a new tab"
                   onClick={(e) => e.stopPropagation()}

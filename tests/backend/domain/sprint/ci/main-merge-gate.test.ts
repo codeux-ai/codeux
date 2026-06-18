@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { MainMergeGateService, type MergeFeedbackContext } from "../../../../../src/domain/sprint/ci/main-merge-gate.js";
+import { MergeConflictDebouncer } from "../../../../../src/domain/sprint/ci/merge-conflict-debouncer.js";
 import type { GitTrackingStatus, CiIntelligenceSettings } from "../../../../../src/contracts/app-types.js";
 
 describe("MainMergeGateService", () => {
@@ -159,6 +160,81 @@ describe("MainMergeGateService", () => {
     });
     expect(structured.text).toContain("Check Status: `DIRTY`");
     expect(structured.text).toContain("Merge into `main` is blocked until the conflict is resolved.");
+  });
+
+  it("debounces a transient DIRTY state and only confirms the conflict once it persists", async () => {
+    const context: MergeFeedbackContext = {
+      ...defaultContext,
+      mergeConflictDebouncer: new MergeConflictDebouncer(),
+      gitStatus: {
+        ...defaultContext.gitStatus!,
+        openPullRequests: [
+          {
+            number: 101,
+            title: "Sprint 1",
+            url: "https://github.com/repo/pull/101",
+            state: "OPEN",
+            isDraft: false,
+            headRefName: "feature/sprint1",
+            baseRefName: "main",
+            mergeStateStatus: "DIRTY",
+            reviewDecision: "APPROVED",
+            comments: 0,
+            checks: [{ name: "test", status: "completed", conclusion: "success" }],
+          } as any,
+        ],
+      },
+    };
+
+    // First DIRTY reading: not yet a confirmed conflict — GitHub may still be
+    // recomputing mergeability, so the gate must not pause the sprint.
+    context.mergeConflictDebouncer!.beginCycle();
+    const first = MainMergeGateService.evaluateMergeFeedback(context);
+    expect(first.hasMergeConflict).toBe(false);
+    expect(first.state).not.toBe("merge_conflict");
+
+    // Still DIRTY on the next cycle: now it is a real conflict.
+    context.mergeConflictDebouncer!.beginCycle();
+    const second = MainMergeGateService.evaluateMergeFeedback(context);
+    expect(second.hasMergeConflict).toBe(true);
+    expect(second.state).toBe("merge_conflict");
+  });
+
+  it("clears a debounced DIRTY streak when the PR reports a mergeable state again", async () => {
+    const debouncer = new MergeConflictDebouncer();
+    const dirtyContext: MergeFeedbackContext = {
+      ...defaultContext,
+      mergeConflictDebouncer: debouncer,
+      gitStatus: {
+        ...defaultContext.gitStatus!,
+        openPullRequests: [
+          {
+            number: 101, title: "Sprint 1", url: "https://github.com/repo/pull/101", state: "OPEN",
+            isDraft: false, headRefName: "feature/sprint1", baseRefName: "main",
+            mergeStateStatus: "DIRTY", reviewDecision: "APPROVED", comments: 0,
+            checks: [{ name: "test", status: "completed", conclusion: "success" }],
+          } as any,
+        ],
+      },
+    };
+
+    debouncer.beginCycle();
+    expect(MainMergeGateService.evaluateMergeFeedback(dirtyContext).hasMergeConflict).toBe(false);
+
+    // The transient DIRTY clears (UNKNOWN → recomputed) before it ever confirmed.
+    const cleanContext: MergeFeedbackContext = {
+      ...dirtyContext,
+      gitStatus: {
+        ...dirtyContext.gitStatus!,
+        openPullRequests: [{ ...(dirtyContext.gitStatus!.openPullRequests[0] as any), mergeStateStatus: "UNKNOWN" }],
+      },
+    };
+    debouncer.beginCycle();
+    expect(MainMergeGateService.evaluateMergeFeedback(cleanContext).hasMergeConflict).toBe(false);
+
+    // A later DIRTY starts a fresh streak — one reading is still not a conflict.
+    debouncer.beginCycle();
+    expect(MainMergeGateService.evaluateMergeFeedback(dirtyContext).hasMergeConflict).toBe(false);
   });
 
   it("reports pending checks", async () => {

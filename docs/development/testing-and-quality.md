@@ -6,6 +6,11 @@ Test files are organized under `tests/`:
 - `tests/backend/**`
 - `tests/dashboard/**`
 
+
+## Local Scratch Files
+
+Temporary experiments, scratch files, or test scripts should be created outside the repository root or matched by local `.gitignore` rules (e.g. \`tmp*\` or \`test-*\`). Do not commit or leave these in the root directory.
+
 ## Core Commands
 
 - Run tests

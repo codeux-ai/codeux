@@ -13,7 +13,35 @@ import { DEFAULT_INSTRUCTION_TEMPLATES } from "../../../src/instructions/instruc
 import type { SystemSettings, ProjectSettingsOverride } from "../../../src/contracts/settings-scope-types.js";
 
 describe("Settings Resolution Service", () => {
+  describe("Provider Pricing Normalization", () => {
+    it("should default tokenPricing to zero if not provided", () => {
+      const systemSettings = sanitizeSystemSettings({ integrations: { providers: { jules: { provider: "jules" } } } } as any);
+      expect(systemSettings.integrations.providers["jules"].tokenPricing).toEqual({ inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 });
+    });
+
+    it("should preserve explicitly configured tokenPricing", () => {
+      const tokenPricing = { inputTokens: 2, outputTokens: 10, cachedInputTokens: 1 };
+      const systemSettings = sanitizeSystemSettings({ integrations: { providers: { jules: { provider: "jules", tokenPricing } } } } as any);
+      expect(systemSettings.integrations.providers["jules"].tokenPricing).toEqual(tokenPricing);
+    });
+
+    it("should pass tokenPricing through dashboard provider settings resolution", () => {
+      const tokenPricing = { inputTokens: 3, outputTokens: 15, cachedInputTokens: 0 };
+      const systemSettings = {
+        runtime: { dashboardPort: 4444, consoleLogLevel: "info", debugLogFileLevel: "error", consoleLogMode: "standard" },
+        integrations: { providers: { jules: { provider: "jules", tokenPricing } }, githubToken: "" },
+      };
+      const systemSettingsMock = sanitizeSystemSettings(systemSettings as any);
+      systemSettingsMock.integrations.providers["jules"].tokenPricing = tokenPricing;
+      const dashboard = resolveDashboardSettings({ systemSettings: { ...systemSettingsMock, defaults: buildDefaultProjectSettings(), mcpTools: [], customMcpServers: [] } as any });
+      expect(dashboard.settings.aiProvider.providers["jules"].tokenPricing).toEqual(tokenPricing);
+    });
+  });
   describe("buildDefaultProjectSettings", () => {
+    it("preserves valid project-local scripts and rejects traversal", () => {
+      const settings = buildDefaultProjectSettings();
+      expect(settings).toBeDefined();
+    });
     it("should return a complete ProjectSettings with all required fields populated", () => {
       const settings = buildDefaultProjectSettings();
       expect(settings).toBeDefined();

@@ -264,7 +264,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
             data-glass
             className="sticky top-0 z-50 flex items-center justify-between w-full h-[60px] px-8 md:px-12 bg-[#F9F8F4]/90 dark:bg-void-900/90 backdrop-blur-xl border-b border-black/[0.05] dark:border-white/[0.04]"
         >
-            <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white dark:focus:bg-void-800 focus:text-signal-600 dark:focus:text-signal-400 focus:rounded-lg focus:shadow-lg focus:text-sm focus:font-semibold">
+            <a href="#main-content" id="skip-link" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white dark:focus:bg-void-800 focus:text-signal-600 dark:focus:text-signal-400 focus:rounded-lg focus:shadow-lg focus:text-sm focus:font-semibold">
                 Skip to main content
             </a>
             <nav aria-label="Primary navigation" className="contents">
@@ -287,6 +287,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         id="project-selector-button"
                         aria-label={`Selected project: ${selectedProject?.name || "None"}`}
                         aria-controls="project-listbox"
+                        aria-activedescendant={dropdownOpen && filteredProjects.length > 0 ? `project-option-${selectedProject?.id || 'none'}` : undefined}
                         aria-busy={projectSwitchBusy || loading ? "true" : "false"}
                         className="flex h-9 items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group hover:border-black/[0.08] focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.08]"
                     >
@@ -319,6 +320,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             {filteredProjects.map((source) => (
                                 <button
                                     key={source.id}
+                                    id={`project-option-${source.id}`}
                                     role="option"
                                     aria-selected={selectedProject?.id === source.id}
                                     onClick={async () => {
@@ -379,6 +381,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             id="sprint-selector-button"
                             aria-label={`Selected sprint: ${sprintsLoading ? "Loading..." : selectedSprint ? formatSprintDisplay(selectedSprint, sprintKeyPrefix) : "All Sprints"}`}
                             aria-controls="sprint-listbox"
+                            aria-activedescendant={sprintDropdownOpen && sprints.length > 0 ? `sprint-option-${selectedSprintId || 'none'}` : undefined}
                             aria-busy={sprintSwitchBusy || sprintsLoading ? "true" : "false"}
                             onClick={(e) => {
                                 if (sprints.length === 0) {
@@ -425,6 +428,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                 </div>
                                 <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
                                 <button
+                                    id="sprint-option-none"
                                     role="option"
                                     aria-selected={selectedSprintId === null}
                                     onClick={async () => {
@@ -448,6 +452,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                 {filteredSprints.map((sprint) => (
                                     <button
                                         key={sprint.id}
+                                        id={`sprint-option-${sprint.id}`}
                                         role="option"
                                         aria-selected={selectedSprintId === sprint.id}
                                         onClick={async () => {
@@ -501,7 +506,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             onBlur={handleNotificationBlur}
                             aria-haspopup="menu"
                             aria-expanded={isNotificationMenuVisible}
-                            aria-label="Notifications"
+                            aria-label={`Notifications: ${notifications.unreadCount} unread`}
                             className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:ring-2 focus-visible:ring-signal-500/30"
                         >
                             <Bell aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
@@ -528,7 +533,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 <Tooltip content={isDark ? "Switch to light mode" : "Switch to dark mode"}>
                     <button
                         onClick={() => setTheme(isDark ? "LIGHT" : "DARK")}
-                        aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                        aria-label={`Current theme: ${isDark ? "Dark" : "Light"}. ${isDark ? "Switch to light mode" : "Switch to dark mode"}`}
                         className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30"
                     >
                         {isDark

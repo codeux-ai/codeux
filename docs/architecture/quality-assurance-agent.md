@@ -120,6 +120,8 @@ Recovery guarantees:
 
 Run budgeting:
 
+Note: The run budget and retry limit rules are explicitly implemented in a dedicated domain module (`src/domain/qa-review/qa-review-budget.ts`).
+
 - the initial completed task review always counts as run `1`
 - extra QA runs only happen after QA requested fixes and the task reaches code-complete again
 - `maxTaskReviewRuns = 1` normally means only the initial task review runs; when QA itself requested and successfully applied an automatic CLI continuation, Code UX still permits the follow-up verification run so the task cannot remain indefinitely QA-blocked after completed fix work

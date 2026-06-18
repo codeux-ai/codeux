@@ -82,7 +82,5 @@ export const sanitizeGuardrails = (
       ),
     ),
     jobs,
-    qaRunsCap: clampCap(guardrailsInput.qaRunsCap, DEFAULT_GUARDRAILS.qaRunsCap),
-    qaRunsOnLimit: readOnLimitAction(guardrailsInput.qaRunsOnLimit, DEFAULT_GUARDRAILS.qaRunsOnLimit),
   };
 };

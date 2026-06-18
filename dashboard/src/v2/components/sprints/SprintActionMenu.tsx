@@ -138,6 +138,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
               href={viewTasksHref}
               role={role}
               onClick={() => onClose?.()}
+              aria-label={`View tasks for sprint ${sprint.name}`}
               className={buttonClassName}
             >
               <Maximize2 className="h-3.5 w-3.5" strokeWidth={2.1} />
@@ -169,6 +170,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onClose?.();
           onEdit?.();
         }}
+        aria-label={`Edit sprint ${sprint.name}`}
         className={buttonClassName}
       >
         <Pencil className="h-3.5 w-3.5" strokeWidth={2.1} />
@@ -181,6 +183,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onClose?.();
           onExport?.();
         }}
+        aria-label={`Export sprint ${sprint.name}`}
         className={buttonClassName}
       >
         <Download className="h-3.5 w-3.5" strokeWidth={2.1} />
@@ -193,6 +196,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onClose?.();
           onOverrides?.();
         }}
+        aria-label={`Configure overrides for sprint ${sprint.name}`}
         className={buttonClassName}
       >
         <Sparkles className="h-3.5 w-3.5" strokeWidth={2.1} />
@@ -223,6 +227,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
             onMarkCompleted?.();
           }}
           disabled={markCompletedDisabled}
+          aria-label={`Mark sprint ${sprint.name} as completed`}
           className={disabledClassName}
         >
           {markCompletedIcon === "square" ? (
@@ -241,6 +246,7 @@ export const SprintActionMenu: FunctionComponent<SprintActionMenuProps> = ({
           onDelete?.();
         }}
         disabled={deleteBusy}
+        aria-label={`Delete sprint ${sprint.name}`}
         className={deleteBusy ? `${handleDeleteClassName} disabled:cursor-not-allowed disabled:opacity-40` : handleDeleteClassName}
       >
         {deleteBusy ? (

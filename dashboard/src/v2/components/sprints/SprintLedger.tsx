@@ -297,7 +297,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       />
 
       <div className="min-h-[20rem] px-3 py-4 sm:px-4 lg:px-5">
-        <Table>
+        <Table caption="Sprint ledger with selection, sorting, and bulk actions.">
           <TableHeader>
             <TableCell isHeader isFirst className="w-[80px] min-w-[80px]">
               <span className="sr-only">Select</span>
@@ -313,71 +313,78 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                   : <Square className="h-4 w-4" strokeWidth={2.2} />}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[80px] min-w-[80px]">
+            <TableCell isHeader className="group w-[80px] min-w-[80px]" ariaSort={sort.key === "showcasePinned" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("showcasePinned")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Showcase, currently sorted ${sort.key === "showcasePinned" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}. Click to sort ${sort.key === "showcasePinned" && sort.direction === "asc" ? "descending" : "ascending"}.`}
               >
                 Showcase
                 {renderSortIndicator("showcasePinned")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "sprintKey" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("sprintKey")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Sprint ID, currently sorted ${sort.key === "sprintKey" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}. Click to sort ${sort.key === "sprintKey" && sort.direction === "asc" ? "descending" : "ascending"}.`}
               >
                 Sprint ID
                 {renderSortIndicator("sprintKey")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[220px] min-w-[220px]">
+            <TableCell isHeader className="group w-[220px] min-w-[220px]" ariaSort={sort.key === "name" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("name")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Sprint, currently sorted ${sort.key === "name" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}. Click to sort ${sort.key === "name" && sort.direction === "asc" ? "descending" : "ascending"}.`}
               >
                 Sprint
                 {renderSortIndicator("name")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "status" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("status")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Status, currently sorted ${sort.key === "status" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}. Click to sort ${sort.key === "status" && sort.direction === "asc" ? "descending" : "ascending"}.`}
               >
                 Status
                 {renderSortIndicator("status")}
               </button>
             </TableCell>
-            <TableCell isHeader align="right" className="group w-[100px] min-w-[100px]">
+            <TableCell isHeader align="right" className="group w-[100px] min-w-[100px]" ariaSort={sort.key === "tasksCount" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("tasksCount")}
                 className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Tasks, currently sorted ${sort.key === "tasksCount" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}. Click to sort ${sort.key === "tasksCount" && sort.direction === "asc" ? "descending" : "ascending"}.`}
               >
                 {renderSortIndicator("tasksCount")}
                 Tasks
               </button>
             </TableCell>
-            <TableCell isHeader align="right" className="group w-[140px] min-w-[140px]">
+            <TableCell isHeader align="right" className="group w-[140px] min-w-[140px]" ariaSort={sort.key === "completion" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("completion")}
                 className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Completion, currently sorted ${sort.key === "completion" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}. Click to sort ${sort.key === "completion" && sort.direction === "asc" ? "descending" : "ascending"}.`}
               >
                 {renderSortIndicator("completion")}
                 Completion
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
               <button
                 type="button"
                 onClick={() => handleSort("createdAt")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Created, currently sorted ${sort.key === "createdAt" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}. Click to sort ${sort.key === "createdAt" && sort.direction === "asc" ? "descending" : "ascending"}.`}
               >
                 Created
                 {renderSortIndicator("createdAt")}

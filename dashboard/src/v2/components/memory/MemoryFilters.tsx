@@ -33,7 +33,7 @@ export const MemoryFilters: FunctionComponent<{
 
     return (
         <div className="flex flex-col items-end gap-3.5 shrink-0">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5" role="tablist">
                 {TIER_TABS.map(tab => {
                     const count = tab.key === "short_term"
                         ? (stats.sprint + stats.agent)
@@ -59,6 +59,7 @@ export const MemoryFilters: FunctionComponent<{
                 {/* Sprint selector — only for Short Term */}
                 {activeTier === "short_term" && sprints.length > 0 && (
                     <select
+                        aria-label="Select sprint"
                         value={selectedSprintId ?? ""}
                         onChange={(e) => selectedSprintIdSignal.value = (e.target as HTMLSelectElement).value || undefined}
                         className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
@@ -75,6 +76,7 @@ export const MemoryFilters: FunctionComponent<{
                 {/* Agent selector — both tiers */}
                 {agentPresets.length > 0 && (
                     <select
+                        aria-label="Select agent preset"
                         value={selectedAgentPresetId ?? ""}
                         onChange={(e) => selectedAgentPresetIdSignal.value = (e.target as HTMLSelectElement).value || undefined}
                         className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
@@ -96,7 +98,7 @@ export const MemoryFilters: FunctionComponent<{
                                transition-colors duration-200">
                     <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Add Memory
                 </button>
-                <button onClick={() => setShowModels(!showModels)}
+                <button aria-pressed={showModels} onClick={() => setShowModels(!showModels)}
                     className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
                                border transition-colors duration-200
                                ${showModels
@@ -109,7 +111,7 @@ export const MemoryFilters: FunctionComponent<{
                         <span className="w-1.5 h-1.5 rounded-full bg-signal-500" />
                     )}
                 </button>
-                <button onClick={handleLobotomizeToggle}
+                <button aria-pressed={lobotomize} onClick={handleLobotomizeToggle}
                     className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-xs border
                                transition-[background-color,box-shadow,border-color] duration-300
                                ${lobotomize

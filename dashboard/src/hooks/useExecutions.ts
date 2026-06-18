@@ -48,12 +48,28 @@ export function useExecutions(projectId: string | null, pollIntervalMs: number =
     }
     let request = executionInflightRequests.get(projectId);
     if (!request) {
-      request = fetchProjectExecution(projectId, signal).finally(() => {
-        executionInflightRequests.delete(projectId);
-      });
+      request = (async () => {
+        try {
+          return await fetchProjectExecution(projectId, signal);
+        } finally {
+          if (executionInflightRequests.get(projectId) === request) {
+            executionInflightRequests.delete(projectId);
+          }
+        }
+      })();
       executionInflightRequests.set(projectId, request);
     }
-    const nextSnapshot = await request;
+
+    let nextSnapshot;
+    try {
+      nextSnapshot = await request;
+    } catch (err: any) {
+      if (err.name === "AbortError" && (!signal || !signal.aborted)) {
+        return fetchResource(signal);
+      }
+      throw err;
+    }
+
     const cached = executionCache.get(projectId) || null;
     const stabilized = cached ? stabilizeExecutionSnapshot(cached, nextSnapshot) : nextSnapshot;
     executionCache.set(projectId, stabilized);

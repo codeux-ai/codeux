@@ -2,6 +2,9 @@ import type { FunctionComponent, ComponentProps } from "preact";
 
 export interface SelectProps extends ComponentProps<"select"> {
   valid?: boolean;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean | "false" | "true" | "grammar" | "spelling";
+  "aria-errormessage"?: string;
 }
 
 export const Select: FunctionComponent<SelectProps> = ({ className = "", disabled, valid, children, ...props }) => {

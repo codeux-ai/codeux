@@ -1,3 +1,96 @@
+export class RealtimeResourceController<T> {
+  private pendingDirectPayload: { value: T } | null = null;
+  private directUpdateFrame: number | null = null;
+  private directUpdateTimeout: number | null = null;
+  private refreshTimeout: number | null = null;
+
+  public stabilizeNext: ((prev: T, next: T) => T) | undefined;
+  public isEqual: ((a: T, b: T) => boolean) | undefined;
+  public refreshInternal: (opts?: { silent?: boolean }) => Promise<void>;
+
+  constructor(
+    private readonly setData: (updater: (prev: T) => T) => void,
+    private readonly setError: (error: string | null) => void,
+    private readonly setLoading: (updater: (prev: boolean) => boolean) => void,
+    private readonly isDeepEqual: (a: T, b: T) => boolean,
+    refreshInternal: (opts?: { silent?: boolean }) => Promise<void>,
+    stabilizeNext?: ((prev: T, next: T) => T) | undefined,
+    isEqual?: ((a: T, b: T) => boolean) | undefined
+  ) {
+    this.refreshInternal = refreshInternal;
+    this.stabilizeNext = stabilizeNext;
+    this.isEqual = isEqual;
+  }
+
+  flushDirectUpdate = () => {
+    if (typeof window !== "undefined") {
+      if (this.directUpdateFrame !== null) {
+        window.cancelAnimationFrame(this.directUpdateFrame);
+      }
+      if (this.directUpdateTimeout !== null) {
+        window.clearTimeout(this.directUpdateTimeout);
+      }
+    }
+    this.directUpdateFrame = null;
+    this.directUpdateTimeout = null;
+    const pending = this.pendingDirectPayload;
+    if (!pending) {
+      return;
+    }
+    this.pendingDirectPayload = null;
+    const nextPayload = pending.value;
+
+    this.setData((prev: T) => {
+      const stabilized = this.stabilizeNext ? this.stabilizeNext(prev, nextPayload) : nextPayload;
+      if (prev === stabilized) return prev;
+      const checkEqual = this.isEqual ?? this.isDeepEqual;
+      return checkEqual(prev, stabilized) ? prev : stabilized;
+    });
+    this.setError(null);
+    this.setLoading((prev: boolean) => (prev !== false ? false : prev));
+  };
+
+  scheduleDirectUpdate = (payload: T) => {
+    this.pendingDirectPayload = { value: payload };
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+      this.flushDirectUpdate();
+      return;
+    }
+    if (this.directUpdateFrame === null) {
+      this.directUpdateFrame = window.requestAnimationFrame(() => this.flushDirectUpdate());
+    }
+    if (this.directUpdateTimeout === null) {
+      this.directUpdateTimeout = window.setTimeout(() => this.flushDirectUpdate(), 250);
+    }
+  };
+
+  scheduleSilentRefresh = () => {
+    if (this.refreshTimeout !== null) {
+      window.clearTimeout(this.refreshTimeout);
+    }
+    this.refreshTimeout = window.setTimeout(() => {
+      this.refreshTimeout = null;
+      void this.refreshInternal({ silent: true });
+    }, 150);
+  };
+
+  cleanup = () => {
+    if (typeof window === "undefined") return;
+    if (this.refreshTimeout !== null) {
+      window.clearTimeout(this.refreshTimeout);
+      this.refreshTimeout = null;
+    }
+    if (this.directUpdateFrame !== null) {
+      window.cancelAnimationFrame(this.directUpdateFrame);
+      this.directUpdateFrame = null;
+    }
+    if (this.directUpdateTimeout !== null) {
+      window.clearTimeout(this.directUpdateTimeout);
+      this.directUpdateTimeout = null;
+    }
+  };
+}
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { DashboardRealtimeServerMessage } from "../types.js";
 import { subscribeToDashboardRealtime, type TransportState } from "../lib/realtime/dashboard-realtime-client.js";
@@ -237,95 +330,35 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     };
   }, [options.fetchResource, options.isAlreadyLoaded, options.refreshOnMount, refreshInternal]);
 
-  const refreshTimeoutRef = useRef<number | null>(null);
-
-  const scheduleSilentRefresh = useCallback(() => {
-    if (refreshTimeoutRef.current !== null) {
-      window.clearTimeout(refreshTimeoutRef.current);
-    }
-    refreshTimeoutRef.current = window.setTimeout(() => {
-      refreshTimeoutRef.current = null;
-      void refreshInternal({ silent: true });
-    }, 150);
-  }, [refreshInternal]);
+  const controllerRef = useRef<RealtimeResourceController<T> | null>(null);
+  if (!controllerRef.current) {
+    controllerRef.current = new RealtimeResourceController<T>(
+      setData,
+      setError,
+      setLoading,
+      isDeepEqual,
+      refreshInternal,
+      optionsRef.current.stabilizeNext,
+      optionsRef.current.isEqual
+    );
+  } else {
+    // Update captured closures so callbacks aren't stale
+    controllerRef.current.refreshInternal = refreshInternal;
+    controllerRef.current.stabilizeNext = optionsRef.current.stabilizeNext;
+    controllerRef.current.isEqual = optionsRef.current.isEqual;
+  }
 
   useEffect(() => {
     return () => {
-      if (refreshTimeoutRef.current !== null) {
-        window.clearTimeout(refreshTimeoutRef.current);
+      if (controllerRef.current) {
+        controllerRef.current.cleanup();
       }
     };
   }, []);
 
-  // Coalesce direct realtime updates to at most one render per animation frame. The server
-  // can push large snapshots many times per second (project.live, execution, overview); applying
-  // each one synchronously runs a deep-equality pass + Preact reconciliation per message and can
-  // saturate the main thread, freezing the tab. Buffering the latest payload and flushing on a
-  // rAF collapses a burst into a single render while always converging on the newest snapshot.
-  const pendingDirectPayloadRef = useRef<{ value: T } | null>(null);
-  const directUpdateFrameRef = useRef<number | null>(null);
-  const directUpdateTimeoutRef = useRef<number | null>(null);
+  const scheduleSilentRefresh = useCallback(() => controllerRef.current?.scheduleSilentRefresh(), []);
+  const scheduleDirectUpdate = useCallback((payload: T) => controllerRef.current?.scheduleDirectUpdate(payload), []);
 
-  const flushDirectUpdate = useCallback(() => {
-    if (typeof window !== "undefined") {
-      if (directUpdateFrameRef.current !== null) {
-        window.cancelAnimationFrame(directUpdateFrameRef.current);
-      }
-      if (directUpdateTimeoutRef.current !== null) {
-        window.clearTimeout(directUpdateTimeoutRef.current);
-      }
-    }
-    directUpdateFrameRef.current = null;
-    directUpdateTimeoutRef.current = null;
-    const pending = pendingDirectPayloadRef.current;
-    if (!pending) {
-      return;
-    }
-    pendingDirectPayloadRef.current = null;
-    const nextPayload = pending.value;
-    setData((prev) => {
-      const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextPayload) : nextPayload;
-      if (prev === stabilized) return prev;
-      const checkEqual = optionsRef.current.isEqual ?? isDeepEqual;
-      return checkEqual(prev, stabilized) ? prev : stabilized;
-    });
-    setError(null);
-    setLoading((prev) => (prev !== false ? false : prev));
-  }, [setData]);
-
-  const scheduleDirectUpdate = useCallback((payload: T) => {
-    pendingDirectPayloadRef.current = { value: payload };
-    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
-      flushDirectUpdate();
-      return;
-    }
-    if (directUpdateFrameRef.current === null) {
-      directUpdateFrameRef.current = window.requestAnimationFrame(() => flushDirectUpdate());
-    }
-    // rAF is paused entirely when the window/tab is occluded, backgrounded, or minimized
-    // (Electron throttles it aggressively), which would strand the latest payload until the
-    // window is refocused — the app appears frozen. A timeout fallback guarantees the buffered
-    // update still lands within a bounded delay even when no frame is ever painted.
-    if (directUpdateTimeoutRef.current === null) {
-      directUpdateTimeoutRef.current = window.setTimeout(() => flushDirectUpdate(), 250);
-    }
-  }, [flushDirectUpdate]);
-
-  useEffect(() => {
-    return () => {
-      if (typeof window === "undefined") {
-        return;
-      }
-      if (directUpdateFrameRef.current !== null) {
-        window.cancelAnimationFrame(directUpdateFrameRef.current);
-        directUpdateFrameRef.current = null;
-      }
-      if (directUpdateTimeoutRef.current !== null) {
-        window.clearTimeout(directUpdateTimeoutRef.current);
-        directUpdateTimeoutRef.current = null;
-      }
-    };
-  }, []);
 
   // 2. Realtime WebSocket Subscription Effect
 

@@ -147,8 +147,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
 
         </div>
         <Row label="Auto-create PRs" description={settings.git.githubMode === "LOCAL" ? "Open pull requests automatically for remote git workflows. (Disabled in Local mode)" : "Open pull requests automatically for remote git workflows."} badge={getBadge("git.autoCreatePr")}>
-          <Toggle
-            value={settings.git.githubMode === "LOCAL" ? false : settings.git.autoCreatePr}
+          <Toggle aria-label="Auto-create PRs" aria-description={settings.git.githubMode === "LOCAL" ? "Open pull requests automatically for remote git workflows. (Disabled in Local mode)" : "Open pull requests automatically for remote git workflows."} value={settings.git.githubMode === "LOCAL" ? false : settings.git.autoCreatePr}
             disabled={settings.git.githubMode === "LOCAL"}
             onChange={(value) => update({
               git: {
@@ -159,8 +158,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           />
         </Row>
         <Row label="Auto-close linked issues" description={settings.git.githubMode === "LOCAL" ? "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete. (Disabled in Local mode)" : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} badge={getBadge("git.autoCloseLinkedIssues")}>
-          <Toggle
-            value={settings.git.githubMode === "LOCAL" ? false : settings.git.autoCloseLinkedIssues}
+          <Toggle aria-label="Auto-close linked issues" aria-description={settings.git.githubMode === "LOCAL" ? "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete. (Disabled in Local mode)" : "Close imported GitHub/GitLab issues after the sprint finishes and the main merge gate is complete."} value={settings.git.githubMode === "LOCAL" ? false : settings.git.autoCloseLinkedIssues}
             disabled={settings.git.githubMode === "LOCAL"}
             onChange={(value) => update({
               git: {
@@ -187,8 +185,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ["waitForJulesCiAutofix", "Wait for Jules autofix", "Allow Jules to attempt CI autofix before escalating."],
         ].map(([field, label, description]) => (
           <Row key={field} label={label} description={description} badge={getBadge(`ciIntelligence.${field}`)}>
-            <Toggle
-              value={settings.git.githubMode === "LOCAL" ? false : (settings.ciIntelligence[field as keyof ProjectSettings["ciIntelligence"]] as boolean)}
+            <Toggle aria-label={label} aria-description={description} value={settings.git.githubMode === "LOCAL" ? false : (settings.ciIntelligence[field as keyof ProjectSettings["ciIntelligence"]] as boolean)}
               disabled={settings.git.githubMode === "LOCAL"}
               onChange={(value) => update({
                 ciIntelligence: {
@@ -272,8 +269,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             ["watchLoop", "Watch loop"],
           ].map(([field, label]) => (
             <Row key={field} label={label} description={`Toggle the ${label.toLowerCase()} phase for this scope.`} badge={getBadge(`sprintLoopSteps.${field}`)}>
-              <Toggle
-                value={settings.sprintLoopSteps[field as keyof ProjectSettings["sprintLoopSteps"]] as boolean}
+              <Toggle aria-label={label} aria-description={`Toggle the ${label.toLowerCase()} phase for this scope.`} value={settings.sprintLoopSteps[field as keyof ProjectSettings["sprintLoopSteps"]] as boolean}
                 onChange={(value) => update({
                   sprintLoopSteps: {
                     ...settings.sprintLoopSteps,
@@ -360,8 +356,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             />
           </Row>
           <Row label="Cache setup as image" description="Build and reuse a derived Docker image keyed by the base image and setup script contents." badge={getBadge("cliWorkflow.containerCacheSetupScriptImage")}>
-            <Toggle
-              value={settings.cliWorkflow.containerCacheSetupScriptImage}
+            <Toggle aria-label="Cache setup as image" aria-description="Build and reuse a derived Docker image keyed by the base image and setup script contents." value={settings.cliWorkflow.containerCacheSetupScriptImage}
               onChange={(value) => update({
                 cliWorkflow: {
                   ...settings.cliWorkflow,
@@ -388,8 +383,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             ["containerMountAntigravityAuth", "Mount Antigravity auth"],
           ].map(([field, label]) => (
             <Row key={field} label={label} description={`Enable ${label.toLowerCase()} for this scope.`} badge={getBadge(`cliWorkflow.${field}`)}>
-              <Toggle
-                value={settings.cliWorkflow[field as keyof ProjectSettings["cliWorkflow"]] as boolean}
+              <Toggle aria-label={label} aria-description={`Enable ${label.toLowerCase()} for this scope.`} value={settings.cliWorkflow[field as keyof ProjectSettings["cliWorkflow"]] as boolean}
                 onChange={(value) => update({
                   cliWorkflow: {
                     ...settings.cliWorkflow,
@@ -449,8 +443,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             ["containerAntigravityAuthPath", "Antigravity auth path"],
           ].map(([field, label]) => (
             <Row key={field} label={label} description={`Runtime path mounted for ${label.toLowerCase()}.`} badge={getBadge(`cliWorkflow.${field}`)}>
-              <TextInput
-                value={settings.cliWorkflow[field as keyof ProjectSettings["cliWorkflow"]] as string}
+              <TextInput aria-label={label} aria-description={`Runtime path mounted for ${label.toLowerCase()}.`} value={settings.cliWorkflow[field as keyof ProjectSettings["cliWorkflow"]] as string}
                 onChange={(value) => update({
                   cliWorkflow: {
                     ...settings.cliWorkflow,
@@ -479,8 +472,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             ["autoStopOnTerminalSprint", "Stop preview when sprint ends"],
           ].map(([field, label]) => (
             <Row key={field} label={label} description={`Enable ${label.toLowerCase()} for this scope.`} badge={getBadge(`sprintPreview.${field}`)}>
-              <Toggle
-                value={settings.sprintPreview[field as keyof ProjectSettings["sprintPreview"]] as boolean}
+              <Toggle aria-label={label} aria-description={`Enable ${label.toLowerCase()} for this scope.`} value={settings.sprintPreview[field as keyof ProjectSettings["sprintPreview"]] as boolean}
                 onChange={(value) => update({
                   sprintPreview: {
                     ...settings.sprintPreview,
@@ -572,8 +564,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               description={skill.isInternal ? "Built-in skill managed by Code UX." : "Project skill discovered from local configuration."}
               badge={getBadge("skills")}
             >
-              <Toggle
-                value={skill.enabled}
+              <Toggle aria-label="Toggle setting"                 value={skill.enabled}
                 onChange={(value) => {
                   const nextSkills = settings.skills.map((entry, entryIndex) => (
                     entryIndex === index ? { ...entry, enabled: value } : entry

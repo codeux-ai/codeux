@@ -68,7 +68,8 @@ Use this page as the main entrypoint.
 2. [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
 3. [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
 4. [Operations Runbook](./operations/runbook.md)
-5. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
+5. [Security Hardening](./operations/security-hardening.md)
+6. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 
 ## Full Table of Contents
 
@@ -129,6 +130,7 @@ Use this page as the main entrypoint.
 - [Qwen Code Integration](./settings/qwen-code-integration.md)
 - [OpenCode Integration](./settings/opencode-integration.md)
 - [Operations Runbook](./operations/runbook.md)
+- [Security Hardening](./operations/security-hardening.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [Testing and Quality](./development/testing-and-quality.md)
 - [Electron Desktop App](./deployment/electron-desktop.md)

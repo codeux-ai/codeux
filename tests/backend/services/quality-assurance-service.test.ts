@@ -421,7 +421,7 @@ describe("QualityAssuranceService", () => {
     expect(providerRunner.runProviderForText).not.toHaveBeenCalled();
   });
 
-  it("does not rerun sprint QA after fixes when maxTaskReviewRuns is 1", async () => {
+  it("does not rerun sprint QA after fixes when maxSprintReviewRuns is 1", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-max-runs-"));
     tempDirs.push(dir);
     const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -475,6 +475,7 @@ describe("QualityAssuranceService", () => {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
             maxTaskReviewRuns: 1,
+            maxSprintReviewRuns: 1,
           },
         },
       }),
@@ -684,6 +685,7 @@ describe("QualityAssuranceService", () => {
           runIndex: 3,
         }),
         countTaskRuns: vi.fn().mockReturnValue(3),
+        countDecisiveTaskRuns: vi.fn().mockReturnValue(3),
       } as any,
       taskService: {} as any,
       agentPresetSyncService: {} as any,
@@ -719,7 +721,10 @@ describe("QualityAssuranceService", () => {
     });
 
     expect(gate.mergeAllowed).toBe(false);
-    expect(gate.reason).toBe("changes_requested");
+    // At the retry cap with changes still outstanding the gate now reports
+    // exhaustion (not changes_requested) so the orchestrator applies the
+    // exhaustion policy instead of looping forever.
+    expect(gate.reason).toBe("retries_exhausted");
     expect(gate.runsUsed).toBe(3);
     expect(gate.maxRuns).toBe(3);
   });
@@ -1037,6 +1042,130 @@ describe("QualityAssuranceService", () => {
     expect(outcome.reviewed).toBe(true);
     expect(outcome.reportText).toContain("Follow-up fix verified");
     expect(qaReviewRepository.listRunsForTask(task.id)).toHaveLength(2);
+  });
+
+  it("does not force-pass a completed_task_without_pr when the verdict is changes_requested even if shouldHavePr is false", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-no-pr-changes-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "coding_completed",
+      isIndependent: true,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      state: "COMPLETED",
+      provider: "qwen-code",
+      sessionId: "session-1",
+      startedAt: "2026-06-13T20:40:00.000Z",
+      finishedAt: "2026-06-13T20:41:00.000Z",
+    });
+    const qaPreset = agentPresetRepository.createAgentPreset(project.id, {
+      name: "QA",
+      presetId: "QA-no-pr-changes",
+      instructionMarkdown: "QA Agent",
+    });
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        resolveTargetedQualityAssuranceAgent: async () => ({
+          id: qaPreset.id,
+          name: qaPreset.name,
+          instructionMarkdown: qaPreset.instructionMarkdown,
+        }),
+      } as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            maxTaskReviewRuns: 3,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    // Reviewer says the work is wrong (changes_requested) yet also reports that no
+    // PR was needed. The changes_requested verdict must win — the task must reopen
+    // and stay merge-blocked, not be force-passed by `shouldHavePr === false`.
+    vi.spyOn(service as any, "runReview").mockResolvedValue({
+      verdict: "changes_requested",
+      summary: "The content of alpha.md does not match the required status line.",
+      findings: [],
+      fixInstructions: null,
+      targetTaskKey: "T1",
+      shouldHavePr: false,
+      followUpTasks: [],
+      raw: {},
+    });
+    vi.spyOn(service as any, "cleanupCliWorkspaceIfNeeded").mockResolvedValue(undefined);
+
+    const outcome = await service.reviewCompletedTask({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      task: {
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        id: "T1",
+        title: "Initial task",
+        prompt: "Implement the initial feature.",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "qwen-code",
+        session_id: "session-1",
+        // No pr_url / worker_branch → resolves to the completed_task_without_pr trigger.
+      },
+      subtasks: [],
+    });
+
+    expect(outcome.reviewed).toBe(true);
+    expect(outcome.reopenedTask).toBe(true);
+    expect(outcome.mergeBlocked).toBe(true);
+    const latestRun = qaReviewRepository.getLatestTaskRun(task.id);
+    expect(latestRun?.triggerType).toBe("completed_task_without_pr");
+    expect(latestRun?.outcome).toBe("changes_requested");
   });
 
   it("recovers a running task QA review when the execution invocation never linked provider runtime", async () => {

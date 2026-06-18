@@ -256,7 +256,7 @@ export const ChatPage: FunctionComponent = () => {
             isCompacting={compacting}
           />
 
-          <div ref={messagesRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto px-6 py-6">
+          <div id="chat-panel" role="log" aria-label="Message history" ref={messagesRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto px-6 py-6">
             {threadsLoading ? (
               <LoadingChat label="Loading conversation" />
             ) : !selectedThread ? (
@@ -300,7 +300,10 @@ export const ChatPage: FunctionComponent = () => {
 
           <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
             <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <label htmlFor="message-composer" className="sr-only">Message</label>
               <textarea
+                id="message-composer"
+                aria-describedby="composer-help"
                 ref={composerRef}
                 value={input}
                 rows={1}
@@ -323,12 +326,17 @@ export const ChatPage: FunctionComponent = () => {
                 }}
               />
               <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="text-[10px] font-mono text-slate-400">
+                <div id="composer-help" className="text-[10px] font-mono text-slate-400">
                   {activeConnection
                     ? `${activeConnection.displayName} · ${activeConnection.status} · Enter sends`
                     : "Messages will stay queued until a listener claims or is assigned to this thread · Enter sends · Shift+Enter newline"}
                 </div>
+                <div className="sr-only" aria-live="polite">
+                  {sending ? "Sending message..." : ""}
+                  {error ? `Failed: ${error}` : ""}
+                </div>
                 <button
+                  aria-label="Send message"
                   type="button"
                   onClick={() => void handleSend()}
                   disabled={!selectedProject || !input.trim() || sending}
@@ -469,7 +477,7 @@ export const ChatPage: FunctionComponent = () => {
           </div>
         </div>
 
-        <div ref={messagesRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto px-6 py-6">
+        <div id="chat-panel" role="log" aria-label="Message history" ref={messagesRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto px-6 py-6">
           {invocationsLoading ? (
             <LoadingChat label="Loading invocations" />
           ) : !selectedInvocation ? (

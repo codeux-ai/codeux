@@ -163,7 +163,7 @@ The dashboard must show these states explicitly and must not invent fake precisi
 
 ## Dashboard API Surface
 
-Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets.
+Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets. The duration aggregation strategy bounds memory usage by using pre-aggregated metrics coupled with bounded percentile sampling.
 
 Usage data now appears in two read models:
 
@@ -176,7 +176,10 @@ Historical Docker-backed CLI invocations that were persisted as `unavailable` be
 
 The stats snapshot includes:
 
-- project totals
+- project totals (including dynamic cost rollups based on typed token-pricing configurations which calculate input, output, and cached input costs in USD based on per-million token rates, defaulting to zero if unset or unconfigured)
+- total provider cost totals (e.g. `providerCost` map)
+- total model cost totals (e.g. `modelCost` map)
+- usage cost chart series for historical visualization (e.g. `core_total_cost`, `provider_cost_*`)
 - active sprint metadata
 - the original query (`window`, optional `from`, optional `to`)
 - normalized range metadata (`label`, `resolution`, `resolutionLabel`, `from`, `to`, `bucketCount`, `isCustom`)
@@ -194,6 +197,7 @@ The dashboard now has a dedicated `/stats` page.
 
 It focuses on:
 
+- total cost
 - total tokens
 - The Overview page now reuses project stats telemetry to display a 7-day Total Tokens card for the selected project, maintaining consistency with the Stats page without introducing a separate query path.
 - active AI time
@@ -254,3 +258,8 @@ The telemetry model is designed for future exact reporting across:
 - per week
 
 Because the canonical source is per invocation, additional reporting surfaces can be added later without changing how usage is recorded.
+
+
+### ProviderTelemetryWatcher
+
+Live provider telemetry polling is extracted into `ProviderTelemetryWatcher`. This helper is responsible for the periodic read of provider log artifacts during an active session (e.g. while `provider-runner` waits for the CLI to complete). It handles the polling loop, background error swallowing, and temporary database cleanup without affecting the core completion result. Note that telemetry emitted by `ProviderTelemetryWatcher` is best-effort for live dashboarding; the final usage data collected by `ProviderRunner` after process exit remains authoritative.

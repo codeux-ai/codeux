@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { deriveTaskBoardState } from "../../../dashboard/src/v2/lib/task-board-state.js";
+import { deriveTaskBoardState, getTaskLane } from "../../../dashboard/src/v2/lib/task-board-state.js";
 import type { Task, TaskPriority, TaskStatus } from "../../../dashboard/src/v2/types.js";
 
 function createTask(id: string, status: TaskStatus, priority: TaskPriority): Task {
@@ -116,4 +116,12 @@ test("deriveTaskBoardState: filtered views - filtering by in_progress shows both
   expect(state.filteredTasks.length).toBe(2);
   const inProgressCol = state.columns.find(c => c.status === "in_progress")!;
   expect(inProgressCol.count).toBe(2);
+});
+
+test("getTaskLane: correctly maps statuses to lanes", () => {
+  expect(getTaskLane("pending")).toBe("pending");
+  expect(getTaskLane("completed")).toBe("completed");
+  expect(getTaskLane("in_progress")).toBe("in_progress");
+  expect(getTaskLane("coding_completed")).toBe("in_progress");
+  expect(getTaskLane("QA_REVIEW_FAILED")).toBe("in_progress");
 });

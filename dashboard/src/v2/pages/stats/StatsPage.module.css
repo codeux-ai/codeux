@@ -33,7 +33,7 @@
 .purposeCards {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @media (min-width: 768px) {

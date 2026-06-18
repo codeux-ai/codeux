@@ -21,8 +21,21 @@ export const fetchExecutionSnapshot = async (): Promise<ExecutionDashboardSnapsh
   return fetchJson<ExecutionDashboardSnapshot>("/api/execution");
 };
 
+const MAX_CACHE_SIZE = 5;
 const livePayloadCache = new Map<string, RuntimeDashboardPayload>();
 const livePayloadInflight = new Map<string, Promise<RuntimeDashboardPayload>>();
+
+const updateLruCache = (key: string, resolved: RuntimeDashboardPayload) => {
+  if (livePayloadCache.has(key)) {
+    livePayloadCache.delete(key);
+  } else if (livePayloadCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = livePayloadCache.keys().next().value;
+    if (firstKey !== undefined) {
+      livePayloadCache.delete(firstKey);
+    }
+  }
+  livePayloadCache.set(key, resolved);
+};
 
 export const clearLivePayloadCacheForTests = (): void => {
   livePayloadCache.clear();
@@ -31,9 +44,19 @@ export const clearLivePayloadCacheForTests = (): void => {
   onboardingReadinessInflight = null;
 };
 
+export const invalidateLivePayloadCache = (projectId?: string | null): void => {
+  const key = projectId?.trim() || "default";
+  livePayloadCache.delete(key);
+};
+
 export const getCachedLivePayload = (projectId?: string | null): RuntimeDashboardPayload | null => {
   const key = projectId?.trim() || "default";
-  return livePayloadCache.get(key) || null;
+  if (!livePayloadCache.has(key)) return null;
+  const val = livePayloadCache.get(key)!;
+  // Update LRU position on access
+  livePayloadCache.delete(key);
+  livePayloadCache.set(key, val);
+  return val;
 };
 
 export const fetchRuntimeDashboardPayload = async (projectId?: string | null): Promise<RuntimeDashboardPayload> => {
@@ -54,7 +77,7 @@ export const fetchLivePayload = async (projectId?: string | null): Promise<Runti
     livePayloadInflight.set(key, request);
   }
   const resolved = await request;
-  livePayloadCache.set(key, resolved);
+  updateLruCache(key, resolved);
   return resolved;
 };
 

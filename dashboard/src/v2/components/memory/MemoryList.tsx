@@ -99,13 +99,17 @@ export const MemoryList: FunctionComponent<{
 
         return (
             <div className="flex flex-col items-center justify-center p-8 text-center text-slate-400">
+                <div className="sr-only" aria-live="polite" aria-atomic="true">No memories found</div>
                 <p className="text-sm font-medium">No memories found</p>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col gap-3 h-full overflow-y-auto dashboard-scrollbar p-2" ref={listRef}>
+        <div className="flex flex-col gap-3 h-full overflow-y-auto dashboard-scrollbar p-2" ref={listRef} role="listbox">
+            <div className="sr-only" aria-live="polite" aria-atomic="true">
+                {renderedNodes.length} memories found
+            </div>
             <div className="sticky top-0 z-10 w-full mb-2">
                 <ActionFeedbackRegion
                     status={memoryMutationsSignal.value.feedback?.status || "idle"}

@@ -29,6 +29,7 @@ export interface CommandOptions {
   trimOutput?: boolean;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
+  maxStdoutChars?: number;
   maxStderrChars?: number;
 }
 
@@ -113,6 +114,7 @@ export async function releaseGitHelperForCwd(cwd: string): Promise<void> {
 
 export class CommandRunner {
   private static readonly DEFAULT_MAX_STDERR_CHARS = 4096;
+  private static readonly DEFAULT_MAX_STDOUT_CHARS = 5242880; // 5MB
   private static readonly MAX_COMMAND_DISPLAY_CHARS = 2000;
   // The out-of-process spawner is a performance layer only. Disabled under tests (which spawn
   // in-process for determinism) and via the CODE_UX_SPAWNER_HOST=0 kill-switch for instant rollback.
@@ -209,7 +211,8 @@ export class CommandRunner {
           ...(options.timeout !== undefined ? { timeout: options.timeout } : {}),
           ...(options.stdinFile !== undefined ? { stdinFile: options.stdinFile } : {}),
           ...(options.trimOutput !== undefined ? { trimOutput: options.trimOutput } : {}),
-          ...(options.maxStderrChars !== undefined ? { maxStderrChars: options.maxStderrChars } : {}),
+          maxStdoutChars: options.maxStdoutChars ?? CommandRunner.DEFAULT_MAX_STDOUT_CHARS,
+          maxStderrChars: options.maxStderrChars ?? CommandRunner.DEFAULT_MAX_STDERR_CHARS,
           streamStdoutLines: Boolean(options.onStdoutLine),
           streamStderrLines: Boolean(options.onStderrLine),
           ...spawner.buildEnvPayload(options.env),
@@ -247,7 +250,6 @@ export class CommandRunner {
     const {
       timeout,
       trimOutput = true,
-      maxStderrChars = CommandRunner.DEFAULT_MAX_STDERR_CHARS,
     } = options;
 
     let ok: boolean;
@@ -269,19 +271,23 @@ export class CommandRunner {
       const separator = finalStderr.length > 0 && !finalStderr.endsWith("\n") ? "\n" : "";
       finalStderr = `${finalStderr}${separator}${extra}`;
     }
-    const clippedStderr = finalStderr.length > maxStderrChars
-      ? `...${finalStderr.slice(-maxStderrChars)}`
-      : finalStderr;
+    if (raw.stderrClipped) {
+      finalStderr = `...${finalStderr}`;
+    }
 
-    const normalizedStdout = containerHostCwd
+    let normalizedStdout = containerHostCwd
       ? this.mapContainerStdoutToHost(raw.stdout, containerHostCwd)
       : raw.stdout;
+    normalizedStdout = trimOutput ? normalizedStdout.trim() : normalizedStdout;
+    if (raw.stdoutClipped) {
+      normalizedStdout = `...${normalizedStdout}`;
+    }
 
     return {
       ok,
       code: raw.code,
-      stdout: trimOutput ? normalizedStdout.trim() : normalizedStdout,
-      stderr: clippedStderr,
+      stdout: normalizedStdout,
+      stderr: finalStderr,
     };
   }
 
@@ -308,6 +314,7 @@ export class CommandRunner {
       trimOutput = true,
       onStdoutLine,
       onStderrLine,
+      maxStdoutChars = CommandRunner.DEFAULT_MAX_STDOUT_CHARS,
       maxStderrChars = CommandRunner.DEFAULT_MAX_STDERR_CHARS,
     } = options;
 
@@ -322,6 +329,8 @@ export class CommandRunner {
       let stderr = "";
       let stdoutBuffer = "";
       let stderrBuffer = "";
+      let stdoutClipped = false;
+      let stderrClipped = false;
       let timedOut = false;
       let aborted = false;
       let resolved = false;
@@ -348,20 +357,23 @@ export class CommandRunner {
           const separator = finalStderr.length > 0 && !finalStderr.endsWith("\n") ? "\n" : "";
           finalStderr = `${finalStderr}${separator}${extraStderr}`;
         }
+        if (stderrClipped) {
+          finalStderr = `...${finalStderr}`;
+        }
 
-        const clippedStderr = finalStderr.length > maxStderrChars
-          ? `...${finalStderr.slice(-maxStderrChars)}`
-          : finalStderr;
-
-        const normalizedStdout = resolvedCommand.containerHostCwd
+        let normalizedStdout = resolvedCommand.containerHostCwd
           ? this.mapContainerStdoutToHost(stdout, resolvedCommand.containerHostCwd)
           : stdout;
+        normalizedStdout = trimOutput ? normalizedStdout.trim() : normalizedStdout;
+        if (stdoutClipped) {
+          normalizedStdout = `...${normalizedStdout}`;
+        }
 
         resolve({
           ok,
           code,
-          stdout: trimOutput ? normalizedStdout.trim() : normalizedStdout,
-          stderr: clippedStderr,
+          stdout: normalizedStdout,
+          stderr: finalStderr,
         });
       };
 
@@ -419,6 +431,10 @@ export class CommandRunner {
         const text = data.toString();
         if (isStderr) {
           stderr += text;
+          if (stderr.length > maxStderrChars) {
+            stderr = stderr.slice(-maxStderrChars);
+            stderrClipped = true;
+          }
           if (callback) {
             stderrBuffer += text;
             const lines = stderrBuffer.split("\n");
@@ -432,6 +448,10 @@ export class CommandRunner {
           }
         } else {
           stdout += text;
+          if (stdout.length > maxStdoutChars) {
+            stdout = stdout.slice(-maxStdoutChars);
+            stdoutClipped = true;
+          }
           if (callback) {
             stdoutBuffer += text;
             const lines = stdoutBuffer.split("\n");

@@ -2,6 +2,7 @@ import type { FunctionComponent } from 'preact';
 import type { JSX } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import gsap from 'gsap';
+import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import type {
   ProjectExecutionStatsSnapshot,
 } from '../../../types.js';
@@ -9,6 +10,7 @@ import {
   formatTokens,
   formatDuration,
   formatDateTime,
+  formatCost
 } from '../stats-utils.js';
 import {
   CHIP_CLASS,
@@ -80,6 +82,7 @@ export const InteractiveUsageChart: FunctionComponent<{
     setEnabledSeries,
   } = chartState;
 
+  const isReducedMotion = useReducedMotion();
   const buckets = stats.buckets;
 
   const dimensionsRef = useRef({ width: 1200, height: 256 });
@@ -308,13 +311,33 @@ export const InteractiveUsageChart: FunctionComponent<{
       <div className="relative flex flex-col gap-8">
         {/* Screen reader summary */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
-          <h2 className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
+          <h2 id="chart-summary-heading" className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
           <p>
             Currently showing {visibleBuckets.length} buckets.
             {activeBucket ? `Focused bucket: ${activeBucket.label}. Tokens: ${activeBucket.usage.totalTokens}` : "No bucket focused."}
             Active series: {visibleSeries.map(s => s.label).join(", ")}.
             Peak Tokens: {formatTokens(peakTokens)}. Peak Time: {formatDuration(peakTime)}. Average Tokens: {formatTokens(averageTokens)}. Peak Invocations: {peakInvocations.toLocaleString()}.
           </p>
+          <table className="sr-only">
+            <thead>
+              <tr>
+                <th>Time</th>
+                {visibleSeries.map(s => (
+                  <th key={s.id}>{s.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleBuckets.map((bucket, i) => (
+                <tr key={bucket.bucketStart}>
+                  <td>{bucket.label}</td>
+                  {visibleSeries.map(s => (
+                    <td key={s.id}>{s.formatter(s.values[i] ?? 0)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
         <UsageGraphHeader
           title={zoomRange ? "Zoomed telemetry window" : stats.range.label}
@@ -433,7 +456,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                   <UsageGraphEmpty />
                 </div>
               ) : (
-                <svg aria-hidden="true" viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
+                <svg role="img" aria-labelledby="chart-summary-heading" viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
                   <defs>
                     {chartData.map((series) => (
                       <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">
@@ -602,8 +625,16 @@ export const InteractiveUsageChart: FunctionComponent<{
                   ? `${visibleBuckets.length} buckets in zoom`
                   : `${stats.range.bucketCount} buckets in ${stats.range.label.toLowerCase()}`}
               </div>
-              {activeBucket ? (
+              {activeBucket ? (() => {
+                const hasCost = activeBucket.usage.totalCostUsd > 0;
+                return (
                 <div className="mt-6 space-y-4">
+                  {hasCost ? (
+                  <div className="flex items-center justify-between rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-4 shadow-sm transition-all hover:bg-emerald-500/[0.15]">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">Total Cost</div>
+                    <div className="text-base font-black text-[var(--stats-value-color)]">{formatCost(activeBucket.usage.totalCostUsd)}</div>
+                  </div>
+                ) : null}
                   <div className="flex items-center justify-between rounded-2xl border border-signal-500/20 bg-signal-500/10 px-5 py-4 shadow-sm transition-all hover:bg-signal-500/[0.15]">
                     <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">Tokens</div>
                     <div className="text-base font-black text-[var(--stats-value-color)]">{formatTokens(activeBucket.usage.totalTokens)}</div>
@@ -617,7 +648,8 @@ export const InteractiveUsageChart: FunctionComponent<{
                     <div className="text-base font-black text-[var(--stats-value-color)]">{activeBucket.usage.invocationCount.toLocaleString()}</div>
                   </div>
                 </div>
-              ) : null}
+                );
+              })() : null}
             </div>
           </div>
         </div>

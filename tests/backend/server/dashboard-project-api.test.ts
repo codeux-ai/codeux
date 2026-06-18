@@ -874,6 +874,7 @@ describe("dashboard project management API", () => {
       executionSnapshot.recentEvents.find((event) => (event as { eventType?: string })?.eventType === "status_sync"),
     ).toBeUndefined();
 
+    const fixedNow = Date.now();
     const telemetryRun = executionRepository.createSprintRun({
       projectId: project.id,
       sprintId: sprint.id,
@@ -917,8 +918,8 @@ describe("dashboard project management API", () => {
       provider: "codex",
       state: "completed",
       sessionId: "stats-session-1",
-      startedAt: new Date(Date.now() - 125_000).toISOString(),
-      finishedAt: new Date(Date.now() - 30_000).toISOString(),
+      startedAt: new Date(fixedNow - 125_000).toISOString(),
+      finishedAt: new Date(fixedNow - 30_000).toISOString(),
       durationMs: 90_000,
     });
     const invocation = executionRepository.createProviderInvocationUsage({
@@ -932,12 +933,12 @@ describe("dashboard project management API", () => {
       provider: "codex",
       purpose: "task_coding",
       model: "gpt-5.3-codex",
-      startedAt: new Date(Date.now() - 125_000).toISOString(),
+      startedAt: new Date(fixedNow - 125_000).toISOString(),
       promptChars: 128,
     });
     executionRepository.updateProviderInvocationUsage(invocation.id, {
       status: "completed",
-      finishedAt: new Date(Date.now() - 30_000).toISOString(),
+      finishedAt: new Date(fixedNow - 30_000).toISOString(),
       durationMs: 90_000,
       transcriptChars: 84,
       inputTokens: 320,
@@ -1017,7 +1018,7 @@ describe("dashboard project management API", () => {
       },
     });
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date(fixedNow).toISOString().slice(0, 10);
     const customStatsSnapshot = await fetch(
       `${baseUrl}/api/projects/${project.id}/stats?window=custom&from=${today}&to=${today}`,
     ).then(async (response) => response.json()) as {

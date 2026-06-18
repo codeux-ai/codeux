@@ -193,8 +193,8 @@ describe("KanbanTaskCard Integration", () => {
     );
 
     // Ensure buttons have accessible titles/labels
-    const editBtn = getByTitle("Edit task");
-    const deleteBtn = getByTitle("Delete task");
+    const editBtn = getByTitle(/Edit task/i);
+    const deleteBtn = getByTitle(/Delete task/i);
     expect(editBtn).toBeInTheDocument();
     expect(deleteBtn).toBeInTheDocument();
 
@@ -255,7 +255,7 @@ describe("KanbanTaskCard Integration", () => {
     );
 
     // Check that 'Depends on' text is in the document (from the new sr-only span)
-    const srTexts = getAllByText("Depends on");
+    const srTexts = getAllByText("Depends on task");
     expect(srTexts.length).toBeGreaterThan(0);
     expect(srTexts[0]).toHaveClass("sr-only");
 

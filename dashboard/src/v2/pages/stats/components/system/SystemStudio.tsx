@@ -21,7 +21,7 @@ const SystemMetricCard: FunctionComponent<{
   icon: ComponentType<any>;
   label: string;
   value: string;
-  detail: string;
+  detail: import("preact").ComponentChild;
   circleClassName: string;
   valueClassName?: string;
 }> = ({ icon: Icon, label, value, detail, circleClassName, valueClassName }) => (
@@ -110,6 +110,10 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
     externalApiMetrics,
     sprintStateSummary,
     errorsByCategory,
+    page,
+    setPage,
+    hasMore,
+    totalCount,
   } = useSystemViewData(projectId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SystemTab>("all");
@@ -180,7 +184,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
           <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
             Sprint Overview
           </div>
-          <h2 className="text-xl font-black text-slate-900 dark:text-white">Active State</h2>
+          <div className="text-xl font-black text-slate-900 dark:text-white">Active State</div>
         </div>
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <SystemMetricCard
@@ -194,7 +198,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             icon={TrendingUp}
             label="Active Sprints"
             value={sprintData.activeSprints > 0 ? sprintData.activeSprints.toLocaleString() : "0"}
-            detail={sprintData.activeSprints > 0 ? `${sprintData.runningTasks} tasks live` : <span className="inline-flex items-center rounded-full bg-signal-500 px-2 py-0.5 text-[9px] font-bold text-white">All settled</span> as any}
+            detail={sprintData.activeSprints > 0 ? `${sprintData.runningTasks} tasks live` : <span className="inline-flex items-center rounded-full bg-signal-500 px-2 py-0.5 text-[9px] font-bold text-white">All settled</span>}
             circleClassName="bg-blue-500/10 text-blue-500 dark:text-blue-400"
           />
           <SystemMetricCard
@@ -220,7 +224,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             Status Distribution
           </div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-black text-slate-900 dark:text-white">Invocations</h2>
+            <div className="text-xl font-black text-slate-900 dark:text-white">Invocations</div>
             {summaryMetrics.runningCount > 0 && (
               <div className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
             )}
@@ -281,7 +285,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
               Error Log
             </div>
-            <h2 className="text-xl font-black text-slate-900 dark:text-white">Failure Analysis</h2>
+            <div className="text-xl font-black text-slate-900 dark:text-white">Failure Analysis</div>
           </div>
           {totalErrors > 0 && (
             <div className="flex h-8 items-center justify-center rounded-full border-2 border-amber-500/30 bg-amber-500/10 px-3 text-[11px] font-bold text-amber-600 dark:text-amber-400">
@@ -320,7 +324,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-500 ${CHIP_CLASS}`}>
               Invocations
             </div>
-            <h2 className="text-xl font-black text-slate-900 dark:text-white">Detailed Log</h2>
+            <div className="text-xl font-black text-slate-900 dark:text-white">Detailed Log</div>
           </div>
           <div className="flex flex-wrap gap-2">
             {(Object.entries(apiData) as [keyof typeof apiData, any][]).filter(([_, metrics]) => metrics.calls > 0).map(([key, metrics]) => (
@@ -356,8 +360,11 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             onSearchChange={setSearch}
             availablePurposes={availablePurposes}
             availableProviders={availableProviders}
-            totalCount={allInvocations.length}
+            totalCount={totalCount}
             filteredCount={tabbedInvocations.length}
+            page={page}
+            onPageChange={setPage}
+            hasMore={hasMore}
           />
 
           {error ? (

@@ -72,6 +72,46 @@ export function computeDurationStats(durations: number[]): ExecutionDurationStat
   };
 }
 
+export interface ExecutionDurationAggregates {
+  sampleCount: number;
+  minMs: number;
+  maxMs: number;
+  avgMs: number;
+}
+
+export function computeDurationStatsFromAggregates(
+  aggs: ExecutionDurationAggregates | null | undefined,
+  samples: number[]
+): ExecutionDurationStats {
+  if (!aggs || aggs.sampleCount === 0) {
+    return createEmptyDurationStats();
+  }
+
+  const sortedSamples = samples
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((left, right) => left - right);
+
+  const avgMs = Math.round(aggs.avgMs);
+
+  const percentile = (fraction: number): number => {
+    if (sortedSamples.length === 0) {
+      return avgMs;
+    }
+    const index = Math.min(sortedSamples.length - 1, Math.max(0, Math.ceil(fraction * sortedSamples.length) - 1));
+    return sortedSamples[index]!;
+  };
+
+  const sampleMax = sortedSamples.length > 0 ? sortedSamples[sortedSamples.length - 1]! : 0;
+
+  return {
+    sampleCount: aggs.sampleCount,
+    avgMs: avgMs,
+    p50Ms: percentile(0.5),
+    p95Ms: percentile(0.95),
+    maxMs: Math.max(aggs.maxMs, sampleMax),
+  };
+}
+
 export function buildModelStatsKey(provider: string | null | undefined, model: string | null | undefined): string {
   return `${provider || "unknown"}::${model || ""}`;
 }

@@ -32,6 +32,7 @@ import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 interface SprintComposerProps {
   nextId: string;
@@ -625,9 +626,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                             </h3>
                           </div>
                           <a
-                            href={issue.url}
+                            href={getSafeUrl(issue.url)}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-900 dark:hover:bg-white/[0.06] dark:hover:text-white"
                             aria-label={`Open ${issue.title}`}
                           >

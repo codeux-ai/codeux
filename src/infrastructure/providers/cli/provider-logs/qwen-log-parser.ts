@@ -93,6 +93,22 @@ function toolCallId(call: unknown): string | undefined {
 }
 
 /**
+ * qwen-code's CLI harness prepends its own ephemeral `<system-reminder>` blocks
+ * (the deferred tool-search registry, available skills, etc.) directly into the
+ * user message before sending it to the model — they arrive merged with our
+ * prompt inside a single OpenAI `user` message, not as a separate `system`
+ * message. Split the leading run of those blocks off so the transcript records
+ * the harness-injected context separately from the prompt Code UX authored.
+ */
+function splitLeadingSystemReminders(text: string): { injected: string; prompt: string } {
+  const match = text.match(/^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*)+/);
+  if (!match) {
+    return { injected: "", prompt: text };
+  }
+  return { injected: match[0].trim(), prompt: text.slice(match[0].length).trim() };
+}
+
+/**
  * Maps a single OpenAI chat message to zero or more conversation turns.
  *
  * `reasoningByCallId` lets us recover the per-step chain-of-thought: the API
@@ -110,7 +126,9 @@ function turnsFromOpenAiMessage(
   const turns: ParsedConversationTurn[] = [];
 
   if (role === "user") {
-    if (text) turns.push({ kind: "user", text });
+    const { injected, prompt } = splitLeadingSystemReminders(text);
+    if (injected) turns.push({ kind: "injected_context", text: injected });
+    if (prompt) turns.push({ kind: "user", text: prompt });
     return turns;
   }
   if (role === "tool") {

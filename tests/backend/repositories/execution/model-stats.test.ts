@@ -4,6 +4,7 @@ import {
   buildModelStatsKey,
   buildModelStatsLabel,
   computeDurationStats,
+  computeDurationStatsFromAggregates,
   computeSuccessRate,
   createEmptyStatusCounts,
 } from "../../../../src/repositories/execution/model-stats.js";
@@ -62,5 +63,49 @@ describe("model-stats", () => {
     expect(buildModelStatsLabel("claude", "claude-opus-4-8")).toBe("claude-opus-4-8");
     expect(buildModelStatsLabel("gemini", "  ")).toBe("gemini (default)");
     expect(buildModelStatsLabel(null, null)).toBe("unknown (default)");
+  });
+
+  describe("computeDurationStatsFromAggregates", () => {
+    it("handles null or missing aggregates", () => {
+      expect(computeDurationStatsFromAggregates(null, [100])).toEqual({ sampleCount: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0 });
+      expect(computeDurationStatsFromAggregates(undefined, [100])).toEqual({ sampleCount: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0 });
+      expect(computeDurationStatsFromAggregates({ sampleCount: 0, minMs: 0, maxMs: 0, avgMs: 0 }, [100])).toEqual({ sampleCount: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0 });
+    });
+
+    it("uses aggregate data directly and bounded samples for percentiles", () => {
+      const aggs = { sampleCount: 1500, minMs: 50, maxMs: 1500, avgMs: 550.5 };
+      const boundedSamples = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+
+      const stats = computeDurationStatsFromAggregates(aggs, boundedSamples);
+
+      expect(stats.sampleCount).toBe(1500); // From aggs
+      expect(stats.avgMs).toBe(551); // Rounded from aggs.avgMs
+      expect(stats.maxMs).toBe(1500); // From aggs, greater than sample max
+
+      expect(stats.p50Ms).toBe(500); // From boundedSamples percentile (median)
+      expect(stats.p95Ms).toBe(1000); // From boundedSamples percentile
+    });
+
+    it("uses sample max if it exceeds aggregate max", () => {
+      const aggs = { sampleCount: 1500, minMs: 50, maxMs: 800, avgMs: 550.5 };
+      const boundedSamples = [100, 500, 1000];
+
+      const stats = computeDurationStatsFromAggregates(aggs, boundedSamples);
+
+      expect(stats.maxMs).toBe(1000); // Overrides aggs.maxMs
+    });
+
+    it("handles empty samples arrays safely when aggregates exist by defaulting percentiles to average", () => {
+      const aggs = { sampleCount: 10, minMs: 10, maxMs: 100, avgMs: 50 };
+      const boundedSamples: number[] = [];
+
+      const stats = computeDurationStatsFromAggregates(aggs, boundedSamples);
+
+      expect(stats.sampleCount).toBe(10);
+      expect(stats.avgMs).toBe(50);
+      expect(stats.maxMs).toBe(100);
+      expect(stats.p50Ms).toBe(50); // Defaults to avg
+      expect(stats.p95Ms).toBe(50); // Defaults to avg
+    });
   });
 });

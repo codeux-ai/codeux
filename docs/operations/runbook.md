@@ -204,6 +204,24 @@ Checks:
   - optional downstream reset rewrites dependent tasks to fresh pending execution snapshots so old completed/running descendants do not keep stale runtime metadata
   - if a task already merged code, operators can check the **Undo the Git merge** option to automatically revert the merge commit programmatically in the feature branch before restarting the task cleanly.
 
+### 9. Accidentally Exposed Dashboard or MCP Endpoints
+Symptoms:
+- Unexpected or unauthorized activities appearing in the dashboard logs.
+- Connections originating from unknown IP addresses.
+
+Failure Modes & Rollback Notes:
+- **Failure Mode**: By default, Code UX binds only to the loopback interface (`127.0.0.1`). If bound to `0.0.0.0` without external authentication, any user on the network can execute arbitrary commands on the host machine.
+- **Rollback / Recovery**:
+  1. Immediately terminate the Code UX server process.
+  2. Verify the configuration `HOST` or bind settings to ensure it restricts to `127.0.0.1`.
+  3. Review the `ExecutionInvocations` logs to identify any unauthorized commands executed.
+  4. If exposing Code UX to the network is required, **front it with a reverse proxy** (e.g., Nginx, Traefik, Caddy) that enforces authentication (such as Basic Auth, mTLS, or an OAuth proxy).
+  5. For the MCP HTTP gateway, ensure `--mcp-http-auth-token` is configured when binding beyond loopback.
+
+### Subprocess Execution Limits
+
+Subprocess execution restricts accumulated `stdout` (default 5MB) and `stderr` (default 4KB) memory growth by slicing long outputs and prepending `"..."`. Streaming callbacks (e.g., `onStdoutLine`, `onStderrLine`) still process the full, untruncated line output regardless of this cap, avoiding memory bloat while preserving line-by-line inspection. These bounds can be overridden via `maxStdoutChars` and `maxStderrChars` in command options.
+
 ## Useful Commands
 
 ```bash

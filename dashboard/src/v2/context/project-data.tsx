@@ -11,6 +11,7 @@ import {
 } from "../lib/project-api.js";
 import { useRealtimeResource } from "../../hooks/use-realtime-resource.js";
 import { type ProjectsResponse, isEqualProjectsResponse, stabilizeProjectsResponse } from "../lib/resource-equality.js";
+import { invalidateLivePayloadCache } from "../../lib/api/dashboard-api.js";
 
 interface ProjectDataContextValue {
   projects: Source[];
@@ -57,6 +58,8 @@ export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildre
   });
 
   const selectProject = useCallback(async (projectId: string): Promise<void> => {
+    invalidateLivePayloadCache(); // Invalidate "default" fallback cache
+    invalidateLivePayloadCache(projectId);
     updateDataLocally((curr) => ({ ...curr, selectedProjectId: projectId }));
     const nextProjectId = await selectProjectRequest(projectId);
     updateDataLocally((curr) => ({ ...curr, selectedProjectId: nextProjectId }));
@@ -76,6 +79,8 @@ export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildre
   }, [refetch]);
 
   const deleteProject = useCallback(async (projectId: string): Promise<void> => {
+    invalidateLivePayloadCache(); // Invalidate "default" fallback cache
+    invalidateLivePayloadCache(projectId);
     await deleteProjectRequest(projectId);
     await refetch({ silent: true });
   }, [refetch]);

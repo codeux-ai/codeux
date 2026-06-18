@@ -44,14 +44,14 @@ export const WaveFluid: FunctionComponent<{ accentHex: string; isActive?: boolea
     return (
     <div
         ref={containerRef}
-        className="absolute bottom-0 left-0 right-0 h-16 overflow-hidden pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-700 ease-out"
+        className="absolute bottom-0 left-0 right-0 h-16 overflow-hidden pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 motion-safe:transition-opacity motion-safe:duration-700 motion-safe:ease-out"
     >
         {/* Primary wave — 2 cycles, drifts left */}
         <svg
             style={{
                 position: 'absolute', bottom: 0,
                 width: '200%', height: '100%', left: 0,
-                animation: 'wave-drift 6s linear infinite',
+                animation: prefersReducedMotion ? 'none' : 'wave-drift 6s linear infinite',
             }}
             viewBox="0 0 200 64"
             preserveAspectRatio="none"
@@ -67,7 +67,7 @@ export const WaveFluid: FunctionComponent<{ accentHex: string; isActive?: boolea
             style={{
                 position: 'absolute', bottom: 0,
                 width: '200%', height: '72%', left: 0,
-                animation: 'wave-drift 9s linear infinite reverse',
+                animation: prefersReducedMotion ? 'none' : 'wave-drift 9s linear infinite reverse',
                 animationDelay: '-3.5s',
             }}
             viewBox="0 0 200 64"

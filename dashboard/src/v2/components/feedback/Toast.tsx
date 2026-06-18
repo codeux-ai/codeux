@@ -49,6 +49,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const actionButtonRef = useRef<HTMLButtonElement>(null);
+  const dismissButtonRef = useRef<HTMLButtonElement>(null);
   const reducedMotion = useReducedMotion();
   const Icon = icons[type];
   const colorClass = colors[type];
@@ -95,6 +96,14 @@ export const Toast: FunctionComponent<ToastProps> = ({
   const handleDismiss = () => {
     if (!containerRef.current) return;
 
+    if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current) {
+      const fallback = document.querySelector('[role="main"]') || document.body;
+      (fallback as HTMLElement).focus();
+      if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current) {
+          (document.activeElement as HTMLElement)?.blur();
+      }
+    }
+
     gsap.to(containerRef.current, {
       opacity: 0,
       scale: 0.95,
@@ -114,9 +123,6 @@ export const Toast: FunctionComponent<ToastProps> = ({
   return (
     <div
       ref={containerRef}
-      role={type === "error" ? "alert" : "status"}
-      aria-live={type === "error" ? "assertive" : "polite"}
-      aria-atomic="true"
       className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm p-4 rounded-xl shadow-lg border backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
     >
       <Icon aria-hidden="true" className="w-5 h-5 shrink-0 mt-0.5" />
@@ -140,6 +146,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
         )}
       </div>
       <button
+        ref={dismissButtonRef}
         type="button"
         onClick={(e) => {
           e.preventDefault();

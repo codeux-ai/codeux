@@ -40,14 +40,22 @@ describe("AgentActions", () => {
     expect(agentPresetSyncService.syncProjectAgents).toHaveBeenCalledWith("proj-1");
   });
 
+  it("rejects missing projectId", async () => {
+    await expect(actions.handleAgentAction({
+      domain: "agents",
+      action: "get",
+      payload: { presetId: "agent-1" },
+    })).rejects.toThrow("projectId is required");
+  });
+
   it("handles creating an agent", async () => {
     const res = await actions.handleAgentAction({
       domain: "agents",
       action: "create",
-      payload: { projectId: "proj-1", name: "New Agent" },
+      payload: { projectId: "proj-1", name: "New Agent", avatarConfig: { type: "emoji" }, labels: ["test", "   ", 123] },
     });
     expect(res.result).toEqual({ agent: { id: "agent-3", name: "New Agent" } });
-    expect(agentPresetSyncService.createAgentPreset).toHaveBeenCalled();
+    expect(agentPresetSyncService.createAgentPreset).toHaveBeenCalledWith("proj-1", expect.objectContaining({ avatarConfig: { type: "emoji" }, labels: ["test"] }));
   });
 
   it("handles updating an agent", async () => {

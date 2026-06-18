@@ -27,8 +27,7 @@ export const AutomationPanel: FunctionComponent<{
           />
         </Row>
         <Row label="Auto-approve plans" description="Approve planning checkpoints automatically when the sprint asks for plan confirmation." badge={getBadge("automationInterventions.autoApprovePlan")}>
-          <Toggle
-            value={settings.automationInterventions.autoApprovePlan}
+          <Toggle aria-label="Toggle setting"             value={settings.automationInterventions.autoApprovePlan}
             onChange={(value) => update({
               automationInterventions: {
                 ...settings.automationInterventions,
@@ -38,8 +37,7 @@ export const AutomationPanel: FunctionComponent<{
           />
         </Row>
         <Row label="Auto-answer clarifications" description="Use the clarification template when a task asks for routine clarification." badge={getBadge("automationInterventions.autoAnswerClarification")}>
-          <Toggle
-            value={settings.automationInterventions.autoAnswerClarification}
+          <Toggle aria-label="Toggle setting"             value={settings.automationInterventions.autoAnswerClarification}
             onChange={(value) => update({
               automationInterventions: {
                 ...settings.automationInterventions,
@@ -96,8 +94,7 @@ export const AutomationPanel: FunctionComponent<{
           </div>
         )}
         <Row label="Auto-resume paused runs" description="Resume paused sessions automatically after a transient pause condition clears." badge={getBadge("automationInterventions.autoResumePaused")}>
-          <Toggle
-            value={settings.automationInterventions.autoResumePaused}
+          <Toggle aria-label="Toggle setting"             value={settings.automationInterventions.autoResumePaused}
             onChange={(value) => update({
               automationInterventions: {
                 ...settings.automationInterventions,

@@ -183,6 +183,7 @@ describe("dashboard-lifecycle-service", () => {
         expediteProjectLiveRefresh: vi.fn(),
         scheduleProjectExecutionRefresh: vi.fn(),
         scheduleProjectStructureRefresh: vi.fn(),
+    setCacheInvalidator: vi.fn(),
         scheduleOverviewRefresh: vi.fn(),
         setSnapshotLoaders: vi.fn(),
       } as any,

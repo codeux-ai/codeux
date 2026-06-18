@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import { AlertCircle, Check, RefreshCw, Terminal, X } from "lucide-preact";
 import { useInteractiveLoginSession } from "../../hooks/useInteractiveLoginSession.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 interface TerminalLoginModalProps {
   providerConfigId: string;
@@ -518,7 +519,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                   </div>
                 </div>
                 <a
-                  href={detectedLoginUrl}
+                  href={getSafeUrl(detectedLoginUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-void-950 hover:bg-signal-400 transition-all duration-200 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_4px_30px_rgba(0,224,160,0.4)] cursor-pointer"

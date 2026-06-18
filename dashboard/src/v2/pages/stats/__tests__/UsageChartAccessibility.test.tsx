@@ -8,6 +8,7 @@ import { describe, it, expect, vi, afterEach, beforeEach, beforeAll } from "vite
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { InteractiveUsageChart } from "../components/InteractiveUsageChart.js";
 import { useUsageChartState } from "../use-usage-chart-state.js";
+import { UsageGraphEmpty, UsageGraphLoading, UsageGraphError } from "../components/UsageGraphStates.js";
 
 expect.extend(matchers);
 
@@ -110,5 +111,45 @@ describe("UsageChartAccessibility", () => {
     const resetButton = screen.getByRole("button", { name: /Reset zoom/i });
     expect(resetButton).toBeInTheDocument();
     expect(screen.getByText(/to Last 7 Days/i)).toBeInTheDocument();
+  });
+
+  it("renders an accessible data table alternative for screen readers", () => {
+    const { container } = render(<Wrapper />);
+    const table = container.querySelector('table.sr-only');
+    expect(table).toBeInTheDocument();
+    expect(table?.querySelectorAll('tbody tr').length).toBe(3); // 3 buckets in mock data
+    expect(table?.textContent).toContain('Jan 2');
+    expect(table?.textContent).toContain('200'); // the formatted value
+  });
+
+  it("marks legend and filter controls as toggle buttons", () => {
+    render(<Wrapper />);
+
+    // Test the filter button
+    const filtersButton = screen.getByRole("button", { name: /Filters/i });
+    expect(filtersButton).toHaveAttribute('aria-expanded', 'false');
+
+    // Simulate opening the filter menu to render the series toggles
+    fireEvent.click(filtersButton);
+
+    // Check if filter metric buttons have aria-pressed
+    // Use explicitly lookup for all buttons and find one with aria-pressed.
+    // Given they are rendered within UsageFilterMenu:
+    const buttons = screen.getAllByRole("button");
+    const pressedButton = buttons.find(b => b.getAttribute('aria-pressed') === 'true' || b.getAttribute('aria-pressed') === 'false');
+    expect(pressedButton).toBeInTheDocument();
+  });
+
+  it("provides status roles for loading, empty, and error states", () => {
+    const { container: loadingContainer } = render(<UsageGraphLoading />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+
+    cleanup();
+    const { container: emptyContainer } = render(<UsageGraphEmpty />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+
+    cleanup();
+    const { container: errorContainer } = render(<UsageGraphError />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });

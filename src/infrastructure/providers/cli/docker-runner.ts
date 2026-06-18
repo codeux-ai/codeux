@@ -5,7 +5,7 @@ import * as pathPosix from "path/posix";
 import { fileURLToPath } from "url";
 import { CliWorkflowSettings, type CustomMcpServer } from "../../../contracts/app-types.js";
 import { isUsableCustomMcpServer } from "../../../mcp/mcp-tool-availability.js";
-import { buildClaudeMcpServerEntry, buildCodexMcpServerTomlLines, buildGeminiMcpServerEntry, escapeTomlString } from "./mcp-config-format.js";
+import { buildProviderMcpConfigArtifact } from "./mcp-config-format.js";
 import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import {
@@ -25,13 +25,7 @@ import { WorkspaceManager } from "./workspace-manager.js";
 import { workspaceVolumeHelperPool, type WorkspaceVolumeHelperPool } from "./workspace-volume-helper.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../../../shared/config/code-ux-paths.js";
 import { ensureDefaultCodeUxAssetsInstalled } from "../../../services/code-ux-default-assets-service.js";
-import {
-  CLAUDE_CODE_MCP_CONFIG_MOUNT,
-  CODEX_MCP_CONFIG_MOUNT,
-  GEMINI_MCP_SETTINGS_MOUNT,
-  QWEN_CODE_SETTINGS_MOUNT,
-  ANTIGRAVITY_MCP_CONFIG_MOUNT,
-} from "./docker-bootstrap-builder.js";
+
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -433,149 +427,38 @@ export class DockerRunner implements IDockerRunner {
     customServers: CustomMcpServer[] = [],
     workflowSettings?: CliWorkflowSettings,
   ): Promise<ContainerMount[]> {
-    const rewriteLoopbackUrls = workflowSettings
-      ? this.shouldRewriteDockerLoopbackUrls(workflowSettings)
-      : false;
-    const dockerConn = conn
-      ? { ...conn, url: this.rewriteLoopbackUrlForDocker(conn.url, rewriteLoopbackUrls) }
-      : null;
-    const headers: Record<string, string> = {};
-    if (dockerConn?.authToken) {
-      headers.Authorization = `Bearer ${dockerConn.authToken}`;
-    }
-    if (dockerConn?.agentId) {
-      headers["X-Code-Ux-Agent"] = dockerConn.agentId;
-    }
-    const applicableCustomServers = this.customServersForProvider(customServers, provider)
-      .map((server) => this.rewriteCustomMcpServerForDocker(server, rewriteLoopbackUrls));
-
-    if (provider === "claude-code") {
-      const mcpServers: Record<string, unknown> = {};
-      if (dockerConn) {
-        mcpServers.code_ux = {
-          type: "http",
-          url: dockerConn.url,
-          ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        };
-      }
-      for (const server of applicableCustomServers) {
-        mcpServers[server.name] = buildClaudeMcpServerEntry(server);
-      }
-      if (Object.keys(mcpServers).length === 0) {
-        return [];
-      }
-      const filePath = path.join(tempRoot, "claude-mcp.json");
-      await fs.writeFile(filePath, JSON.stringify({ mcpServers }, null, 2));
-      return [{ source: filePath, destination: CLAUDE_CODE_MCP_CONFIG_MOUNT, readonly: true }];
-    }
-
-    if (provider === "gemini") {
-      const mcpServers: Record<string, unknown> = {};
-      if (dockerConn) {
-        mcpServers.code_ux = {
-          httpUrl: dockerConn.url,
-          ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        };
-      }
-      for (const server of applicableCustomServers) {
-        mcpServers[server.name] = buildGeminiMcpServerEntry(server);
-      }
-      if (Object.keys(mcpServers).length === 0) {
-        return [];
-      }
-      const filePath = path.join(tempRoot, "gemini-settings.json");
-      await fs.writeFile(filePath, JSON.stringify({ mcpServers }, null, 2));
-      return [{ source: filePath, destination: GEMINI_MCP_SETTINGS_MOUNT, readonly: true }];
-    }
-
-    if (provider === "qwen-code") {
-      const filePath = path.join(tempRoot, "qwen-settings.json");
-      let settings: Record<string, unknown> = {};
-      if (providerEnv.QWEN_SETTINGS_CONTENT) {
-        try {
-          settings = JSON.parse(providerEnv.QWEN_SETTINGS_CONTENT) as Record<string, unknown>;
-        } catch {
-          settings = {};
-        }
-      }
-      if (dockerConn || applicableCustomServers.length > 0) {
-        const existingMcpServers = settings.mcpServers as Record<string, unknown> || {};
-        const mcpServers: Record<string, unknown> = { ...existingMcpServers };
-        if (dockerConn) {
-          mcpServers.code_ux = existingMcpServers.code_ux || {
-            httpUrl: dockerConn.url,
-            ...(Object.keys(headers).length > 0 ? { headers } : {}),
-          };
-        }
-        for (const server of applicableCustomServers) {
-          mcpServers[server.name] = buildGeminiMcpServerEntry(server);
-        }
-        settings.mcpServers = mcpServers;
-      }
-      if (Object.keys(settings).length === 0) {
-        return [];
-      }
-      await fs.writeFile(filePath, JSON.stringify(settings, null, 2));
-      return [{ source: filePath, destination: QWEN_CODE_SETTINGS_MOUNT, readonly: true }];
-    }
-
     if (provider === "opencode") {
       return [];
     }
 
-    if (provider === "antigravity") {
-      const mcpServers: Record<string, unknown> = {};
-      if (dockerConn) {
-        mcpServers.code_ux = {
-          serverUrl: dockerConn.url,
-          ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        };
-      }
-      for (const server of applicableCustomServers) {
-        if (server.transport === "stdio") {
-          mcpServers[server.name] = {
-            command: server.command,
-            ...(server.args && server.args.length > 0 ? { args: server.args } : {}),
-            ...(server.env && Object.keys(server.env).length > 0 ? { env: server.env } : {}),
-          };
-        } else {
-          mcpServers[server.name] = {
-            serverUrl: server.url,
-            ...(server.headers && Object.keys(server.headers).length > 0 ? { headers: server.headers } : {}),
-          };
-        }
-      }
-      if (Object.keys(mcpServers).length === 0) {
-        return [];
-      }
-      const filePath = path.join(tempRoot, "antigravity-mcp.json");
-      await fs.writeFile(filePath, JSON.stringify({ mcpServers }, null, 2));
-      return [{ source: filePath, destination: ANTIGRAVITY_MCP_CONFIG_MOUNT, readonly: true }];
-    }
+    const rewriteLoopbackUrls = workflowSettings
+      ? this.shouldRewriteDockerLoopbackUrls(workflowSettings)
+      : false;
 
-    if (!dockerConn && applicableCustomServers.length === 0) {
+    const applicableCustomServers = this.customServersForProvider(customServers, provider);
+
+    const artifact = buildProviderMcpConfigArtifact(provider, conn, applicableCustomServers, {
+      qwenSettingsContent: providerEnv.QWEN_SETTINGS_CONTENT,
+      rewriteEnabled: rewriteLoopbackUrls,
+      rewriteUrl: (url, enabled) => this.rewriteLoopbackUrlForDocker(url, enabled),
+    });
+
+    if (!artifact) {
       return [];
     }
-    const filePath = path.join(tempRoot, "codex-config.toml");
-    const lines: string[] = [];
-    if (dockerConn) {
-      lines.push("[mcp_servers.code-ux]", `url = "${escapeTomlString(dockerConn.url)}"`);
-      const codexHeaderParts: string[] = [];
-      if (dockerConn.authToken) {
-        codexHeaderParts.push(`"Authorization" = "Bearer ${escapeTomlString(dockerConn.authToken)}"`);
-      }
-      if (dockerConn.agentId) {
-        codexHeaderParts.push(`"X-Code-Ux-Agent" = "${escapeTomlString(dockerConn.agentId)}"`);
-      }
-      if (codexHeaderParts.length > 0) {
-        lines.push(`http_headers = { ${codexHeaderParts.join(", ")} }`);
-      }
-    }
-    for (const server of applicableCustomServers) {
-      lines.push(...buildCodexMcpServerTomlLines(server.name, server));
-    }
-    await fs.writeFile(filePath, lines.join("\n") + "\n");
-    return [{ source: filePath, destination: CODEX_MCP_CONFIG_MOUNT, readonly: true }];
+
+    // Standardize filename for backwards-compatibility in Docker temp mount
+    let mountFilename = artifact.filename;
+    if (provider === "claude-code") mountFilename = "claude-mcp.json";
+    if (provider === "gemini") mountFilename = "gemini-settings.json";
+    if (provider === "qwen-code") mountFilename = "qwen-settings.json";
+    if (provider === "codex") mountFilename = "codex-config.toml";
+    if (provider === "antigravity") mountFilename = "antigravity-mcp.json";
+
+    const filePath = path.join(tempRoot, mountFilename);
+    await fs.writeFile(filePath, artifact.content);
+
+    return [{ source: filePath, destination: artifact.dockerMountDestination, readonly: true }];
   }
 
   private shouldRewriteDockerLoopbackUrls(workflowSettings: CliWorkflowSettings): boolean {

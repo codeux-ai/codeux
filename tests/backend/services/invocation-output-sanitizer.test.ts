@@ -39,4 +39,29 @@ describe("sanitizeInvocationOutputText", () => {
 
     expect(sanitizeInvocationOutputText(input)).toBe("The first message was hello.");
   });
+
+  it("redacts sensitive keys in JSON structures", () => {
+    const input = '{"apiKey": "secret123", "normal": "value"}';
+    expect(sanitizeInvocationOutputText(input)).toBe('{"apiKey": "[REDACTED]", "normal": "value"}');
+  });
+
+  it("redacts environment variable assignments", () => {
+    const input = 'export OPENAI_API_KEY=sk-12345\nOPENAI_API_KEY="sk-12345"';
+    expect(sanitizeInvocationOutputText(input)).toBe('export OPENAI_API_KEY=[REDACTED]\nOPENAI_API_KEY="[REDACTED]"');
+  });
+
+  it("redacts Authorization Bearer tokens", () => {
+    const input = 'Authorization: Bearer my-secret-token\n--header "Authorization: Bearer other-token"';
+    expect(sanitizeInvocationOutputText(input)).toBe('Authorization: Bearer [REDACTED]\n--header "Authorization: Bearer [REDACTED]"');
+  });
+
+  it("redacts GitHub tokens", () => {
+    const input = 'here is my token ghp_123456789012345678901234567890123456';
+    expect(sanitizeInvocationOutputText(input)).toBe('here is my token [REDACTED]');
+  });
+
+  it("redacts GitLab tokens", () => {
+    const input = 'gitlab token glpat-12345678901234567890';
+    expect(sanitizeInvocationOutputText(input)).toBe('gitlab token [REDACTED]');
+  });
 });

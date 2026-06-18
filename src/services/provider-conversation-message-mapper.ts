@@ -31,6 +31,8 @@ export function conversationTurnToMessage(
   switch (turn.kind) {
     case "user":
       return { role: "user", contentMarkdown: sanitizedTurnText, metadata: base };
+    case "injected_context":
+      return { role: "system", contentMarkdown: sanitizedTurnText, metadata: { ...base, kind: "injected_context" } };
     case "assistant":
       return { role: "assistant", contentMarkdown: sanitizedTurnText, metadata: base };
     case "reasoning":

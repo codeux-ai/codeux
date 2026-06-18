@@ -5,8 +5,8 @@
     --stats-card-padding: 1.75rem;
     
     /* Surface Tokens (Light Mode) */
-    --stats-card-bg: rgba(255, 255, 255, 0.7);
-    --stats-card-border: rgba(0, 0, 0, 0.06);
+    --stats-card-bg: #FFFFFF;
+    --stats-card-border: rgba(0, 0, 0, 0.08);
     --stats-card-shadow: 0 2px 20px rgba(0, 0, 0, 0.04);
     
     /* Accent Tokens */
@@ -28,8 +28,8 @@
 
   .dark {
     /* Surface Tokens (Dark Mode) */
-    --stats-card-bg: rgba(24, 20, 17, 0.6); /* void-800/60 */
-    --stats-card-border: rgba(255, 255, 255, 0.06);
+    --stats-card-bg: #181411; /* void-800 */
+    --stats-card-border: rgba(255, 255, 255, 0.08);
     --stats-card-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
     
     /* Typography Tokens (Dark Mode) */

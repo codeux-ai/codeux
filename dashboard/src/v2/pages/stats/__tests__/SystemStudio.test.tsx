@@ -65,7 +65,7 @@ function createInvocation(overrides: Partial<ExecutionInvocationRecord>): Execut
 describe("SystemStudio", () => {
   it("renders telemetry, responds to filtering, and toggles row expansion", async () => {
     mockedFetchInvocationMessages.mockResolvedValue([]);
-    mockedFetchProjectInvocations.mockResolvedValue([
+    (mockedFetchProjectInvocations as any).mockResolvedValue([
       createInvocation({
         id: "inv-failed",
         status: "failed",
@@ -103,7 +103,7 @@ describe("SystemStudio", () => {
     expect(screen.getByRole("button", { name: "System Msgs" })).toBeTruthy();
     expect(container.textContent).toContain("1.3k");
     expect(container.textContent).toContain("9m 0s");
-    expect(container.textContent).toContain("2 of 2");
+    expect(container.textContent).toContain("Showing 2 of 2");
     expect(screen.getByText("Rate limited")).toBeTruthy();
     expect(screen.queryByText("Loading messages")).toBeNull();
 
@@ -118,25 +118,27 @@ describe("SystemStudio", () => {
     fireEvent.click(screen.getByRole("button", { name: "Errors" }));
 
     await waitFor(() => {
-      expect(screen.getByText("1 of 2")).toBeTruthy();
+      expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
+      expect(container.textContent).toContain("Rate limited");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "System Msgs" }));
 
     await waitFor(() => {
-      expect(screen.getByText("1 of 2")).toBeTruthy();
+      expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
+      expect(container.textContent).toContain("System Msgs");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "All" }));
 
     await waitFor(() => {
-      expect(screen.getByText("2 of 2")).toBeTruthy();
+      expect(screen.getByText("Showing 2 of 2")).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Running" }));
 
     await waitFor(() => {
-      expect(screen.getByText("1 of 2")).toBeTruthy();
+      expect(screen.getByText("Showing 1 of 2")).toBeTruthy();
     });
 
     expect(container.querySelectorAll("tbody > tr").length).toBe(1);

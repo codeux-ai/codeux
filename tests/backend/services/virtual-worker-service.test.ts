@@ -82,6 +82,84 @@ describe("VirtualWorkerService", () => {
     vi.useFakeTimers();
   });
 
+  it("duplicate attention items in the same sprint do not repeatedly hit settingsRepository during one scheduling pass", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const virtualProject = projectManagementRepository.createProject({
+      name: "Virtual Project",
+      sourceType: "local",
+      sourceRef: "/workspace/virtual-project",
+      defaultBranch: "main",
+    });
+
+    settingsRepository.saveProjectSettings(virtualProject.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
+
+    const sprint = projectManagementRepository.createSprint(virtualProject.id, {
+      name: "Sprint 1",
+      number: 1,
+      goal: "Test caching",
+    });
+
+    // Create duplicate open attention items in the same sprint
+    for (let i = 0; i < 5; i++) {
+      projectAttentionService.openItem({
+        projectId: virtualProject.id,
+        sprintId: sprint.id,
+        taskId: null,
+        sprintRunId: null,
+        dispatchId: null,
+        attentionType: "action_required",
+        severity: "high",
+        ownerType: "worker",
+        title: `Virtual attention ${i}`,
+        summaryMarkdown: "Needs worker action.",
+        payload: null,
+      });
+    }
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: {
+        startTask: vi.fn(),
+      } as any,
+    });
+
+    // Mock resolveEffectiveDashboardSettings by spying on settingsRepository
+    const settingsSpy = vi.spyOn(settingsRepository, "getProjectSettings");
+
+    await virtualWorkerService.reconcile();
+
+    // The first resolution gets cached, the subsequent ones hit the cache
+    // 2 times: once for resolveDashboardSettings(projectId) and once for resolveDashboardSettings(projectId, sprintId)
+    // because sprintId ?? "" resolves to different keys.
+    expect(settingsSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("reconcile only schedules projects that still need virtual worker execution", async () => {
     const {
       settingsRepository,
@@ -163,7 +241,7 @@ describe("VirtualWorkerService", () => {
     await virtualWorkerService.reconcile();
 
     expect(scheduleSpy).toHaveBeenCalledTimes(1);
-    expect(scheduleSpy).toHaveBeenCalledWith(virtualProject.id, "reconcile");
+    expect(scheduleSpy).toHaveBeenCalledWith(virtualProject.id, "reconcile", expect.any(Function));
   });
 
   it("escalates unsupported worker attention items to a human attention item", async () => {
@@ -618,10 +696,6 @@ describe("VirtualWorkerService", () => {
       cliWorkflowService: { startTask: vi.fn() } as any,
     });
 
-    // Sprint-level settings should resolve to VIRTUAL
-    expect((virtualWorkerService as any).resolveWorkerExecutionMode(project.id, sprint.id)).toBe("VIRTUAL");
-    // Project-level also VIRTUAL (set above)
-    expect((virtualWorkerService as any).resolveWorkerExecutionMode(project.id)).toBe("VIRTUAL");
     // Cover resolveDashboardSettings with sprintId
     const settings = (virtualWorkerService as any).resolveDashboardSettings(project.id, sprint.id);
     expect(settings.workers.executionMode).toBe("VIRTUAL");

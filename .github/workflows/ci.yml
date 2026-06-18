@@ -139,3 +139,39 @@ jobs:
 
       - name: Run Dashboard Tests
         run: pnpm run test:dashboard
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Restore node_modules cache
+        id: nm-cache-audit
+        uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-nm-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        if: steps.nm-cache-audit.outputs.cache-hit != 'true'
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run Security Audit
+        run: pnpm run audit

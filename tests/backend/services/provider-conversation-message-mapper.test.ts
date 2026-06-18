@@ -16,6 +16,19 @@ describe("conversationTurnToMessage", () => {
     });
   });
 
+  it("maps an injected_context turn to a system message", () => {
+    const turn: ParsedConversationTurn = {
+      kind: "injected_context",
+      text: "<system-reminder>computer_use__click ...</system-reminder>",
+    };
+    const result = conversationTurnToMessage(turn, "qwen-code", "google/gemma");
+    expect(result).toEqual({
+      role: "system",
+      contentMarkdown: "<system-reminder>computer_use__click ...</system-reminder>",
+      metadata: { provider: "qwen-code", model: "google/gemma", kind: "injected_context" },
+    });
+  });
+
   it("maps an assistant turn correctly", () => {
     const turn: ParsedConversationTurn = {
       kind: "assistant",

@@ -170,10 +170,52 @@ describe("FieldWrapper", () => {
     expect(helperElement).toBeInTheDocument();
     expect(errorElement).toBeInTheDocument();
 
+    // The helper text is hidden (collapsed) while an error is shown.
     expect(helperElement.className).toContain("opacity-0");
-    expect(helperElement.className).toContain("invisible");
+    expect(helperElement.className).toContain("pointer-events-none");
 
-    expect(errorElement.className).toContain("motion-safe:animate-form-slide-down");
+// The error element is only rendered when there is an error, so its presence
+// is what makes it visible; it animates in via the slide-down keyframes.
+expect(errorElement.className).toContain("text-status-red");
+expect(errorElement.className).toContain("motion-safe:animate-form-slide-down");
+expect(errorElement.className).not.toContain("pointer-events-none");
+  });
 
+  it("correctly handles and wires multiple children", () => {
+    const { rerender } = render(
+      <FieldWrapper label="Test Label" htmlFor="test-input" error="Required">
+        <Input id="test-input" />
+        <Input id="test-input-2" />
+      </FieldWrapper>
+    );
+
+    const inputs = screen.getAllByRole("textbox");
+    expect(inputs).toHaveLength(2);
+
+    // Initial state
+    expect(inputs[0]).toHaveAttribute("id", "test-input"); // Only the first valid child receives the ID
+    expect(inputs[1]).toHaveAttribute("id", "test-input-2"); // Subsequent children retain their original IDs
+
+    inputs.forEach(input => {
+      expect(input).not.toHaveAttribute("aria-invalid", "true");
+    });
+
+    // Trigger blur on first input
+    inputs[0].focus();
+    inputs[0].blur();
+
+    rerender(
+      <FieldWrapper label="Test Label" htmlFor="test-input" error="Required">
+        <Input id="test-input" />
+        <Input id="test-input-2" />
+      </FieldWrapper>
+    );
+
+    // Both should receive error states
+    const rerenderedInputs = screen.getAllByRole("textbox");
+    rerenderedInputs.forEach(input => {
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input.getAttribute("aria-errormessage")).not.toBeNull();
+    });
   });
 });

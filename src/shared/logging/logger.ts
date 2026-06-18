@@ -158,7 +158,18 @@ const inferPurpose = (metadata: LogMetadata | undefined, message: string): LogPu
   return "general";
 };
 
-const normalizeMetadataValue = (value: unknown): unknown => {
+const SENSITIVE_KEYS = new Set([
+  "apikey", "token", "authorization", "password", "secret",
+  "githubtoken", "gitlabtoken", "jiratoken",
+  "anthropic_api_key", "openai_api_key", "gemini_api_key",
+  "gh_token", "gitlab_token"
+]);
+
+const isSensitiveKey = (key: string): boolean => {
+  return SENSITIVE_KEYS.has(key.toLowerCase());
+};
+
+const normalizeMetadataValue = (value: unknown, keyName: string = ""): unknown => {
   if (value instanceof Error) {
     return {
       name: value.name,
@@ -168,13 +179,17 @@ const normalizeMetadataValue = (value: unknown): unknown => {
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => normalizeMetadataValue(item));
+    return value.map((item) => normalizeMetadataValue(item, keyName));
   }
 
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, normalizeMetadataValue(item)])
+      Object.entries(value).map(([key, item]) => [key, normalizeMetadataValue(item, key)])
     );
+  }
+
+  if (typeof value === "string" && isSensitiveKey(keyName)) {
+    return "[REDACTED]";
   }
 
   if (typeof value === "bigint") {

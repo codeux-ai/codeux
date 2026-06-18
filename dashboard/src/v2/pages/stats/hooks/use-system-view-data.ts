@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import { fetchProjectInvocations } from "../../../lib/invocation-api.js";
-import type { ExecutionInvocationRecord, ExecutionInvocationStatus } from "../../../types.js";
+import type { ExecutionInvocationRecord, ExecutionInvocationStatus, ProjectInvocationsQuery, ProjectInvocationsQueryResult } from "../../../types.js";
 
 export type SystemSortKey = "startedAt" | "inputTokens" | "outputTokens" | "totalTokens" | "durationMs";
 
@@ -90,16 +90,36 @@ const getDurationMs = (record: ExecutionInvocationRecord): number => {
 
 export function useSystemViewData(projectId: string) {
   const [allInvocations, setAllInvocations] = useState<ExecutionInvocationRecord[]>([]);
+  const [serverTotalCount, setServerTotalCount] = useState<number | null>(null);
+  const [serverSummary, setServerSummary] = useState<SystemSummaryMetrics | null>(null);
+  const [serverExtMetrics, setServerExtMetrics] = useState<ExternalApiMetrics | null>(null);
+  const [serverSprintSummary, setServerSprintSummary] = useState<SprintStateSummary | null>(null);
+  const [serverErrorsByCategory, setServerErrorsByCategory] = useState<ErrorsByCategory | null>(null);
+  const [serverAvailablePurposes, setServerAvailablePurposes] = useState<string[] | null>(null);
+  const [serverAvailableProviders, setServerAvailableProviders] = useState<string[] | null>(null);
   const [filters, setFilters] = useState<SystemFilters>(EMPTY_FILTERS);
   const [search, setSearch] = useState<string>("");
   const [sort, setSort] = useState<SystemSort>({ key: "startedAt", dir: "desc" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [page, setPage] = useState(0);
+  const pageSize = 100;
+
+  useEffect(() => {
+    setPage(0);
+  }, [filters, search, sort]);
 
   useEffect(() => {
     if (!projectId) {
       setAllInvocations([]);
+      setServerTotalCount(null);
+          setServerSummary(null);
+          setServerExtMetrics(null);
+          setServerSprintSummary(null);
+          setServerErrorsByCategory(null);
+          setServerAvailablePurposes(null);
+          setServerAvailableProviders(null);
       setLoading(false);
       setError(null);
       return;
@@ -110,12 +130,52 @@ export function useSystemViewData(projectId: string) {
     setLoading(true);
     setError(null);
 
-    void fetchProjectInvocations(projectId)
-      .then((nextInvocations) => {
+    const query: ProjectInvocationsQuery = {
+      limit: pageSize,
+      offset: page * pageSize,
+      search: search || undefined,
+      sortKey: ["startedAt", "durationMs", "totalTokens", "costCents"].includes(sort.key) ? (sort.key as any) : undefined,
+      sortDir: sort.dir,
+      status: filters.status.length > 0 ? filters.status[0] : undefined,
+      purpose: filters.purpose.length > 0 ? filters.purpose[0] : undefined,
+      provider: filters.provider.length > 0 ? filters.provider[0] : undefined,
+      errorCategories: filters.errorCategories && filters.errorCategories.length > 0 ? filters.errorCategories : undefined,
+    };
+
+    void fetchProjectInvocations(projectId, query)
+      .then((response: ExecutionInvocationRecord[] | ProjectInvocationsQueryResult) => {
         if (!active) {
           return;
         }
-        setAllInvocations(nextInvocations);
+        if (Array.isArray(response)) {
+          setAllInvocations(response);
+          setServerTotalCount(null);
+          setServerSummary(null);
+        } else {
+          setAllInvocations(response.items);
+          setServerTotalCount(response.totalCount);
+          setServerAvailablePurposes(response.availablePurposes || null);
+          setServerAvailableProviders(response.availableProviders || null);
+          if (response.summary) {
+            setServerExtMetrics(response.summary.externalApiMetrics || null);
+            setServerSprintSummary(response.summary.sprintStateSummary || null);
+            setServerErrorsByCategory(response.summary.errorsByCategory || null);
+            const sum = response.summary;
+            const decidedCount = sum.completedCount + sum.failedCount + sum.cancelledCount;
+            const cacheDenominator = sum.totalInputTokens + sum.totalCachedTokens;
+            setServerSummary({
+              ...sum,
+              errorRate: sum.failedCount / Math.max(1, sum.totalInvocations),
+              successRate: decidedCount > 0 ? sum.completedCount / decidedCount : null,
+              cacheHitRate: cacheDenominator > 0 ? sum.totalCachedTokens / cacheDenominator : null,
+            });
+          } else {
+            setServerSummary(null);
+            setServerExtMetrics(null);
+            setServerSprintSummary(null);
+            setServerErrorsByCategory(null);
+          }
+        }
       })
       .catch((fetchError: unknown) => {
         if (!active) {
@@ -132,9 +192,14 @@ export function useSystemViewData(projectId: string) {
     return () => {
       active = false;
     };
-  }, [projectId, refreshKey]);
+  }, [projectId, refreshKey, page, search, sort, filters]);
 
   const filteredInvocations = useMemo(() => {
+    if (serverTotalCount !== null) {
+
+      return allInvocations;
+    }
+
     const normalizedSearch = normalizeText(search);
 
     const filtered = allInvocations.filter((record) => {
@@ -223,9 +288,13 @@ export function useSystemViewData(projectId: string) {
     });
 
     return sorted;
-  }, [allInvocations, filters, search, sort]);
+  }, [allInvocations, filters, search, sort, serverTotalCount]);
 
   const summaryMetrics = useMemo<SystemSummaryMetrics>(() => {
+    if (serverSummary) {
+      return serverSummary;
+    }
+
     const totalInvocations = filteredInvocations.length;
     let runningCount = 0;
     let failedCount = 0;
@@ -289,9 +358,10 @@ export function useSystemViewData(projectId: string) {
       avgDurationMs: finishedCount > 0 ? durationTotal / finishedCount : 0,
       p95DurationMs,
     };
-  }, [filteredInvocations]);
+  }, [filteredInvocations, serverSummary]);
 
   const availablePurposes = useMemo(() => {
+    if (serverAvailablePurposes) return serverAvailablePurposes;
     const purposes = new Set<string>();
     for (const record of allInvocations) {
       const purpose = (record.type || "").trim();
@@ -300,9 +370,10 @@ export function useSystemViewData(projectId: string) {
       }
     }
     return Array.from(purposes).sort((left, right) => left.localeCompare(right));
-  }, [allInvocations]);
+  }, [allInvocations, serverAvailablePurposes]);
 
   const externalApiMetrics = useMemo<ExternalApiMetrics>(() => {
+    if (serverExtMetrics) return serverExtMetrics;
     const metrics: ExternalApiMetrics = {
       git: { calls: 0, avgDurationMs: 0 },
       jules: { calls: 0, avgDurationMs: 0 },
@@ -347,9 +418,10 @@ export function useSystemViewData(projectId: string) {
     }
 
     return metrics;
-  }, [allInvocations]);
+  }, [allInvocations, serverExtMetrics]);
 
   const sprintStateSummary = useMemo<SprintStateSummary>(() => {
+    if (serverSprintSummary) return serverSprintSummary;
     const sprintMap = new Map<string, { statusCounts: Record<string, number> }>();
     let totalTasks = 0;
     let runningTasks = 0;
@@ -396,9 +468,10 @@ export function useSystemViewData(projectId: string) {
       runningTasks,
       blockedTasks,
     };
-  }, [allInvocations]);
+  }, [allInvocations, serverSprintSummary]);
 
   const errorsByCategory = useMemo<ErrorsByCategory>(() => {
+    if (serverErrorsByCategory) return serverErrorsByCategory;
     const counts: ErrorsByCategory = {
       timeout: 0,
       rateLimit: 0,
@@ -422,9 +495,10 @@ export function useSystemViewData(projectId: string) {
     }
 
     return counts;
-  }, [allInvocations]);
+  }, [allInvocations, serverErrorsByCategory]);
 
   const availableProviders = useMemo(() => {
+    if (serverAvailableProviders) return serverAvailableProviders;
     const providers = new Set<string>();
     for (const record of allInvocations) {
       const provider = (record.provider || "").trim();
@@ -433,11 +507,14 @@ export function useSystemViewData(projectId: string) {
       }
     }
     return Array.from(providers).sort((left, right) => left.localeCompare(right));
-  }, [allInvocations]);
+  }, [allInvocations, serverAvailableProviders]);
 
   const refetch = useCallback(() => {
     setRefreshKey((current) => current + 1);
   }, []);
+
+  const hasMore = serverTotalCount !== null ? (page * pageSize + allInvocations.length < serverTotalCount) : false;
+  const totalCount = serverTotalCount !== null ? serverTotalCount : allInvocations.length;
 
   return {
     invocations: filteredInvocations,
@@ -457,5 +534,9 @@ export function useSystemViewData(projectId: string) {
     externalApiMetrics,
     sprintStateSummary,
     errorsByCategory,
+    page,
+    setPage,
+    hasMore,
+    totalCount,
   };
 }

@@ -105,7 +105,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   return (
     <section className={`${PANEL_CLASS} rounded-[2.5rem] p-8 md:p-10`}>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
-      <div className="relative flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
+      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-4xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
             <BarChart3 className="h-3.5 w-3.5" strokeWidth={2.2} />
@@ -153,7 +153,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             </div>
           ) : null}
         </div>
-        <div className="flex flex-col items-start gap-4 xl:items-end xl:justify-end w-full xl:w-auto mt-6 xl:mt-0">
+        <div className="flex flex-col items-start gap-4 lg:items-end lg:justify-end w-full lg:w-auto mt-6 lg:mt-0">
           <div className={`inline-flex flex-wrap p-1 w-full sm:w-auto ${CHIP_CLASS}`}>
             {WINDOW_PRESETS.map((window) => {
               const isActive = activeQuery.window === window;

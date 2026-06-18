@@ -146,8 +146,8 @@ describe("live task card actions", () => {
 
   it("shows edit and force-complete controls and disables force-complete for completed tasks", () => {
     render(<LiveSessionPage />);
-    expect(screen.getAllByRole("button", { name: "Edit" }).length).toBeGreaterThan(0);
-    const forceButtons = screen.getAllByRole("button", { name: "Force complete" });
+    expect(screen.getAllByRole("button", { name: /Edit task/ }).length).toBeGreaterThan(0);
+    const forceButtons = screen.getAllByRole("button", { name: /Force complete task/ });
     expect(forceButtons.length).toBeGreaterThan(0);
     const disabledCompleted = forceButtons.find((button) => button.hasAttribute("disabled"));
     expect(disabledCompleted).toBeTruthy();
@@ -155,7 +155,7 @@ describe("live task card actions", () => {
 
   it("navigates to task edit route from the edit action", async () => {
     render(<LiveSessionPage />);
-    const buttons = screen.getAllByRole("button", { name: "Edit" });
+    const buttons = screen.getAllByRole("button", { name: /Edit task/ });
     await userEvent.click(buttons[0]!);
     expect(window.location.pathname).toBe("/tasks");
     expect(window.location.search).toContain("taskId=task-record-1");
@@ -164,7 +164,7 @@ describe("live task card actions", () => {
 
   it("force-completes successfully and refreshes live data", async () => {
     render(<LiveSessionPage />);
-    const buttons = screen.getAllByRole("button", { name: "Force complete" });
+    const buttons = screen.getAllByRole("button", { name: /Force complete task/ });
     await userEvent.click(buttons[0]!);
 
     await waitFor(() => {
@@ -180,7 +180,7 @@ describe("live task card actions", () => {
   it("renders inline error when force-complete fails", async () => {
     forceCompleteLiveTaskMock.mockRejectedValueOnce(new Error("force complete failed"));
     render(<LiveSessionPage />);
-    const buttons = screen.getAllByRole("button", { name: "Force complete" });
+    const buttons = screen.getAllByRole("button", { name: /Force complete task/ });
     await userEvent.click(buttons[0]!);
     expect(await screen.findByText("force complete failed")).toBeInTheDocument();
   });

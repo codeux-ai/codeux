@@ -39,6 +39,9 @@ export const Dialog: FunctionComponent<DialogProps> = ({
 
   const trapRef = useFocusTrap(isOpen, { onClose, restoreFocus: true, initialFocusRef });
 
+  const hasAccessibleName = ariaLabel || ariaLabelledBy || ariaLabelledby;
+  const fallbackAriaLabel = !hasAccessibleName ? "Dialog" : undefined;
+
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
@@ -64,7 +67,7 @@ export const Dialog: FunctionComponent<DialogProps> = ({
         ref={trapRef}
         role="dialog"
         aria-modal="true"
-        aria-label={ariaLabel}
+        aria-label={ariaLabel || fallbackAriaLabel}
         aria-labelledby={ariaLabelledBy || ariaLabelledby}
         aria-describedby={ariaDescribedBy || ariaDescribedby}
         tabIndex={-1}

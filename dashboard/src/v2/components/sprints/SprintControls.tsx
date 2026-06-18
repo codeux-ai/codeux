@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { Loader2, Pause, Play, Square } from "lucide-preact";
 
 export interface SprintControlsProps {
+  sprintName?: string;
   isActive: boolean;
   isPaused: boolean;
   isStartStopPending: boolean;
@@ -17,6 +18,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
   isPauseResumePending,
   onStartStop,
   onPauseResume,
+  sprintName = "sprint",
 }) => {
   const canPauseResume = isActive || isPaused;
 
@@ -32,8 +34,8 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
             : !canPauseResume
               ? "Sprint must be running to pause"
               : isPaused
-                ? "Resume sprint"
-                : "Pause sprint"
+                ? "Resume sprint execution"
+                : "Pause sprint execution"
         }
         className={`inline-flex h-10 min-w-[6.25rem] flex-1 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isPaused

@@ -80,4 +80,45 @@ describe("useSprints", () => {
 
     expect(fetchSprints).toHaveBeenCalledTimes(1);
   });
+
+  it("refetches seamlessly if a shared in-flight request is aborted by a different caller", async () => {
+    const projectId = `project-${crypto.randomUUID()}`;
+
+    vi.mocked(fetchSprints).mockImplementation(async (_pid, signal) => {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          resolve(makeCollection() as any);
+        }, 100);
+        if (signal) {
+          signal.addEventListener("abort", () => {
+            clearTimeout(timeout);
+            const e = new Error("AbortError");
+            e.name = "AbortError";
+            reject(e);
+          });
+        }
+      });
+    });
+
+    const Wrapper1 = () => {
+      const data = useSprints(projectId);
+      return h("div", { "data-testid": "w1" }, data.data.length);
+    };
+    const Wrapper2 = () => {
+      const data = useSprints(projectId);
+      return h("div", { "data-testid": "w2" }, data.data.length);
+    };
+
+    const { unmount: unmount1 } = render(h(Wrapper1, null));
+    render(h(Wrapper2, null));
+
+    // Abort the first one right away
+    unmount1();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("w2").textContent).toBe("1");
+    });
+
+    expect(fetchSprints).toHaveBeenCalledTimes(2);
+  });
 });

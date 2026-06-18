@@ -26,6 +26,7 @@ vi.mock("gsap", async (importOriginal) => {
       if (fn) fn();
       return { revert: vi.fn() };
     }),
+    set: vi.fn(),
     to: vi.fn().mockImplementation((el, config) => {
       if (config?.onComplete) config.onComplete();
     }),
@@ -33,7 +34,6 @@ vi.mock("gsap", async (importOriginal) => {
       if (to?.onComplete) to.onComplete();
     }),
     killTweensOf: vi.fn(),
-    set: vi.fn(),
   };
   return { ...actual, default: mockGsap, gsap: mockGsap };
 });

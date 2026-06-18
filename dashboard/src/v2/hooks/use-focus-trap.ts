@@ -63,7 +63,10 @@ export function useFocusTrap(
           containerRef.current.querySelectorAll(FOCUSABLE_SELECTOR)
         ) as HTMLElement[];
 
-        if (focusableElements.length === 0) return;
+        if (focusableElements.length === 0) {
+          event.preventDefault();
+          return;
+        }
 
         const first = focusableElements[0];
         const last = focusableElements[focusableElements.length - 1];
