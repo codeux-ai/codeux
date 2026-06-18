@@ -20,7 +20,15 @@ export const applyDashboardPreRouteMiddleware = (
 ): void => {
   app.use(correlationIdMiddleware());
   app.use((req, res, next) => {
-    applyDashboardSecurityHeaders(res);
+    // Preview-host requests proxy a locally-running app that the dashboard renders inside
+    // a cross-origin iframe (preview-<id>.localhost). Stamping the dashboard hardening
+    // headers — notably X-Frame-Options: SAMEORIGIN and a restrictive Permissions-Policy —
+    // onto those proxied responses makes the browser refuse to frame the preview and
+    // disables browser features (camera/mic/geolocation) inside it. Previews are local,
+    // trusted content, so skip the hardening headers and let them render in full.
+    if (parsePreviewSessionIdFromHost(req.headers.host) === null) {
+      applyDashboardSecurityHeaders(res);
+    }
 
     const isRuntimeDataPath = req.path.startsWith("/api/")
       || req.path === "/health"

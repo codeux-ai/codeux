@@ -75,7 +75,11 @@ export function buildPreviewProxyRequestHeaders(
   upstreamPort: number,
 ): Record<string, string | string[] | undefined> {
   const headers = { ...req.headers } as Record<string, string | string[] | undefined>;
-  const headersToStrip = ["authorization", "cookie", "connection", "upgrade", "transfer-encoding", "content-length", "accept-encoding"];
+  // Strip only hop-by-hop and transport headers. authorization/cookie are intentionally
+  // forwarded: the preview iframe runs on its own origin (preview-<id>.localhost), so these
+  // are the previewed app's own credentials — never the dashboard's — and stateful preview
+  // apps (login/session flows) need them to reach the container.
+  const headersToStrip = ["connection", "upgrade", "transfer-encoding", "content-length", "accept-encoding"];
   for (const key of Object.keys(headers)) {
     const lower = key.toLowerCase();
     if (headersToStrip.includes(lower) || lower.startsWith("proxy-") || lower.startsWith("x-code-ux-")) {
@@ -146,7 +150,6 @@ export function sendBufferedPreviewResponse(args: {
   }
 
   if (!isHtml) {
-    delete responseHeaders["set-cookie"];
     args.res.writeHead(args.response.statusCode, responseHeaders);
     args.res.end(args.response.body);
     return;
@@ -155,7 +158,6 @@ export function sendBufferedPreviewResponse(args: {
   delete responseHeaders["content-length"];
   delete responseHeaders["content-security-policy"];
   delete responseHeaders["content-security-policy-report-only"];
-  delete responseHeaders["set-cookie"];
   args.res.writeHead(args.response.statusCode, responseHeaders);
   args.res.end(injectPreviewBridgeIntoHtml(args.response.body.toString("utf8")));
 }

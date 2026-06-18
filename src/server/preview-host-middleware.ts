@@ -136,7 +136,6 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
       const isHtml = contentType.toLowerCase().includes("text/html");
       if (!isHtml) {
         const responseHeaders = { ...proxyResponse.headers };
-        delete responseHeaders["set-cookie"];
         if (typeof responseHeaders.location === "string") {
           responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, req, session.hostPort!);
         }
@@ -153,7 +152,6 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
         const body = Buffer.concat(chunks).toString("utf8");
         const injected = injectPreviewBridgeIntoHtml(body);
         const responseHeaders = { ...proxyResponse.headers };
-        delete responseHeaders["set-cookie"];
         delete responseHeaders["content-length"];
         delete responseHeaders["content-security-policy"];
         delete responseHeaders["content-security-policy-report-only"];

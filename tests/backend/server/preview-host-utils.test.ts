@@ -8,7 +8,7 @@ import type { Request } from "express";
 
 describe("preview-host-utils", () => {
   describe("buildPreviewProxyRequestHeaders", () => {
-    it("strips sensitive and hop-by-hop headers", () => {
+    it("strips hop-by-hop/transport headers but forwards the preview app's own credentials", () => {
       const req = {
         headers: {
           "authorization": "Bearer token",
@@ -27,8 +27,11 @@ describe("preview-host-utils", () => {
         socket: { localPort: 8080 },
       } as unknown as Request;
       const result = buildPreviewProxyRequestHeaders(req, 3000);
-      expect(result["authorization"]).toBeUndefined();
-      expect(result["cookie"]).toBeUndefined();
+      // The preview iframe runs on its own origin (preview-<id>.localhost), so cookie/
+      // authorization belong to the previewed app — forward them so stateful apps work.
+      expect(result["authorization"]).toBe("Bearer token");
+      expect(result["cookie"]).toBe("session=123");
+      // Hop-by-hop and transport headers must still be stripped for correct proxying.
       expect(result["connection"]).toBeUndefined();
       expect(result["upgrade"]).toBeUndefined();
       expect(result["transfer-encoding"]).toBeUndefined();
@@ -67,7 +70,7 @@ describe("preview-host-utils", () => {
   });
 
   describe("sendBufferedPreviewResponse", () => {
-    it("suppresses set-cookie header", () => {
+    it("forwards the preview app's set-cookie header", () => {
       const req = { protocol: "http", headers: { host: "dashboard.local" } } as unknown as Request;
       let writtenHeaders: any;
       const res = {
@@ -84,7 +87,8 @@ describe("preview-host-utils", () => {
         }
       });
 
-      expect(writtenHeaders).not.toHaveProperty("set-cookie");
+      // Preview runs on its own origin, so its session cookies must reach the browser.
+      expect(writtenHeaders["set-cookie"]).toEqual(["secret=1"]);
     });
   });
 

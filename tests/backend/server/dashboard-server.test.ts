@@ -959,6 +959,11 @@ describe("setupDashboardServer", () => {
     });
     expect(previewResponse.statusCode).toBe(200);
     expect(previewResponse.body).toContain("/_code_ux/preview-bridge.js");
+    // Preview content is rendered inside a cross-origin iframe (preview-<id>.localhost),
+    // so the dashboard's X-Frame-Options/Permissions-Policy hardening must NOT be stamped
+    // onto proxied preview responses or the browser refuses to frame them.
+    expect(previewResponse.headers["x-frame-options"]).toBeUndefined();
+    expect(previewResponse.headers["permissions-policy"]).toBeUndefined();
 
     const bridgeResponse = await makeHostRequest({
       port: handle.port,
