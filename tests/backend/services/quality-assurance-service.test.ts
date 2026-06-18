@@ -357,6 +357,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 1,
           },
         },
@@ -474,6 +476,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 1,
             maxSprintReviewRuns: 1,
           },
@@ -640,6 +644,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 1,
           },
         },
@@ -697,6 +703,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 3,
           },
         },
@@ -746,6 +754,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns,
           },
         },
@@ -867,6 +877,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             taskCompletion: { enabled: false, agentPresetId: null },
             completedTaskWithoutPr: { enabled: true, agentPresetId: null },
           },
@@ -998,6 +1010,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 1,
           },
         },
@@ -1116,6 +1130,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 3,
           },
         },
@@ -1252,6 +1268,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 1,
           },
         },
@@ -1388,6 +1406,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 2,
           },
         },
@@ -1500,6 +1520,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 2,
           },
         },
@@ -1637,6 +1659,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 3,
             completedTaskWithoutPr: { enabled: true, agentPresetId: "QA-1" },
           },
@@ -1758,6 +1782,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 3,
             completedTaskWithoutPr: { enabled: true, agentPresetId: "QA-1" },
           },
@@ -2509,8 +2535,10 @@ describe("QualityAssuranceService", () => {
           agents: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents,
             qualityAssurance: {
-              ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
-              enabled: true,
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             },
           },
         }),
@@ -2685,6 +2713,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
           },
         },
       }),

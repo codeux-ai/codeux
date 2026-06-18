@@ -37,6 +37,7 @@ import { normalizeQaReviewResult } from "../domain/qa-review/qa-review-result-no
 import type { NormalizedQaReviewResult } from "../domain/qa-review/qa-review-types.js";
 
 import { clearMergeProjectionForRerun, MERGE_PROJECTION_RESET } from "../domain/sprint/task-reset-state.js";
+import { buildQaReviewRequest, resolveTaskTriggerType } from "../domain/qa-review/qa-review-request-builder.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
@@ -175,68 +176,49 @@ export class QualityAssuranceService {
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
 
-    const triggerType = this.resolveTaskTriggerType(args.task, qaSettings);
-    if (!triggerType) {
-      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
-    }
-
     const existingRuns = this.deps.qaReviewRepository.countTaskRuns(taskId);
     const decisiveRuns = this.deps.qaReviewRepository.countDecisiveTaskRuns(taskId);
     const latestRun = this.deps.qaReviewRepository.getLatestTaskRun(taskId);
-    // The budget is spent once we have enough real verdicts, or once total
-    // attempts (including reviewer infra crashes) hit the infra ceiling. Until
-    // then, keep retrying — a reviewer that crashed on auth/config produced no
-    // verdict and the task still needs reviewing before it can merge.
-    const budget = evaluateQaReviewBudget({
-      existingRuns,
-      decisiveRuns,
-      maxTaskReviewRuns: qaSettings.maxTaskReviewRuns,
-      latestRun,
-    });
-    if (!budget.allowed) {
-      await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
-      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
-    }
-
     const taskRun = this.resolveTaskRunForSubtask(args.task, args.sprintRunId);
-    const project = this.deps.projectManagementRepository.getProject(args.projectId);
-    const sprint = this.deps.projectManagementRepository.getSprint(args.sprintId);
-    if (!project || !sprint) {
+
+    const request = await buildQaReviewRequest({
+      task: args.task,
+      taskRun,
+      project: this.deps.projectManagementRepository.getProject(args.projectId) || null,
+      sprint: this.deps.projectManagementRepository.getSprint(args.sprintId) || null,
+      sprintRunId: args.sprintRunId || null,
+      settings,
+      budgetArgs: {
+        existingRuns,
+        decisiveRuns,
+        latestRun,
+      },
+      resolveAgent: (projectId, agentPresetId) =>
+        this.deps.agentPresetSyncService.resolveTargetedQualityAssuranceAgent(projectId, agentPresetId),
+    });
+
+    if (!request) {
+      const budget = evaluateQaReviewBudget({
+        existingRuns,
+        decisiveRuns,
+        maxTaskReviewRuns: qaSettings.maxTaskReviewRuns,
+        latestRun,
+      });
+      if (!budget.allowed) {
+        await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
+      }
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
 
-    const sprintFeatureBranch = sprint.featureBranch?.trim()
-      || `${settings.git.featureBranchPrefix || "feature/"}sprint-${sprint.number ?? 0}`;
-
-    const agentPresetId = triggerType === "completed_task_without_pr"
-      ? qaSettings.completedTaskWithoutPr.agentPresetId
-      : qaSettings.taskCompletion.agentPresetId;
-    const agent = await this.deps.agentPresetSyncService.resolveTargetedQualityAssuranceAgent(args.projectId, agentPresetId);
-
-    const memoryInstructions = resolveAgentMemoryInstructions(
-      agent,
-      settings.memory?.workerLearningsInstruction
-    );
-    let agentInstructions = agent.instructionMarkdown + (memoryInstructions ? `\n\n### Memory Capture Instructions\n${memoryInstructions}` : "");
-
-    const run = this.deps.qaReviewRepository.createRun({
-      projectId: args.projectId,
-      sprintId: args.sprintId,
-      sprintRunId: args.sprintRunId || null,
-      taskId,
-      taskRunId: taskRun?.id || null,
+    const {
       triggerType,
-      runIndex: existingRuns + 1,
-      agentPresetId: agent.id,
-      agentName: agent.name,
-      targetTaskKey: args.task.id,
-      targetSessionId: args.task.session_id || null,
-      targetProvider: args.task.provider || null,
-      payload: {
-        taskKey: args.task.id,
-        runIndex: existingRuns + 1,
-      },
-    });
+      sprintFeatureBranch,
+      agentPresetId,
+      agentInstructions,
+      runPayload,
+    } = request;
+
+    const run = this.deps.qaReviewRepository.createRun(runPayload as any);
 
     // Signal that the task has entered the QA stage so the live view advances
     // from coding-completed → QA and starts timing the review immediately
@@ -250,6 +232,12 @@ export class QualityAssuranceService {
     });
     this.setTaskQaPending(args.task, true);
 
+    const project = this.deps.projectManagementRepository.getProject(args.projectId);
+    const sprint = this.deps.projectManagementRepository.getSprint(args.sprintId);
+    if (!project || !sprint) {
+      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
+    }
+
     try {
       const review = await this.runReview({
         triggerType,
@@ -262,7 +250,7 @@ export class QualityAssuranceService {
         currentTask: args.task,
         taskRun,
         sprintRunId: args.sprintRunId || null,
-        agentPresetId: agent.id,
+        agentPresetId: agentPresetId,
         // Task QA reviews the task's own feature/worker branch, falling back to
         // the sprint base branch when the worker branch metadata is missing.
         reviewBranch: args.task.worker_branch?.trim()
@@ -673,7 +661,7 @@ export class QualityAssuranceService {
     const scope = { projectId: args.projectId, sprintId: args.sprintId };
     const settings = this.deps.getDashboardSettings(scope);
     const qaSettings = settings.agents.qualityAssurance;
-    const triggerType = this.resolveTaskTriggerType(args.task, qaSettings);
+    const triggerType = resolveTaskTriggerType(args.task, qaSettings);
     if (!qaSettings.enabled || !triggerType) {
       return {
         mergeAllowed: true,
@@ -1705,23 +1693,6 @@ export class QualityAssuranceService {
     }
   }
 
-  private resolveTaskTriggerType(
-    task: Pick<Subtask, "pr_url" | "worker_branch" | "is_merged">,
-    qaSettings: DashboardSettings["agents"]["qualityAssurance"],
-  ): QaReviewTriggerType | null {
-    // A task with merge evidence clearly did NOT complete without a PR. We must
-    // check `is_merged`/`worker_branch` too, not just `pr_url`: `pr_url` is not a
-    // persisted task column — it is reconstructed at runtime — so when an old
-    // merged task is reloaded (e.g. a sprint resumes) its `pr_url` comes back
-    // empty and the no-PR trigger would misfire QA on already-merged work.
-    const hasMergeEvidence = Boolean(task.pr_url?.trim())
-      || Boolean(task.worker_branch?.trim())
-      || Boolean(task.is_merged);
-    if (!hasMergeEvidence && qaSettings.completedTaskWithoutPr.enabled) {
-      return "completed_task_without_pr";
-    }
-    return qaSettings.taskCompletion.enabled ? "task_completion" : null;
-  }
 
   private getLatestSprintTaskUpdatedAt(projectId: string, sprintId: string): number {
     const timestamps = this.deps.projectManagementRepository.listTasks(projectId, sprintId)
