@@ -29,17 +29,40 @@ class DashboardRealtimeClient {
   private readonly SNAPSHOT_REQUIRED_COOLDOWN_MS = 3000;
   private transportState: TransportState = "disconnected";
   private disconnectTimer: number | null = null;
+  private onlineListener: (() => void) | null = null;
 
   constructor() {
     if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-      window.addEventListener("online", () => {
+      this.onlineListener = () => {
         if (this.subscriptions.size > 0) {
           this.reconnectAttempt = 0;
           this.clearReconnectTimer();
           this.ensureConnected();
         }
-      });
+      };
+      window.addEventListener("online", this.onlineListener);
     }
+  }
+
+  dispose(): void {
+    if (this.onlineListener && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+      window.removeEventListener("online", this.onlineListener);
+      this.onlineListener = null;
+    }
+    this.clearDisconnectTimer();
+    this.clearReconnectTimer();
+    if (this.subscriptionSyncTimer !== null) {
+      globalThis.clearTimeout(this.subscriptionSyncTimer);
+      this.subscriptionSyncTimer = null;
+    }
+    this.subscriptions.clear();
+    this.lastSentScopesKey = "";
+    if (this.socket) {
+      const socket = this.socket;
+      this.socket = null;
+      socket.close();
+    }
+    this.setTransportState("disconnected");
   }
 
   subscribe(scopes: string[], listener: RealtimeListener, transportListener?: TransportStateListener): () => void {
@@ -57,9 +80,16 @@ class DashboardRealtimeClient {
 
     return () => {
       this.subscriptions.delete(subscriptionId);
-      this.scheduleSubscriptionSync();
       if (this.subscriptions.size === 0) {
+        if (this.subscriptionSyncTimer !== null) {
+          globalThis.clearTimeout(this.subscriptionSyncTimer);
+          this.subscriptionSyncTimer = null;
+        }
+        this.clearReconnectTimer();
+        this.lastSentScopesKey = "";
         this.scheduleDisconnectCheck();
+      } else {
+        this.scheduleSubscriptionSync();
       }
     };
   }
@@ -131,7 +161,11 @@ class DashboardRealtimeClient {
       this.snapshotRequiredLastDispatchedAt = now;
     }
 
-    for (const subscription of this.subscriptions.values()) {
+    const currentSubscriptions = Array.from(this.subscriptions.entries());
+    for (const [id, subscription] of currentSubscriptions) {
+      if (!this.subscriptions.has(id)) {
+        continue;
+      }
       if (message.type === "event") {
         if (!subscription.scopes.includes(message.event.scope)) {
           continue;
@@ -264,4 +298,11 @@ function getClient(): DashboardRealtimeClient {
 
 export function subscribeToDashboardRealtime(scopes: string[], listener: RealtimeListener, transportListener?: TransportStateListener): () => void {
   return getClient().subscribe(scopes, listener, transportListener);
+}
+
+export function resetSharedDashboardRealtimeClientForTest(): void {
+  if (sharedClient) {
+    sharedClient.dispose();
+    sharedClient = null;
+  }
 }

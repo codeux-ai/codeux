@@ -182,6 +182,18 @@ Code UX still uses:
 
 WebSockets are browser transport only.
 
+
+
+### Client Lifecycle and Resource Management
+
+The dashboard realtime client operates as a shared singleton to multiplex multiple React hooks and components over a single underlying WebSocket connection.
+
+To prevent memory leaks across long-lived dashboard sessions or during test execution:
+- The `online` event listener is stored as an instance field and properly removed when the client is disposed.
+- The shared singleton exposes a `resetSharedDashboardRealtimeClientForTest` export specifically to tear down and recreate the client between test cases, guaranteeing no cross-test pollution from timers or stray event handlers.
+- When the final active subscription is removed, the client schedules exactly one disconnect check. If no new subscriptions arrive during the debounce window, it explicitly clears its sync timers, reconnect timers, and any stale state (such as the `lastSentScopesKey`) before closing the socket.
+- Subscription dispatch loops are guarded to ensure that a listener removed mid-dispatch does not receive subsequent messages in the same frame.
+
 ## Main Files
 
 Backend:

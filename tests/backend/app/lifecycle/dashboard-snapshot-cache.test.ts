@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { DashboardSnapshotCachePolicy } from "../../../../src/app/lifecycle/dashboard-snapshot-cache-policy.js";
 import { DashboardSnapshotCache, mapExecutionConnections, mapAssignedWorkers, mapAttentionItems } from "../../../../src/app/lifecycle/dashboard-snapshot-cache.js";
 
 describe("DashboardSnapshotCache", () => {
@@ -28,6 +29,25 @@ describe("DashboardSnapshotCache", () => {
     cache = new DashboardSnapshotCache(mockDeps);
   });
 
+
+  describe("DashboardSnapshotCachePolicy", () => {
+    it("generates stable cache keys for project stats queries", () => {
+      const key1 = DashboardSnapshotCachePolicy.getProjectStatsCacheKey("p1", { window: "7d" });
+      const key2 = DashboardSnapshotCachePolicy.getProjectStatsCacheKey("p1", { window: "7d" });
+      expect(key1).toBe(key2);
+      expect(key1).toBe('p1:{"window":"7d"}');
+
+      const key3 = DashboardSnapshotCachePolicy.getProjectStatsCacheKey("p1", { window: "30d" });
+      expect(key1).not.toBe(key3);
+    });
+
+    it("matches cache keys correctly for invalidation", () => {
+      const key1 = DashboardSnapshotCachePolicy.getProjectStatsCacheKey("p1", { window: "7d" });
+      expect(DashboardSnapshotCachePolicy.isProjectStatsCacheKeyMatch(key1, "p1")).toBe(true);
+      expect(DashboardSnapshotCachePolicy.isProjectStatsCacheKeyMatch(key1, "p2")).toBe(false);
+    });
+  });
+
   describe("snapshots caching", () => {
     it("caches project snapshots", () => {
       const snap1 = cache.getProjectsSnapshot();
@@ -50,10 +70,11 @@ describe("DashboardSnapshotCache", () => {
       expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledTimes(1);
     });
 
+
     it("caches project stats snapshots", () => {
       const snap1 = cache.getProjectStatsSnapshot("p1");
       const snap2 = cache.getProjectStatsSnapshot("p1");
-      expect(snap1).toBe(snap2);
+      expect(snap1).toBe(snap2); // Immutability: returned snapshot identity is preserved
       expect(mockDeps.executionRepository.getProjectStatsSnapshot).toHaveBeenCalledTimes(1);
     });
   });

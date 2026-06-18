@@ -363,4 +363,57 @@ describe("dashboard-realtime-client", () => {
 
     unsubscribe();
   });
+
+  it("guards subscription dispatch so a removed listener does not receive later messages", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const listenerA = vi.fn();
+    const listenerB = vi.fn();
+
+    let unsubscribeA: () => void;
+
+    unsubscribeA = subscribeToDashboardRealtime(["overview"], (msg) => {
+      listenerA(msg);
+      // Remove listener B during dispatch
+      unsubscribeB();
+    });
+
+    const unsubscribeB = subscribeToDashboardRealtime(["overview"], listenerB);
+
+    const firstSocket = MockWebSocket.instances[0]!;
+    firstSocket.emit("open");
+
+    firstSocket.emit("message", {
+      type: "event",
+      event: { scope: "overview", type: "updated", sequence: 1 },
+    });
+
+    expect(listenerA).toHaveBeenCalledTimes(1);
+    expect(listenerB).not.toHaveBeenCalled();
+
+    unsubscribeA();
+  });
+
+  it("can reset the shared client for tests and cleans up its listeners", async () => {
+    let addListenerSpy = vi.fn();
+    let removeListenerSpy = vi.fn();
+    vi.stubGlobal("window", {
+      location: { protocol: "http:", host: "localhost:4444" },
+      setTimeout, clearTimeout,
+      addEventListener: addListenerSpy,
+      removeEventListener: removeListenerSpy,
+    });
+
+    const { subscribeToDashboardRealtime, resetSharedDashboardRealtimeClientForTest } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+
+    // Instantiates shared client
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], () => {});
+
+    expect(addListenerSpy).toHaveBeenCalledWith("online", expect.any(Function));
+
+    resetSharedDashboardRealtimeClientForTest();
+
+    expect(removeListenerSpy).toHaveBeenCalledWith("online", expect.any(Function));
+
+    unsubscribe();
+  });
 });
