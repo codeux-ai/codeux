@@ -203,6 +203,11 @@ export class SprintPreviewService {
           await fs.chmod(startupRuntimePath, 0o755);
         }
 
+        // Resolve the exact commit being previewed so the container's startup script can
+        // skip the (expensive) build when the branch hasn't changed since the last cached
+        // build. Build artifacts persist across restarts in the per-sprint Docker volume.
+        const sourceCommit = await this.resolvePreviewSourceCommit(project.baseDir, featureBranch);
+
         const setupScriptPath = await this.resolveContainerSetupScriptPath(project.baseDir, effectiveSettings.cliWorkflow);
         const baseImage = effectiveSettings.cliWorkflow.containerImage.trim() || "node:24-bookworm";
         const resolvedImage = await new DockerSetupImageCache().resolveImage({
@@ -268,6 +273,7 @@ export class SprintPreviewService {
           effectiveInstallCommand,
           buildCommand: preparedScript.buildCommand,
           runCommand: preparedScript.runCommand,
+          sourceCommit,
           resolvedImage: resolvedImage.image,
           bootstrapScript,
         });
@@ -1088,6 +1094,21 @@ export class SprintPreviewService {
       return branch;
     }
     throw new Error(`Cannot export sprint preview workspace: branch ${branch} does not exist locally or on origin.`);
+  }
+
+  /**
+   * Resolves the commit SHA of the branch being previewed. Returns null on any failure so
+   * the container falls back to building unconditionally (cache disabled, never wrong).
+   */
+  private async resolvePreviewSourceCommit(repoPath: string, branch: string): Promise<string | null> {
+    try {
+      const exportRef = await this.resolvePreviewExportRef(repoPath, branch);
+      const result = await runCommandStrict("git", ["rev-parse", exportRef], repoPath);
+      const sha = result.stdout.trim();
+      return sha || null;
+    } catch {
+      return null;
+    }
   }
 
   private async resolvePreviewBranchBaseRef(repoPath: string, defaultBranch: string): Promise<string> {

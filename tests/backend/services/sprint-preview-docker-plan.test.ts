@@ -40,6 +40,7 @@ describe("SprintPreviewDockerPlanBuilder", () => {
       effectiveInstallCommand: "npm install",
       buildCommand: "npm run build",
       runCommand: "npm start",
+      sourceCommit: "abc1234",
       resolvedImage: "node:18",
       bootstrapScript: "echo 'bootstrap'",
     });
@@ -82,6 +83,7 @@ describe("SprintPreviewDockerPlanBuilder", () => {
       effectiveInstallCommand: "npm install",
       buildCommand: "npm run build",
       runCommand: "npm start",
+      sourceCommit: "abc1234",
       resolvedImage: "node:18",
       bootstrapScript: "echo 'bootstrap'",
     });
