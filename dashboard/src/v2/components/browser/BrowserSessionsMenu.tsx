@@ -6,6 +6,7 @@ import { useProjectData } from "../../context/project-data.js";
 import { fetchPreviewSessions } from "../../lib/browser-api.js";
 import { buildPreviewUrl } from "../../lib/preview-origin.js";
 import type { SprintPreviewSession } from "../../../types.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 type InteractionState = 'closed' | 'hover' | 'open';
 
@@ -187,7 +188,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                             sessions.map((session) => (
                                 <a
                                     key={session.id}
-                                    href={buildPreviewUrl(session.id, session.lastKnownPath)}
+                                    href={getSafeUrl(buildPreviewUrl(session.id, session.lastKnownPath))}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     role="menuitem"

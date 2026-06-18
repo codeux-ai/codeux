@@ -19,6 +19,7 @@ import { LiveDurationBadge } from "../ui/LiveDurationBadge.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
 import type { AgentAvatarConfig } from "../../types.js";
 import './kanban-task-card.css';
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 export const KanbanTaskCard: FunctionComponent<{
   viewModel: TaskCardViewModel;
@@ -192,7 +193,7 @@ export const KanbanTaskCard: FunctionComponent<{
           </div>
           {prUrl && (
             <a
-              href={prUrl}
+              href={getSafeUrl(prUrl)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-[9px] font-mono text-signal-500 hover:text-signal-400 transition-colors"

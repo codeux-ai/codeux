@@ -21,6 +21,7 @@ import { formatTime } from "../../lib/time.js";
 import type { GitTrackingStatus } from "../../types.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
 import { WaveFluid } from "./ui/WaveFluid.js";
+import { getSafeUrl } from "../lib/safe-url.js";
 
 interface GitCIStatusPanelProps {
   status: GitTrackingStatus | null;
@@ -182,9 +183,9 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                 return (
                   <a
                     key={pr.url}
-                    href={pr.url}
+                    href={getSafeUrl(pr.url)}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="group/pr block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 hover:bg-signal-500/[0.02] dark:border-white/[0.04] dark:bg-white/[0.015]"
                   >
                     <div className="mb-1 flex items-start justify-between gap-2">
@@ -225,9 +226,9 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                 return (
                   <a
                     key={`${run.id ?? run.url}`}
-                    href={run.url}
+                    href={getSafeUrl(run.url)}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -260,9 +261,9 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
               {status.mergedPullRequests.map((merged) => (
                 <a
                   key={merged.url}
-                  href={merged.url}
+                  href={getSafeUrl(merged.url)}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-status-green/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
                 >
                   <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">
