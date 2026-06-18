@@ -27,6 +27,7 @@ import {
   resolveAntigravityContainerLogPath,
   cleanupProviderRuntimeArtifacts
 } from "./provider-runtime-artifacts.js";
+import { readQwenLogData, readCodexLatestSessionJson, readClaudeSessionJsonl, parseAntigravityConversationId, readAntigravityTranscript } from "./provider-transcripts.js";
 import {
   collectProviderUsageTelemetry,
   readQwenOpenAiLogRecords,
@@ -361,11 +362,11 @@ export class ProviderRunner implements IProviderRunner {
         nativeSessionId,
         sessionId,
         antigravityLogPath,
-        readClaudeSessionJsonl: async (id) => this.readClaudeSessionJsonl(cwd, id, workflowSettings.executionMode),
-        readCodexLatestSessionJson: async () => this.readCodexLatestSessionJson(cwd, workflowSettings.executionMode),
-        readQwenLogData: async () => this.readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs),
-        parseAntigravityConversationId: async (logPath) => this.parseAntigravityConversationId(cwd, logPath, workflowSettings.executionMode),
-        readAntigravityTranscript: async (resolvedId) => this.readAntigravityTranscript(cwd, resolvedId, workflowSettings.executionMode),
+        readClaudeSessionJsonl: async (id) => readClaudeSessionJsonl(cwd, id, workflowSettings.executionMode, this.dockerRunner),
+        readCodexLatestSessionJson: async () => readCodexLatestSessionJson(cwd, workflowSettings.executionMode, this.dockerRunner),
+        readQwenLogData: async () => readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs, this.dockerRunner),
+        parseAntigravityConversationId: async (logPath) => parseAntigravityConversationId(cwd, logPath, workflowSettings.executionMode, this.dockerRunner),
+        readAntigravityTranscript: async (resolvedId) => readAntigravityTranscript(cwd, resolvedId, workflowSettings.executionMode, this.dockerRunner),
         resolveAntigravityDatabase: async (resolvedId, destPath) => this.resolveAntigravityDatabase(cwd, resolvedId, workflowSettings.executionMode, destPath),
       });
       watcher.start();
@@ -416,23 +417,23 @@ export class ProviderRunner implements IProviderRunner {
         ? await this.readProviderOutputPath(cwd, input.codexOutputPath, workflowSettings.executionMode)
         : "";
       const claudeSessionJsonl = provider === "claude-code" && nativeSessionId
-        ? await this.readClaudeSessionJsonl(cwd, nativeSessionId, workflowSettings.executionMode)
+        ? await readClaudeSessionJsonl(cwd, nativeSessionId, workflowSettings.executionMode, this.dockerRunner)
         : null;
       const codexSessionJson = provider === "codex"
-        ? await this.readCodexLatestSessionJson(cwd, workflowSettings.executionMode)
+        ? await readCodexLatestSessionJson(cwd, workflowSettings.executionMode, this.dockerRunner)
         : null;
       const qwenLog = provider === "qwen-code"
-        ? await this.readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs)
+        ? await readQwenLogData(cwd, workflowSettings.executionMode, sessionId, startedMs, this.dockerRunner)
         : null;
 
       let resolvedNativeSessionId = nativeSessionId;
       if (provider === "antigravity" && !resolvedNativeSessionId && antigravityLogPath) {
-        resolvedNativeSessionId = await this.parseAntigravityConversationId(cwd, antigravityLogPath, workflowSettings.executionMode);
+        resolvedNativeSessionId = await parseAntigravityConversationId(cwd, antigravityLogPath, workflowSettings.executionMode, this.dockerRunner);
       }
 
       let antigravityTranscriptJsonl: string | null = null;
       if (provider === "antigravity" && resolvedNativeSessionId) {
-        antigravityTranscriptJsonl = await this.readAntigravityTranscript(cwd, resolvedNativeSessionId, workflowSettings.executionMode);
+        antigravityTranscriptJsonl = await readAntigravityTranscript(cwd, resolvedNativeSessionId, workflowSettings.executionMode, this.dockerRunner);
         
         const safeSession = resolvedNativeSessionId.replace(/[^A-Za-z0-9_-]/g, "_");
         const hostTempDb = path.join(os.tmpdir(), `agy-temp-${safeSession}-${randomUUID()}.db`);
@@ -557,144 +558,6 @@ export class ProviderRunner implements IProviderRunner {
   /** Aggregates provider-reported usage and the conversation from qwen-code
    *  OpenAI logs for both execution modes. Reads the log records once so usage
    *  and the parsed conversation come from the same set of files. */
-  private async readQwenLogData(
-    cwd: string,
-    executionMode: CliWorkflowSettings["executionMode"],
-    sessionId: string,
-    startTimeMs: number,
-  ): Promise<{ usage: QwenUsageTotals | null; conversation: ParsedConversationTurn[] } | null> {
-    let records: unknown[] = [];
-    if (executionMode === "DOCKER") {
-      const arrayJson = await this.dockerRunner.readWorkspaceJsonArray?.(cwd, CONTAINER_QWEN_OPENAI_LOG_DIR).catch(() => null);
-      if (!arrayJson) return null;
-      try {
-        const parsed = JSON.parse(arrayJson);
-        records = Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return null;
-      }
-    } else {
-      records = await readQwenOpenAiLogRecords(resolveQwenHostLogDir(sessionId), startTimeMs);
-    }
-    if (records.length === 0) {
-      return null;
-    }
-    return { usage: sumQwenOpenAiUsage(records), conversation: buildQwenConversation(records) };
-  }
-
-  private async readCodexLatestSessionJson(
-    cwd: string,
-    executionMode: CliWorkflowSettings["executionMode"],
-  ): Promise<string | null> {
-    const now = new Date();
-    const year = now.getFullYear().toString();
-    const month = (now.getMonth() + 1).toString().padStart(2, "0");
-    const day = now.getDate().toString().padStart(2, "0");
-
-    if (executionMode === "DOCKER") {
-      const sessionsDir = pathPosix.join(
-        CONTAINER_RUNTIME_HOME,
-        ".codex",
-        "sessions",
-        year,
-        month,
-        day,
-      );
-      return (await this.dockerRunner.readLatestWorkspaceFile?.(cwd, sessionsDir, "*.jsonl").catch(() => null)) ?? null;
-    }
-
-    const sessionsDir = path.join(os.homedir(), ".codex", "sessions", year, month, day);
-    try {
-      const files = await fs.readdir(sessionsDir);
-      // Codex writes rollout transcripts as `rollout-<ts>-<uuid>.jsonl`.
-      const jsonFiles = files.filter(f => f.endsWith(".jsonl"));
-      if (jsonFiles.length === 0) return null;
-      const withMtimes = await Promise.all(
-        jsonFiles.map(async (f) => {
-          const filePath = path.join(sessionsDir, f);
-          const stat = await fs.stat(filePath).catch(() => null);
-          return { filePath, mtime: stat?.mtimeMs ?? 0 };
-        }),
-      );
-      withMtimes.sort((a, b) => b.mtime - a.mtime);
-      return await fs.readFile(withMtimes[0].filePath, "utf8").catch(() => null);
-    } catch {
-      return null;
-    }
-  }
-
-  private async readClaudeSessionJsonl(
-    cwd: string,
-    nativeSessionId: string,
-    executionMode: CliWorkflowSettings["executionMode"],
-  ): Promise<string | null> {
-    if (executionMode !== "DOCKER") {
-      return null;
-    }
-
-    const sessionPath = pathPosix.join(
-      CONTAINER_RUNTIME_HOME,
-      ".claude",
-      "projects",
-      CONTAINER_WORKSPACE_ROOT.replaceAll(pathPosix.sep, "-"),
-      `${nativeSessionId}.jsonl`,
-    );
-    return (await this.dockerRunner.readWorkspaceFile?.(cwd, sessionPath).catch(() => null)) || null;
-  }
-
-  private async parseAntigravityConversationId(
-    cwd: string,
-    logPath: string,
-    executionMode: CliWorkflowSettings["executionMode"],
-  ): Promise<string | null> {
-    try {
-      const raw = executionMode === "DOCKER"
-        ? ((await this.dockerRunner.readWorkspaceFile?.(cwd, logPath).catch(() => null)) || "")
-        : (await fs.readFile(logPath, "utf8").catch(() => ""));
-      if (!raw.trim()) {
-        return null;
-      }
-      const match = raw.match(/Created conversation\s+([0-9a-fA-F-]+)/i) ||
-                    raw.match(/found conversation\s+([0-9a-fA-F-]+)/i) ||
-                    raw.match(/switching to conversation\s+([0-9a-fA-F-]+)/i) ||
-                    raw.match(/GetConversationDetail:\s+found\s+conversation\s+([0-9a-fA-F-]+)/i);
-      return match ? match[1] : null;
-    } catch {
-      return null;
-    }
-  }
-
-  private async readAntigravityTranscript(
-    cwd: string,
-    conversationId: string,
-    executionMode: CliWorkflowSettings["executionMode"],
-  ): Promise<string | null> {
-    const candidates = [
-      executionMode === "DOCKER"
-        ? pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity-cli", "brain", conversationId, ".system_generated", "logs", "transcript.jsonl")
-        : path.join(os.homedir(), ".gemini", "antigravity-cli", "brain", conversationId, ".system_generated", "logs", "transcript.jsonl"),
-      executionMode === "DOCKER"
-        ? pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity-cli", "brain", conversationId, ".system_generated", "logs", "overview.txt")
-        : path.join(os.homedir(), ".gemini", "antigravity-cli", "brain", conversationId, ".system_generated", "logs", "overview.txt"),
-      executionMode === "DOCKER"
-        ? pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "transcript.jsonl")
-        : path.join(os.homedir(), ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "transcript.jsonl"),
-      executionMode === "DOCKER"
-        ? pathPosix.join(CONTAINER_RUNTIME_HOME, ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "overview.txt")
-        : path.join(os.homedir(), ".gemini", "antigravity", "brain", conversationId, ".system_generated", "logs", "overview.txt"),
-    ];
-
-    for (const p of candidates) {
-      const raw = executionMode === "DOCKER"
-        ? await this.dockerRunner.readWorkspaceFile?.(cwd, p).catch(() => null)
-        : await fs.readFile(p, "utf8").catch(() => null);
-      if (raw) {
-        return raw;
-      }
-    }
-    return null;
-  }
-
   private async resolveAntigravityDatabase(
     cwd: string,
     conversationId: string,
