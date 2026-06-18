@@ -1031,8 +1031,8 @@ describe("dashboard project management API", () => {
       window: "custom",
       query: {
         window: "custom",
-        from: today,
-        to: today,
+        from: `${today}T00:00:00.000Z`,
+        to: `${today}T23:59:59.999Z`,
       },
       range: {
         isCustom: true,
