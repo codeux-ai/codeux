@@ -30,6 +30,7 @@ import { LaunchContainerPanel } from "./components/browser/LaunchContainerPanel.
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
+import { getSafeUrl } from "./lib/safe-url.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
@@ -548,9 +549,9 @@ export const BrowserPage: FunctionComponent = () => {
                   {sessionActionPending ? "Stopping..." : "Stop"}
                 </button>
                 <a
-                  href={visibleSelectedSession ? `${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}` : undefined}
+                  href={visibleSelectedSession ? getSafeUrl(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}`) : undefined}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none opacity-50" : ""}`}
                 >
                   <ExternalLink className="h-4 w-4" strokeWidth={2} />

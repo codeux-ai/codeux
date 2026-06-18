@@ -28,6 +28,7 @@ import { Button } from "./ui/Button.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { AgentSelectAvatarIcon } from "./agents/AgentSelectAvatarIcon.js";
 import { SprintReviewBadge } from "./sprints/SprintReviewBadge.js";
+import { getSafeUrl } from "../lib/safe-url.js";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -510,9 +511,9 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     </div>
                     {task.pr_url && (
                         <a
-                            href={task.pr_url}
+                            href={getSafeUrl(task.pr_url)}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             className="text-[10px] font-mono text-signal-500 hover:text-signal-400 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 focus-visible:rounded"
                         >
                             <span className="py-2.5 min-h-[44px] inline-flex items-center gap-1.5">

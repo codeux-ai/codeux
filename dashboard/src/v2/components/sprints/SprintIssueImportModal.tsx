@@ -15,6 +15,7 @@ import {
 import type { ProjectSummary, SprintLinkedIssueInput } from "../../types.js";
 import { fetchProjectIssuePromptContexts, searchProjectIssues, type RemoteIssueSummary } from "../../lib/project-api.js";
 import { MultiSelect } from "../ui/MultiSelect.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 interface SprintIssueImportModalProps {
   project: ProjectSummary;
@@ -352,9 +353,9 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
                           </label>
                         </div>
                         <a
-                          href={issue.url}
+                          href={getSafeUrl(issue.url)}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           onClick={(event) => event.stopPropagation()}
                           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-900 dark:hover:bg-white/[0.06] dark:hover:text-white"
                           aria-label={`Open ${issue.title}`}
