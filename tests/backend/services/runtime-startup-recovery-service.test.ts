@@ -69,6 +69,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Startup Recovery Sprint",
       number: 42,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -167,6 +168,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Interrupted Jules Sprint",
       number: 3,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -250,6 +252,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Durable Jules Sprint",
       number: 4,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -317,6 +320,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Duplicate Active Run Sprint",
       number: 7,
+      status: "running",
     });
     const olderRun = executionRepository.createSprintRun({
       projectId: project.id,
@@ -366,6 +370,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Terminal Task Run Sprint",
       number: 13,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -430,6 +435,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Unrecoverable Dispatch Sprint",
       number: 21,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -588,6 +594,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Recovered Fix Follow-Up Sprint",
       number: 56,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -771,6 +778,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Quota Wait Task Sprint",
       number: 58,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -874,6 +882,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Recovery Logger Sprint",
       number: 77,
+      status: "running",
     });
     const sprintRun = executionRepository.createSprintRun({
       projectId: project.id,
@@ -901,5 +910,40 @@ describe("RuntimeStartupRecoveryService", () => {
       projectId: project.id,
       error: "recover failed",
     });
+  });
+
+  it("does not recover sprint runs if the associated sprint is not running", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Non-running Sprint Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/non-running-sprint-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Non-running Sprint",
+      number: 88,
+      status: "idle",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+
+    const result = await service.recover();
+
+    expect(result.resumedSprintRunIds).toEqual([]);
+    expect(result.supersededSprintRunIds).toEqual([sprintRun.id]);
+    expect(recoverSprintRun).not.toHaveBeenCalled();
+
+    const updatedRun = executionRepository.getSprintRun(sprintRun.id);
+    expect(updatedRun?.status).toBe("failed");
   });
 });
