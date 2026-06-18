@@ -4,6 +4,7 @@ import * as path from "path";
 import type { IncomingMessage } from "http";
 import type { Logger } from "../shared/logging/logger.js";
 import { correlationIdMiddleware } from "../shared/logging/correlation-id.js";
+import { applyDashboardSecurityHeaders, isHostileBrowserOrigin } from "./dashboard-security.js";
 import { createPreviewHostMiddleware } from "./preview-host-middleware.js";
 import { parsePreviewSessionIdFromHost } from "./preview-host-utils.js";
 import type { DashboardServerOptions } from "./dashboard-server.js";
@@ -19,6 +20,8 @@ export const applyDashboardPreRouteMiddleware = (
 ): void => {
   app.use(correlationIdMiddleware());
   app.use((req, res, next) => {
+    applyDashboardSecurityHeaders(res);
+
     const isRuntimeDataPath = req.path.startsWith("/api/")
       || req.path === "/health"
       || req.path === "/ready";
@@ -45,6 +48,25 @@ export const applyDashboardPreRouteMiddleware = (
   });
 
   app.use(createPreviewHostMiddleware(options));
+
+  app.use((req, res, next) => {
+    const isRuntimeDataPath = req.path.startsWith("/api/")
+      || req.path === "/health"
+      || req.path === "/ready";
+
+    if (isRuntimeDataPath && isHostileBrowserOrigin(req)) {
+      dashboardLogger.warn("Blocked hostile cross-site browser request", {
+        logPurpose: "security",
+        method: req.method,
+        path: req.originalUrl,
+        reason: "hostile_browser_origin",
+      });
+      res.status(403).json({ error: "Forbidden: Cross-site requests are not allowed." });
+      return;
+    }
+    next();
+  });
+
   // Settings payloads can embed a base64 background-image data URL, which the
   // dashboard warns about past ~5MB. base64 inflates bytes by ~33%, so allow
   // generous headroom to keep appearance saves from failing with HTTP 413.
