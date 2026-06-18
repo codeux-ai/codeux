@@ -19,6 +19,11 @@ export function registerExecutionInvocationRoutes(router: Express, deps: Dashboa
         search: req.query.search as string,
         sortKey: req.query.sortKey as any,
         sortDir: req.query.sortDir as any,
+        errorCategories: Array.isArray(req.query.errorCategories)
+          ? (req.query.errorCategories as string[])
+          : typeof req.query.errorCategories === 'string'
+            ? [req.query.errorCategories]
+            : undefined,
       };
       res.json(deps.executionRepository.queryProjectInvocations({ ...query, projectId }));
       return;

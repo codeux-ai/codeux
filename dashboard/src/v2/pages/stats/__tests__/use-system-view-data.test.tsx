@@ -58,7 +58,7 @@ describe("useSystemViewData", () => {
   });
 
   it("returns the documented view model shape", async () => {
-    mockedFetchProjectInvocations.mockResolvedValue([
+    (mockedFetchProjectInvocations as any).mockResolvedValue([
       createInvocation({ id: "inv-1", type: "analysis", provider: "gemini", status: "completed" }),
       createInvocation({
         id: "inv-2",
@@ -102,8 +102,73 @@ describe("useSystemViewData", () => {
     expect(result.current.error === null || typeof result.current.error === "string").toBe(true);
   });
 
+  it("supports query-mode server responses and passes parameters", async () => {
+    (mockedFetchProjectInvocations as any).mockResolvedValue({
+      items: [
+        createInvocation({ id: "inv-server", status: "completed", type: "analysis", provider: "gemini" })
+      ],
+      totalCount: 150,
+      summary: {
+        totalInvocations: 150,
+        runningCount: 10,
+        failedCount: 5,
+        completedCount: 135,
+        cancelledCount: 0,
+        pausedCount: 0,
+        totalTokens: 1000,
+        totalInputTokens: 500,
+        totalOutputTokens: 500,
+        totalCachedTokens: 0,
+        avgDurationMs: 1200,
+        p95DurationMs: 3000,
+        externalApiMetrics: {
+          git: { calls: 0, avgDurationMs: 0 },
+          jules: { calls: 0, avgDurationMs: 0 },
+          jira: { calls: 0, avgDurationMs: 0 },
+          other: { calls: 0, avgDurationMs: 0 },
+        },
+        sprintStateSummary: {
+          totalSprints: 0,
+          activeSprints: 0,
+          completedSprints: 0,
+          failedSprints: 0,
+          totalTasks: 0,
+          runningTasks: 0,
+          blockedTasks: 0,
+        },
+        errorsByCategory: { timeout: 0, rateLimit: 0, apiError: 0, modelError: 0, cancelled: 0, other: 0 }
+      }
+    });
+
+    const { result } = renderHook(() => useSystemViewData("project-1"));
+
+    act(() => {
+      result.current.setSearch("test search");
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(mockedFetchProjectInvocations).toHaveBeenCalledWith(
+      "project-1",
+      expect.objectContaining({
+        search: "test search",
+        limit: 100,
+        offset: 0
+      })
+    );
+
+    expect(result.current.invocations).toHaveLength(1);
+    expect(result.current.invocations[0].id).toBe("inv-server");
+    expect(result.current.totalCount).toBe(150);
+    expect(result.current.hasMore).toBe(true);
+    expect(result.current.summaryMetrics.totalInvocations).toBe(150);
+    expect(result.current.summaryMetrics.completedCount).toBe(135);
+  });
+
   it("filters invocations by failed status", async () => {
-    mockedFetchProjectInvocations.mockResolvedValue([
+    (mockedFetchProjectInvocations as any).mockResolvedValue([
       createInvocation({ id: "inv-1", status: "completed", type: "analysis", provider: "gemini" }),
       createInvocation({ id: "inv-2", status: "failed", type: "deployment", provider: "codex", errorMessage: "boom" }),
       createInvocation({ id: "inv-3", status: "running", type: "analysis", provider: "codex", finishedAt: null }),
@@ -132,7 +197,7 @@ describe("useSystemViewData", () => {
   });
 
   it("calculates derived metrics (externalApiMetrics, sprintStateSummary, errorsByCategory)", async () => {
-    mockedFetchProjectInvocations.mockResolvedValue([
+    (mockedFetchProjectInvocations as any).mockResolvedValue([
       createInvocation({ id: "inv-1", type: "git_push", sprintId: "sprint-1", status: "completed", finishedAt: "2026-06-01T10:05:00.000Z" }),
       createInvocation({ id: "inv-2", type: "jira_sync", sprintId: "sprint-1", status: "running", finishedAt: null }),
       createInvocation({ id: "inv-3", type: "coding", provider: "jules", sprintId: "sprint-2", status: "failed", lastErrorMessage: "timeout error" }),

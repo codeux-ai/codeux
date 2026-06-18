@@ -110,6 +110,10 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
     externalApiMetrics,
     sprintStateSummary,
     errorsByCategory,
+    page,
+    setPage,
+    hasMore,
+    totalCount,
   } = useSystemViewData(projectId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SystemTab>("all");
@@ -356,8 +360,11 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
             onSearchChange={setSearch}
             availablePurposes={availablePurposes}
             availableProviders={availableProviders}
-            totalCount={allInvocations.length}
+            totalCount={totalCount}
             filteredCount={tabbedInvocations.length}
+            page={page}
+            onPageChange={setPage}
+            hasMore={hasMore}
           />
 
           {error ? (

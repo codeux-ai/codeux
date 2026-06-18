@@ -4,6 +4,9 @@ import { CHIP_CLASS, INPUT_CLASS, SUBPANEL_CLASS } from "../StatsShared.js";
 import type { SystemFilters } from "../../hooks/use-system-view-data.js";
 
 export interface SystemFilterBarProps {
+  page?: number;
+  onPageChange?: (p: number) => void;
+  hasMore?: boolean;
   filters: SystemFilters;
   onFiltersChange: (f: SystemFilters) => void;
   search: string;
@@ -54,6 +57,9 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   availableProviders,
   totalCount,
   filteredCount,
+  page,
+  onPageChange,
+  hasMore,
 }) => {
   const hasActiveFilters = filters.status.length > 0 || filters.purpose.length > 0 || filters.provider.length > 0 || (filters.errorCategories && filters.errorCategories.length > 0) || search !== "";
 
@@ -179,8 +185,31 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
           </button>
         ) : null}
         <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-          {filteredCount} of {totalCount}
+          Showing {filteredCount} {page !== undefined ? `of ${totalCount}` : `of ${totalCount}`}
         </div>
+        {page !== undefined && onPageChange && (
+          <div className="flex items-center gap-2 border-l border-slate-200 pl-4 dark:border-white/10">
+            <button
+              type="button"
+              disabled={page === 0}
+              onClick={() => onPageChange(page - 1)}
+              className="text-xs font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-300"
+            >
+              Prev
+            </button>
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              Page {page + 1}
+            </span>
+            <button
+              type="button"
+              disabled={!hasMore}
+              onClick={() => onPageChange(page + 1)}
+              className="text-xs font-bold text-slate-500 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-300"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

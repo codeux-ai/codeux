@@ -9,6 +9,7 @@ export interface ProjectInvocationsQuery {
   purpose?: string;
   provider?: string;
   search?: string;
+  errorCategories?: string[];
   sortKey?: "startedAt" | "durationMs" | "totalTokens" | "costCents";
   sortDir?: "asc" | "desc";
 }
@@ -16,6 +17,45 @@ export interface ProjectInvocationsQuery {
 export interface ProjectInvocationsQueryResult {
   items: ExecutionInvocationRecord[];
   totalCount: number;
+  summary: {
+    totalInvocations: number;
+    runningCount: number;
+    failedCount: number;
+    completedCount: number;
+    cancelledCount: number;
+    pausedCount: number;
+    totalTokens: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCachedTokens: number;
+    avgDurationMs: number;
+    p95DurationMs: number;
+    externalApiMetrics: {
+      git: { calls: number; avgDurationMs: number };
+      jules: { calls: number; avgDurationMs: number };
+      jira: { calls: number; avgDurationMs: number };
+      other: { calls: number; avgDurationMs: number };
+    };
+    sprintStateSummary: {
+      totalSprints: number;
+      activeSprints: number;
+      completedSprints: number;
+      failedSprints: number;
+      totalTasks: number;
+      runningTasks: number;
+      blockedTasks: number;
+    };
+    errorsByCategory: {
+      timeout: number;
+      rateLimit: number;
+      apiError: number;
+      modelError: number;
+      cancelled: number;
+      other: number;
+    };
+  };
+  availablePurposes: string[];
+  availableProviders: string[];
 }
 
 export interface ExecutionInvocationRecord {
