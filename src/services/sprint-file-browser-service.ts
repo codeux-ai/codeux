@@ -397,6 +397,9 @@ export class SprintFileBrowserService {
 
   async reconcileSessions(): Promise<void> {
     const sessions = this.deps.sprintFileBrowserRepository.listSessions();
+    if (sessions.length === 0) {
+      return;
+    }
     // Fetch the file-browser container listing once for the whole pass (was one `docker ps` per session).
     const containers = await this.listFileBrowserContainers(process.cwd());
     for (const session of sessions) {

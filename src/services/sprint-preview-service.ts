@@ -500,8 +500,6 @@ export class SprintPreviewService {
 
   async reconcileSessions(): Promise<void> {
     const sessions = this.deps.sprintPreviewRepository.listSessions();
-    // Fetch the preview container listing once for the whole pass (was one `docker ps` per session).
-    const containers = await this.listPreviewContainers(process.cwd());
     // Memoize the per-project execution snapshot within this pass; many sessions share a project and
     // it is an expensive DB rollup, so recomputing it per session was a second N+1.
     const executionSnapshotByProject = new Map<string, ReturnType<typeof this.deps.executionRepository.getProjectExecutionSnapshot>>();
@@ -513,100 +511,105 @@ export class SprintPreviewService {
       }
       return snapshot;
     };
-    for (const session of sessions) {
-      const sprint = this.deps.projectManagementRepository.getSprint(session.sprintId);
-      if (!sprint) {
-        // Sprint was deleted — drop the orphaned session record so we stop reconciling it.
-        this.deps.sprintPreviewRepository.deleteSession(session.id);
-        continue;
-      }
-      const refreshed = await this.refreshRuntimeState(session, containers);
-      const activeRun = getExecutionSnapshot(session.projectId)
-        .sprintRuns
-        .some((run) => run.sprintId === session.sprintId && run.status === "running");
 
-      // Prune dead sessions for finished sprints. Once a sprint is terminal and has no running
-      // container, the session can never auto-start again, so reconciling it every 15s (settings
-      // resolution + completed-task counts) is pure waste — these stopped records otherwise
-      // accumulate indefinitely. They are recreated on demand if a preview is started again.
-      const sprintTerminal = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
-      const isDeadSession = (refreshed.status === "stopped" || refreshed.status === "error")
-        && !refreshed.containerId && !refreshed.containerName;
-      if (sprintTerminal && !activeRun && isDeadSession) {
-        this.deps.sprintPreviewRepository.deleteSession(refreshed.id);
-        continue;
-      }
-
-      // A non-running session can only be acted on this cycle if it can be auto-started, which needs
-      // an active sprint run. Without one, every downstream branch is a no-op for it (stop/rebuild/
-      // autoStop only apply to running sessions, and the task-count update is gated on running too),
-      // so skip the expensive settings resolution + completed-task count entirely.
-      const isRunningOrStarting = refreshed.status === "running" || refreshed.status === "starting";
-      if (!isRunningOrStarting && !activeRun) {
-        continue;
-      }
-
-      const settings = this.resolveSettings(session.projectId, session.sprintId).sprintPreview;
-      const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
-
-      if (settings.enabled === false) {
-        if (refreshed.status === "running" || refreshed.status === "starting") {
-          await this.stopSession(refreshed.id).catch(() => undefined);
+    if (sessions.length > 0) {
+      // Fetch the preview container listing once for the whole pass (was one `docker ps` per session).
+      const containers = await this.listPreviewContainers(process.cwd());
+      for (const session of sessions) {
+        const sprint = this.deps.projectManagementRepository.getSprint(session.sprintId);
+        if (!sprint) {
+          // Sprint was deleted — drop the orphaned session record so we stop reconciling it.
+          this.deps.sprintPreviewRepository.deleteSession(session.id);
+          continue;
         }
-        continue;
-      }
+        const refreshed = await this.refreshRuntimeState(session, containers);
+        const activeRun = getExecutionSnapshot(session.projectId)
+          .sprintRuns
+          .some((run) => run.sprintId === session.sprintId && run.status === "running");
 
-      if (settings.autoStartOnRunningSprint && activeRun && refreshed.status === "stopped") {
-        await this.startSession(session.projectId, session.sprintId).catch((error) => {
-          this.deps.logger?.warn("Failed to auto-start sprint preview session", {
-            sessionId: session.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-        continue;
-      }
-
-      const isTerminalStatus = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
-      const statusChangedToTerminal = isTerminalStatus && refreshed.lastSeenSprintStatus !== sprint.status;
-
-      if (settings.autoStopOnTerminalSprint && !activeRun && statusChangedToTerminal) {
-        if (refreshed.status !== "stopped") {
-          await this.stopSession(refreshed.id).catch(() => undefined);
+        // Prune dead sessions for finished sprints. Once a sprint is terminal and has no running
+        // container, the session can never auto-start again, so reconciling it every 15s (settings
+        // resolution + completed-task counts) is pure waste — these stopped records otherwise
+        // accumulate indefinitely. They are recreated on demand if a preview is started again.
+        const sprintTerminal = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
+        const isDeadSession = (refreshed.status === "stopped" || refreshed.status === "error")
+          && !refreshed.containerId && !refreshed.containerName;
+        if (sprintTerminal && !activeRun && isDeadSession) {
+          this.deps.sprintPreviewRepository.deleteSession(refreshed.id);
+          continue;
         }
-      }
 
-      if (refreshed.status !== "running" && refreshed.status !== "starting") {
-        continue;
-      }
+        // A non-running session can only be acted on this cycle if it can be auto-started, which needs
+        // an active sprint run. Without one, every downstream branch is a no-op for it (stop/rebuild/
+        // autoStop only apply to running sessions, and the task-count update is gated on running too),
+        // so skip the expensive settings resolution + completed-task count entirely.
+        const isRunningOrStarting = refreshed.status === "running" || refreshed.status === "starting";
+        if (!isRunningOrStarting && !activeRun) {
+          continue;
+        }
 
-      if (settings.rebuildOnTaskCompletion && completedTaskCount > refreshed.lastCompletedTaskCount) {
-        await this.rebuildSession(refreshed.id).catch((error) => {
-          this.deps.logger?.warn("Failed to auto-rebuild sprint preview after task completion", {
-            sessionId: refreshed.id,
-            error: error instanceof Error ? error.message : String(error),
+        const settings = this.resolveSettings(session.projectId, session.sprintId).sprintPreview;
+        const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
+
+        if (settings.enabled === false) {
+          if (refreshed.status === "running" || refreshed.status === "starting") {
+            await this.stopSession(refreshed.id).catch(() => undefined);
+          }
+          continue;
+        }
+
+        if (settings.autoStartOnRunningSprint && activeRun && refreshed.status === "stopped") {
+          await this.startSession(session.projectId, session.sprintId).catch((error) => {
+            this.deps.logger?.warn("Failed to auto-start sprint preview session", {
+              sessionId: session.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
           });
-        });
-        continue;
-      }
+          continue;
+        }
 
-      if (
-        settings.rebuildOnSprintCompletion
-        && sprint.status === "completed"
-        && refreshed.lastSeenSprintStatus !== "completed"
-      ) {
-        await this.rebuildSession(refreshed.id).catch((error) => {
-          this.deps.logger?.warn("Failed to auto-rebuild sprint preview after sprint completion", {
-            sessionId: refreshed.id,
-            error: error instanceof Error ? error.message : String(error),
+        const isTerminalStatus = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
+        const statusChangedToTerminal = isTerminalStatus && refreshed.lastSeenSprintStatus !== sprint.status;
+
+        if (settings.autoStopOnTerminalSprint && !activeRun && statusChangedToTerminal) {
+          if (refreshed.status !== "stopped") {
+            await this.stopSession(refreshed.id).catch(() => undefined);
+          }
+        }
+
+        if (refreshed.status !== "running" && refreshed.status !== "starting") {
+          continue;
+        }
+
+        if (settings.rebuildOnTaskCompletion && completedTaskCount > refreshed.lastCompletedTaskCount) {
+          await this.rebuildSession(refreshed.id).catch((error) => {
+            this.deps.logger?.warn("Failed to auto-rebuild sprint preview after task completion", {
+              sessionId: refreshed.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
           });
-        });
-        continue;
-      }
+          continue;
+        }
 
-      this.deps.sprintPreviewRepository.updateSession(refreshed.id, {
-        lastCompletedTaskCount: completedTaskCount,
-        lastSeenSprintStatus: sprint.status,
-      });
+        if (
+          settings.rebuildOnSprintCompletion
+          && sprint.status === "completed"
+          && refreshed.lastSeenSprintStatus !== "completed"
+        ) {
+          await this.rebuildSession(refreshed.id).catch((error) => {
+            this.deps.logger?.warn("Failed to auto-rebuild sprint preview after sprint completion", {
+              sessionId: refreshed.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+          continue;
+        }
+
+        this.deps.sprintPreviewRepository.updateSession(refreshed.id, {
+          lastCompletedTaskCount: completedTaskCount,
+          lastSeenSprintStatus: sprint.status,
+        });
+      }
     }
 
     const projects = this.deps.projectManagementRepository.listProjects().projects;

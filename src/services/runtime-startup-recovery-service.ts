@@ -362,6 +362,22 @@ export class RuntimeStartupRecoveryService {
         continue;
       }
 
+      const rawStatus = this.deps.projectManagementRepository.getRawSprintStatus(sprintRun.sprintId);
+      if (rawStatus !== "running") {
+        this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+          status: "failed",
+          finishedAt: recoveredAt,
+          lastHeartbeatAt: recoveredAt,
+        });
+        this.deps.executionRepository.appendSprintRunEvent(sprintRun.id, "sprint_failed", "system", {
+          reason: "associated_sprint_not_running",
+          sprintStatus: rawStatus || "deleted",
+        }, {
+          sourceEventKey: `startup-recovery:sprint-not-running:${sprintRun.id}`,
+        });
+        supersededSprintRunIds.push(sprintRun.id);
+        continue;
+      }
 
       recoveredSprintIds.add(sprintRun.sprintId);
       this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);

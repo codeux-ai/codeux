@@ -872,6 +872,19 @@ export class ProjectManagementRepository {
     }
   }
 
+  getRawSprintStatus(sprintId: string): SprintRecord["status"] | null {
+    try {
+      const row = this.db.prepare(`
+        SELECT status
+        FROM sprints
+        WHERE id = ?
+      `).get(sprintId) as { status: string } | undefined;
+      return row ? (row.status as SprintRecord["status"]) : null;
+    } catch {
+      return null;
+    }
+  }
+
   findSprintByProjectAndNumber(projectId: string, sprintNumber: number): SprintRecord | null {
     this.requireProject(projectId);
     const row = this.db.prepare(`
