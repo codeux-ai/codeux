@@ -248,6 +248,11 @@ export class SprintFileBrowserService {
   async readFile(sessionId: string, requestedPath: string): Promise<FileBrowserFileContent> {
     const session = await this.requireRunningSession(sessionId);
     const relPath = this.normalizeRelativePath(requestedPath);
+
+    if (PRUNED_DIRECTORIES.some(pruned => relPath === pruned || relPath.startsWith(pruned + "/"))) {
+       throw new Error(`Invalid file path: ${relPath} is within a pruned directory`);
+    }
+
     const containerPath = pathPosix.join(CONTAINER_WORKSPACE_PATH, relPath);
     const script = `head -c ${MAX_FILE_BYTES + 1} -- ${this.shellQuote(containerPath)}`;
     const result = await commandRunner.run("docker", ["exec", session.containerId!, "sh", "-c", script], {
@@ -348,13 +353,15 @@ export class SprintFileBrowserService {
       || { path: relPath, oldPath: null, status: "modified" as FileBrowserChangeStatus, additions: 0, deletions: 0 };
 
     const originalPath = change.oldPath || relPath;
-    const original = change.status === "added"
-      ? null
+    const originalResult = change.status === "added"
+      ? { content: null, truncated: false }
       : await this.showFileAtRef(project.baseDir, compareRef, originalPath);
-    const modified = change.status === "deleted"
-      ? null
+    const modifiedResult = change.status === "deleted"
+      ? { content: null, truncated: false }
       : await this.showFileAtRef(project.baseDir, featureRef, relPath);
 
+    const original = originalResult.content;
+    const modified = modifiedResult.content;
     const binary = (original !== null && original.includes("\u0000")) || (modified !== null && modified.includes("\u0000"));
 
     return {
@@ -365,6 +372,7 @@ export class SprintFileBrowserService {
       modified: binary ? null : modified,
       binary,
       language: resolveLanguageForPath(relPath),
+      truncated: originalResult.truncated || modifiedResult.truncated,
     };
   }
 
@@ -632,12 +640,27 @@ export class SprintFileBrowserService {
     return map;
   }
 
-  private async showFileAtRef(repoPath: string, ref: string, filePath: string): Promise<string | null> {
-    const result = await this.runGit(repoPath, ["show", `${ref}:${filePath}`]);
-    if (!result.ok) {
-      return null;
+  private async showFileAtRef(repoPath: string, ref: string, filePath: string): Promise<{ content: string | null; truncated: boolean }> {
+    if (!(await this.commitExists(repoPath, ref))) {
+      return { content: null, truncated: false };
     }
-    return result.stdout;
+
+    const normalizedPath = this.normalizeRelativePath(filePath);
+    if (PRUNED_DIRECTORIES.some(pruned => normalizedPath === pruned || normalizedPath.startsWith(pruned + "/"))) {
+       throw new Error(`Invalid file path: ${filePath} is within a pruned directory`);
+    }
+
+    const args = ["show", `${ref}:${normalizedPath}`];
+    const result = await this.runGit(repoPath, args);
+    if (!result.ok) {
+      return { content: null, truncated: false };
+    }
+    const raw = result.stdout;
+    const truncated = raw.length > MAX_FILE_BYTES;
+    return {
+      content: truncated ? raw.slice(0, MAX_FILE_BYTES) : raw,
+      truncated
+    };
   }
 
   /**
@@ -942,11 +965,35 @@ export class SprintFileBrowserService {
 
   private normalizeRelativePath(requestedPath: string): string {
     const trimmed = (requestedPath || "").trim().replace(/\\/g, "/");
+
+    if (!trimmed) {
+      throw new Error(`Invalid file path: path cannot be empty`);
+    }
+
+    const decoded = decodeURIComponent(trimmed);
+    if (decoded.includes("../") || decoded.includes("..\\") || decoded === "..") {
+      throw new Error(`Invalid file path: encoded traversal is not allowed`);
+    }
+
+    if (/^[a-zA-Z]:[\\\/]/.test(trimmed) || trimmed.startsWith("/")) {
+      throw new Error(`Invalid file path: absolute paths are not allowed`);
+    }
+
+    if (/[\x00-\x1F\x7F]/.test(trimmed)) {
+      throw new Error(`Invalid file path: control characters are not allowed`);
+    }
+
     const withoutLeading = trimmed.replace(/^\.\//, "").replace(/^\/+/, "");
     const normalized = pathPosix.normalize(withoutLeading);
-    if (!normalized || normalized === "." || normalized.startsWith("..") || normalized.includes("../")) {
+
+    if (!normalized || normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.includes("../")) {
       throw new Error(`Invalid file path: ${requestedPath}`);
     }
+
+    if (normalized === ".git" || normalized.startsWith(".git/")) {
+      throw new Error(`Invalid file path: .git internals are not allowed`);
+    }
+
     return normalized;
   }
 
