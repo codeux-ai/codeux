@@ -701,6 +701,18 @@ For provider-backed runs, session polling is now used to ingest durable runtime 
 
 - A "Live Preview" CTA link now appears in the Live view header when the relevant sprint has an active (`running`) preview session with a resolved `hostPort`. The link securely routes directly to the iframe preview origin (`buildPreviewUrl`) at the `lastKnownPath`.
 
+
+## Interaction Patterns
+
+The dashboard relies on consistent interaction primitives across all v2 views:
+
+- **Cursor Affordance**: All interactive controls (buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays) explicitly use a pointer cursor. Disabled controls retain `cursor-not-allowed` or default arrow cursors.
+- **Async Feedback & Loading**: Active states (like waiting for CI, running tasks, or loading large datasets) use visual indicators like spinners or pulsing dots.
+- **Reduced Motion**: All animated feedback (like CI spinners or GSAP transitions) uses Tailwind's `motion-reduce:animate-none` or explicit reduced-motion checks to disable looping animations if the user prefers reduced motion.
+- **Overlays & Modals**: Dismissible surfaces (dialogs, side panels, search overlays) can be closed via explicit buttons, clicking the backdrop, or pressing the Escape key. Focus is trapped within the overlay while open and restored to the trigger when closed.
+- **Data Views**: Complex data views (like the Sprint Ledger or Stats page) maintain sticky sort/filter controls while the data scrolls. List windowing and progressive rendering ensure smooth interactions even with large datasets.
+- **Destructive Actions & Flows**: Major flows with side effects, such as rerunning a task, require explicit confirmation. The confirmation dialog warns about potential downstream impacts (e.g., downstream task resets, existing git merges) and provides localized options to clean up state before proceeding.
+
 ## Accessibility Patterns
 
 This dashboard enforces accessibility best practices to ensure an inclusive experience:
