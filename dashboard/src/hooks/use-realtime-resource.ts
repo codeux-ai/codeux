@@ -243,14 +243,16 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     abortControllerRef.current = abortController;
 
     // Compose the external signal if provided
+    let abortListener: (() => void) | undefined;
     if (refreshOptions?.signal) {
       const externalSignal = refreshOptions.signal;
       if (externalSignal.aborted) {
         abortController.abort(externalSignal.reason);
       } else {
-        externalSignal.addEventListener("abort", () => {
+        abortListener = () => {
           abortController.abort(externalSignal.reason);
-        }, { once: true });
+        };
+        externalSignal.addEventListener("abort", abortListener, { once: true });
       }
     }
 
@@ -296,8 +298,20 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
         if (fetchIdRef.current === currentFetchId) {
           activeSilentFetchPromiseRef.current = null;
         }
+        if (abortListener && refreshOptions?.signal) {
+          refreshOptions.signal.removeEventListener("abort", abortListener);
+        }
       }
     })();
+
+    // Ensure we do not cache a promise that gets aborted, preventing subsequent
+    // silent refresh deduplications from getting an already-aborted promise.
+    const onAbort = () => {
+      if (activeSilentFetchPromiseRef.current === fetchPromise) {
+        activeSilentFetchPromiseRef.current = null;
+      }
+    };
+    abortController.signal.addEventListener("abort", onAbort, { once: true });
 
     if (shouldDedupeSilentFetch) {
       activeSilentFetchPromiseRef.current = fetchPromise;
