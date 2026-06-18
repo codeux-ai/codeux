@@ -21,6 +21,8 @@ export const BranchNameSchemeEditor: FunctionComponent<BranchNameSchemeEditorPro
         disabled={disabled}
         mono={true}
         placeholder="e.g. feature/sprint{sprint_id}-implementation"
+        aria-label="Sprint branch scheme"
+        aria-description="Template used when naming sprint branches."
       />
       <div className="flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-slate-400 dark:text-slate-500">
         <span className="font-bold uppercase tracking-wider text-slate-500">Placeholders:</span>

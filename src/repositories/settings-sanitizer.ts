@@ -27,6 +27,7 @@ import {
   DEFAULT_SKILLS,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
+  QA_EXHAUSTION_POLICIES,
 } from "./settings-defaults.js";
 
 const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" | "LOCAL"): SkillToggle[] => {
@@ -135,6 +136,36 @@ const sanitizeQualityAssuranceTrigger = (
   };
 };
 
+const QA_MAX_REVIEW_RUNS_CEILING = 20;
+
+const readReviewRunCount = (value: unknown, fallback: number): number => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(1, Math.min(QA_MAX_REVIEW_RUNS_CEILING, Math.round(value)));
+  }
+  return fallback;
+};
+
+const sanitizeQualityAssurance = (
+  value: Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined,
+): DashboardSettings["agents"]["qualityAssurance"] => {
+  const input = value && typeof value === "object" ? value : {};
+  const defaults = DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance;
+  const policy = typeof input.exhaustionPolicy === "string"
+    && QA_EXHAUSTION_POLICIES.includes(input.exhaustionPolicy as never)
+    ? input.exhaustionPolicy
+    : defaults.exhaustionPolicy;
+
+  return {
+    enabled: readBoolean(input.enabled, defaults.enabled),
+    maxTaskReviewRuns: readReviewRunCount(input.maxTaskReviewRuns, defaults.maxTaskReviewRuns),
+    maxSprintReviewRuns: readReviewRunCount(input.maxSprintReviewRuns, defaults.maxSprintReviewRuns),
+    exhaustionPolicy: policy,
+    taskCompletion: sanitizeQualityAssuranceTrigger(input.taskCompletion, defaults.taskCompletion),
+    sprintCompletion: sanitizeQualityAssuranceTrigger(input.sprintCompletion, defaults.sprintCompletion),
+    completedTaskWithoutPr: sanitizeQualityAssuranceTrigger(input.completedTaskWithoutPr, defaults.completedTaskWithoutPr),
+  };
+};
+
 const cloneAgentRouting = (): DashboardSettings["agents"]["routing"] => ({
   planning: { ...DEFAULT_DASHBOARD_SETTINGS.agents.routing.planning },
   taskCoding: {
@@ -236,6 +267,8 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
     qualityAssurance: {
       enabled: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.enabled,
       maxTaskReviewRuns: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxTaskReviewRuns,
+      maxSprintReviewRuns: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxSprintReviewRuns,
+      exhaustionPolicy: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.exhaustionPolicy,
       taskCompletion: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion },
       sprintCompletion: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion },
       completedTaskWithoutPr: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr },
@@ -376,10 +409,16 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
         ? Math.round(sprintPreviewInput.containerAppPort)
         : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.containerAppPort
     )),
-    startupScriptPath: readString(
-      sprintPreviewInput.startupScriptPath,
-      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath,
-    ).trim() || DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath,
+    startupScriptPath: (() => {
+      const raw = readString(
+        sprintPreviewInput.startupScriptPath,
+        DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath,
+      ).trim() || DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath;
+      if (raw.includes("..") || raw.startsWith("/") || /^[a-zA-Z]:\\/.test(raw) || raw.includes("~") || raw.includes("$") || raw.includes("%")) {
+        return DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath;
+      }
+      return raw;
+    })(),
   };
   if (sprintPreview.hostPortRangeEnd < sprintPreview.hostPortRangeStart) {
     sprintPreview.hostPortRangeEnd = sprintPreview.hostPortRangeStart;
@@ -402,30 +441,9 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
           )
         : {}),
     },
-    qualityAssurance: {
-      enabled: readBoolean(
-        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.enabled,
-        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.enabled,
-      ),
-      maxTaskReviewRuns: Math.max(1, Math.min(10,
-        typeof (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.maxTaskReviewRuns === "number"
-          && Number.isFinite((agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.maxTaskReviewRuns)
-            ? Math.round((agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)!.maxTaskReviewRuns!)
-            : DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxTaskReviewRuns
-      )),
-      taskCompletion: sanitizeQualityAssuranceTrigger(
-        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.taskCompletion,
-        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion,
-      ),
-      sprintCompletion: sanitizeQualityAssuranceTrigger(
-        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.sprintCompletion,
-        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion,
-      ),
-      completedTaskWithoutPr: sanitizeQualityAssuranceTrigger(
-        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.completedTaskWithoutPr,
-        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr,
-      ),
-    },
+    qualityAssurance: sanitizeQualityAssurance(
+      agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined,
+    ),
   };
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);

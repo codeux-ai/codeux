@@ -233,7 +233,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <>
                 <tr key={invocation.id} className="block lg:table-row">
                   <td colSpan={11} className="p-0 block lg:table-cell">
-                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-6`}>
+                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-6 ${invocation.status === "running" ? "border-l-2 border-l-blue-400 bg-blue-500/[0.02]" : invocation.status === "failed" ? "border-l-2 border-l-red-400 bg-red-500/[0.02]" : ""}`}>
                       <div className="flex flex-col gap-3 lg:grid lg:w-full lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center lg:gap-2">
                         {/* Header Row: Time and Expand */}
                         <div className="flex items-center justify-between lg:contents">

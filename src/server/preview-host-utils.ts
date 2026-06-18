@@ -75,7 +75,17 @@ export function buildPreviewProxyRequestHeaders(
   upstreamPort: number,
 ): Record<string, string | string[] | undefined> {
   const headers = { ...req.headers } as Record<string, string | string[] | undefined>;
-  delete headers["accept-encoding"];
+  // Strip only hop-by-hop and transport headers. authorization/cookie are intentionally
+  // forwarded: the preview iframe runs on its own origin (preview-<id>.localhost), so these
+  // are the previewed app's own credentials — never the dashboard's — and stateful preview
+  // apps (login/session flows) need them to reach the container.
+  const headersToStrip = ["connection", "upgrade", "transfer-encoding", "content-length", "accept-encoding"];
+  for (const key of Object.keys(headers)) {
+    const lower = key.toLowerCase();
+    if (headersToStrip.includes(lower) || lower.startsWith("proxy-") || lower.startsWith("x-code-ux-")) {
+      delete headers[key];
+    }
+  }
   headers["x-forwarded-host"] = String(req.headers.host || "");
   headers.host = `127.0.0.1:${upstreamPort}`;
   headers["x-forwarded-proto"] = req.protocol || "http";
@@ -101,8 +111,15 @@ export async function requestBufferedPreviewResponse(args: {
       headers: args.headers,
     }, (proxyResponse: IncomingMessage) => {
       const chunks: Buffer[] = [];
+      let totalSize = 0;
       proxyResponse.on("data", (chunk: any) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        totalSize += buf.length;
+        if (totalSize > 5 * 1024 * 1024) {
+          proxyResponse.destroy(new Error("Response body exceeds maximum allowed size for buffered proxying"));
+          return;
+        }
+        chunks.push(buf);
       });
       proxyResponse.on("end", () => {
         resolve({
@@ -458,6 +475,9 @@ export function rewritePreviewLocationHeader(location: string, req: express.Requ
   if (!location) {
     return location;
   }
+  if (location.startsWith("/")) {
+    return location;
+  }
   const previewOrigin = `${req.protocol || "http"}://${String(req.headers.host || "").trim()}`;
   const upstreamOrigins = new Set([
     `http://127.0.0.1:${upstreamPort}`,
@@ -465,7 +485,8 @@ export function rewritePreviewLocationHeader(location: string, req: express.Requ
   ]);
   for (const upstreamOrigin of upstreamOrigins) {
     if (location.startsWith(upstreamOrigin)) {
-      return `${previewOrigin}${location.slice(upstreamOrigin.length)}`;
+      const relative = location.slice(upstreamOrigin.length);
+      return relative.startsWith("/") ? relative : `/${relative}`;
     }
   }
   return location;

@@ -2,6 +2,7 @@ import { type FunctionComponent } from "preact";
 import { ExternalLink, Play } from "lucide-preact";
 import type { SprintPreviewSession } from "../../../types.js";
 import { buildPreviewUrl } from "../../lib/preview-origin.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 interface LivePreviewLinkProps {
     session: SprintPreviewSession | null;
@@ -16,7 +17,7 @@ export const LivePreviewLink: FunctionComponent<LivePreviewLinkProps> = ({ sessi
 
     return (
         <a
-            href={previewUrl}
+            href={getSafeUrl(previewUrl)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-xs font-bold text-white bg-signal-500 hover:bg-signal-600 shadow-sm transition-colors duration-200"

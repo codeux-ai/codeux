@@ -354,6 +354,49 @@ describe("ExecutionControlService", () => {
     });
   });
 
+  it("reaps orphaned merge attention items when a sprint run is cancelled", async () => {
+    const { projectRepository, executionRepository, projectAttentionRepository, service } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Reaper Project",
+      sourceType: "local",
+      sourceRef: "/workspace/reaper-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Reaper Sprint", number: 9 });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    projectAttentionRepository.openItems([
+      {
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        attentionType: "merge_required",
+        severity: "medium",
+        ownerType: "worker",
+        title: "Merge required for T1",
+        summaryMarkdown: "Task T1 is awaiting merge.",
+      },
+      {
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        title: "QA could not verify T2",
+        summaryMarkdown: "Needs a human.",
+      },
+    ]);
+
+    await service.cancelSprintRun(sprintRun.id);
+
+    const open = projectAttentionRepository.listProjectAttentionItems(project.id, { statuses: ["open", "claimed"] });
+    // The transient merge escalation is reaped; the human escalation is left alone.
+    expect(open.map((item) => item.attentionType)).toEqual(["human_escalation_required"]);
+  });
+
   it("retries terminal dispatches through the task rerun service", async () => {
     const { projectRepository, executionRepository, service, rerunTask } = await createFixture();
     const project = projectRepository.createProject({

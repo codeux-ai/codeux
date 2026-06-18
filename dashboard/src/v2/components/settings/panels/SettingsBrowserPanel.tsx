@@ -23,7 +23,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
     <div className="flex flex-col gap-5">
       <SectionCard title="Workspace Visibility" watermark="WEB" badge={getBadge("sprintPreview")} icon={<Eye strokeWidth={2.4} />}>
         <Row label="Preview runtime enabled" description="Allow Code UX to launch, rebuild, and reconcile preview containers for this scope." badge={getFieldBadge("sprintPreview.enabled")}>
-          <Toggle value={editableSettings.sprintPreview.enabled} onChange={() => updateEditableSettings((current) => ({
+          <Toggle aria-label="Toggle setting" value={editableSettings.sprintPreview.enabled} onChange={() => updateEditableSettings((current) => ({
             ...current,
             sprintPreview: {
               ...current.sprintPreview,
@@ -32,7 +32,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
           }))} />
         </Row>
         <Row label="Show in-app browser workspace" description="Expose Browser entry points in the dashboard and allow the embedded preview workspace to render." badge={getFieldBadge("sprintPreview.showInAppBrowser")}>
-          <Toggle value={editableSettings.sprintPreview.showInAppBrowser} onChange={() => updateEditableSettings((current) => ({
+          <Toggle aria-label="Toggle setting" value={editableSettings.sprintPreview.showInAppBrowser} onChange={() => updateEditableSettings((current) => ({
             ...current,
             sprintPreview: {
               ...current.sprintPreview,
@@ -41,7 +41,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
           }))} />
         </Row>
         <Row label="Launch preview when sprint starts" description="Start a preview container automatically when Code UX detects the sprint is actively running." badge={getFieldBadge("sprintPreview.autoStartOnRunningSprint")}>
-          <Toggle value={editableSettings.sprintPreview.autoStartOnRunningSprint} onChange={() => updateEditableSettings((current) => ({
+          <Toggle aria-label="Toggle setting" value={editableSettings.sprintPreview.autoStartOnRunningSprint} onChange={() => updateEditableSettings((current) => ({
             ...current,
             sprintPreview: {
               ...current.sprintPreview,
@@ -50,7 +50,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
           }))} />
         </Row>
         <Row label="Rebuild preview on task completion" description="Refresh the active preview after a task finishes so the container reflects the latest sprint output." badge={getFieldBadge("sprintPreview.rebuildOnTaskCompletion")}>
-          <Toggle value={editableSettings.sprintPreview.rebuildOnTaskCompletion} onChange={() => updateEditableSettings((current) => ({
+          <Toggle aria-label="Toggle setting" value={editableSettings.sprintPreview.rebuildOnTaskCompletion} onChange={() => updateEditableSettings((current) => ({
             ...current,
             sprintPreview: {
               ...current.sprintPreview,
@@ -59,7 +59,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
           }))} />
         </Row>
         <Row label="Rebuild preview on sprint completion" description="Run one final rebuild when the sprint reaches its completed terminal state." badge={getFieldBadge("sprintPreview.rebuildOnSprintCompletion")}>
-          <Toggle value={editableSettings.sprintPreview.rebuildOnSprintCompletion} onChange={() => updateEditableSettings((current) => ({
+          <Toggle aria-label="Toggle setting" value={editableSettings.sprintPreview.rebuildOnSprintCompletion} onChange={() => updateEditableSettings((current) => ({
             ...current,
             sprintPreview: {
               ...current.sprintPreview,
@@ -68,7 +68,7 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
           }))} />
         </Row>
         <Row label="Stop preview when sprint ends" description="Shut down the preview container automatically when the sprint finishes, fails, or is cancelled." badge={getFieldBadge("sprintPreview.autoStopOnTerminalSprint")} last>
-          <Toggle value={editableSettings.sprintPreview.autoStopOnTerminalSprint} onChange={() => updateEditableSettings((current) => ({
+          <Toggle aria-label="Toggle setting" value={editableSettings.sprintPreview.autoStopOnTerminalSprint} onChange={() => updateEditableSettings((current) => ({
             ...current,
             sprintPreview: {
               ...current.sprintPreview,

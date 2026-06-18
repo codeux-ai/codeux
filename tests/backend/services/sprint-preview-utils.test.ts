@@ -22,7 +22,15 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
+import { resolvePreviewScriptPath } from "../../../src/services/sprint-preview-utils.js";
+
 describe("sprint-preview-utils", () => {
+  it("resolves and confines script path", async () => {
+    const repoPath = await createTempRepo();
+    await expect(resolvePreviewScriptPath(repoPath, ".code-ux/browser/start-preview.sh")).resolves.toBe(path.join(repoPath, ".code-ux/browser/start-preview.sh"));
+    await expect(resolvePreviewScriptPath(repoPath, "../outside.sh")).resolves.toBe(path.join(repoPath, ".code-ux/browser/start-preview.sh"));
+    await expect(resolvePreviewScriptPath(repoPath, "/tmp/start.sh")).resolves.toBe(path.join(repoPath, ".code-ux/browser/start-preview.sh"));
+  });
   it("normalizes browser paths and strips host prefixes", () => {
     expect(normalizePreviewPath("dashboard")).toBe("/dashboard");
     expect(normalizePreviewPath("https://example.com/foo?bar=1#hash")).toBe("/foo?bar=1#hash");
@@ -135,5 +143,25 @@ describe("sprint-preview-utils", () => {
     expect(script).toContain("bash -c \"$SPRINT_PREVIEW_INSTALL_COMMAND\"");
     expect(script).not.toContain("bash -lc \"$SPRINT_PREVIEW_INSTALL_COMMAND\"");
     expect(script).toContain("serve -s \"$candidate\" -l \"$SPRINT_PREVIEW_PORT\"");
+  });
+
+  it("caches install/build across restarts, only rebuilding on dependency or commit changes", () => {
+    const script = buildGeneratedSprintPreviewScript();
+
+    // Stamp files live in the workspace, which is backed by the persistent per-sprint volume.
+    expect(script).toContain("$SPRINT_PREVIEW_WORKSPACE/.code-ux-preview-install.stamp");
+    expect(script).toContain("$SPRINT_PREVIEW_WORKSPACE/.code-ux-preview-build.stamp");
+
+    // Install is skipped when node_modules exists and the dependency signature is unchanged.
+    expect(script).toContain("preview_dependency_signature");
+    expect(script).toContain("[ -d node_modules ]");
+    expect(script).toContain("skipping install");
+
+    // Build is skipped when the previewed source commit matches the cached build stamp.
+    expect(script).toContain("${SPRINT_PREVIEW_SOURCE_COMMIT:-}");
+    expect(script).toContain("skipping build");
+
+    // A dependency change invalidates the build cache so output can never be stale.
+    expect(script).toContain("rm -f \"$preview_build_stamp\"");
   });
 });

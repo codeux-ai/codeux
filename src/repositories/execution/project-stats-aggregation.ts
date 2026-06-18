@@ -43,6 +43,10 @@ export function mapAggregatedUsage(row: UsageAggregationRow): ExecutionUsageTota
     outputTokens: toNumber(row.outputTokens),
     reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
     totalTokens: toNumber(row.totalTokens),
+    inputCostUsd: 0,
+    outputCostUsd: 0,
+    cachedInputCostUsd: 0,
+    totalCostUsd: 0,
     toolCallCount: toNumber(row.toolCallCount),
     reportedInvocationCount: toNumber(row.reportedInvocationCount),
     estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
@@ -59,6 +63,10 @@ export function mergeAggregatedUsage(target: ExecutionUsageTotals, source: Execu
   target.outputTokens += source.outputTokens;
   target.reasoningOutputTokens += source.reasoningOutputTokens;
   target.totalTokens += source.totalTokens;
+  target.inputCostUsd += source.inputCostUsd;
+  target.outputCostUsd += source.outputCostUsd;
+  target.cachedInputCostUsd += source.cachedInputCostUsd;
+  target.totalCostUsd += source.totalCostUsd;
   target.toolCallCount = (target.toolCallCount ?? 0) + (source.toolCallCount ?? 0);
   target.reportedInvocationCount += source.reportedInvocationCount;
   target.estimatedInvocationCount += source.estimatedInvocationCount;

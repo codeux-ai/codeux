@@ -336,18 +336,20 @@ Legacy runtime:
   - restrained panel surfaces for sidebar and viewer regions using shared neutral/light-dark borders and backgrounds
   - launch state card matching Browser Preview container-launch conventions (accent icon treatment, selector styling, and primary action button)
   - file browsing/diff behavior remains unchanged (`files` and `changes` modes, selected path display, side-by-side toggle, and status semantics)
-- Stats page now matches the high-interaction v2 dashboard card language more closely with a unified **Analysis Studio UX**:
+- Stats page now matches the high-interaction v2 dashboard card language more closely with a unified **Analysis Studio UX**, including light/dark mode support and responsive behavior across screen sizes:
   - unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
-  - an embedded grouped metric selector instead of separate tabs, organizing Tokens, Time, and Git metrics into unified groupings
-  - relocated analysis-mode controls that focus the workspace on trend, composition, or reliability
-  - a full-width interactive trend graph (Usage Graph) with hover bucket inspection and drag-to-zoom timeframe selection
+  - visual-mode navigation controls that focus the workspace on Trend, Composition, Models, Providers/Reliability, Ledgers, or System subpages
+  - a full-width interactive trend graph (Usage Graph) with hover bucket inspection and drag-to-zoom timeframe selection, integrating Tokens, Time, Git metrics, and Cost into unified groupings
+  - Settings Integrations provider-instance `Token pricing` values now feed Stats cost metrics; if a provider has no pricing configured (or $0.00), its invocations are tracked but contribute $0.00 to aggregate cost series
   - a Trend Studio summary band above the chart and a purpose activity section below it, keeping the trend tab self-contained for window-level analysis
-  - a Composition Studio that now layers cache efficiency, token-flight timing, and a per-provider activity ledger beneath the donut charts so the provider picture stays readable without tab switching
+  - a Composition Studio that layers cache efficiency, token-flight timing, and a per-provider activity ledger beneath donut charts so the provider picture stays readable without tab switching
   - a persistent right-side selected-metrics rail for configuring the chart series; same-window refreshes preserve user chart selections
   - hourly views keep one-hour hover targets while reducing visible axis labels to a three-hour rhythm for readability
   - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
-  - tabbed task and sprint telemetry sections replacing the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
-  - Git stats (Insertions, Deletions, Files Changed, Pull Requests, Merged PRs) are integrated directly alongside Tokens and Time metrics in the Analysis Studio
+  - Models and Providers/Reliability tracking specifically surface model performance, API error rates, and retry counts
+  - tabbed Ledgers telemetry section replaces the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
+  - System subpage for deeper debugging and internal telemetry info, exposing internal cache hit rates, pub/sub connection stability, worker execution loops, queue lengths, and unhandled exception traces
+  - Git stats (Insertions, Deletions, Files Changed, Pull Requests, Merged PRs) are integrated directly alongside Tokens, Time, and Cost metrics in the Analysis Studio
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and route-assignment tags, rather than a raw edit form.

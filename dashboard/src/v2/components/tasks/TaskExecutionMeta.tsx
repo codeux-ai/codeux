@@ -41,19 +41,22 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
     <div className={`flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400 ${className}`}>
       {/* Time Chip */}
       <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-void-700 px-2 py-0.5 rounded-full border border-slate-200 dark:border-white/[0.05]">
-        <Clock className="w-3 h-3" strokeWidth={2} />
+        <Clock className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
+        <span className="sr-only">Duration: </span>
         <span>{time || "Not started"}</span>
       </div>
 
       {/* Executor Chip */}
       <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-void-700 px-2 py-0.5 rounded-full border border-slate-200 dark:border-white/[0.05]">
         {getExecutorIcon()}
+        <span className="sr-only">Executor: </span>
         <span>{getExecutorLabel()}</span>
       </div>
 
       {/* Execution Mode Chip */}
       <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-void-700 px-2 py-0.5 rounded-full border border-slate-200 dark:border-white/[0.05]">
-        <Settings className="w-3 h-3" strokeWidth={2} />
+        <Settings className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
+        <span className="sr-only">Mode: </span>
         <span className="capitalize">{executionMode || "Standard"}</span>
       </div>
     </div>

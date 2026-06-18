@@ -582,7 +582,7 @@ describe("LiveSessionPage Integration Isolation", () => {
 
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).queryByText("Needs clarification before continuing")).not.toBeInTheDocument();
-    expect(within(card as HTMLElement).getByRole("link", { name: /PR/i })).toHaveAttribute("href", "https://github.com/example/repo/pull/101");
+    expect(within(card as HTMLElement).getByRole("link", { name: /View Pull Request/i })).toHaveAttribute("href", "https://github.com/example/repo/pull/101");
   });
 
   it("does not surface a previous failure banner once the latest dispatch is running", () => {

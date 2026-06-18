@@ -5,7 +5,7 @@
  * dashboard can render the full agent session with rich, per-type UI.
  */
 
-export type ParsedTurnKind = "user" | "assistant" | "reasoning" | "tool_call" | "tool_result";
+export type ParsedTurnKind = "user" | "assistant" | "reasoning" | "tool_call" | "tool_result" | "injected_context";
 
 export interface ParsedTurnTokens {
   input?: number;

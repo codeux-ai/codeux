@@ -27,7 +27,7 @@ describe('UsageFilterMenu', () => {
 
   it('should call onClose when close button is clicked', () => {
     const { getAllByRole } = render(<UsageFilterMenu {...mockProps} />);
-    const closeButton = getAllByRole('button', { name: '' })[0]; // The X icon button
+    const closeButton = getAllByRole('button').find(b => b.getAttribute('aria-label') === 'Close graph filters')!;
     fireEvent.click(closeButton);
     expect(mockProps.onClose).toHaveBeenCalled();
   });

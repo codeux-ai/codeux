@@ -5,7 +5,11 @@ import { hashStr } from "./utils.js";
 import type { ShipDatum } from "../../hooks/useBoatRaceAnimation.js";
 import { getBoatRaceCheckpoints } from "../../lib/boat-race.js";
 
-export const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color: string; isDark: boolean }> = memo(({ x, color, label, isDark }) => (
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+
+export const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color: string; isDark: boolean }> = memo(({ x, color, label, isDark }) => {
+    const isReducedMotion = useReducedMotion();
+    return (
     <g>
         {/* Dashed guide line */}
         <line x1={x} y1={LANE_TOP - 5} x2={x} y2={LANE_BOT + 5}
@@ -16,7 +20,7 @@ export const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color
             <rect x={-5} y={0} width={10} height={12} rx={3} fill={isDark ? "#0a1520" : "#e2d6c6"} stroke={color} strokeWidth={0.6} opacity={0.5} />
             {/* Buoy light */}
             <circle cx={0} cy={-2} r={2} fill={color} opacity={0.4}>
-                <animate attributeName="opacity" values="0.4;0.15;0.4" dur="2s" repeatCount="indefinite" />
+                {!isReducedMotion && <animate attributeName="opacity" values="0.4;0.15;0.4" dur="2s" repeatCount="indefinite" />}
             </circle>
             {/* Label */}
             <text y={-8} textAnchor="middle" fill={color} fontSize={5.5} fontFamily="monospace"
@@ -25,11 +29,14 @@ export const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color
             </text>
         </g>
     </g>
-));
+    );
+});
 
 /* ─── Finish Line ────────────────────────────────────────────────────────── */
 
-export const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = memo(({ x, isDark }) => (
+export const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = memo(({ x, isDark }) => {
+    const isReducedMotion = useReducedMotion();
+    return (
     <g>
         {/* Radial glow */}
         <ellipse cx={x} cy={SVG_H / 2} rx={60} ry={SVG_H * 0.65} fill="url(#br-finish-glow)" />
@@ -46,25 +53,25 @@ export const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = mem
             </pattern>
         </defs>
         <rect x={x - 2} y={24} width={18} height={14} rx={1.5} fill="url(#br-checker)" opacity={isDark ? 0.4 : 0.5}>
-            <animate attributeName="width" values="18;19.5;18" dur="2.5s" repeatCount="indefinite" />
+            {!isReducedMotion && <animate attributeName="width" values="18;19.5;18" dur="2.5s" repeatCount="indefinite" />}
         </rect>
 
         {/* Glow line */}
         <line x1={x - 8} y1={LANE_TOP - 12} x2={x - 8} y2={LANE_BOT + 12}
             stroke="#00E0A0" strokeWidth={1.8} opacity={0.08}>
-            <animate attributeName="opacity" values="0.08;0.2;0.08" dur="2.5s" repeatCount="indefinite" />
+            {!isReducedMotion && <animate attributeName="opacity" values="0.08;0.2;0.08" dur="2.5s" repeatCount="indefinite" />}
         </line>
         <line x1={x - 8} y1={LANE_TOP - 12} x2={x - 8} y2={LANE_BOT + 12}
             stroke="#00E0A0" strokeWidth={6} opacity={0.02} filter="url(#br-glow2)">
-            <animate attributeName="opacity" values="0.02;0.06;0.02" dur="2.5s" repeatCount="indefinite" />
+            {!isReducedMotion && <animate attributeName="opacity" values="0.02;0.06;0.02" dur="2.5s" repeatCount="indefinite" />}
         </line>
 
         {/* Top lights */}
         <circle cx={x - 4} cy={22} r={2.5} fill="#00E0A0" opacity={0.4} filter="url(#br-glow)">
-            <animate attributeName="opacity" values="0.4;0.15;0.4" dur="2s" repeatCount="indefinite" />
+            {!isReducedMotion && <animate attributeName="opacity" values="0.4;0.15;0.4" dur="2s" repeatCount="indefinite" />}
         </circle>
         <circle cx={x + 18} cy={22} r={2.5} fill="#00E0A0" opacity={0.4} filter="url(#br-glow)">
-            <animate attributeName="opacity" values="0.4;0.15;0.4" dur="2s" repeatCount="indefinite" begin="0.5s" />
+            {!isReducedMotion && <animate attributeName="opacity" values="0.4;0.15;0.4" dur="2s" repeatCount="indefinite" begin="0.5s" />}
         </circle>
 
         {/* FINISH label */}
@@ -73,7 +80,8 @@ export const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = mem
             FINISH
         </text>
     </g>
-));
+    );
+});
 
 /* ─── Celestial body (moon in dark mode, sun in light mode) ──────────────── */
 
@@ -86,6 +94,7 @@ const STAR_DATA = Array.from({ length: 30 }, (_, i) => ({
 }));
 
 export const CelestialBody: FunctionComponent<{ isDark: boolean }> = memo(({ isDark }) => {
+    const isReducedMotion = useReducedMotion();
     if (isDark) {
         return (
             <g>
@@ -99,7 +108,7 @@ export const CelestialBody: FunctionComponent<{ isDark: boolean }> = memo(({ isD
                 {STAR_DATA.map((star, i) => {
                     return (
                         <circle key={`s${i}`} cx={star.cx} cy={star.cy} r={star.r} fill="white" opacity={star.op}>
-                            <animate attributeName="opacity" values={`${star.op};${star.op + 0.12};${star.op}`} dur={`${star.dur}s`} repeatCount="indefinite" />
+                            {!isReducedMotion && <animate attributeName="opacity" values={`${star.op};${star.op + 0.12};${star.op}`} dur={`${star.dur}s`} repeatCount="indefinite" />}
                         </circle>
                     );
                 })}
@@ -123,7 +132,7 @@ export const CelestialBody: FunctionComponent<{ isDark: boolean }> = memo(({ isD
                 return (
                     <line key={`ray${i}`} x1={x1} y1={y1} x2={x2} y2={y2}
                         stroke="#FFB800" strokeWidth={1.5} opacity={0.08} strokeLinecap="round">
-                        <animate attributeName="opacity" values="0.08;0.15;0.08" dur={`${3 + i * 0.3}s`} repeatCount="indefinite" />
+                        {!isReducedMotion && <animate attributeName="opacity" values="0.08;0.15;0.08" dur={`${3 + i * 0.3}s`} repeatCount="indefinite" />}
                     </line>
                 );
             })}
@@ -142,6 +151,7 @@ export const CelestialBody: FunctionComponent<{ isDark: boolean }> = memo(({ isD
 /* ─── Subtle wave lines (transparent-friendly, works on any background) ──── */
 
 export const SubtleWaves: FunctionComponent<{ isDark: boolean }> = memo(({ isDark }) => {
+    const isReducedMotion = useReducedMotion();
     const waveColor = isDark ? "white" : "#334155";
     return (
         <g>
@@ -158,9 +168,9 @@ export const SubtleWaves: FunctionComponent<{ isDark: boolean }> = memo(({ isDar
                 }).join(" ");
                 return (
                     <path key={i} d={`M-100 ${y} ${curves}`} fill="none" stroke={waveColor} strokeWidth={0.4} opacity={op}>
-                        <animateTransform attributeName="transform" type="translate"
+                        {!isReducedMotion && <animateTransform attributeName="transform" type="translate"
                             values={`0 0; ${freq / 3} ${amp * 0.4}; 0 0`}
-                            dur={`${dur}s`} repeatCount="indefinite" />
+                            dur={`${dur}s`} repeatCount="indefinite" />}
                     </path>
                 );
             })}
@@ -171,6 +181,7 @@ export const SubtleWaves: FunctionComponent<{ isDark: boolean }> = memo(({ isDar
 
 
 export const BoatRaceBackground = memo(({ isDark, ripples }: { isDark: boolean; ripples: {x: number, y: number, id: number}[] }) => {
+    const isReducedMotion = useReducedMotion();
     return (
         <g>
             <defs>
@@ -196,14 +207,14 @@ export const BoatRaceBackground = memo(({ isDark, ripples }: { isDark: boolean; 
             {ripples.map(r => (
                 <g key={r.id}>
                     <circle cx={r.x} cy={r.y} r={2} fill="none"
-                        stroke={isDark ? "white" : "#334155"} strokeWidth={0.5} opacity={0}>
-                        <animate attributeName="r" values="2;40" dur="2s" fill="freeze" />
-                        <animate attributeName="opacity" values="0.12;0" dur="2s" fill="freeze" />
+                        stroke={isDark ? "white" : "#334155"} strokeWidth={0.5} opacity={isReducedMotion ? 0.12 : 0}>
+                        {!isReducedMotion && <animate attributeName="r" values="2;40" dur="2s" fill="freeze" />}
+                        {!isReducedMotion && <animate attributeName="opacity" values="0.12;0" dur="2s" fill="freeze" />}
                     </circle>
                     <circle cx={r.x} cy={r.y} r={2} fill="none"
-                        stroke={isDark ? "white" : "#334155"} strokeWidth={0.3} opacity={0}>
-                        <animate attributeName="r" values="2;25" dur="1.5s" fill="freeze" />
-                        <animate attributeName="opacity" values="0.08;0" dur="1.5s" fill="freeze" />
+                        stroke={isDark ? "white" : "#334155"} strokeWidth={0.3} opacity={isReducedMotion ? 0.08 : 0}>
+                        {!isReducedMotion && <animate attributeName="r" values="2;25" dur="1.5s" fill="freeze" />}
+                        {!isReducedMotion && <animate attributeName="opacity" values="0.08;0" dur="1.5s" fill="freeze" />}
                     </circle>
                 </g>
             ))}

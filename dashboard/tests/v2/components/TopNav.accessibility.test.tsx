@@ -1,3 +1,5 @@
+import { fireEvent } from "@testing-library/preact";
+vi.mock("../../../src/v2/components/NotificationPanel.js", () => ({ NotificationPanel: () => <div role="dialog" aria-label="Notifications">Panel</div> }));
 /**
  * @vitest-environment jsdom
  */
@@ -67,6 +69,18 @@ vi.mock("gsap", () => ({
     default: {
         fromTo: vi.fn(),
         to: vi.fn(),
+        set: vi.fn(),
+        context: vi.fn(() => ({ revert: vi.fn() })),
+        killTweensOf: vi.fn(),
+        timeline: vi.fn()
+    },
+    gsap: {
+        fromTo: vi.fn(),
+        to: vi.fn(),
+        set: vi.fn(),
+        context: vi.fn(() => ({ revert: vi.fn() })),
+        killTweensOf: vi.fn(),
+        timeline: vi.fn()
     }
 }));
 
@@ -267,4 +281,31 @@ describe("TopNav Selectors Accessibility", () => {
         await user.click(sprintBtn);
         expect(sprintBtn).toHaveAttribute("aria-expanded", "false");
     });
+
+
+    it("supports notification menu Escape close", async () => {
+        renderNav();
+        const notifyBtn = screen.getByRole("button", { name: /Notifications/i });
+
+        fireEvent.click(notifyBtn);
+        // wait a tick
+        await new Promise(r => setTimeout(r, 10));
+        expect(notifyBtn).toHaveAttribute("aria-expanded", "true");
+
+        notifyBtn.focus();
+        await user.keyboard("{Escape}");
+        fireEvent.keyDown(document, { key: "Escape" });
+        // Let setTimeout run for focus restoration
+        await new Promise(r => setTimeout(r, 50));
+
+        expect(notifyBtn).toHaveAttribute("aria-expanded", "false");
+        expect(document.activeElement).toBe(notifyBtn);
+    });
+
+    it("includes current state in theme toggle naming", async () => {
+        renderNav();
+        const themeBtn = screen.getByRole("button", { name: /Current theme:/i });
+        expect(themeBtn).toHaveAttribute("aria-label", expect.stringContaining("Light"));
+    });
+
 });

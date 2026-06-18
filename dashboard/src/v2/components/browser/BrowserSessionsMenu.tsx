@@ -6,6 +6,7 @@ import { useProjectData } from "../../context/project-data.js";
 import { fetchPreviewSessions } from "../../lib/browser-api.js";
 import { buildPreviewUrl } from "../../lib/preview-origin.js";
 import type { SprintPreviewSession } from "../../../types.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 type InteractionState = 'closed' | 'hover' | 'open';
 
@@ -150,7 +151,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                 aria-haspopup="menu"
                 aria-expanded={isMenuVisible}
                 aria-controls={isMenuVisible ? menuId : undefined}
-                aria-label="Toggle active browser sessions"
+                aria-label={`Browser Sessions: ${sessions.length} active`}
                 className={`relative w-11 h-11 flex items-center justify-center rounded-xl transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     isMenuVisible
                     ? "bg-signal-500/8 dark:bg-signal-400/10"
@@ -187,7 +188,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                             sessions.map((session) => (
                                 <a
                                     key={session.id}
-                                    href={buildPreviewUrl(session.id, session.lastKnownPath)}
+                                    href={getSafeUrl(buildPreviewUrl(session.id, session.lastKnownPath))}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     role="menuitem"

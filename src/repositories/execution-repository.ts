@@ -1202,6 +1202,14 @@ export class ExecutionRepository {
       requireProject: (id) => requireProject(this.db, id),
       getWallTimeTotalsByTaskIdsForRange: (id, start, end, now) => this.wallTimeQuery.getWallTimeTotalsByTaskIdsForRange(id, start, end, now),
       getWallTimeTotalsBySprintRunIdsForRange: (id, start, end, now) => this.wallTimeQuery.getWallTimeTotalsBySprintRunIdsForRange(id, start, end, now),
+      getProviderPricing: (providerId, model) => {
+        try {
+          const sys = this.db.prepare("SELECT settings_json FROM settings WHERE scope_type = 'system'").get() as any;
+          if (!sys || !sys.settings_json) return undefined;
+          const parsed = JSON.parse(sys.settings_json);
+          return parsed?.integrations?.providers?.[providerId]?.pricing;
+        } catch { return undefined; }
+      },
       getTaskMetadata: (id, ids) => {
         const missing = ids.filter(i => !taskMetaCache.has(i));
         if (missing.length > 0) {
@@ -1718,6 +1726,10 @@ export class ExecutionRepository {
         outputTokens: toNumber(row.outputTokens),
         reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
         totalTokens: toNumber(row.totalTokens),
+        inputCostUsd: 0,
+        outputCostUsd: 0,
+        cachedInputCostUsd: 0,
+        totalCostUsd: 0,
         toolCallCount: toNumber(row.toolCallCount),
         reportedInvocationCount: toNumber(row.reportedInvocationCount),
         estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
@@ -1766,6 +1778,10 @@ export class ExecutionRepository {
         outputTokens: toNumber(row.outputTokens),
         reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
         totalTokens: toNumber(row.totalTokens),
+        inputCostUsd: 0,
+        outputCostUsd: 0,
+        cachedInputCostUsd: 0,
+        totalCostUsd: 0,
         toolCallCount: toNumber(row.toolCallCount),
         reportedInvocationCount: toNumber(row.reportedInvocationCount),
         estimatedInvocationCount: toNumber(row.estimatedInvocationCount),

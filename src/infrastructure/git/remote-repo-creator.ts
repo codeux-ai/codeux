@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { runCommandStrict } from "../../services/cli-process-runner.js";
+import { validateSafeRepoName, validateSafeClonePath, validateNonEmptyDir } from "../../utils/path-validator.js";
 import { buildGitHttpAuthEnvWithFallbacks } from "../../services/git-http-auth.js";
 
 export interface RemoteRepoResult {
@@ -21,6 +22,11 @@ const parseApiError = (fallback: string, text: string): string => {
 };
 
 const cloneRepository = async (remoteUrl: string, cloneParentDir: string, repoName: string, hostToken?: string): Promise<void> => {
+  validateSafeRepoName(repoName);
+  validateSafeClonePath(cloneParentDir);
+  const targetDir = path.resolve(cloneParentDir, repoName);
+  validateNonEmptyDir(targetDir);
+
   await runCommandStrict(
     "git",
     ["clone", remoteUrl, repoName],
@@ -43,6 +49,10 @@ export async function createGitHubRepo(opts: {
   hostToken?: string;
 }): Promise<RemoteRepoResult> {
   try {
+    validateSafeRepoName(opts.repoName);
+    validateSafeClonePath(opts.cloneParentDir);
+    const targetDir = path.resolve(opts.cloneParentDir, opts.repoName);
+    validateNonEmptyDir(targetDir);
     fs.mkdirSync(opts.cloneParentDir, { recursive: true });
 
     if (!opts.hostToken?.trim()) {
@@ -91,6 +101,10 @@ export async function createGitLabRepo(opts: {
   hostToken?: string;
 }): Promise<RemoteRepoResult> {
   try {
+    validateSafeRepoName(opts.repoName);
+    validateSafeClonePath(opts.cloneParentDir);
+    const targetDir = path.resolve(opts.cloneParentDir, opts.repoName);
+    validateNonEmptyDir(targetDir);
     fs.mkdirSync(opts.cloneParentDir, { recursive: true });
 
     if (!opts.hostToken?.trim()) {

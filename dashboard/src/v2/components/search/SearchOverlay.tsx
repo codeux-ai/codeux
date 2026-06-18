@@ -5,6 +5,7 @@ import { Search, X, Layers, Activity, Cpu, Box, ArrowRight, Inbox, Loader2 } fro
 import { useNavigate } from "@tanstack/react-router";
 import { SearchResultRow } from "./SearchResultRow";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 
@@ -29,8 +30,12 @@ interface SearchOverlayProps {
 
 export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef, isOpen, onClose, searchQuery, onSearchChange, results, isLoading }) => {
     const overlayRef = useRef<HTMLDivElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const containerRef = useFocusTrap(isOpen, {
+        onClose,
+        initialFocusRef: inputRef,
+        restoreFocus: true
+    }) as preact.RefObject<HTMLDivElement>;
     const [focusedIndex, setFocusedIndex] = useState(-1);
             const navigate = useNavigate();
 
@@ -47,8 +52,6 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
         }
         onClose();
     };
-
-    const triggerElementRef = useRef<HTMLElement | null>(null);
 
     const CATEGORIES: Array<{ id: string; title: string; icon: any; items: ReadonlyArray<SearchItem> }> = [
         { id: 'sprints', title: 'Sprints', icon: Layers, items: results?.sprints || [] },
@@ -121,7 +124,6 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
         gsap.killTweensOf(containerRef.current);
 
         if (isOpen) {
-            triggerElementRef.current = document.activeElement as HTMLElement;
             gsap.set(overlayRef.current, { display: 'flex' });
 
             const tl = gsap.timeline();
@@ -148,11 +150,12 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                     if (overlayRef.current) {
                         gsap.set(overlayRef.current, { display: 'none' });
                     }
-                    triggerElementRef.current?.focus();
                 }
             });
 
-            tl.to(containerRef.current, { y: reducedMotion ? 0 : -20, opacity: 0, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit, ease: MODAL_MOTION.overlay.exitEase });
+            if (containerRef.current) {
+                tl.to(containerRef.current, { y: reducedMotion ? 0 : -20, opacity: 0, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit, ease: MODAL_MOTION.overlay.exitEase });
+            }
             tl.to(overlayRef.current, { opacity: 0, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit, ease: MODAL_MOTION.overlay.exitEase }, reducedMotion ? 0 : "-=0.1");
 
             setFocusedIndex(-1);
@@ -223,9 +226,10 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                         type="text"
                         role="combobox"
                         aria-autocomplete="list"
-                        aria-expanded="true"
+                        aria-expanded={isOpen}
                         aria-controls="search-results-list"
-                        aria-activedescendant={focusedIndex >= 0 ? `search-result-${focusedIndex}` : undefined}
+                        aria-activedescendant={focusedIndex >= 0 ? `search-result-${allItems[focusedIndex]?.id}` : undefined}
+                        aria-label="Global search"
                         placeholder="Search sprints, tasks, agents..."
                         value={searchQuery}
                         onInput={(e) => onSearchChange(e.currentTarget.value)}
@@ -233,10 +237,14 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                     />
                     <button
                         onClick={onClose}
-                        className="p-2 ml-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                        className="p-2 ml-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
                     >
                         <X className="w-5 h-5" />
                     </button>
+                </div>
+
+                <div className="sr-only" role="status" aria-live="polite">
+                    {searchQuery.length === 0 ? '' : isLoading ? 'Searching...' : allItems.length === 0 ? `No results found for '${searchQuery}'` : `${allItems.length} results available`}
                 </div>
 
                 {/* Results Area */}
@@ -254,7 +262,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                         onClose();
                                         navigate({ to: '/sprints' });
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
                                 >
                                     <Layers className="w-4 h-4" />
                                     Sprints
@@ -266,7 +274,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                         onClose();
                                         navigate({ to: '/tasks' });
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
                                 >
                                     <Activity className="w-4 h-4" />
                                     Tasks
@@ -278,7 +286,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                         onClose();
                                         navigate({ to: '/agents' });
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
                                 >
                                     <Cpu className="w-4 h-4" />
                                     Agents

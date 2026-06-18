@@ -648,6 +648,16 @@ export class WatchLoopRunner {
           },
           `sprint-completed:${sprintRunId}`
         );
+        // The sprint has finished merging — reap any merge attention items that
+        // are still open for this run (e.g. a transient escalation the auto-merge
+        // gate raised then superseded). Left behind, they keep the project pinned
+        // to `intervention` forever even though there is nothing left to merge.
+        this.deps.projectAttentionService.resolveItemsForSprintRun(
+          scopedExecutionContext.project.id,
+          sprintRunId,
+          ["merge_required", "merge_conflict"],
+          "sprint_completed",
+        );
         this.triggerAutoPromote(scopedExecutionContext.project.id, scopedExecutionContext.sprint.id);
         const issueCloseOutcome = await this.deps.sprintIssueService?.closeLinkedIssues(
           scopedExecutionContext.project.id,

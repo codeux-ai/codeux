@@ -52,7 +52,7 @@ describe("DashboardRealtimeWebSocketServer", () => {
 
     bootDashboardRealtimeWebSocketServer({
       server,
-      pathName: "/ws",
+      pathName: "/api/realtime",
       realtimeService,
       logger,
     });
@@ -65,7 +65,7 @@ describe("DashboardRealtimeWebSocketServer", () => {
     socket.destroy = vi.fn();
 
     const req = {
-      url: "/ws",
+      url: "/api/realtime",
       headers: {
         upgrade: "websocket",
         connection: "Upgrade",
@@ -135,7 +135,7 @@ describe("DashboardRealtimeWebSocketServer", () => {
     socket.destroy = vi.fn();
 
     const req = {
-      url: "/ws",
+      url: "/api/realtime",
       headers: {
         upgrade: "websocket",
         connection: "Upgrade",
@@ -149,7 +149,83 @@ describe("DashboardRealtimeWebSocketServer", () => {
     return socket;
   };
 
+
+  describe("Websocket Security", () => {
+    it("accepts loopback/no-origin realtime upgrade", () => {
+      const socket = new EventEmitter() as any;
+      socket.write = vi.fn();
+      socket.end = vi.fn();
+      socket.destroy = vi.fn();
+
+      const req = {
+        url: "/api/realtime",
+        method: "GET",
+        headers: {
+          upgrade: "websocket",
+          connection: "Upgrade",
+          "sec-websocket-key": "testkey",
+        },
+      } as unknown as IncomingMessage;
+
+      server.emit("upgrade", req, socket);
+
+      expect(socket.destroy).not.toHaveBeenCalled();
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining("101 Switching Protocols"));
+    });
+
+    it("rejects hostile Sec-Fetch-Site: cross-site upgrade", () => {
+      const socket = new EventEmitter();
+      socket.write = vi.fn();
+      socket.end = vi.fn();
+      socket.destroy = vi.fn();
+
+      const req = {
+        url: "/api/realtime",
+        method: "GET",
+        headers: {
+          upgrade: "websocket",
+          connection: "Upgrade",
+          "sec-websocket-key": "testkey",
+          "sec-fetch-site": "cross-site",
+          host: "localhost:4000",
+        },
+      };
+
+      server.emit("upgrade", req, socket);
+
+      expect(logger.warn).toHaveBeenCalledWith("websocket_upgrade_rejected_hostile_origin", expect.objectContaining({ logPurpose: "security" }));
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining("403 Forbidden"));
+      expect(socket.destroy).toHaveBeenCalled();
+    });
+
+    it("rejects hostile Origin upgrade", () => {
+      const socket = new EventEmitter();
+      socket.write = vi.fn();
+      socket.end = vi.fn();
+      socket.destroy = vi.fn();
+
+      const req = {
+        url: "/api/realtime",
+        method: "GET",
+        headers: {
+          upgrade: "websocket",
+          connection: "Upgrade",
+          "sec-websocket-key": "testkey",
+          origin: "https://evil.com",
+          host: "localhost:4000",
+        },
+      };
+
+      server.emit("upgrade", req, socket);
+
+      expect(logger.warn).toHaveBeenCalledWith("websocket_upgrade_rejected_hostile_origin", expect.objectContaining({ logPurpose: "security" }));
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining("403 Forbidden"));
+      expect(socket.destroy).toHaveBeenCalled();
+    });
+  });
+
   describe("Websocket Frame Limits", () => {
+
     it("rejects unmasked frames by closing the socket", () => {
       const socket = setupRawClient();
 
@@ -365,7 +441,7 @@ describe("DashboardRealtimeWebSocketServer observability", () => {
 
     bootDashboardRealtimeWebSocketServer({
       server: serverMock as any,
-      pathName: "/ws",
+      pathName: "/api/realtime",
       realtimeService: realtimeServiceMock as any,
       logger: loggerMock as any,
     });
@@ -376,7 +452,7 @@ describe("DashboardRealtimeWebSocketServer observability", () => {
     (socketMock as any).destroy = vi.fn();
 
     const reqMock = {
-      url: "/ws",
+      url: "/api/realtime",
       headers: {
         upgrade: "websocket",
         connection: "upgrade",

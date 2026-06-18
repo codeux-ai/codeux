@@ -34,6 +34,7 @@ export const UsageGraphLegend: FunctionComponent<UsageGraphLegendProps> = ({
                   type="button"
                   onClick={() => onToggleSeries(s.id)}
                   disabled={disabled}
+                  aria-pressed={active}
                   className={`inline-flex items-center gap-2.5 rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] transition-all border ${
                     active
                       ? 'bg-[var(--stats-card-bg)] border-signal-500/25 text-[var(--stats-value-color)] shadow-sm ring-1 ring-amber-500/40'

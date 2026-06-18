@@ -110,15 +110,6 @@ export class GuardrailService {
     return this.evaluateInternal(scope, taskId, purpose, jobConfig.cap, jobConfig.onLimit, settings);
   }
 
-  /** Evaluate the dedicated QA-review guardrail (separate from agents.qualityAssurance.maxTaskReviewRuns). */
-  evaluateQa(scope: GuardrailScope, taskId: string): GuardrailEvaluation {
-    const settings = this.settingsFor(scope);
-    if (!settings || !settings.enabled) {
-      return { allowed: true, count: 0, cap: 0, action: settings?.qaRunsOnLimit ?? "WARN_ONLY" };
-    }
-    return this.evaluateInternal(scope, taskId, "qa_review", settings.qaRunsCap, settings.qaRunsOnLimit, settings);
-  }
-
   /** Record one invocation of the given purpose for the task. Returns the new count. */
   record(scope: GuardrailScope, taskId: string, purpose: GuardrailLedgerPurpose): number {
     const count = this.repo.record({ projectId: scope.projectId, taskId, purpose });

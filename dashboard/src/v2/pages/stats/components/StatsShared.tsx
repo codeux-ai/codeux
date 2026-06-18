@@ -31,6 +31,7 @@ import type {
 } from "../../../types.js";
 import {
   formatTokens,
+  formatCost,
   formatDuration,
   formatPercent,
   formatDateTime,
@@ -158,6 +159,24 @@ export const TrendStudio: FunctionComponent<{
   return (
   <section className="space-y-6">
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-8">
+      <TrendKpiTile
+        label="Total Cost"
+        value={stats.usage.totalCostUsd > 0 ? formatCost(stats.usage.totalCostUsd) : (stats.usage.totalTokens > 0 ? "No pricing configured" : "$0.00")}
+        delta={undefined}
+        detail="across all providers"
+      />
+      <TrendKpiTile
+        label="Cost per Invocation"
+        value={stats.usage.totalCostUsd > 0 && stats.usage.invocationCount > 0 ? formatCost(stats.usage.totalCostUsd / stats.usage.invocationCount) : "—"}
+      />
+      <TrendKpiTile
+        label="Cost per Active Hour"
+        value={stats.usage.totalCostUsd > 0 && stats.usage.activeTimeMs > 0 ? formatCost(stats.usage.totalCostUsd / (stats.usage.activeTimeMs / 3600000)) : "—"}
+      />
+      <TrendKpiTile
+        label="Peak Bucket Cost"
+        value={(chartState as any)?.metrics?.peakCostUsd > 0 ? formatCost((chartState as any)?.metrics?.peakCostUsd) : "—"}
+      />
       <TrendKpiTile
         label="Total Tokens"
         value={formatTokens(stats.usage.totalTokens)}
@@ -387,9 +406,13 @@ export const CompositionStudio: FunctionComponent<{
                         <Icon className="h-4 w-4" strokeWidth={2.1} />
                       </div>
                       <div className="min-w-0">
-                        <div className="truncate text-base font-black text-slate-900 dark:text-white">{provider.label}</div>
+                        <div className="truncate text-base font-black text-slate-900 dark:text-white" title={provider.label}>{provider.label}</div>
                         <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">{provider.secondaryLabel ?? ""}</div>
                       </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-black text-slate-900 dark:text-white">{provider.usage.totalCostUsd > 0 ? formatCost(provider.usage.totalCostUsd) : "—"}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">cost</div>
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-black text-slate-900 dark:text-white">{formatTokens(provider.usage.totalTokens)}</div>
@@ -561,7 +584,7 @@ export const ReliabilityStudio: FunctionComponent<{
                         <Icon className="h-4 w-4" strokeWidth={2.1} />
                       </div>
                       <div className="min-w-0">
-                        <div className="truncate text-base font-black text-slate-900 dark:text-white">{provider.label}</div>
+                        <div className="truncate text-base font-black text-slate-900 dark:text-white" title={provider.label}>{provider.label}</div>
                         <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">{provider.secondaryLabel ?? ""}</div>
                       </div>
                     </div>
@@ -569,8 +592,8 @@ export const ReliabilityStudio: FunctionComponent<{
                   <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-right text-[10px] font-bold uppercase tracking-[0.18em] ${successTone}`}>
                     {formatPercent(reliabilityScore * 100)}
                   </div>
-                  <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-right text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
-                    <span className="text-base font-black normal-case tracking-tight text-slate-900 dark:text-white">
+                  <div className={`inline-flex min-w-0 items-center gap-2 rounded-full px-3 py-1.5 text-right text-[10px] font-bold uppercase tracking-[0.18em] ${CHIP_CLASS}`}>
+                    <span className="truncate text-base font-black normal-case tracking-tight text-slate-900 dark:text-white">
                       {formatTokens(provider.usage.totalTokens)}
                     </span>
                     <span className="text-slate-400">tokens</span>

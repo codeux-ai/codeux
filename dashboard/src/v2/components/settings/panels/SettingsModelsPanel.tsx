@@ -533,7 +533,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               {expanded ? (
                 <div id={detailsId} className="grid gap-3">
                   <Row label="Eligible by default" description="Controls whether this instance participates before route-specific overrides are applied.">
-                    <Toggle value={provider.enabled} onChange={(value) => updateProviderSettings(providerConfigId, { enabled: value })} />
+                    <Toggle aria-label="Toggle setting" value={provider.enabled} onChange={(value) => updateProviderSettings(providerConfigId, { enabled: value })} />
                   </Row>
                   {providerSupportsModelSelection(provider.provider) ? (
                     <Row label="Base model" description="Inherited by routes unless a route-specific model override is set.">
@@ -886,7 +886,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                     {expanded ? (
                       <div id={detailsId} className="grid gap-3">
                         <Row label="Enabled override" description="Override route participation for this one instance.">
-                          <Toggle value={override.enabled ?? provider.enabled} onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { enabled: value })} />
+                          <Toggle aria-label="Toggle setting" value={override.enabled ?? provider.enabled} onChange={(value) => updateRouteProviderOverride(activeRouteDefinition.id, providerConfigId, { enabled: value })} />
                         </Row>
                         {supportsModel ? (
                           <Row label="Model override" description={`Inherited: ${provider.model}`}>

@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { validateSafeClonePath, validateNonEmptyDir } from "../../utils/path-validator.js";
 import { runCommandStrict } from "../../services/cli-process-runner.js";
 
 /**
@@ -9,6 +10,8 @@ import { runCommandStrict } from "../../services/cli-process-runner.js";
  * @param defaultBranch - The name of the initial branch (defaults to "main").
  */
 export async function initLocalRepo(dirPath: string, defaultBranch = "main"): Promise<void> {
+  validateSafeClonePath(dirPath);
+  validateNonEmptyDir(dirPath);
   try {
     fs.mkdirSync(dirPath, { recursive: true });
 

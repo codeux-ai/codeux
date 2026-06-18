@@ -15,6 +15,7 @@ import {
     providerSupportsModelSelection,
 } from "../../lib/settings-view-models.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
+import { Modal } from "./Modal.js";
 
 interface RerunTaskModalProps {
     task: Subtask;
@@ -132,24 +133,12 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     ), [downstreamTasks, task]);
     const taskAlreadyMerged = Boolean(task.is_merged) || MERGED_TASK_INDICATORS.has(task.merge_indicator || "");
 
-    useLayoutEffect(() => {
-        const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
-        const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
-        gsap.fromTo(cardRef.current,
-            { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart },
-            { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, duration: d_card, ease: MODAL_MOTION.entry.ease, delay: reducedMotion ? 0 : 0.04 },
-        );
-    }, [reducedMotion]);
 
     const handleClose = () => {
         if (isSubmitting) return;
-        const duration = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
-        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, duration, ease: MODAL_MOTION.exit.ease });
-        gsap.to(backdropRef.current, { opacity: 0, duration, delay: reducedMotion ? 0 : 0.04, onComplete: onClose });
+        onClose();
     };
 
-    const backdropRef = useFocusTrap(true, { onClose: handleClose, restoreFocus: true });
 
     const handleSubmit = async () => {
         setIsSubmitting(true);
@@ -171,17 +160,14 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     };
 
     return (
-        <div
-            ref={backdropRef}
-            onClick={(e) => { if (e.target === backdropRef.current) handleClose(); }}
-            className="fixed inset-0 z-[250] flex cursor-pointer items-center justify-center bg-black/50 px-6 py-8 backdrop-blur-md dark:bg-black/70"
+        <Modal
+            isOpen={true}
+            onClose={handleClose}
+            ariaLabelledBy="rerun-modal-title"
+            className="w-full max-w-md !p-0 !rounded-[2rem]"
         >
             <div
-                ref={cardRef}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="rerun-modal-title"
-                className="w-full max-w-md cursor-default overflow-hidden rounded-[2rem] bg-white shadow-[0_32px_80px_rgba(0,0,0,0.18)] dark:bg-void-900 dark:shadow-[0_32px_80px_rgba(0,0,0,0.6)]"
+                className="w-full cursor-default overflow-hidden bg-white dark:bg-void-900"
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-7 pt-6 pb-4">
@@ -369,6 +355,6 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     </button>
                 </div>
             </div>
-        </div>
+        </Modal>
     );
 };

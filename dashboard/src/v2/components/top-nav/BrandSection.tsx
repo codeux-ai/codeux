@@ -24,7 +24,7 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
                 <button
                     type="button"
                     onClick={onMenuToggle}
-                    aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+                    aria-label={isMobileMenuOpen ? "Close mobile menu" : "Open mobile menu"}
                     aria-expanded={!!isMobileMenuOpen}
                     aria-controls="primary-navigation"
                     className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 shrink-0"

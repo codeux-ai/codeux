@@ -7,6 +7,7 @@ export const MemorySearch: FunctionComponent = () => {
         <div className="relative group w-full sm:w-[280px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-signal-500 transition-colors duration-200" />
             <input
+                aria-label="Search memory"
                 type="text"
                 placeholder="Search memory..."
                 value={searchQuerySignal.value}
@@ -15,6 +16,7 @@ export const MemorySearch: FunctionComponent = () => {
             />
             {searchQuerySignal.value && (
                 <button
+                    aria-label="Clear search"
                     onClick={() => searchQuerySignal.value = ""}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-mono font-bold"
                 >

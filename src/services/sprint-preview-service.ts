@@ -35,6 +35,7 @@ import {
   detectSprintPreviewCommands,
   normalizePreviewPath,
   readOptionalSprintPreviewScript,
+  resolvePreviewScriptPath,
 } from "./sprint-preview-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
@@ -197,6 +198,11 @@ export class SprintPreviewService {
           await fs.chmod(startupRuntimePath, 0o755);
         }
 
+        // Resolve the exact commit being previewed so the container's startup script can
+        // skip the (expensive) build when the branch hasn't changed since the last cached
+        // build. Build artifacts persist across restarts in the per-sprint Docker volume.
+        const sourceCommit = await this.resolvePreviewSourceCommit(project.baseDir, featureBranch);
+
         const setupScriptPath = await this.resolveContainerSetupScriptPath(project.baseDir, effectiveSettings.cliWorkflow);
         const baseImage = effectiveSettings.cliWorkflow.containerImage.trim() || "node:24-bookworm";
         const resolvedImage = await new DockerSetupImageCache().resolveImage({
@@ -262,6 +268,7 @@ export class SprintPreviewService {
           effectiveInstallCommand,
           buildCommand: preparedScript.buildCommand,
           runCommand: preparedScript.runCommand,
+          sourceCommit,
           resolvedImage: resolvedImage.image,
           bootstrapScript,
         });
@@ -394,7 +401,7 @@ export class SprintPreviewService {
     const project = this.requireProject(projectId);
     this.requireSprint(projectId, sprintId);
     const settings = this.resolveSettings(projectId, sprintId).sprintPreview;
-    const scriptPath = resolveConfiguredPath(project.baseDir, settings.startupScriptPath);
+    const scriptPath = await resolvePreviewScriptPath(project.baseDir, settings.startupScriptPath);
     const script = await readOptionalSprintPreviewScript(scriptPath);
     const detected = await detectSprintPreviewCommands(project.baseDir);
 
@@ -415,7 +422,7 @@ export class SprintPreviewService {
     const project = this.requireProject(projectId);
     this.requireSprint(projectId, sprintId);
     const settings = this.resolveSettings(projectId, sprintId).sprintPreview;
-    const scriptPath = resolveConfiguredPath(project.baseDir, settings.startupScriptPath);
+    const scriptPath = await resolvePreviewScriptPath(project.baseDir, settings.startupScriptPath);
     await fs.mkdir(path.dirname(scriptPath), { recursive: true });
     await fs.writeFile(scriptPath, content, "utf8");
     if (process.platform !== "win32") {
@@ -470,7 +477,24 @@ export class SprintPreviewService {
       responseHeaders[key] = value;
     });
 
-    const bodyBuffer = Buffer.from(await response.arrayBuffer());
+    const chunks: Buffer[] = [];
+    let totalSize = 0;
+    if (response.body) {
+      for await (const chunk of response.body as any) {
+        totalSize += chunk.length;
+        if (totalSize > 5 * 1024 * 1024) {
+          throw new Error("Response body exceeds maximum allowed size for proxied preview");
+        }
+        chunks.push(Buffer.from(chunk));
+      }
+    } else {
+      const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength > 5 * 1024 * 1024) {
+        throw new Error("Response body exceeds maximum allowed size for proxied preview");
+      }
+      chunks.push(Buffer.from(arrayBuffer));
+    }
+    const bodyBuffer = Buffer.concat(chunks);
     const rewrittenBody = this.shouldRewriteBody(contentType)
       ? Buffer.from(this.rewriteProxyBody(bodyBuffer.toString("utf8"), rewritePrefix))
       : bodyBuffer;
@@ -495,8 +519,6 @@ export class SprintPreviewService {
 
   async reconcileSessions(): Promise<void> {
     const sessions = this.deps.sprintPreviewRepository.listSessions();
-    // Fetch the preview container listing once for the whole pass (was one `docker ps` per session).
-    const containers = await this.listPreviewContainers(process.cwd());
     // Memoize the per-project execution snapshot within this pass; many sessions share a project and
     // it is an expensive DB rollup, so recomputing it per session was a second N+1.
     const executionSnapshotByProject = new Map<string, ReturnType<typeof this.deps.executionRepository.getProjectExecutionSnapshot>>();
@@ -508,100 +530,105 @@ export class SprintPreviewService {
       }
       return snapshot;
     };
-    for (const session of sessions) {
-      const sprint = this.deps.projectManagementRepository.getSprint(session.sprintId);
-      if (!sprint) {
-        // Sprint was deleted — drop the orphaned session record so we stop reconciling it.
-        this.deps.sprintPreviewRepository.deleteSession(session.id);
-        continue;
-      }
-      const refreshed = await this.refreshRuntimeState(session, containers);
-      const activeRun = getExecutionSnapshot(session.projectId)
-        .sprintRuns
-        .some((run) => run.sprintId === session.sprintId && run.status === "running");
 
-      // Prune dead sessions for finished sprints. Once a sprint is terminal and has no running
-      // container, the session can never auto-start again, so reconciling it every 15s (settings
-      // resolution + completed-task counts) is pure waste — these stopped records otherwise
-      // accumulate indefinitely. They are recreated on demand if a preview is started again.
-      const sprintTerminal = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
-      const isDeadSession = (refreshed.status === "stopped" || refreshed.status === "error")
-        && !refreshed.containerId && !refreshed.containerName;
-      if (sprintTerminal && !activeRun && isDeadSession) {
-        this.deps.sprintPreviewRepository.deleteSession(refreshed.id);
-        continue;
-      }
-
-      // A non-running session can only be acted on this cycle if it can be auto-started, which needs
-      // an active sprint run. Without one, every downstream branch is a no-op for it (stop/rebuild/
-      // autoStop only apply to running sessions, and the task-count update is gated on running too),
-      // so skip the expensive settings resolution + completed-task count entirely.
-      const isRunningOrStarting = refreshed.status === "running" || refreshed.status === "starting";
-      if (!isRunningOrStarting && !activeRun) {
-        continue;
-      }
-
-      const settings = this.resolveSettings(session.projectId, session.sprintId).sprintPreview;
-      const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
-
-      if (settings.enabled === false) {
-        if (refreshed.status === "running" || refreshed.status === "starting") {
-          await this.stopSession(refreshed.id).catch(() => undefined);
+    if (sessions.length > 0) {
+      // Fetch the preview container listing once for the whole pass (was one `docker ps` per session).
+      const containers = await this.listPreviewContainers(process.cwd());
+      for (const session of sessions) {
+        const sprint = this.deps.projectManagementRepository.getSprint(session.sprintId);
+        if (!sprint) {
+          // Sprint was deleted — drop the orphaned session record so we stop reconciling it.
+          this.deps.sprintPreviewRepository.deleteSession(session.id);
+          continue;
         }
-        continue;
-      }
+        const refreshed = await this.refreshRuntimeState(session, containers);
+        const activeRun = getExecutionSnapshot(session.projectId)
+          .sprintRuns
+          .some((run) => run.sprintId === session.sprintId && run.status === "running");
 
-      if (settings.autoStartOnRunningSprint && activeRun && refreshed.status === "stopped") {
-        await this.startSession(session.projectId, session.sprintId).catch((error) => {
-          this.deps.logger?.warn("Failed to auto-start sprint preview session", {
-            sessionId: session.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-        continue;
-      }
-
-      const isTerminalStatus = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
-      const statusChangedToTerminal = isTerminalStatus && refreshed.lastSeenSprintStatus !== sprint.status;
-
-      if (settings.autoStopOnTerminalSprint && !activeRun && statusChangedToTerminal) {
-        if (refreshed.status !== "stopped") {
-          await this.stopSession(refreshed.id).catch(() => undefined);
+        // Prune dead sessions for finished sprints. Once a sprint is terminal and has no running
+        // container, the session can never auto-start again, so reconciling it every 15s (settings
+        // resolution + completed-task counts) is pure waste — these stopped records otherwise
+        // accumulate indefinitely. They are recreated on demand if a preview is started again.
+        const sprintTerminal = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
+        const isDeadSession = (refreshed.status === "stopped" || refreshed.status === "error")
+          && !refreshed.containerId && !refreshed.containerName;
+        if (sprintTerminal && !activeRun && isDeadSession) {
+          this.deps.sprintPreviewRepository.deleteSession(refreshed.id);
+          continue;
         }
-      }
 
-      if (refreshed.status !== "running" && refreshed.status !== "starting") {
-        continue;
-      }
+        // A non-running session can only be acted on this cycle if it can be auto-started, which needs
+        // an active sprint run. Without one, every downstream branch is a no-op for it (stop/rebuild/
+        // autoStop only apply to running sessions, and the task-count update is gated on running too),
+        // so skip the expensive settings resolution + completed-task count entirely.
+        const isRunningOrStarting = refreshed.status === "running" || refreshed.status === "starting";
+        if (!isRunningOrStarting && !activeRun) {
+          continue;
+        }
 
-      if (settings.rebuildOnTaskCompletion && completedTaskCount > refreshed.lastCompletedTaskCount) {
-        await this.rebuildSession(refreshed.id).catch((error) => {
-          this.deps.logger?.warn("Failed to auto-rebuild sprint preview after task completion", {
-            sessionId: refreshed.id,
-            error: error instanceof Error ? error.message : String(error),
+        const settings = this.resolveSettings(session.projectId, session.sprintId).sprintPreview;
+        const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
+
+        if (settings.enabled === false) {
+          if (refreshed.status === "running" || refreshed.status === "starting") {
+            await this.stopSession(refreshed.id).catch(() => undefined);
+          }
+          continue;
+        }
+
+        if (settings.autoStartOnRunningSprint && activeRun && refreshed.status === "stopped") {
+          await this.startSession(session.projectId, session.sprintId).catch((error) => {
+            this.deps.logger?.warn("Failed to auto-start sprint preview session", {
+              sessionId: session.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
           });
-        });
-        continue;
-      }
+          continue;
+        }
 
-      if (
-        settings.rebuildOnSprintCompletion
-        && sprint.status === "completed"
-        && refreshed.lastSeenSprintStatus !== "completed"
-      ) {
-        await this.rebuildSession(refreshed.id).catch((error) => {
-          this.deps.logger?.warn("Failed to auto-rebuild sprint preview after sprint completion", {
-            sessionId: refreshed.id,
-            error: error instanceof Error ? error.message : String(error),
+        const isTerminalStatus = sprint.status === "completed" || sprint.status === "failed" || sprint.status === "cancelled";
+        const statusChangedToTerminal = isTerminalStatus && refreshed.lastSeenSprintStatus !== sprint.status;
+
+        if (settings.autoStopOnTerminalSprint && !activeRun && statusChangedToTerminal) {
+          if (refreshed.status !== "stopped") {
+            await this.stopSession(refreshed.id).catch(() => undefined);
+          }
+        }
+
+        if (refreshed.status !== "running" && refreshed.status !== "starting") {
+          continue;
+        }
+
+        if (settings.rebuildOnTaskCompletion && completedTaskCount > refreshed.lastCompletedTaskCount) {
+          await this.rebuildSession(refreshed.id).catch((error) => {
+            this.deps.logger?.warn("Failed to auto-rebuild sprint preview after task completion", {
+              sessionId: refreshed.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
           });
-        });
-        continue;
-      }
+          continue;
+        }
 
-      this.deps.sprintPreviewRepository.updateSession(refreshed.id, {
-        lastCompletedTaskCount: completedTaskCount,
-        lastSeenSprintStatus: sprint.status,
-      });
+        if (
+          settings.rebuildOnSprintCompletion
+          && sprint.status === "completed"
+          && refreshed.lastSeenSprintStatus !== "completed"
+        ) {
+          await this.rebuildSession(refreshed.id).catch((error) => {
+            this.deps.logger?.warn("Failed to auto-rebuild sprint preview after sprint completion", {
+              sessionId: refreshed.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+          continue;
+        }
+
+        this.deps.sprintPreviewRepository.updateSession(refreshed.id, {
+          lastCompletedTaskCount: completedTaskCount,
+          lastSeenSprintStatus: sprint.status,
+        });
+      }
     }
 
     const projects = this.deps.projectManagementRepository.listProjects().projects;
@@ -675,10 +702,11 @@ export class SprintPreviewService {
 
   private buildProxyHeaders(headers: Record<string, string | undefined> = {}): Record<string, string> {
     const next: Record<string, string> = {};
+    const stripList = ["authorization", "cookie", "set-cookie", "connection", "upgrade", "transfer-encoding", "host", "content-length", "accept-encoding"];
     for (const [key, value] of Object.entries(headers)) {
       if (!value) continue;
       const normalized = key.toLowerCase();
-      if (normalized === "host" || normalized === "content-length" || normalized === "accept-encoding") {
+      if (stripList.includes(normalized) || normalized.startsWith("proxy-") || normalized.startsWith("x-code-ux-")) {
         continue;
       }
       next[key] = value;
@@ -923,7 +951,7 @@ export class SprintPreviewService {
   }
 
   private async prepareStartupScript(repoPath: string, settings: SprintPreviewSettings): Promise<PreparedStartupScript> {
-    const scriptPath = resolveConfiguredPath(repoPath, settings.startupScriptPath);
+    const scriptPath = await resolvePreviewScriptPath(repoPath, settings.startupScriptPath);
     const script = await readOptionalSprintPreviewScript(scriptPath);
     const detected = await detectSprintPreviewCommands(repoPath);
 
@@ -1003,6 +1031,21 @@ export class SprintPreviewService {
       return branch;
     }
     throw new Error(`Cannot export sprint preview workspace: branch ${branch} does not exist locally or on origin.`);
+  }
+
+  /**
+   * Resolves the commit SHA of the branch being previewed. Returns null on any failure so
+   * the container falls back to building unconditionally (cache disabled, never wrong).
+   */
+  private async resolvePreviewSourceCommit(repoPath: string, branch: string): Promise<string | null> {
+    try {
+      const exportRef = await this.resolvePreviewExportRef(repoPath, branch);
+      const result = await runCommandStrict("git", ["rev-parse", exportRef], repoPath);
+      const sha = result.stdout.trim();
+      return sha || null;
+    } catch {
+      return null;
+    }
   }
 
   private async resolvePreviewBranchBaseRef(repoPath: string, defaultBranch: string): Promise<string> {

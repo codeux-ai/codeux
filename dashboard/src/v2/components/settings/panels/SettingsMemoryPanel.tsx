@@ -25,8 +25,7 @@ import { BookOpen, Brain, Gauge } from "lucide-preact";
       <div className="flex flex-col gap-5">
         <SectionCard title="Memory System" watermark="MEM" badge={getBadge("memory")} icon={<Brain strokeWidth={2.4} />}>
           <Row label="Enable memory" description="Turn on the memory system for automatic capture, storage, and semantic search of sprint knowledge." badge={getFieldBadge("memory.enabled")}>
-            <Toggle
-              value={editableSettings.memory.enabled}
+            <Toggle aria-label="Toggle setting"               value={editableSettings.memory.enabled}
               onChange={() => updateEditableSettings((current) => ({
                 ...current,
                 memory: { ...current.memory, enabled: !current.memory.enabled },
@@ -34,8 +33,7 @@ import { BookOpen, Brain, Gauge } from "lucide-preact";
             />
           </Row>
           <Row label="Auto-capture sprint events" description="Automatically create memories when tasks complete, fail, or encounter CI issues during sprint execution." badge={getFieldBadge("memory.autoCaptureSprint")}>
-            <Toggle
-              value={editableSettings.memory.autoCaptureSprint}
+            <Toggle aria-label="Toggle setting"               value={editableSettings.memory.autoCaptureSprint}
               disabled={!editableSettings.memory.enabled}
               onChange={() => updateEditableSettings((current) => ({
                 ...current,
@@ -44,8 +42,7 @@ import { BookOpen, Brain, Gauge } from "lucide-preact";
             />
           </Row>
           <Row label="Auto-capture agent events" description="Capture memories from notable agent interactions such as retries and clarifications." badge={getFieldBadge("memory.autoCaptureAgent")}>
-            <Toggle
-              value={editableSettings.memory.autoCaptureAgent}
+            <Toggle aria-label="Toggle setting"               value={editableSettings.memory.autoCaptureAgent}
               disabled={!editableSettings.memory.enabled}
               onChange={() => updateEditableSettings((current) => ({
                 ...current,
@@ -54,8 +51,7 @@ import { BookOpen, Brain, Gauge } from "lucide-preact";
             />
           </Row>
           <Row label="Auto-promote to project scope" description="Automatically promote recurring or high-strength sprint memories to long-term project knowledge when a sprint completes." badge={getFieldBadge("memory.autoPromote")} last>
-            <Toggle
-              value={editableSettings.memory.autoPromote}
+            <Toggle aria-label="Toggle setting"               value={editableSettings.memory.autoPromote}
               disabled={!editableSettings.memory.enabled}
               onChange={() => updateEditableSettings((current) => ({
                 ...current,

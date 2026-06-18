@@ -720,6 +720,49 @@ describe("buildQwenConversation", () => {
     expect(conversation[3].tokens).toMatchObject({ input: 200, output: 60 });
   });
 
+  it("splits qwen harness-injected <system-reminder> blocks out of the user prompt", () => {
+    const records = [
+      {
+        timestamp: "2026-06-02T10:00:00.000Z",
+        request: {
+          messages: [
+            {
+              role: "user",
+              content:
+                "<system-reminder>\nThe following tools are reachable via tool_search.\n- \"computer_use__click\": \"Left-click...\"\n</system-reminder>\n<system-reminder>\nThe following skills are available.\n</system-reminder>\n## Objective\nUpdate the file.",
+            },
+          ],
+        },
+        response: {
+          usage: { prompt_tokens: 100, completion_tokens: 10 },
+          choices: [{ message: { role: "assistant", content: "Done." } }],
+        },
+      },
+    ];
+
+    const conversation = buildQwenConversation(records);
+    expect(conversation.map((t) => t.kind)).toEqual(["injected_context", "user", "assistant"]);
+    // The harness registry is isolated; our prompt is clean.
+    expect(conversation[0].text).toContain("computer_use__click");
+    expect(conversation[0].text).toContain("</system-reminder>");
+    expect(conversation[1]).toMatchObject({ kind: "user", text: "## Objective\nUpdate the file." });
+    expect(conversation[1].text).not.toContain("system-reminder");
+    expect(conversation[1].text).not.toContain("computer_use__");
+  });
+
+  it("leaves an ordinary user prompt untouched when there is no injected context", () => {
+    const records = [
+      {
+        timestamp: "2026-06-02T10:00:00.000Z",
+        request: { messages: [{ role: "user", content: "Just a normal prompt." }] },
+        response: { usage: { prompt_tokens: 5, completion_tokens: 2 }, choices: [{ message: { role: "assistant", content: "ok" } }] },
+      },
+    ];
+    const conversation = buildQwenConversation(records);
+    expect(conversation.map((t) => t.kind)).toEqual(["user", "assistant"]);
+    expect(conversation[0]).toMatchObject({ kind: "user", text: "Just a normal prompt." });
+  });
+
   it("captures per-step and final reasoning_content from thinking models", () => {
     const records = [
       {

@@ -34,6 +34,10 @@ describe("CompositionStudio", () => {
             usage: {
               inputTokens: 1000,
               cachedInputTokens: 250,
+              inputCostUsd: 0,
+              outputCostUsd: 0,
+              cachedInputCostUsd: 0,
+              totalCostUsd: 0,
               outputTokens: 500,
               reasoningOutputTokens: 125,
               totalTokens: 1875,
@@ -50,6 +54,10 @@ describe("CompositionStudio", () => {
                 usage: {
                   inputTokens: 400,
                   cachedInputTokens: 100,
+                  inputCostUsd: 0,
+                  outputCostUsd: 0,
+                  cachedInputCostUsd: 0,
+                  totalCostUsd: 10.0,
                   outputTokens: 200,
                   reasoningOutputTokens: 50,
                   totalTokens: 750,
@@ -66,6 +74,10 @@ describe("CompositionStudio", () => {
                 usage: {
                   inputTokens: 600,
                   cachedInputTokens: 150,
+                  inputCostUsd: 0,
+                  outputCostUsd: 0,
+                  cachedInputCostUsd: 0,
+                  totalCostUsd: 20.0,
                   outputTokens: 300,
                   reasoningOutputTokens: 75,
                   totalTokens: 1125,
@@ -82,6 +94,10 @@ describe("CompositionStudio", () => {
                 usage: {
                   inputTokens: 100,
                   cachedInputTokens: 25,
+                  inputCostUsd: 0,
+                  outputCostUsd: 0,
+                  cachedInputCostUsd: 0,
+                  totalCostUsd: 0,
                   outputTokens: 75,
                   reasoningOutputTokens: 0,
                   totalTokens: 200,
@@ -114,13 +130,15 @@ describe("CompositionStudio", () => {
     const providerActivity = screen.getByText("Provider Activity");
 
     expect(providerShare.compareDocumentPosition(tokenAnatomy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByText("cost").length).toBeGreaterThan(0);
     expect(tokenAnatomy.compareDocumentPosition(purposeRibbon) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(purposeRibbon.compareDocumentPosition(tokenFlight) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(tokenFlight.compareDocumentPosition(cacheEfficiency) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(cacheEfficiency.compareDocumentPosition(providerActivity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     expect(screen.getByText("20.0%")).toBeInTheDocument();
-    expect(screen.getByText("250 tokens saved from cache")).toBeInTheDocument();
+
+    expect(screen.getByText("~250 tokens saved")).toBeInTheDocument();
     expect(screen.getByText("9m 0s")).toBeInTheDocument();
     expect(screen.getByText("0s")).toBeInTheDocument();
 

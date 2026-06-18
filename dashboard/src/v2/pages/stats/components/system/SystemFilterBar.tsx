@@ -64,7 +64,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   const hasActiveFilters = filters.status.length > 0 || filters.purpose.length > 0 || filters.provider.length > 0 || (filters.errorCategories && filters.errorCategories.length > 0) || search !== "";
 
   return (
-    <div className={`${SUBPANEL_CLASS} flex flex-wrap items-center gap-3 p-4`}>
+    <div className={`${SUBPANEL_CLASS} flex flex-nowrap items-center gap-3 p-3 overflow-x-auto whitespace-nowrap scrollbar-hide`}>
       <div className="relative min-w-0 w-full lg:flex-1 lg:basis-[18rem]">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
         <input

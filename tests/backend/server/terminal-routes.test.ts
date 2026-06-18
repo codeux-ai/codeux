@@ -3,7 +3,7 @@ import request from "supertest";
 import express from "express";
 import { EventEmitter } from "events";
 import { spawn } from "child_process";
-import { registerTerminalRoutes, bootDashboardTerminalWebSocketServer, buildLoginDockerfile } from "../../../src/server/terminal-routes.js";
+import { registerTerminalRoutes, bootDashboardTerminalWebSocketServer, buildLoginDockerfile, activeTerminalSessions } from "../../../src/server/terminal-routes.js";
 import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
 
 // Mock child_process.spawn
@@ -87,6 +87,91 @@ describe("Terminal Routes", () => {
     mockStderr.removeAllListeners();
   });
 
+  it("should reject websocket upgrades from hostile origins", async () => {
+    const mockServer = new EventEmitter() as any;
+    const mockSocket = new EventEmitter() as any;
+    mockSocket.write = vi.fn();
+    mockSocket.destroy = vi.fn();
+
+    bootDashboardTerminalWebSocketServer({
+      server: mockServer,
+      pathName: "/ws/terminal",
+      logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), child: vi.fn() } as any,
+    });
+
+    const startResponse = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerConfigId: "gemini" });
+    const sessionId = startResponse.body.sessionId;
+
+    const mockReq = {
+      url: `/ws/terminal?sessionId=${sessionId}`,
+      headers: {
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+        "sec-fetch-site": "cross-site",
+        "origin": "https://evil.com"
+      },
+    };
+
+    mockServer.emit("upgrade", mockReq, mockSocket, Buffer.alloc(0));
+
+    expect(mockSocket.write).toHaveBeenCalledWith(expect.stringContaining("403 Forbidden"));
+    expect(mockSocket.destroy).toHaveBeenCalled();
+  });
+
+  it("should close the socket when receiving oversized frames", async () => {
+    vi.useFakeTimers();
+
+    const startResponse = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerConfigId: "gemini" });
+    const sessionId = startResponse.body.sessionId;
+
+    const mockServer = new EventEmitter() as any;
+    const mockSocket = new EventEmitter() as any;
+    mockSocket.write = vi.fn();
+    mockSocket.destroy = vi.fn();
+
+    bootDashboardTerminalWebSocketServer({
+      server: mockServer,
+      pathName: "/ws/terminal",
+      logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), child: vi.fn() } as any,
+    });
+
+    const mockReq = {
+      url: `/ws/terminal?sessionId=${sessionId}`,
+      headers: {
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+      },
+    };
+
+    mockServer.emit("upgrade", mockReq, mockSocket, Buffer.alloc(0));
+
+    // Send a frame that is larger than 10MB
+    const oversizedFrame = Buffer.alloc(14);
+    oversizedFrame[0] = 0x81; // FIN + text
+    oversizedFrame[1] = 0xff; // Masked + 127 length indicator
+    oversizedFrame.writeBigUInt64BE(BigInt(11 * 1024 * 1024), 2);
+    oversizedFrame[10] = 0x12;
+    oversizedFrame[11] = 0x34;
+    oversizedFrame[12] = 0x56;
+    oversizedFrame[13] = 0x78;
+
+    mockSocket.emit("data", oversizedFrame);
+
+    expect(mockSocket.destroy).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("should return 400 when starting terminal session with unknown raw providerId", async () => {
+    const response = await request(app)
+      .post("/api/terminal/start")
+      .send({ providerId: "not-a-real-provider" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("Unknown providerId: not-a-real-provider");
+  });
+
   it("should successfully start a terminal session and spawn docker", async () => {
     const response = await request(app)
       .post("/api/terminal/start")
@@ -94,6 +179,7 @@ describe("Terminal Routes", () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty("sessionId");
+    expect(response.body.sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     expect(response.body.providerId).toBe("gemini");
   });
 
@@ -105,6 +191,7 @@ describe("Terminal Routes", () => {
         .send({ providerConfigId });
       expect(response.status).toBe(200);
       expect(response.body.sessionId).toBeDefined();
+      expect(response.body.sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     }
   });
 

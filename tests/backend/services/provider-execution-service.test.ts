@@ -47,6 +47,7 @@ describe("ProviderExecutionService", () => {
       createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-1" }),
       getExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-1", status: "running" }),
       appendExecutionInvocationMessage: vi.fn(),
+      clearExecutionInvocationMessages: vi.fn(),
       createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "prov-inv-1" }),
       getProviderInvocationUsage: vi.fn().mockReturnValue({ id: "prov-inv-1", status: "running" }),
       updateProviderInvocationUsage: vi.fn(),
@@ -166,6 +167,33 @@ describe("ProviderExecutionService", () => {
     expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
       "exec-inv-1",
       expect.objectContaining({ role: "assistant", contentMarkdown: "text output" })
+    );
+  });
+
+  it("records the full agent conversation even in text-output mode (QA / planning)", async () => {
+    const textMockResult = {
+      ...mockResult,
+      text: "{\"verdict\":\"pass\"}",
+      usageTelemetry: {
+        ...mockResult.usageTelemetry,
+        conversation: [
+          { kind: "user", text: "Review this diff." },
+          { kind: "tool_call", text: "", toolName: "read_file", toolCallId: "c1", toolArguments: "{}" },
+          { kind: "tool_result", text: "", toolCallId: "c1", toolOutput: "file contents" },
+          { kind: "assistant", text: "{\"verdict\":\"pass\"}" },
+        ],
+      },
+    };
+    providerRunner.runProviderForText.mockResolvedValue(textMockResult);
+
+    await service.executeProvider({ ...defaultArgs, expectTextOutput: true });
+
+    expect(providerRunner.runProviderForText).toHaveBeenCalled();
+    expect(executionRepository.clearExecutionInvocationMessages).toHaveBeenCalledWith("exec-inv-1");
+    // The intermediate tool call is now persisted, not discarded.
+    expect(executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith(
+      "exec-inv-1",
+      expect.objectContaining({ role: "tool", metadata: expect.objectContaining({ kind: "tool_call", toolName: "read_file" }) })
     );
   });
 

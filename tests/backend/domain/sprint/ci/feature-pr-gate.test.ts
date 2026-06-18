@@ -240,6 +240,31 @@ describe("FeaturePrGateService", () => {
     );
   });
 
+  it("retries instead of escalating when a non-conflict auto-merge attempt fails transiently", async () => {
+    context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
+    context.autoMergeFeaturePr = vi.fn().mockResolvedValue({
+      ok: false,
+      mergeConflict: false,
+      message: "Pull request is not mergeable yet.",
+    });
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    // The task is parked as "auto-merge in progress" (RUNNING + CI) rather than
+    // left in CODING_COMPLETED, so the merge protocol does not raise a spurious
+    // `merge_required` attention item and the watch loop keeps retrying the merge.
+    expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(result.subtasks[0].is_merged).toBeFalsy();
+    expect(result.subtasks[0].merge_indicator).toBe("CI");
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "automerge_failed", prNumber: 101 }),
+      expect.any(Object),
+    );
+  });
+
   it("marks the task as a merge conflict before waiting on CI when the PR is DIRTY", async () => {
     context.gitStatus.openPullRequests[0].mergeStateStatus = "DIRTY";
     context.gitStatus.openPullRequests[0].checks = [];

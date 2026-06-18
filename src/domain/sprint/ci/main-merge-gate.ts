@@ -9,6 +9,7 @@ import type {
   FeaturePrAutoMergeMode,
   GitTrackingStatus,
 } from "../../../contracts/app-types.js";
+import type { MergeConflictDebouncer } from "./merge-conflict-debouncer.js";
 
 export interface MergeFeedbackContext {
   repoPath: string;
@@ -19,6 +20,12 @@ export interface MergeFeedbackContext {
   githubMode: "REMOTE" | "LOCAL";
   gitStatus: GitTrackingStatus | null;
   autoMergeMainBranchPr?: (args: { repoPath: string; prNumber: number }) => Promise<AutoMergeFeaturePrResult>;
+  /**
+   * Debounces transient `DIRTY` mergeability readings on the feature→main PR so a
+   * conflict is only flagged (and the sprint only paused / a worker dispatched)
+   * once it has actually persisted across cycles, not on a stale post-push state.
+   */
+  mergeConflictDebouncer?: MergeConflictDebouncer;
 }
 
 export interface MergeFeedbackResult {
@@ -155,7 +162,13 @@ export class MainMergeGateService {
       .map((check) => check.name);
     const waitForMainCi = ciIntelligence.mainBranchAutoMergeMode === "WHEN_GREEN";
     const resolveAllCommentsBeforeMainMerge = ciIntelligence.resolveAllCommentsBeforeMainMerge;
-    const hasMergeConflict = mainMergePr.mergeStateStatus === "DIRTY";
+    // A single `DIRTY` reading is unreliable — GitHub returns it transiently right
+    // after the feature→main PR is created/updated while it recomputes
+    // mergeability. Debounce it so a phantom conflict does not pause the sprint and
+    // dispatch a worker to "resolve" a conflict that clears itself a cycle later.
+    const hasMergeConflict = context.mergeConflictDebouncer
+      ? context.mergeConflictDebouncer.observe(mainMergePr.url, mainMergePr.mergeStateStatus)
+      : mainMergePr.mergeStateStatus === "DIRTY";
     const hasFailedChecks = waitForMainCi && failedChecks.length > 0;
     const hasPendingChecks = waitForMainCi && (checks.length === 0 || checks.some((check) => isCiPending(check.status, check.conclusion)));
     const hasReviewBlockers = resolveAllCommentsBeforeMainMerge

@@ -6,6 +6,8 @@ import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { FormError } from "../forms/FormError.js";
+import { Modal } from "./Modal.js";
+import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { fetchLocalDirectories } from "../../lib/project-api.js";
 import type { LocalDirectoryBrowserResponse } from "../../types.js";
 
@@ -95,6 +97,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const reducedMotion = useReducedMotion();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
+    const nameInputRef = useRef<HTMLInputElement>(null);
     const [touched, setTouched] = useState({ name: false, path: false });
 
     const validationErrors = useMemo(() => {
@@ -109,45 +112,13 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         return errors;
     }, [name, gitUrl, sourceType]);
 
-    useLayoutEffect(() => {
-        const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
-        const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
-        gsap.fromTo(cardRef.current,
-            { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
-            { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease, clearProps: "filter" }
-        );
-        if (fieldsRef.current) {
-            gsap.fromTo(Array.from(fieldsRef.current.children),
-                { y: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.yStart, opacity: 0 },
-                {
-                    y: 0,
-                    opacity: 1,
-                    stagger: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.stagger,
-                    duration: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.duration,
-                    ease: MODAL_MOTION.fieldStagger.ease,
-                    delay: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.delay
-                }
-            );
-        }
-    }, [reducedMotion]);
 
     const handleClose = () => {
         if (isSubmitting) return;
-        setIsClosing(true);
-
-        const d_card = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
-        const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
-
-        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d_card, ease: MODAL_MOTION.exit.ease });
-        gsap.to(backdropRef.current, { opacity: 0, duration: d_backdrop, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
+        onClose();
     };
 
-    const backdropRef = useFocusTrap(!isClosing, { onClose: handleClose, restoreFocus: true });
 
-    const handleBackdropClick = (e: PointerEvent) => {
-        if (e.target === backdropRef.current) handleClose();
-    };
 
     const submitProject = async () => {
         setIsSubmitting(true);
@@ -190,6 +161,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     };
 
     const handleSubmit = async (e: Event) => {
+
         e.preventDefault();
 
         setTouched(prev => ({ ...prev, path: true }));
@@ -377,17 +349,15 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     ] as const;
 
     return (
-        <div
-            ref={backdropRef}
-            onPointerDown={handleBackdropClick}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-project-modal-title"
-            className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/50 dark:bg-black/70 backdrop-blur-xl"
+        <Modal
+            isOpen={true}
+            onClose={handleClose}
+            initialFocusRef={nameInputRef}
+            ariaLabelledBy="add-project-modal-title"
+            className="w-[calc(100vw-2rem)] sm:w-full max-w-2xl lg:max-w-3xl !p-0 !rounded-[2.5rem]"
         >
             <div
-                ref={cardRef}
-                className="relative flex flex-col sm:flex-row w-[calc(100vw-2rem)] sm:w-full max-w-2xl lg:max-w-3xl max-h-[calc(100dvh-2rem)] overflow-hidden sm:overflow-y-auto rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
+                className="relative flex flex-col sm:flex-row w-full max-h-[calc(100dvh-2rem)] overflow-hidden sm:overflow-y-auto"
                 style={{ minHeight: modalMinHeight }}
             >
                 {/* ── Left decorative panel ── */}
@@ -425,6 +395,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 Connect a local directory or remote repository
                             </p>
                         </div>
+                        <div className="sr-only" aria-live="polite" role="status">
+                            {sourceType === 'new_project' ? 'New Project selected' : sourceType === 'git' ? 'Git Repo selected' : 'Local Project selected'}
+                            {showSetupOptions ? '. Setup Options step.' : ''}
+                        </div>
                         <button
                             onClick={handleClose}
                             aria-label="Close dialog"
@@ -439,10 +413,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <div ref={fieldsRef} className="flex flex-col gap-5 lg:gap-6 flex-1">
 
                             {submitError && (
-                                // form errors demand immediate user attention to proceed.
-                                <div role="alert" aria-live="assertive" id="project-form-error" className="text-status-red text-sm font-medium">
-                                    {submitError}
-                                </div>
+                                <ActionFeedbackRegion status="error" message={submitError} onDismiss={() => setSubmitError(null)} />
                             )}
 
                             {/* Project Name */}
@@ -452,21 +423,17 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 </label>
                                 <input
                                     id="add-project-name"
+                                    ref={nameInputRef}
                                     type="text"
                                     value={name}
                                     onInput={(e) => {
                                         const newName = (e.target as HTMLInputElement).value;
                                         setName(newName);
                                         if (!isSlugEdited) {
-                                            setGitUrlSlug(slugify(newName));
+                                            setGitUrlSlug(newName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""));
                                         }
-                                        if (submitError) setSubmitError(null);
+                                        setTouched(prev => ({ ...prev, name: true }));
                                     }}
-                                    placeholder="My Awesome Project"
-                                    className={projectNameInputClass}
-                                    required
-                                    autoFocus
-                                    autoComplete="off"
                                     aria-invalid={!!validationErrors.name && touched.name}
                                     aria-errormessage="project-name-error"
                                     aria-describedby={validationErrors.name && touched.name ? "project-name-error" : undefined}
@@ -889,6 +856,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     </form>
                 </div>
             </div>
-        </div>
+        </Modal>
     );
 };

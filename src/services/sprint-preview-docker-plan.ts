@@ -24,6 +24,11 @@ export interface SprintPreviewDockerPlanArgs {
   effectiveInstallCommand: string | null;
   buildCommand: string | null;
   runCommand: string | null;
+  /**
+   * Commit SHA of the exported preview source. Passed to the container so the startup
+   * script can skip the build when the branch hasn't changed since the last cached build.
+   */
+  sourceCommit: string | null;
   resolvedImage: string;
   bootstrapScript: string;
 }
@@ -53,6 +58,7 @@ export function buildSprintPreviewDockerCreateArgs(args: SprintPreviewDockerPlan
     "-e", `SPRINT_PREVIEW_INSTALL_COMMAND=${args.effectiveInstallCommand || ""}`,
     "-e", `SPRINT_PREVIEW_BUILD_COMMAND=${args.buildCommand || ""}`,
     "-e", `SPRINT_PREVIEW_RUN_COMMAND=${args.runCommand || ""}`,
+    "-e", `SPRINT_PREVIEW_SOURCE_COMMIT=${args.sourceCommit || ""}`,
   ];
 
   if (args.userSpec) {

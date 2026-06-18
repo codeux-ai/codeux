@@ -19,6 +19,7 @@ import { LiveDurationBadge } from "../ui/LiveDurationBadge.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
 import type { AgentAvatarConfig } from "../../types.js";
 import './kanban-task-card.css';
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 export const KanbanTaskCard: FunctionComponent<{
   viewModel: TaskCardViewModel;
@@ -109,16 +110,13 @@ export const KanbanTaskCard: FunctionComponent<{
       onDragEnd={onDragEnd as any}
       aria-roledescription="sortable"
       aria-describedby={`task-card-kbd-${task.recordId}`}
-      onKeyDown={(e) => {
-        // Placeholder for accessible reordering
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          // Optional: Toggle accessible drag mode if implemented
-        }
-      }}
+
       className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''}`}
       style={{ transformStyle: "preserve-3d", willChange: "transform" }}
     >
+      <span id={`task-card-kbd-${task.recordId}`} className="sr-only">
+        Keyboard reordering is not supported. Use drag and drop to reorder.
+      </span>
       <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05]" />
       <WaveFluid accentHex={STATUS_CFG[task.status].hex} />
       <BorderTrace accentHex={STATUS_CFG[task.status].hex} />
@@ -126,10 +124,11 @@ export const KanbanTaskCard: FunctionComponent<{
       <div className="flex items-center justify-between mb-3 relative z-10">
         <span className="font-mono text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-[0.1em]">
           {task.id.toUpperCase()}
+          <span className="sr-only">, Status: {task.status.replace('_', ' ')}</span>
         </span>
         <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-[0.14em] ${pri.bg} ${pri.color}`}>
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${pri.dot}`} />
-          {pri.label}
+          <span className="sr-only">Priority: </span>{pri.label}
         </div>
       </div>
 
@@ -184,7 +183,8 @@ export const KanbanTaskCard: FunctionComponent<{
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-black/[0.04] dark:border-white/[0.04] relative z-10">
         <div className="flex items-center gap-3">
           <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-slate-300 dark:text-slate-600">
-            <Clock className="w-3 h-3 shrink-0" strokeWidth={2} />
+            <Clock className="w-3 h-3 shrink-0" strokeWidth={2} aria-hidden="true" />
+            <span className="sr-only">Duration: </span>
             <LiveDurationBadge
               durationText={liveRunningTime ?? task.time ?? "Not started"}
               flashTriggerCount={flashTriggerCount}
@@ -192,7 +192,7 @@ export const KanbanTaskCard: FunctionComponent<{
           </div>
           {prUrl && (
             <a
-              href={prUrl}
+              href={getSafeUrl(prUrl)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-[9px] font-mono text-signal-500 hover:text-signal-400 transition-colors"
@@ -206,11 +206,11 @@ export const KanbanTaskCard: FunctionComponent<{
         <span className="text-[9px] font-mono text-slate-300 dark:text-slate-700">{liveStartedAt ? `· ${formatTimeAgo(liveStartedAt)}` : humanizedCreatedAt}</span>
       </div>
 
-      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-within:opacity-100 focus-within:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
+      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-within:opacity-100 focus-within:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 group-focus-visible:opacity-100 group-focus-visible:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
         <button
           type="button"
           className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
-          title="Edit task"
+          title={`Edit task ${task.id}`} aria-label={`Edit task ${task.id}`}
           onClick={() => onEdit(task)}
         >
           <Settings className="w-3 h-3" />
@@ -218,7 +218,7 @@ export const KanbanTaskCard: FunctionComponent<{
         <button
           type="button"
           className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
-          title="Delete task"
+          title={`Delete task ${task.id}`} aria-label={`Delete task ${task.id}`}
           onClick={async (e) => {
             e.stopPropagation();
             const confirmed = await requestConfirm({

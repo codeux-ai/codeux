@@ -143,7 +143,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
       <div className="cursor-default space-y-4 text-center">
         <div className={`inline-flex items-center gap-3 rounded-full border px-5 py-2 text-xs font-bold uppercase tracking-[0.2em] ${theme.badgeBorder} ${theme.badgeBg} ${theme.badgeText}`}>
           <span className="relative flex h-2 w-2">
-            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${theme.pingBg1}`}></span>
+            <span className={`absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full opacity-75 ${theme.pingBg1}`}></span>
             <span className={`relative inline-flex h-2 w-2 rounded-full ${theme.pingBg2}`}></span>
           </span>
           {getBadgeText()}
@@ -166,7 +166,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         <div className="flex flex-col items-center overflow-hidden h-10 w-full">
           <div className="flex items-center gap-3" ref={textContainerRef}>
             <span className="relative flex h-3 w-3">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${theme.pingBg1}`}></span>
+              <span className={`motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${theme.pingBg1}`}></span>
               <span className={`relative inline-flex rounded-full h-3 w-3 ${theme.pingBg2}`}></span>
             </span>
             <h3

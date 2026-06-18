@@ -4,11 +4,11 @@ import gsap from "gsap";
 import { useGsapDurations } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
-export interface ToggleProps extends Omit<ComponentProps<"button">, "value" | "onChange"> {
+export type ToggleProps = Omit<ComponentProps<"button">, "value" | "onChange" | "aria-label" | "aria-labelledby"> & {
   value: boolean;
   onChange: (value: boolean) => void;
   danger?: boolean;
-}
+} & ({ "aria-label": string } | { "aria-labelledby": string });
 
 export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger, disabled, className = "", ...props }) => {
   const thumbRef = useRef<HTMLSpanElement>(null);
@@ -37,6 +37,7 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
     <button
       {...props}
       type="button"
+      role="switch"
       onClick={() => onChange(!value)}
       disabled={disabled}
       className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus-visible:ring-[var(--color-accent-primary)] disabled:cursor-not-allowed disabled:opacity-50 motion-safe:enabled:active:scale-[0.98] ${
@@ -46,7 +47,8 @@ export const Toggle: FunctionComponent<ToggleProps> = ({ value, onChange, danger
             : "border-signal-500/40 bg-signal-500 shadow-[0_0_16px_rgba(0,224,160,0.22)] enabled:hover:bg-signal-500/90"
           : "border-black/[0.12] bg-black/[0.08] enabled:hover:bg-black/[0.12] enabled:hover:border-black/[0.16] dark:border-white/[0.12] dark:bg-white/[0.08] dark:enabled:hover:bg-white/[0.12] dark:enabled:hover:border-white/[0.16]"
       } ${className}`}
-      aria-pressed={value}
+      aria-checked={value}
+      aria-pressed={"aria-pressed" in props ? props["aria-pressed"] : undefined}
     >
       <span
         aria-hidden

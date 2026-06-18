@@ -69,8 +69,11 @@ export const ChatPageShell: FunctionComponent<{
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
-          <div className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <div role="tablist" aria-label="Chat Mode" className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
             <button
+              role="tab"
+              aria-selected={chatMode === "threads"}
+              aria-controls="chat-panel"
               type="button"
               onClick={() => onSetChatMode("threads")}
               className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
@@ -82,6 +85,9 @@ export const ChatPageShell: FunctionComponent<{
               Threads
             </button>
             <button
+              role="tab"
+              aria-selected={chatMode === "invocations"}
+              aria-controls="chat-panel"
               type="button"
               onClick={() => onSetChatMode("invocations")}
               className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${

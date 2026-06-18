@@ -197,7 +197,7 @@ describe("StatsPage Shell", () => {
     } as any);
     render(<StatsPage />);
     expect(gsap.fromTo).not.toHaveBeenCalled();
-    expect(screen.getByText(/Loading the telemetry field/i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading telemetry field/i)).toBeInTheDocument();
   });
 
   it("does not animate if there is an error and stats are null", () => {

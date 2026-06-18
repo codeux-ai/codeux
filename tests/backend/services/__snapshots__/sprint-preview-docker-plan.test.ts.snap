@@ -47,6 +47,8 @@ exports[`SprintPreviewDockerPlanBuilder > matches snapshot 1`] = `
   "SPRINT_PREVIEW_BUILD_COMMAND=npm run build",
   "-e",
   "SPRINT_PREVIEW_RUN_COMMAND=npm start",
+  "-e",
+  "SPRINT_PREVIEW_SOURCE_COMMIT=abc1234",
   "--user",
   "1000:1000",
   "--mount",

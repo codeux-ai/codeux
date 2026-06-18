@@ -109,6 +109,10 @@ describe("execution-read-model-mappers", () => {
       totalTokens: 30,
       activeTimeMs: 1000,
       wallTimeMs: 0,
+      inputCostUsd: 0,
+      outputCostUsd: 0,
+      cachedInputCostUsd: 0,
+      totalCostUsd: 0,
     };
 
     const record = mapExecutionSprintRunSummaryRow(row, null, usage);
@@ -147,6 +151,33 @@ describe("queryProjectStatsSnapshot", () => {
             if (query.includes("duration_ms as durationMs")) {
               return [{ provider: "openai", model: "gpt-4", durationMs: 100 }];
             }
+            if (query.includes("SELECT\n      CAST((julianday(started_at) - julianday(?))") || query.includes("bucketIndex,")) {
+              return [
+                {
+                  bucketIndex: 0,
+                  task_id: "task-1",
+                  sprint_key: "sprint-1",
+                  provider: "openai",
+                  purpose: "test",
+                  usage_source: "reported",
+                  model: "gpt-4",
+                  status: "completed",
+                  lastActivityAt: "2023-01-01T00:00:00Z",
+                  invocationCount: 1,
+                  activeTimeMs: 100,
+                  inputTokens: 1000000,
+                  cachedInputTokens: 500000,
+                  outputTokens: 2000000,
+                  reasoningOutputTokens: 0,
+                  totalTokens: 3500000,
+                  toolCallCount: 0,
+                  reportedInvocationCount: 1,
+                  estimatedInvocationCount: 0,
+                  unsupportedInvocationCount: 0,
+                  unavailableInvocationCount: 0,
+                }
+              ];
+            }
             return [];
           }),
         };
@@ -160,6 +191,7 @@ describe("queryProjectStatsSnapshot", () => {
       getTaskMetadata: vi.fn().mockReturnValue(new Map()),
       getSprintMetadata: vi.fn().mockReturnValue(new Map()),
       updateLastActivity: vi.fn(),
+      getProviderPricing: vi.fn().mockReturnValue({ inputTokens: 5, outputTokens: 15, cachedInputTokens: 2.5 }),
     };
 
     const snapshot = queryProjectStatsSnapshot(dbMock as any, "proj-1", "7d", depsMock);
@@ -170,11 +202,29 @@ describe("queryProjectStatsSnapshot", () => {
     expect(snapshot.window).toBe("7d");
     expect(snapshot.git).toBeDefined();
     expect(snapshot.git.totals).toEqual({ insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0, mergeConflictCount: 0 });
+
+    // Assert calculated usage costs
+    expect(snapshot.usage.inputCostUsd).toBe(5); // 1,000,000 / 1_000_000 * 5
+    expect(snapshot.usage.cachedInputCostUsd).toBe(1.25); // 500,000 / 1_000_000 * 2.5
+    expect(snapshot.usage.outputCostUsd).toBe(30); // 2,000,000 / 1_000_000 * 15
+    expect(snapshot.usage.totalCostUsd).toBe(36.25);
+
+    // Assert provider and model costs are tracked
+    expect(snapshot.providers.find(p => p.id === "openai")?.usage.totalCostUsd).toBe(36.25);
+    expect(snapshot.models.find(m => m.provider === "openai")?.usage.totalCostUsd).toBe(36.25);
+
+    // Assert bucket aggregates have correct cost
+    expect(snapshot.buckets[0].usage.totalCostUsd).toBe(36.25);
+
+    // Assert chart series exist
+    expect(snapshot.chartSeries.find(s => s.id === 'core_total_cost')).toMatchObject({ grouping: 'totals', formatter: 'number', defaultEnabled: false });
+    expect(snapshot.chartSeries.find(s => s.id === 'provider_cost_openai')).toMatchObject({ grouping: 'providers_cost', formatter: 'number', defaultEnabled: false });
+    expect(snapshot.chartSeries.find(s => s.id.startsWith('model_cost_'))).toMatchObject({ grouping: 'models_cost', formatter: 'number', defaultEnabled: false });
     expect(snapshot.activeSprint?.sprintId).toBe("sprint-1");
 
     // Model + reliability analytics are present even on an empty window
-    expect(snapshot.models).toEqual([]);
-    expect(snapshot.statusCounts).toEqual({ completed: 0, failed: 0, cancelled: 0, running: 0, paused: 0 });
+    expect(snapshot.models.length).toBe(1);
+    expect(snapshot.statusCounts).toEqual({ completed: 1, failed: 0, cancelled: 0, running: 0, paused: 0 });
     // Duration reflects the mock data injected via the aggregate query
     expect(snapshot.duration).toEqual({ sampleCount: 1, avgMs: 100, p50Ms: 100, p95Ms: 100, maxMs: 100 });
     expect(snapshot.chartSeries.find(s => s.id === 'core_cache_hit')).toMatchObject({ grouping: 'details', formatter: 'percent', defaultEnabled: false });

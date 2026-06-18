@@ -87,6 +87,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
+            aria-label="Close graph filters"
             className="rounded-full p-1 text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200"
           >
             <X className="h-4 w-4" />
@@ -140,6 +141,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                                 setEnabledSeries((curr) => ({ ...curr, [s.id]: !curr[s.id] }));
                               }}
                               disabled={disabled}
+                              aria-pressed={active}
                               className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all ${
                                 active
                                   ? 'border-amber-500/28 bg-amber-500/12 text-amber-700 dark:text-amber-300'
