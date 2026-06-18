@@ -1,5 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
+import { resolveConfiguredPath } from "./cli-docker-utils.js";
 
 export type SprintPreviewPackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
@@ -357,3 +358,36 @@ export async function resolveStaticPreviewEntry(repoPath: string): Promise<strin
   }
   return null;
 }
+
+export const resolvePreviewScriptPath = async (repoPath: string, configuredPath: string): Promise<string> => {
+  const defaultScript = path.resolve(repoPath, ".code-ux/browser/start-preview.sh");
+
+  if (!configuredPath || typeof configuredPath !== "string" || configuredPath.trim().length === 0) {
+    return defaultScript;
+  }
+
+  let resolved = resolveConfiguredPath(repoPath, configuredPath);
+
+  try {
+    resolved = await fs.realpath(resolved);
+  } catch (err) {
+    // If file doesn't exist, we fallback to string check, assuming it will be created.
+    // Wait, the "last-mile" verification implies we should check realpath. If it doesn't exist,
+    // we can check the realpath of the directory it's going into.
+    try {
+       const dir = await fs.realpath(path.dirname(resolved));
+       resolved = path.join(dir, path.basename(resolved));
+    } catch {
+       // if even directory does not exist, just use string matching for creation.
+    }
+  }
+
+  const realRepoPath = await fs.realpath(repoPath).catch(() => path.resolve(repoPath));
+  const isWithin = resolved === realRepoPath || resolved.startsWith(realRepoPath + path.sep);
+
+  if (!isWithin) {
+    return defaultScript;
+  }
+
+  return resolved;
+};

@@ -33,6 +33,7 @@ import {
   detectSprintPreviewCommands,
   normalizePreviewPath,
   readOptionalSprintPreviewScript,
+  resolvePreviewScriptPath,
 } from "./sprint-preview-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { getHomeCodeUxPath, getRepoCodeUxPath } from "../shared/config/code-ux-paths.js";
@@ -399,7 +400,7 @@ export class SprintPreviewService {
     const project = this.requireProject(projectId);
     this.requireSprint(projectId, sprintId);
     const settings = this.resolveSettings(projectId, sprintId).sprintPreview;
-    const scriptPath = resolveConfiguredPath(project.baseDir, settings.startupScriptPath);
+    const scriptPath = await resolvePreviewScriptPath(project.baseDir, settings.startupScriptPath);
     const script = await readOptionalSprintPreviewScript(scriptPath);
     const detected = await detectSprintPreviewCommands(project.baseDir);
 
@@ -420,7 +421,7 @@ export class SprintPreviewService {
     const project = this.requireProject(projectId);
     this.requireSprint(projectId, sprintId);
     const settings = this.resolveSettings(projectId, sprintId).sprintPreview;
-    const scriptPath = resolveConfiguredPath(project.baseDir, settings.startupScriptPath);
+    const scriptPath = await resolvePreviewScriptPath(project.baseDir, settings.startupScriptPath);
     await fs.mkdir(path.dirname(scriptPath), { recursive: true });
     await fs.writeFile(scriptPath, content, "utf8");
     if (process.platform !== "win32") {
@@ -1004,7 +1005,7 @@ export class SprintPreviewService {
   }
 
   private async prepareStartupScript(repoPath: string, settings: SprintPreviewSettings): Promise<PreparedStartupScript> {
-    const scriptPath = resolveConfiguredPath(repoPath, settings.startupScriptPath);
+    const scriptPath = await resolvePreviewScriptPath(repoPath, settings.startupScriptPath);
     const script = await readOptionalSprintPreviewScript(scriptPath);
     const detected = await detectSprintPreviewCommands(repoPath);
 

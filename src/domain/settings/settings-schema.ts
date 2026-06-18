@@ -426,7 +426,14 @@ const validateSprintPreview = (
   if (typeof value.hostPortRangeStart !== "number") issues.push({ path: `${path}.hostPortRangeStart`, message: "Expected a number" });
   if (typeof value.hostPortRangeEnd !== "number") issues.push({ path: `${path}.hostPortRangeEnd`, message: "Expected a number" });
   if (typeof value.containerAppPort !== "number") issues.push({ path: `${path}.containerAppPort`, message: "Expected a number" });
-  if (typeof value.startupScriptPath !== "string") issues.push({ path: `${path}.startupScriptPath`, message: "Expected a string" });
+  if (typeof value.startupScriptPath !== "string") {
+    issues.push({ path: `${path}.startupScriptPath`, message: "Expected a string" });
+  } else {
+    const trimmed = value.startupScriptPath.trim();
+    if (trimmed.includes("..") || trimmed.startsWith("/") || trimmed.match(/^[a-zA-Z]:\\/) || trimmed.includes("~") || trimmed.includes("$") || trimmed.includes("%")) {
+      issues.push({ path: `${path}.startupScriptPath`, message: "Expected a safe relative path without traversal or environment variables" });
+    }
+  }
 };
 
 const validateWorkers = (

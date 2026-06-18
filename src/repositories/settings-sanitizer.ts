@@ -409,10 +409,16 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
         ? Math.round(sprintPreviewInput.containerAppPort)
         : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.containerAppPort
     )),
-    startupScriptPath: readString(
-      sprintPreviewInput.startupScriptPath,
-      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath,
-    ).trim() || DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath,
+    startupScriptPath: (() => {
+      const raw = readString(
+        sprintPreviewInput.startupScriptPath,
+        DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath,
+      ).trim() || DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath;
+      if (raw.includes("..") || raw.startsWith("/") || /^[a-zA-Z]:\\/.test(raw) || raw.includes("~") || raw.includes("$") || raw.includes("%")) {
+        return DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath;
+      }
+      return raw;
+    })(),
   };
   if (sprintPreview.hostPortRangeEnd < sprintPreview.hostPortRangeStart) {
     sprintPreview.hostPortRangeEnd = sprintPreview.hostPortRangeStart;

@@ -430,9 +430,15 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
     containerAppPort: typeof input.containerAppPort === "number" && Number.isFinite(input.containerAppPort)
       ? Math.max(1, Math.min(65535, Math.round(input.containerAppPort)))
       : defaults.containerAppPort,
-    startupScriptPath: typeof input.startupScriptPath === "string" && input.startupScriptPath.trim().length > 0
-      ? input.startupScriptPath.trim()
-      : defaults.startupScriptPath,
+    startupScriptPath: (() => {
+      const raw = typeof input.startupScriptPath === "string" && input.startupScriptPath.trim().length > 0
+        ? input.startupScriptPath.trim()
+        : defaults.startupScriptPath;
+      if (raw.includes("..") || raw.startsWith("/") || /^[a-zA-Z]:\\/.test(raw) || raw.includes("~") || raw.includes("$") || raw.includes("%")) {
+        return defaults.startupScriptPath;
+      }
+      return raw;
+    })(),
   };
 }
 

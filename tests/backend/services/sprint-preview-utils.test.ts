@@ -22,7 +22,15 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
+import { resolvePreviewScriptPath } from "../../../src/services/sprint-preview-utils.js";
+
 describe("sprint-preview-utils", () => {
+  it("resolves and confines script path", async () => {
+    const repoPath = await createTempRepo();
+    await expect(resolvePreviewScriptPath(repoPath, ".code-ux/browser/start-preview.sh")).resolves.toBe(path.join(repoPath, ".code-ux/browser/start-preview.sh"));
+    await expect(resolvePreviewScriptPath(repoPath, "../outside.sh")).resolves.toBe(path.join(repoPath, ".code-ux/browser/start-preview.sh"));
+    await expect(resolvePreviewScriptPath(repoPath, "/tmp/start.sh")).resolves.toBe(path.join(repoPath, ".code-ux/browser/start-preview.sh"));
+  });
   it("normalizes browser paths and strips host prefixes", () => {
     expect(normalizePreviewPath("dashboard")).toBe("/dashboard");
     expect(normalizePreviewPath("https://example.com/foo?bar=1#hash")).toBe("/foo?bar=1#hash");

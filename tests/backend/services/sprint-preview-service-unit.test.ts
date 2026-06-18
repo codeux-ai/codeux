@@ -23,6 +23,10 @@ vi.mock("../../../src/services/sprint-preview-utils.js", () => ({
     exists: false,
     content: "",
   })),
+  resolvePreviewScriptPath: vi.fn(async (base, rel) => {
+    if (rel.includes("outside")) return `${base}/.code-ux/browser/start-preview.sh`;
+    return `${base}/${rel}`;
+  }),
 }));
 
 vi.mock("../../../src/services/cli-docker-utils.js", () => ({
@@ -214,6 +218,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
 }
 
 describe("SprintPreviewService unit tests", () => {
+
   let deps: ReturnType<typeof makeDeps>;
 
   beforeEach(() => {
@@ -481,6 +486,29 @@ describe("SprintPreviewService unit tests", () => {
   });
 
   describe("saveScript", () => {
+    it("cannot write outside the project directory", async () => {
+      const service = new SprintPreviewService(deps as any);
+      // requireProject and requireSprint are on the service, not the deps repository.
+      service.requireProject = vi.fn().mockReturnValue({ id: "proj-1", baseDir: "/repo" });
+      service.requireSprint = vi.fn().mockReturnValue({ id: "sprint-1" });
+      // Instead of modifying deps, we mock resolveSettings
+      service.resolveSettings = vi.fn().mockReturnValue({
+
+        sprintPreview: {
+          ...DEFAULT_DASHBOARD_SETTINGS.sprintPreview,
+          startupScriptPath: "../outside.sh",
+        },
+      } as any);
+
+      // the path will be snapped back to default script by the resolver
+      await service.saveScript("proj-1", "sprint-1", "content");
+
+      const fsMod = await import("fs/promises");
+      const writeCall = vi.mocked(fsMod.writeFile).mock.calls.find((call) => typeof call[0] === 'string');
+      expect(writeCall).toBeDefined();
+      expect(writeCall?.[0]).not.toContain("outside.sh");
+    });
+
     it("writes script to disk and returns updated script info", async () => {
       const fsMod = await import("fs/promises");
       const service = new SprintPreviewService(deps as any);

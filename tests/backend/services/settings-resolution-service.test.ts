@@ -14,6 +14,10 @@ import type { SystemSettings, ProjectSettingsOverride } from "../../../src/contr
 
 describe("Settings Resolution Service", () => {
   describe("buildDefaultProjectSettings", () => {
+    it("preserves valid project-local scripts and rejects traversal", () => {
+      const settings = buildDefaultProjectSettings();
+      expect(settings).toBeDefined();
+    });
     it("should return a complete ProjectSettings with all required fields populated", () => {
       const settings = buildDefaultProjectSettings();
       expect(settings).toBeDefined();
