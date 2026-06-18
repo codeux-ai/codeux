@@ -7,6 +7,7 @@ import type { AgentPresetRepository } from "../repositories/agent-preset-reposit
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { KnowledgeDocumentSummary } from "../contracts/knowledge-types.js";
 import { asyncRoute, syncRoute, toErrorResponse } from "./route-utils.js";
+import { TEXT_EXTENSIONS, HTML_EXTENSIONS } from "../services/knowledge-ingestion-service.js";
 import { requireTrimmedString } from "./request-parsers.js";
 
 const MODEL_REQUIRED_MESSAGE =
@@ -18,6 +19,27 @@ const IGNORED_DIRECTORIES = new Set([
 ]);
 
 const MAX_DIRECTORY_FILES = 100;
+
+const MAX_DIRECTORY_BYTES = 50 * 1024 * 1024; // 50MB
+
+function isSupportedUpload(fileName: string, mimeType?: string): boolean {
+  const ext = path.extname(fileName).toLowerCase();
+  const mime = (mimeType || "").toLowerCase();
+  if (ext === ".pdf" || mime === "application/pdf") return true;
+  if (ext === ".docx" || mime.includes("officedocument.wordprocessingml")) return true;
+  if (HTML_EXTENSIONS.has(ext) || mime.includes("text/html")) return true;
+  if (TEXT_EXTENSIONS.has(ext) || mime.startsWith("text/")) return true;
+  return false;
+}
+
+function sanitizeFilename(name: string): string {
+  if (!name) return "unnamed-file";
+  let clean = name.replace(/[\x00-\x1F\x7F/\\]/g, "").trim();
+  if (!clean) clean = "unnamed-file";
+  if (clean.length > 255) clean = clean.substring(0, 255);
+  return clean;
+}
+
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -116,20 +138,26 @@ export function registerKnowledgeRoutes(app: Express, deps: KnowledgeRouteDepend
           return;
         }
 
+
         const documents: KnowledgeDocumentSummary[] = [];
         const errors: Array<{ fileName: string; error: string }> = [];
         for (const file of files) {
+          const safeName = sanitizeFilename(file.originalname);
+          if (!isSupportedUpload(safeName, file.mimetype)) {
+            errors.push({ fileName: safeName, error: "Unsupported file type" });
+            continue;
+          }
           try {
             const doc = await knowledgeService.ingestDocument(projectId, {
-              title: file.originalname,
+              title: safeName,
               sourceType: "upload",
-              sourceRef: file.originalname,
+              sourceRef: safeName,
               mimeType: file.mimetype,
               buffer: file.buffer,
             });
             documents.push(doc);
           } catch (error) {
-            errors.push({ fileName: file.originalname, error: error instanceof Error ? error.message : String(error) });
+            errors.push({ fileName: safeName, error: error instanceof Error ? error.message : "Failed to read file" });
           }
         }
         res.status(documents.length ? 201 : 400).json({ documents, errors });
@@ -247,6 +275,7 @@ interface RepoIngestResult {
 }
 
 /** Ingest a single in-repo file or all text files under an in-repo directory. */
+
 async function ingestRepoPath(
   knowledgeService: KnowledgeService,
   baseDir: string,
@@ -259,17 +288,28 @@ async function ingestRepoPath(
     throw new Error("Path must be inside the project directory.");
   }
 
-  const stat = await fs.stat(target).catch(() => null);
-  if (!stat) {
-    throw new Error(`Path not found: ${relativePath}`);
+  const realBase = await fs.realpath(resolvedBase).catch(() => resolvedBase);
+  const realTarget = await fs.realpath(target).catch(() => null);
+
+  if (!realTarget) {
+    throw new Error("Path not found");
   }
 
-  const files = stat.isDirectory() ? await collectDirectoryFiles(target) : [target];
+  if (realTarget !== realBase && !realTarget.startsWith(realBase + path.sep)) {
+    throw new Error("Path must be inside the project directory.");
+  }
+
+  const stat = await fs.stat(realTarget).catch(() => null);
+  if (!stat) {
+    throw new Error("Path not found");
+  }
+
+  const files = stat.isDirectory() ? await collectDirectoryFiles(realTarget) : [realTarget];
   const documents: KnowledgeDocumentSummary[] = [];
   const errors: Array<{ fileName: string; error: string }> = [];
 
   for (const filePath of files) {
-    const rel = path.relative(resolvedBase, filePath);
+    const rel = path.relative(realBase, filePath);
     try {
       const buffer = await fs.readFile(filePath);
       const doc = await knowledgeService.ingestDocument(projectId, {
@@ -280,7 +320,7 @@ async function ingestRepoPath(
       });
       documents.push(doc);
     } catch (error) {
-      errors.push({ fileName: rel, error: error instanceof Error ? error.message : String(error) });
+      errors.push({ fileName: rel, error: error instanceof Error ? error.message : "Failed to read file" });
     }
   }
 
@@ -289,18 +329,25 @@ async function ingestRepoPath(
 
 async function collectDirectoryFiles(dir: string): Promise<string[]> {
   const collected: string[] = [];
+  let totalBytes = 0;
 
   const walk = async (current: string): Promise<void> => {
-    if (collected.length >= MAX_DIRECTORY_FILES) return;
+    if (collected.length >= MAX_DIRECTORY_FILES || totalBytes >= MAX_DIRECTORY_BYTES) return;
     const entries = await fs.readdir(current, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
-      if (collected.length >= MAX_DIRECTORY_FILES) return;
+      if (collected.length >= MAX_DIRECTORY_FILES || totalBytes >= MAX_DIRECTORY_BYTES) return;
       if (entry.name.startsWith(".") && entry.isDirectory()) continue;
       if (entry.isDirectory()) {
         if (IGNORED_DIRECTORIES.has(entry.name)) continue;
         await walk(path.join(current, entry.name));
       } else if (entry.isFile()) {
-        collected.push(path.join(current, entry.name));
+        const filePath = path.join(current, entry.name);
+        const st = await fs.stat(filePath).catch(() => null);
+        if (st) {
+          if (totalBytes + st.size > MAX_DIRECTORY_BYTES) continue;
+          totalBytes += st.size;
+          collected.push(filePath);
+        }
       }
     }
   };

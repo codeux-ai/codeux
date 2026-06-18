@@ -9,7 +9,7 @@ const MAX_CHUNK_CHARS = 1400; // ~350 tokens — comfortably under the 512-token
 const OVERLAP_CHARS = 200;
 
 /** Text-extractable extensions read directly as UTF-8 (code, config, data, docs). */
-const TEXT_EXTENSIONS = new Set([
+export const TEXT_EXTENSIONS = new Set([
   ".md", ".markdown", ".mdx", ".txt", ".text", ".rst", ".adoc",
   ".json", ".jsonc", ".yaml", ".yml", ".toml", ".ini", ".env", ".csv", ".tsv", ".xml",
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".go", ".rs", ".java", ".kt",
@@ -18,7 +18,7 @@ const TEXT_EXTENSIONS = new Set([
   ".graphql", ".proto", ".dockerfile", ".tf", ".lua", ".r", ".dart", ".ex", ".exs",
 ]);
 
-const HTML_EXTENSIONS = new Set([".html", ".htm"]);
+export const HTML_EXTENSIONS = new Set([".html", ".htm"]);
 
 export interface ExtractTextInput {
   fileName: string;
@@ -88,7 +88,9 @@ export class KnowledgeIngestionService {
       const result = await parser.getText();
       return result.text ?? "";
     } catch (error) {
-      this.logger.warn(`PDF extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      const name = error instanceof Error ? error.name : "Error";
+      this.logger.warn(`PDF extraction failed: [${name}] ${msg.slice(0, 200)}`);
       throw new UnsupportedDocumentError("Could not read this PDF. It may be scanned/image-only or corrupted.");
     } finally {
       await parser?.destroy().catch(() => undefined);
@@ -103,7 +105,9 @@ export class KnowledgeIngestionService {
       const result = await mammoth.extractRawText({ buffer });
       return result.value ?? "";
     } catch (error) {
-      this.logger.warn(`DOCX extraction failed: ${error instanceof Error ? error.message : String(error)}`);
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      const name = error instanceof Error ? error.name : "Error";
+      this.logger.warn(`DOCX extraction failed: [${name}] ${msg.slice(0, 200)}`);
       throw new UnsupportedDocumentError("Could not read this Word document. It may be corrupted.");
     }
   }
