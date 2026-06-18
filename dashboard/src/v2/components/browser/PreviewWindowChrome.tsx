@@ -132,22 +132,25 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                title="Close window"
                 onClick={() => setWindowState("closed")}
-              className="group flex h-3 w-3 items-center justify-center rounded-full bg-status-red/80 hover:bg-status-red"
+              className="group flex h-3 w-3 items-center justify-center rounded-full bg-status-red/80 transition hover:bg-status-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/50"
             >
               <X className="h-2 w-2 text-red-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
             </button>
             <button
               type="button"
+              title="Minimize window"
               onClick={() => setWindowState("minimized")}
-              className="group flex h-3 w-3 items-center justify-center rounded-full bg-amber-400/80 hover:bg-amber-400"
+              className="group flex h-3 w-3 items-center justify-center rounded-full bg-amber-400/80 transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50"
             >
               <Minus className="h-2 w-2 text-amber-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
             </button>
             <button
               type="button"
+              title={isFullscreen ? "Restore window" : "Maximize window"}
               onClick={() => setWindowState(isFullscreen ? "normal" : "fullscreen")}
-              className="group flex h-3 w-3 items-center justify-center rounded-full bg-signal-500/90 hover:bg-signal-500"
+              className="group flex h-3 w-3 items-center justify-center rounded-full bg-signal-500/90 transition hover:bg-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
             >
               {isFullscreen ? (
                 <Minimize2 className="h-2 w-2 text-green-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />

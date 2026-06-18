@@ -183,6 +183,7 @@ export const BrowserPage: FunctionComponent = () => {
       setLogs("");
       return;
     }
+    setLogs("Loading logs...");
     let cancelled = false;
     const deferredFetch = window.setTimeout(() => {
       void fetchPreviewLogs(visibleSelectedSession.id, 160)
@@ -478,15 +479,27 @@ export const BrowserPage: FunctionComponent = () => {
           onAddressSubmit={(_value) => navigate()}
           navigationEnabled={navigationEnabled}
         >
-          {visibleSelectedSession && frameSrc && (
-            <iframe
-              key={visibleSelectedSession.id}
-              ref={frameRef}
-              title={`Sprint preview ${visibleSelectedSession.sprintName}`}
-              src={frameSrc}
-              className="h-full w-full border-0 bg-white"
-            />
-          )}
+          {visibleSelectedSession && frameSrc ? (
+            <div className="relative h-full w-full">
+              {!navigationEnabled && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/50 backdrop-blur-sm dark:bg-void-950/50">
+                  <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/90 px-6 py-4 shadow-sm dark:bg-void-900/90">
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-signal-500 border-t-transparent" />
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      {visibleSelectedSession.status === "starting" ? "Container starting..." : "Waiting for connection..."}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <iframe
+                key={visibleSelectedSession.id}
+                ref={frameRef}
+                title={`Sprint preview ${visibleSelectedSession.sprintName}`}
+                src={frameSrc}
+                className="h-full w-full border-0 bg-white"
+              />
+            </div>
+          ) : null}
         </PreviewWindowChrome>
 
         <div className="space-y-5">
