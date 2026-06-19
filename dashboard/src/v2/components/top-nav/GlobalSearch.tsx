@@ -8,6 +8,7 @@ import { usePreviewSessions } from "../../hooks/use-preview-sessions.js";
 import type { SprintPreviewSession } from "../../../types.js";
 import type { Task, Source, Sprint, AgentPreset } from "../../types.js";
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
+import { GSAP_INTERACTION_TOKENS, useGsapDurations } from "../../lib/motion/constants.js";
 
 interface GlobalSearchProps {
     projectId: string | null;
@@ -24,6 +25,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
     const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
 
+    const durations = useGsapDurations();
     const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null);
     const { sessions } = usePreviewSessions({ projectId: isSearchOpen ? projectId : null, pollInterval: 0 });
 
@@ -59,8 +61,8 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
         if (!searchBarContainerRef.current) return;
         gsap.to(searchBarContainerRef.current, {
             scaleX: 1.05,
-            duration: 0.35,
-            ease: "expo.out",
+            duration: durations.base,
+            ease: GSAP_INTERACTION_TOKENS.controlFeedback.ease,
             boxShadow: "0 0 0 2px rgba(0,224,160,0.3)",
             overwrite: "auto"
         });
@@ -70,8 +72,8 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
         if (!searchBarContainerRef.current || isSearchOpen) return;
         gsap.to(searchBarContainerRef.current, {
             scaleX: 1,
-            duration: 0.35,
-            ease: "expo.out",
+            duration: durations.base,
+            ease: GSAP_INTERACTION_TOKENS.controlFeedback.ease,
             boxShadow: "0 0 0 0px rgba(0,224,160,0)",
             overwrite: "auto"
         });

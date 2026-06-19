@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import gsap from "gsap";
 import { Search, X, Layers, Activity, Cpu, Box, ArrowRight, Inbox, Loader2 } from "lucide-preact";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, Link } from "@tanstack/react-router";
 import { SearchResultRow } from "./SearchResultRow";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
@@ -177,6 +177,12 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
             if (e.key === 'Escape') {
                 e.preventDefault();
                 onClose();
+            } else if (e.key === 'Home') {
+                e.preventDefault();
+                setFocusedIndex(0);
+            } else if (e.key === 'End') {
+                e.preventDefault();
+                setFocusedIndex((allItems?.length || 0) - 1);
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 setFocusedIndex(prev => (prev < (allItems?.length || 0) - 1 ? prev + 1 : 0));
@@ -200,7 +206,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
     const activeItemRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
         if (activeItemRef.current) {
-            activeItemRef.current.scrollIntoView({ block: 'nearest' });
+            if (typeof activeItemRef.current.scrollIntoView === 'function') activeItemRef.current.scrollIntoView({ block: 'nearest' });
         }
     }, [focusedIndex]);
 
@@ -245,14 +251,15 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                     />
                     <button
                         onClick={onClose}
-                        className="p-2 ml-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
+                        aria-label="Close search"
+                        className="p-2 ml-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors cursor-pointer"
                     >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 <div className="sr-only" role="status" aria-live="polite">
-                    {searchQuery.length === 0 ? '' : isLoading ? 'Searching...' : allItems.length === 0 ? `No results found for '${searchQuery}'` : `${allItems.length} results available`}
+                    {searchQuery.length === 0 ? '' : isLoading ? '' : allItems.length === 0 ? `No results found for '${searchQuery}'` : `${allItems.length} results available`}
                 </div>
 
                 {/* Results Area */}
@@ -263,53 +270,43 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                 Quick navigation
                             </h3>
                             <div className="flex flex-wrap gap-2 px-3 pb-4">
-                                <a
-                                    href="/sprints"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        onClose();
-                                        navigate({ to: '/sprints' });
-                                    }}
+                                <Link
+                                    to="/sprints"
+                                    onClick={onClose}
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
                                 >
                                     <Layers className="w-4 h-4" />
                                     Sprints
-                                </a>
-                                <a
-                                    href="/tasks"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        onClose();
-                                        navigate({ to: '/tasks' });
-                                    }}
+                                </Link>
+                                <Link
+                                    to="/tasks"
+                                    onClick={onClose}
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
                                 >
                                     <Activity className="w-4 h-4" />
                                     Tasks
-                                </a>
-                                <a
-                                    href="/agents"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        onClose();
-                                        navigate({ to: '/agents' });
-                                    }}
+                                </Link>
+                                <Link
+                                    to="/agents"
+                                    onClick={onClose}
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 transition-colors"
                                 >
                                     <Cpu className="w-4 h-4" />
                                     Agents
-                                </a>
+                                </Link>
                             </div>
                         </div>
                     ) : isLoading ? (
                         <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
                             <Loader2 className="w-8 h-8 mb-4 animate-spin opacity-50" />
-                            <span className="text-sm">Searching...</span>
+                            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Searching...</span>
+                            <span className="text-xs mt-1 text-slate-500 dark:text-slate-400">Looking through tasks, sprints, and agents</span>
                         </div>
                     ) : allItems.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
                             <Inbox className="w-8 h-8 mb-4 opacity-50" />
-                            <span className="text-sm">No results found for '{searchQuery}'</span>
+                            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">No results found for '{searchQuery}'</span>
+                            <span className="text-xs mt-1 text-slate-500 dark:text-slate-400">Try adjusting your search terms or checking for typos.</span>
                         </div>
                     ) : (
                         <div id="search-results-list" role="listbox" className="grid grid-cols-1 md:grid-cols-2 gap-4 p-2">
