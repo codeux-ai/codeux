@@ -110,6 +110,25 @@ export function queryRunningRetryExecutionInvocations(db: Database): ExecutionIn
   return rows.map(mapExecutionInvocationRow);
 }
 
+export function queryActiveExecutionInvocationsByTypes(
+  db: Database,
+  types: string[],
+): ExecutionInvocationRecord[] {
+  if (types.length === 0) {
+    return [];
+  }
+
+  const rows = db.prepare(`
+    SELECT${INVOCATION_SELECT}
+    FROM execution_invocations${INVOCATION_JOINS}
+    WHERE execution_invocations.status IN ('running', 'paused')
+      AND execution_invocations.type IN (${types.map(() => "?").join(", ")})
+    ORDER BY execution_invocations.started_at DESC, execution_invocations.rowid DESC
+  `).all(...types) as ExecutionInvocationRow[];
+
+  return rows.map(mapExecutionInvocationRow);
+}
+
 export function queryProjectInvocations(
   db: import("../db/database-adapter.js").DatabaseAdapter,
   params: import("../../contracts/invocation-types.js").ProjectInvocationsQuery & { projectId: string }

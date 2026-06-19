@@ -10,6 +10,7 @@ import {
   queryExecutionInvocationMessages,
   queryExecutionInvocationsByProviderInvocationId,
   queryRunningRetryExecutionInvocations,
+  queryActiveExecutionInvocationsByTypes,
 } from "./execution/execution-invocations-query.js";
 import { randomUUID } from "crypto";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
@@ -455,6 +456,10 @@ export class ExecutionRepository {
 
   listRunningRetryExecutionInvocations(): ExecutionInvocationRecord[] {
     return queryRunningRetryExecutionInvocations(this.db);
+  }
+
+  listActiveExecutionInvocationsByTypes(types: string[]): ExecutionInvocationRecord[] {
+    return queryActiveExecutionInvocationsByTypes(this.db, types);
   }
 
   listExecutionInvocationMessages(invocationId: string): ExecutionInvocationMessageRecord[] {
@@ -1117,6 +1122,22 @@ export class ExecutionRepository {
       LIMIT 1
     `).get(normalizedSessionId) as TaskRunRow | undefined;
     return row ? this.mapTaskRunRow(row) : null;
+  }
+
+  listTaskRunsByStates(states: TaskRunRecord["state"][]): TaskRunRecord[] {
+    const normalizedStates = Array.from(new Set(states.map((state) => String(state || "").trim()).filter(Boolean)));
+    if (normalizedStates.length === 0) {
+      return [];
+    }
+
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM task_runs
+      WHERE state IN (${normalizedStates.map(() => "?").join(", ")})
+      ORDER BY started_at DESC, rowid DESC
+    `).all(...normalizedStates) as unknown as TaskRunRow[];
+
+    return rows.map((row) => this.mapTaskRunRow(row));
   }
 
   isSessionTerminal(sessionName: string): boolean {

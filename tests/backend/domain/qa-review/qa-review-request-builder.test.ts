@@ -116,6 +116,23 @@ describe("qa-review-request-builder", () => {
       expect(result?.runPayload.runIndex).toBe(1);
     });
 
+    it("builds a request when agentPresetId is null, falling back to the default QA agent", async () => {
+      // Regression guard: a null taskCompletion.agentPresetId is the default case.
+      // The builder must NOT bail — resolveAgent supplies the project's default QA
+      // agent. An early return here silently skips QA and blocks every merge.
+      mockSettings.agents.qualityAssurance.taskCompletion.agentPresetId = null;
+      const taskWithPr = { ...defaultTask, pr_url: "http://github.com/pr/1" };
+
+      const result = await buildQaReviewRequest({
+        task: taskWithPr, taskRun: null, project: defaultProject, sprint: defaultSprint, sprintRunId: null, settings: mockSettings, budgetArgs: defaultBudgetArgs, resolveAgent
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.triggerType).toBe("task_completion");
+      expect(resolveAgent).toHaveBeenCalledWith("proj-1", null);
+      expect(result?.agentPresetId).toBe("agent-1"); // resolved default agent id
+    });
+
     it("computes default feature branch if sprint featureBranch is missing", async () => {
       const sprintWithoutBranch = { ...defaultSprint, featureBranch: "" };
       mockSettings.git.featureBranchPrefix = "my-feat/";

@@ -27,6 +27,7 @@ import { ProjectManagementRepository } from "../repositories/project-management-
 import { ProjectRuntimeRepository } from "../repositories/project-runtime-repository.js";
 import { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
+import { QaReviewRepository } from "../repositories/qa-review-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
 import { GitStatusService, type GitTrackingRequest } from "../services/git-status-service.js";
 import { defaultRunner } from "../infrastructure/git/git-status-query-client.js";
@@ -131,6 +132,7 @@ export class CodeUxServer {
   private projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
   private projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   private projectAttentionRepository: ProjectAttentionRepository;
+  private qaReviewRepository: QaReviewRepository;
   private agentPresetRepository: AgentPresetRepository;
   private dockerService: DockerService;
   private managementToolHandler: import("../mcp/management-tool-handler.js").ManagementToolHandler;
@@ -196,6 +198,7 @@ export class CodeUxServer {
     this.projectWorkerAssignmentRepository = deps.projectWorkerAssignmentRepository;
     this.projectWorkerAssignmentService = deps.projectWorkerAssignmentService;
     this.projectAttentionRepository = deps.projectAttentionRepository;
+    this.qaReviewRepository = deps.qaReviewRepository;
     this.agentPresetRepository = deps.agentPresetRepository;
     this.agentPresetSyncService = deps.agentPresetSyncService;
     this.executionRepository = deps.executionRepository;
@@ -223,6 +226,7 @@ export class CodeUxServer {
     this.runtimeStartupRecoveryService = new RuntimeStartupRecoveryService({
       sessionTracking: this.sessionTracking,
       executionRepository: this.executionRepository,
+      qaReviewRepository: this.qaReviewRepository,
       projectManagementRepository: this.projectManagementRepository,
       sprintOrchestrator: this.sprintOrchestrator,
       dockerService: this.dockerService,

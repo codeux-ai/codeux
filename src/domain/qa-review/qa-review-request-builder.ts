@@ -14,7 +14,7 @@ export interface QaReviewRequestBuilderArgs {
   sprintRunId: string | null;
   settings: DashboardSettings;
   budgetArgs: Omit<QaReviewBudgetArgs, "maxTaskReviewRuns">;
-  resolveAgent: (projectId: string, agentPresetId: string) => Promise<AgentPreset>;
+  resolveAgent: (projectId: string, agentPresetId: string | null) => Promise<AgentPreset>;
 }
 
 export interface BuiltQaReviewRequest {
@@ -69,13 +69,14 @@ export async function buildQaReviewRequest(args: QaReviewRequestBuilderArgs): Pr
   const sprintFeatureBranch = sprint.featureBranch?.trim()
     || `${settings.git.featureBranchPrefix || "feature/"}sprint-${sprint.number ?? 0}`;
 
+  // A null agentPresetId is the common/default case: the project hasn't pinned a
+  // specific QA preset, so resolveAgent falls back to the project's default QA
+  // agent. Do NOT bail here — an early `return null` silently skips QA entirely
+  // for every QA-enabled project that uses the default agent, stranding tasks at
+  // CODING_COMPLETED/QA_PENDING and blocking all merges.
   const agentPresetId = triggerType === "completed_task_without_pr"
     ? qaSettings.completedTaskWithoutPr.agentPresetId
     : qaSettings.taskCompletion.agentPresetId;
-
-  if (!agentPresetId) {
-    return null;
-  }
 
   const agent = await resolveAgent(project.id, agentPresetId);
 

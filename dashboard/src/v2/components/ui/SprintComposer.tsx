@@ -275,9 +275,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       activeRequestRef.current.detached = true;
       ignoredRequestIdsRef.current.add(activeRequestRef.current.id);
     }
-    if (abortRef.current) {
-      abortRef.current = null;
-    }
+    activeRequestRef.current = null;
+    abortRef.current = null;
     setIsImproving(false);
     setIsSubmitting(false);
     setIsOverlayDismissed(true);
@@ -372,6 +371,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         linkedIssues: visibleLinkedIssues,
         clientRequestId,
         sprintKeyOverride: state.sprintKeyOverride.trim() || undefined,
+        signal: controller.signal,
       });
       const activeRequest = activeRequestRef.current;
       if (!isUnmountedRef.current && activeRequest?.id === clientRequestId && !activeRequest.detached && !activeRequest.cancelled) {

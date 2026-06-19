@@ -321,6 +321,7 @@ describe("SprintComposer", () => {
     });
 
     expect(mockOnSubmit).toHaveBeenCalled();
+    expect(mockOnSubmit.mock.calls[0]?.[0]?.signal).toBeInstanceOf(AbortSignal);
 
     // Click New Sprint
     const newSprintBtn = getByText("New Sprint");
@@ -329,6 +330,11 @@ describe("SprintComposer", () => {
     expect(mockOnStartNewSprint).toHaveBeenCalled();
     expect(mockOnCancelPlanningRequest).not.toHaveBeenCalled();
     expect((nameInput as HTMLInputElement).value).toBe("");
+    fireEvent.input(nameInput, { target: { value: "Follow-up Sprint" } });
+    const secondSubmitBtn = getAllByText("Plan & Start").pop()!;
+    expect(secondSubmitBtn).not.toBeDisabled();
+    fireEvent.click(secondSubmitBtn);
+    expect(mockOnSubmit).toHaveBeenCalledTimes(2);
 
     // Resolve the promise to cleanup
     resolveSubmit!(undefined);

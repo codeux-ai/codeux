@@ -32,7 +32,10 @@ export class ProviderConcurrencyService {
    * @param signal Optional AbortSignal to cancel waiting
    */
   async waitForSlot(provider: ProviderId, limit: number, signal?: AbortSignal, maxWaitMs?: number): Promise<void> {
-    if (limit <= 0) return;
+    if (limit <= 0) {
+      await this.reconcileStaleProviderInvocations(provider);
+      return;
+    }
 
     const startMs = Date.now();
     let lastLogMs = 0;
@@ -46,7 +49,7 @@ export class ProviderConcurrencyService {
         throw new Error(`Provider concurrency wait timed out after ${maxWaitMs}ms`);
       }
 
-      await this.reconcileStaleDockerProviderInvocations(provider);
+      await this.reconcileStaleProviderInvocations(provider);
 
       // Count running invocations across ALL projects in the repository
       const runningInvocations = this.deps.executionRepository.listRunningProviderInvocationUsages([provider]);
@@ -88,6 +91,7 @@ export class ProviderConcurrencyService {
     maxWaitMs?: number
   ): Promise<ProviderInvocationUsageRecord> {
     if (limit <= 0) {
+      await this.reconcileStaleProviderInvocations(provider);
       return this.deps.executionRepository.createProviderInvocationUsage(input);
     }
 
@@ -103,7 +107,7 @@ export class ProviderConcurrencyService {
         throw new Error(`Provider concurrency wait timed out after ${maxWaitMs}ms`);
       }
 
-      await this.reconcileStaleDockerProviderInvocations(provider);
+      await this.reconcileStaleProviderInvocations(provider);
 
       const invocation = this.deps.executionRepository.tryCreateProviderInvocationUsage(input, limit);
       if (invocation) {
@@ -146,10 +150,12 @@ export class ProviderConcurrencyService {
    * Checks if there is available concurrency capacity for the given provider without claiming a slot.
    */
   async hasAvailableCapacity(provider: ProviderId, limit: number): Promise<boolean> {
-    if (limit <= 0) return true;
+    if (limit <= 0) {
+      await this.reconcileStaleProviderInvocations(provider);
+      return true;
+    }
 
-    await this.reconcileStaleDockerProviderInvocations(provider);
-    this.reconcileStaleJulesProviderInvocations(provider);
+    await this.reconcileStaleProviderInvocations(provider);
 
     const counts = this.getGlobalRunningCounts([provider]);
     const current = counts[provider] || 0;
@@ -162,11 +168,11 @@ export class ProviderConcurrencyService {
     input: CreateProviderInvocationUsageInput,
   ): Promise<ProviderInvocationUsageRecord | null> {
     if (limit <= 0) {
+      await this.reconcileStaleProviderInvocations(provider);
       return this.deps.executionRepository.createProviderInvocationUsage(input);
     }
 
-    await this.reconcileStaleDockerProviderInvocations(provider);
-    this.reconcileStaleJulesProviderInvocations(provider);
+    await this.reconcileStaleProviderInvocations(provider);
 
     return this.deps.executionRepository.tryCreateProviderInvocationUsage(input, limit);
   }
@@ -183,6 +189,11 @@ export class ProviderConcurrencyService {
       }
     }
     return counts;
+  }
+
+  private async reconcileStaleProviderInvocations(provider: ProviderId): Promise<void> {
+    await this.reconcileStaleDockerProviderInvocations(provider);
+    this.reconcileStaleJulesProviderInvocations(provider);
   }
 
   private async reconcileStaleDockerProviderInvocations(provider: ProviderId): Promise<void> {

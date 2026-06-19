@@ -253,6 +253,17 @@ export class QaReviewRepository {
     return rows.map((row) => this.mapRow(row));
   }
 
+  listRunningRuns(): QaReviewRunRecord[] {
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM qa_review_runs
+      WHERE status = 'running'
+      ORDER BY started_at DESC
+    `).all() as unknown as QaReviewRunRow[];
+
+    return rows.map((row) => this.mapRow(row));
+  }
+
   getRun(runId: string): QaReviewRunRecord | null {
     const row = this.db.prepare(`
       SELECT *
