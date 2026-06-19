@@ -36,7 +36,7 @@ export const PillChoiceGroup: FunctionComponent<{
           type="button"
           disabled={disabled}
           onClick={() => onChange(option.value)}
-          className={`group relative min-w-[104px] overflow-hidden rounded-[1rem] border px-4 py-2 text-left transition-[border-color,background-color,color,transform,box-shadow] duration-200 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 disabled:cursor-not-allowed disabled:opacity-50 active:scale-95 ${
+          className={`group relative min-w-[104px] overflow-hidden rounded-[1rem] border px-4 py-2 text-left transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-signal-500 disabled:cursor-not-allowed disabled:opacity-50 motion-safe:active:scale-[0.98] ${
             active
               ? "border-signal-500/30 bg-signal-500/[0.11] text-signal-700 shadow-[0_10px_20px_rgba(0,224,160,0.08)] hover:bg-signal-500/[0.15] dark:border-signal-400/30 dark:bg-signal-400/[0.12] dark:text-signal-200 dark:hover:bg-signal-400/[0.16]"
               : "border-black/[0.06] bg-white/70 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:bg-black/[0.02] hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.08] dark:hover:text-white"
@@ -82,7 +82,7 @@ export const TextInput: FunctionComponent<{
     aria-label={ariaLabel}
     aria-description={ariaDescription}
     onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
-    className={mono ? "font-mono" : "font-sans"}
+    className={`transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] ${mono ? "font-mono" : "font-sans"}`}
   />
 );
 
@@ -101,7 +101,7 @@ export const TextAreaInput: FunctionComponent<{
     aria-label={ariaLabel}
     aria-description={ariaDescription}
     onInput={(event) => onChange((event.currentTarget as HTMLTextAreaElement).value)}
-    className="min-h-[320px] w-full rounded-[1rem] border border-black/[0.06] hover:border-black/[0.12] bg-black/[0.04] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 transition-colors duration-200 focus:border-signal-500/40 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 focus:ring-0 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.04] dark:text-slate-200"
+    className="min-h-[320px] w-full rounded-[1rem] border border-[color:var(--color-border-muted)] hover:border-[color:var(--color-border-muted)] bg-white/80 px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] "
   />
 );
 
@@ -125,7 +125,7 @@ export const NumberInput: FunctionComponent<{
     aria-label={ariaLabel}
     aria-description={ariaDescription}
     onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
-    className="w-32 rounded-[1rem] border border-black/[0.06] hover:border-black/[0.12] bg-white/80 px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200"
+    className="w-32 rounded-[1rem] border border-[color:var(--color-border-muted)] hover:border-[color:var(--color-border-muted)] bg-white/80 px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 aria-[invalid=true]:border-status-red/60 aria-[invalid=true]:bg-status-red/[0.04] aria-[invalid=true]:text-status-red aria-[invalid=true]:shadow-[0_0_0_1px_rgba(211,47,47,0.14)] data-[valid=true]:border-signal-500/50 data-[valid=true]:bg-signal-500/[0.02] data-[valid=true]:shadow-[0_0_0_1px_rgba(0,224,160,0.15)] dark:data-[valid=true]:bg-signal-500/[0.04] "
   />
 );
 

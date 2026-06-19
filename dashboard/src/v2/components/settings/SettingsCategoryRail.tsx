@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { Layers3 } from "lucide-preact";
 import type { Category, CategoryId } from "../../hooks/use-settings-page-state.js";
 import { NoticePanel } from "./SettingsSurface.js";
+import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 
 import { AlertTriangle, Bot, BrainCircuit, Compass, Cpu, Monitor, Plug, Server, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
@@ -70,7 +71,8 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
             key={category.id}
             type="button"
             onClick={() => onSwitchCategory(category.id)}
-            className={`group relative flex w-full items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left transition-colors duration-200 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${isDanger ? "focus-visible:outline-status-red" : "focus-visible:outline-signal-500"} ${
+            aria-current={isActive ? "page" : undefined}
+            className={`group relative flex w-full items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left ${SHARED_INTERACTION_CLASSES} ${isDanger ? "focus-visible:ring-status-red" : ""} ${
               isActive
                 ? isDanger
                   ? "bg-status-red/[0.07] dark:bg-status-red/[0.08]"

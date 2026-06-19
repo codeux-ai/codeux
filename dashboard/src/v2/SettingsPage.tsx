@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { Check, Compass, RefreshCw, Search, Settings, Zap } from "lucide-preact";
 import { ActionButton, NoticePanel } from "./components/settings/SettingsSurface.js";
+import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { useSettingsPageState } from "./hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES, CATEGORY_SEARCH_HINTS } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
@@ -17,6 +18,7 @@ export const SettingsPage: FunctionComponent = () => {
 
   const state = useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS);
   const {
+    clearFeedback,
     activeCategory,
     activeScope,
     setActiveScope,
@@ -269,11 +271,13 @@ export const SettingsPage: FunctionComponent = () => {
             <div className="h-px flex-1 bg-gradient-to-r from-black/[0.06] to-transparent dark:from-white/[0.06]" />
           </div>
 
-          {error ? (
-            <NoticePanel title="Settings error" tone="warning">
-              {error}
-            </NoticePanel>
-          ) : null}
+          <div className="flex flex-col gap-3">
+            <ActionFeedbackRegion
+              status={error ? "error" : saveMessage ? "success" : "idle"}
+              message={error || saveMessage || null}
+              onDismiss={clearFeedback}
+            />
+          </div>
 
           <SettingsContentPanels state={state} />
         </div>

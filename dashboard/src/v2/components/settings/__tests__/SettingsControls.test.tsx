@@ -9,6 +9,58 @@ import { BranchNameSchemeEditor } from "../BranchNameSchemeEditor";
 import { SprintKeyEditor } from "../SprintKeyEditor";
 import { TextInput, NumberInput, TextAreaInput } from "../SettingsFormFields";
 
+
+import { SettingsCategoryRail } from "../SettingsCategoryRail";
+import { ActionButton, NoticePanel } from "../SettingsSurface";
+import { OverrideBadge } from "../panels/SharedPanelComponents";
+import { SlidersHorizontal } from "lucide-preact";
+import userEvent from "@testing-library/user-event";
+
+  it("SettingsCategoryRail renders categories with proper aria-current semantics", () => {
+    const mockCategories = [
+      { id: "general" as const, num: "01", label: "General", icon: SlidersHorizontal, description: "Test" }
+    ];
+    render(
+      <SettingsCategoryRail
+        filteredCategories={mockCategories}
+        activeCategory="general"
+        settingsSearch=""
+        onSwitchCategory={() => {}}
+      />
+    );
+    const btn = screen.getByRole("button", { name: /General/ });
+    expect(btn).toHaveAttribute("aria-current", "page");
+  });
+
+  it("ActionButton provides busy state feedback", () => {
+    render(
+      <ActionButton label="Save" onClick={() => {}} busy={true} />
+    );
+    const btn = screen.getByRole("button", { name: "Save" });
+    expect(btn).toHaveAttribute("aria-busy", "true");
+    expect(btn).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("OverrideBadge handles reset click", async () => {
+    const user = userEvent.setup();
+    let clicked = false;
+    render(
+      <OverrideBadge label="Project override" onReset={() => { clicked = true; }} contextLabel="My Setting" />
+    );
+    const btn = screen.getByRole("button", { name: /Delete project override for My Setting/ });
+    await user.click(btn);
+    expect(clicked).toBe(true);
+  });
+
+
+
+  it("ActionButton renders danger tone", () => {
+    render(<ActionButton label="Wipe" onClick={() => {}} tone="danger" />);
+    const btn = screen.getByRole("button", { name: "Wipe" });
+    expect(btn.className).toContain("status-red");
+  });
+
+
 describe("SettingsControls Accessibility", () => {
   afterEach(() => {
     cleanup();
