@@ -1,4 +1,8 @@
 import { type FunctionComponent } from "preact";
+import { useLayoutEffect, useRef } from "preact/hooks";
+import gsap from "gsap";
+import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import type { ConversationRuntimeState } from "../../types.js";
 import { getWorkingBubbleData } from "../../lib/chat-widget-view-models.js";
 import { PlanningRequestWidget } from "./widgets/PlanningRequestWidget.js";
@@ -12,6 +16,17 @@ export interface WorkingBubbleProps {
 
 export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayName, runtimeState, phase }) => {
   const data = getWorkingBubbleData(runtimeState);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
+
+  useLayoutEffect(() => {
+    if (!bubbleRef.current) return;
+    if (prefersReducedMotion) {
+      gsap.set(bubbleRef.current, { opacity: 1, y: 0 });
+    } else {
+      gsap.fromTo(bubbleRef.current, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000, ease: INTERACTION_TOKENS.enterExit.ease });
+    }
+  }, [prefersReducedMotion]);
 
   let role: AvatarRole = "agent";
   if (runtimeState?.routeKind === "worker" || displayName) {
@@ -21,7 +36,7 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
   }
 
   return (
-    <div className="flex justify-start">
+    <div ref={bubbleRef} className="flex justify-start">
       <div className="flex max-w-[760px] w-full items-start gap-3">
         <div className="mt-1 flex shrink-0 w-8 h-8 items-center justify-center">
           <ChatAvatar role={role} provider={data.providerLabel} agentName={displayName || "Assistant"} />

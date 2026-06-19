@@ -6,7 +6,7 @@ import { ChatAvatar } from "./ChatAvatar.js";
 import { ChatRuntimeBadge } from "./ChatRuntimeBadge.js";
 
 const statusTone = (pendingCount: number): string => (
-  pendingCount > 0 ? "text-status-amber" : "text-slate-400 dark:text-slate-500"
+  pendingCount > 0 ? "text-status-amber animate-pulse" : "text-slate-400 dark:text-slate-500"
 );
 
 const STATUS_PILL: Record<string, { dot: string; text: string; bg: string; border: string }> = {
@@ -47,7 +47,7 @@ export const ThreadListCard: FunctionComponent<{
               shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500
               ${isSelected
-                ? "border-2 border-signal-500/30 shadow-[0_0_24px_rgba(0,224,160,0.08)]"
+                ? "border-2 border-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.12)] transition-all duration-300"
                 : "border-2 border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
               }`}
           >

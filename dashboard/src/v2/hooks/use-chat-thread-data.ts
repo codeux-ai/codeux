@@ -369,6 +369,9 @@ export const useChatThreadData = (options: {
         onMessageSendFailed?.(optimisticInvocationId);
       }
       setError(sendError instanceof Error ? sendError.message : String(sendError));
+      if (composerRef?.current) {
+        composerRef.current.focus();
+      }
     } finally {
       setSending(false);
     }

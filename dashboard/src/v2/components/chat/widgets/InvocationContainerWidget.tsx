@@ -15,7 +15,7 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
   if (containerPhase === "starting") {
     return (
       <div
-        class="flex items-center gap-2.5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
+        class="flex items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
         role="status"
         aria-label="Initializing container"
       >
@@ -33,7 +33,7 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
   if (containerPhase === "working") {
     return (
       <div
-        class="flex items-center gap-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
+        class="flex items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
         role="status"
         aria-label="Container working"
       >
@@ -62,7 +62,7 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
   if (containerPhase === "completed") {
     return (
       <div
-        class="flex items-center gap-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
+        class="flex items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
         role="status"
         aria-label="Container completed"
       >
@@ -86,7 +86,7 @@ export const InvocationContainerWidget: FunctionComponent<InvocationContainerWid
   // failed
   return (
     <div
-      class="flex items-center gap-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
+      class="flex items-center gap-3 rounded-xl transition-all duration-300 bg-black/[0.02] dark:bg-white/[0.02] px-4 py-3"
       role="status"
       aria-label="Container failed"
     >

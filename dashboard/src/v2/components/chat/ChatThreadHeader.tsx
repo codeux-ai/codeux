@@ -91,7 +91,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
             )}
             <div className="inline-flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Worker:</span>
-              <span className="rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300">
+              <span className="rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 transition-colors duration-300">
                 {assignedLabel}
               </span>
             </div>
