@@ -8,13 +8,16 @@ import {
   PREVIEW_REBUILD_PATH,
   PREVIEW_START_PATH,
   PREVIEW_STATUS_PATH,
+  applyPreviewCorsHeaders,
   buildPreviewBridgeScript,
   buildPreviewProxyRequestHeaders,
   buildPreviewStandbyHtml,
   injectPreviewBridgeIntoHtml,
+  mergePreviewCorsHeaders,
   parsePreviewSessionIdFromHost,
   requestBufferedPreviewResponse,
   rewritePreviewLocationHeader,
+  sanitizePreviewDocumentHeaders,
   sendBufferedPreviewResponse,
   shouldAttemptPreviewSpaFallback,
 } from "./preview-host-utils.js";
@@ -27,7 +30,13 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
       next();
       return;
     }
+    applyPreviewCorsHeaders(req, res);
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
+      return;
+    }
     if (req.path === PREVIEW_BRIDGE_PATH) {
+      res.setHeader("Cache-Control", "no-store");
       res.type("application/javascript").send(buildPreviewBridgeScript());
       return;
     }
@@ -136,6 +145,7 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
       const isHtml = contentType.toLowerCase().includes("text/html");
       if (!isHtml) {
         const responseHeaders = { ...proxyResponse.headers };
+        mergePreviewCorsHeaders(req, responseHeaders);
         if (typeof responseHeaders.location === "string") {
           responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, req, session.hostPort!);
         }
@@ -152,9 +162,8 @@ export function createPreviewHostMiddleware(options: DashboardServerOptions): ex
         const body = Buffer.concat(chunks).toString("utf8");
         const injected = injectPreviewBridgeIntoHtml(body);
         const responseHeaders = { ...proxyResponse.headers };
-        delete responseHeaders["content-length"];
-        delete responseHeaders["content-security-policy"];
-        delete responseHeaders["content-security-policy-report-only"];
+        sanitizePreviewDocumentHeaders(responseHeaders);
+        mergePreviewCorsHeaders(req, responseHeaders);
         if (typeof responseHeaders.location === "string") {
           responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, req, session.hostPort!);
         }
