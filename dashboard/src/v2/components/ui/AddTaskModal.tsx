@@ -101,6 +101,12 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     event.preventDefault();
     if (Object.keys(validationErrors).length > 0) {
       setTouched({ sprintId: true, title: true });
+      setTimeout(() => {
+        const firstInvalid = fieldsRef.current?.querySelector('[aria-invalid="true"]');
+        if (firstInvalid instanceof HTMLElement) {
+          firstInvalid.focus();
+        }
+      }, 0);
       return;
     }
 
@@ -124,7 +130,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     } catch (err) {
       setIsSubmitting(false);
       const msg = err instanceof Error ? err.message : String(err);
-      setError(msg, { autoDismiss: false });
+      setError(msg, { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry", autoDismiss: false });
     }
   };
 
@@ -188,7 +194,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
           </div>
 
           <form ref={fieldsRef} onSubmit={handleSubmit} className="flex flex-col gap-6">
-            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} autoDismiss={feedback.autoDismiss} />
+            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="group/field">
                 <label htmlFor="add-task-sprint" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint</label>
@@ -199,7 +205,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     setSprintId((event.target as HTMLSelectElement).value);
                     if (feedback.status === "error") clearFeedback();
                   }}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500" aria-invalid={!!validationErrors.sprintId && touched.sprintId}
+                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500" aria-invalid={!!validationErrors.sprintId && touched.sprintId ? "true" : "false"}
                   aria-describedby={validationErrors.sprintId && touched.sprintId ? "task-sprint-error" : undefined}
                   onBlur={() => setTouched(prev => ({ ...prev, sprintId: true }))}
                   required
@@ -218,7 +224,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   id="add-task-title"
                   type="text"
                   value={title}
-                  aria-invalid={!!validationErrors.title && touched.title}
+                  aria-invalid={!!validationErrors.title && touched.title ? "true" : "false"}
                   aria-describedby={validationErrors.title && touched.title ? "task-title-error" : undefined}
                   onInput={(event) => {
                     setTitle((event.target as HTMLInputElement).value);
@@ -355,7 +361,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                         key={task.recordId}
                         type="button"
                         onClick={() => toggleDependency(task.recordId)}
-                        aria-pressed={active}
+                        aria-pressed={active ? "true" : "false"}
                         className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                           active
                             ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
