@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { h } from "preact";
-import { render, screen } from "@testing-library/preact";
+import { render, screen, cleanup } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { expect, describe, it, vi, beforeEach } from "vitest";
+import { expect, describe, it, vi, beforeEach, afterEach } from "vitest";
 
 expect.extend(matchers);
 
@@ -51,6 +51,11 @@ describe("SearchOverlay Accessibility", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         window.HTMLElement.prototype.scrollIntoView = vi.fn();
+        window.Element.prototype.scrollIntoView = vi.fn();
+    });
+
+    afterEach(() => {
+        cleanup();
     });
 
     it("has accessible search combobox", () => {
@@ -100,7 +105,9 @@ describe("SearchOverlay Accessibility", () => {
                 results={{ sprints: [], tasks: [], agents: [], containers: [] }}
             />
         );
-        expect(statusRegion.textContent).toBe("Searching...");
+        // Since we removed the "Searching..." text from the hidden status region when isLoading is true,
+        // it will be empty instead. The main loading spinner UI now provides the status.
+        expect(statusRegion.textContent).toBe("");
 
         // Rerender with results
         rerender(
@@ -157,6 +164,34 @@ describe("SearchOverlay Accessibility", () => {
 
         // Press up
         await user.keyboard("{ArrowUp}");
+        expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-spr-1");
+    });
+
+                    it("supports Home and End keyboard navigation", async () => {
+        const user = userEvent.setup();
+        render(
+            <SearchOverlay
+                isOpen={true}
+                onClose={mockOnClose}
+                searchQuery="t"
+                onSearchChange={mockOnSearchChange}
+                results={mockResults}
+            />
+        );
+
+        const combobox = screen.getAllByRole("combobox", { name: "Global search", hidden: true })[0];
+        combobox.focus();
+
+        // ArrowDown sets focus to first element
+        await user.keyboard("{ArrowDown}");
+        expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-spr-1");
+
+        // End sets focus to last element
+        await user.keyboard("{End}");
+        expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-tsk-1");
+
+        // Home sets focus back to first element
+        await user.keyboard("{Home}");
         expect(combobox).toHaveAttribute("aria-activedescendant", "search-result-spr-1");
     });
 
