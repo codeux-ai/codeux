@@ -107,6 +107,10 @@ The dashboard injects a small preview bridge script into proxied HTML responses.
 
 Host-based preview routing also proxies websocket upgrades so preview apps that derive websocket URLs from `window.location` continue to work on their own preview origin.
 
+Preview host responses intentionally skip the dashboard origin's frame and permissions hardening headers. For proxied HTML documents, Code UX also strips upstream `Content-Security-Policy`, `Content-Security-Policy-Report-Only`, and `X-Frame-Options` headers before injecting the preview bridge. This keeps locally trusted sprint previews embeddable in the in-app iframe even when the previewed app ships production headers such as `frame-ancestors 'none'` or `X-Frame-Options: DENY`.
+
+Preview hosts also apply permissive CORS at the Code UX proxy boundary. `OPTIONS` preflight requests are answered before they reach the container, proxied responses override upstream `Access-Control-*` headers, and proxied browser requests normalize `Origin`, same-preview `Referer`, and `Sec-Fetch-Site` to the loopback upstream origin before entering the container. The injected preview bridge loads before app head scripts so it can rewrite same-dashboard and any-port loopback `fetch` / `XMLHttpRequest` calls back onto the preview origin. Together, these rules prevent previewed apps from accidentally hitting the dashboard API origin or rejecting their own preview-origin requests as cross-site while they are running inside the in-app browser.
+
 ## Automation
 
 `SprintPreviewService.reconcileSessions()` runs on a background interval from `CodeUxServer`.

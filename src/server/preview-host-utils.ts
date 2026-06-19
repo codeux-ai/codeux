@@ -86,13 +86,41 @@ export function buildPreviewProxyRequestHeaders(
       delete headers[key];
     }
   }
-  headers["x-forwarded-host"] = String(req.headers.host || "");
+  const upstreamOrigin = `http://127.0.0.1:${upstreamPort}`;
+  const previewHost = String(req.headers.host || "");
+  const previewOrigin = `${req.protocol || "http"}://${previewHost}`;
+  headers["x-forwarded-host"] = previewHost;
   headers.host = `127.0.0.1:${upstreamPort}`;
   headers["x-forwarded-proto"] = req.protocol || "http";
+  normalizePreviewRequestOriginHeaders(headers, upstreamOrigin, previewOrigin);
   if (req.socket.localPort) {
     headers["x-forwarded-port"] = String(req.socket.localPort);
   }
   return headers;
+}
+
+function normalizePreviewRequestOriginHeaders(
+  headers: Record<string, string | string[] | undefined>,
+  upstreamOrigin: string,
+  previewOrigin: string,
+): void {
+  for (const key of Object.keys(headers)) {
+    const lower = key.toLowerCase();
+    if (lower === "origin") {
+      headers[key] = upstreamOrigin;
+      continue;
+    }
+    if (lower === "referer") {
+      const value = Array.isArray(headers[key]) ? headers[key][0] : headers[key];
+      if (typeof value === "string" && value.startsWith(previewOrigin)) {
+        headers[key] = `${upstreamOrigin}${value.slice(previewOrigin.length)}`;
+      }
+      continue;
+    }
+    if (lower === "sec-fetch-site") {
+      headers[key] = "same-origin";
+    }
+  }
 }
 
 export async function requestBufferedPreviewResponse(args: {
@@ -148,6 +176,7 @@ export function sendBufferedPreviewResponse(args: {
   if (typeof responseHeaders.location === "string") {
     responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, args.req, args.upstreamPort);
   }
+  mergePreviewCorsHeaders(args.req, responseHeaders);
 
   if (!isHtml) {
     args.res.writeHead(args.response.statusCode, responseHeaders);
@@ -155,16 +184,153 @@ export function sendBufferedPreviewResponse(args: {
     return;
   }
 
-  delete responseHeaders["content-length"];
-  delete responseHeaders["content-security-policy"];
-  delete responseHeaders["content-security-policy-report-only"];
+  sanitizePreviewDocumentHeaders(responseHeaders);
   args.res.writeHead(args.response.statusCode, responseHeaders);
   args.res.end(injectPreviewBridgeIntoHtml(args.response.body.toString("utf8")));
+}
+
+export function sanitizePreviewDocumentHeaders(headers: Record<string, string | string[] | undefined>): void {
+  removeHeaderCaseInsensitive(headers, "content-length");
+  removeHeaderCaseInsensitive(headers, "content-security-policy");
+  removeHeaderCaseInsensitive(headers, "content-security-policy-report-only");
+  removeHeaderCaseInsensitive(headers, "x-frame-options");
+}
+
+function removeHeaderCaseInsensitive(headers: Record<string, string | string[] | undefined>, headerName: string): void {
+  const normalized = headerName.toLowerCase();
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === normalized) {
+      delete headers[key];
+    }
+  }
+}
+
+export function applyPreviewCorsHeaders(req: express.Request, res: express.Response): void {
+  for (const [key, value] of Object.entries(buildPreviewCorsHeaders(req))) {
+    res.setHeader(key, value);
+  }
+}
+
+export function mergePreviewCorsHeaders(
+  req: express.Request,
+  headers: Record<string, string | string[] | undefined>,
+): void {
+  const existingVary = getHeaderValuesCaseInsensitive(headers, "vary");
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase().startsWith("access-control-")) {
+      delete headers[key];
+    }
+  }
+  removeHeaderCaseInsensitive(headers, "vary");
+  Object.assign(headers, buildPreviewCorsHeaders(req, existingVary));
+}
+
+function getHeaderValuesCaseInsensitive(
+  headers: Record<string, string | string[] | undefined>,
+  headerName: string,
+): string[] {
+  const normalized = headerName.toLowerCase();
+  const values: string[] = [];
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() !== normalized || value === undefined) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      values.push(...value);
+    } else {
+      values.push(value);
+    }
+  }
+  return values;
+}
+
+function buildPreviewCorsHeaders(
+  req: express.Request,
+  existingVary?: string | string[],
+): Record<string, string> {
+  const origin = typeof req.headers.origin === "string" && req.headers.origin.trim()
+    ? req.headers.origin.trim()
+    : "*";
+  const requestedHeaders = typeof req.headers["access-control-request-headers"] === "string"
+    ? req.headers["access-control-request-headers"]
+    : "Authorization, Content-Type, X-Requested-With";
+
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": requestedHeaders,
+    "Access-Control-Max-Age": "86400",
+    "Vary": appendVaryHeader(existingVary, "Origin"),
+  };
+
+  if (origin !== "*") {
+    headers["Access-Control-Allow-Credentials"] = "true";
+  }
+
+  return headers;
+}
+
+function appendVaryHeader(existingVary: string | string[] | undefined, value: string): string {
+  const values = new Set<string>();
+  const add = (item: string) => {
+    for (const part of item.split(",")) {
+      const trimmed = part.trim();
+      if (trimmed) {
+        values.add(trimmed);
+      }
+    }
+  };
+
+  if (Array.isArray(existingVary)) {
+    for (const item of existingVary) {
+      add(item);
+    }
+  } else if (existingVary) {
+    add(existingVary);
+  }
+  values.add(value);
+
+  return Array.from(values).join(", ");
 }
 
 export function buildPreviewBridgeScript(): string {
   return [
     "(() => {",
+    "  const rewriteCodeUxPreviewUrl = (value) => {",
+    "    try {",
+    "      const url = new URL(String(value), window.location.href);",
+    "      const firstDot = window.location.hostname.indexOf('.');",
+    "      if (!window.location.hostname.startsWith('preview-') || firstDot === -1) return null;",
+    "      const dashboardHost = window.location.hostname.slice(firstDot + 1);",
+    "      const isLoopback = (host) => host === 'localhost' || host === '127.0.0.1' || host === '[::1]';",
+    "      const isSameDashboardHost = url.hostname === dashboardHost;",
+    "      const isPreviewLoopbackTarget = isLoopback(url.hostname) || (isLoopback(dashboardHost) && url.hostname === dashboardHost);",
+    "      if (url.protocol !== window.location.protocol || (!isSameDashboardHost && !isPreviewLoopbackTarget)) return null;",
+    "      return `${window.location.origin}${url.pathname}${url.search}${url.hash}`;",
+    "    } catch {",
+    "      return null;",
+    "    }",
+    "  };",
+    "  const rewriteRequestInput = (input) => {",
+    "    if (typeof Request !== 'undefined' && input instanceof Request) {",
+    "      const rewrittenUrl = rewriteCodeUxPreviewUrl(input.url);",
+    "      return rewrittenUrl ? new Request(rewrittenUrl, input) : input;",
+    "    }",
+    "    const rewrittenUrl = rewriteCodeUxPreviewUrl(input);",
+    "    return rewrittenUrl || input;",
+    "  };",
+    "  const originalFetch = window.fetch;",
+    "  if (typeof originalFetch === 'function') {",
+    "    window.fetch = function (input, init) {",
+    "      return originalFetch.call(this, rewriteRequestInput(input), init);",
+    "    };",
+    "  }",
+    "  const originalOpen = window.XMLHttpRequest?.prototype?.open;",
+    "  if (typeof originalOpen === 'function') {",
+    "    window.XMLHttpRequest.prototype.open = function (method, url, ...rest) {",
+    "      return originalOpen.call(this, method, rewriteCodeUxPreviewUrl(url) || url, ...rest);",
+    "    };",
+    "  }",
     "  const sendState = () => {",
     "    try {",
     "      window.parent?.postMessage({",
@@ -462,11 +628,14 @@ export function injectPreviewBridgeIntoHtml(html: string): string {
   if (html.includes(PREVIEW_BRIDGE_PATH)) {
     return html;
   }
-  if (html.includes("</head>")) {
-    return html.replace("</head>", `  ${tag}\n</head>`);
+  if (/<head(?:\s[^>]*)?>/i.test(html)) {
+    return html.replace(/<head(?:\s[^>]*)?>/i, (headTag) => `${headTag}\n  ${tag}`);
   }
-  if (html.includes("</body>")) {
-    return html.replace("</body>", `  ${tag}\n</body>`);
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `  ${tag}\n</head>`);
+  }
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `  ${tag}\n</body>`);
   }
   return `${html}\n${tag}\n`;
 }

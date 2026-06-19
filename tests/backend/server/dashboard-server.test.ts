@@ -844,14 +844,33 @@ describe("setupDashboardServer", () => {
 
   it("routes preview hosts to the matching preview session and injects the browser bridge", async () => {
     const upstream = express();
+    upstream.post("/api/guard", (req, res) => {
+      const origin = String(req.headers.origin || "");
+      if (origin && new URL(origin).host !== req.headers.host) {
+        res.status(403).json({ error: "Forbidden: Cross-site requests are not allowed." });
+        return;
+      }
+      res.json({ ok: true, origin, host: req.headers.host });
+    });
     upstream.use("/assets", (req, res) => {
-      res.type("application/javascript").send("console.log('asset');");
+      res
+        .set("Access-Control-Allow-Origin", "https://blocked.example")
+        .type("application/javascript")
+        .send("console.log('asset');");
     });
     upstream.use("/deep/link", (req, res) => {
-      res.type("html").send("<!doctype html><html><head><title>Deep</title></head><body>Deep Link</body></html>");
+      res
+        .set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'")
+        .set("X-Frame-Options", "DENY")
+        .type("html")
+        .send("<!doctype html><html><head><title>Deep</title></head><body>Deep Link</body></html>");
     });
     upstream.use((req, res) => {
-      res.type("html").send("<!doctype html><html><head><title>Preview</title></head><body><div id='app'>ok</div></body></html>");
+      res
+        .set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'")
+        .set("X-Frame-Options", "DENY")
+        .type("html")
+        .send("<!doctype html><html><head><title>Preview</title></head><body><div id='app'>ok</div></body></html>");
     });
     const upstreamServer = await new Promise<Server>((resolve) => {
       const server = upstream.listen(0, "127.0.0.1", () => resolve(server));
@@ -963,6 +982,7 @@ describe("setupDashboardServer", () => {
     // so the dashboard's X-Frame-Options/Permissions-Policy hardening must NOT be stamped
     // onto proxied preview responses or the browser refuses to frame them.
     expect(previewResponse.headers["x-frame-options"]).toBeUndefined();
+    expect(previewResponse.headers["content-security-policy"]).toBeUndefined();
     expect(previewResponse.headers["permissions-policy"]).toBeUndefined();
 
     const bridgeResponse = await makeHostRequest({
@@ -972,6 +992,7 @@ describe("setupDashboardServer", () => {
     });
     expect(bridgeResponse.statusCode).toBe(200);
     expect(bridgeResponse.body).toContain("sprint-preview:state");
+    expect(bridgeResponse.headers["cache-control"]).toBe("no-store");
 
     const hostedPreviewResponse = await makeHostRequest({
       port: handle.port,
@@ -993,9 +1014,43 @@ describe("setupDashboardServer", () => {
       port: handle.port,
       host: `preview-test-session.localhost:${handle.port}`,
       path: "/assets/app.js",
+      headers: {
+        Origin: "http://preview-test-session.localhost:4444",
+      },
     });
     expect(assetResponse.statusCode).toBe(200);
     expect(assetResponse.body).toContain("console.log('asset');");
+    expect(assetResponse.headers["access-control-allow-origin"]).toBe("http://preview-test-session.localhost:4444");
+    expect(assetResponse.headers["access-control-allow-credentials"]).toBe("true");
+
+    const preflightResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/api/data",
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://preview-test-session.localhost:4444",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "x-preview-token, content-type",
+      },
+    });
+    expect(preflightResponse.statusCode).toBe(204);
+    expect(preflightResponse.headers["access-control-allow-origin"]).toBe("http://preview-test-session.localhost:4444");
+    expect(preflightResponse.headers["access-control-allow-headers"]).toBe("x-preview-token, content-type");
+
+    const guardedPostResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/api/guard",
+      method: "POST",
+      headers: {
+        Origin: `http://preview-test-session.localhost:${handle.port}`,
+        "Content-Type": "application/json",
+      },
+    });
+    expect(guardedPostResponse.statusCode).toBe(200);
+    expect(guardedPostResponse.body).toContain("\"ok\":true");
+    expect(guardedPostResponse.body).toContain(`\"origin\":\"http://127.0.0.1:${upstreamPort}\"`);
   });
 
   it("falls back to the preview app shell for extensionless direct loads on preview hosts", async () => {

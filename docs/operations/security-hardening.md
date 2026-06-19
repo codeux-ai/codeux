@@ -26,6 +26,8 @@ While Code UX trusts the developer and any connected systems, several specific p
 - **Upload/Path Ingestion Limits:** Data ingestion points and upload facilities restrict excessive file sizes and deeply-nested paths. This maintains stability and limits arbitrary disk exhaustion or path-length manipulation.
 - **Markdown URL Sanitization:** Markdown and generated HTML correctly sanitize embedded links and image sources, mitigating JavaScript URI injections (`javascript:`) in rendered output.
 - **Preview Proxy Constraints:** The local preview proxy enforces clear boundaries on the local ports and destination hosts it will forward traffic towards, reducing blind SSRF proxy abuse.
+- **Preview Frame Compatibility:** Preview-host traffic is treated as local trusted application content rather than dashboard chrome. The dashboard does not stamp its frame/permissions hardening headers onto preview-host responses, and proxied preview HTML has upstream CSP and `X-Frame-Options` stripped so the in-app iframe remains loadable.
+- **Preview CORS Compatibility:** Preview-host traffic answers CORS preflights and overrides upstream `Access-Control-*` headers at the proxy boundary. The dashboard API origin keeps its CSRF guard; only preview-host origins get permissive local-app CORS behavior.
 
 ### Secret Redaction
 - **Log and Output Filtering:** Internal API keys, credentials, and sensitive configurations are actively scrubbed and redacted from application logs, debug outputs, and exported execution traces.
