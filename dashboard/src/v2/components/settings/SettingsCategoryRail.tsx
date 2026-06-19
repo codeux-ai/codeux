@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { useRef } from "preact/hooks";
 import { Layers3 } from "lucide-preact";
 import type { Category, CategoryId } from "../../hooks/use-settings-page-state.js";
 import { NoticePanel } from "./SettingsSurface.js";
@@ -46,6 +47,21 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   onSwitchCategory,
 }) => {
   const normalizedSearch = settingsSearch.trim().toLowerCase();
+  const buttonsRef = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const handleKeyDown = (e: KeyboardEvent, index: number) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const nextIndex = (index + 1) % filteredCategories.length;
+      buttonsRef.current[nextIndex]?.focus();
+      onSwitchCategory(filteredCategories[nextIndex].id);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prevIndex = (index - 1 + filteredCategories.length) % filteredCategories.length;
+      buttonsRef.current[prevIndex]?.focus();
+      onSwitchCategory(filteredCategories[prevIndex].id);
+    }
+  };
 
   return (
     <div className="sticky top-16 flex flex-col gap-3 rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-3 backdrop-blur-2xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -61,7 +77,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
         </div>
       </div>
 
-      {filteredCategories.map((category) => {
+      {filteredCategories.map((category, index) => {
         const isActive = activeCategory === category.id;
         const isDanger = category.danger;
         const isSearchMatch = Boolean(normalizedSearch && (CATEGORY_SEARCH_HINTS[category.id]?.some(hint => hint.includes(normalizedSearch)) || category.label.toLowerCase().includes(normalizedSearch) || category.description.toLowerCase().includes(normalizedSearch)));
@@ -70,7 +86,9 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
           <button
             key={category.id}
             type="button"
+            ref={el => { buttonsRef.current[index] = el; }}
             onClick={() => onSwitchCategory(category.id)}
+            onKeyDown={(e) => handleKeyDown(e, index)}
             aria-current={isActive ? "page" : undefined}
             className={`group relative flex w-full items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left ${SHARED_INTERACTION_CLASSES} ${isDanger ? "focus-visible:ring-status-red" : ""} ${
               isActive

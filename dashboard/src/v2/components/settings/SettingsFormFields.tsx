@@ -1,4 +1,5 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
+import { SHARED_INTERACTION_CLASSES } from "../ui/Button.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import type { ProviderId } from "../../../types.js";
