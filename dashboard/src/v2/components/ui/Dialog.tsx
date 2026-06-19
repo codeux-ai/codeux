@@ -3,6 +3,7 @@ import { useEffect, useState } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { Overlay } from "./Overlay.js";
+import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
 
 interface DialogProps {
   isOpen: boolean;
@@ -54,7 +55,7 @@ export const Dialog: FunctionComponent<DialogProps> = ({
       setVisible(false);
       const timer = setTimeout(() => {
         setShouldRender(false);
-      }, reducedMotion ? 0 : 150); // Exit transition time
+      }, reducedMotion ? 0 : parseFloat(INTERACTION_TOKENS.enterExit.duration)); // Exit transition time
       return () => clearTimeout(timer);
     }
   }, [isOpen, reducedMotion]);
@@ -62,7 +63,7 @@ export const Dialog: FunctionComponent<DialogProps> = ({
   if (!shouldRender) return null;
 
   return (
-    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur exitDuration={150}>
+    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur exitDuration={parseFloat(INTERACTION_TOKENS.enterExit.duration)}>
       <div
         ref={trapRef}
         role="dialog"
@@ -75,7 +76,7 @@ export const Dialog: FunctionComponent<DialogProps> = ({
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'scale(1)' : 'scale(0.95)',
-          transition: reducedMotion ? 'none' : visible ? 'opacity 200ms ease-out, transform 200ms ease-out' : 'opacity 150ms ease-in, transform 150ms ease-in',
+          transition: reducedMotion ? 'none' : `opacity ${INTERACTION_TOKENS.enterExit.duration} ${INTERACTION_TOKENS.enterExit.ease}, transform ${INTERACTION_TOKENS.enterExit.duration} ${INTERACTION_TOKENS.enterExit.ease}`,
         }}
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside dialog
       >

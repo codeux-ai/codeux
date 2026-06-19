@@ -62,7 +62,9 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
 
     const handlePointerLeave = (e?: PointerEvent | FocusEvent) => {
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-        setIsVisible(false);
+        hoverTimeout.current = window.setTimeout(() => {
+            setIsVisible(false);
+        }, 150);
     };
 
     useLayoutEffect(() => {

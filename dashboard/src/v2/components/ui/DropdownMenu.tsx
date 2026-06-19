@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preac
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
-import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
+import { GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface DropdownMenuProps {
@@ -147,8 +147,8 @@ export const DropdownMenu = ({
           opacity: 1,
           scale: 1,
           y: 0,
-          duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
-          ease: MOTION_TOKENS.easing.standard,
+          duration: isReducedMotion ? 0 : GSAP_INTERACTION_TOKENS.enterExit.duration,
+          ease: GSAP_INTERACTION_TOKENS.enterExit.ease,
         }
       );
       requestAnimationFrame(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
@@ -157,8 +157,8 @@ export const DropdownMenu = ({
         opacity: 0,
         scale: 0.95,
         y: position === "bottom" ? -5 : position === "top" ? 5 : 0,
-        duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
-        ease: MOTION_TOKENS.easing.standard,
+        duration: isReducedMotion ? 0 : GSAP_INTERACTION_TOKENS.enterExit.duration,
+        ease: GSAP_INTERACTION_TOKENS.enterExit.ease,
         onComplete: () => setIsRendered(false),
       });
     }
@@ -255,7 +255,7 @@ export const DropdownMenu = ({
             id={menuId}
             ref={menuRef}
             role="menu"
-            className={`fixed z-[100] bg-white/92 dark:bg-void-800/92 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] shadow-md dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-[1.75rem] p-2 ${className}`}
+            className={`fixed z-[100] bg-white/92 dark:bg-void-800/92 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] shadow-md dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-[1.75rem] p-2 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
             style={{ top: coords.top, left: coords.left, transformOrigin }}
             onClick={(e) => e.stopPropagation()}
           >

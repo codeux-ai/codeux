@@ -104,3 +104,85 @@ describe("ConfirmDialog", () => {
     expect(handleCancel).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe("ConfirmDialog with additional test cases", () => {
+  const defaultOptions = {
+    title: "Delete Project?",
+    body: "This action cannot be undone.",
+    confirmLabel: "Delete",
+    cancelLabel: "Cancel",
+    destructive: true,
+  };
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it("clarifies action on confirm by displaying visually distinct state (action clarity)", () => {
+    vi.useFakeTimers();
+    const handleConfirm = vi.fn();
+    render(
+      <ConfirmDialog isOpen={true} options={{...defaultOptions, destructive: false}} onConfirm={handleConfirm} onCancel={vi.fn()} />
+    );
+
+    const btn = screen.getByRole("button", { name: "Delete" });
+    fireEvent.click(btn);
+
+    act(() => {
+        vi.advanceTimersByTime(100);
+    });
+
+    // Check that button switches to processing state immediately
+    expect(btn).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Processing...")).toBeInTheDocument();
+  });
+
+  it("bypasses transition via reduced-motion for GSAP calls", async () => {
+    const gsapMock = await import("gsap");
+    const fromToSpy = vi.spyOn(gsapMock.default, 'fromTo');
+
+    // We mock matchMedia to force reduced motion
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation(query => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    render(
+      <ConfirmDialog isOpen={true} options={defaultOptions} onConfirm={vi.fn()} onCancel={vi.fn()} />
+    );
+
+    // Using vitest assertion to check that the gsap calls had duration 0
+    expect(fromToSpy).toHaveBeenCalledWith(
+        expect.any(HTMLElement),
+        expect.anything(),
+        expect.objectContaining({ duration: 0 })
+    );
+
+    // cleanup mock
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation(query => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+    fromToSpy.mockRestore();
+  });
+});

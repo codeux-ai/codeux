@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preac
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
-import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
+import { GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface PopoverProps {
@@ -118,8 +118,8 @@ export const Popover = ({
           opacity: 1,
           scale: 1,
           y: 0,
-          duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
-          ease: MOTION_TOKENS.easing.standard,
+          duration: isReducedMotion ? 0 : GSAP_INTERACTION_TOKENS.enterExit.duration,
+          ease: GSAP_INTERACTION_TOKENS.enterExit.ease,
         }
       );
     } else if (isRendered) {
@@ -127,8 +127,8 @@ export const Popover = ({
         opacity: 0,
         scale: 0.95,
         y: position === "bottom" ? -5 : position === "top" ? 5 : 0,
-        duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
-        ease: MOTION_TOKENS.easing.standard,
+        duration: isReducedMotion ? 0 : GSAP_INTERACTION_TOKENS.enterExit.duration,
+        ease: GSAP_INTERACTION_TOKENS.enterExit.ease,
         onComplete: () => setIsRendered(false),
       });
     }
@@ -200,7 +200,7 @@ export const Popover = ({
             ref={popoverRef}
             role={isTooltip ? "tooltip" : "dialog"}
             tabIndex={-1}
-            className={`fixed z-[9999] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-4 ${className}`}
+            className={`fixed z-[9999] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-4 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
             style={{ top: coords.top, left: coords.left }}
           >
             {content}
