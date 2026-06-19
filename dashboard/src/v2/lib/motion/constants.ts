@@ -13,6 +13,29 @@ export const GSAP_EASINGS = {
   linear: "linear"
 } as const;
 
+export const GSAP_INTERACTION_TOKENS = {
+  controlFeedback: {
+    duration: GSAP_DURATIONS.fast,
+    ease: GSAP_EASINGS.smooth
+  },
+  enterExit: {
+    duration: GSAP_DURATIONS.base,
+    ease: GSAP_EASINGS.smooth
+  },
+  expansionCollapse: {
+    duration: GSAP_DURATIONS.base,
+    ease: GSAP_EASINGS.smoothInOut
+  },
+  selectionMovement: {
+    duration: GSAP_DURATIONS.fast,
+    ease: GSAP_EASINGS.smooth
+  },
+  asyncFeedback: {
+    duration: GSAP_DURATIONS.slow,
+    ease: GSAP_EASINGS.linear
+  }
+} as const;
+
 export function useGsapDurations() {
   const reducedMotion = useReducedMotion();
   if (reducedMotion) {
