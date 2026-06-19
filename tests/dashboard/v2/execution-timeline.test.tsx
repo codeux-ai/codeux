@@ -21,6 +21,7 @@ vi.mock("gsap", () => ({
 }));
 
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useResolvedMotionDuration: (d) => d,
   useReducedMotion: () => false,
 }));
 
@@ -146,7 +147,7 @@ describe("ExecutionTimeline", () => {
     );
 
     expect(screen.getByText("Runtime Timeline")).toBeInTheDocument();
-    expect(screen.getByText("No task run events recorded yet.")).toBeInTheDocument();
+    expect(screen.getByText("No runtime events yet")).toBeInTheDocument();
     expect(screen.queryByText("run completed")).not.toBeInTheDocument();
   });
 });

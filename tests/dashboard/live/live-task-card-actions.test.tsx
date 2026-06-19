@@ -41,6 +41,7 @@ vi.mock("../../../dashboard/src/v2/context/project-data.js", async (importOrigin
 });
 
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useResolvedMotionDuration: (d: any) => d,
   useReducedMotion: () => false,
 }));
 

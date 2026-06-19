@@ -40,4 +40,18 @@ describe("LiveTransportBanner", () => {
     expect(screen.getByText("Connection Error")).toBeInTheDocument();
     expect(screen.getByText("Realtime stream failed")).toBeInTheDocument();
   });
+
+  it("renders reconnecting state", () => {
+    render(
+      <LiveTransportBanner
+        transportState="reconnecting"
+        isRecovering={false}
+        snapshotUpdatedAt={null}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByText("Reconnecting")).toBeInTheDocument();
+    expect(screen.getByText("Attempting to restore connection...")).toBeInTheDocument();
+  });
 });

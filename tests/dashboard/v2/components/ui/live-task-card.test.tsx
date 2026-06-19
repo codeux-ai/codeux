@@ -14,6 +14,7 @@ window.ResizeObserver = vi.fn().mockImplementation(() => ({
 }));
 
 vi.mock("../../../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useResolvedMotionDuration: (d) => d,
   useReducedMotion: vi.fn(() => false),
 }));
 

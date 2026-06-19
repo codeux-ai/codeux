@@ -21,6 +21,7 @@ vi.mock("gsap", () => ({
 }));
 
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useResolvedMotionDuration: (d: any) => d,
   useReducedMotion: vi.fn(),
 }));
 

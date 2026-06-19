@@ -2,7 +2,8 @@ import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useMemo, useLayoutEffect, useRef, useId, useState } from "preact/hooks";
 import gsap from "gsap";
-import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import { useReducedMotion, useResolvedMotionDuration } from "../hooks/use-reduced-motion.js";
+import { INTERACTION_TOKENS } from "../lib/motion/tokens.js";
 import { Bot, CheckCircle2, ChevronDown, XCircle } from "lucide-preact";
 import { renderMarkdown } from "../../lib/markdown.js";
 import { formatTime } from "../../lib/time.js";
@@ -44,6 +45,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
     const listRef = useRef<HTMLDivElement>(null);
     const prevCountRef = useRef<number>(0);
     const reducedMotion = useReducedMotion();
+    const duration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
     const attentionItems = snapshot?.attentionItems || [];
 
     const { openCount, claimedCount } = useMemo(() => {
@@ -71,10 +73,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
 
             if (newElements.length > 0) {
                 ctx = gsap.context(() => {
-                    gsap.fromTo(newElements,
-                        { opacity: 0, x: -10 },
-                        { opacity: 1, x: 0, duration: 0.25, stagger: 0.04, ease: "power2.out" }
-                    );
+                    gsap.fromTo(newElements, { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: duration, stagger: 0.04, ease: INTERACTION_TOKENS.enterExit.ease, overwrite: "auto" });
                 });
                 newElements.forEach(el => el.setAttribute('data-entered', 'true'));
             }

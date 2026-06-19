@@ -36,7 +36,7 @@ describe("RuntimeEventFeed", () => {
 
     it("handles empty events", () => {
         render(<RuntimeEventFeed events={[]} />);
-        expect(screen.getByText("Awaiting runtime events...")).toBeInTheDocument();
+        expect(screen.getByText("No runtime events yet")).toBeInTheDocument();
     });
 
     it("animates only new elements on same-length replacement", () => {

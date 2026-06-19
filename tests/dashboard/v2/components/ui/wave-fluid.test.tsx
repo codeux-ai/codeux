@@ -7,6 +7,7 @@ import { WaveFluid } from "../../../../../dashboard/src/v2/components/ui/WaveFlu
 import gsap from "gsap";
 
 vi.mock("../../../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useResolvedMotionDuration: (d: any) => d,
   useReducedMotion: vi.fn(() => false),
 }));
 

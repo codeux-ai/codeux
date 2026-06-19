@@ -41,6 +41,7 @@ vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () 
 }));
 
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useResolvedMotionDuration: (d: any) => d,
     useReducedMotion: vi.fn().mockReturnValue(false),
 }));
 
