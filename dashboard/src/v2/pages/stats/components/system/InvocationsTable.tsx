@@ -146,7 +146,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   if (loading) {
     return (
-      <div className="space-y-3">
+      <div role="status" aria-label="Loading invocations" className="space-y-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 motion-safe:animate-pulse bg-slate-100/50 dark:bg-white/5`} />
         ))}
@@ -156,7 +156,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   if (invocations.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+      <div role="status" className="flex flex-col items-center justify-center py-20 text-slate-500">
         <AlertTriangle className="mb-4 h-10 w-10 opacity-20" />
         <div className="text-sm font-medium">No invocations match the current filters</div>
       </div>

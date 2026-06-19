@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent } from '@testing-library/preact';
+import { render, fireEvent, cleanup } from '@testing-library/preact';
 import gsap from 'gsap';
 
 vi.mock('gsap', () => ({
@@ -54,14 +54,20 @@ describe('UsageFilterMenu', () => {
   });
 
   it('should not allow disabling the last enabled series', () => {
+    cleanup();
     const setEnabledSeriesSpy = vi.fn();
     const singleSeriesProps = {
       ...mockProps,
       enabledSeries: { tokens: true, active: false }, setEnabledSeries: setEnabledSeriesSpy
     };
-    const { getAllByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
+    const { getAllByText, getByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
     setEnabledSeriesSpy.mockClear();
+
+    // Check live region
+    expect(getByText('Showing 1 filter')).toBeTruthy();
+
     const tokensButton = getAllByText('Tokens')[0].closest('button');
+    expect(tokensButton!.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(tokensButton!);
     expect(setEnabledSeriesSpy).not.toHaveBeenCalled();
   });

@@ -560,6 +560,9 @@ export const InteractiveUsageChart: FunctionComponent<{
                           setDragCurrentIndex(absoluteIndex);
                         }}
                         onMouseEnter={() => setHoveredIndex(index)}
+                        onFocus={() => setHoveredIndex(index)}
+                        onBlur={() => setHoveredIndex(null)}
+                        aria-label={buckets[absoluteIndex]?.label || "Bucket"}
                         onMouseMove={() => {
                           if (dragStartIndex !== null) {
                             setDragCurrentIndex(absoluteIndex);

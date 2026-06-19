@@ -1,8 +1,10 @@
+import * as matchers from "@testing-library/jest-dom/matchers";
+expect.extend(matchers);
 /**
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/preact';
+import { render, screen, cleanup } from '@testing-library/preact';
 import { StatsPageHero, getRelativeTime } from '../components/StatsPageHero.js';
 
 describe('StatsPageHero', () => {
@@ -66,5 +68,46 @@ describe('StatsPageHero', () => {
     expect(ledgersButton.compareDocumentPosition(systemButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.querySelectorAll('input[type="date"]').length).toBe(2);
     expect(screen.getByRole('button', { name: 'Apply' })).toBeTruthy();
+  });
+
+  it('disables the Apply button when custom dates are missing', () => {
+    cleanup();
+    const { rerender } = render(
+      <StatsPageHero
+        selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+        stats={null}
+        activeQuery={{ window: 'custom' } as any}
+        customFrom={""}
+        customTo={""}
+        applyPresetWindow={vi.fn()}
+        setCustomFrom={vi.fn()}
+        setCustomTo={vi.fn()}
+        applyCustomRange={vi.fn()}
+        visualMode="trend"
+        setVisualMode={vi.fn()}
+      />
+    );
+
+    let applyBtn = screen.getAllByRole('button', { name: 'Apply' })[0] as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(true);
+
+    rerender(
+      <StatsPageHero
+        selectedProject={{ id: 'proj-1', name: 'Project 1' } as any}
+        stats={null}
+        activeQuery={{ window: 'custom' } as any}
+        customFrom="2026-05-01"
+        customTo="2026-05-02"
+        applyPresetWindow={vi.fn()}
+        setCustomFrom={vi.fn()}
+        setCustomTo={vi.fn()}
+        applyCustomRange={vi.fn()}
+        visualMode="trend"
+        setVisualMode={vi.fn()}
+      />
+    );
+
+    applyBtn = screen.getAllByRole('button', { name: 'Apply' })[0] as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(false);
   });
 });

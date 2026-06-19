@@ -85,6 +85,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
     >
       <div className={styles.content}>
         <div className={`${styles.header} flex items-center justify-between`}>
+          <div aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
           <div className="flex items-center gap-3">
             <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
               Graph Filters
@@ -156,7 +157,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                                 if (activeSeriesCount === 1 && enabledSeries[s.id]) return;
                                 setEnabledSeries((curr) => ({ ...curr, [s.id]: !curr[s.id] }));
                               }}
-                              disabled={disabled}
+                              aria-disabled={disabled ? "true" : undefined}
                               aria-pressed={active}
                               className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
                                 active

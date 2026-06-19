@@ -191,7 +191,9 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
               <button
                 type="button"
                 onClick={applyCustomRange}
-                className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
+                disabled={!customFrom || !customTo}
+                aria-disabled={!customFrom || !customTo ? "true" : undefined}
+                className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Apply
               </button>
