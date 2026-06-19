@@ -316,6 +316,9 @@ Legacy runtime:
 - Stats page is project-scoped and visualizes tracked token, time, and Git usage (insertions, deletions, PRs) for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
 - Scheduler page is project-scoped and provides a calendar plus 24-hour day view for timed sprint starts, quicksprint launches, and `/chat` messages. Recurring entries expand into every visible day in the calendar and support endless, fixed-count, and end-date/time recurrence. It also supports editing existing entries directly from scheduled entries or occurrences with full form hydration, title customization, and cancellation support. See [Scheduler](./scheduler.md).
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
+  - Preview session interactions (launch, rebuild, stop) provide robust T01 motion and T04 feedback through the unified ActionFeedbackRegion.
+  - Native disabled states explicitly lock actions while asynchronous operations resolve (such as starting or removing preview containers) or when valid sprints are missing.
+  - Interactive retry mechanisms map automatically to failed launch and rebuild attempts, communicating contextually in the browser workspace.
   - floating horizontal slider in its own top strip, with large-screen five-card visibility for preview selection
   - the browser window starts directly below the slider instead of sharing a stretched first-row layout with the sprint controls
   - one preview session per sprint

@@ -434,6 +434,11 @@ export const BrowserPage: FunctionComponent = () => {
             status={browserFeedback.feedback.status}
             message={browserFeedback.feedback.message}
             onDismiss={() => browserFeedback.clearFeedback()}
+            retryAction={
+              browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("launch") ? () => handleStart() :
+              browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("rebuild") ? () => handleRebuild() :
+              undefined
+            }
           />
         </div>
       )}
@@ -483,11 +488,11 @@ export const BrowserPage: FunctionComponent = () => {
           {visibleSelectedSession && frameSrc ? (
             <div className="relative h-full w-full">
               {!navigationEnabled && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/50 backdrop-blur-sm dark:bg-void-950/50">
-                  <div className="flex flex-col items-center gap-3 rounded-2xl bg-white/90 px-6 py-4 shadow-sm dark:bg-void-900/90">
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-signal-500 border-t-transparent" />
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      {visibleSelectedSession.status === "starting" ? "Container starting..." : "Waiting for connection..."}
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center p-4">
+                  <div className="flex items-center gap-3 rounded-full border border-black/[0.08] bg-white/90 px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-md dark:border-white/[0.08] dark:bg-void-900/90 dark:shadow-[0_8px_32px_rgba(0,0,0,0.24)]">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-signal-500 border-t-transparent" />
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {visibleSelectedSession.status === "starting" ? "Container starting..." : visibleSelectedSession.status === "error" ? "Container failed" : "Waiting for connection..."}
                     </span>
                   </div>
                 </div>
@@ -547,6 +552,7 @@ export const BrowserPage: FunctionComponent = () => {
                   type="button"
                   onClick={handleRebuild}
                   disabled={!visibleSelectedSession || sessionActionPending}
+                  aria-disabled={!visibleSelectedSession || sessionActionPending}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <RotateCcw className={`h-4 w-4 ${sessionActionPending ? 'animate-spin' : ''}`} strokeWidth={2} />
@@ -556,6 +562,7 @@ export const BrowserPage: FunctionComponent = () => {
                   type="button"
                   onClick={handleStop}
                   disabled={!visibleSelectedSession || sessionActionPending}
+                  aria-disabled={!visibleSelectedSession || sessionActionPending}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
@@ -565,6 +572,7 @@ export const BrowserPage: FunctionComponent = () => {
                   href={visibleSelectedSession ? getSafeUrl(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}`) : undefined}
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-disabled={!visibleSelectedSession}
                   className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none opacity-50" : ""}`}
                 >
                   <ExternalLink className="h-4 w-4" strokeWidth={2} />
@@ -595,6 +603,7 @@ export const BrowserPage: FunctionComponent = () => {
                   type="button"
                   onClick={handleSaveScript}
                   disabled={savingScript || !scriptTargetSprint}
+                  aria-disabled={savingScript || !scriptTargetSprint}
                   className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
                   <Save className="h-4 w-4" strokeWidth={2} />

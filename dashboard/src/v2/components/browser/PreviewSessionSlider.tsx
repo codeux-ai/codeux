@@ -157,6 +157,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                     : "border-status-red/15 text-status-red hover:border-status-red/30 hover:bg-status-red/8"
                   }`}
                   title="Remove preview container"
+                  disabled={removing}
                   aria-disabled={removing}
                 >
                   {removing ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <Trash2 className="h-3 w-3" strokeWidth={2.5} />}
