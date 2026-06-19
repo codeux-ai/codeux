@@ -61,3 +61,21 @@ export function useReducedMotion(): boolean {
 
     return isReducedMotion;
 }
+
+/**
+ * Hook to conditionally resolve a motion duration.
+ * If reduced motion is preferred, it returns 0 for numbers or "0ms" for strings.
+ * Otherwise, it returns the provided duration.
+ */
+export function useResolvedMotionDuration<T extends number | string>(duration: T): T {
+    const isReducedMotion = useReducedMotion();
+
+    // We cannot use useMemo here because useReducedMotion is a hook itself
+    // But we are resolving the hook inside our hook body, so `isReducedMotion` will re-evaluate
+
+    if (isReducedMotion) {
+        return (typeof duration === "number" ? 0 : "0ms") as T;
+    }
+
+    return duration;
+}
