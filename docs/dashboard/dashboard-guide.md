@@ -731,3 +731,10 @@ This dashboard enforces accessibility best practices to ensure an inclusive expe
 - **Charts**: Data visualizations are wrapped in a region with `role="region"` and an `aria-label`, providing an accessible name for the visual content.
 - **Reduced Motion**: Component animations using GSAP and Tailwind respect user preferences via the `prefers-reduced-motion` media query, disabling unnecessary visual transitions where appropriate.
 - **Task Board State Ownership:** To prevent lane mapping drift across views, `dashboard/src/v2/lib/task-board-state.ts` is the strict single source of truth for all task status to lane derivations (via `getTaskLane`). It correctly groups transient implementation statuses like `coding_completed` and `QA_REVIEW_FAILED` into the "in_progress" lane for consistent Kanban rendering.
+
+
+## Sprint Composer Feedback and Validation
+
+The Sprint Composer implements explicit pending states during asynchronous operations like generating subtasks or refining prompts.
+Validation errors are shown clearly when inputs are incomplete or when submission fails, avoiding UI layout jumps via a "form-shake" animation for users who do not prefer reduced motion.
+When an issue with processing occurs, clear feedback and retry mechanisms are presented immediately within the composer.

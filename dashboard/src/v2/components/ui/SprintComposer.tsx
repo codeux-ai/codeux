@@ -28,6 +28,7 @@ import { getPlanningFeedback, type PlanningActionType, PLANNING_ACTION_LABELS } 
 import { PlanningProgressOverlay } from "./PlanningProgressOverlay.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
@@ -102,6 +103,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [isImproving, setIsImproving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { feedback: actionFeedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
+  const [touchedName, setTouchedName] = useState(false);
+  const [touchedGoal, setTouchedGoal] = useState(false);
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  const [hasAttemptedImprove, setHasAttemptedImprove] = useState(false);
+  const reducedMotion = useReducedMotion();
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
 
@@ -286,7 +292,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   };
 
   const handleImprovePrompt = async (): Promise<void> => {
-    if (!onImprovePrompt || !state.name.trim() || !state.goal.trim()) {
+    if (!onImprovePrompt) return;
+    if (!state.name.trim() || !state.goal.trim()) {
+      setHasAttemptedSubmit(true);
+      setHasAttemptedImprove(true);
       return;
     }
     previousFocusRef.current = document.activeElement as HTMLElement | null;
@@ -297,6 +306,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     abortRef.current = controller;
     setIsImproving(true);
     clearFeedback();
+    setPending(PLANNING_ACTION_LABELS.improve);
     try {
       const improvedGoal = await onImprovePrompt({
         name: state.name.trim(),
@@ -306,9 +316,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         overrides: toPlanningOverrides(state.routeOverride, state.modelOverride, state.planningAgentPresetId),
       });
       const activeRequest = activeRequestRef.current;
-      if (!activeRequest || (activeRequest.id === clientRequestId && !activeRequest.detached && !activeRequest.cancelled)) {
+      if (!isUnmountedRef.current && activeRequest && activeRequest.id === clientRequestId && !activeRequest.detached && !activeRequest.cancelled) {
         state.setGoal(improvedGoal);
         state.setOriginalPrompt(rawPrompt);
+        setSuccess("Prompt refined");
       }
     } catch (error) {
       const activeRequest = activeRequestRef.current;
@@ -342,6 +353,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
     if (!state.name.trim()) {
+      setHasAttemptedSubmit(true);
       return;
     }
 
@@ -357,6 +369,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     abortRef.current = controller;
     setIsSubmitting(true);
     clearFeedback();
+    const actionType = state.submitMode === "plan_only" ? "plan_only" : state.submitMode === "replan" ? "replan" : "plan_and_start";
+    setPending(PLANNING_ACTION_LABELS[actionType]);
     try {
       await onSubmit({
         name: state.name.trim(),
@@ -559,16 +573,32 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
           <label data-composer-stagger className="mt-8 block space-y-2">
             <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Name</span>
-            <input
-              type="text"
-              value={state.name}
-              onInput={(event) => state.setName((event.target as HTMLInputElement).value)}
-              disabled={isBusy}
-              placeholder="Runtime hardening"
-              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
-              required
-              autoFocus
-            />
+            {(() => {
+              const showNameError = (touchedName || hasAttemptedSubmit) && !state.name.trim();
+              return (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={state.name}
+                    onInput={(event) => state.setName((event.target as HTMLInputElement).value)}
+                    onBlur={() => setTouchedName(true)}
+                    disabled={isBusy}
+                    aria-invalid={showNameError ? "true" : "false"}
+                    placeholder="Runtime hardening"
+                    className={`w-full border-0 border-b-2 bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:text-[1.9rem] ${
+                      showNameError
+                        ? "border-ember-500 text-ember-600 placeholder:text-ember-300 focus:border-ember-500 dark:border-ember-500 dark:text-ember-400 dark:placeholder:text-ember-800"
+                        : "border-black/[0.08] text-slate-900 placeholder:text-slate-200 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700"
+                    } ${showNameError && !reducedMotion ? "animate-form-shake" : ""}`}
+                    required
+                    autoFocus
+                  />
+                  {showNameError && (
+                    <div className="absolute -bottom-6 left-0 text-[11px] font-bold text-ember-600 dark:text-ember-400">Sprint name is required</div>
+                  )}
+                </div>
+              );
+            })()}
           </label>
 
           <div data-composer-stagger className="mt-8 space-y-3">
@@ -673,13 +703,29 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     ? "border-black/[0.07] bg-black/[0.025] opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03]"
                     : "border-black/[0.07] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.03]"
               }`}>
-                <textarea
-                  value={state.goal}
-                  onInput={(event) => state.setGoal((event.target as HTMLTextAreaElement).value)}
-                  disabled={isBusy}
-                  placeholder="Describe the outcome, affected systems, and what done looks like when this sprint lands."
-                  className="min-h-[220px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300 disabled:cursor-not-allowed dark:text-slate-300 dark:placeholder:text-slate-600 sm:min-h-[260px] sm:px-5"
-                />
+                {(() => {
+                  const showGoalError = (touchedGoal || hasAttemptedImprove) && !state.goal.trim();
+                  return (
+                    <div className="relative h-full">
+                      <textarea
+                        value={state.goal}
+                        onInput={(event) => state.setGoal((event.target as HTMLTextAreaElement).value)}
+                        onBlur={() => setTouchedGoal(true)}
+                        disabled={isBusy}
+                        aria-invalid={showGoalError ? "true" : "false"}
+                        placeholder="Describe the outcome, affected systems, and what done looks like when this sprint lands."
+                        className={`min-h-[220px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed outline-none disabled:cursor-not-allowed sm:min-h-[260px] sm:px-5 ${
+                          showGoalError
+                            ? "text-ember-600 placeholder:text-ember-300 dark:text-ember-400 dark:placeholder:text-ember-800"
+                            : "text-slate-700 placeholder:text-slate-300 dark:text-slate-300 dark:placeholder:text-slate-600"
+                        } ${showGoalError && !reducedMotion ? "animate-form-shake" : ""}`}
+                      />
+                      {showGoalError && (
+                        <div className="absolute bottom-2 right-4 text-[11px] font-bold text-ember-600 dark:text-ember-400">Prompt is required to plan</div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {state.originalPrompt && (
@@ -804,7 +850,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                       {PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress..."}
                     </div>
                     <div className="mt-0.5 text-[10px] text-signal-600/70 dark:text-signal-400/70">
-                      {Math.floor(elapsedMs / 60000)}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed
+                      {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed
                     </div>
                   </div>
                 </button>
