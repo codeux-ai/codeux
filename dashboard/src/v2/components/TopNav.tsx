@@ -238,10 +238,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const handleCreateProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
+            const sourceRef = project.initMode === 'new-local'
+                ? (project.path || project.name)
+                : (project.repoSlug || project.name);
+
             await createProject({
                 name: project.name,
                 sourceType: project.initMode === 'new-local' ? 'local' : 'git',
-                sourceRef: project.path || project.name,
+                sourceRef,
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,

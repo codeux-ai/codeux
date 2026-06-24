@@ -153,6 +153,11 @@ export class ProjectAttentionService {
     });
   }
 
+  patchItemPayload(itemId: string, payloadPatch: Record<string, unknown>): ProjectAttentionItemRecord {
+    this.requireItem(itemId);
+    return this.projectAttentionRepository.patchAttentionItemPayload(itemId, payloadPatch);
+  }
+
   private requireItem(itemId: string): ProjectAttentionItemRecord {
     const item = this.projectAttentionRepository.getAttentionItem(itemId);
     if (!item) {

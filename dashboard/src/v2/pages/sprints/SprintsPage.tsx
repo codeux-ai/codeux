@@ -184,6 +184,9 @@ export const SprintsPage: FunctionComponent = () => {
     addTaskForSprint, setAddTaskForSprint,
     addTaskSprintTasks,
     virtualProviders,
+    defaultRouteOptionLabel,
+    defaultModelOptionLabel,
+    defaultRouteIconProviderId,
     planningEta,
     planningPresets,
     defaultPlanningAgentPresetId,
@@ -318,10 +321,10 @@ export const SprintsPage: FunctionComponent = () => {
 
   const onSprintSubmit = useCallback(async (payload: any) => {
     await handleSubmitSprint(payload);
-    if (!editingSprint) {
+    if ((payload.shouldHandleResult?.() ?? true) && !editingSprint) {
         animateLatestCell();
+        setLinkedIssues([]);
     }
-    setLinkedIssues([]);
   }, [handleSubmitSprint, editingSprint, animateLatestCell]);
 
   useEffect(() => {
@@ -599,6 +602,9 @@ export const SprintsPage: FunctionComponent = () => {
                     initialSprint={editingSprint}
                     linkedIssues={linkedIssues}
                     virtualProviders={virtualProviders}
+                    defaultRouteOptionLabel={defaultRouteOptionLabel}
+                    defaultModelOptionLabel={defaultModelOptionLabel}
+                    defaultRouteIconProviderId={defaultRouteIconProviderId}
                     planningPresets={planningPresets}
                     agentPresets={agentPresets}
                     defaultPlanningAgentPresetId={defaultPlanningAgentPresetId}
@@ -647,10 +653,15 @@ export const SprintsPage: FunctionComponent = () => {
                     agentPresets={agentPresets}
 
                     virtualProviders={virtualProviders}
+                    defaultRouteOptionLabel={defaultRouteOptionLabel}
+                    defaultModelOptionLabel={defaultModelOptionLabel}
+                    defaultRouteIconProviderId={defaultRouteIconProviderId}
                     planningEta={planningEta}
-                    onExecute={async (templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride) => {
-                      await handleQuicksprintExecute(templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride);
-                      animateLatestCell();
+                    onExecute={async (templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride, signal, options) => {
+                      await handleQuicksprintExecute(templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride, signal, options);
+                      if (options?.shouldHandleResult?.() ?? true) {
+                        animateLatestCell();
+                      }
                     }}
                     onCreateTemplate={handleCreateQuicksprintTemplate}
                     onUpdateTemplate={handleUpdateQuicksprintTemplate}

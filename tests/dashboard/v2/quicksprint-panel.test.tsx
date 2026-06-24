@@ -91,6 +91,39 @@ describe("QuicksprintPanel", () => {
     expect(getByText("Plan & Start")).toBeInTheDocument();
   });
 
+  it("renders provider instance route labels, default models, and brand icons", async () => {
+    const { getByText, queryByText } = render(
+      <QuicksprintPanel
+        {...defaultProps}
+        virtualProviders={[
+          {
+            providerConfigId: "codex-primary",
+            provider: "codex",
+            displayLabel: "Codex Primary",
+            iconProviderId: "codex",
+            effectiveModel: "gpt-5.5",
+          },
+        ]}
+        defaultRouteOptionLabel="Default Route (Codex Primary)"
+        defaultModelOptionLabel="Default Model (gpt-5.5)"
+        defaultRouteIconProviderId="codex"
+      />
+    );
+
+    fireEvent.click(getByText("API Tests"));
+
+    expect(getByText("Default Route (Codex Primary)")).toBeInTheDocument();
+    expect(getByText("Default Model (gpt-5.5)")).toBeInTheDocument();
+    expect(document.body.querySelector('img[src="/lobe-icons/codex-color.svg"]')).toBeInTheDocument();
+    expect(queryByText("Virtual Codex Worker")).not.toBeInTheDocument();
+
+    fireEvent.click(getByText("Default Route (Codex Primary)"));
+    await waitFor(() => {
+      expect(getByText("Codex Primary")).toBeInTheDocument();
+    });
+    expect(document.body.querySelectorAll('img[src="/lobe-icons/codex-color.svg"]').length).toBeGreaterThan(1);
+  });
+
   it("filters default templates by purpose", async () => {
     const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
 
@@ -144,5 +177,59 @@ describe("QuicksprintPanel", () => {
 
     // We didn't cancel, so we can now resolve the execution
     resolveExecute!();
+  });
+
+  it("opens a fresh quicksprint without cancelling the previous planning request", async () => {
+    let resolveFirstExecute: () => void;
+    let resolveSecondExecute: () => void;
+    const firstExecutePromise = new Promise<void>((resolve) => {
+      resolveFirstExecute = resolve;
+    });
+    const secondExecutePromise = new Promise<void>((resolve) => {
+      resolveSecondExecute = resolve;
+    });
+    const mockOnExecute = vi
+      .fn()
+      .mockReturnValueOnce(firstExecutePromise)
+      .mockReturnValueOnce(secondExecutePromise);
+    const mockOnClose = vi.fn();
+
+    const { getByText } = render(
+      <QuicksprintPanel {...defaultProps} onExecute={mockOnExecute} onClose={mockOnClose} />
+    );
+
+    fireEvent.click(getByText("API Tests"));
+    const firstSubmitButton = getByText("Plan & Start");
+    fireEvent.click(firstSubmitButton);
+
+    await waitFor(() => {
+      expect(getByText("Quicksprint in motion")).toBeInTheDocument();
+    });
+    const firstSignal = mockOnExecute.mock.calls[0]?.[6] as AbortSignal;
+    expect(firstSignal).toBeInstanceOf(AbortSignal);
+
+    fireEvent.click(getByText("New Quicksprint"));
+
+    expect(firstSignal.aborted).toBe(false);
+    expect(getByText("Launch A Quicksprint.")).toBeInTheDocument();
+
+    fireEvent.click(getByText("API Tests"));
+    const secondSubmitButton = getByText("Plan & Start");
+    expect(secondSubmitButton).not.toBeDisabled();
+    fireEvent.click(secondSubmitButton);
+
+    await waitFor(() => {
+      expect(mockOnExecute).toHaveBeenCalledTimes(2);
+    });
+
+    resolveFirstExecute!();
+    await Promise.resolve();
+    expect(mockOnClose).not.toHaveBeenCalled();
+    expect(secondSubmitButton).toBeDisabled();
+
+    resolveSecondExecute!();
+    await waitFor(() => {
+      expect(mockOnClose).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -29,16 +29,31 @@ import { PlanningProgressOverlay } from "./PlanningProgressOverlay.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
+import type { ImprovePromptInput } from "../../types.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
+import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
+import type { ProviderId } from "../../types.js";
+
+interface VirtualProviderOption {
+  id?: string;
+  providerConfigId?: string;
+  provider?: string;
+  label?: string;
+  displayLabel?: string;
+  iconProviderId?: ProviderId;
+  effectiveModel?: string;
+}
 
 interface SprintComposerProps {
   nextId: string;
   initialSprint?: Sprint | null;
-  virtualProviders: Array<{ id: VirtualWorkerProvider; label: string }>;
+  virtualProviders: VirtualProviderOption[];
+  defaultRouteOptionLabel?: string;
+  defaultModelOptionLabel?: string;
+  defaultRouteIconProviderId?: ProviderId | null;
   planningPresets: AgentPreset[];
   agentPresets?: AgentPreset[];
   defaultPlanningAgentPresetId?: string | null;
@@ -61,6 +76,7 @@ interface SprintComposerProps {
     clientRequestId?: string;
     sprintKeyOverride?: string;
     signal?: AbortSignal;
+    shouldHandleResult?: () => boolean;
   }) => Promise<void> | void;
   onCancelPlanningRequest?: (clientRequestId: string) => Promise<void> | void;
   onStartNewSprint?: () => void;
@@ -73,6 +89,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   nextId,
   initialSprint = null,
   virtualProviders,
+  defaultRouteOptionLabel = "Default Route",
+  defaultModelOptionLabel = "Default Model",
+  defaultRouteIconProviderId = null,
   planningPresets,
   agentPresets,
   defaultPlanningAgentPresetId = null,
@@ -302,6 +321,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     activeRequestRef.current = { id: clientRequestId, detached: false, cancelled: false };
     const controller = new AbortController();
     abortRef.current = controller;
+    const shouldHandleResult = (): boolean => {
+      const activeRequest = activeRequestRef.current;
+      return !isUnmountedRef.current
+        && !!activeRequest
+        && activeRequest.id === clientRequestId
+        && !activeRequest.detached
+        && !activeRequest.cancelled;
+    };
     setIsImproving(true);
     clearFeedback();
     setPending(PLANNING_ACTION_LABELS.improve);
@@ -313,8 +340,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         planningAgentPresetId: state.planningAgentPresetId || undefined,
         overrides: toPlanningOverrides(state.routeOverride, state.modelOverride, state.planningAgentPresetId),
       });
-      const activeRequest = activeRequestRef.current;
-      if (!isUnmountedRef.current && activeRequest && activeRequest.id === clientRequestId && !activeRequest.detached && !activeRequest.cancelled) {
+      if (shouldHandleResult()) {
         state.setGoal(improvedGoal);
         state.setOriginalPrompt(rawPrompt);
         setSuccess("Prompt refined");
@@ -332,7 +358,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         setError(error instanceof Error ? error.message : String(error), { retryAction: handleImprovePrompt, retryLabel: "Retry Improve", autoDismiss: false });
       }
     } finally {
-      abortRef.current = null;
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       const activeRequest = activeRequestRef.current;
       if (activeRequest?.id === clientRequestId) {
         activeRequestRef.current = null;
@@ -365,6 +393,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     activeRequestRef.current = { id: clientRequestId, detached: false, cancelled: false };
     const controller = new AbortController();
     abortRef.current = controller;
+    const shouldHandleResult = (): boolean => {
+      const activeRequest = activeRequestRef.current;
+      return !isUnmountedRef.current
+        && !!activeRequest
+        && activeRequest.id === clientRequestId
+        && !activeRequest.detached
+        && !activeRequest.cancelled;
+    };
     setIsSubmitting(true);
     clearFeedback();
     const actionType = state.submitMode === "plan_only" ? "plan_only" : state.submitMode === "replan" ? "replan" : "plan_and_start";
@@ -384,9 +420,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         clientRequestId,
         sprintKeyOverride: state.sprintKeyOverride.trim() || undefined,
         signal: controller.signal,
+        shouldHandleResult,
       });
-      const activeRequest = activeRequestRef.current;
-      if (!isUnmountedRef.current && activeRequest?.id === clientRequestId && !activeRequest.detached && !activeRequest.cancelled) {
+      if (shouldHandleResult()) {
         onClose();
       }
     } catch (error) {
@@ -402,7 +438,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         setError(error instanceof Error ? error.message : String(error), { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry Request", autoDismiss: false });
       }
     } finally {
-      abortRef.current = null;
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       const activeRequest = activeRequestRef.current;
       if (activeRequest?.id === clientRequestId) {
         activeRequestRef.current = null;
@@ -429,15 +467,38 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     })),
     ...virtualProviders.map(v => ({
       type: 'virtual' as const,
-      id: v.id,
-      label: v.label,
-      provider: v.id,
+      id: v.providerConfigId || v.id || v.provider || "",
+      label: v.displayLabel || v.label || v.providerConfigId || v.id || v.provider || "Provider",
+      provider: v.providerConfigId || v.id || v.provider,
+      iconProviderId: v.iconProviderId || (v.provider as ProviderId | undefined) || (v.id as ProviderId | undefined),
+      effectiveModel: v.effectiveModel,
     }))
   ];
 
   const currentRoute = state.routeOverride || null;
   const showModelOverride = currentRoute?.type === 'virtual';
-  const modelOptions = currentRoute?.provider ? getProviderModelOptions(currentRoute.provider) : [];
+  const modelProviderId = currentRoute?.iconProviderId;
+  const modelOptions = modelProviderId ? getProviderModelOptions(modelProviderId) : [];
+  const defaultModelLabel = currentRoute?.effectiveModel
+    ? `Default Model (${currentRoute.effectiveModel})`
+    : defaultModelOptionLabel;
+  const renderProviderIcon = (providerId: ProviderId) => (
+    <ProviderBrandIcon id={providerId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+  );
+  const renderConnectedRouteIcon = () => (
+    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-slate-500/18 bg-slate-500/[0.08] text-slate-600 dark:border-slate-300/18 dark:bg-slate-300/[0.08] dark:text-slate-300">
+      <Workflow className="h-3.5 w-3.5" strokeWidth={2.2} />
+    </span>
+  );
+
+  useEffect(() => {
+    if (!state.modelOverride) {
+      return;
+    }
+    if (!showModelOverride || !modelOptions.some((option) => option.value === state.modelOverride)) {
+      state.setModelOverride(null);
+    }
+  }, [modelOptions, showModelOverride, state.modelOverride]);
 
   const isDark = document.documentElement.classList.contains("dark");
 
@@ -538,10 +599,24 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     state.setRouteOverride(opt || null);
                   }}
                   options={[
-                    { value: "", label: "Default Route" },
-                    ...routeOptions.map(opt => ({ value: opt.id, label: opt.label })),
+                    {
+                      value: "",
+                      label: defaultRouteOptionLabel,
+                      icon: defaultRouteIconProviderId
+                        ? () => renderProviderIcon(defaultRouteIconProviderId)
+                        : undefined,
+                    },
+                    ...routeOptions.map(opt => ({
+                      value: opt.id,
+                      label: opt.label,
+                      icon: opt.type === "virtual" && opt.iconProviderId
+                        ? () => renderProviderIcon(opt.iconProviderId!)
+                        : opt.type === "connected"
+                          ? renderConnectedRouteIcon
+                          : undefined,
+                    })),
                   ]}
-                  placeholder="Default Route"
+                  placeholder={defaultRouteOptionLabel}
                 />
               </div>
             </div>
@@ -564,10 +639,22 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                       value={state.modelOverride || ""}
                       onChange={(val) => state.setModelOverride(val || null)}
                       options={[
-                        { value: "", label: "Default Model" },
-                        ...modelOptions.map(opt => ({ value: opt.value, label: opt.label })),
+                        {
+                          value: "",
+                          label: defaultModelLabel,
+                          icon: modelProviderId
+                            ? () => renderProviderIcon(modelProviderId)
+                            : undefined,
+                        },
+                        ...modelOptions.map(opt => ({
+                          value: opt.value,
+                          label: opt.label,
+                          icon: modelProviderId
+                            ? () => renderProviderIcon(modelProviderId)
+                            : undefined,
+                        })),
                       ]}
-                      placeholder="Default Model"
+                      placeholder={defaultModelLabel}
                     />
                   );
                 })()}

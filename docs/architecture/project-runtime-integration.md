@@ -51,6 +51,7 @@ Sprint matching:
 Task matching:
 - prefers DB task record id when present
 - otherwise matches by `task_key`
+- session and PR artifacts are accepted only when they are unowned or already owned by the same project, sprint, and task. This prevents two projects that point at repositories with the same basename from sharing a Jules run-key match such as `codeux/s4/t02`.
 
 Legacy cleanup:
 - unscoped project-level runtime rows from the pre-multi-sprint bridge are treated as deprecated
@@ -71,6 +72,7 @@ Recent tightening:
 - dashboard cancel no longer patches selected-project subtasks directly
 - task planning status is now updated from execution owners (`cli_workflow`, worker dispatch completion, and Jules session sync) instead of relying only on snapshot mirroring
 - recent provider activity is now persisted into `task_run_events` and projected back into `/api/status`, so legacy task cards and the Live page no longer need a second live-activities fetch to show real provider messages
+- Jules session sync and legacy status mirroring reject foreign runtime artifacts before mutating `task_runs` or planning status. A status payload that contains a session id or PR URL already persisted under another project, sprint, or task is treated as stale and cannot create a new task run in the selected sprint.
 
 ## Why This Matters
 

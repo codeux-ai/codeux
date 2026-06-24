@@ -29,10 +29,11 @@ describe("TaskComposer Accessibility", () => {
       })),
     });
 
-    render(<TaskComposer sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+    const { container } = render(<TaskComposer sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
 
-    const submitButton = screen.getByRole("button", { name: /Create Task/i });
-    fireEvent.click(submitButton);
+    const form = container.querySelector("form");
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
 
     await waitFor(() => {
       const firstInvalid = document.querySelector('[aria-invalid="true"]');
