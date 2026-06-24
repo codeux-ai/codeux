@@ -206,6 +206,8 @@ Legacy runtime:
 - Selecting a virtual worker from the top nav switches the selected project into `workers.executionMode = VIRTUAL` with that provider
 - Connected MCP worker selection has been removed; the worker selector is now virtual-only
 - Projects page is DB-backed and can create/select/delete projects
+- Project cards now surface richer read-only metadata from `GET /api/projects`, including source badges, repository URL or workspace path, created/updated timestamps, last run timestamp/status, branch details, provider, host, and task-completion counts.
+- Project card quick actions are always visible and include `Open`, `Setup project`, `Project settings`, and `Delete`; the settings action first selects the project and then routes to `/config` so the existing scoped settings surface opens for the right project.
 - Project source cells now select the clicked project before routing: the `Sprints` action loads `/sprints`, and the settings gear loads `/config`.
 - The Projects page now uses the dashed grid Add Project card as the single entry point for creating a project; the top-right header CTA was removed to keep creation affordance in one place.
 - The `Add Project` dialog now keeps keyboard focus inside the active form field while typing, and its initial focus respects the form's `autofocus` input instead of jumping to the header close button

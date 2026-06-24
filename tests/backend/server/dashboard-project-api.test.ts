@@ -544,6 +544,86 @@ describe("dashboard project management API", () => {
     expect(apiSprint2.latestReview.reviewer).toBe('QA Bot');
   });
 
+  it("includes latest run activity in GET /api/projects", async () => {
+    const { fetch, storage } = await createServerHandle();
+    const baseUrl = "http://127.0.0.1";
+
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Activity Project", sourceType: "local", sourceRef: "/tmp/activity" }),
+    });
+    expect(projectResponse.status).toBe(201);
+    const project = await projectResponse.json() as { id: string };
+
+    const sprintResponse = await fetch(`${baseUrl}/api/projects/${project.id}/sprints`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Activity Sprint", goal: "Track recent runs" }),
+    });
+    expect(sprintResponse.status).toBe(201);
+    const sprint = await sprintResponse.json() as { id: string };
+
+    const taskResponse = await fetch(`${baseUrl}/api/projects/${project.id}/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sprintId: sprint.id,
+        title: "Recent task",
+        promptMarkdown: "Create a task so run data can be attached.",
+        priority: "medium",
+        executorType: "auto",
+        status: "pending",
+      }),
+    });
+    expect(taskResponse.status).toBe(201);
+    const task = await taskResponse.json() as { id: string };
+
+    const db = storage.getDatabase();
+    db.prepare(`
+      INSERT INTO sprint_runs (
+        id, project_id, sprint_id, status, trigger_type, executor_mode, started_at, finished_at, last_heartbeat_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "sprint-run-activity",
+      project.id,
+      sprint.id,
+      "completed",
+      "manual",
+      "docker_cli",
+      "2026-03-11T09:00:00.000Z",
+      "2026-03-11T09:15:00.000Z",
+      null,
+      "2026-03-11T09:00:00.000Z",
+      "2026-03-11T09:15:00.000Z",
+    );
+    db.prepare(`
+      INSERT INTO task_runs (
+        id, project_id, sprint_id, task_id, sprint_run_id, state, started_at, finished_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "task-run-activity",
+      project.id,
+      sprint.id,
+      task.id,
+      "sprint-run-activity",
+      "in_progress",
+      "2026-03-12T10:11:12.000Z",
+      null,
+    );
+
+    const projects = await fetch(`${baseUrl}/api/projects`).then(async (response) => response.json()) as {
+      projects: Array<{ name: string; lastRunAt: string | null; lastRunStatus: string | null }>;
+      selectedProjectId: string | null;
+    };
+    expect(projects.selectedProjectId).toBe(project.id);
+    expect(projects.projects[0]).toMatchObject({
+      name: "Activity Project",
+      lastRunAt: "2026-03-12T10:11:12.000Z",
+      lastRunStatus: "in_progress",
+    });
+  });
+
   it("creates and queries DB-backed projects, sprints, tasks, and markdown export", async () => {
     const {
       dir,
