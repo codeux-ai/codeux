@@ -264,11 +264,11 @@ describe("SprintLedger Component", () => {
       expect(lockedRow).toBeDefined();
       expect(unlockedRow).toBeDefined();
 
-      const lockedCheckbox = lockedRow!.querySelector("button");
-      const unlockedCheckbox = unlockedRow!.querySelector("button");
+      const lockedPinBtn = Array.from(lockedRow!.querySelectorAll("button")).find(b => b.getAttribute("aria-label")?.includes("showcase"));
+      const unlockedPinBtn = Array.from(unlockedRow!.querySelectorAll("button")).find(b => b.getAttribute("aria-label")?.includes("showcase"));
 
-      expect(lockedCheckbox).toBeDisabled();
-      expect(unlockedCheckbox).not.toBeDisabled();
+      expect(lockedPinBtn).toBeDisabled();
+      expect(unlockedPinBtn).not.toBeDisabled();
     });
   });
 
