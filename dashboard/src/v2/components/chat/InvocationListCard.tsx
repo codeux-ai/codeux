@@ -7,6 +7,7 @@ import { ProviderLogo } from "../ui/ProviderLogo.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { formatTokenCount } from "../../lib/chat-widget-view-models.js";
 import { formatInvocationPurpose, formatInvocationDuration, InvocationContextChips } from "./invocation-display.js";
 
@@ -76,6 +77,7 @@ export const InvocationListCard: FunctionComponent<{
   sprintKeyPrefix?: string;
 }> = ({ invocations, selectedInvocationId, onSelect, agentPresets, sprintKeyPrefix = "SPR" }) => {
   const [showStats, setShowStats] = useState(readStoredStatsVisibility);
+  const interactionTokens = useInteractionTokens();
 
   const toggleStats = () => {
     setShowStats((current) => {
@@ -94,7 +96,12 @@ export const InvocationListCard: FunctionComponent<{
         onClick={toggleStats}
         aria-pressed={showStats}
         title={showStats ? "Hide stats" : "Show stats"}
-        className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors ${
+        style={{
+          transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
+          transitionDuration: interactionTokens.controlFeedback.duration,
+          transitionTimingFunction: interactionTokens.controlFeedback.ease,
+        }}
+        className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] ${
           showStats
             ? "border-signal-500/30 bg-signal-500/[0.08] text-signal-600 dark:text-signal-400"
             : "border-black/[0.07] bg-black/[0.02] text-slate-400 hover:text-slate-600 dark:border-white/[0.07] dark:bg-white/[0.02] dark:hover:text-slate-200"
@@ -162,6 +169,7 @@ export const InvocationListCard: FunctionComponent<{
           <div
             role="button"
             tabIndex={0}
+            aria-selected={isSelected ? "true" : "false"}
             onClick={() => onSelect(invocation.id)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
@@ -169,7 +177,12 @@ export const InvocationListCard: FunctionComponent<{
                 onSelect(invocation.id);
               }
             }}
-            className={`w-full cursor-pointer rounded-[1.5rem] p-4 text-left transition-all duration-200
+            style={{
+              transitionProperty: "all",
+              transitionDuration: interactionTokens.controlFeedback.duration,
+              transitionTimingFunction: interactionTokens.controlFeedback.ease,
+            }}
+            className={`w-full cursor-pointer rounded-[1.5rem] p-4 text-left
               bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl
               shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
               ${isOptimistic ? "opacity-70" : ""}
@@ -226,29 +239,39 @@ export const InvocationListCard: FunctionComponent<{
               </div>
 
               {/* Stat table — clean 2-column label/value grid */}
-              {showStats && (
-              <div className="mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-black/[0.05] bg-black/[0.015] dark:border-white/[0.06] dark:bg-white/[0.02]">
-                {cells.map((cell, idx) => {
-                  const full = cell.full || (stretchLast && idx === lastIndex);
-                  return (
-                    <div
-                      key={cell.label}
-                      className={`flex items-center justify-between gap-2 px-2.5 py-1.5
-                        ${full ? "col-span-2" : ""}
-                        ${!full && idx % 2 === 1 ? "border-l border-black/[0.05] dark:border-white/[0.06]" : ""}
-                        ${idx >= 2 ? "border-t border-black/[0.05] dark:border-white/[0.06]" : ""}`}
-                    >
-                      <span className="truncate text-[8px] font-semibold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
-                        {cell.label}
-                      </span>
-                      <span className={`shrink-0 whitespace-nowrap font-mono text-[10px] font-semibold tabular-nums ${cell.tone || "text-slate-700 dark:text-slate-200"}`}>
-                        {cell.value}
-                      </span>
-                    </div>
-                  );
-                })}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateRows: showStats ? "1fr" : "0fr",
+                  transitionProperty: "grid-template-rows",
+                  transitionDuration: interactionTokens.expansionCollapse.duration,
+                  transitionTimingFunction: interactionTokens.expansionCollapse.ease,
+                }}
+              >
+                <div className="overflow-hidden">
+                  <div className={`mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-black/[0.05] bg-black/[0.015] dark:border-white/[0.06] dark:bg-white/[0.02] ${!showStats ? "invisible" : ""}`}>
+                    {cells.map((cell, idx) => {
+                      const full = cell.full || (stretchLast && idx === lastIndex);
+                      return (
+                        <div
+                          key={cell.label}
+                          className={`flex items-center justify-between gap-2 px-2.5 py-1.5
+                            ${full ? "col-span-2" : ""}
+                            ${!full && idx % 2 === 1 ? "border-l border-black/[0.05] dark:border-white/[0.06]" : ""}
+                            ${idx >= 2 ? "border-t border-black/[0.05] dark:border-white/[0.06]" : ""}`}
+                        >
+                          <span className="truncate text-[8px] font-semibold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
+                            {cell.label}
+                          </span>
+                          <span className={`shrink-0 whitespace-nowrap font-mono text-[10px] font-semibold tabular-nums ${cell.tone || "text-slate-700 dark:text-slate-200"}`}>
+                            {cell.value}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-              )}
 
               {/* Invocation id — tiny, bottom-right */}
               <div className="mt-2 text-right font-mono text-[10px] text-slate-300 dark:text-slate-600">
