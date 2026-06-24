@@ -70,7 +70,7 @@ const normalizeAgentName = (value: string): string => (
 
 /* ── Main Page ── */
 export const AgentsPage: FunctionComponent = () => {
-  const contentRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLElement>(null);
   const { selectedProject, loading: projectLoading } = useProjectData();
   const [presets, setPresets] = useState<AgentPreset[]>([]);
   const [loading, setLoading] = useState(false);

@@ -54,8 +54,8 @@ describe("ActionFeedbackRegion", () => {
       />
     );
 
-    const retryBtn = screen.getByRole("button", { name: "Retry: Saved successfully" });
-    const dismissBtn = screen.getByRole("button", { name: "Dismiss: Saved successfully" });
+    const retryBtn = screen.getByRole("button", { name: "Retry" });
+    const dismissBtn = screen.getByRole("button", { name: "Dismiss" });
     expect(retryBtn).toBeInTheDocument();
     expect(dismissBtn).toBeInTheDocument();
   });

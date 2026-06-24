@@ -15,7 +15,7 @@ import { SectionDivider } from "./components/ui/SectionDivider.js";
 const OverviewTelemetry = lazy(() => import("./components/OverviewTelemetry.js").then(m => ({ default: m.OverviewTelemetry })));
 
 export const DashboardV2: FunctionComponent = () => {
-    const mainContentRef = useRef<HTMLDivElement>(null);
+    const mainContentRef = useRef<HTMLElement>(null);
     const pageData = useOverviewPageData();
     const prefersReducedMotion = useReducedMotion();
 
@@ -37,7 +37,7 @@ export const DashboardV2: FunctionComponent = () => {
     }, [prefersReducedMotion]);
 
     return (
-        <PageContainer containerRef={mainContentRef} padding="overview" className="gap-12 md:gap-24">
+        <PageContainer containerRef={mainContentRef} padding="overview" className="gap-12 md:gap-24" aria-label="Dashboard Overview">
             {/* Page Header */}
             <header className="flex flex-col md:flex-row items-start md:items-end justify-between w-full gap-6">
                 <div>

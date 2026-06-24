@@ -104,6 +104,7 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
             style={{ opacity: 0.2 }}
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
+            aria-hidden="true"
         >
             <defs>
                 <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">

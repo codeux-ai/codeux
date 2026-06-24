@@ -550,7 +550,7 @@ export const ProjectsPage: FunctionComponent = () => {
 
     return (
         <>
-            <PageContainer containerRef={mainRef} className="gap-16">
+            <PageContainer aria-label="Projects" containerRef={mainRef} className="gap-16">
                 {/* ── Ambient glows (max 2 per page) ─────────────────── */}
                 <div
                     aria-hidden="true"

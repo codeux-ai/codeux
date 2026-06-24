@@ -291,7 +291,7 @@ export const OnboardingExperience: FunctionComponent = () => {
   const backdropRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLElement>(null);
   const sideRef = useRef<HTMLElement>(null);
-  const contentRef = useRef<HTMLElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [readiness, setReadiness] = useState<OnboardingRuntimeReadiness>(defaultReadiness);
@@ -874,7 +874,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             </button>
           </header>
 
-          <main ref={contentRef} className="dashboard-scrollbar relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 dark:text-slate-100 md:px-8">
+          <div ref={contentRef} className="dashboard-scrollbar relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 dark:text-slate-100 md:px-8">
             {error ? (
               <div className="mb-4 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm font-semibold text-status-red">
                 {error}
@@ -1523,7 +1523,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 )}
               </div>
             ) : null}
-          </main>
+          </div>
 
           <footer className="relative flex shrink-0 items-center justify-between gap-3 border-t border-black/[0.06] bg-white/45 px-5 py-4 backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-950/28 md:px-8">
             <button

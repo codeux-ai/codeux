@@ -334,4 +334,11 @@ describe("TopNav Selectors Accessibility", () => {
         expect(liveRegion).toBeInTheDocument();
         expect(liveRegion?.textContent).toContain("Project switched");
     });
+
+    it("has a discoverable skip link that points to main content", async () => {
+        renderNav();
+        const skipLink = screen.getByText(/Skip to main content/i);
+        expect(skipLink).toBeInTheDocument();
+        expect(skipLink).toHaveAttribute("href", "#main-content");
+    });
 });

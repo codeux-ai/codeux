@@ -62,7 +62,7 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div role="status" aria-live="polite" aria-atomic="true" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div role="status" aria-live="polite" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.filter(t => t.type !== 'error').map((toast) => (
           <Toast
             key={toast.id}
@@ -72,7 +72,7 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
           />
         ))}
       </div>
-      <div role="alert" aria-live="assertive" aria-atomic="true" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div role="alert" aria-live="assertive" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.filter(t => t.type === 'error').map((toast) => (
           <Toast
             key={toast.id}

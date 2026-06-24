@@ -429,7 +429,7 @@ export const LiveSessionPage: FunctionComponent = () => {
 
 
     return (
-        <PageContainer className="gap-16">
+        <PageContainer aria-label="Live Session" className="gap-16">
             <h1 className="sr-only">Live Session</h1>
             <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
             <LiveTransportBanner
