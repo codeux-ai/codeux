@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { JulesApiClient } from "../../../src/integrations/jules-api-client.js";
+import { JulesApiClient, JulesNotFoundError } from "../../../src/integrations/jules-api-client.js";
 import axios from "axios";
 
 const mockInstance = Object.assign(
@@ -27,6 +27,7 @@ vi.mock("axios", () => {
   return {
     default: {
       create: vi.fn(() => mockInstance),
+      isAxiosError: vi.fn((err: any) => err && typeof err === "object" && (err.isAxiosError === true || err.response?.status !== undefined)),
     }
   };
 });
@@ -266,5 +267,20 @@ describe("JulesApiClient coverage", () => {
         const errorCb = (mockInstance.interceptors.response as any)._errorCb;
         const err = { response: { status: 404 }, config: { url: "/x" }, message: "Request failed with status code 404" };
         await expect(errorCb(err)).rejects.toBe(err);
+    });
+
+    it("handles 404 in listAllActivities by throwing JulesNotFoundError", async () => {
+        vi.mocked(mockInstance.get).mockReset();
+        const err = Object.assign(new Error("Request failed with status code 404"), {
+          response: { status: 404 },
+          config: { url: "/sessions/sess/activities" }
+        });
+        vi.mocked(mockInstance.get).mockRejectedValueOnce(err);
+
+        const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key", minRequestIntervalMs: 0 });
+        
+        const promise = client.listAllActivities("sess");
+        await expect(promise).rejects.toThrow("Jules activities not found for session: sess");
+        await expect(promise).rejects.toBeInstanceOf(JulesNotFoundError);
     });
 });

@@ -3,6 +3,37 @@ import type { AxiosInstance } from "axios";
 import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
 import type { JulesClient } from "../domain/jules/jules-client.js";
 
+export class JulesNotFoundError extends Error {
+  readonly status = 404;
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = "JulesNotFoundError";
+    this.cause = cause;
+  }
+}
+
+export function isNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  if (error instanceof Error && error.name === "JulesNotFoundError") {
+    return true;
+  }
+  if (axios.isAxiosError && axios.isAxiosError(error)) {
+    return error.response?.status === 404;
+  }
+  const err = error as { status?: number; response?: { status?: number }; message?: string };
+  if (err.status === 404 || err.response?.status === 404) {
+    return true;
+  }
+  if (typeof err.message === "string" && err.message.includes("status code 404")) {
+    return true;
+  }
+  return false;
+}
+
 export interface JulesApiClientOptions {
   apiKey?: string | null;
   baseUrl: string;
@@ -368,8 +399,15 @@ export class JulesApiClient implements JulesClient {
   async getSession(sessionId: string): Promise<JulesSession> {
     this.ensureApiKey();
     const name = this.toSessionName(sessionId);
-    const response = await this.axiosInstance.get<JulesSession>(`/${name}`);
-    return response.data;
+    try {
+      const response = await this.axiosInstance.get<JulesSession>(`/${name}`);
+      return response.data;
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        throw new JulesNotFoundError(`Jules session not found: ${sessionId}`, error);
+      }
+      throw error;
+    }
   }
 
   async listSessions(args: JulesListSessionsRequest = {}): Promise<JulesListSessionsResponse> {
@@ -452,8 +490,15 @@ export class JulesApiClient implements JulesClient {
     this.ensureApiKey();
     const sessionName = this.toSessionName(sessionId);
     const activityName = this.normalizeName("activities", activityId);
-    const response = await this.axiosInstance.get<JulesActivity>(`/${sessionName}/${activityName}`);
-    return response.data;
+    try {
+      const response = await this.axiosInstance.get<JulesActivity>(`/${sessionName}/${activityName}`);
+      return response.data;
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        throw new JulesNotFoundError(`Jules activity not found: ${sessionId}/${activityId}`, error);
+      }
+      throw error;
+    }
   }
 
   async listActivities(args: JulesListActivitiesRequest): Promise<JulesListActivitiesResponse> {
@@ -474,12 +519,19 @@ export class JulesApiClient implements JulesClient {
     let allActivities: JulesActivity[] = [];
     let pageToken: string | undefined = undefined;
 
-    do {
-      const params: JulesPageQuery = { pageToken };
-      const response = await this.axiosInstance.get<JulesListActivitiesResponse>(`/${sessionName}/activities`, { params });
-      allActivities = allActivities.concat(response.data.activities || []);
-      pageToken = response.data.nextPageToken;
-    } while (pageToken);
+    try {
+      do {
+        const params: JulesPageQuery = { pageToken };
+        const response = await this.axiosInstance.get<JulesListActivitiesResponse>(`/${sessionName}/activities`, { params });
+        allActivities = allActivities.concat(response.data.activities || []);
+        pageToken = response.data.nextPageToken;
+      } while (pageToken);
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        throw new JulesNotFoundError(`Jules activities not found for session: ${sessionId}`, error);
+      }
+      throw error;
+    }
 
     return allActivities;
   }
