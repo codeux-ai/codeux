@@ -49,18 +49,6 @@ export const runStartReadyTasksStep = async (
     }
 
     const provider = options.getProviderForTask(task);
-    if (provider) {
-      const providerSettings = options.getProviderSettings(provider);
-      const limit = providerSettings.maxConcurrentTasks ?? 0;
-      if (limit > 0) {
-        const currentCount = currentRunningCounts[provider] || 0;
-        if (currentCount >= limit) {
-          task.status = "BLOCKED";
-          options.logger.info("Task blocked: provider concurrency cap reached", { taskId: task.id, provider, limit, currentCount });
-          continue;
-        }
-      }
-    }
 
     try {
       const session = await options.startTask(task);
@@ -80,11 +68,12 @@ export const runStartReadyTasksStep = async (
       // A provider cap deferral is not a dispatch failure: block the task and retry next cycle
       // without counting it toward the emergency-stop failure budget.
       if (error instanceof ProviderCapReachedError) {
-        task.status = "BLOCKED";
+        task.status = "PENDING";
         options.logger.info("Task blocked: provider concurrency cap reached at dispatch", {
           taskId: task.id,
           provider: error.provider,
           limit: error.limit,
+          currentCount: (error as any).currentCount,
         });
         continue;
       }
