@@ -12,7 +12,7 @@ describe("FieldWrapper Accessibility", () => {
         <Input />
       </FieldWrapper>
     );
-    const requiredSrText = getByText("(required)");
+    const requiredSrText = getByText("(Required)");
     expect(requiredSrText.className).toContain("sr-only");
 
     const input = container.querySelector("input");
@@ -76,5 +76,53 @@ describe("FieldWrapper Accessibility", () => {
     const input = container.querySelector("input");
     expect(input?.getAttribute("aria-describedby")).toContain("helper-123");
     expect(input?.getAttribute("aria-errormessage")).toBeFalsy();
+  });
+
+  it("does not show error on untouched fields", () => {
+    const { container } = render(
+      <FieldWrapper label="Test" error="Invalid input">
+        <Input />
+      </FieldWrapper>
+    );
+
+    const input = container.querySelector("input");
+    expect(input?.getAttribute("aria-invalid")).toBeFalsy();
+    expect(input?.getAttribute("aria-errormessage")).toBeFalsy();
+  });
+
+  it("shows error on force-touched fields", () => {
+    const { container } = render(
+      <FieldWrapper label="Test" error="Invalid input" forceTouch={true}>
+        <Input />
+      </FieldWrapper>
+    );
+
+    const input = container.querySelector("input");
+    expect(input?.getAttribute("aria-invalid")).toBe("true");
+    expect(input?.getAttribute("aria-errormessage")).toBeTruthy();
+  });
+
+  it("passes valid state to child", () => {
+    const { container } = render(
+      <FieldWrapper label="Test" valid={true}>
+        <Input />
+      </FieldWrapper>
+    );
+
+    const input = container.querySelector("input");
+    expect(input?.getAttribute("data-valid")).toBe("true");
+  });
+
+  it("handles helper-only fields correctly without assigning error properties", () => {
+    const { container } = render(
+      <FieldWrapper label="Test" helperText="Help me">
+        <Input />
+      </FieldWrapper>
+    );
+
+    const input = container.querySelector("input");
+    expect(input?.getAttribute("aria-errormessage")).toBeFalsy();
+    expect(input?.getAttribute("aria-invalid")).toBeFalsy();
+    expect(input?.getAttribute("aria-describedby")).toBeTruthy();
   });
 });

@@ -8,19 +8,31 @@ export interface Option {
 }
 
 interface MultiSelectProps {
+  id?: string;
   options?: Option[];
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
   className?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean | "false" | "true" | "grammar" | "spelling";
+  "aria-errormessage"?: string;
+  "aria-required"?: boolean | "false" | "true";
+  onBlur?: (e: FocusEvent) => void;
 }
 
 export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
+  id,
   options = [],
   value,
   onChange,
   placeholder = "Add label...",
   className = "",
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
+  "aria-errormessage": ariaErrorMessage,
+  "aria-required": ariaRequired,
+  onBlur,
 }) => {
   const [inputValue, setInputValue] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -150,12 +162,13 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
 
     // Otherwise it's a real blur
     addTag(inputValue);
+    onBlur?.(e);
   };
 
   return (
     <div className={`relative ${className}`} ref={containerRef}>
       <div
-        className={`flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-[0.95rem] border border-black/[0.06] bg-transparent px-3 py-1.5 transition-colors focus-within:border-signal-500 dark:border-white/[0.07]`}
+        className={`flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-[0.95rem] border border-black/[0.06] bg-transparent px-3 py-1.5 transition-colors focus-within:border-signal-500 dark:border-white/[0.07] ${ariaInvalid === 'true' || ariaInvalid === true ? 'border-status-red' : ''}`}
         onClick={() => {
           inputRef.current?.focus();
           setIsOpen(true);
@@ -185,12 +198,17 @@ export const MultiSelect: FunctionComponent<MultiSelectProps> = ({
           );
         })}
         <input
+          id={id}
           ref={inputRef}
           type="text"
           role="combobox"
           aria-expanded={isOpen}
           aria-haspopup="listbox"
           aria-controls={listboxId}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+          aria-errormessage={ariaErrorMessage}
+          aria-required={ariaRequired}
           value={inputValue}
           onInput={(e) => {
             setInputValue((e.target as HTMLInputElement).value);

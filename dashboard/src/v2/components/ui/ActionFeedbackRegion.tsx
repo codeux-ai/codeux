@@ -149,7 +149,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
           <button
             type="button"
             onClick={retryAction}
-            aria-label={`Retry: ${displayedMessage}`}
+            aria-label={retryLabel || "Retry"}
             className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -172,7 +172,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
               onDismiss?.();
             }}
             className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-            aria-label={`Dismiss: ${displayedMessage}`}
+            aria-label="Dismiss"
           >
             <X className="w-4 h-4" />
           </button>

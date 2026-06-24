@@ -14,6 +14,7 @@ export function FormError({ id, error, helperId, helperText }: FormErrorProps) {
     <div class="grid grid-cols-1 mt-1.5 overflow-hidden relative">
       <div
         id={helperId}
+        aria-hidden={!!error}
         class={`
           col-start-1 row-start-1
           text-xs text-slate-500 dark:text-slate-400
@@ -28,8 +29,6 @@ export function FormError({ id, error, helperId, helperText }: FormErrorProps) {
       {error && (
         <div
           id={id}
-          role="alert"
-          aria-live="assertive"
           class="col-start-1 row-start-1 text-xs font-medium text-status-red motion-safe:animate-form-slide-down opacity-100 visible"
         >
           {error}
