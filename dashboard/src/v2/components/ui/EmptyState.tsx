@@ -41,7 +41,7 @@ export const EmptyState: FunctionComponent<EmptyStateProps> = ({
   return (
     <div ref={containerRef} className="flex w-full flex-col items-center justify-center p-12 text-center">
       {icon && (
-        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 text-slate-500 shadow-sm ring-1 ring-slate-900/5 dark:bg-white/[0.04] dark:text-slate-400 dark:ring-white/[0.06]">
+        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--surface-glass)] text-slate-500 dark:text-slate-400 shadow-[var(--elevation-base)] ring-1 ring-[color:var(--border-hairline)]">
           {icon}
         </div>
       )}
@@ -49,7 +49,7 @@ export const EmptyState: FunctionComponent<EmptyStateProps> = ({
         {title}
       </h3>
       {description && (
-        <p className="mb-8 max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+        <p className="mb-8 max-w-sm text-sm leading-relaxed text-[color:var(--text-metadata)]">
           {description}
         </p>
       )}
