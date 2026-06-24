@@ -299,7 +299,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
         id: vp.providerConfigId || vp.id || vp.provider || "",
         label: vp.displayLabel || vp.label || vp.providerConfigId || vp.id || vp.provider || "Provider",
         provider: vp.providerConfigId || vp.id || vp.provider,
-        iconProviderId: vp.iconProviderId || vp.provider as ProviderId | undefined || vp.id as ProviderId | undefined,
+        iconProviderId: vp.iconProviderId || (vp.provider as ProviderId | undefined) || (vp.id as ProviderId | undefined),
         effectiveModel: vp.effectiveModel,
       });
     }
@@ -315,6 +315,23 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const defaultModelLabel = routeOverride?.effectiveModel
     ? `Default Model (${routeOverride.effectiveModel})`
     : defaultModelOptionLabel;
+  const renderProviderIcon = (providerId: ProviderId) => (
+    <ProviderBrandIcon id={providerId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+  );
+  const renderConnectedRouteIcon = () => (
+    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-slate-500/18 bg-slate-500/[0.08] text-slate-600 dark:border-slate-300/18 dark:bg-slate-300/[0.08] dark:text-slate-300">
+      <Settings2 className="h-3.5 w-3.5" strokeWidth={2.2} />
+    </span>
+  );
+
+  useEffect(() => {
+    if (!modelOverride) {
+      return;
+    }
+    if (!showModelOverride || !modelOptions.some((option) => option.value === modelOverride)) {
+      setModelOverride(null);
+    }
+  }, [modelOptions, modelOverride, showModelOverride]);
 
   /* ── Planning feedback / timer ──────────────────────────────────── */
   useEffect(() => {
@@ -663,22 +680,23 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                       onChange={(id) => {
                         const opt = routeOptions.find((o) => o.id === id);
                         setRouteOverride(opt || null);
-                        if (!opt || opt.type !== "virtual") setModelOverride(null);
                       }}
                       options={[
                         {
                           value: "",
                           label: defaultRouteOptionLabel,
                           icon: defaultRouteIconProviderId
-                            ? () => <ProviderBrandIcon id={defaultRouteIconProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                            ? () => renderProviderIcon(defaultRouteIconProviderId)
                             : undefined,
                         },
                         ...routeOptions.map((opt) => ({
                           value: opt.id,
                           label: opt.label,
-                          icon: opt.iconProviderId
-                            ? () => <ProviderBrandIcon id={opt.iconProviderId!} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
-                            : undefined,
+                          icon: opt.type === "virtual" && opt.iconProviderId
+                            ? () => renderProviderIcon(opt.iconProviderId!)
+                            : opt.type === "connected"
+                              ? renderConnectedRouteIcon
+                              : undefined,
                         })),
                       ]}
                       placeholder={defaultRouteOptionLabel}
@@ -703,14 +721,14 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                           value: "",
                           label: defaultModelLabel,
                           icon: modelProviderId
-                            ? () => <ProviderBrandIcon id={modelProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                            ? () => renderProviderIcon(modelProviderId)
                             : undefined,
                         },
                         ...modelOptions.map((opt) => ({
                           value: opt.value,
                           label: opt.label,
                           icon: modelProviderId
-                            ? () => <ProviderBrandIcon id={modelProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                            ? () => renderProviderIcon(modelProviderId)
                             : undefined,
                         })),
                       ]}

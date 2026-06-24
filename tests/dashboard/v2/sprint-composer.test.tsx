@@ -50,6 +50,37 @@ describe("SprintComposer", () => {
     expect(getByPlaceholderText("Runtime hardening")).toBeInTheDocument();
   });
 
+  it("renders provider instance route labels, default models, and brand icons", async () => {
+    const { getByRole, getByText, queryByText } = render(
+      <SprintComposer
+        {...defaultProps}
+        virtualProviders={[
+          {
+            providerConfigId: "codex-primary",
+            provider: "codex",
+            displayLabel: "Codex Primary",
+            iconProviderId: "codex",
+            effectiveModel: "gpt-5.5",
+          },
+        ]}
+        defaultRouteOptionLabel="Default Route (Codex Primary)"
+        defaultModelOptionLabel="Default Model (gpt-5.5)"
+        defaultRouteIconProviderId="codex"
+      />
+    );
+
+    expect(getByText("Default Route (Codex Primary)")).toBeInTheDocument();
+    expect(getByText("Default Model (gpt-5.5)")).toBeInTheDocument();
+    expect(document.body.querySelector('img[src="/lobe-icons/codex-color.svg"]')).toBeInTheDocument();
+    expect(queryByText("Virtual Codex Worker")).not.toBeInTheDocument();
+
+    fireEvent.click(getByRole("button", { name: "Planning Route" }));
+    await waitFor(() => {
+      expect(getByText("Codex Primary")).toBeInTheDocument();
+    });
+    expect(document.body.querySelectorAll('img[src="/lobe-icons/codex-color.svg"]').length).toBeGreaterThan(1);
+  });
+
   it("renders linked issue cards and submits them", async () => {
     const onSubmit = vi.fn();
     const issue = {

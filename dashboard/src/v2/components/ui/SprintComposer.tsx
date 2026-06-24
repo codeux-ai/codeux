@@ -472,7 +472,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       id: v.providerConfigId || v.id || v.provider || "",
       label: v.displayLabel || v.label || v.providerConfigId || v.id || v.provider || "Provider",
       provider: v.providerConfigId || v.id || v.provider,
-      iconProviderId: v.iconProviderId || v.provider as ProviderId | undefined || v.id as ProviderId | undefined,
+      iconProviderId: v.iconProviderId || (v.provider as ProviderId | undefined) || (v.id as ProviderId | undefined),
       effectiveModel: v.effectiveModel,
     }))
   ];
@@ -484,6 +484,23 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const defaultModelLabel = currentRoute?.effectiveModel
     ? `Default Model (${currentRoute.effectiveModel})`
     : defaultModelOptionLabel;
+  const renderProviderIcon = (providerId: ProviderId) => (
+    <ProviderBrandIcon id={providerId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+  );
+  const renderConnectedRouteIcon = () => (
+    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-slate-500/18 bg-slate-500/[0.08] text-slate-600 dark:border-slate-300/18 dark:bg-slate-300/[0.08] dark:text-slate-300">
+      <Workflow className="h-3.5 w-3.5" strokeWidth={2.2} />
+    </span>
+  );
+
+  useEffect(() => {
+    if (!state.modelOverride) {
+      return;
+    }
+    if (!showModelOverride || !modelOptions.some((option) => option.value === state.modelOverride)) {
+      state.setModelOverride(null);
+    }
+  }, [modelOptions, showModelOverride, state.modelOverride]);
 
   const isDark = document.documentElement.classList.contains("dark");
 
@@ -588,15 +605,17 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                       value: "",
                       label: defaultRouteOptionLabel,
                       icon: defaultRouteIconProviderId
-                        ? () => <ProviderBrandIcon id={defaultRouteIconProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                        ? () => renderProviderIcon(defaultRouteIconProviderId)
                         : undefined,
                     },
                     ...routeOptions.map(opt => ({
                       value: opt.id,
                       label: opt.label,
-                      icon: opt.iconProviderId
-                        ? () => <ProviderBrandIcon id={opt.iconProviderId!} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
-                        : undefined,
+                      icon: opt.type === "virtual" && opt.iconProviderId
+                        ? () => renderProviderIcon(opt.iconProviderId!)
+                        : opt.type === "connected"
+                          ? renderConnectedRouteIcon
+                          : undefined,
                     })),
                   ]}
                   placeholder={defaultRouteOptionLabel}
@@ -622,14 +641,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                       value: "",
                       label: defaultModelLabel,
                       icon: modelProviderId
-                        ? () => <ProviderBrandIcon id={modelProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                        ? () => renderProviderIcon(modelProviderId)
                         : undefined,
                     },
                     ...modelOptions.map(opt => ({
                       value: opt.value,
                       label: opt.label,
                       icon: modelProviderId
-                        ? () => <ProviderBrandIcon id={modelProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                        ? () => renderProviderIcon(modelProviderId)
                         : undefined,
                     })),
                   ]}

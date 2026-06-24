@@ -250,6 +250,48 @@ describe("SprintsPage", () => {
     expect(setShowQuicksprint).toHaveBeenCalledWith(false);
   });
 
+  it("passes provider instance route labels and defaults into the sprint composer", () => {
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      selectedProject: { id: "proj-1" },
+      planningRoute: { available: true },
+      sortedSprints: [],
+      showcaseSprints: [],
+      activeRunsBySprintId: new Map(),
+      interventionBySprintId: new Map(),
+      nextId: "spr-123",
+      virtualProviders: [{
+        providerConfigId: "codex-primary",
+        provider: "codex",
+        displayLabel: "Codex Primary",
+        iconProviderId: "codex",
+        effectiveModel: "gpt-5.5",
+      }],
+      defaultRouteOptionLabel: "Default Route (Codex Primary)",
+      defaultModelOptionLabel: "Default Model (gpt-5.5)",
+      defaultRouteIconProviderId: "codex",
+      pendingActionIds: new Set(),
+      planningPresets: [],
+      quicksprintTemplates: [],
+      showCreateComposer: true,
+      setShowCreateComposer: vi.fn(),
+      showQuicksprint: false,
+      setShowQuicksprint: vi.fn(),
+      editingSprint: null,
+      setEditingSprint: vi.fn(),
+      showImportModal: false,
+      setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
+    } as any);
+
+    render(<SprintsPage />);
+
+    expect(screen.getByText("Default Route (Codex Primary)")).toBeInTheDocument();
+    expect(screen.getByText("Default Model (gpt-5.5)")).toBeInTheDocument();
+    expect(screen.queryByText("Virtual Codex Worker")).not.toBeInTheDocument();
+    expect(document.body.querySelector('img[src="/lobe-icons/codex-color.svg"]')).toBeInTheDocument();
+  });
+
   it("toggles the sprint gallery from the top action row", () => {
     vi.mocked(useSprintsPageData).mockReturnValue({
       selectedProject: { id: "proj-1" },

@@ -91,6 +91,39 @@ describe("QuicksprintPanel", () => {
     expect(getByText("Plan & Start")).toBeInTheDocument();
   });
 
+  it("renders provider instance route labels, default models, and brand icons", async () => {
+    const { getByText, queryByText } = render(
+      <QuicksprintPanel
+        {...defaultProps}
+        virtualProviders={[
+          {
+            providerConfigId: "codex-primary",
+            provider: "codex",
+            displayLabel: "Codex Primary",
+            iconProviderId: "codex",
+            effectiveModel: "gpt-5.5",
+          },
+        ]}
+        defaultRouteOptionLabel="Default Route (Codex Primary)"
+        defaultModelOptionLabel="Default Model (gpt-5.5)"
+        defaultRouteIconProviderId="codex"
+      />
+    );
+
+    fireEvent.click(getByText("API Tests"));
+
+    expect(getByText("Default Route (Codex Primary)")).toBeInTheDocument();
+    expect(getByText("Default Model (gpt-5.5)")).toBeInTheDocument();
+    expect(document.body.querySelector('img[src="/lobe-icons/codex-color.svg"]')).toBeInTheDocument();
+    expect(queryByText("Virtual Codex Worker")).not.toBeInTheDocument();
+
+    fireEvent.click(getByText("Default Route (Codex Primary)"));
+    await waitFor(() => {
+      expect(getByText("Codex Primary")).toBeInTheDocument();
+    });
+    expect(document.body.querySelectorAll('img[src="/lobe-icons/codex-color.svg"]').length).toBeGreaterThan(1);
+  });
+
   it("filters default templates by purpose", async () => {
     const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
 

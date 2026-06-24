@@ -27,7 +27,7 @@ describe("Sprints Page View Models", () => {
     it("returns virtual worker label if virtual mode", () => {
       const result = buildPlanningRoute(null, { executionMode: "VIRTUAL", virtualWorkerProvider: "gemini" });
       expect(result.available).toBe(true);
-      expect(result.label).toBe("Virtual Gemini Worker");
+      expect(result.label).toBe("Gemini Primary");
     });
 
     it("returns connection display name if no virtual mode and connection exists", () => {

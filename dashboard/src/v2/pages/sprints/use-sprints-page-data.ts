@@ -11,7 +11,6 @@ import type {
   AgentPreset,
   Sprint,
   SprintStatus,
-  VirtualWorkerProvider,
 } from "../../types.js";
 import type { AddProjectModalSubmission } from "../../components/ui/AddProjectModal.js";
 import type { SystemSettings } from "../../../types.js";
@@ -335,8 +334,13 @@ export function useSprintsPageData() {
   );
 
   const planningRoute = useMemo(
-    () => buildPlanningRoute(planningConnection, workerMode),
-    [planningConnection, workerMode],
+    () => buildPlanningRoute(
+      planningConnection,
+      workerMode,
+      systemSettings,
+      effectiveSettings?.settings.workers.model,
+    ),
+    [effectiveSettings?.settings.workers.model, planningConnection, systemSettings, workerMode],
   );
 
   const reloadQuicksprintTemplates = useCallback(async () => {
