@@ -471,6 +471,10 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     getProject: (projectId) => deps.projectManagementRepository.getProject(projectId),
     updateProject: (projectId, input) => deps.projectManagementRepository.updateProject(projectId, input),
     deleteProject: (projectId) => deps.projectManagementRepository.deleteProject(projectId),
+    listProjectGoals: (projectId) => deps.projectManagementRepository.listProjectGoals(projectId),
+    createProjectGoal: (projectId, input) => deps.projectManagementRepository.createProjectGoal(projectId, input),
+    updateProjectGoal: (goalId, input) => deps.projectManagementRepository.updateProjectGoal(goalId, input),
+    deleteProjectGoal: (goalId) => deps.projectManagementRepository.deleteProjectGoal(goalId),
     selectProject: (projectId) => {
       const selectedProjectId = deps.projectManagementRepository.setSelectedProjectId(projectId);
       cache.invalidateProjects();
@@ -564,6 +568,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<DashboardS
     },
     planSprint: async (projectId, sprintId, input, signal) => {
       const result = await deps.planningAgentService.planSprint(projectId, sprintId, input, signal);
+      deps.activityCacheService.invalidateGitStatusCache();
+      return result;
+    },
+    planGoalSprint: async (projectId, input, signal) => {
+      const result = await deps.planningAgentService.planGoalSprint(projectId, input, signal);
       deps.activityCacheService.invalidateGitStatusCache();
       return result;
     },

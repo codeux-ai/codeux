@@ -54,6 +54,19 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "tasks", "executor_type", "TEXT NOT NULL DEFAULT 'auto'");
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS project_goals (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS sprint_linked_issues (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
@@ -113,6 +126,7 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureColumn(db, "execution_invocations", "agent_preset_id", "TEXT");
 
   ensureUniqueIndex(db, "idx_tasks_sprint_key", "tasks", "sprint_id, task_key");
+  ensureIndex(db, "idx_project_goals_project_status", "project_goals", "project_id, status, updated_at DESC");
   ensureUniqueIndex(db, "idx_sprint_linked_issues_unique", "sprint_linked_issues", "sprint_id, provider, host_domain, repository, issue_number");
   ensureIndex(db, "idx_sprint_linked_issues_sprint", "sprint_linked_issues", "project_id, sprint_id, close_state");
   ensureIndex(db, "idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");

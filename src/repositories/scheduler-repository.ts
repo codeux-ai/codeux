@@ -5,6 +5,7 @@ import { EntityNotFoundError, requireRecord, toNumber, ValidationError } from ".
 import type {
   CreateSchedulerEntryInput,
   ScheduleChatTarget,
+  ScheduleGoalSprintTarget,
   ScheduleQuicksprintTarget,
   ScheduleRecurrenceRule,
   SchedulerEntryRecord,
@@ -37,6 +38,7 @@ interface SchedulerEntryRow {
 interface PersistedTargetPayload {
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
+  goalSprintTarget?: ScheduleGoalSprintTarget;
   chatTarget?: ScheduleChatTarget;
 }
 
@@ -248,6 +250,29 @@ export class SchedulerRepository {
       };
     }
 
+    if (targetType === "goal_sprint") {
+      const goalIds = Array.from(new Set((input.goalSprintTarget?.goalIds || []).map((id) => id.trim()).filter(Boolean)));
+      if (goalIds.length === 0) {
+        throw new ValidationError("goalSprintTarget.goalIds is required.");
+      }
+      const minSprints = Math.max(1, Math.floor(Number(input.goalSprintTarget?.minSprints ?? 1)) || 1);
+      const maxSprints = Math.max(minSprints, Math.floor(Number(input.goalSprintTarget?.maxSprints ?? Math.max(2, minSprints))) || minSprints);
+      const minTasks = Math.max(1, Math.floor(Number(input.goalSprintTarget?.minTasks ?? goalIds.length)) || 1);
+      const maxTasks = Math.max(minTasks, Math.floor(Number(input.goalSprintTarget?.maxTasks ?? Math.max(minTasks, maxSprints * 6))) || minTasks);
+      return {
+        goalSprintTarget: {
+          goalIds,
+          minTasks,
+          maxTasks,
+          minSprints,
+          maxSprints,
+          submitMode: input.goalSprintTarget?.submitMode ?? "plan_and_start",
+          autoTriggerNext: input.goalSprintTarget?.autoTriggerNext ?? true,
+          planningOverrides: input.goalSprintTarget?.planningOverrides,
+        },
+      };
+    }
+
     const bodyMarkdown = input.chatTarget?.bodyMarkdown?.trim();
     if (!bodyMarkdown) {
       throw new ValidationError("chatTarget.bodyMarkdown is required.");
@@ -272,6 +297,9 @@ export class SchedulerRepository {
     }
     if (targetType === "quicksprint") {
       return "Scheduled quicksprint";
+    }
+    if (targetType === "goal_sprint") {
+      return "Scheduled goal sprint";
     }
     return target.chatTarget?.title || "Scheduled chat message";
   }
@@ -302,6 +330,7 @@ export class SchedulerRepository {
       lastError: row.last_error,
       sprintTarget: target.sprintTarget,
       quicksprintTarget: target.quicksprintTarget,
+      goalSprintTarget: target.goalSprintTarget,
       chatTarget: target.chatTarget,
       createdAt: row.created_at,
       updatedAt: row.updated_at,

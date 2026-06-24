@@ -15,6 +15,7 @@ import {
     Plus,
     Settings,
     Sparkles,
+    Target,
     Trash2,
 } from "lucide-preact";
 import type { Source, SourceStatus } from "./types.js";
@@ -25,11 +26,12 @@ import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useProjectData } from "./context/project-data.js";
 import { SkeletonPanel, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
-import { startProjectSetup } from "./lib/project-api.js";
+import { createProjectGoal, deleteProjectGoal, startProjectSetup, updateProjectGoal } from "./lib/project-api.js";
 import { fetchProjectInvocations } from "./lib/invocation-api.js";
 import { useToast } from "./components/feedback/ToastProvider.js";
 import { prefetchRoute } from "./router/route-prefetch.js";
 import { buildProjectCardViewModel, PROJECT_CARD_EMPTY_VALUE } from "./lib/project-card-view-model.js";
+import type { ProjectGoalRecord } from "./types.js";
 
 const EMBER_HEX = '#FFB800';
 
@@ -102,7 +104,8 @@ const ProjectCard: FunctionComponent<{
     onSetup: () => void;
     onOpenInvocation: () => void;
     onSettings: () => void;
-}> = ({ source, isSelected, isSettingUp, setupInvocationId, onSelect, onDelete, onSetup, onOpenInvocation, onSettings }) => {
+    onGoals: () => void;
+}> = ({ source, isSelected, isSettingUp, setupInvocationId, onSelect, onDelete, onSetup, onOpenInvocation, onSettings, onGoals }) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const viewModel = useMemo(() => buildProjectCardViewModel(source), [source]);
     const statusText = statusLabel[source.status];
@@ -353,6 +356,26 @@ const ProjectCard: FunctionComponent<{
                         </div>
                     </div>
 
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onGoals();
+                        }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        className="flex w-full items-center justify-between gap-3 rounded-[1.25rem] border border-signal-500/20 bg-signal-500/[0.09] px-4 py-3 text-left text-signal-800 transition-all hover:-translate-y-px hover:bg-signal-500/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/35 dark:text-signal-200"
+                    >
+                        <span className="flex min-w-0 items-center gap-2">
+                            <Target className="h-4 w-4 shrink-0" />
+                            <span className="truncate text-[11px] font-black uppercase tracking-[0.14em]">
+                                Goals
+                            </span>
+                        </span>
+                        <span className="shrink-0 rounded-full bg-white/70 px-2.5 py-1 font-mono text-[11px] font-black dark:bg-white/[0.08]">
+                            {source.activeGoalsCount || 0} active
+                        </span>
+                    </button>
+
                     <div className="mt-auto grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                         {viewModel.actions.map((action) => {
                             const isSetupAction = action.kind === "setup-project";
@@ -489,6 +512,11 @@ export const ProjectsPage: FunctionComponent = () => {
     const [runningSetupProjectIds, setRunningSetupProjectIds] = useState<Set<string>>(() => new Set());
     const [setupInvocationByProjectId, setSetupInvocationByProjectId] = useState<Record<string, string>>({});
     const [setupError, setSetupError] = useState<string | null>(null);
+    const [goalsProjectId, setGoalsProjectId] = useState<string | null>(null);
+    const [newGoalTitle, setNewGoalTitle] = useState("");
+    const [newGoalDescription, setNewGoalDescription] = useState("");
+    const [goalBusyId, setGoalBusyId] = useState<string | null>(null);
+    const [goalError, setGoalError] = useState<string | null>(null);
     const [setupOptions, setSetupOptions] = useState({
         agents: true,
         quicksprints: true,
@@ -503,6 +531,7 @@ export const ProjectsPage: FunctionComponent = () => {
         createProject,
         deleteProject,
         selectProject,
+        refreshProjects,
     } = useProjectData();
     const { addToast } = useToast();
 
@@ -650,6 +679,7 @@ export const ProjectsPage: FunctionComponent = () => {
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
+                goals: project.goals,
             });
             return;
         }
@@ -659,6 +689,7 @@ export const ProjectsPage: FunctionComponent = () => {
             sourceType: project.type,
             sourceRef: project.path,
             cloneDir: project.cloneDir,
+            goals: project.goals,
         });
         if (project.setup?.enabled) {
             launchProjectSetup(createdProject.id, createdProject.name, project.setup.options);
@@ -666,6 +697,52 @@ export const ProjectsPage: FunctionComponent = () => {
     };
 
     const activeSetupProject = sources.find(source => source.id === setupProjectId) || null;
+    const activeGoalsProject = sources.find(source => source.id === goalsProjectId) || null;
+
+    const handleCreateGoal = async () => {
+        if (!activeGoalsProject || !newGoalTitle.trim()) return;
+        setGoalBusyId("new");
+        setGoalError(null);
+        try {
+            await createProjectGoal(activeGoalsProject.id, {
+                title: newGoalTitle.trim(),
+                description: newGoalDescription.trim(),
+            });
+            setNewGoalTitle("");
+            setNewGoalDescription("");
+            await refreshProjects();
+        } catch (error) {
+            setGoalError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setGoalBusyId(null);
+        }
+    };
+
+    const handleUpdateGoalStatus = async (goal: ProjectGoalRecord, status: ProjectGoalRecord["status"]) => {
+        setGoalBusyId(goal.id);
+        setGoalError(null);
+        try {
+            await updateProjectGoal(goal.id, { status });
+            await refreshProjects();
+        } catch (error) {
+            setGoalError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setGoalBusyId(null);
+        }
+    };
+
+    const handleDeleteGoal = async (goal: ProjectGoalRecord) => {
+        setGoalBusyId(goal.id);
+        setGoalError(null);
+        try {
+            await deleteProjectGoal(goal.id);
+            await refreshProjects();
+        } catch (error) {
+            setGoalError(error instanceof Error ? error.message : String(error));
+        } finally {
+            setGoalBusyId(null);
+        }
+    };
 
     const handleRunSetup = async () => {
         if (!setupProjectId) return;
@@ -848,6 +925,12 @@ export const ProjectsPage: FunctionComponent = () => {
                                             }
                                         }}
                                         onSettings={() => openProjectSettings(source.id)}
+                                        onGoals={() => {
+                                            setGoalsProjectId(source.id);
+                                            setGoalError(null);
+                                            setNewGoalTitle("");
+                                            setNewGoalDescription("");
+                                        }}
                                     />
                                 </div>
                             ))}
@@ -869,6 +952,108 @@ export const ProjectsPage: FunctionComponent = () => {
                     onAdd={handleAddProject}
                     initialSourceType={modalSourceType}
                 />
+            )}
+            {activeGoalsProject && (
+                <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 px-6 backdrop-blur-xl" role="dialog" aria-modal="true" aria-labelledby="project-goals-title">
+                    <div className="w-full max-w-2xl rounded-[2rem] border border-black/[0.06] bg-white p-6 shadow-[0_40px_90px_rgba(0,0,0,0.28)] dark:border-white/[0.08] dark:bg-void-800">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
+                                    <Target className="h-4 w-4" />
+                                    Project Goals
+                                </div>
+                                <h2 id="project-goals-title" className="mt-3 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                                    {activeGoalsProject.name}
+                                </h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setGoalsProjectId(null)}
+                                className="rounded-full bg-black/[0.05] px-3 py-2 text-xs font-bold text-slate-500 transition-colors hover:text-slate-900 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:text-white"
+                            >
+                                Close
+                            </button>
+                        </div>
+
+                        <div className="mt-5 grid gap-3">
+                            <input
+                                type="text"
+                                value={newGoalTitle}
+                                onInput={(event) => setNewGoalTitle((event.target as HTMLInputElement).value)}
+                                placeholder="Finalize frontend UI"
+                                className="rounded-2xl border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-signal-500/50 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-white"
+                            />
+                            <textarea
+                                value={newGoalDescription}
+                                onInput={(event) => setNewGoalDescription((event.target as HTMLTextAreaElement).value)}
+                                rows={3}
+                                placeholder="Optional details, acceptance criteria, or constraints"
+                                className="resize-y rounded-2xl border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:border-signal-500/50 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-200"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => { void handleCreateGoal(); }}
+                                disabled={!newGoalTitle.trim() || goalBusyId === "new"}
+                                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-signal-500 px-5 py-3 text-xs font-black uppercase tracking-[0.14em] text-void-900 transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                            >
+                                {goalBusyId === "new" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                                Add Goal
+                            </button>
+                        </div>
+
+                        {goalError && (
+                            <div className="mt-4 rounded-2xl bg-status-red/[0.08] p-3 text-sm font-semibold text-status-red" role="alert">
+                                {goalError}
+                            </div>
+                        )}
+
+                        <div className="mt-6 max-h-[42vh] space-y-3 overflow-y-auto pr-1">
+                            {activeGoalsProject.goals.length === 0 ? (
+                                <div className="rounded-2xl border border-dashed border-black/[0.08] p-5 text-sm font-semibold text-slate-400 dark:border-white/[0.1]">
+                                    No goals defined yet.
+                                </div>
+                            ) : activeGoalsProject.goals.map((goal) => (
+                                <div key={goal.id} className="rounded-2xl border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.08] dark:bg-white/[0.035]">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="font-bold text-slate-900 dark:text-white">{goal.title}</div>
+                                            {goal.description ? (
+                                                <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">{goal.description}</div>
+                                            ) : null}
+                                            <div className="mt-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{goal.status}</div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => { void handleUpdateGoalStatus(goal, goal.status === "completed" ? "active" : "completed"); }}
+                                            disabled={goalBusyId === goal.id}
+                                            className="rounded-xl border border-status-green/20 bg-status-green/[0.08] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-status-green disabled:opacity-50"
+                                        >
+                                            {goal.status === "completed" ? "Reopen" : "Complete"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => { void handleUpdateGoalStatus(goal, goal.status === "archived" ? "active" : "archived"); }}
+                                            disabled={goalBusyId === goal.id}
+                                            className="rounded-xl border border-black/[0.06] bg-white/70 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04]"
+                                        >
+                                            {goal.status === "archived" ? "Restore" : "Archive"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => { void handleDeleteGoal(goal); }}
+                                            disabled={goalBusyId === goal.id}
+                                            className="rounded-xl border border-status-red/20 bg-status-red/[0.08] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-status-red disabled:opacity-50"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             )}
             {activeSetupProject && (
                 <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 px-6 backdrop-blur-xl" role="dialog" aria-modal="true" aria-labelledby="setup-project-title">

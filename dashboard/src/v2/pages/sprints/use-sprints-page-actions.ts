@@ -2,6 +2,7 @@ import { useCallback } from "preact/hooks";
 import type {
   CreateTaskInput,
   ImprovePromptInput,
+  ProjectGoalRecord,
   Sprint,
   SprintLinkedIssueInput,
   SprintStatus,
@@ -17,9 +18,11 @@ import {
   fetchTasks,
   importSprintMarkdown,
   improveSprintPrompt,
+  planGoalSprint,
   planSprint,
   updateSprint,
   cancelPlanningRequest,
+  createProjectGoal,
 } from "../../lib/project-api.js";
 import {
   buildTaskBundle,
@@ -75,6 +78,7 @@ export interface SprintsPageActionsDeps {
   setAddTaskSprintTasks: (tasks: any[]) => void;
   setAddTaskForSprint: (sprint: Sprint | null) => void;
   reloadQuicksprintTemplates: () => Promise<void>;
+  refreshProjects: () => Promise<void>;
   createProject: any;
 }
 
@@ -102,6 +106,7 @@ export function useSprintsPageActions({
   setAddTaskSprintTasks,
   setAddTaskForSprint,
   reloadQuicksprintTemplates,
+  refreshProjects,
   createProject,
 }: SprintsPageActionsDeps) {
   const runSprintAction = useCallback(
@@ -685,6 +690,55 @@ export function useSprintsPageActions({
     ],
   );
 
+  const handleGoalSprintExecute = useCallback(
+    async (input: {
+      goalIds: string[];
+      minTasks: number;
+      maxTasks: number;
+      minSprints: number;
+      maxSprints: number;
+      submitMode: "plan_only" | "plan_and_start";
+      routeOverride?: PlanningRouteOption | null;
+      modelOverride?: string | null;
+      planningAgentPresetId?: string | null;
+    }) => {
+      if (!selectedProject) return;
+      try {
+        await planGoalSprint(selectedProject.id, {
+          goalIds: input.goalIds,
+          minTasks: input.minTasks,
+          maxTasks: input.maxTasks,
+          minSprints: input.minSprints,
+          maxSprints: input.maxSprints,
+          submitMode: input.submitMode,
+          planningAgentPresetId: input.planningAgentPresetId || undefined,
+          overrides: toPlanningOverrides(
+            input.routeOverride ?? null,
+            input.modelOverride ?? null,
+            input.planningAgentPresetId ?? null,
+          ),
+        });
+        await Promise.all([refreshPlanningEta(selectedProject.id), refresh()]);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : String(error));
+        throw error;
+      }
+    },
+    [refresh, refreshPlanningEta, selectedProject, setError],
+  );
+
+  const handleCreateGoalFromComposer = useCallback(
+    async (input: { title: string; description?: string }): Promise<ProjectGoalRecord> => {
+      if (!selectedProject) {
+        throw new Error("Select a project before creating goals.");
+      }
+      const goal = await createProjectGoal(selectedProject.id, input);
+      await refreshProjects();
+      return goal;
+    },
+    [refreshProjects, selectedProject],
+  );
+
   const handleCreateQuicksprintTemplate = useCallback(
     async (data: {
       name: string;
@@ -747,6 +801,7 @@ export function useSprintsPageActions({
           initMode: project.initMode,
           remoteProvider: project.remoteProvider,
           isPrivate: project.isPrivate,
+          goals: project.goals,
         });
         return;
       }
@@ -756,6 +811,7 @@ export function useSprintsPageActions({
         sourceType: project.type,
         sourceRef: project.path,
         cloneDir: project.cloneDir,
+        goals: project.goals,
       });
     },
     [createProject],
@@ -776,6 +832,8 @@ export function useSprintsPageActions({
     handleOpenExport,
     handleImportSprint,
     handleQuicksprintExecute,
+    handleCreateGoalFromComposer,
+    handleGoalSprintExecute,
     handleCreateQuicksprintTemplate,
     handleUpdateQuicksprintTemplate,
     handleDeleteQuicksprintTemplate,

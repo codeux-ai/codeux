@@ -30,6 +30,42 @@ afterEach(async () => {
 
 describe("ProjectManagementRepository", () => {
 
+  it("creates and manages project goals", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Goal Project",
+      sourceType: "local",
+      sourceRef: "/workspace/goal-project",
+      goals: ["Finalize frontend UI", { title: "Improve Test Coverage", description: "Reach critical path coverage." }],
+    });
+
+    expect(project.goals.map((goal) => goal.title)).toEqual([
+      "Finalize frontend UI",
+      "Improve Test Coverage",
+    ]);
+    expect(project.activeGoalsCount).toBe(2);
+
+    const created = repository.createProjectGoal(project.id, {
+      title: "Complete Checkout process",
+      description: "Wire payment confirmation and failure states.",
+    });
+    expect(created.status).toBe("active");
+
+    const updated = repository.updateProjectGoal(created.id, { status: "completed" });
+    expect(updated.status).toBe("completed");
+
+    const listed = repository.listProjectGoals(project.id);
+    expect(listed).toHaveLength(3);
+    expect(repository.getProjectGoalsByIds(project.id, [created.id])).toEqual([updated]);
+
+    repository.deleteProjectGoal(created.id);
+    expect(repository.listProjectGoals(project.id).map((goal) => goal.title)).toEqual([
+      "Finalize frontend UI",
+      "Improve Test Coverage",
+    ]);
+    expect(repository.getProject(project.id)?.activeGoalsCount).toBe(2);
+  });
+
   it("updates a project and sprint gracefully with empty or partial inputs", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({

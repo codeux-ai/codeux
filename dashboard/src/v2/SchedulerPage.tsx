@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Repeat,
   Send,
+  Target,
   Trash2,
   Zap,
 } from "lucide-preact";
@@ -70,6 +71,14 @@ const TARGET_OPTIONS: Array<{
     chipClassName: "bg-signal-500/12 text-signal-600 dark:text-signal-400",
   },
   {
+    value: "goal_sprint",
+    label: "Goal Sprint",
+    icon: Target,
+    tone: "text-signal-500",
+    activeClassName: "border-signal-500/35 bg-signal-500/10 shadow-[0_12px_34px_rgba(0,224,160,0.13)]",
+    chipClassName: "bg-signal-500/12 text-signal-600 dark:text-signal-400",
+  },
+  {
     value: "chat",
     label: "Chat message",
     icon: MessageCircle,
@@ -114,7 +123,7 @@ const formatTimeLabel = (iso: string): string => (
 );
 
 const targetLabel = (targetType: ScheduleTargetType): string => (
-  targetType === "sprint" ? "Sprint" : targetType === "quicksprint" ? "Quicksprint" : "Chat"
+  targetType === "sprint" ? "Sprint" : targetType === "quicksprint" ? "Quicksprint" : targetType === "goal_sprint" ? "Goal Sprint" : "Chat"
 );
 
 const recurrenceSummary = (recurrence: ScheduleRecurrenceRule): string => {
@@ -164,6 +173,11 @@ export const SchedulerPage: FunctionComponent = () => {
   const [selectedSprintId, setSelectedSprintId] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [taskCount, setTaskCount] = useState(5);
+  const [selectedGoalIds, setSelectedGoalIds] = useState<Set<string>>(new Set());
+  const [goalMinTasks, setGoalMinTasks] = useState(3);
+  const [goalMaxTasks, setGoalMaxTasks] = useState(12);
+  const [goalMinSprints, setGoalMinSprints] = useState(1);
+  const [goalMaxSprints, setGoalMaxSprints] = useState(3);
   const [chatMessage, setChatMessage] = useState("");
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [frequency, setFrequency] = useState<ScheduleRecurrenceRule["frequency"]>("daily");
@@ -221,7 +235,15 @@ export const SchedulerPage: FunctionComponent = () => {
     });
   }, [selectedProject?.id, refresh]);
 
+  useEffect(() => {
+    setSelectedGoalIds((current) => {
+      if (current.size > 0) return current;
+      return new Set((selectedProject?.goals || []).filter((goal) => goal.status === "active").map((goal) => goal.id));
+    });
+  }, [selectedProject?.goals]);
+
   const incompleteSprints = useMemo(() => sprints.filter((sprint) => sprint.status !== "completed"), [sprints]);
+  const activeGoals = useMemo(() => (selectedProject?.goals || []).filter((goal) => goal.status === "active"), [selectedProject?.goals]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_item, index) => addDays(startOfWeek(selectedDate), index)), [selectedDate]);
   const dayOccurrences = useMemo(() => {
     const dayStart = startOfDay(selectedDate).getTime();
@@ -268,6 +290,12 @@ export const SchedulerPage: FunctionComponent = () => {
     } else if (entry.targetType === "quicksprint" && entry.quicksprintTarget) {
       setSelectedTemplateId(entry.quicksprintTarget.templateId);
       setTaskCount(entry.quicksprintTarget.taskCount);
+    } else if (entry.targetType === "goal_sprint" && entry.goalSprintTarget) {
+      setSelectedGoalIds(new Set(entry.goalSprintTarget.goalIds));
+      setGoalMinTasks(entry.goalSprintTarget.minTasks);
+      setGoalMaxTasks(entry.goalSprintTarget.maxTasks);
+      setGoalMinSprints(entry.goalSprintTarget.minSprints);
+      setGoalMaxSprints(entry.goalSprintTarget.maxSprints);
     } else if (entry.targetType === "chat" && entry.chatTarget) {
       setChatMessage(entry.chatTarget.bodyMarkdown);
     }
@@ -294,6 +322,11 @@ export const SchedulerPage: FunctionComponent = () => {
     setSelectedSprintId(sprints.find((sprint) => sprint.status !== "completed")?.id || "");
     setSelectedTemplateId(templates[0]?.id || "");
     setTaskCount(5);
+    setSelectedGoalIds(new Set((selectedProject?.goals || []).filter((goal) => goal.status === "active").map((goal) => goal.id)));
+    setGoalMinTasks(3);
+    setGoalMaxTasks(12);
+    setGoalMinSprints(1);
+    setGoalMaxSprints(3);
     setChatMessage("");
     setRepeatEnabled(false);
     setFrequency("daily");
@@ -336,6 +369,8 @@ export const SchedulerPage: FunctionComponent = () => {
       } else if (targetType === "quicksprint") {
         const template = templates.find((item) => item.id === selectedTemplateId);
         return template ? `Run ${template.name}` : "Scheduled quicksprint";
+      } else if (targetType === "goal_sprint") {
+        return "Scheduled goal sprint";
       } else {
         return "Scheduled chat message";
       }
@@ -356,6 +391,15 @@ export const SchedulerPage: FunctionComponent = () => {
     } else if (targetType === "quicksprint") {
       if (!selectedTemplateId) {
         setFeedback({ tone: "error", message: "Choose a quicksprint template." });
+        return;
+      }
+    } else if (targetType === "goal_sprint") {
+      if (selectedGoalIds.size === 0) {
+        setFeedback({ tone: "error", message: "Choose at least one active goal." });
+        return;
+      }
+      if (goalMinTasks > goalMaxTasks || goalMinSprints > goalMaxSprints) {
+        setFeedback({ tone: "error", message: "Goal sprint minimums cannot be greater than maximums." });
         return;
       }
     } else {
@@ -380,6 +424,16 @@ export const SchedulerPage: FunctionComponent = () => {
         templateId: selectedTemplateId,
         taskCount,
         submitMode: "plan_and_start",
+      };
+    } else if (targetType === "goal_sprint") {
+      input.goalSprintTarget = {
+        goalIds: Array.from(selectedGoalIds),
+        minTasks: goalMinTasks,
+        maxTasks: goalMaxTasks,
+        minSprints: goalMinSprints,
+        maxSprints: goalMaxSprints,
+        submitMode: "plan_and_start",
+        autoTriggerNext: true,
       };
     } else {
       input.chatTarget = {
@@ -538,7 +592,7 @@ export const SchedulerPage: FunctionComponent = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {TARGET_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -614,6 +668,50 @@ export const SchedulerPage: FunctionComponent = () => {
                     className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
                   />
                 </label>
+              </div>
+            )}
+
+            {targetType === "goal_sprint" && (
+              <div className="grid gap-3">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Goals</span>
+                  <div className="mt-2 grid gap-2">
+                    {activeGoals.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-black/[0.08] p-3 text-xs font-semibold text-slate-400 dark:border-white/[0.1]">
+                        Add active goals from the Projects page first.
+                      </div>
+                    ) : activeGoals.map((goal) => {
+                      const selected = selectedGoalIds.has(goal.id);
+                      return (
+                        <button
+                          key={goal.id}
+                          type="button"
+                          onClick={() => setSelectedGoalIds((current) => {
+                            const next = new Set(current);
+                            if (next.has(goal.id)) next.delete(goal.id);
+                            else next.add(goal.id);
+                            return next;
+                          })}
+                          className={`rounded-2xl border p-3 text-left transition-all ${
+                            selected
+                              ? "border-signal-500/35 bg-signal-500/[0.1] text-slate-900 dark:text-white"
+                              : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035]"
+                          }`}
+                          aria-pressed={selected}
+                        >
+                          <span className="block text-xs font-black">{goal.title}</span>
+                          {goal.description ? <span className="mt-1 block text-[11px] font-medium opacity-75">{goal.description}</span> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <NumberInput label="Min tasks" value={goalMinTasks} min={1} max={goalMaxTasks} onChange={setGoalMinTasks} />
+                  <NumberInput label="Max tasks" value={goalMaxTasks} min={goalMinTasks} max={50} onChange={setGoalMaxTasks} />
+                  <NumberInput label="Min sprints" value={goalMinSprints} min={1} max={goalMaxSprints} onChange={setGoalMinSprints} />
+                  <NumberInput label="Max sprints" value={goalMaxSprints} min={goalMinSprints} max={8} onChange={setGoalMaxSprints} />
+                </div>
               </div>
             )}
 
@@ -963,3 +1061,26 @@ export const SchedulerPage: FunctionComponent = () => {
     </PageContainer>
   );
 };
+
+const NumberInput: FunctionComponent<{
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}> = ({ label, value, min, max, onChange }) => (
+  <label className="block">
+    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</span>
+    <input
+      type="number"
+      min={min}
+      max={max}
+      value={value}
+      onInput={(event) => {
+        const next = Math.trunc(Number(event.currentTarget.value) || min);
+        onChange(Math.max(min, Math.min(max, next)));
+      }}
+      className={`mt-2 min-h-[44px] w-full ${SCHEDULER_FIELD_CLASS}`}
+    />
+  </label>
+);

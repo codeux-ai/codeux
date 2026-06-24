@@ -28,6 +28,7 @@ import { SprintCell } from "../../components/sprints/SprintCell.js";
 import { SprintLedger } from "../../components/sprints/SprintLedger.js";
 import { SprintActionMenu } from "../../components/sprints/SprintActionMenu.js";
 import { QuicksprintPanel } from "../../components/quicksprint/QuicksprintPanel.js";
+import { GoalSprintPanel } from "../../components/goals/GoalSprintPanel.js";
 import { AddTaskModal } from "../../components/ui/AddTaskModal.js";
 import { SprintComposer } from "../../components/ui/SprintComposer.js";
 import { AddProjectModal } from "../../components/ui/AddProjectModal.js";
@@ -193,10 +194,14 @@ export const SprintsPage: FunctionComponent = () => {
     defaultAgentRoutingMode,
     defaultWorkerAgentPresetId,
     showQuicksprint, setShowQuicksprint,
+    showGoalSprint, setShowGoalSprint,
     quicksprintTemplates,
     quicksprintLoading,
+    activeGoals,
     agentPresets,
     handleQuicksprintExecute,
+    handleCreateGoalFromComposer,
+    handleGoalSprintExecute,
     handleCreateQuicksprintTemplate,
     handleUpdateQuicksprintTemplate,
     handleDeleteQuicksprintTemplate,
@@ -451,6 +456,31 @@ export const SprintsPage: FunctionComponent = () => {
                   setShowCreateComposer(false);
                   setEditingSprint(null);
                 }
+                if (showQuicksprint) {
+                  setShowQuicksprint(false);
+                }
+                setShowGoalSprint(!showGoalSprint);
+              }}
+              disabled={!selectedProject}
+              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                showGoalSprint
+                  ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
+                  : "bg-signal-500 text-void-900 hover:-translate-y-px hover:bg-signal-400"
+              }`}
+            >
+              {showGoalSprint ? <X className="h-3.5 w-3.5" strokeWidth={2.3} /> : <Target className="h-3.5 w-3.5" strokeWidth={2.3} />}
+              {showGoalSprint ? "Close Goal Sprint" : "Goal Sprint"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (showCreateComposer || editingSprint) {
+                  setShowCreateComposer(false);
+                  setEditingSprint(null);
+                }
+                if (showGoalSprint) {
+                  setShowGoalSprint(false);
+                }
                 setShowQuicksprint(!showQuicksprint);
               }}
               disabled={!selectedProject}
@@ -468,6 +498,9 @@ export const SprintsPage: FunctionComponent = () => {
               onClick={() => {
                 if (showQuicksprint) {
                   setShowQuicksprint(false);
+                }
+                if (showGoalSprint) {
+                  setShowGoalSprint(false);
                 }
                 if (editingSprint || showCreateComposer) {
                   setEditingSprint(null);
@@ -496,7 +529,7 @@ export const SprintsPage: FunctionComponent = () => {
             <div ref={createStageRef} className="relative">
               <div
                 className={`transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                  showCreateComposer || editingSprint || showQuicksprint || !showSprintGallery
+                  showCreateComposer || editingSprint || showQuicksprint || showGoalSprint || !showSprintGallery
                     ? "pointer-events-none max-h-0 overflow-hidden -translate-y-8 scale-[0.985] opacity-0 blur-[10px]"
                     : "max-h-[240rem] overflow-visible translate-y-0 scale-100 opacity-100 blur-0"
                 }`}
@@ -531,6 +564,8 @@ export const SprintsPage: FunctionComponent = () => {
                         onEdit={() => {
                           setEditingSprint(sprint);
                           setShowCreateComposer(false);
+                          setShowGoalSprint(false);
+                          setShowQuicksprint(false);
                           setLinkedIssues(sprint.linkedIssues || []);
                         }}
                         onDelete={() => {
@@ -558,6 +593,8 @@ export const SprintsPage: FunctionComponent = () => {
                     onClick={() => {
                       setEditingSprint(null);
                       setLinkedIssues([]);
+                      setShowGoalSprint(false);
+                      setShowQuicksprint(false);
                       setShowCreateComposer(true);
                     }}
                     disabled={!selectedProject}
@@ -621,6 +658,8 @@ export const SprintsPage: FunctionComponent = () => {
                     onCancelPlanningRequest={handleCancelPlanningRequest}
                     onStartNewSprint={() => {
                       setEditingSprint(null);
+                      setShowGoalSprint(false);
+                      setShowQuicksprint(false);
                       setShowCreateComposer(true);
                       setLinkedIssues([]);
                     }}
@@ -669,6 +708,34 @@ export const SprintsPage: FunctionComponent = () => {
                   />
                 </div>
               </div>
+
+              <div
+                className={`transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                  showGoalSprint
+                    ? "mt-0 max-h-[120rem] overflow-visible translate-y-0 scale-100 opacity-100 blur-0"
+                    : "pointer-events-none max-h-0 overflow-hidden translate-y-10 scale-[0.985] opacity-0 blur-[10px]"
+                }`}
+              >
+                {showGoalSprint ? (
+                  <div className="relative">
+                    <GoalSprintPanel
+                      goals={activeGoals}
+                      agentPresets={planningPresets}
+                      virtualProviders={virtualProviders}
+                      defaultRouteOptionLabel={defaultRouteOptionLabel}
+                      defaultModelOptionLabel={defaultModelOptionLabel}
+                      defaultRouteIconProviderId={defaultRouteIconProviderId}
+                      defaultPlanningAgentPresetId={defaultPlanningAgentPresetId}
+                      onClose={() => setShowGoalSprint(false)}
+                      onCreateGoal={handleCreateGoalFromComposer}
+                      onExecute={async (input) => {
+                        await handleGoalSprintExecute(input);
+                        animateLatestCell();
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div className="rounded-[2.2rem] border border-black/[0.06] bg-white/70 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
@@ -690,6 +757,8 @@ export const SprintsPage: FunctionComponent = () => {
                   setEditingSprint(sprint);
                   setLinkedIssues(sprint.linkedIssues || []);
                   setShowCreateComposer(false);
+                  setShowGoalSprint(false);
+                  setShowQuicksprint(false);
                 }}
                 onExportSprint={(sprint) => {
                   void handleOpenExport(sprint.id, sprint.name);
@@ -751,6 +820,7 @@ export const SprintsPage: FunctionComponent = () => {
             mergeLinkedIssues(issues);
             setShowIssueImportModal(false);
             setShowQuicksprint(false);
+            setShowGoalSprint(false);
             if (!editingSprint) {
               setShowCreateComposer(true);
             }
@@ -766,6 +836,7 @@ export const SprintsPage: FunctionComponent = () => {
             mergeLinkedIssues(issues);
             setIsJiraModalOpen(false);
             setShowQuicksprint(false);
+            setShowGoalSprint(false);
             if (!editingSprint) {
               setShowCreateComposer(true);
             }

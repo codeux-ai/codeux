@@ -4,6 +4,7 @@ import type {
   SchedulerEntryRecord,
   UpdateSchedulerEntryInput,
 } from "../contracts/scheduler-types.js";
+import type { GoalSprintPlanInput, GoalSprintPlanResult } from "../contracts/project-management-types.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { SchedulerRepository } from "../repositories/scheduler-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
@@ -19,6 +20,7 @@ export interface SchedulerServiceDeps {
   quicksprintService: QuicksprintService;
   chatThreadRuntimeService: ChatThreadRuntimeService;
   executionControlService: ExecutionControlService;
+  planGoalSprint: (projectId: string, input: GoalSprintPlanInput) => Promise<GoalSprintPlanResult>;
   logger: Logger;
   tickIntervalMs?: number;
 }
@@ -140,6 +142,24 @@ export class SchedulerService {
       return;
     }
 
+    if (entry.targetType === "goal_sprint") {
+      const target = entry.goalSprintTarget;
+      if (!target) {
+        throw new Error("Scheduled goal sprint target is missing.");
+      }
+      await this.deps.planGoalSprint(entry.projectId, {
+        goalIds: target.goalIds,
+        minTasks: target.minTasks,
+        maxTasks: target.maxTasks,
+        minSprints: target.minSprints,
+        maxSprints: target.maxSprints,
+        submitMode: target.submitMode,
+        autoTriggerNext: target.autoTriggerNext,
+        overrides: target.planningOverrides,
+      });
+      return;
+    }
+
     const target = entry.chatTarget;
     if (!target) {
       throw new Error("Scheduled chat target is missing.");
@@ -159,6 +179,18 @@ export class SchedulerService {
   }
 
   private validateInputTarget(projectId: string, input: CreateSchedulerEntryInput): void {
+    if (input.targetType === "goal_sprint") {
+      const goalIds = input.goalSprintTarget?.goalIds || [];
+      const goals = this.deps.projectManagementRepository.getProjectGoalsByIds(projectId, goalIds);
+      if (goals.length !== new Set(goalIds).size) {
+        throw new Error("Only goals in the selected project can be scheduled.");
+      }
+      if (goals.some((goal) => goal.status !== "active")) {
+        throw new Error("Only active goals can be scheduled.");
+      }
+      return;
+    }
+
     if (input.targetType !== "sprint") {
       return;
     }

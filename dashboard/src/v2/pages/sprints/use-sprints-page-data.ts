@@ -80,6 +80,8 @@ export function useSprintsPageData() {
     setAddTaskSprintTasks,
     showQuicksprint,
     setShowQuicksprint,
+    showGoalSprint,
+    setShowGoalSprint,
   } = useSprintsPageModals();
 
   const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(
@@ -119,7 +121,7 @@ export function useSprintsPageData() {
 
   const { feedback, setError, clearFeedback } = useActionFeedback();
 
-  const { projects, selectedProject, createProject } = useProjectData();
+  const { projects, selectedProject, createProject, refreshProjects } = useProjectData();
   const {
     data: sprints,
     refetch: refresh,
@@ -377,6 +379,7 @@ export function useSprintsPageData() {
     setAddTaskSprintTasks,
     setAddTaskForSprint,
     reloadQuicksprintTemplates,
+    refreshProjects,
     createProject,
   });
 
@@ -441,8 +444,11 @@ export function useSprintsPageData() {
       defaultAgentRouting?.taskCoding.agentPresetId || null,
     showQuicksprint,
     setShowQuicksprint,
+    showGoalSprint,
+    setShowGoalSprint,
     quicksprintTemplates,
     quicksprintLoading,
+    activeGoals: selectedProject?.goals?.filter((goal) => goal.status === "active") || [],
 
     feedback,
     clearFeedback,

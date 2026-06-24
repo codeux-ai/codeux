@@ -4,6 +4,7 @@ import { asyncRoute, toErrorResponse, syncRoute } from "./route-utils.js";
 import { requireTrimmedString, parseTrimmedString } from "./request-parsers.js";
 import type {
   CreateSprintInput,
+  GoalSprintPlanInput,
   IssuePromptContextInput,
   SprintLinkedIssueInput,
   SprintMarkdownImportInput,
@@ -115,6 +116,19 @@ export function registerSprintRoutes(router: Express, deps: DashboardDependencie
       res.status(201).json(deps.createSprint(requireTrimmedString(req.params.projectId, "projectId"), payload));
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to create sprint"));
+    }
+  }));
+
+  router.post("/api/projects/:projectId/goal-sprints/plan", asyncRoute(async (req, res) => {
+    if (!deps.planGoalSprint) {
+      res.status(501).json({ error: "Goal sprint planning is not enabled." });
+      return;
+    }
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      res.status(201).json(await deps.planGoalSprint(projectId, req.body as GoalSprintPlanInput));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to plan goal sprint"));
     }
   }));
 

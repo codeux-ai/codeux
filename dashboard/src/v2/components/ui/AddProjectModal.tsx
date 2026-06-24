@@ -29,6 +29,7 @@ type ExistingProjectSubmission = {
         enabled: boolean;
         options: ProjectSetupOptions;
     };
+    goals?: string[];
 };
 
 type NewProjectSubmission = {
@@ -39,6 +40,7 @@ type NewProjectSubmission = {
     remoteProvider?: 'github' | 'gitlab';
     isPrivate?: boolean;
     repoSlug?: string;
+    goals?: string[];
 };
 
 export type AddProjectModalSubmission = ExistingProjectSubmission | NewProjectSubmission;
@@ -49,6 +51,14 @@ const slugify = (text: string): string => {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '');
 };
+
+const parseGoalsText = (value: string): string[] => (
+    value
+        .split(/\r?\n/)
+        .map((line) => line.trim().replace(/^[-*]\s+/, ""))
+        .filter(Boolean)
+        .slice(0, 20)
+);
 
 interface AddProjectModalProps {
     onClose: () => void;
@@ -81,6 +91,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [newProvider, setNewProvider] = useState<'github' | 'gitlab'>('github');
     const [newIsPrivate, setNewIsPrivate] = useState(true);
     const [initializeProject, setInitializeProject] = useState(true);
+    const [goalsText, setGoalsText] = useState('');
     const [showSetupOptions, setShowSetupOptions] = useState(false);
     const [setupOptions, setSetupOptions] = useState({
         agents: true,
@@ -125,6 +136,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         setSubmitError(null);
         setTouched(prev => ({ ...prev, path: true }));
         try {
+            const goals = parseGoalsText(goalsText);
+            const goalPayload = goals.length > 0 ? { goals } : {};
             if (sourceType === 'new_project') {
                 await Promise.resolve(onAdd({
                     name: name.trim(),
@@ -140,6 +153,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             isPrivate: newIsPrivate,
                         }
                         : {}),
+                    ...goalPayload,
                 }));
             } else {
                 const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
@@ -153,6 +167,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         enabled: initializeProject,
                         options: setupOptions,
                     },
+                    ...goalPayload,
                 }));
             }
             handleClose();
@@ -443,6 +458,21 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     onBlur={() => setTouched(prev => ({ ...prev, name: true }))}
                                 />
                                 <FormError id="project-name-error" error={touched.name ? validationErrors.name : undefined} />
+                            </div>
+
+                            <div className="group/field">
+                                <label htmlFor="add-project-goals" className={`${fieldLabelClass} flex items-center gap-1.5`}>
+                                    <Workflow className="h-3 w-3" /> Goals
+                                    <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">(optional, one per line)</span>
+                                </label>
+                                <textarea
+                                    id="add-project-goals"
+                                    value={goalsText}
+                                    onInput={(event) => setGoalsText((event.target as HTMLTextAreaElement).value)}
+                                    rows={3}
+                                    placeholder={"Finalize frontend UI\nComplete checkout process\nImprove test coverage"}
+                                    className={`${detailInputClass} min-h-[6.5rem] resize-y leading-relaxed`}
+                                />
                             </div>
 
                             {/* Source Type Toggle */}

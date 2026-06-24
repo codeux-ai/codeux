@@ -75,7 +75,11 @@ import type {
 } from "../contracts/connection-chat-types.js";
 import type {
   CreateProjectInput,
+  ProjectGoalInput,
+  ProjectGoalRecord,
   CreateSprintInput,
+  GoalSprintPlanInput,
+  GoalSprintPlanResult,
   CreateTaskInput,
   ImprovePromptInput,
   PlanSprintOptions,
@@ -90,6 +94,7 @@ import type {
   SprintRecord,
   TaskRecord,
   UpdateProjectInput,
+  UpdateProjectGoalInput,
   UpdateSprintInput,
   UpdateTaskInput,
   SprintLinkedIssueInput,
@@ -189,6 +194,10 @@ export interface DashboardServerOptions {
   getProject: (projectId: string) => ProjectSummary | null;
   updateProject: (projectId: string, input: UpdateProjectInput) => ProjectSummary;
   deleteProject: (projectId: string) => void;
+  listProjectGoals: (projectId: string) => ProjectGoalRecord[];
+  createProjectGoal: (projectId: string, input: ProjectGoalInput) => ProjectGoalRecord;
+  updateProjectGoal: (goalId: string, input: UpdateProjectGoalInput) => ProjectGoalRecord;
+  deleteProjectGoal: (goalId: string) => void;
   selectProject: (projectId: string | null) => string | null;
   selectSprint: (projectId: string, sprintId: string | null) => string | null;
   listSprints: (projectId: string) => SprintCollectionResponse;
@@ -232,6 +241,7 @@ export interface DashboardServerOptions {
 
   improveSprintPrompt?: (projectId: string, input: ImprovePromptInput, signal?: AbortSignal) => Promise<unknown>;
   planSprint?: (projectId: string, sprintId: string, options: PlanSprintOptions, signal?: AbortSignal) => Promise<unknown>;
+  planGoalSprint?: (projectId: string, input: GoalSprintPlanInput, signal?: AbortSignal) => Promise<GoalSprintPlanResult>;
   quicksprintService?: QuicksprintService;
   schedulerService?: SchedulerService;
   sprintIssueService?: SprintIssueService;

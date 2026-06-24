@@ -2,7 +2,7 @@ import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, toErrorResponse, syncRoute } from "./route-utils.js";
 import { requireTrimmedString, parseTrimmedString } from "./request-parsers.js";
-import type { CreateProjectInput, ProjectSetupRequestInput, UpdateProjectInput } from "../contracts/project-management-types.js";
+import type { CreateProjectInput, ProjectGoalInput, ProjectSetupRequestInput, UpdateProjectGoalInput, UpdateProjectInput } from "../contracts/project-management-types.js";
 import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.js";
 import { initializeProject } from "../domain/projects/project-initializer.js";
 
@@ -123,6 +123,43 @@ export function registerProjectRoutes(router: Express, deps: DashboardDependenci
       res.json({ ok: true });
     } catch (error) {
       res.status(400).json(toErrorResponse(error, "Failed to delete project"));
+    }
+  }));
+
+  router.get("/api/projects/:projectId/goals", syncRoute((req, res) => {
+    try {
+      res.json(deps.listProjectGoals(requireTrimmedString(req.params.projectId, "projectId")));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to list project goals"));
+    }
+  }));
+
+  router.post("/api/projects/:projectId/goals", syncRoute((req, res) => {
+    try {
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
+      res.status(201).json(deps.createProjectGoal(projectId, req.body as ProjectGoalInput));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to create project goal"));
+    }
+  }));
+
+  router.patch("/api/project-goals/:goalId", syncRoute((req, res) => {
+    try {
+      res.json(deps.updateProjectGoal(
+        requireTrimmedString(req.params.goalId, "goalId"),
+        req.body as UpdateProjectGoalInput,
+      ));
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to update project goal"));
+    }
+  }));
+
+  router.delete("/api/project-goals/:goalId", syncRoute((req, res) => {
+    try {
+      deps.deleteProjectGoal(requireTrimmedString(req.params.goalId, "goalId"));
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(400).json(toErrorResponse(error, "Failed to delete project goal"));
     }
   }));
 

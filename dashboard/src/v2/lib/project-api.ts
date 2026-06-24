@@ -2,12 +2,16 @@ import type {
   CreateProjectInput,
   CreateSprintInput,
   CreateTaskInput,
+  GoalSprintPlanInput,
+  GoalSprintPlanResult,
   IssuePromptContext,
   IssuePromptContextInput,
   ImprovePromptInput,
   LocalDirectoryBrowserResponse,
   PlanSprintOptions,
   ProjectCollectionResponse,
+  ProjectGoalInput,
+  ProjectGoalRecord,
   ProjectSummary,
   ProjectSetupRequestInput,
   ProjectSetupResult,
@@ -20,6 +24,7 @@ import type {
   SprintRecord,
   TaskRecord,
   UpdateProjectInput,
+  UpdateProjectGoalInput,
   UpdateSprintInput,
   UpdateTaskInput,
 } from "../types.js";
@@ -98,6 +103,32 @@ export const updateProject = async (projectId: string, input: UpdateProjectInput
 
 export const deleteProject = async (projectId: string): Promise<void> => {
   await fetchJson<{ ok: boolean }>(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+  });
+};
+
+export const fetchProjectGoals = async (projectId: string, signal?: AbortSignal): Promise<ProjectGoalRecord[]> => {
+  return fetchJson<ProjectGoalRecord[]>(`/api/projects/${encodeURIComponent(projectId)}/goals`, { signal });
+};
+
+export const createProjectGoal = async (projectId: string, input: ProjectGoalInput): Promise<ProjectGoalRecord> => {
+  return fetchJson<ProjectGoalRecord>(`/api/projects/${encodeURIComponent(projectId)}/goals`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+};
+
+export const updateProjectGoal = async (goalId: string, input: UpdateProjectGoalInput): Promise<ProjectGoalRecord> => {
+  return fetchJson<ProjectGoalRecord>(`/api/project-goals/${encodeURIComponent(goalId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+};
+
+export const deleteProjectGoal = async (goalId: string): Promise<void> => {
+  await fetchJson<{ ok: boolean }>(`/api/project-goals/${encodeURIComponent(goalId)}`, {
     method: "DELETE",
   });
 };
@@ -296,6 +327,19 @@ export const planSprint = async (
   signal?: AbortSignal,
 ): Promise<{ ok: true; invocationId: string; agentId: string; createdTaskIds: string[]; started: boolean }> => {
   return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    signal,
+  });
+};
+
+export const planGoalSprint = async (
+  projectId: string,
+  input: GoalSprintPlanInput,
+  signal?: AbortSignal,
+): Promise<GoalSprintPlanResult> => {
+  return fetchJson<GoalSprintPlanResult>(`/api/projects/${encodeURIComponent(projectId)}/goal-sprints/plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

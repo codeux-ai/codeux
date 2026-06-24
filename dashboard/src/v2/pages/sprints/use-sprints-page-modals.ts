@@ -14,6 +14,7 @@ export function useSprintsPageModals() {
   const [addTaskForSprint, setAddTaskForSprint] = useState<Sprint | null>(null);
   const [addTaskSprintTasks, setAddTaskSprintTasks] = useState<Task[]>([]);
   const [showQuicksprint, setShowQuicksprint] = useState(false);
+  const [showGoalSprint, setShowGoalSprint] = useState(false);
 
   return {
     showCreateComposer,
@@ -32,5 +33,7 @@ export function useSprintsPageModals() {
     setAddTaskSprintTasks,
     showQuicksprint,
     setShowQuicksprint,
+    showGoalSprint,
+    setShowGoalSprint,
   };
 }

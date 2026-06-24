@@ -1,6 +1,7 @@
 import type { QuicksprintExecutionInput } from "./quicksprint-types.js";
+import type { GoalSprintPlanInput } from "./project-management-types.js";
 
-export type ScheduleTargetType = "sprint" | "quicksprint" | "chat";
+export type ScheduleTargetType = "sprint" | "quicksprint" | "goal_sprint" | "chat";
 export type ScheduleStatus = "scheduled" | "paused" | "completed" | "failed" | "cancelled";
 export type ScheduleRecurrenceFrequency = "none" | "hourly" | "daily" | "weekly" | "monthly";
 export type ScheduleRecurrenceEndMode = "never" | "after_count" | "on_date";
@@ -26,6 +27,17 @@ export interface ScheduleQuicksprintTarget {
   planningOverrides?: QuicksprintExecutionInput["planningOverrides"];
 }
 
+export interface ScheduleGoalSprintTarget {
+  goalIds: string[];
+  minTasks: number;
+  maxTasks: number;
+  minSprints: number;
+  maxSprints: number;
+  submitMode: GoalSprintPlanInput["submitMode"];
+  autoTriggerNext?: boolean;
+  planningOverrides?: GoalSprintPlanInput["overrides"];
+}
+
 export interface ScheduleChatTarget {
   bodyMarkdown: string;
   threadId?: string | null;
@@ -48,6 +60,7 @@ export interface SchedulerEntryRecord {
   lastError: string | null;
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
+  goalSprintTarget?: ScheduleGoalSprintTarget;
   chatTarget?: ScheduleChatTarget;
   createdAt: string;
   updatedAt: string;
@@ -81,6 +94,7 @@ export interface CreateSchedulerEntryInput {
   recurrence?: Partial<ScheduleRecurrenceRule>;
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
+  goalSprintTarget?: ScheduleGoalSprintTarget;
   chatTarget?: ScheduleChatTarget;
 }
 
@@ -93,6 +107,6 @@ export interface UpdateSchedulerEntryInput {
   recurrence?: Partial<ScheduleRecurrenceRule>;
   sprintTarget?: ScheduleSprintTarget;
   quicksprintTarget?: ScheduleQuicksprintTarget;
+  goalSprintTarget?: ScheduleGoalSprintTarget;
   chatTarget?: ScheduleChatTarget;
 }
-

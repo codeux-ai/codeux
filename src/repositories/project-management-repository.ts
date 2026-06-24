@@ -6,11 +6,15 @@ import { ValidationError, EntityNotFoundError, RepositoryError } from "./reposit
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import type {
   CreateProjectInput,
+  ProjectGoalInput,
+  ProjectGoalRecord,
+  ProjectGoalStatus,
   CreateSprintInput,
   CreateTaskInput,
   ProjectCollectionResponse,
   ProjectSourceType,
   ProjectSummary,
+  UpdateProjectGoalInput,
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
   SprintRecord,
@@ -56,6 +60,16 @@ interface ProjectRow {
   has_active_runs: number | string | null;
   last_run_at: string | null;
   last_run_status: string | null;
+}
+
+interface ProjectGoalRow {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  status: ProjectGoalStatus;
+  created_at: string;
+  updated_at: string;
 }
 
 interface SprintRow {
@@ -207,6 +221,10 @@ export class ProjectManagementRepository {
         INSERT INTO project_sources (id, project_id, source_type, source_ref, created_at)
         VALUES (?, ?, ?, ?, ?)
       `);
+      const insertGoal = this.db.prepare(`
+        INSERT INTO project_goals (id, project_id, title, description, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
 
       this.runInTransaction(() => {
         insert.run(
@@ -223,6 +241,9 @@ export class ProjectManagementRepository {
           now
         );
         insertSource.run(randomUUID(), id, sourceType, sourceRef, now);
+        for (const goal of normalizeProjectGoalInputs(input.goals || [])) {
+          insertGoal.run(randomUUID(), id, goal.title, goal.description || "", goal.status || "active", now, now);
+        }
 
         if (!this.getSelectedProjectId()) {
           this.setSelectedProjectId(id);
@@ -866,6 +887,75 @@ export class ProjectManagementRepository {
     this.publishProjectsRefresh();
   }
 
+  listProjectGoals(projectId: string): ProjectGoalRecord[] {
+    this.requireProject(projectId);
+    return this.listProjectGoalsUnchecked(projectId);
+  }
+
+  createProjectGoal(projectId: string, input: ProjectGoalInput): ProjectGoalRecord {
+    try {
+      this.requireProject(projectId);
+      const normalized = normalizeProjectGoalInput(input);
+      const id = randomUUID();
+      const now = new Date().toISOString();
+      this.db.prepare(`
+        INSERT INTO project_goals (id, project_id, title, description, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, projectId, normalized.title, normalized.description || "", normalized.status || "active", now, now);
+      this.touchProject(projectId, now);
+      this.publishProjectStructureRefresh(projectId);
+      this.publishProjectsRefresh();
+      return this.requireProjectGoal(id);
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, projectId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
+  updateProjectGoal(goalId: string, input: UpdateProjectGoalInput): ProjectGoalRecord {
+    try {
+      const current = this.requireProjectGoal(goalId);
+      const nextTitle = input.title === undefined ? current.title : input.title.trim();
+      if (!nextTitle) {
+        throw new ValidationError("Goal title is required.");
+      }
+      const nextDescription = input.description === undefined ? current.description : input.description.trim();
+      const nextStatus = input.status === undefined ? current.status : normalizeProjectGoalStatus(input.status);
+      const now = new Date().toISOString();
+      this.db.prepare(`
+        UPDATE project_goals
+        SET title = ?, description = ?, status = ?, updated_at = ?
+        WHERE id = ?
+      `).run(nextTitle, nextDescription, nextStatus, now, goalId);
+      this.touchProject(current.projectId, now);
+      this.publishProjectStructureRefresh(current.projectId);
+      this.publishProjectsRefresh();
+      return this.requireProjectGoal(goalId);
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, goalId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
+  deleteProjectGoal(goalId: string): void {
+    try {
+      const current = this.requireProjectGoal(goalId);
+      this.db.prepare(`DELETE FROM project_goals WHERE id = ?`).run(goalId);
+      this.touchProject(current.projectId);
+      this.publishProjectStructureRefresh(current.projectId);
+      this.publishProjectsRefresh();
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      if (error instanceof Error && (error.message.toLowerCase().includes('depend') || error.message.includes('constraint failed') || error.message.includes('FOREIGN KEY'))) throw new ValidationError(error.message);
+      this.logger.error("Operation failed", { error, goalId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
   getSprint(sprintId: string): SprintRecord | null {
     try {
       return this.requireSprint(sprintId);
@@ -921,12 +1011,42 @@ export class ProjectManagementRepository {
     return this.inflateTasks(rows);
   }
 
+  getProjectGoalsByIds(projectId: string, goalIds: string[]): ProjectGoalRecord[] {
+    this.requireProject(projectId);
+    if (goalIds.length === 0) {
+      return [];
+    }
+    const rows = this.storage.executeChunkedInQuery<ProjectGoalRow>({
+      sqlPrefix: "SELECT * FROM project_goals WHERE id",
+      sqlSuffix: "ORDER BY created_at ASC",
+      items: goalIds,
+    });
+    const requested = new Set(goalIds);
+    return rows
+      .filter((row) => row.project_id === projectId && requested.has(row.id))
+      .map((row) => this.mapProjectGoalRow(row));
+  }
+
   private requireProject(projectId: string): ProjectSummary {
     const project = this.getProject(projectId);
     if (!project) {
       throw new EntityNotFoundError(`Project not found: ${projectId}`);
     }
     return project;
+  }
+
+  private requireProjectGoal(goalId: string): ProjectGoalRecord {
+    const row = this.db.prepare(`
+      SELECT *
+      FROM project_goals
+      WHERE id = ?
+    `).get(goalId) as ProjectGoalRow | undefined;
+
+    if (!row) {
+      throw new EntityNotFoundError(`Project goal not found: ${goalId}`);
+    }
+
+    return this.mapProjectGoalRow(row);
   }
 
   private requireSprint(sprintId: string): SprintRecord {
@@ -1058,18 +1178,21 @@ export class ProjectManagementRepository {
     const projectIds = rows.map((row) => row.id);
     const settingsOverridesMap = this.settingsRepository.getProjectSettingsBatch(projectIds);
     const agentBindingsMap = this.projectWorkerAssignmentRepository.listAssignmentsForProjects(projectIds, { activeOnly: true });
+    const goalsMap = this.listProjectGoalsForProjects(projectIds);
 
     return rows.map((row) => {
       const settingsOverrides = settingsOverridesMap.get(row.id) || {};
       const agentBindings = agentBindingsMap.get(row.id) || [];
-      return this.mapProjectRow(row, settingsOverrides, agentBindings);
+      const goals = goalsMap.get(row.id) || [];
+      return this.mapProjectRow(row, settingsOverrides, agentBindings, goals);
     });
   }
 
   private mapProjectRow(
     row: ProjectRow,
     settingsOverrides: ProjectSettingsOverride,
-    agentBindings: ProjectWorkerAssignmentRecord[]
+    agentBindings: ProjectWorkerAssignmentRecord[],
+    goals: ProjectGoalRecord[] = []
   ): ProjectSummary {
     const sourceType = row.source_type || "local";
     const sourceRef = row.source_ref || row.base_dir;
@@ -1104,8 +1227,52 @@ export class ProjectManagementRepository {
       isRunning,
       settingsOverrides,
       agentBindings,
+      goals,
+      activeGoalsCount: goals.filter((goal) => goal.status === "active").length,
       lastRunAt: row.last_run_at,
       lastRunStatus: row.last_run_status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private listProjectGoalsForProjects(projectIds: string[]): Map<string, ProjectGoalRecord[]> {
+    const map = new Map<string, ProjectGoalRecord[]>();
+    if (projectIds.length === 0) {
+      return map;
+    }
+
+    const rows = this.storage.executeChunkedInQuery<ProjectGoalRow>({
+      sqlPrefix: "SELECT * FROM project_goals WHERE project_id",
+      sqlSuffix: "ORDER BY status ASC, created_at ASC",
+      items: projectIds,
+    });
+
+    for (const row of rows) {
+      const current = map.get(row.project_id) || [];
+      current.push(this.mapProjectGoalRow(row));
+      map.set(row.project_id, current);
+    }
+    return map;
+  }
+
+  private listProjectGoalsUnchecked(projectId: string): ProjectGoalRecord[] {
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM project_goals
+      WHERE project_id = ?
+      ORDER BY status ASC, created_at ASC
+    `).all(projectId) as unknown as ProjectGoalRow[];
+    return rows.map((row) => this.mapProjectGoalRow(row));
+  }
+
+  private mapProjectGoalRow(row: ProjectGoalRow): ProjectGoalRecord {
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      title: row.title,
+      description: row.description || "",
+      status: normalizeProjectGoalStatus(row.status),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -1406,6 +1573,45 @@ function normalizeLinkedIssueInputs(issues: SprintLinkedIssueInput[]): SprintLin
     });
   }
   return normalized.slice(0, 50);
+}
+
+function normalizeProjectGoalInputs(goals: Array<string | ProjectGoalInput>): ProjectGoalInput[] {
+  const normalized: ProjectGoalInput[] = [];
+  const seen = new Set<string>();
+  for (const goal of goals) {
+    const input = typeof goal === "string" ? { title: goal } : goal;
+    try {
+      const candidate = normalizeProjectGoalInput(input);
+      const key = candidate.title.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      normalized.push(candidate);
+    } catch {
+      continue;
+    }
+  }
+  return normalized.slice(0, 20);
+}
+
+function normalizeProjectGoalInput(input: ProjectGoalInput): ProjectGoalInput {
+  const title = input.title.trim();
+  if (!title) {
+    throw new ValidationError("Goal title is required.");
+  }
+  return {
+    title,
+    description: input.description?.trim() || "",
+    status: normalizeProjectGoalStatus(input.status || "active"),
+  };
+}
+
+function normalizeProjectGoalStatus(status: string): ProjectGoalStatus {
+  if (status === "active" || status === "completed" || status === "archived") {
+    return status;
+  }
+  return "active";
 }
 
 function sameStringArray(left: string[], right: string[]): boolean {

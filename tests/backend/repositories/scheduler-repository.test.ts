@@ -78,6 +78,42 @@ describe("SchedulerRepository", () => {
     expect(updated.nextRunAt).toBeNull();
   });
 
+  it("persists goal sprint scheduler targets", async () => {
+    const { dir, projectRepository, schedulerRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Goal Scheduler Project",
+      sourceType: "local",
+      sourceRef: dir,
+      goals: ["Finalize UI", "Improve coverage"],
+    });
+    const goals = projectRepository.listProjectGoals(project.id);
+
+    const entry = schedulerRepository.createEntry(project.id, {
+      targetType: "goal_sprint",
+      scheduledFor: "2026-05-18T09:00:00.000Z",
+      goalSprintTarget: {
+        goalIds: goals.map((goal) => goal.id),
+        minTasks: 4,
+        maxTasks: 10,
+        minSprints: 1,
+        maxSprints: 3,
+        submitMode: "plan_and_start",
+        autoTriggerNext: true,
+      },
+    });
+
+    expect(entry.targetType).toBe("goal_sprint");
+    expect(entry.goalSprintTarget).toMatchObject({
+      goalIds: goals.map((goal) => goal.id),
+      minTasks: 4,
+      maxTasks: 10,
+      minSprints: 1,
+      maxSprints: 3,
+      submitMode: "plan_and_start",
+      autoTriggerNext: true,
+    });
+  });
+
   it("recomputes nextRunAt to the next future occurrence when resuming a paused entry", async () => {
     const { dir, projectRepository, schedulerRepository } = await createRepositories();
     const project = projectRepository.createProject({

@@ -27,6 +27,19 @@ export interface PlanPromptArgs {
   learningsInstruction?: string;
 }
 
+export interface GoalSprintPlanPromptArgs {
+  projectName: string;
+  planningAgent: AgentPresetRecord;
+  codingAgentRoster?: AgentPresetRecord[];
+  goals: Array<{ title: string; description: string }>;
+  minTasks: number;
+  maxTasks: number;
+  minSprints: number;
+  maxSprints: number;
+  memoryContext?: string;
+  learningsInstruction?: string;
+}
+
 /**
  * Builds a prompt for the planning agent to refine a sprint goal.
  */
@@ -184,6 +197,86 @@ export function buildPlanPrompt(args: PlanPromptArgs): string {
     codingAgents.length > 0
       ? '{"goal":"Optional refined sprint goal","tasks":[{"key":"T01","title":"Task title","description":"Short intent","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...","priority":"medium","executorType":"auto","agentPresetId":"agent-preset-id","dependsOn":[]}]}'
       : '{"goal":"Optional refined sprint goal","tasks":[{"key":"T01","title":"Task title","description":"Short intent","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...","priority":"medium","executorType":"auto","dependsOn":[]}]}',
+  ];
+
+  if (args.learningsInstruction) {
+    parts.push("", "## LEARNINGS CAPTURE (Required)", "", args.learningsInstruction);
+  }
+
+  return parts.join("\n");
+}
+
+export function buildGoalSprintPlanPrompt(args: GoalSprintPlanPromptArgs): string {
+  const memorySection = args.memoryContext ? `\n${args.memoryContext}\n` : "";
+  const codingAgents = args.codingAgentRoster || [];
+  const parts = [
+    "You are Code UX's Planning agent.",
+    "",
+    "## Planning Agent Instructions",
+    args.planningAgent.instructionMarkdown.trim() || "Break goals into actionable sprint plans.",
+    "",
+    "## Task",
+    "Plan one or more sprints that can complete the selected project goals.",
+    `Project: ${args.projectName}`,
+    "",
+    "## Selected Goals",
+    ...args.goals.map((goal, index) => [
+      `${index + 1}. ${goal.title}`,
+      goal.description.trim() ? `   ${goal.description.trim()}` : "",
+    ].filter(Boolean).join("\n")),
+    memorySection,
+    ...(codingAgents.length > 0 ? [
+      "",
+      "## Coding Agent Routing",
+      "The project uses orchestrated coding-agent routing. Choose the best coding agent for each task by setting `agentPresetId` to one of these IDs.",
+      ...codingAgents.map((agent) => `- ${agent.id}: ${agent.name}${agent.description.trim() ? ` - ${agent.description.trim()}` : ""}`),
+    ] : []),
+    "",
+    "## Bounds",
+    `- Create between ${args.minSprints} and ${args.maxSprints} sprint(s).`,
+    `- Create between ${args.minTasks} and ${args.maxTasks} total task(s) across all sprints.`,
+    "",
+    "## Planning Rules",
+    "- Split work into multiple sprints only when goals can be parallelized or when there is a real dependency boundary.",
+    "- Use `dependsOnSprintIndexes` only when a sprint cannot start until another planned sprint has completed.",
+    "- Sprint dependency indexes are zero-based and must only reference earlier sprints.",
+    "- Maximize safe parallelism between independent sprints.",
+    "- Each sprint must contain a DAG of implementation-ready tasks.",
+    "- Within each sprint, task keys must use `T01`, `T02`, `T03`, ... in topological order.",
+    "- Dependencies inside a sprint must only reference earlier task keys in that same sprint.",
+    "- Do not create branch, PR, merge, coordination, analysis-only, or placeholder tasks.",
+    "- Use `auto` executor unless a task clearly needs `docker_cli` or `jules`.",
+    "- `promptMarkdown` must use this exact section order: `## Objective`, `## Scope`, `## Implementation Requirements`, `## Constraints`, `## Verification`.",
+    ...(codingAgents.length > 0 ? ["- `agentPresetId` must be one of the available coding agent IDs listed above."] : []),
+    "",
+    "## Output Rules",
+    "- Return JSON only.",
+    "- Return one top-level object with `summary` and `sprints`.",
+    "- Do not wrap the JSON in prose.",
+    "",
+    "## Required Output Shape",
+    "{",
+    '  "summary": "Short summary of how the selected goals will be reached.",',
+    '  "sprints": [',
+    "    {",
+    '      "name": "Goal Sprint: concise sprint name",',
+    '      "goal": "Implementation-ready sprint goal.",',
+    '      "dependsOnSprintIndexes": [],',
+    '      "tasks": [',
+    "        {",
+    '          "key": "T01",',
+    '          "title": "Task title",',
+    '          "description": "Short intent",',
+    '          "promptMarkdown": "## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...",',
+    '          "priority": "medium",',
+    '          "executorType": "auto",',
+    ...(codingAgents.length > 0 ? ['          "agentPresetId": "agent-preset-id",'] : []),
+    '          "dependsOn": []',
+    "        }",
+    "      ]",
+    "    }",
+    "  ]",
+    "}",
   ];
 
   if (args.learningsInstruction) {

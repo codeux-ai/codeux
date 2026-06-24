@@ -61,6 +61,8 @@ export function isEqualProject(p1: Source, p2: Source): boolean {
     p1.isRunning === p2.isRunning &&
     p1.updatedAt === p2.updatedAt &&
     p1.sprintsCount === p2.sprintsCount &&
+    p1.activeGoalsCount === p2.activeGoalsCount &&
+    isDeepEqual(p1.goals, p2.goals) &&
     isDeepEqual(p1.agentBindings, p2.agentBindings) &&
     isDeepEqual(p1.settingsOverrides, p2.settingsOverrides);
 }

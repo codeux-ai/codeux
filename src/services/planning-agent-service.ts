@@ -5,7 +5,10 @@ import type { CliWorkflowSettings, DashboardSettings, ProviderId, QwenModelProvi
 import type {
   TaskExecutorType,
   TaskPriority,
+  GoalSprintPlanInput,
+  GoalSprintPlanResult,
   ImprovePromptInput,
+  PlannedGoalSprintPayload,
   PlanSprintOptions,
   PlanningOverrides,
 } from "../contracts/project-management-types.js";
@@ -62,6 +65,9 @@ interface PlanSprintResult {
   createdTaskIds: string[];
   started: boolean;
 }
+
+const GOAL_SPRINT_MAX_TASKS = 50;
+const GOAL_SPRINT_MAX_SPRINTS = 8;
 
 interface PlanningResultContext {
   provider: Exclude<ProviderId, "jules">;
@@ -397,6 +403,179 @@ export class PlanningAgentService {
       agentId: planningAgent.id,
       createdTaskIds,
       started: options.autoStart,
+    };
+  }
+
+  async planGoalSprint(projectId: string, input: GoalSprintPlanInput, signal?: AbortSignal): Promise<GoalSprintPlanResult> {
+    const project = this.requireProject(projectId);
+    const normalized = normalizeGoalSprintPlanInput(input);
+    const selectedGoals = this.deps.projectManagementRepository.getProjectGoalsByIds(projectId, normalized.goalIds)
+      .filter((goal) => goal.status === "active");
+    if (selectedGoals.length === 0) {
+      throw new Error("Select at least one active project goal.");
+    }
+
+    const runtime = this.resolvePlanningRuntime(projectId, normalized.overrides);
+    const planningAgentPresetId = normalized.overrides?.planningAgentPresetId
+      || normalized.planningAgentPresetId
+      || runtime.settings.agents?.routing?.planning?.agentPresetId
+      || undefined;
+    const planningAgent = await this.deps.agentPresetSyncService.resolveTargetedPlanningAgent(
+      projectId,
+      planningAgentPresetId,
+    );
+
+    const invocation = this.deps.executionRepository?.createExecutionInvocation({
+      projectId,
+      skipValidation: true,
+      sprintId: null,
+      type: "planning",
+      status: "running",
+      provider: runtime.settings.workers.virtualWorkerProvider,
+      systemPrompt: null,
+    });
+
+    signal?.throwIfAborted();
+    const memoryContext = this.buildMemoryContext(projectId, null, planningAgent.id);
+    const learningsInstruction = (runtime.settings.memory?.enabled && runtime.settings.memory?.autoCaptureSprint)
+      ? resolveAgentMemoryInstructions(planningAgent, runtime.settings.memory?.workerLearningsInstruction)
+      : undefined;
+    const codingAgentRoster = await this.resolveCodingAgentRoster(projectId, runtime.settings, normalized.overrides);
+    const allowedAgentPresetIds = codingAgentRoster.map((agent) => agent.id);
+    const manualCodingAgent = await this.resolveManualCodingAgent(projectId, runtime.settings, normalized.overrides);
+    const prompt = PlanningPromptBuilder.buildGoalSprintPlanPrompt({
+      projectName: project.name,
+      planningAgent,
+      codingAgentRoster,
+      goals: selectedGoals.map((goal) => ({ title: goal.title, description: goal.description })),
+      minTasks: normalized.minTasks,
+      maxTasks: normalized.maxTasks,
+      minSprints: normalized.minSprints,
+      maxSprints: normalized.maxSprints,
+      memoryContext,
+      learningsInstruction,
+    });
+
+    if (invocation) {
+      this.deps.executionRepository?.appendExecutionInvocationMessage(invocation.id, {
+        role: "user",
+        contentMarkdown: prompt,
+      });
+    }
+
+    let payload: PlannedGoalSprintPayload;
+    let cleanupWorkspace: (() => Promise<void>) | undefined;
+    try {
+      const virtualResult = await this.runVirtualPlanningRequest({
+        projectId,
+        sprintId: null,
+        invocationId: invocation?.id,
+        repoPath: project.baseDir,
+        settings: runtime.settings,
+        rawPrompt: prompt,
+        overrides: normalized.overrides,
+        signal,
+        parseFn: (bodyMarkdown) => validateGoalSprintPayload(
+          this.parseJsonReply<unknown>(bodyMarkdown),
+          {
+            minSprints: normalized.minSprints,
+            maxSprints: normalized.maxSprints,
+            minTasks: normalized.minTasks,
+            maxTasks: normalized.maxTasks,
+            allowedAgentPresetIds,
+          },
+        ),
+        buildRetryPrompt: (lastError) => [
+          "Your previous output could not be parsed as a valid goal sprint plan.",
+          `Parse error: ${lastError.message}`,
+          "",
+          "Please output ONLY raw JSON with this shape:",
+          '{"summary":"...","sprints":[{"name":"...","goal":"...","dependsOnSprintIndexes":[],"tasks":[{"key":"T01","title":"...","description":"...","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n...\\n\\n## Implementation Requirements\\n...\\n\\n## Constraints\\n...\\n\\n## Verification\\n...","priority":"medium","executorType":"auto","dependsOn":[]}]}]}',
+        ].join("\n"),
+      });
+      payload = virtualResult.parsed;
+      cleanupWorkspace = virtualResult.cleanupWorkspace;
+
+      if (invocation) {
+        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
+          status: "completed",
+          finishedAt: new Date().toISOString(),
+        });
+      }
+
+      if (learningsInstruction) {
+        await this.captureMemoriesFromWorkspace(
+          projectId,
+          undefined,
+          planningAgent.id,
+          virtualResult.memoryCaptureWorkspacePath,
+          invocation?.id || "",
+        );
+      }
+    } catch (error) {
+      if (invocation) {
+        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
+          status: "failed",
+          errorMessage: error instanceof Error ? error.message : String(error),
+          finishedAt: new Date().toISOString(),
+        });
+      }
+      throw error;
+    } finally {
+      await cleanupWorkspace?.().catch(() => undefined);
+    }
+
+    const createdSprintIds: string[] = [];
+    const createdTaskIds: string[] = [];
+    const startedSprintIds: string[] = [];
+    const goalTitles = selectedGoals.map((goal) => goal.title).join(", ");
+
+    for (let index = 0; index < payload.sprints.length; index += 1) {
+      const sprintPlan = payload.sprints[index]!;
+      const dependencyNote = sprintPlan.dependsOnSprintIndexes?.length
+        ? `\n\nDepends on planned goal sprint index(es): ${sprintPlan.dependsOnSprintIndexes.join(", ")}.`
+        : "";
+      const sprint = this.deps.projectManagementRepository.createSprint(projectId, {
+        name: sprintPlan.name,
+        originalPrompt: `Goal Sprint for project goals: ${goalTitles}`,
+        goal: `${sprintPlan.goal}${dependencyNote}`,
+        showcasePinned: true,
+      });
+      createdSprintIds.push(sprint.id);
+      const { createdTaskIds: taskIds } = persistPlannedTasks(
+        projectId,
+        sprint.id,
+        sprintPlan.tasks,
+        this.deps.projectManagementRepository,
+        { defaultAgentPresetId: manualCodingAgent?.id || null },
+      );
+      createdTaskIds.push(...taskIds);
+    }
+
+    if (normalized.submitMode === "plan_and_start") {
+      for (let index = 0; index < payload.sprints.length; index += 1) {
+        const sprintPlan = payload.sprints[index]!;
+        if ((sprintPlan.dependsOnSprintIndexes || []).length > 0) {
+          continue;
+        }
+        const sprintId = createdSprintIds[index]!;
+        await this.deps.executionControlService.orchestrateSprint(projectId, sprintId);
+        startedSprintIds.push(sprintId);
+      }
+    }
+
+    this.captureDecisionMemory(projectId, null, planningAgent.id,
+      `Goal sprint plan created ${createdSprintIds.length} sprint(s) and ${createdTaskIds.length} task(s) for goals: ${goalTitles.slice(0, 200)}`,
+      0.85,
+    );
+
+    return {
+      ok: true,
+      invocationId: invocation?.id || "",
+      agentId: planningAgent.id,
+      sprintIds: createdSprintIds,
+      taskIds: createdTaskIds,
+      startedSprintIds,
     };
   }
 
@@ -758,4 +937,147 @@ export class PlanningAgentService {
     }
     return sprint;
   }
+}
+
+function normalizeGoalSprintPlanInput(input: GoalSprintPlanInput): GoalSprintPlanInput {
+  const goalIds = Array.from(new Set((input.goalIds || []).map((id) => id.trim()).filter(Boolean)));
+  if (goalIds.length === 0) {
+    throw new Error("goalIds must include at least one project goal.");
+  }
+  const minSprints = clampInteger(input.minSprints, 1, GOAL_SPRINT_MAX_SPRINTS, 1);
+  const maxSprints = clampInteger(input.maxSprints, minSprints, GOAL_SPRINT_MAX_SPRINTS, Math.max(minSprints, 3));
+  const minTasks = clampInteger(input.minTasks, 1, GOAL_SPRINT_MAX_TASKS, Math.max(1, minSprints));
+  const maxTasks = clampInteger(input.maxTasks, minTasks, GOAL_SPRINT_MAX_TASKS, Math.max(minTasks, maxSprints * 6));
+  const submitMode = input.submitMode === "plan_only" || input.submitMode === "schedule"
+    ? input.submitMode
+    : "plan_and_start";
+  return {
+    ...input,
+    goalIds,
+    minTasks,
+    maxTasks,
+    minSprints,
+    maxSprints,
+    submitMode,
+  };
+}
+
+function clampInteger(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = Math.trunc(Number(value));
+  if (!Number.isFinite(parsed)) {
+    return Math.min(max, Math.max(min, fallback));
+  }
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function validateGoalSprintPayload(
+  payload: unknown,
+  options: {
+    minSprints: number;
+    maxSprints: number;
+    minTasks: number;
+    maxTasks: number;
+    allowedAgentPresetIds: string[];
+  },
+): PlannedGoalSprintPayload {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Goal sprint plan must be a JSON object.");
+  }
+  const raw = payload as { summary?: unknown; sprints?: unknown };
+  if (!Array.isArray(raw.sprints)) {
+    throw new Error("Goal sprint plan must include a sprints array.");
+  }
+  if (raw.sprints.length < options.minSprints || raw.sprints.length > options.maxSprints) {
+    throw new Error(`Goal sprint plan must include between ${options.minSprints} and ${options.maxSprints} sprint(s).`);
+  }
+
+  let totalTasks = 0;
+  const sprints = raw.sprints.map((candidate, sprintIndex) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new Error(`Sprint ${sprintIndex + 1} must be an object.`);
+    }
+    const sprint = candidate as { name?: unknown; goal?: unknown; dependsOnSprintIndexes?: unknown; tasks?: unknown };
+    const name = String(sprint.name || "").trim();
+    const goal = String(sprint.goal || "").trim();
+    if (!name || !goal) {
+      throw new Error(`Sprint ${sprintIndex + 1} must include name and goal.`);
+    }
+    if (!Array.isArray(sprint.tasks) || sprint.tasks.length === 0) {
+      throw new Error(`Sprint ${sprintIndex + 1} must include at least one task.`);
+    }
+    const dependsOnSprintIndexes = Array.isArray(sprint.dependsOnSprintIndexes)
+      ? sprint.dependsOnSprintIndexes.map((value) => Math.trunc(Number(value))).filter((value) => Number.isFinite(value))
+      : [];
+    if (dependsOnSprintIndexes.some((value) => value < 0 || value >= sprintIndex)) {
+      throw new Error(`Sprint ${sprintIndex + 1} has an invalid sprint dependency.`);
+    }
+    const tasks = normalizePlannedTasks(sprint.tasks, options.allowedAgentPresetIds, `Sprint ${sprintIndex + 1}`);
+    totalTasks += tasks.length;
+    return {
+      name,
+      goal,
+      dependsOnSprintIndexes,
+      tasks,
+    };
+  });
+
+  if (totalTasks < options.minTasks || totalTasks > options.maxTasks) {
+    throw new Error(`Goal sprint plan must include between ${options.minTasks} and ${options.maxTasks} total task(s).`);
+  }
+
+  return {
+    summary: String(raw.summary || "").trim(),
+    sprints,
+  };
+}
+
+function normalizePlannedTasks(tasks: unknown[], allowedAgentPresetIds: string[], scope: string): PlannedTaskDraft[] {
+  const seen = new Set<string>();
+  return tasks.map((candidate, index) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new Error(`${scope} task ${index + 1} must be an object.`);
+    }
+    const task = candidate as Record<string, unknown>;
+    const key = String(task.key || "").trim();
+    const expectedKey = `T${String(index + 1).padStart(2, "0")}`;
+    if (key !== expectedKey) {
+      throw new Error(`${scope} task keys must be sequential. Expected ${expectedKey}.`);
+    }
+    if (seen.has(key)) {
+      throw new Error(`${scope} contains duplicate task key ${key}.`);
+    }
+    seen.add(key);
+    const dependsOn = Array.isArray(task.dependsOn)
+      ? task.dependsOn.map((value) => String(value).trim()).filter(Boolean)
+      : [];
+    for (const dependencyKey of dependsOn) {
+      if (!seen.has(dependencyKey)) {
+        throw new Error(`${scope} task ${key} depends on unknown or later task ${dependencyKey}.`);
+      }
+    }
+    const agentPresetId = typeof task.agentPresetId === "string" && task.agentPresetId.trim()
+      ? task.agentPresetId.trim()
+      : null;
+    if (agentPresetId && allowedAgentPresetIds.length > 0 && !allowedAgentPresetIds.includes(agentPresetId)) {
+      throw new Error(`${scope} task ${key} uses unavailable agentPresetId ${agentPresetId}.`);
+    }
+    return {
+      key,
+      title: String(task.title || "").trim(),
+      description: String(task.description || "").trim(),
+      promptMarkdown: String(task.promptMarkdown || "").trim(),
+      priority: normalizeTaskPriority(task.priority),
+      executorType: normalizeTaskExecutorType(task.executorType),
+      agentPresetId,
+      dependsOn,
+    };
+  });
+}
+
+function normalizeTaskPriority(value: unknown): TaskPriority {
+  return value === "critical" || value === "high" || value === "low" ? value : "medium";
+}
+
+function normalizeTaskExecutorType(value: unknown): TaskExecutorType {
+  return value === "docker_cli" || value === "jules" ? value : "auto";
 }

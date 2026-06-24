@@ -48,6 +48,7 @@ describe("SchedulerService", () => {
       quicksprintService: {} as any,
       chatThreadRuntimeService: {} as any,
       executionControlService: executionControlService as any,
+      planGoalSprint: vi.fn(),
       logger: createLogger() as any,
     });
 
@@ -83,6 +84,7 @@ describe("SchedulerService", () => {
       quicksprintService: {} as any,
       chatThreadRuntimeService: chatThreadRuntimeService as any,
       executionControlService: {} as any,
+      planGoalSprint: vi.fn(),
       logger: createLogger() as any,
     });
 

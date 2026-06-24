@@ -10,6 +10,29 @@ export type TaskPriority = "critical" | "high" | "medium" | "low";
 export type TaskExecutorType = "auto" | "docker_cli" | "jules";
 export type GitProvider = "github" | "gitlab" | "local";
 export type ProjectInitMode = "existing" | "new-local" | "new-remote";
+export type ProjectGoalStatus = "active" | "completed" | "archived";
+
+export interface ProjectGoalRecord {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  status: ProjectGoalStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectGoalInput {
+  title: string;
+  description?: string;
+  status?: ProjectGoalStatus;
+}
+
+export interface UpdateProjectGoalInput {
+  title?: string;
+  description?: string;
+  status?: ProjectGoalStatus;
+}
 
 export interface ProjectSummary {
   id: string;
@@ -30,6 +53,8 @@ export interface ProjectSummary {
   isRunning: boolean;
   settingsOverrides: ProjectSettingsOverride;
   agentBindings: ProjectWorkerAssignmentRecord[];
+  goals: ProjectGoalRecord[];
+  activeGoalsCount: number;
   lastRunAt: string | null;
   lastRunStatus: string | null;
   createdAt: string;
@@ -177,6 +202,7 @@ export interface CreateProjectInput {
   initMode?: ProjectInitMode;           // omitted = "existing" (backward compat)
   isPrivate?: boolean;                  // new-remote: repo visibility, default true
   remoteProvider?: "github" | "gitlab"; // new-remote: which hosting provider
+  goals?: Array<string | ProjectGoalInput>;
 }
 
 export interface UpdateProjectInput {
@@ -244,6 +270,41 @@ export interface PlanSprintOptions {
   planningAgentPresetId?: string;
   quicksprintTemplateId?: string;
   overrides?: PlanningOverrides;
+}
+
+export interface GoalSprintPlanInput {
+  goalIds: string[];
+  minTasks: number;
+  maxTasks: number;
+  minSprints: number;
+  maxSprints: number;
+  submitMode: "plan_only" | "plan_and_start" | "schedule";
+  scheduledFor?: string;
+  autoTriggerNext?: boolean;
+  clientRequestId?: string;
+  planningAgentPresetId?: string;
+  overrides?: PlanningOverrides;
+}
+
+export interface PlannedGoalSprintDraft {
+  name: string;
+  goal: string;
+  dependsOnSprintIndexes?: number[];
+  tasks: PlannedTaskDraft[];
+}
+
+export interface PlannedGoalSprintPayload {
+  summary: string;
+  sprints: PlannedGoalSprintDraft[];
+}
+
+export interface GoalSprintPlanResult {
+  ok: true;
+  invocationId: string;
+  agentId: string;
+  sprintIds: string[];
+  taskIds: string[];
+  startedSprintIds: string[];
 }
 
 export interface ProjectSetupOptions {
