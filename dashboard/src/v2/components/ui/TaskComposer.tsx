@@ -39,6 +39,9 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
+  const statusRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const priorityRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const executorRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const state = useTaskComposerState(sprints, availableTasks, initialTask, initialSprintId);
   const reducedMotion = useReducedMotion();
@@ -81,6 +84,16 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
         const firstInvalid = fieldsRef.current?.querySelector('[aria-invalid="true"]');
         if (firstInvalid instanceof HTMLElement) {
           firstInvalid.focus();
+        } else {
+          // If no specific aria-invalid element (e.g. for radiogroups), we might need to find the first error element
+          const firstErrorMsg = fieldsRef.current?.querySelector('.text-red-500[id$="-error"]');
+          if (firstErrorMsg && firstErrorMsg.id) {
+            const groupName = firstErrorMsg.id.replace('-error', '');
+            const firstButtonInGroup = fieldsRef.current?.querySelector(`fieldset[aria-labelledby="${groupName}-legend"] button`);
+            if (firstButtonInGroup instanceof HTMLElement) {
+              firstButtonInGroup.focus();
+            }
+          }
         }
       }, 0);
 
@@ -126,6 +139,11 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
         onSubmit={handleSubmit}
         className="relative z-10 grid gap-0 xl:grid-cols-[minmax(0,1fr)_21rem]"
       >
+        {state.hasAttemptedSubmit && !state.isValid && (
+          <div className="sr-only" role="alert" aria-live="assertive">
+            Please fix {Object.keys(state.validationErrors).length} validation errors before submitting.
+          </div>
+        )}
         <div className="border-b border-black/[0.06] p-6 dark:border-white/[0.06] sm:p-8 lg:p-10 xl:border-b-0 xl:border-r">
           <div data-composer-stagger className="flex items-start justify-between gap-4">
             <div className="space-y-4">
@@ -156,8 +174,9 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
             <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Sprint</div>
+              <label htmlFor="task-composer-sprint" className="block text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Sprint</label>
               <select
+                id="task-composer-sprint"
                 value={state.sprintId}
                 onInput={(event) => state.setSprintId((event.target as HTMLSelectElement).value)}
                 onBlur={() => state.setFieldTouched('sprintId')}
@@ -179,35 +198,57 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               </div>
             </div>
 
-            <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <fieldset className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]" role="radiogroup" aria-labelledby="status-legend">
               <div className="flex items-center gap-2 mb-2">
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Status</div>
+                <legend id="status-legend" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Status</legend>
                 {(state.hasAttemptedSubmit || state.touchedFields.status) && state.statusError && (
-                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded">{state.statusError}</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded" id="status-error">{state.statusError}</div>
                 )}
               </div>
               <div className="flex gap-2 flex-wrap" onBlur={() => state.setFieldTouched('status')}>
-                {STATUS_OPTIONS.map((option) => (
+                {STATUS_OPTIONS.map((option, index) => {
+                  const isChecked = state.status === option;
+                  return (
                   <button
                     key={option}
                     type="button"
+                    role="radio"
+                    aria-checked={isChecked ? "true" : "false"}
+                    tabIndex={isChecked ? 0 : -1}
+                    ref={el => { statusRefs.current[index] = el; }}
                     onClick={() => state.setStatus(option)}
+                    onKeyDown={(e) => {
+                      let nextIndex = index;
+                      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        nextIndex = (index + 1) % STATUS_OPTIONS.length;
+                      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        nextIndex = (index - 1 + STATUS_OPTIONS.length) % STATUS_OPTIONS.length;
+                      }
+                      if (nextIndex !== index) {
+                        state.setStatus(STATUS_OPTIONS[nextIndex]);
+                        setTimeout(() => statusRefs.current[nextIndex]?.focus(), 0);
+                      }
+                    }}
+                    aria-describedby={((state.hasAttemptedSubmit || state.touchedFields.status) && state.statusError) ? "status-error" : undefined}
                     className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.14em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
-                      state.status === option
+                      isChecked
                         ? "bg-signal-500 text-void-900 shadow-[0_2px_12px_rgba(0,224,160,0.3)]"
                         : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                     }`}
                   >
                     {option.replace("_", " ")}
                   </button>
-                ))}
+                )})}
               </div>
-            </div>
+            </fieldset>
           </div>
 
-          <label data-composer-stagger className="mt-8 block space-y-2">
-            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Task Title</span>
+          <div data-composer-stagger className="mt-8 block space-y-2">
+            <label htmlFor="task-composer-title" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Task Title</label>
             <input
+              id="task-composer-title"
               ref={titleInputRef}
               type="text"
               value={state.title}
@@ -233,7 +274,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                     </div>
               </div>
             </div>
-          </label>
+          </div>
 
           <div data-composer-stagger className="mt-8 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -243,7 +284,9 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="flex flex-col">
                 <div className={`rounded-[1.7rem] border bg-black/[0.025] dark:bg-white/[0.03] transition-colors ${(state.hasAttemptedSubmit || state.touchedFields.description) && !state.isDescriptionValid ? 'border-red-500' : 'border-black/[0.07] dark:border-white/[0.08]'}`}>
+                  <label htmlFor="task-composer-description" className="sr-only">Task Description</label>
                   <textarea
+                    id="task-composer-description"
                     value={state.description}
                     onInput={(event) => state.setDescription((event.target as HTMLTextAreaElement).value)}
                     onBlur={() => state.setFieldTouched('description')}
@@ -271,7 +314,9 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
               <div className="flex flex-col">
                 <div className={`rounded-[1.7rem] border bg-black/[0.025] dark:bg-white/[0.03] transition-colors ${(state.hasAttemptedSubmit || state.touchedFields.promptMarkdown) && !state.isPromptMarkdownValid ? 'border-red-500' : 'border-black/[0.07] dark:border-white/[0.08]'}`}>
+                  <label htmlFor="task-composer-prompt" className="sr-only">Execution Prompt</label>
                   <textarea
+                    id="task-composer-prompt"
                     value={state.promptMarkdown}
                     onInput={(event) => state.setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
                     onBlur={() => state.setFieldTouched('promptMarkdown')}
@@ -309,13 +354,17 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 )}
               </div>
               {availableTasks.filter(t => t.sprintId === state.sprintId && t.recordId !== initialTask?.recordId).length > 5 && (
+                <>
+                <label htmlFor="task-composer-dependency-search" className="sr-only">Filter tasks</label>
                 <input
+                  id="task-composer-dependency-search"
                   type="search"
                   placeholder="Filter tasks..."
                   value={state.dependencySearchQuery}
                   onInput={(e) => state.setDependencySearchQuery((e.target as HTMLInputElement).value)}
                   className="w-48 bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-3 py-1.5 text-xs rounded-xl focus:outline-none focus:border-ember-500 focus-visible:ring-1 focus-visible:ring-ember-500/50"
                 />
+                </>
               )}
             </div>
             {state.dependencyOptions.length === 0 ? (
@@ -357,47 +406,87 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
         </div>
 
         <aside className="flex flex-col gap-4 p-6 sm:p-8">
-          <div data-composer-stagger>
+          <fieldset data-composer-stagger role="radiogroup" aria-labelledby="priority-legend">
             <div className="flex items-center gap-2 mb-3">
-              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Priority</div>
+              <legend id="priority-legend" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Priority</legend>
               {(state.hasAttemptedSubmit || state.touchedFields.priority) && state.priorityError && (
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded">{state.priorityError}</div>
+                <div id="priority-error" className="text-[9px] font-bold uppercase tracking-[0.2em] text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded">{state.priorityError}</div>
               )}
             </div>
             <div className="grid grid-cols-2 gap-2" onBlur={() => state.setFieldTouched('priority')}>
-              {PRIORITY_OPTIONS.map((option) => (
+              {PRIORITY_OPTIONS.map((option, index) => {
+                const isChecked = state.priority === option;
+                return (
                 <button
                   key={option}
                   type="button"
+                  role="radio"
+                  aria-checked={isChecked ? "true" : "false"}
+                  tabIndex={isChecked ? 0 : -1}
+                  ref={el => { priorityRefs.current[index] = el; }}
                   onClick={() => state.setPriority(option)}
+                  onKeyDown={(e) => {
+                    let nextIndex = index;
+                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      nextIndex = (index + 1) % PRIORITY_OPTIONS.length;
+                    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      nextIndex = (index - 1 + PRIORITY_OPTIONS.length) % PRIORITY_OPTIONS.length;
+                    }
+                    if (nextIndex !== index) {
+                      state.setPriority(PRIORITY_OPTIONS[nextIndex]);
+                      setTimeout(() => priorityRefs.current[nextIndex]?.focus(), 0);
+                    }
+                  }}
+                  aria-describedby={((state.hasAttemptedSubmit || state.touchedFields.priority) && state.priorityError) ? "priority-error" : undefined}
                   className={`px-3 py-2 rounded-[1.1rem] border text-[10px] font-bold uppercase tracking-[0.14em] transition-all text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 active:scale-95 ${
-                    state.priority === option
+                    isChecked
                       ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400 shadow-[0_4px_12px_rgba(255,184,0,0.15)]"
                       : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
                   }`}
                 >
                   {option}
                 </button>
-              ))}
+              )})}
             </div>
-          </div>
+          </fieldset>
 
-          <div data-composer-stagger>
+          <fieldset data-composer-stagger role="radiogroup" aria-labelledby="executor-legend">
             <div className="flex items-center gap-2 mb-3">
-              <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
-              <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Executor</label>
+              <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} aria-hidden="true" />
+              <legend id="executor-legend" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Executor</legend>
               {(state.hasAttemptedSubmit || state.touchedFields.executorType) && state.executorTypeError && (
-                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded">{state.executorTypeError}</div>
+                <div id="executor-error" className="text-[9px] font-bold uppercase tracking-[0.2em] text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded">{state.executorTypeError}</div>
               )}
             </div>
             <div className="grid gap-3" onBlur={() => state.setFieldTouched('executorType')}>
-              {EXECUTOR_OPTIONS.map((option) => {
+              {EXECUTOR_OPTIONS.map((option, index) => {
                 const isActive = state.executorType === option.value;
                 return (
                   <button
                     key={option.value}
                     type="button"
+                    role="radio"
+                    aria-checked={isActive ? "true" : "false"}
+                    tabIndex={isActive ? 0 : -1}
+                    ref={el => { executorRefs.current[index] = el; }}
                     onClick={() => state.setExecutorType(option.value)}
+                    onKeyDown={(e) => {
+                      let nextIndex = index;
+                      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        nextIndex = (index + 1) % EXECUTOR_OPTIONS.length;
+                      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        nextIndex = (index - 1 + EXECUTOR_OPTIONS.length) % EXECUTOR_OPTIONS.length;
+                      }
+                      if (nextIndex !== index) {
+                        state.setExecutorType(EXECUTOR_OPTIONS[nextIndex].value);
+                        setTimeout(() => executorRefs.current[nextIndex]?.focus(), 0);
+                      }
+                    }}
+                    aria-describedby={((state.hasAttemptedSubmit || state.touchedFields.executorType) && state.executorTypeError) ? "executor-error" : undefined}
                     className={`rounded-[1.35rem] border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 active:scale-[0.98] ${
                       isActive
                         ? "border-signal-500/30 bg-signal-500/[0.08] shadow-[0_12px_24px_rgba(0,224,160,0.08)]"
@@ -405,7 +494,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                     }`}
                   >
                     <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 dark:text-white">
-                      <span className={`w-2 h-2 rounded-full ${isActive ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`} />
+                      <span className={`w-2 h-2 rounded-full ${isActive ? "bg-signal-500" : "bg-slate-300 dark:bg-slate-600"}`} aria-hidden="true" />
                       {option.label}
                     </div>
                     <div className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
@@ -415,7 +504,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 );
               })}
             </div>
-          </div>
+          </fieldset>
 
           <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
             <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
