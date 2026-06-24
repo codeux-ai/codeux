@@ -585,9 +585,10 @@ export class VirtualWorkerService {
   private async resolveMergeConflictAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
     const guardrailScope = { projectId: item.projectId, sprintId: item.sprintId };
-    const mergeConflictEval = item.taskId
-      ? this.deps.guardrailService?.evaluate(guardrailScope, item.taskId, "merge_conflict") ?? null
-      : null;
+    // Key by the task when present, else a stable synthetic id so taskless conflicts
+    // (e.g. a final feature→default merge) still get a retry ceiling instead of looping.
+    const guardrailKey = item.taskId || `merge-conflict:${item.sprintRunId ?? item.id}`;
+    const mergeConflictEval = this.deps.guardrailService?.evaluate(guardrailScope, guardrailKey, "merge_conflict") ?? null;
     if (mergeConflictEval && !mergeConflictEval.allowed && mergeConflictEval.action !== "WARN_ONLY") {
       this.escalateAttentionToHuman(
         workerEndpointId,
@@ -656,9 +657,8 @@ export class VirtualWorkerService {
     // the attention item — re-dispatching here would only spin up a no-op worker.
     if (settings.git.githubMode !== "LOCAL"
       && await this.isMergeConflictResolvedOnRemote(repoPath, sourceBranch, targetBranch, gitAuth)) {
-      if (item.taskId) {
-        this.deps.guardrailService?.record(guardrailScope, item.taskId, "merge_conflict");
-      }
+      // No provider runs here (the remote is already merged), so this must not consume
+      // the retry budget — otherwise GitHub mergeability lag could falsely trip the cap.
       this.deps.projectAttentionService.resolveItem(item.id, {
         status: "resolved",
         reason: "virtual_worker_merge_conflict_already_resolved",
@@ -678,6 +678,12 @@ export class VirtualWorkerService {
       });
       return;
     }
+
+    // Count every real resolution attempt up-front — before spinning up the provider — so
+    // failures, crashes, and quota-exhausted runs all consume the retry budget. Recording
+    // only on success (the previous behavior) meant a conflict that never resolved retried
+    // indefinitely until the provider API limit was hit instead of escalating after `cap`.
+    this.deps.guardrailService?.record(guardrailScope, guardrailKey, "merge_conflict");
 
     const sessionId = `virtual-merge-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);
@@ -832,9 +838,6 @@ export class VirtualWorkerService {
           ? `Pushed resolved merge conflict to ${sourceBranch} at ${headSha}.`
           : `Resolved merge-conflict run completed on ${sourceBranch} at ${headSha}.`,
       });
-      if (item.taskId) {
-        this.deps.guardrailService?.record(guardrailScope, item.taskId, "merge_conflict");
-      }
       this.deps.projectAttentionService.resolveItem(item.id, {
         status: "resolved",
         reason: "virtual_worker_merge_conflict_resolved",
@@ -946,6 +949,11 @@ export class VirtualWorkerService {
       this.escalateAttentionToHuman(workerEndpointId, item, `Virtual worker reached the CI autofix guardrail (${retryCount}/${capLabel}). Escalating to human.`);
       return;
     }
+
+    // Record the attempt up-front so failed/crashed CI-fix runs also consume the retry
+    // budget — recording only on success let an unfixable failure retry until the
+    // provider API limit instead of escalating after `cap` attempts.
+    this.deps.guardrailService?.record(guardrailScope, guardrailKey, "ci_fix");
 
     const sessionId = `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const resumeTarget = this.deps.sessionTracking.findLatestCliSessionForBranch({
@@ -1107,8 +1115,6 @@ export class VirtualWorkerService {
           ? `Pushed CI fix to ${branchName} at ${headSha}.`
           : `CI fix run completed on ${branchName} at ${headSha}.`,
       });
-
-      this.deps.guardrailService?.record(guardrailScope, guardrailKey, "ci_fix");
 
       this.deps.projectAttentionService.resolveItem(item.id, {
         status: "resolved",
@@ -1385,14 +1391,51 @@ export class VirtualWorkerService {
 
   private async ensureMergeConflictResolved(worktreePath: string): Promise<void> {
     const unresolved = await this.listUnresolvedFiles(worktreePath);
-    if (unresolved.length > 0) {
-      throw new Error(`Unresolved merge conflicts remain: ${unresolved.join(", ")}`);
+    if (unresolved.length === 0) {
+      return;
+    }
+    // The agent almost always edits the working-tree files to resolve the conflict but
+    // leaves them unstaged, so the index still records unmerged stage entries and
+    // `git diff --diff-filter=U` keeps listing them. That is NOT an unresolved conflict —
+    // only files that still contain conflict markers are. (Every provider — Qwen, Codex,
+    // Antigravity — hits this: they remove the markers, run tests, then hand back without
+    // staging, expecting the orchestrator to finalize the index.) Stage the agent's edits
+    // first so resolved unmerged entries collapse, then verify no markers survived.
+    await this.runWorkspaceCommand(worktreePath, "git", ["add", "-A"]);
+    const stillConflicted = await this.listFilesWithConflictMarkers(worktreePath, unresolved);
+    if (stillConflicted.length > 0) {
+      throw new Error(`Unresolved merge conflicts remain: ${stillConflicted.join(", ")}`);
     }
   }
 
   private async listUnresolvedFiles(worktreePath: string): Promise<string[]> {
     const result = await this.runWorkspaceCommand(worktreePath, "git", ["diff", "--name-only", "--diff-filter=U"]);
     return result.stdout.split("\n").map((entry) => entry.trim()).filter(Boolean);
+  }
+
+  private async listFilesWithConflictMarkers(worktreePath: string, files: string[]): Promise<string[]> {
+    if (files.length === 0) {
+      return [];
+    }
+    try {
+      // Search the staged content for surviving conflict markers. Requiring the start
+      // (`<<<<<<<`) or end (`>>>>>>>`) markers — rather than the `=======` separator,
+      // which appears legitimately in markdown/RST — avoids false positives.
+      const result = await this.runWorkspaceCommand(worktreePath, "git", [
+        "grep",
+        "--cached",
+        "-l",
+        "-E",
+        "^(<{7}|>{7})( |$)",
+        "--",
+        ...files,
+      ]);
+      return result.stdout.split("\n").map((entry) => entry.trim()).filter(Boolean);
+    } catch {
+      // `git grep` exits non-zero when it finds no matches, which is exactly the
+      // success case here: the agent removed every conflict marker.
+      return [];
+    }
   }
 
   private async finalizeMergeCommit(worktreePath: string, sourceBranch: string, targetBranch: string): Promise<void> {
