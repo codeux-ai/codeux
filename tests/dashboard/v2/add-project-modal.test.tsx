@@ -116,15 +116,16 @@ describe("AddProjectModal", () => {
     });
   });
 
-  it("submits the new project local payload without setup fields", async () => {
+  it("submits the new project local payload without a slug", async () => {
     const onAdd = vi.fn().mockResolvedValue(undefined);
     render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} initialSourceType="new_project" />);
 
-    const nameInput2 = screen.getByLabelText(/Project Name/i);
-    fireEvent.input(nameInput2, { target: { value: "Alpha" } });
-    await waitFor(() => expect(nameInput2).toHaveValue("Alpha"));
+    expect(screen.queryByLabelText(/git url slug/i)).not.toBeInTheDocument();
+
+    const nameInput = screen.getByLabelText(/Project Name/i);
+    fireEvent.input(nameInput, { target: { value: "Alpha" } });
+    await waitFor(() => expect(nameInput).toHaveValue("Alpha"));
     fireEvent.input(screen.getByLabelText(/Directory Path/i), { target: { value: "/tmp/alpha" } });
-    await waitFor(() => expect(screen.getByLabelText(/Project Name/i)).toHaveValue("Alpha"));
     await waitFor(() => expect(screen.getByLabelText(/Directory Path/i)).toHaveValue("/tmp/alpha"));
     const form = screen.getByLabelText(/Project Name/i).closest("form");
     fireEvent.submit(form!);
@@ -135,7 +136,34 @@ describe("AddProjectModal", () => {
       type: "new_project",
       path: "/tmp/alpha",
       initMode: "new-local",
-      repoSlug: "alpha",
+    });
+  });
+
+  it("submits the new project remote payload with an auto-generated slug", async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} initialSourceType="new_project" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /remote repo/i }));
+
+    const nameInput = screen.getByLabelText(/Project Name/i) as HTMLInputElement;
+    const slugInput = screen.getByLabelText(/Git URL Slug/i) as HTMLInputElement;
+
+    fireEvent.input(nameInput, { target: { value: "Alpha Beta" } });
+
+    await waitFor(() => expect(nameInput).toHaveValue("Alpha Beta"));
+    await waitFor(() => expect(slugInput).toHaveValue("alpha-beta"));
+
+    fireEvent.submit(nameInput.closest("form")!);
+
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(onAdd).toHaveBeenCalledWith({
+      name: "Alpha Beta",
+      type: "new_project",
+      path: "",
+      initMode: "new-remote",
+      repoSlug: "alpha-beta",
+      remoteProvider: "github",
+      isPrivate: true,
     });
   });
 
