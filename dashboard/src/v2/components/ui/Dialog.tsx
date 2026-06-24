@@ -3,7 +3,8 @@ import { useEffect, useState } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { Overlay } from "./Overlay.js";
-import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
 interface DialogProps {
   isOpen: boolean;
@@ -35,6 +36,8 @@ export const Dialog: FunctionComponent<DialogProps> = ({
   ariaDescribedby,
 }) => {
   const reducedMotion = useReducedMotion();
+  const cssTokens = useInteractionTokens();
+  const gsapTokens = useGsapInteractionTokens();
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [visible, setVisible] = useState(isOpen);
 
@@ -55,15 +58,15 @@ export const Dialog: FunctionComponent<DialogProps> = ({
       setVisible(false);
       const timer = setTimeout(() => {
         setShouldRender(false);
-      }, reducedMotion ? 0 : parseFloat(INTERACTION_TOKENS.enterExit.duration)); // Exit transition time
+      }, reducedMotion ? 0 : gsapTokens.enterExit.duration * 1000); // Exit transition time
       return () => clearTimeout(timer);
     }
-  }, [isOpen, reducedMotion]);
+  }, [isOpen, reducedMotion, gsapTokens.enterExit.duration]);
 
   if (!shouldRender) return null;
 
   return (
-    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur exitDuration={parseFloat(INTERACTION_TOKENS.enterExit.duration)}>
+    <Overlay isOpen={isOpen} onClose={disableBackdropClick ? undefined : onClose} blur>
       <div
         ref={trapRef}
         role="dialog"
@@ -76,7 +79,7 @@ export const Dialog: FunctionComponent<DialogProps> = ({
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'scale(1)' : 'scale(0.95)',
-          transition: reducedMotion ? 'none' : `opacity ${INTERACTION_TOKENS.enterExit.duration} ${INTERACTION_TOKENS.enterExit.ease}, transform ${INTERACTION_TOKENS.enterExit.duration} ${INTERACTION_TOKENS.enterExit.ease}`,
+          transition: reducedMotion ? 'none' : `opacity ${cssTokens.enterExit.duration} ${cssTokens.enterExit.ease}, transform ${cssTokens.enterExit.duration} ${cssTokens.enterExit.ease}`,
         }}
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside dialog
       >

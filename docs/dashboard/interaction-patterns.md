@@ -60,3 +60,11 @@ All interaction timings automatically respect the user's system preferences or d
 - When a user prefers reduced motion, the aforementioned hooks (`useInteractionTokens`, `useGsapInteractionTokens`) automatically resolve all duration values to `0` or `"0ms"`.
 - This ensures visual state changes happen instantly while preserving logical flows and React/Preact lifecycle events that depend on state transitions.
 - Do not hardcode custom fallback logic for `duration`. Use the hooks, and the components will naturally skip the animation timing.
+
+## Overlay Transitions & Focus Management
+
+All standard overlays (Dialog, DropdownMenu, Popover, Tooltip, ConfirmDialog) adhere to specific rules for transitions and accessibility:
+
+1. **Transitions:** Overlays must use the `enterExit` or `controlFeedback` tokens (via `useInteractionTokens()` or `useGsapInteractionTokens()`) rather than hardcoded durations (e.g., `150ms`). These hooks ensure that `prefers-reduced-motion` settings automatically disable CSS transitions or set GSAP durations to 0.
+2. **Focus Restoration:** Dialogs, DropdownMenus, and Popovers must reliably restore focus to the element that triggered them when they close. This relies on caching the `document.activeElement` during the `isOpen` state change and using `.focus({ preventScroll: true })` after closing to prevent unexpected page jumps.
+3. **Menu Keyboard Navigation:** Dropdown menus and lists utilizing arrow key navigation should use standard roles (e.g., `role="menuitem"`) and ensure their querying logic explicitly ignores `disabled` or `aria-disabled="true"` elements to ensure users do not become trapped on non-interactive items.

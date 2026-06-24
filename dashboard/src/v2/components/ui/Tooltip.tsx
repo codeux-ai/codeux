@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useLayoutEffect, useId } from "preact/hook
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { tooltipMotion } from "../../utils/motion.js";
-import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { calculatePosition } from "../../lib/positioning/index.js";
 
 interface TooltipProps {
@@ -32,7 +32,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
     const hoverTimeout = useRef<number | null>(null);
 
     const [coords, setCoords] = useState({ top: 0, left: 0 });
-    const durations = useGsapDurations();
+    const gsapTokens = useGsapInteractionTokens();
     const gsapCtx = useRef<gsap.Context | null>(null);
     const [tooltipId] = useState(() => `tooltip-${Math.random().toString(36).substr(2, 9)}`);
 
@@ -93,9 +93,9 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
             gsap.killTweensOf(tooltipRef.current);
 
             if (isVisible) {
-                tooltipMotion.enter(tooltipRef.current, position, { duration: durations.fast, ease: GSAP_EASINGS.spring });
+                tooltipMotion.enter(tooltipRef.current, position, { duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
             } else if (isRendered) {
-                tooltipMotion.exit(tooltipRef.current, position, () => setIsRendered(false), { duration: durations.fast, ease: GSAP_EASINGS.smooth });
+                tooltipMotion.exit(tooltipRef.current, position, () => setIsRendered(false), { duration: gsapTokens.controlFeedback.duration, ease: gsapTokens.controlFeedback.ease });
             }
         });
     }, [isVisible, isRendered, position]);
