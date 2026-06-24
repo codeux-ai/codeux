@@ -117,7 +117,7 @@ export type ChatThread = ConversationThreadRecord;
 export type ChatMessageRecord = ConversationMessageRecord;
 
 export type ProjectCardSourceBadgeKind = "local" | "remote-git" | "local-repository";
-export type ProjectCardActionKind = "open-project" | "settings" | "setup-agent" | "invocation" | "delete";
+export type ProjectCardActionKind = "open-project" | "settings" | "setup-project" | "delete";
 export type ProjectCardActionTone = "default" | "danger";
 
 export interface ProjectCardDisplayValue {

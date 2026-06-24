@@ -86,11 +86,10 @@ describe("project-card-view-model", () => {
       isEmpty: false,
     });
     expect(viewModel.actions.map((action) => action.label)).toEqual([
-      "Open project",
+      "Open",
+      "Setup project",
       "Settings",
-      "Setup agent",
-      "Open invocation",
-      "Delete project",
+      "Delete",
     ]);
   });
 
@@ -190,9 +189,16 @@ describe("project-card-view-model", () => {
     expect(buildProjectCardActions()).toEqual([
       {
         kind: "open-project",
-        label: "Open project",
+        label: "Open",
         ariaLabel: "Open project",
         title: "Open project",
+        tone: "default",
+      },
+      {
+        kind: "setup-project",
+        label: "Setup project",
+        ariaLabel: "Setup project",
+        title: "Setup project",
         tone: "default",
       },
       {
@@ -203,22 +209,8 @@ describe("project-card-view-model", () => {
         tone: "default",
       },
       {
-        kind: "setup-agent",
-        label: "Setup agent",
-        ariaLabel: "Setup agent",
-        title: "Setup agent",
-        tone: "default",
-      },
-      {
-        kind: "invocation",
-        label: "Open invocation",
-        ariaLabel: "Open invocation",
-        title: "Open invocation",
-        tone: "default",
-      },
-      {
         kind: "delete",
-        label: "Delete project",
+        label: "Delete",
         ariaLabel: "Delete project",
         title: "Delete project",
         tone: "danger",

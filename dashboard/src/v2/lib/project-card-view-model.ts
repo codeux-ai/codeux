@@ -27,9 +27,16 @@ const PROJECT_PROVIDER_LABELS: Record<ProjectSummary["gitProvider"], string> = {
 const PROJECT_CARD_ACTIONS: Array<Pick<ProjectCardActionDescriptor, "kind" | "label" | "ariaLabel" | "title" | "tone">> = [
   {
     kind: "open-project",
-    label: "Open project",
+    label: "Open",
     ariaLabel: "Open project",
     title: "Open project",
+    tone: "default",
+  },
+  {
+    kind: "setup-project",
+    label: "Setup project",
+    ariaLabel: "Setup project",
+    title: "Setup project",
     tone: "default",
   },
   {
@@ -40,22 +47,8 @@ const PROJECT_CARD_ACTIONS: Array<Pick<ProjectCardActionDescriptor, "kind" | "la
     tone: "default",
   },
   {
-    kind: "setup-agent",
-    label: "Setup agent",
-    ariaLabel: "Setup agent",
-    title: "Setup agent",
-    tone: "default",
-  },
-  {
-    kind: "invocation",
-    label: "Open invocation",
-    ariaLabel: "Open invocation",
-    title: "Open invocation",
-    tone: "default",
-  },
-  {
     kind: "delete",
-    label: "Delete project",
+    label: "Delete",
     ariaLabel: "Delete project",
     title: "Delete project",
     tone: "danger",

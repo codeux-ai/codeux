@@ -1,6 +1,7 @@
 # Projects
 
 The **Projects** page (`/projects`) lists every project Code UX manages and lets you create, edit, select, and delete them.
+Each card now surfaces the source badge, repository URL, local workspace directory, creation and update timestamps, last run time, branch, provider, and host so the active checkout is easy to scan without opening a second page.
 
 A *project* is the binding between Code UX and a single Git repository. Each project has its own:
 
@@ -33,13 +34,14 @@ On save, Code UX:
 Most other dashboard pages operate on a *single active project*. The active project is selectable from:
 
 - The top bar dropdown (always visible).
-- A click on any project card on the Projects page.
+- A click on any project card on the Projects page, or the card's **Open** action.
+- The card's **Settings** wheel, which selects the project and opens the project-scoped settings surface.
 
 Programmatically, the active project ID is sent with REST calls (`/api/projects/:projectId/...`) and is the implicit scope of the WebSocket subscription.
 
 ## Editing a project
 
-Click the **⋯** menu on a project card and choose **Edit**. The fields above are editable except the repository path; to change the path, delete and re-create the project.
+Click the card's **Open** action to make it the active project, or use the **Settings** wheel to jump directly to the project-scoped settings page.
 
 ## Deleting a project
 
