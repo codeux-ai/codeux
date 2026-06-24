@@ -97,7 +97,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     switch (status) {
       case "running":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-blue-500/40 bg-blue-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300 dark:border-white/[0.06]`}>
             <div className="h-2 w-2 rounded-full bg-blue-500" />
             <Loader2 className="h-3 w-3 animate-spin" />
             Running
@@ -105,7 +105,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       case "completed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300 dark:border-white/[0.06]`}>
             <div className="h-2 w-2 rounded-full bg-emerald-500" />
             <CheckCircle2 className="h-3 w-3" />
             Completed
@@ -113,7 +113,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       case "failed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-red-500/40 bg-red-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-300 dark:border-white/[0.06]`}>
             <div className="h-2 w-2 rounded-full bg-red-500" />
             <XCircle className="h-3 w-3" />
             Failed
@@ -121,7 +121,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       case "cancelled":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-slate-500/40 bg-slate-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 dark:border-white/[0.06]`}>
             <div className="h-2 w-2 rounded-full bg-slate-500" />
             <MinusCircle className="h-3 w-3" />
             Cancelled
@@ -129,7 +129,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       case "paused":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300 dark:border-white/[0.06]`}>
             <div className="h-2 w-2 rounded-full bg-amber-500" />
             <PauseCircle className="h-3 w-3" />
             Paused
