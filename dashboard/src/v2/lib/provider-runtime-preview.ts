@@ -1,6 +1,72 @@
-import type { ProviderConfigId, SystemSettings } from "../../types.js";
+import type { ProviderConfigId, SystemSettings, ProviderId } from "../../types.js";
 
 export type SystemProviderConfig = SystemSettings["integrations"]["providers"][ProviderConfigId];
+
+export interface SanitizableProviderConfig {
+  provider: ProviderId;
+  name: string;
+  authType?: "apiKey" | "localAuth" | "dashboardAuth";
+  mountAuth: boolean;
+  authPath: string;
+  apiKey: string;
+  customBaseUrl?: string;
+  customModel?: string;
+  qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
+  qwenRegion?: "china" | "international";
+  qwenBaseUrl?: string;
+  qwenEnvKey?: string;
+  qwenModelId?: string;
+  qwenProtocol?: "openai" | "anthropic" | "gemini";
+  qwenAdditionalModelProviders?: any[];
+  openCodeAuthMode?: "LOCAL_AUTH" | "ENV_KEY" | "CUSTOM_PROVIDER";
+  openCodeProviderId?: string;
+  openCodeModelId?: string;
+  openCodeBaseUrl?: string;
+  openCodeEnvKey?: string;
+  openCodePackage?: string;
+}
+
+export const sanitizeSystemProviderConfig = <T extends SanitizableProviderConfig>(
+  provider: T,
+): T => {
+  if (provider.provider === "jules") {
+    return provider;
+  }
+
+  const sanitized = { ...provider };
+  const authType = sanitized.authType || (sanitized.mountAuth ? "localAuth" : "apiKey");
+  sanitized.authType = authType;
+
+  if (authType === "apiKey") {
+    sanitized.mountAuth = false;
+    sanitized.authPath = "";
+  } else {
+    // localAuth or dashboardAuth
+    sanitized.mountAuth = true;
+    sanitized.apiKey = "";
+    sanitized.customBaseUrl = "";
+    sanitized.customModel = "";
+
+    if (sanitized.provider === "qwen-code") {
+      sanitized.qwenAuthMode = "LOCAL_AUTH";
+      sanitized.qwenRegion = undefined;
+      sanitized.qwenBaseUrl = "";
+      sanitized.qwenEnvKey = "";
+      sanitized.qwenModelId = "";
+      sanitized.qwenProtocol = undefined;
+      sanitized.qwenAdditionalModelProviders = [];
+    } else if (sanitized.provider === "opencode") {
+      sanitized.openCodeAuthMode = "LOCAL_AUTH";
+      sanitized.openCodeProviderId = "";
+      sanitized.openCodeModelId = "";
+      sanitized.openCodeBaseUrl = "";
+      sanitized.openCodeEnvKey = "";
+      sanitized.openCodePackage = "";
+    }
+  }
+
+  return sanitized;
+};
 
 export const qwenAuthModeOptions = [
   { value: "LOCAL_AUTH", label: "Local auth", hint: "Copy ~/.qwen OAuth cache" },
@@ -62,25 +128,26 @@ export const buildQwenSettingsPreview = (
   model: string,
   dockerExecutionEnabled: boolean,
 ): string => {
-  const authMode = provider.qwenAuthMode || "MODEL_PROVIDER";
+  const sanitized = sanitizeSystemProviderConfig(provider);
+  const authMode = sanitized.qwenAuthMode || "MODEL_PROVIDER";
   const envKey = authMode === "ALIBABA_CODING_PLAN"
     ? "BAILIAN_CODING_PLAN_API_KEY"
-    : provider.qwenEnvKey || "OLLAMA_API_KEY";
+    : sanitized.qwenEnvKey || "OLLAMA_API_KEY";
   const baseUrl = authMode === "ALIBABA_CODING_PLAN"
-    ? getQwenEndpointForRegion(provider.qwenRegion)
-    : provider.qwenBaseUrl || "http://127.0.0.1:11434/v1";
-  const protocol = provider.qwenProtocol || "openai";
+    ? getQwenEndpointForRegion(sanitized.qwenRegion)
+    : sanitized.qwenBaseUrl || "http://127.0.0.1:11434/v1";
+  const protocol = sanitized.qwenProtocol || "openai";
   const modelId = authMode === "MODEL_PROVIDER"
-    ? (provider.qwenModelId || (model === "custom/model" || model === "local-model" ? "glm-4.7-flash" : model) || "glm-4.7-flash")
+    ? (sanitized.qwenModelId || (model === "custom/model" || model === "local-model" ? "glm-4.7-flash" : model) || "glm-4.7-flash")
     : model || "qwen3-coder-plus";
   const primaryProvider = {
     id: modelId,
-    name: provider.name,
+    name: sanitized.name,
     baseUrl: rewriteDockerLoopbackUrl(baseUrl, dockerExecutionEnabled),
     description: authMode === "ALIBABA_CODING_PLAN" ? "Qwen via Alibaba Cloud Coding Plan" : "Qwen custom model provider",
     envKey,
   };
-  const additional = (provider.qwenAdditionalModelProviders || []).map((entry) => ({
+  const additional = (sanitized.qwenAdditionalModelProviders || []).map((entry) => ({
     id: entry.id,
     name: entry.name || entry.id,
     baseUrl: rewriteDockerLoopbackUrl(entry.baseUrl, dockerExecutionEnabled),
@@ -92,8 +159,8 @@ export const buildQwenSettingsPreview = (
       [protocol]: [primaryProvider, ...additional],
     },
     env: {
-      [envKey]: maskSecret(provider.apiKey),
-      ...Object.fromEntries((provider.qwenAdditionalModelProviders || []).map((entry) => [entry.envKey, maskSecret(entry.apiKey)])),
+      [envKey]: maskSecret(sanitized.apiKey),
+      ...Object.fromEntries((sanitized.qwenAdditionalModelProviders || []).map((entry) => [entry.envKey, maskSecret(entry.apiKey)])),
     },
     security: {
       auth: {
@@ -103,7 +170,7 @@ export const buildQwenSettingsPreview = (
     model: {
       name: modelId,
     },
-    ...(authMode === "ALIBABA_CODING_PLAN" ? { codingPlan: { region: provider.qwenRegion || "international" } } : {}),
+    ...(authMode === "ALIBABA_CODING_PLAN" ? { codingPlan: { region: sanitized.qwenRegion || "international" } } : {}),
   }, null, 2);
 };
 
@@ -112,10 +179,11 @@ export const buildOpenCodeConfigPreview = (
   model: string,
   dockerExecutionEnabled: boolean,
 ): string => {
-  const authMode = provider.openCodeAuthMode || "ENV_KEY";
+  const sanitized = sanitizeSystemProviderConfig(provider);
+  const authMode = sanitized.openCodeAuthMode || "ENV_KEY";
   const modelParts = splitOpenCodeModel(model);
-  const providerId = provider.openCodeProviderId || modelParts.providerId;
-  const modelId = provider.openCodeModelId || modelParts.modelId;
+  const providerId = sanitized.openCodeProviderId || modelParts.providerId;
+  const modelId = sanitized.openCodeModelId || modelParts.modelId;
   const selectedModel = authMode === "CUSTOM_PROVIDER" ? `${providerId}/${modelId}` : model || `${providerId}/${modelId}`;
   const config: Record<string, unknown> = {
     $schema: "https://opencode.ai/config.json",
@@ -135,10 +203,10 @@ export const buildOpenCodeConfigPreview = (
   if (authMode === "CUSTOM_PROVIDER") {
     config.provider = {
       [providerId]: {
-        npm: provider.openCodePackage || "@ai-sdk/openai-compatible",
+        npm: sanitized.openCodePackage || "@ai-sdk/openai-compatible",
         name: providerId,
         options: {
-          baseURL: rewriteDockerLoopbackUrl(provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1", dockerExecutionEnabled),
+          baseURL: rewriteDockerLoopbackUrl(sanitized.openCodeBaseUrl || "http://127.0.0.1:11434/v1", dockerExecutionEnabled),
           apiKey: "{env:OPENCODE_API_KEY}",
         },
         models: {
@@ -150,8 +218,8 @@ export const buildOpenCodeConfigPreview = (
   return JSON.stringify({
     ...config,
     env: {
-      [provider.openCodeEnvKey || "OLLAMA_API_KEY"]: maskSecret(provider.apiKey),
-      OPENCODE_API_KEY: maskSecret(provider.apiKey),
+      [sanitized.openCodeEnvKey || "OLLAMA_API_KEY"]: maskSecret(sanitized.apiKey),
+      OPENCODE_API_KEY: maskSecret(sanitized.apiKey),
     },
   }, null, 2);
 };

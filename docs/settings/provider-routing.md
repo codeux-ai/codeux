@@ -89,6 +89,22 @@ Manual route selection is authoritative for that route. If a route sets `provide
 9. If a persisted task already has a concrete provider assignment, such as `gemini` on retry, Code UX resolves the matching provider instance settings for that provider instead of reusing settings from a newly resolved fallback route. This keeps model and auth-copy settings aligned with the actual CLI being launched.
 10. Legacy provider-id keyed payloads are normalized into the instance model so older settings rows and tests continue to resolve through the new routing engine.
 
+## Credential Mutual Exclusion
+
+To prevent conflicting generated runtime configuration and credential leakage, Code UX enforces strict mutual exclusion between API key and local copy / dashboard login authentication modes for every non-Jules provider:
+
+1. **API Key Mode (`authType === "apiKey"`)**:
+   - `mountAuth` is automatically disabled (`false`).
+   - The local copy / dashboard auth path (`authPath`) is cleared.
+   - Preserves custom provider API-key sub-modes (e.g. Alibaba Cloud Coding Plan, custom OpenAI-compatible endpoints) and their specific endpoints/keys.
+
+2. **Local Auth / Dashboard Login (`authType === "localAuth"` or `authType === "dashboardAuth"`)**:
+   - The `apiKey` field is cleared.
+   - Any custom model provider base URL (`customBaseUrl`) or custom model slug (`customModel`) overrides are cleared and ignored.
+   - For **Qwen Code**, forces `qwenAuthMode` to `LOCAL_AUTH` and clears all custom API-key sub-mode fields (`qwenRegion`, `qwenBaseUrl`, `qwenEnvKey`, `qwenModelId`, `qwenProtocol`, `qwenAdditionalModelProviders`).
+   - For **OpenCode**, forces `openCodeAuthMode` to `LOCAL_AUTH` and clears all custom API-key sub-mode fields (`openCodeProviderId`, `openCodeModelId`, `openCodeBaseUrl`, `openCodeEnvKey`, `openCodePackage`).
+   - For **Codex**, ensures that no stale API key or custom model-provider overrides are passed to the child process environment (`withProviderEnv`) or command construction arguments.
+
 ## Current Defaults
 
 - `task_coding` uses `GLOBAL`

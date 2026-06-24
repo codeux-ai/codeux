@@ -16,6 +16,7 @@ import {
   providerLabels,
   createSystemProviderDraft,
   sortProviderConfigEntries,
+  getSystemIntegrationProviders,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints } from "../../../dashboard/src/types.js";
 
@@ -259,7 +260,7 @@ describe("provider availability helpers", () => {
     // Jules available via hint
     expect(getProviderAuthLabel("jules", mockSystemSettings, mockHints, false)).toBe("API key");
     // Gemini available via system setting + per-instance mount enabled
-    expect(getProviderAuthLabel("gemini", mockSystemSettings, mockHints, true)).toBe("Auth mount + API key");
+    expect(getProviderAuthLabel("gemini", mockSystemSettings, mockHints, true)).toBe("Auth mount enabled");
     // Codex local auth should not surface as an active auth source by itself
     expect(getProviderAuthLabel("codex", mockSystemSettings, mockHints, false)).toBeNull();
     // Claude can still surface an active auth mount in Docker mode without an API key
@@ -279,5 +280,33 @@ describe("provider availability helpers", () => {
     // codex local auth alone should not activate it
     // claude-code is activated via auth mount and enabled
     expect(eligible).toEqual(["jules", "claude-code"]);
+  });
+});
+
+describe("provider settings sanitization", () => {
+  it("sanitizes SystemProviderConfig/provider settings mutually exclusively", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "codex": {
+            provider: "codex",
+            name: "Codex Primary",
+            apiKey: "stale-key",
+            authType: "localAuth",
+            mountAuth: true,
+            authPath: "~/.codex",
+            customBaseUrl: "https://custom.api",
+            customModel: "gpt-custom",
+          },
+        },
+      },
+    } as any;
+
+    const providers = getSystemIntegrationProviders(systemSettings);
+    const codex = providers["codex"];
+    expect(codex.apiKey).toBe("");
+    expect(codex.customBaseUrl).toBe("");
+    expect(codex.customModel).toBe("");
+    expect(codex.mountAuth).toBe(true);
   });
 });

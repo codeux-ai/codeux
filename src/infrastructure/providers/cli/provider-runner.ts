@@ -602,10 +602,10 @@ export class ProviderRunner implements IProviderRunner {
    *  empty array for non-codex providers or when no custom base URL is configured. */
   private buildCodexCustomProviderArgs(
     provider: CliProviderId,
-    config: Pick<ProviderRunInput, "customBaseUrl">,
+    config: Pick<ProviderRunInput, "customBaseUrl" | "providerMountAuth">,
     workflowSettings: CliWorkflowSettings,
   ): string[] {
-    if (provider !== "codex" || !config.customBaseUrl || config.customBaseUrl.trim().length === 0) {
+    if (provider !== "codex" || config.providerMountAuth || !config.customBaseUrl || config.customBaseUrl.trim().length === 0) {
       return [];
     }
     const providerId = "custom_gateway";
@@ -742,13 +742,14 @@ export class ProviderRunner implements IProviderRunner {
     githubToken?: string,
     providerMountAuth?: boolean,
     providerConfig?: Pick<ProviderRunInput, "qwenAuthMode" | "qwenRegion" | "qwenBaseUrl" | "qwenEnvKey" | "qwenModelId" | "qwenProtocol" | "qwenAdditionalModelProviders" | "openCodeAuthMode" | "openCodeProviderId" | "openCodeModelId" | "openCodeBaseUrl" | "openCodeEnvKey" | "openCodePackage" | "mcpConnection" | "customBaseUrl" | "customModel" | "customMcpServers">,
-    qwenOpenAiLogDir?: string,
+    qwenProcessLogDir?: string,
     gitlabToken?: string,
   ): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...process.env };
     const useContainerMounts = workflowSettings.executionMode === "DOCKER";
     const useGithubMount = useContainerMounts && workflowSettings.containerMountGithubAuth;
     const useProviderMount = useContainerMounts && Boolean(providerMountAuth);
+    const isApiKeyMode = !providerMountAuth;
 
     if (githubToken && !useGithubMount) {
       env.GH_TOKEN = githubToken;
@@ -760,10 +761,10 @@ export class ProviderRunner implements IProviderRunner {
     }
     if (provider === "gemini") {
       if (model && model !== "default") env.GEMINI_MODEL = model;
-      if (apiKey && !useProviderMount) env.GEMINI_API_KEY = apiKey;
+      if (isApiKeyMode && apiKey && !useProviderMount) env.GEMINI_API_KEY = apiKey;
       env.GEMINI_CLI_TRUST_WORKSPACE = "true";
     } else if (provider === "claude-code") {
-      if (providerConfig?.customBaseUrl) {
+      if (isApiKeyMode && providerConfig?.customBaseUrl) {
         // Claude Code speaks the Anthropic Messages API and always appends `/v1/messages`
         // to ANTHROPIC_BASE_URL. A base ending in `/v1` (e.g. the OpenAI-format URL used by
         // Codex/Qwen, https://openrouter.ai/api/v1) would produce `/v1/v1/messages` and fail
@@ -782,14 +783,14 @@ export class ProviderRunner implements IProviderRunner {
           env.ANTHROPIC_AUTH_TOKEN = apiKey;
           env.ANTHROPIC_API_KEY = "";
         }
-      } else if (apiKey && !useProviderMount) {
+      } else if (isApiKeyMode && apiKey && !useProviderMount) {
         env.ANTHROPIC_API_KEY = apiKey;
       }
 
       // If a custom model is provided (and thus passed in `model`), point every Claude
       // Code model tier at it — including the background "small/fast" tier that would
       // otherwise request a Haiku model the gateway does not serve.
-      if (model && model !== "default") {
+      if (isApiKeyMode && model && model !== "default") {
         env.ANTHROPIC_MODEL = model;
         env.ANTHROPIC_SMALL_FAST_MODEL = model;
         env.ANTHROPIC_DEFAULT_OPUS_MODEL = model;
@@ -798,8 +799,8 @@ export class ProviderRunner implements IProviderRunner {
       }
     } else if (provider === "codex") {
       if (model && model !== "default") env.CODEX_MODEL = model;
-      if (apiKey && !useProviderMount) env.OPENAI_API_KEY = apiKey;
-      if (providerConfig?.customBaseUrl) {
+      if (isApiKeyMode && apiKey && !useProviderMount) env.OPENAI_API_KEY = apiKey;
+      if (isApiKeyMode && providerConfig?.customBaseUrl) {
         env.OPENAI_BASE_URL = this.rewriteLoopbackUrlForDocker(
           providerConfig.customBaseUrl,
           this.shouldRewriteDockerLoopbackUrls(workflowSettings),
@@ -807,13 +808,15 @@ export class ProviderRunner implements IProviderRunner {
       }
     } else if (provider === "qwen-code") {
       const qwenEnvKeys = new Set<string>();
-      const primaryEnvKey = providerConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"
-        ? "BAILIAN_CODING_PLAN_API_KEY"
-        : providerConfig?.qwenEnvKey || "OLLAMA_API_KEY";
+      const primaryEnvKey = !isApiKeyMode
+        ? "OLLAMA_API_KEY"
+        : providerConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"
+          ? "BAILIAN_CODING_PLAN_API_KEY"
+          : providerConfig?.qwenEnvKey || "OLLAMA_API_KEY";
       qwenEnvKeys.add(primaryEnvKey);
       qwenEnvKeys.add("QWEN_CODE_SUPPRESS_YOLO_WARNING");
       env.QWEN_CODE_SUPPRESS_YOLO_WARNING = "1";
-      if (apiKey && !useProviderMount) {
+      if (isApiKeyMode && apiKey && !useProviderMount) {
         env[primaryEnvKey] = apiKey;
         env.DASHSCOPE_API_KEY ||= apiKey;
         env.BAILIAN_CODING_PLAN_API_KEY ||= apiKey;
@@ -822,21 +825,23 @@ export class ProviderRunner implements IProviderRunner {
           env.OPENAI_API_KEY ||= apiKey;
         }
       }
-      const baseUrl = providerConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"
+      const baseUrl = isApiKeyMode && providerConfig?.qwenAuthMode === "ALIBABA_CODING_PLAN"
         ? providerConfig.qwenRegion === "china"
           ? "https://coding.dashscope.aliyuncs.com/v1"
           : "https://coding-intl.dashscope.aliyuncs.com/v1"
-        : providerConfig?.qwenAuthMode === "MODEL_PROVIDER"
+        : isApiKeyMode && providerConfig?.qwenAuthMode === "MODEL_PROVIDER"
           ? providerConfig.qwenBaseUrl || "http://127.0.0.1:11434/v1"
           : undefined;
       if (baseUrl) {
         env.OPENAI_BASE_URL = this.rewriteLoopbackUrlForDocker(baseUrl, this.shouldRewriteDockerLoopbackUrls(workflowSettings));
       }
-      for (const entry of providerConfig?.qwenAdditionalModelProviders || []) {
-        if (entry.envKey) {
-          qwenEnvKeys.add(entry.envKey);
-          if (entry.apiKey && !useProviderMount) {
-            env[entry.envKey] = entry.apiKey;
+      if (isApiKeyMode) {
+        for (const entry of providerConfig?.qwenAdditionalModelProviders || []) {
+          if (entry.envKey) {
+            qwenEnvKeys.add(entry.envKey);
+            if (entry.apiKey && !useProviderMount) {
+              env[entry.envKey] = entry.apiKey;
+            }
           }
         }
       }
@@ -845,14 +850,19 @@ export class ProviderRunner implements IProviderRunner {
       }
       env.QWEN_SETTINGS_CONTENT = this.buildQwenSettingsContent(
         model,
-        providerConfig,
+        {
+          ...providerConfig,
+          qwenAuthMode: !isApiKeyMode ? "LOCAL_AUTH" : providerConfig?.qwenAuthMode,
+        },
         providerConfig?.mcpConnection || null,
         this.shouldRewriteDockerLoopbackUrls(workflowSettings),
-        qwenOpenAiLogDir,
+        qwenProcessLogDir,
       );
     } else if (provider === "opencode") {
-      const envKey = providerConfig?.openCodeEnvKey || (providerConfig?.openCodeAuthMode === "CUSTOM_PROVIDER" ? "OLLAMA_API_KEY" : "ANTHROPIC_API_KEY");
-      const resolvedApiKey = apiKey || process.env[envKey] || "";
+      const envKey = isApiKeyMode
+        ? (providerConfig?.openCodeEnvKey || (providerConfig?.openCodeAuthMode === "CUSTOM_PROVIDER" ? "OLLAMA_API_KEY" : "ANTHROPIC_API_KEY"))
+        : "ANTHROPIC_API_KEY";
+      const resolvedApiKey = isApiKeyMode ? (apiKey || process.env[envKey] || "") : "";
       if (resolvedApiKey && !useProviderMount) {
         env[envKey] = resolvedApiKey;
         env.OPENCODE_API_KEY = resolvedApiKey;
@@ -868,12 +878,15 @@ export class ProviderRunner implements IProviderRunner {
       }
       env.OPENCODE_CONFIG_CONTENT = this.buildOpenCodeConfigContent(
         model,
-        providerConfig,
+        {
+          ...providerConfig,
+          openCodeAuthMode: !isApiKeyMode ? "LOCAL_AUTH" : providerConfig?.openCodeAuthMode,
+        },
         providerConfig?.mcpConnection || null,
         this.shouldRewriteDockerLoopbackUrls(workflowSettings),
       );
     } else if (provider === "antigravity") {
-      if (apiKey && !useProviderMount) {
+      if (isApiKeyMode && apiKey && !useProviderMount) {
         env.ANTIGRAVITY_API_KEY = apiKey;
       }
       if (model && model !== "default") {

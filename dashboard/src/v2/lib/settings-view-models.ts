@@ -15,6 +15,7 @@ import type {
   ThinkingMode,
 } from "../../types.js";
 import { cloneGuardrails } from "../../lib/settings.js";
+import { sanitizeSystemProviderConfig } from "./provider-runtime-preview.js";
 import {
   BRANCH_NAME_TOKENS,
   BRANCH_NAME_TOKEN_ALIASES,
@@ -603,7 +604,9 @@ export const getSystemIntegrationProviders = (
 ): Record<ProviderConfigId, SystemProviderCredentialSettings> => {
   const providers = systemSettings?.integrations?.providers;
   if (providers && Object.keys(providers).length > 0) {
-    return providers;
+    return Object.fromEntries(
+      Object.entries(providers).map(([id, config]) => [id, sanitizeSystemProviderConfig(config)])
+    );
   }
 
   const fallback: Record<ProviderConfigId, SystemProviderCredentialSettings> = {};
@@ -618,8 +621,9 @@ export const getSystemIntegrationProviders = (
       authPath: getProviderDefaultAuthPath(providerId),
     };
 
+    let item: SystemProviderCredentialSettings;
     if (providerId === "qwen-code") {
-      fallback[providerId] = {
+      item = {
         ...base,
         qwenAuthMode: "MODEL_PROVIDER",
         qwenRegion: "international",
@@ -630,7 +634,7 @@ export const getSystemIntegrationProviders = (
         qwenAdditionalModelProviders: [],
       };
     } else if (providerId === "opencode") {
-      fallback[providerId] = {
+      item = {
         ...base,
         openCodeAuthMode: "ENV_KEY",
         openCodeProviderId: "ollama",
@@ -640,8 +644,9 @@ export const getSystemIntegrationProviders = (
         openCodePackage: "@ai-sdk/openai-compatible",
       };
     } else {
-      fallback[providerId] = base;
+      item = base;
     }
+    fallback[providerId] = sanitizeSystemProviderConfig(item);
   }
   return fallback;
 };
