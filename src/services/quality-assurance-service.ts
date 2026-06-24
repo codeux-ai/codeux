@@ -1,4 +1,12 @@
-import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workflow-utils.js";
+import {
+  buildProviderPrompt,
+  DEFAULT_CLI_WORKFLOW_SETTINGS,
+  buildWorkerBranchPrefix,
+  buildWorkerBranch
+} from "./cli-workflow-utils.js";
+import { GitStatusQueryClient } from "../infrastructure/git/git-status-query-client.js";
+import { resolveRepositoryHost, selectHostToken } from "../infrastructure/git/repository-host-resolver.js";
+import { parseOpenPrs, parseMergedPrs } from "../infrastructure/git/git-status-mappers.js";
 import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import { StructuredAgentRequestService } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
@@ -1353,6 +1361,10 @@ export class QualityAssuranceService {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
     };
+    const gitAuth: GitHttpAuthOptions = {
+      githubToken: settings.git.githubToken,
+      gitlabToken: settings.git.gitlabToken,
+    };
     const resumeWorkspacePath = await this.workspaceManager.resolveResumeWorktreePath(
       args.repoPath,
       args.sessionId,
@@ -1364,10 +1376,91 @@ export class QualityAssuranceService {
     const resolvedWorkspaceBranch = hasPreservedWorkspace
       ? await this.workspaceManager.resolveCurrentBranch(worktreePath)
       : null;
-    const workerBranch = args.task.worker_branch?.trim()
+    let workerBranch = args.task.worker_branch?.trim()
       || args.taskRun?.workerBranch?.trim()
       || resolvedWorkspaceBranch
       || undefined;
+    let isRecovered = Boolean(workerBranch);
+
+    if (!workerBranch) {
+      const prUrl = args.task.pr_url?.trim() || args.taskRun?.prUrl?.trim();
+      if (prUrl) {
+        try {
+          const client = new GitStatusQueryClient(args.repoPath);
+          const remoteRes = await client.gitRemoteUrl("origin", settings.git.githubToken);
+          const remoteUrl = remoteRes.ok ? remoteRes.stdout.trim() : null;
+          const { provider, hostDomain, repoTarget } = resolveRepositoryHost(remoteUrl);
+          const hostTokens = {
+            githubToken: settings.git.githubToken,
+            gitlabToken: settings.git.gitlabToken,
+          };
+          const effectiveToken = selectHostToken(provider, hostTokens);
+          client.setProvider(provider, hostDomain, repoTarget, Boolean(effectiveToken));
+
+          const openRes = await client.ghPrListOpen(effectiveToken);
+          if (openRes.ok) {
+            const { data } = parseOpenPrs(openRes.stdout);
+            const match = data.find(p => p.url?.trim() === prUrl);
+            if (match && match.headRefName) {
+              workerBranch = match.headRefName;
+              isRecovered = true;
+            }
+          }
+          if (!workerBranch) {
+            const mergedRes = await client.ghPrListMerged(effectiveToken);
+            if (mergedRes.ok) {
+              const { data } = parseMergedPrs(mergedRes.stdout);
+              const match = data.find(p => p.url?.trim() === prUrl);
+              if (match && match.headRefName) {
+                workerBranch = match.headRefName;
+                isRecovered = true;
+              }
+            }
+          }
+        } catch (err) {
+          this.deps.logger?.warn?.(`Failed to recover worker branch from PR metadata: ${err}`);
+        }
+      }
+    }
+
+    if (!workerBranch) {
+      if (args.featureBranch && args.task?.id && args.provider) {
+        const prefix = buildWorkerBranchPrefix(args.featureBranch, args.task.id, args.provider);
+        try {
+          const gitAllRes = await runCommandStrict("git", ["branch", "-a", "--list", `*${prefix}*`], args.repoPath);
+          if (gitAllRes.ok) {
+            const branches = gitAllRes.stdout
+              .split("\n")
+              .map(b => b.replace(/^\*?\s*/, "").trim())
+              .filter(Boolean);
+            const localMatch = branches.find(b => !b.startsWith("remotes/"));
+            if (localMatch) {
+              workerBranch = localMatch;
+              isRecovered = true;
+            } else {
+              const remoteMatch = branches.find(b => b.startsWith("remotes/origin/"));
+              if (remoteMatch) {
+                workerBranch = remoteMatch.replace("remotes/origin/", "");
+                isRecovered = true;
+              }
+            }
+          }
+        } catch (err) {
+          this.deps.logger?.warn?.(`Failed to recover worker branch from git branch listing: ${err}`);
+        }
+      }
+    }
+
+    if (!workerBranch) {
+      if (args.featureBranch?.trim() && args.task?.id?.trim() && args.provider) {
+        try {
+          workerBranch = buildWorkerBranch(args.featureBranch, args.task.id, args.provider);
+        } catch (err) {
+          this.deps.logger?.warn?.(`Failed to build deterministic worker branch: ${err}`);
+        }
+      }
+    }
+
     if (!workerBranch) {
       const workspaceState = hasPreservedWorkspace
         ? `resume workspace ${worktreePath} does not expose a current branch`
@@ -1377,22 +1470,46 @@ export class QualityAssuranceService {
       );
     }
 
-    await this.syncRemoteBranchesIfNeeded(
-      args.repoPath,
-      workerBranch,
-      args.scope,
-      "continuing QA follow-up",
-    );
+    // Persist recovered worker-branch metadata back to the task run and project-management task when available
+    if (workerBranch && isRecovered) {
+      if (args.task.worker_branch !== workerBranch) {
+        args.task.worker_branch = workerBranch;
+      }
+      if (args.taskRun && args.taskRun.workerBranch !== workerBranch) {
+        args.taskRun.workerBranch = workerBranch;
+        if (args.taskRun.id) {
+          try {
+            this.deps.executionRepository.updateTaskRun(args.taskRun.id, { workerBranch });
+          } catch (err) {
+            this.deps.logger?.warn?.(`Failed to update taskRun workerBranch: ${err}`);
+          }
+        }
+      }
+    }
 
-    const gitAuth: GitHttpAuthOptions = {
-      githubToken: settings.git.githubToken,
-      gitlabToken: settings.git.gitlabToken,
-    };
+    try {
+      await this.syncRemoteBranchesIfNeeded(
+        args.repoPath,
+        workerBranch,
+        args.scope,
+        "continuing QA follow-up",
+      );
 
-    if (!hasPreservedWorkspace) {
-      await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch, undefined, gitAuth);
-    } else {
-      await this.syncExistingCliFollowUpWorkspace(worktreePath, workerBranch, args.repoPath, gitAuth);
+      if (!hasPreservedWorkspace) {
+        await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch, undefined, gitAuth);
+      } else {
+        await this.syncExistingCliFollowUpWorkspace(worktreePath, workerBranch, args.repoPath, gitAuth);
+      }
+    } catch (prepareError) {
+      if (!isRecovered) {
+        const workspaceState = hasPreservedWorkspace
+          ? `resume workspace ${worktreePath} does not expose a current branch`
+          : `resume workspace is missing for session ${args.sessionId}`;
+        throw new Error(
+          `Cannot continue CLI QA fixes for ${args.task.id}: worker branch metadata is missing and ${workspaceState}.`,
+        );
+      }
+      throw prepareError;
     }
 
     const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath);
