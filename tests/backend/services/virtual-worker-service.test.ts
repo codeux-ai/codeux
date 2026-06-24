@@ -10,11 +10,13 @@ import { ExecutionRepository } from "../../../src/repositories/execution-reposit
 import { WorkerEndpointRepository } from "../../../src/repositories/worker-endpoint-repository.js";
 import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/project-worker-assignment-repository.js";
 import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
+import { GuardrailRepository } from "../../../src/repositories/guardrail-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ProjectWorkerAssignmentService } from "../../../src/domain/workers/project-worker-assignment-service.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { WorkerTaskDispatchService } from "../../../src/services/worker-task-dispatch-service.js";
 import { VirtualWorkerService } from "../../../src/services/virtual-worker-service.js";
+import { GuardrailService } from "../../../src/services/guardrail-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import * as cliProcessRunner from "../../../src/services/cli-process-runner.js";
 
@@ -1168,7 +1170,7 @@ describe("VirtualWorkerService", () => {
   });
 
   it("records the merge-conflict guardrail attempt even when the resolution fails", async () => {
-    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository, projectManagementRepository } = await setupServiceWithProject();
 
     const record = vi.fn();
     (virtualWorkerService as any).deps.guardrailService = {
@@ -1185,8 +1187,17 @@ describe("VirtualWorkerService", () => {
       transport: "internal",
       capabilities: {},
     });
+    const sprint = projectManagementRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const task = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task conflict",
+      promptMarkdown: "Resolve task merge conflict.",
+      isIndependent: true,
+    });
     const item = projectAttentionService.openItem({
       projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
       attentionType: "merge_conflict",
       severity: "high",
       ownerType: "worker",
@@ -1203,6 +1214,54 @@ describe("VirtualWorkerService", () => {
 
     // The core fix: a failed attempt still consumes the retry budget.
     expect(record).toHaveBeenCalledWith(expect.anything(), expect.any(String), "merge_conflict");
+    const active = projectAttentionService.listActiveProjectItems(project.id);
+    expect(active.some((i) => i.attentionType === "human_escalation_required")).toBe(true);
+  });
+
+  it("tracks taskless main-merge conflict attempts on the attention payload without guardrail FK errors", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository, settingsRepository, dir } = await setupServiceWithProject();
+
+    settingsRepository.saveProjectSettings(project.id, {
+      guardrails: {
+        enabled: true,
+        perTaskTotalCeiling: 0,
+        jobs: {
+          ...DEFAULT_DASHBOARD_SETTINGS.guardrails.jobs,
+          merge_conflict: { cap: 3, onLimit: "BLOCK_AND_ESCALATE" },
+        },
+      },
+    });
+    (virtualWorkerService as any).deps.guardrailService = new GuardrailService(
+      new GuardrailRepository(new AppDbStorage(path.join(dir, "app.db"))),
+      (scope) => settingsRepository.resolveProjectDashboardSettings(scope.projectId).settings.guardrails,
+    );
+
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:main-merge-gr",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Main merge conflict",
+      summaryMarkdown: "Resolve final feature to main conflict",
+      payload: { repoPath: "/test", conflictingBranches: { source: "feature/sprint-1", target: "main" } },
+    });
+
+    vi.spyOn((virtualWorkerService as any), "isMergeConflictResolvedOnRemote").mockResolvedValue(false);
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("boom"));
+
+    await expect((virtualWorkerService as any).resolveMergeConflictAttention(endpoint.id, item)).resolves.toBeUndefined();
+
+    const resolved = projectAttentionService.getItem(item.id);
+    expect(resolved?.status).toBe("resolved");
+    expect(resolved?.payload?.mergeConflictResolutionAttempts).toBe(1);
+    expect(resolved?.payload?.mergeConflictGuardrailSubject).toBe(`attention:${item.id}`);
     const active = projectAttentionService.listActiveProjectItems(project.id);
     expect(active.some((i) => i.attentionType === "human_escalation_required")).toBe(true);
   });
@@ -1232,7 +1291,11 @@ describe("VirtualWorkerService", () => {
       ownerType: "worker",
       title: "Merge Conflict",
       summaryMarkdown: "Resolve it",
-      payload: { repoPath: "/test", conflictingBranches: { source: "src", target: "tgt" } },
+      payload: {
+        repoPath: "/test",
+        conflictingBranches: { source: "src", target: "tgt" },
+        mergeConflictResolutionAttempts: 3,
+      },
     });
 
     const prepareWorktree = vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree")

@@ -18,7 +18,7 @@ import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import { ProviderExecutionService, resolveEffectiveModel } from "./provider-execution-service.js";
-import type { GuardrailService } from "./guardrail-service.js";
+import type { GuardrailEvaluation, GuardrailScope, GuardrailService } from "./guardrail-service.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
@@ -585,10 +585,7 @@ export class VirtualWorkerService {
   private async resolveMergeConflictAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
     const guardrailScope = { projectId: item.projectId, sprintId: item.sprintId };
-    // Key by the task when present, else a stable synthetic id so taskless conflicts
-    // (e.g. a final feature→default merge) still get a retry ceiling instead of looping.
-    const guardrailKey = item.taskId || `merge-conflict:${item.sprintRunId ?? item.id}`;
-    const mergeConflictEval = this.deps.guardrailService?.evaluate(guardrailScope, guardrailKey, "merge_conflict") ?? null;
+    const mergeConflictEval = this.evaluateMergeConflictGuardrail(settings, guardrailScope, item);
     if (mergeConflictEval && !mergeConflictEval.allowed && mergeConflictEval.action !== "WARN_ONLY") {
       this.escalateAttentionToHuman(
         workerEndpointId,
@@ -683,7 +680,7 @@ export class VirtualWorkerService {
     // failures, crashes, and quota-exhausted runs all consume the retry budget. Recording
     // only on success (the previous behavior) meant a conflict that never resolved retried
     // indefinitely until the provider API limit was hit instead of escalating after `cap`.
-    this.deps.guardrailService?.record(guardrailScope, guardrailKey, "merge_conflict");
+    this.recordMergeConflictAttempt(guardrailScope, item);
 
     const sessionId = `virtual-merge-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);
@@ -890,6 +887,49 @@ export class VirtualWorkerService {
         });
       }
     }
+  }
+
+  private evaluateMergeConflictGuardrail(
+    settings: DashboardSettings,
+    scope: GuardrailScope,
+    item: ProjectAttentionItemRecord,
+  ): GuardrailEvaluation | null {
+    if (item.taskId) {
+      return this.deps.guardrailService?.evaluate(scope, item.taskId, "merge_conflict") ?? null;
+    }
+
+    const jobConfig = settings.guardrails?.jobs?.merge_conflict;
+    if (!settings.guardrails?.enabled || !jobConfig) {
+      return { allowed: true, count: 0, cap: 0, action: jobConfig?.onLimit ?? "WARN_ONLY" };
+    }
+
+    const count = this.readNonNegativeInteger(item.payload?.mergeConflictResolutionAttempts);
+    const cap = jobConfig.cap;
+    if (cap <= 0) {
+      return { allowed: true, count, cap, action: jobConfig.onLimit };
+    }
+
+    return {
+      allowed: count < cap,
+      count,
+      cap,
+      action: jobConfig.onLimit,
+      reason: count < cap ? undefined : `Reached max merge_conflict invocations for this sprint-level attention item (${count}/${cap}).`,
+    };
+  }
+
+  private recordMergeConflictAttempt(scope: GuardrailScope, item: ProjectAttentionItemRecord): void {
+    if (item.taskId) {
+      this.deps.guardrailService?.record(scope, item.taskId, "merge_conflict");
+      return;
+    }
+
+    const nextCount = this.readNonNegativeInteger(item.payload?.mergeConflictResolutionAttempts) + 1;
+    const updated = this.deps.projectAttentionService.patchItemPayload(item.id, {
+      mergeConflictResolutionAttempts: nextCount,
+      mergeConflictGuardrailSubject: `attention:${item.id}`,
+    });
+    item.payload = updated.payload;
   }
 
   private async resolveCiFixAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
@@ -1628,6 +1668,17 @@ export class VirtualWorkerService {
       throw new Error(`Missing ${label} in virtual worker attention payload.`);
     }
     return normalized;
+  }
+
+  private readNonNegativeInteger(value: unknown): number {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(0, Math.floor(value));
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+    }
+    return 0;
   }
 
   private asRecord(value: unknown): Record<string, unknown> | null {

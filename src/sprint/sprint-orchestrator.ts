@@ -385,7 +385,12 @@ export class SprintOrchestrator {
     const repoPath = executionContext.repoPath;
     const defaultFeatureBranch = executionContext.featureBranch;
     const defaultBranch = executionContext.defaultBranch;
-    const githubMode = this.deps.settings.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
+    // Use the project/sprint-scoped git mode (LOCAL vs REMOTE) - `this.deps.settings`
+    // is the global snapshot and never carries a top-level `githubMode`, so reading it
+    // here always collapsed to REMOTE and silently disabled the LOCAL worker-to-feature
+    // merge path for LOCAL-mode projects. Mirror how QA and the gates resolve it
+    // (`settings.git.githubMode`).
+    const githubMode = dashboardSettings.git.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
     const retryFailed = true;
     const loopSteps = this.getLoopStepSettings(dashboardSettings);
     const ciIntelligence = this.getCiIntelligenceSettings(dashboardSettings);
@@ -475,7 +480,12 @@ export class SprintOrchestrator {
     const sprintScopeKey = `${executionContext.project.id}:${executionContext.sprint.id}`;
     const defaultFeatureBranch = executionContext.featureBranch;
     const defaultBranch = executionContext.defaultBranch;
-    const githubMode = this.deps.settings.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
+    // Use the project/sprint-scoped git mode (LOCAL vs REMOTE) - `this.deps.settings`
+    // is the global snapshot and never carries a top-level `githubMode`, so reading it
+    // here always collapsed to REMOTE and silently disabled the LOCAL worker-to-feature
+    // merge path for LOCAL-mode projects. Mirror how QA and the gates resolve it
+    // (`settings.git.githubMode`).
+    const githubMode = dashboardSettings.git.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
     const retryFailed = args.retry_failed !== false;
     const loopSteps = this.getLoopStepSettings(dashboardSettings);
     const ciIntelligence = this.getCiIntelligenceSettings(dashboardSettings);

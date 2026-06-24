@@ -11,6 +11,7 @@ import { getDockerUserSpec } from "../../../src/services/cli-docker-utils.js";
 const execFile = promisify(execFileCallback);
 const tempDirs: string[] = [];
 const dockerAvailable = spawnSync("docker", ["--version"], { stdio: "ignore" }).status === 0;
+const PREVIEW_WORKSPACE_EXPORT_TIMEOUT_MS = 120_000;
 
 const run = async (command: string, args: string[], cwd?: string): Promise<void> => {
   await execFile(command, args, cwd ? { cwd } : undefined);
@@ -90,7 +91,7 @@ describeIfDocker("SprintPreviewService workspace export", () => {
     const marker = await fs.readFile(path.join(workspacePath, "src", "preview-marker.txt"), "utf8");
     expect(marker.replace(/\r\n/g, "\n")).toBe("remote-only branch\n");
     await expect(fs.access(path.join(workspacePath, ".git"))).rejects.toThrow();
-  });
+  }, PREVIEW_WORKSPACE_EXPORT_TIMEOUT_MS);
 
   it("exports the latest remote commit for a stale local branch into the preview workspace", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-preview-service-"));
@@ -149,5 +150,5 @@ describeIfDocker("SprintPreviewService workspace export", () => {
     const stale = await fs.readFile(path.join(workspacePath, "src", "stale.txt"), "utf8");
     expect(stale.replace(/\r\n/g, "\n")).toBe("latest remote branch\n");
     await expect(fs.access(path.join(workspacePath, ".git"))).rejects.toThrow();
-  });
+  }, PREVIEW_WORKSPACE_EXPORT_TIMEOUT_MS);
 });
