@@ -5,6 +5,8 @@ The dashboard UI uses a set of shared interaction tokens to ensure standard easi
 ## Overview
 
 We export two sets of tokens to accommodate different styling approaches:
+
+When components use standard interaction contracts, they dynamically apply durations and easings via inline `style` tags referencing `useInteractionTokens`.
 - **`useInteractionTokens`** (from `tokens.ts`): Provides CSS transition durations (e.g., `"150ms"`) and CSS easings.
 - **`useGsapInteractionTokens`** (from `constants.ts`): Provides GSAP-compatible numeric durations (e.g., `0.15`) and string easings suitable for GSAP tweens.
 

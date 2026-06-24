@@ -1,6 +1,7 @@
 import { useRef, useLayoutEffect } from "preact/hooks";
 import { gsap } from "gsap";
-import { useGsapDurations, GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
+import { useGsapDurations, GSAP_INTERACTION_TOKENS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 /**
@@ -36,9 +37,10 @@ export function FilterStrip<T extends string>({
     const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
     const pillRef = useRef<HTMLDivElement>(null);
     const isFirstRender = useRef(true);
-    const durations = useGsapDurations();
-
-    const reducedMotion = useReducedMotion();
+    const gsapTokens = useGsapInteractionTokens();
+  const durations = useGsapDurations();
+  const reducedMotion = useReducedMotion();
+    const tokens = useInteractionTokens();
 
     useLayoutEffect(() => {
         const btn = buttonRefs.current[activeIndex];
@@ -51,7 +53,7 @@ export function FilterStrip<T extends string>({
             gsap.to(pillRef.current, {
                 x: btn.offsetLeft,
                 width: btn.offsetWidth,
-                duration: reducedMotion ? 0 : GSAP_INTERACTION_TOKENS.selectionMovement.duration,
+                duration: gsapTokens.selectionMovement.duration,
                 ease: 'power2.out'
             });
         }
@@ -101,6 +103,7 @@ export function FilterStrip<T extends string>({
                         ref={(el) => { buttonRefs.current[idx] = el; }}
                         key={value}
                         type="button"
+                        style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                         role="tab"
                         aria-label={optionAriaLabel}
                         aria-selected={isActive}
@@ -108,7 +111,7 @@ export function FilterStrip<T extends string>({
                         onClick={() => onChange(value)}
                         onKeyDown={(e) => handleKeyDown(e as any, idx)}
                         // Note the z-10 so the button text is on top of the absolute indicator behind it
-                        className={`relative z-10 flex-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-colors duration-[200ms] motion-reduce:duration-0 active:brightness-95 dark:active:brightness-110 touch-target ${
+                        className={`relative z-10 flex-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-colors active:brightness-95 dark:active:brightness-110 touch-target ${
                             isActive
                                 ? 'text-slate-900 dark:text-white'
                                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -122,9 +125,10 @@ export function FilterStrip<T extends string>({
             {showClear && onClear && (
                 <button
                     type="button"
+                    style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                     onClick={onClear}
                     aria-label={`Clear filters${ariaLabel ? ` for ${ariaLabel}` : ''}`}
-                    className="relative z-10 flex-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-all duration-300 overflow-hidden animate-in fade-in zoom-in-95 touch-target ml-1 border-l border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-void-600/50"
+                    className="relative z-10 flex-none focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-all overflow-hidden animate-in fade-in zoom-in-95 touch-target ml-1 border-l border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-void-600/50"
                 >
                     Clear All
                 </button>
