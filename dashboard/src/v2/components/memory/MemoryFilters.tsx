@@ -132,8 +132,8 @@ export const MemoryFilters: FunctionComponent<{
                     className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-xs border
                                transition-[background-color,box-shadow,border-color] duration-300
                                ${lobotomize
-                                   ? "bg-status-red text-white border-status-red shadow-[0_0_24px_rgba(227,0,15,0.4)] hover:shadow-[0_0_36px_rgba(227,0,15,0.6)]"
-                                   : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-400 hover:border-status-red/50 hover:text-status-red"
+                                   ? "bg-rose-500 text-white border-rose-500 shadow-[0_0_24px_rgba(244,63,94,0.4)] hover:shadow-[0_0_36px_rgba(244,63,94,0.6)]"
+                                   : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-400 hover:border-rose-500/50 hover:text-rose-500"
                                }`}>
                     <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
                     {lobotomize ? "Danger: Delete Mode Active" : "Lobotomize"}

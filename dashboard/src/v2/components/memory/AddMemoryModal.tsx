@@ -47,7 +47,7 @@ export const AddMemoryModal: FunctionComponent<{
                                border border-black/[0.06] dark:border-white/[0.06]
                                text-slate-800 dark:text-slate-200
                                placeholder:text-slate-400
-                               focus:outline-none focus:ring-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500
+                               focus:outline-none focus:ring-2 focus:border-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500
                                resize-none" />
                 <div className="flex items-center gap-3">
                     <select value={category} onChange={e => setCategory((e.target as HTMLSelectElement).value as MemoryCategory)}
