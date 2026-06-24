@@ -437,6 +437,8 @@ export const BrowserPage: FunctionComponent = () => {
             retryAction={
               browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("launch") ? () => handleStart() :
               browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("rebuild") ? () => handleRebuild() :
+              browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("stop") ? () => handleStop() :
+              browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("script") ? () => handleSaveScript() :
               undefined
             }
           />
@@ -553,6 +555,7 @@ export const BrowserPage: FunctionComponent = () => {
                   onClick={handleRebuild}
                   disabled={!visibleSelectedSession || sessionActionPending}
                   aria-disabled={!visibleSelectedSession || sessionActionPending}
+                  aria-busy={sessionActionPending}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <RotateCcw className={`h-4 w-4 ${sessionActionPending ? 'animate-spin' : ''}`} strokeWidth={2} />
@@ -563,6 +566,7 @@ export const BrowserPage: FunctionComponent = () => {
                   onClick={handleStop}
                   disabled={!visibleSelectedSession || sessionActionPending}
                   aria-disabled={!visibleSelectedSession || sessionActionPending}
+                  aria-busy={sessionActionPending}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
@@ -573,7 +577,8 @@ export const BrowserPage: FunctionComponent = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-disabled={!visibleSelectedSession}
-                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none opacity-50" : ""}`}
+                  title={visibleSelectedSession ? "Open preview in new tab" : "Start container to open"}
+                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none opacity-50 cursor-not-allowed" : ""}`}
                 >
                   <ExternalLink className="h-4 w-4" strokeWidth={2} />
                   Open
@@ -604,6 +609,7 @@ export const BrowserPage: FunctionComponent = () => {
                   onClick={handleSaveScript}
                   disabled={savingScript || !scriptTargetSprint}
                   aria-disabled={savingScript || !scriptTargetSprint}
+                  aria-busy={savingScript}
                   className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
                   <Save className="h-4 w-4" strokeWidth={2} />

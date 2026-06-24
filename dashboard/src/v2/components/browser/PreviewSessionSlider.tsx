@@ -159,6 +159,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   title="Remove preview container"
                   disabled={removing}
                   aria-disabled={removing}
+                  aria-busy={removing}
                 >
                   {removing ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <Trash2 className="h-3 w-3" strokeWidth={2.5} />}
                   {removing ? "Removing..." : "Remove"}
