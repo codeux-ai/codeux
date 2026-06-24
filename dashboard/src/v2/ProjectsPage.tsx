@@ -5,8 +5,6 @@ import { Bot, FolderOpen, Plus, ExternalLink, Loader2, Trash2, Sparkles } from "
 import type { Source, SourceStatus } from "./types.js";
 import { AddProjectModal, type AddProjectModalSubmission, type SourceType as AddProjectModalSourceType } from "./components/ui/AddProjectModal.js";
 import { StatusDot } from "./components/ui/StatusDot.js";
-import { WaveFluid } from "./components/ui/WaveFluid.js";
-import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useProjectData } from "./context/project-data.js";
 import { SkeletonPanel, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
@@ -14,7 +12,6 @@ import { startProjectSetup } from "./lib/project-api.js";
 import { fetchProjectInvocations } from "./lib/invocation-api.js";
 import { useToast } from "./components/feedback/ToastProvider.js";
 
-const EMBER_HEX = '#FFB800';
 
 type Filter = 'All' | 'Running' | 'Idle' | 'Failed';
 
@@ -58,7 +55,6 @@ const ProjectCard: FunctionComponent<{
     const color    = statusColor[source.status];
     const isRunning = source.status === 'running';
     const accentHex = '#00AB84';
-    const watermark = source.name.slice(0, 3).toUpperCase();
     const total     = source.completedTasks + source.openTasks;
     const completion = total > 0 ? Math.round((source.completedTasks / total) * 100) : 0;
 
@@ -100,52 +96,28 @@ const ProjectCard: FunctionComponent<{
             onMouseLeave={onLeave}
             className="group relative"
         >
-          {/* Running project: stable layered breathing glow aura */}
+          {/* Running project: restrained active border */}
           {isRunning && (
             <div
-              className="absolute inset-0 rounded-[1.75rem] pointer-events-none scale-[1.012]"
+              className="absolute inset-0 rounded-[1.75rem] border-2 border-ember-500/50 pointer-events-none scale-[1.01] transition-transform duration-300"
               style={{ zIndex: 0 }}
-            >
-              {/* Crisp accent border */}
-              <div
-                className="absolute inset-0 rounded-[1.75rem]"
-                style={{ border: `1px solid ${accentHex}70` }}
-              />
-              {/* Ambient breathing glow */}
-              <div
-                className="absolute inset-0 rounded-[1.75rem] animate-[pulse_3.5s_ease-in-out_infinite]"
-                style={{ boxShadow: `0 0 20px ${accentHex}40, inset 0 0 10px ${accentHex}20` }}
-              />
-            </div>
+            />
           )}
           <div
-            className={`relative flex flex-col
-                       backdrop-blur-2xl
+            className={`relative flex flex-col h-full
+                       backdrop-blur-xl
                        rounded-[1.75rem]
-                       p-7
+                       p-6
                        overflow-hidden cursor-pointer
-                       ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/70 dark:bg-void-800/60"}
+                       transition-all duration-300
+                       ${isRunning ? "bg-white/90 dark:bg-void-800/90" : "bg-white/60 dark:bg-void-800/50"}
                        ${isSelected
-                         ? "border border-ember-500/45 shadow-[0_8px_30px_rgba(255,184,0,0.08)] ring-1 ring-ember-500/18"
-                         : "border border-black/[0.06] dark:border-white/[0.06] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
+                         ? "border-2 border-ember-500 shadow-sm"
+                         : "border border-black/[0.08] dark:border-white/[0.08] shadow-sm hover:border-black/[0.12] dark:hover:border-white/[0.12]"
                        }`}
           >
-            {/* Ghost watermark */}
-            <div
-                aria-hidden="true"
-                className="absolute -bottom-5 -right-2 text-[7rem] font-black tracking-tighter
-                           text-black/[0.03] dark:text-white/[0.025]
-                           pointer-events-none select-none font-display leading-none"
-            >
-                {watermark}
-            </div>
 
-            {/* Hover tint */}
-            <div className="absolute inset-0 bg-signal-500/0 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05] transition-colors duration-300 pointer-events-none" />
 
-            {/* Wave + border trace */}
-            <WaveFluid accentHex={EMBER_HEX} />
-            <BorderTrace accentHex={EMBER_HEX} />
 
             {/* ── Header ────────────────────────────────────────────── */}
             <div className="flex items-start justify-between mb-6 relative z-10">
@@ -193,7 +165,7 @@ const ProjectCard: FunctionComponent<{
             )}
 
             {/* ── Stats ─────────────────────────────────────────────── */}
-            <div className="grid grid-cols-3 gap-2 mb-6 relative z-10">
+            <div className="grid grid-cols-3 gap-3 mb-6 relative z-10">
                 {([
                     { label: 'Sprints', value: source.sprintsCount },
                     { label: 'Open',    value: source.openTasks     },
@@ -201,9 +173,9 @@ const ProjectCard: FunctionComponent<{
                 ] as const).map(({ label: l, value }) => (
                     <div
                         key={l}
-                        className="flex flex-col items-center py-3.5 rounded-[1rem]
-                                   bg-black/[0.03] dark:bg-white/[0.03]
-                                   border border-black/[0.04] dark:border-white/[0.04]
+                        className="flex flex-col items-center py-3 rounded-xl
+                                   bg-black/[0.02] dark:bg-white/[0.02]
+                                   border border-black/[0.06] dark:border-white/[0.06]
                                    group-hover:border-ember-500/[0.08] transition-colors duration-300"
                     >
                         <span className="text-[1.6rem] font-black text-slate-900 dark:text-white font-mono leading-none">
@@ -296,28 +268,15 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
                    p-7
                    bg-white/55 dark:bg-void-800/40
                    backdrop-blur-2xl
-                   border-2 border-dashed border-signal-500/25 hover:border-signal-500/50
+                   border border-dashed border-black/[0.1] dark:border-white/[0.1] hover:border-signal-500/50
                    rounded-[1.75rem]
                    shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.18)]
                    transition-colors duration-500
                    hover:bg-signal-500/[0.025] cursor-pointer"
     >
-        {/* Morphing organic icon */}
-        <div
-            className="relative w-16 h-16 flex items-center justify-center
-                       border-2 border-dashed border-signal-500/25
-                       group-hover:border-signal-500 group-hover:bg-signal-500/[0.1]
-                       transition-all duration-400 animate-organic"
-        >
-            <div
-                className="absolute inset-0 bg-signal-500/0 group-hover:bg-signal-500/[0.08]
-                           transition-colors duration-300 animate-organic-reverse"
-            />
-            <Plus
-                className="w-6 h-6 text-signal-500/40 group-hover:text-signal-500
-                           group-hover:rotate-90 transition-all duration-400 relative z-10"
-                strokeWidth={2}
-            />
+        {/* Simple Icon */}
+        <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-black/[0.02] dark:bg-white/[0.02] group-hover:bg-signal-500/[0.1] transition-colors duration-300">
+            <Plus className="w-5 h-5 text-slate-400 group-hover:text-signal-500" strokeWidth={2} />
         </div>
 
         <div className="flex flex-col items-center gap-1.5">
