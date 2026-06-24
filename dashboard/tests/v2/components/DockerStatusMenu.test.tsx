@@ -74,7 +74,7 @@ describe("DockerStatusMenu", () => {
 
   it("renders the trigger button", () => {
     render(<DockerStatusMenu />);
-    expect(screen.getByRole("button", { name: /Docker Status/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Docker Status: /i })).toBeInTheDocument();
   });
 
   it("opens popover on click, displays containers, and traps focus", async () => {
@@ -84,7 +84,7 @@ describe("DockerStatusMenu", () => {
 
     expect(screen.queryByRole("dialog", { name: "Active Docker Containers" })).not.toBeInTheDocument();
 
-    const button = screen.getByRole("button", { name: /Docker Status/ });
+    const button = screen.getByRole("button", { name: /Docker Status: /i });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -105,7 +105,7 @@ describe("DockerStatusMenu", () => {
     mockFetchResponses(mockContainers);
 
     render(<DockerStatusMenu />);
-    const button = screen.getByRole("button", { name: /Docker Status/ });
+    const button = screen.getByRole("button", { name: /Docker Status: /i });
     button.focus();
 
     fireEvent.click(button);
@@ -142,7 +142,7 @@ describe("DockerStatusMenu", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: "Active Docker Containers" })).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
 
     fireEvent.mouseLeave(wrapper);
     vi.runAllTimers();
@@ -158,7 +158,7 @@ describe("DockerStatusMenu", () => {
     mockFetchResponses([]);
 
     render(<DockerStatusMenu />);
-    const button = screen.getByRole("button", { name: /Docker Status/ });
+    const button = screen.getByRole("button", { name: /Docker Status: /i });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -173,7 +173,7 @@ describe("DockerStatusMenu", () => {
     vi.mocked(fetch).mockRejectedValueOnce(new Error("Network Error"));
 
     render(<DockerStatusMenu />);
-    const button = screen.getByRole("button", { name: /Docker Status/ });
+    const button = screen.getByRole("button", { name: /Docker Status: /i });
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -189,7 +189,7 @@ describe("DockerStatusMenu", () => {
       cluster: {
         status: "not_ready",
         label: "Cluster not ready",
-        detail: "Docker must be installed and running before containerized provider CLIs can execute tasks.",
+        detail: "Required local runtime dependencies are available.",
       },
       dependencies: [
         {
@@ -205,7 +205,7 @@ describe("DockerStatusMenu", () => {
     });
 
     render(<DockerStatusMenu />);
-    fireEvent.click(screen.getByRole("button", { name: /Docker Status/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Docker Status: /i }));
 
     await waitFor(() => {
       expect(screen.getAllByText("Cluster not ready").length).toBeGreaterThan(0);

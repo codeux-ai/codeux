@@ -1,4 +1,4 @@
-import { h, ComponentChildren, RefObject } from "preact";
+import { h, ComponentChildren, RefObject, isValidElement, cloneElement } from "preact";
 import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
@@ -151,7 +151,7 @@ export const DropdownMenu = ({
           ease: GSAP_INTERACTION_TOKENS.enterExit.ease,
         }
       );
-      requestAnimationFrame(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
+      requestAnimationFrame(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])')?.focus());
     } else if (isRendered) {
       gsap.to(menuRef.current, {
         opacity: 0,
@@ -187,7 +187,7 @@ export const DropdownMenu = ({
 
       if (!menuRef.current) return;
 
-      const items = Array.from(menuRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]')) as HTMLElement[];
+      const items = Array.from(menuRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])')) as HTMLElement[];
       if (items.length === 0) return;
 
       const currentIndex = items.findIndex((item) => item === document.activeElement);
@@ -230,24 +230,42 @@ export const DropdownMenu = ({
 
   return (
     <>
-      <div
-        ref={externalTriggerRef ? undefined : localTriggerRef}
-        className="inline-flex cursor-pointer"
-        onClick={(e) => { e.stopPropagation(); onOpenChange(!isOpen); }}
-        onKeyDown={(e) => {
+      {isValidElement(children) ? cloneElement(children as preact.VNode<any>, {
+        ref: externalTriggerRef ? undefined : localTriggerRef,
+        onClick: (e: MouseEvent) => {
+          e.stopPropagation();
+          onOpenChange(!isOpen);
+          if ((children.props as any).onClick) (children.props as any).onClick(e);
+        },
+        onKeyDown: (e: KeyboardEvent) => {
           if (!externalTriggerRef && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
             onOpenChange(!isOpen);
           }
-        }}
-        tabIndex={!externalTriggerRef ? 0 : undefined}
-        role={!externalTriggerRef ? "button" : undefined}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
-        aria-controls={isOpen ? menuId : undefined}
-      >
-        {children}
-      </div>
+          if ((children.props as any).onKeyDown) (children.props as any).onKeyDown(e);
+        },
+        "aria-haspopup": "menu",
+        "aria-expanded": isOpen,
+        "aria-controls": isOpen ? menuId : undefined,
+      }) : (
+        <button
+          type="button"
+          ref={externalTriggerRef ? undefined : (localTriggerRef as unknown as RefObject<HTMLButtonElement>)}
+          className="inline-flex cursor-pointer text-left"
+          onClick={(e) => { e.stopPropagation(); onOpenChange(!isOpen); }}
+          onKeyDown={(e) => {
+            if (!externalTriggerRef && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault();
+              onOpenChange(!isOpen);
+            }
+          }}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? menuId : undefined}
+        >
+          {children}
+        </button>
+      )}
 
       {isRendered && typeof document !== "undefined" &&
         createPortal(
