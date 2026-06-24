@@ -1,0 +1,10 @@
+--- dashboard/src/v2/components/ui/SprintComposer.tsx
++++ dashboard/src/v2/components/ui/SprintComposer.tsx
+@@ -518,6 +518,7 @@
+                 value={state.sprintKeyOverride}
+                 onInput={(e) => state.setSprintKeyOverride((e.target as HTMLInputElement).value)}
+                 disabled={isBusy}
++                aria-disabled={isBusy ? "true" : "false"}
+                 className="mt-2 w-full min-w-0 bg-transparent font-mono text-3xl font-black tracking-tight text-slate-900 outline-none transition-colors hover:bg-black/[0.03] focus:bg-white dark:text-white dark:hover:bg-white/[0.03] dark:focus:bg-transparent disabled:cursor-not-allowed"
+                 placeholder={defaultSprintKey}
+                 aria-label="Sprint Key Override"

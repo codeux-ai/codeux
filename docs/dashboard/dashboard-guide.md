@@ -266,6 +266,8 @@ Legacy runtime:
 - The Sprints page gallery show/hide control persists its browser-local visibility preference, so the gallery remains hidden or shown after navigation and reloads
 - `Improve with AI` is worker-backed through the Planning agent and only rewrites the sprint prompt
 - Sprint planning is also worker-backed through the Planning agent and automatically creates task records from the returned plan
+- Sprint planning provides semantic async feedback. Progress is announced via `aria-live` regions that update politely on phase changes rather than continuous timer ticks. Active requests expose `aria-busy` states and provide accessible disabled reasons (`aria-description`) for locked controls.
+- Asynchronous planning operations ensure focus is automatically restored to the triggering element (e.g., the Submit or Improve Prompt buttons) upon cancellation or after recovering from a failure.
 - The built-in Planning agent now expects a strict database task JSON contract:
   - task keys should use `T01`, `T02`, `T03`, ...
   - the `tasks` array is returned in DAG order
