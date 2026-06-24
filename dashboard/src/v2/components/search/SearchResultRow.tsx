@@ -118,12 +118,13 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
             to={targetTo as any}
             search={targetSearch as any}
             onClick={item.status === 'unavailable' || item.status === 'disabled' ? (e: any) => e.preventDefault() : onClick}
-            id={`search-result-${item.id}`}
+            id={`search-result-${categoryType}-${item.id}`}
             ref={activeItemRef as any}
             onMouseEnter={onFocus}
             aria-disabled={item.status === 'unavailable' || item.status === 'disabled' ? 'true' : undefined}
             aria-label={`${categoryType} result: ${title}`}
             role="option"
+            tabIndex={-1}
             aria-selected={isFocused}
             style={{ transitionDuration, transitionTimingFunction }}
             className={`group relative flex items-center justify-between w-full text-left px-4 py-3 rounded-[1.25rem] transition-all overflow-hidden ${
