@@ -29,16 +29,31 @@ import { PlanningProgressOverlay } from "./PlanningProgressOverlay.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
+import type { ImprovePromptInput } from "../../types.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
 import { getSafeUrl } from "../../lib/safe-url.js";
+import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
+import type { ProviderId } from "../../types.js";
+
+interface VirtualProviderOption {
+  id?: string;
+  providerConfigId?: string;
+  provider?: string;
+  label?: string;
+  displayLabel?: string;
+  iconProviderId?: ProviderId;
+  effectiveModel?: string;
+}
 
 interface SprintComposerProps {
   nextId: string;
   initialSprint?: Sprint | null;
-  virtualProviders: Array<{ id: VirtualWorkerProvider; label: string }>;
+  virtualProviders: VirtualProviderOption[];
+  defaultRouteOptionLabel?: string;
+  defaultModelOptionLabel?: string;
+  defaultRouteIconProviderId?: ProviderId | null;
   planningPresets: AgentPreset[];
   agentPresets?: AgentPreset[];
   defaultPlanningAgentPresetId?: string | null;
@@ -74,6 +89,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   nextId,
   initialSprint = null,
   virtualProviders,
+  defaultRouteOptionLabel = "Default Route",
+  defaultModelOptionLabel = "Default Model",
+  defaultRouteIconProviderId = null,
   planningPresets,
   agentPresets,
   defaultPlanningAgentPresetId = null,
@@ -451,15 +469,21 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     })),
     ...virtualProviders.map(v => ({
       type: 'virtual' as const,
-      id: v.id,
-      label: v.label,
-      provider: v.id,
+      id: v.providerConfigId || v.id || v.provider || "",
+      label: v.displayLabel || v.label || v.providerConfigId || v.id || v.provider || "Provider",
+      provider: v.providerConfigId || v.id || v.provider,
+      iconProviderId: v.iconProviderId || v.provider as ProviderId | undefined || v.id as ProviderId | undefined,
+      effectiveModel: v.effectiveModel,
     }))
   ];
 
   const currentRoute = state.routeOverride || null;
   const showModelOverride = currentRoute?.type === 'virtual';
-  const modelOptions = currentRoute?.provider ? getProviderModelOptions(currentRoute.provider) : [];
+  const modelProviderId = currentRoute?.iconProviderId;
+  const modelOptions = modelProviderId ? getProviderModelOptions(modelProviderId) : [];
+  const defaultModelLabel = currentRoute?.effectiveModel
+    ? `Default Model (${currentRoute.effectiveModel})`
+    : defaultModelOptionLabel;
 
   const isDark = document.documentElement.classList.contains("dark");
 
@@ -560,10 +584,22 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     state.setRouteOverride(opt || null);
                   }}
                   options={[
-                    { value: "", label: "Default Route" },
-                    ...routeOptions.map(opt => ({ value: opt.id, label: opt.label })),
+                    {
+                      value: "",
+                      label: defaultRouteOptionLabel,
+                      icon: defaultRouteIconProviderId
+                        ? () => <ProviderBrandIcon id={defaultRouteIconProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                        : undefined,
+                    },
+                    ...routeOptions.map(opt => ({
+                      value: opt.id,
+                      label: opt.label,
+                      icon: opt.iconProviderId
+                        ? () => <ProviderBrandIcon id={opt.iconProviderId!} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                        : undefined,
+                    })),
                   ]}
-                  placeholder="Default Route"
+                  placeholder={defaultRouteOptionLabel}
                 />
               </div>
             </div>
@@ -582,10 +618,22 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                   value={state.modelOverride || ""}
                   onChange={(val) => state.setModelOverride(val || null)}
                   options={[
-                    { value: "", label: "Default Model" },
-                    ...modelOptions.map(opt => ({ value: opt.value, label: opt.label })),
+                    {
+                      value: "",
+                      label: defaultModelLabel,
+                      icon: modelProviderId
+                        ? () => <ProviderBrandIcon id={modelProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                        : undefined,
+                    },
+                    ...modelOptions.map(opt => ({
+                      value: opt.value,
+                      label: opt.label,
+                      icon: modelProviderId
+                        ? () => <ProviderBrandIcon id={modelProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                        : undefined,
+                    })),
                   ]}
-                  placeholder="Default Model"
+                  placeholder={defaultModelLabel}
                 />
               </div>
             </div>
