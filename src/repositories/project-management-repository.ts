@@ -54,6 +54,8 @@ interface ProjectRow {
   open_tasks: number | string | null;
   completed_tasks: number | string | null;
   has_active_runs: number | string | null;
+  last_run_at: string | null;
+  last_run_status: string | null;
 }
 
 interface SprintRow {
@@ -1102,6 +1104,8 @@ export class ProjectManagementRepository {
       isRunning,
       settingsOverrides,
       agentBindings,
+      lastRunAt: row.last_run_at,
+      lastRunStatus: row.last_run_status,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

@@ -1,5 +1,27 @@
+const projectRunActivityCte = `
+      WITH project_run_activity AS (
+        SELECT
+          sr.project_id,
+          COALESCE(sr.finished_at, sr.started_at, sr.created_at) AS activity_at,
+          sr.status AS run_status,
+          1 AS source_priority,
+          sr.rowid AS source_rowid
+        FROM sprint_runs sr
+        UNION ALL
+        SELECT
+          tr.project_id,
+          tr.started_at AS activity_at,
+          tr.state AS run_status,
+          0 AS source_priority,
+          tr.rowid AS source_rowid
+        FROM task_runs tr
+        WHERE tr.started_at IS NOT NULL
+      )
+`;
+
 export const projectSummaryQuery = {
   select: `
+      ${projectRunActivityCte}
       SELECT
         p.id,
         p.slug,
@@ -30,7 +52,21 @@ export const projectSummaryQuery = {
               ),
               s.status
             ) IN ('running', 'queued')
-        ) AS has_active_runs
+        ) AS has_active_runs,
+        (
+          SELECT pra.activity_at
+          FROM project_run_activity pra
+          WHERE pra.project_id = p.id
+          ORDER BY pra.activity_at DESC, pra.source_priority DESC, pra.source_rowid DESC
+          LIMIT 1
+        ) AS last_run_at,
+        (
+          SELECT pra.run_status
+          FROM project_run_activity pra
+          WHERE pra.project_id = p.id
+          ORDER BY pra.activity_at DESC, pra.source_priority DESC, pra.source_rowid DESC
+          LIMIT 1
+        ) AS last_run_status
   `,
   from: `
       FROM projects p
