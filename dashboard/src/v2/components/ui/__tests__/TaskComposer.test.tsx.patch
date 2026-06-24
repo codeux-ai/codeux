@@ -1,0 +1,15 @@
+<<<<<<< SEARCH
+    await waitFor(() => {
+      const firstInvalid = document.querySelector('[aria-invalid="true"]');
+      expect(firstInvalid).not.toBeNull();
+      // Test that the focus was moved
+      expect(document.activeElement).toBe(firstInvalid);
+    });
+=======
+    await waitFor(() => {
+      const firstInvalid = document.querySelector('[aria-invalid="true"]');
+      expect(firstInvalid).not.toBeNull();
+      // Test that the focus was moved
+      expect(document.activeElement).toBe(firstInvalid);
+    }, { timeout: 2000 });
+>>>>>>> REPLACE

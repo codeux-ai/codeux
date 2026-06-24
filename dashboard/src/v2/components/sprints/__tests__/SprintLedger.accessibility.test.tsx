@@ -131,7 +131,7 @@ describe("SprintLedger Accessibility", () => {
       />
     );
 
-    const createdBtns = screen.getAllByRole("button", { name: /Sort by Created\. Currently sorted/i });
+    const createdBtns = screen.getAllByRole("button", { name: /Sort by Created, currently sorted/i });
     const createdBtn = createdBtns[0];
     expect(createdBtn).toBeInTheDocument();
 

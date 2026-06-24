@@ -62,9 +62,9 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
 
     const childProps: any = {
       "aria-invalid": showError ? "true" : undefined,
-      ...(ariaDescribedBy ? { "aria-describedby": ariaDescribedBy } : {}),
-      "aria-errormessage": errorId,
-      ...(required ? { "aria-required": true } : {}),
+      "aria-describedby": ariaDescribedBy || undefined,
+      "aria-errormessage": showError ? errorId : undefined,
+      "aria-required": required ? "true" : undefined,
       onBlur: (e: any) => {
         setTouched(true);
         existingOnBlur?.(e);
@@ -85,7 +85,7 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
       <label htmlFor={inputId} class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex gap-1">
         {label}
         {required && <span class="text-status-red" aria-hidden="true">*</span>}
-        {required && <span class="sr-only">(required)</span>}
+        {required && <span class="sr-only">(Required)</span>}
       </label>
       <div
         class={`

@@ -2,6 +2,9 @@ import type { FunctionComponent, ComponentProps } from "preact";
 
 export interface InputProps extends ComponentProps<"input"> {
   valid?: boolean;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean | "false" | "true" | "grammar" | "spelling";
+  "aria-errormessage"?: string;
 }
 
 export const Input: FunctionComponent<InputProps> = ({ className = "", disabled, valid, ...props }) => {

@@ -108,7 +108,7 @@ describe("SprintComposer", () => {
     // Expect to see the error message after rejection
     await waitFor(() => {
         expect(screen.queryAllByText("Network failure").length).toBeGreaterThan(0);
-        expect(screen.queryByRole("button", { name: "Retry: Network failure" })).not.toBeNull();
+        expect(screen.queryByRole("button", { name: "Retry Improve" })).not.toBeNull();
     }, { timeout: 3000 });
   });
 

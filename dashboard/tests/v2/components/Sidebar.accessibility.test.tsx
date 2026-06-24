@@ -82,12 +82,12 @@ describe("Sidebar Mobile Accessibility", () => {
         const onToggle = vi.fn();
         render(<BrandSection isMobile={true} isMobileMenuOpen={true} onMenuToggle={onToggle} />);
 
-        const trigger = screen.getByRole("button", { name: /close navigation menu/i });
+        const trigger = screen.getByRole("button", { name: /close mobile menu/i });
         expect(trigger).toHaveAttribute("aria-expanded", "true");
         expect(trigger).toHaveAttribute("aria-controls", "primary-navigation");
 
         render(<BrandSection isMobile={true} isMobileMenuOpen={false} onMenuToggle={onToggle} />);
-        const triggerClosed = screen.getAllByRole("button", { name: /open navigation menu/i })[0];
+        const triggerClosed = screen.getAllByRole("button", { name: /open mobile menu/i })[0];
         expect(triggerClosed).toHaveAttribute("aria-expanded", "false");
     });
 

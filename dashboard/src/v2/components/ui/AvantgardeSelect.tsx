@@ -13,6 +13,7 @@ export interface SelectOption {
 }
 
 interface AvantgardeSelectProps {
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
@@ -24,6 +25,11 @@ interface AvantgardeSelectProps {
   searchable?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean | "false" | "true" | "grammar" | "spelling";
+  "aria-errormessage"?: string;
+  "aria-required"?: boolean | "false" | "true";
+  onBlur?: (e: FocusEvent) => void;
 }
 
 interface DropdownPosition {
@@ -65,6 +71,7 @@ function findBoundaryAncestor(el: HTMLElement): HTMLElement | null {
 }
 
 export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
+  id,
   value,
   onChange,
   options,
@@ -75,6 +82,11 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   searchable = false,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledby,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
+  "aria-errormessage": ariaErrorMessage,
+  "aria-required": ariaRequired,
+  onBlur,
 }) => {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -409,6 +421,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   return (
     <div className={`relative ${className}`}>
       <button
+        id={id}
         ref={triggerRef}
         type="button"
         onClick={() => !disabled && setOpen(!open)}
@@ -418,12 +431,17 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
             setOpen(true);
           }
         }}
+        onBlur={onBlur}
         className={triggerClass}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledby}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
+        aria-errormessage={ariaErrorMessage}
+        aria-required={ariaRequired}
       >
         {selected?.icon ? <span className="flex-shrink-0">{renderOptionIcon(selected.icon)}</span> : null}
         <span className="truncate">{selected?.label || placeholder}</span>
