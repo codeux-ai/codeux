@@ -39,5 +39,16 @@ export const TASK_STATUS_CONFIG: Record<string, StatusConfig> = {
 
 export function getStatusConfig(status?: string): StatusConfig {
   if (!status) return TASK_STATUS_CONFIG.pending;
+  const lower = status.toLowerCase();
+  if (lower.startsWith("pending_cap_")) {
+    const match = status.match(/^PENDING_cap_(\d+)_(\d+)$/i);
+    if (match) {
+      return {
+        label: `Waiting for slot (${match[1]}/${match[2]})`,
+        variant: "muted",
+        icon: CircleDashed,
+      };
+    }
+  }
   return TASK_STATUS_CONFIG[status] || TASK_STATUS_CONFIG.pending;
 }

@@ -394,6 +394,7 @@ Legacy runtime:
 ### Dashboard view
 - Task statistics
 - Execution runtime panel for sprint runs, dispatch queue state, live project connections, worker assignment, lease ownership, and recent runtime events
+  - Queued/deferred dispatches show a stable status indicator `Waiting for slot (current/limit)` when an invocation is waiting for a provider concurrency slot.
 - Live runtime visuals are only considered active when the selected project has a `running` or `queued` sprint run; cancelled, paused, and completed runs fall back to a waiting state
 - When no sprint is running but a paused sprint needs human intervention, the overview telemetry now switches from an empty state to an attention state with the exact reason and operator instructions
 - Task pipeline cards

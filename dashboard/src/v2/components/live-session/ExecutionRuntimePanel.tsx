@@ -9,6 +9,7 @@ import { BorderTrace } from "../ui/BorderTrace.js";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { QuotaCountdown, TaskDuration } from "../LiveTaskCard.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
+import { findActiveConcurrencyWait } from "../../../lib/task-progress.js";
 
 export const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
@@ -506,54 +507,59 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                 <p className="text-[11px] font-mono text-slate-400 dark:text-slate-600">No task dispatches yet.</p>
                             ) : (
                                 <div className="max-h-72 space-y-2 overflow-y-auto pr-1 dashboard-scrollbar">
-                                    {visibleTaskDispatches.map((dispatch) => (
-                                        <div key={dispatch.id} className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                                        {dispatch.taskKey} · {dispatch.taskTitle}
-                                                    </div>
-                                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                                                        <span>{dispatch.sprintName}</span>
-                                                        <span>·</span>
-                                                        <span>{EXECUTOR_LABELS[dispatch.executorType] || dispatch.executorType}</span>
-                                                        {dispatch.connectionDisplayName && (
-                                                            <>
-                                                                <span>·</span>
-                                                                <span className="inline-flex items-center gap-1">
-                                                                    <Bot className="h-3 w-3" strokeWidth={2} />
-                                                                    {dispatch.connectionDisplayName}
-                                                                </span>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(dispatch.status)}`}>
-                                                        {dispatch.status}
-                                                    </div>
-                                                    {dispatch.taskRunState && (
-                                                        <div className={`mt-1 text-[10px] font-mono ${statusTone(dispatch.taskRunState)}`}>
-                                                            {dispatch.taskRunState}
+                                    {visibleTaskDispatches.map((dispatch) => {
+                                        const dispatchEvents = snapshot.recentEvents.filter(
+                                            (e) => e.dispatchId === dispatch.id || (e.taskRunId && e.taskRunId === dispatch.taskRunId)
+                                        );
+                                        const activeCap = findActiveConcurrencyWait(dispatchEvents, dispatch.status);
+                                        return (
+                                            <div key={dispatch.id} className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.04] dark:bg-white/[0.015]">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                            {dispatch.taskKey} · {dispatch.taskTitle}
                                                         </div>
-                                                    )}
-                                                    <TaskDuration
-                                                        dispatchTiming={{
-                                                            startedAt: dispatch.startedAt,
-                                                            finishedAt: dispatch.finishedAt,
-                                                            status: dispatch.status,
-                                                        }}
-                                                    />
+                                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
+                                                            <span>{dispatch.sprintName}</span>
+                                                            <span>·</span>
+                                                            <span>{EXECUTOR_LABELS[dispatch.executorType] || dispatch.executorType}</span>
+                                                            {dispatch.connectionDisplayName && (
+                                                                <>
+                                                                    <span>·</span>
+                                                                    <span className="inline-flex items-center gap-1">
+                                                                        <Bot className="h-3 w-3" strokeWidth={2} />
+                                                                        {dispatch.connectionDisplayName}
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(activeCap ? "PENDING" : dispatch.status)}`}>
+                                                            {activeCap ? `Waiting for slot (${activeCap.currentCount}/${activeCap.limit})` : dispatch.status}
+                                                        </div>
+                                                        {dispatch.taskRunState && !activeCap && (
+                                                            <div className={`mt-1 text-[10px] font-mono ${statusTone(dispatch.taskRunState)}`}>
+                                                                {dispatch.taskRunState}
+                                                            </div>
+                                                        )}
+                                                        <TaskDuration
+                                                            dispatchTiming={{
+                                                                startedAt: dispatch.startedAt,
+                                                                finishedAt: dispatch.finishedAt,
+                                                                status: dispatch.status,
+                                                            }}
+                                                        />
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            {(dispatch.sessionId || dispatch.workerBranch || dispatch.errorMessage || dispatch.activeLeaseOwnerKey) && (
-                                                <div className="mt-2 space-y-1 border-t border-black/[0.04] pt-2 text-[10px] font-mono text-slate-400 dark:border-white/[0.04]">
-                                                    {dispatch.sessionId && <div>session {dispatch.sessionId}</div>}
-                                                    {dispatch.workerBranch && <div>branch {dispatch.workerBranch}</div>}
-                                                    {dispatch.activeLeaseOwnerKey && <div>lease {dispatch.activeLeaseOwnerKey}</div>}
-                                                    {dispatch.errorMessage && <QuotaCountdown errorMessage={dispatch.errorMessage} />}
-                                                </div>
-                                            )}
+                                                {(dispatch.sessionId || dispatch.workerBranch || dispatch.errorMessage || dispatch.activeLeaseOwnerKey) && (
+                                                    <div className="mt-2 space-y-1 border-t border-black/[0.04] pt-2 text-[10px] font-mono text-slate-400 dark:border-white/[0.04]">
+                                                        {dispatch.sessionId && <div>session {dispatch.sessionId}</div>}
+                                                        {dispatch.workerBranch && <div>branch {dispatch.workerBranch}</div>}
+                                                        {dispatch.activeLeaseOwnerKey && <div>lease {dispatch.activeLeaseOwnerKey}</div>}
+                                                        {dispatch.errorMessage && <QuotaCountdown errorMessage={dispatch.errorMessage} />}
+                                                    </div>
+                                                )}
                                             <div className="mt-3 flex flex-wrap gap-2">
                                                 {(dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running") && (
                                                     <button
@@ -596,7 +602,8 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 )}
                                             </div>
                                         </div>
-                                    ))}
+                                    );
+                                })}
                                 </div>
                             )}
                         </div>
