@@ -249,7 +249,7 @@ export const KineticDock: FunctionComponent = () => {
                     style={{ left: `${indicatorState.left}px` }}
                     className={`absolute bottom-2 h-[3px] w-7 rounded-full
                                bg-signal-500 shadow-[0_0_12px_rgba(0,224,160,0.8)]
-                               transition-[left,opacity] duration-[400ms] ease-[cubic-bezier(0.175,0.885,0.32,1.275)]
+                               ${prefersReducedMotion ? "transition-none" : "transition-[left,opacity] duration-[400ms] ease-[cubic-bezier(0.175,0.885,0.32,1.275)]"}
                                ${indicatorState.initialized ? "opacity-100" : "opacity-0"}`}
 
                 />

@@ -7,8 +7,10 @@ import type { StatusStyle } from "./utils.js";
 import type { ShipDatum, AnimatedShipPosition } from "../../hooks/useBoatRaceAnimation.js";
 import { useComputed } from "@preact/signals";
 import { getTaskProgressPhase } from "../../../lib/task-progress.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 export const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean; isFailed?: boolean }> = memo(({ accentColor, dim, isMoving, isDark, isFailed }) => {
+    const isReducedMotion = useReducedMotion();
     const o = dim ? 0.35 : 1;
     const hullFill = isDark ? "#0f1d33" : "#c8d6e5";
     const hullStroke = isDark ? "#1a3050" : "#8395a7";
@@ -23,7 +25,7 @@ export const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolea
         <g opacity={o}>
             {/* Water reflection */}
             <ellipse cx={0} cy={24} rx={46} ry={8} fill={accentColor} opacity={0.08}>
-                {isMoving && <animate attributeName="ry" values="8;10;8" dur="2.5s" repeatCount="indefinite" />}
+                {isMoving && !isReducedMotion && <animate attributeName="ry" values="8;10;8" dur="2.5s" repeatCount="indefinite" />}
             </ellipse>
             {/* Hull shadow */}
             <ellipse cx={3} cy={20} rx={40} ry={6} fill={isDark ? "black" : "#2d3436"} opacity={isDark ? 0.4 : 0.15} />
@@ -54,7 +56,7 @@ export const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolea
             {/* Radar mast */}
             <line x1={0} y1={-29} x2={0} y2={-40} stroke={bridgeStroke} strokeWidth={0.8} />
             <circle cx={0} cy={-40.5} r={1.2} fill={accentColor} opacity={0.5}>
-                <animate attributeName="opacity" values="0.5;0.1;0.5" dur="1.8s" repeatCount="indefinite" />
+                {!isReducedMotion ? <animate attributeName="opacity" values="0.5;0.1;0.5" dur="1.8s" repeatCount="indefinite" /> : null}
             </circle>
             {/* Nav lights */}
             <circle cx={-36} cy={0} r={1.5} fill="#E3000F" opacity={0.7} />
@@ -64,9 +66,9 @@ export const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolea
                 <g opacity={0.12}>
                     {[0, 1, 2, 3, 4].map(j => (
                         <circle key={j} cx={-2 + j * 0.8} cy={-37} r={1} fill={smokeFill}>
-                            <animate attributeName="cy" values="-37;-62" dur={`${2 + j * 0.5}s`} repeatCount="indefinite" begin={`${j * 0.5}s`} />
-                            <animate attributeName="r" values="1;5" dur={`${2 + j * 0.5}s`} repeatCount="indefinite" begin={`${j * 0.5}s`} />
-                            <animate attributeName="opacity" values="0.2;0" dur={`${2 + j * 0.5}s`} repeatCount="indefinite" begin={`${j * 0.5}s`} />
+                            {!isReducedMotion ? <animate attributeName="cy" values="-37;-62" dur={`${2 + j * 0.5}s`} repeatCount="indefinite" begin={`${j * 0.5}s`} /> : null}
+                            {!isReducedMotion ? <animate attributeName="r" values="1;5" dur={`${2 + j * 0.5}s`} repeatCount="indefinite" begin={`${j * 0.5}s`} /> : null}
+                            {!isReducedMotion ? <animate attributeName="opacity" values="0.2;0" dur={`${2 + j * 0.5}s`} repeatCount="indefinite" begin={`${j * 0.5}s`} /> : null}
                         </circle>
                     ))}
                 </g>
@@ -76,9 +78,9 @@ export const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolea
                 <g opacity={0.8}>
                     {[0, 1, 2, 3, 4].map(j => (
                         <circle key={j} cx={j * 2 - 4} cy={-5} r={1.5} fill={failSmokeFill}>
-                            <animate attributeName="cy" values="-5;-30" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
-                            <animate attributeName="r" values="1.5;6" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
-                            <animate attributeName="opacity" values="0.8;0" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
+                            {!isReducedMotion ? <animate attributeName="cy" values="-5;-30" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} /> : null}
+                            {!isReducedMotion ? <animate attributeName="r" values="1.5;6" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} /> : null}
+                            {!isReducedMotion ? <animate attributeName="opacity" values="0.8;0" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} /> : null}
                         </circle>
                     ))}
                 </g>
@@ -90,6 +92,7 @@ export const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolea
 /* ─── SVG: Wooden Ship ───────────────────────────────────────────────────── */
 
 export const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean; isFailed?: boolean }> = memo(({ accentColor, dim, isMoving, isDark, isFailed }) => {
+    const isReducedMotion = useReducedMotion();
     const o = dim ? 0.35 : 1;
     const hullFill = isDark ? "#5C3D0E" : "#8B6914";
     const hullStroke = isDark ? "#7A5518" : "#A67B20";
@@ -105,7 +108,7 @@ export const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; 
         <g opacity={o}>
             {/* Water reflection */}
             <ellipse cx={0} cy={24} rx={38} ry={7} fill={accentColor} opacity={0.06}>
-                {isMoving && <animate attributeName="ry" values="7;9;7" dur="2.8s" repeatCount="indefinite" />}
+                {isMoving && !isReducedMotion ? <animate attributeName="ry" values="7;9;7" dur="2.8s" repeatCount="indefinite" /> : null}
             </ellipse>
             {/* Hull shadow */}
             <ellipse cx={3} cy={20} rx={36} ry={5.5} fill={isDark ? "black" : "#2d3436"} opacity={isDark ? 0.35 : 0.12} />
@@ -132,30 +135,30 @@ export const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; 
             <line x1={-18} y1={-24} x2={14} y2={-24} stroke={mastStroke} strokeWidth={1.3} />
             {/* Main sail */}
             <path d="M0 -46 Q22 -34 22 -14 L0 -10 Z" fill={sailFill} opacity={0.92} stroke={sailStroke} strokeWidth={0.6}>
-                <animate attributeName="d"
+                {!isReducedMotion ? <animate attributeName="d"
                     values="M0 -46 Q22 -34 22 -14 L0 -10 Z;M0 -46 Q24 -33 23 -13 L0 -10 Z;M0 -46 Q22 -34 22 -14 L0 -10 Z"
-                    dur="5s" repeatCount="indefinite" />
+                    dur="5s" repeatCount="indefinite" /> : null}
             </path>
             {/* Topsail */}
             <path d="M0 -46 Q14 -42 14 -36 L0 -34 Z" fill={sailFill} opacity={0.7} stroke={sailStroke} strokeWidth={0.4}>
-                <animate attributeName="d"
+                {!isReducedMotion ? <animate attributeName="d"
                     values="M0 -46 Q14 -42 14 -36 L0 -34 Z;M0 -46 Q15 -41 15 -35 L0 -34 Z;M0 -46 Q14 -42 14 -36 L0 -34 Z"
-                    dur="4s" repeatCount="indefinite" />
+                    dur="4s" repeatCount="indefinite" /> : null}
             </path>
             {/* Jib */}
             <path d="M-4 -44 Q-18 -32 -18 -14 L-4 -12 Z" fill={sailFill} opacity={0.75} stroke={sailStroke} strokeWidth={0.4}>
-                <animate attributeName="d"
+                {!isReducedMotion ? <animate attributeName="d"
                     values="M-4 -44 Q-18 -32 -18 -14 L-4 -12 Z;M-4 -44 Q-20 -31 -19 -13 L-4 -12 Z;M-4 -44 Q-18 -32 -18 -14 L-4 -12 Z"
-                    dur="4.5s" repeatCount="indefinite" />
+                    dur="4.5s" repeatCount="indefinite" /> : null}
             </path>
             {/* Rigging */}
             <line x1={-2} y1={-46} x2={22} y2={-14} stroke={mastStroke} strokeWidth={0.3} opacity={0.3} />
             <line x1={-2} y1={-46} x2={-18} y2={-14} stroke={mastStroke} strokeWidth={0.3} opacity={0.3} />
             {/* Flag */}
             <path d="M-2 -48 L10 -46 L-2 -44" fill={accentColor} opacity={0.9}>
-                <animate attributeName="d"
+                {!isReducedMotion ? <animate attributeName="d"
                     values="M-2 -48 L10 -46 L-2 -44;M-2 -48 L11 -45.5 L-2 -44;M-2 -48 L10 -46 L-2 -44"
-                    dur="2s" repeatCount="indefinite" />
+                    dur="2s" repeatCount="indefinite" /> : null}
             </path>
             {/* Fore mast */}
             <line x1={18} y1={3} x2={18} y2={-22} stroke={mastStroke} strokeWidth={1.6} />
@@ -165,19 +168,19 @@ export const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; 
             <rect x={-12.5} y={-3.5} width={3.5} height={4} rx={0.8} fill={windowFill} opacity={0.25} />
             {/* Lanterns */}
             <circle cx={30} cy={4} r={2} fill="#FFB800" opacity={0.6}>
-                <animate attributeName="opacity" values="0.6;0.15;0.6" dur="3.5s" repeatCount="indefinite" />
+                {!isReducedMotion ? <animate attributeName="opacity" values="0.6;0.15;0.6" dur="3.5s" repeatCount="indefinite" /> : null}
             </circle>
             <circle cx={-30} cy={8} r={1.4} fill={accentColor} opacity={0.4}>
-                <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2.5s" repeatCount="indefinite" />
+                {!isReducedMotion ? <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2.5s" repeatCount="indefinite" /> : null}
             </circle>
             {/* Failure Smoke */}
             {isFailed && (
                 <g opacity={0.8}>
                     {[0, 1, 2, 3, 4].map(j => (
                         <circle key={j} cx={j * 2 - 4} cy={0} r={1.5} fill={failSmokeFill}>
-                            <animate attributeName="cy" values="0;-25" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
-                            <animate attributeName="r" values="1.5;6" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
-                            <animate attributeName="opacity" values="0.8;0" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} />
+                            {!isReducedMotion ? <animate attributeName="cy" values="0;-25" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} /> : null}
+                            {!isReducedMotion ? <animate attributeName="r" values="1.5;6" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} /> : null}
+                            {!isReducedMotion ? <animate attributeName="opacity" values="0.8;0" dur={`${1.5 + j * 0.4}s`} repeatCount="indefinite" begin={`${j * 0.3}s`} /> : null}
                         </circle>
                     ))}
                 </g>
@@ -189,6 +192,7 @@ export const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; 
 /* ─── Tow line: animated dots connecting ship to trailing badge ──────────── */
 
 export const TowLine: FunctionComponent<{ color: string; length: number }> = memo(({ color, length }) => {
+    const isReducedMotion = useReducedMotion();
     const dotCount = 5;
     const spacing = length / (dotCount + 1);
     return (
@@ -202,10 +206,10 @@ export const TowLine: FunctionComponent<{ color: string; length: number }> = mem
                 const delay = i * 0.18;
                 return (
                     <circle key={i} cx={cx} cy={0} r={1.8 - i * 0.15} fill={color} opacity={0.4}>
-                        <animate attributeName="cy" values="0;-2;0;2;0" dur="1.6s"
-                            repeatCount="indefinite" begin={`${delay}s`} />
-                        <animate attributeName="opacity" values="0.4;0.7;0.4" dur="1.6s"
-                            repeatCount="indefinite" begin={`${delay}s`} />
+                        {!isReducedMotion ? <animate attributeName="cy" values="0;-2;0;2;0" dur="1.6s"
+                            repeatCount="indefinite" begin={`${delay}s`} /> : null}
+                        {!isReducedMotion ? <animate attributeName="opacity" values="0.4;0.7;0.4" dur="1.6s"
+                            repeatCount="indefinite" begin={`${delay}s`} /> : null}
                     </circle>
                 );
             })}
@@ -223,6 +227,7 @@ export const ShipBadge: FunctionComponent<{
     isRunning: boolean;
     isDark: boolean;
 }> = memo(({ taskId, title, style, mergeIndicator, isRunning, isDark }) => {
+    const isReducedMotion = useReducedMotion();
     const pillBg = isDark ? "rgba(4,8,16,0.92)" : "rgba(255,255,255,0.92)";
     const textColor = isDark ? "white" : "#1e293b";
     return (
@@ -236,19 +241,19 @@ export const ShipBadge: FunctionComponent<{
             {isRunning && (
                 <rect x={-58} y={-12} width={116} height={24} rx={12}
                     fill="none" stroke={style.color} strokeWidth={0.9} opacity={0}>
-                    <animate attributeName="opacity" values="0;0.4;0" dur="2s" repeatCount="indefinite" />
-                    <animate attributeName="x" values="-58;-61" dur="2s" repeatCount="indefinite" />
-                    <animate attributeName="y" values="-12;-15" dur="2s" repeatCount="indefinite" />
-                    <animate attributeName="width" values="116;122" dur="2s" repeatCount="indefinite" />
-                    <animate attributeName="height" values="24;30" dur="2s" repeatCount="indefinite" />
+                    {!isReducedMotion ? <animate attributeName="opacity" values="0;0.4;0" dur="2s" repeatCount="indefinite" /> : null}
+                    {!isReducedMotion ? <animate attributeName="x" values="-58;-61" dur="2s" repeatCount="indefinite" /> : null}
+                    {!isReducedMotion ? <animate attributeName="y" values="-12;-15" dur="2s" repeatCount="indefinite" /> : null}
+                    {!isReducedMotion ? <animate attributeName="width" values="116;122" dur="2s" repeatCount="indefinite" /> : null}
+                    {!isReducedMotion ? <animate attributeName="height" values="24;30" dur="2s" repeatCount="indefinite" /> : null}
                 </rect>
             )}
             {/* Status dot */}
             <circle cx={-42} cy={0} r={isRunning ? 3.5 : 2.5} fill={style.color}>
                 {isRunning && (
                     <>
-                        <animate attributeName="r" values="3.5;4.5;3.5" dur="1.5s" repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="1;0.5;1" dur="1.5s" repeatCount="indefinite" />
+                        {!isReducedMotion ? <animate attributeName="r" values="3.5;4.5;3.5" dur="1.5s" repeatCount="indefinite" /> : null}
+                        {!isReducedMotion ? <animate attributeName="opacity" values="1;0.5;1" dur="1.5s" repeatCount="indefinite" /> : null}
                     </>
                 )}
             </circle>
@@ -300,6 +305,7 @@ export const BoatRaceShipItem = memo(({
     TOW_LINE_LENGTH: number,
     BADGE_OFFSET: number
 }) => {
+    const isReducedMotion = useReducedMotion();
     const isRunning = getTaskProgressPhase(s.task) === "RUNNING";
     const isMoving = !s.progress.stopped;
     const isFailed = getTaskProgressPhase(s.task) === "FAILED";
@@ -378,18 +384,18 @@ export const BoatRaceShipItem = memo(({
             <ellipse cx={-45} cy={14} rx={isMoving ? 60 : 25} ry={isMoving ? 4.5 : 2}
                 fill="url(#br-wake)" opacity={isMoving ? 0.3 : 0.06}>
                 {isMoving && (
-                    <animate attributeName="rx" values="55;70;55" dur="3s" repeatCount="indefinite" />
+                    !isReducedMotion ? <animate attributeName="rx" values="55;70;55" dur="3s" repeatCount="indefinite" /> : null
                 )}
             </ellipse>
             {isRunning && (
                 <>
                     <ellipse cx={-65} cy={16} rx={30} ry={2.5} fill={isDark ? "white" : "#334155"} opacity={0.04}>
-                        <animate attributeName="rx" values="24;36;24" dur="4s" repeatCount="indefinite" />
+                        {!isReducedMotion ? <animate attributeName="rx" values="24;36;24" dur="4s" repeatCount="indefinite" /> : null}
                     </ellipse>
                     {[0, 1, 2, 3, 4].map(j => (
                         <circle key={j} cx={38 + j * 2} cy={j * 2.5} r={0.7 + j * 0.15} fill={isDark ? "white" : "#475569"} opacity={0}>
-                            <animate attributeName="cy" values={`${j * 2.5};${-6 - j * 3};${j * 2.5}`} dur={`${0.5 + j * 0.12}s`} repeatCount="indefinite" begin={`${j * 0.1}s`} />
-                            <animate attributeName="opacity" values="0.25;0;0.25" dur={`${0.5 + j * 0.12}s`} repeatCount="indefinite" begin={`${j * 0.1}s`} />
+                            {!isReducedMotion ? <animate attributeName="cy" values={`${j * 2.5};${-6 - j * 3};${j * 2.5}`} dur={`${0.5 + j * 0.12}s`} repeatCount="indefinite" begin={`${j * 0.1}s`} /> : null}
+                            {!isReducedMotion ? <animate attributeName="opacity" values="0.25;0;0.25" dur={`${0.5 + j * 0.12}s`} repeatCount="indefinite" begin={`${j * 0.1}s`} /> : null}
                         </circle>
                     ))}
                 </>

@@ -19,3 +19,11 @@ describe('useDockHoverMotion Architectural Constraints', () => {
         expect(hookFileExists).toBe(false);
     });
 });
+
+    it('should assert KineticDock respects reduced motion for hover magnetism', () => {
+        const componentPath = path.resolve(__dirname, '../../components/KineticDock.tsx');
+        const content = fs.readFileSync(componentPath, 'utf8');
+        expect(content).toContain('if (prefersReducedMotion || !dockRef.current) return;');
+        expect(content).toContain('if (prefersReducedMotion) return;');
+        expect(content).toContain('transition-none');
+    });

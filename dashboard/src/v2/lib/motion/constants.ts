@@ -47,3 +47,29 @@ export function useGsapDurations() {
   }
   return GSAP_DURATIONS;
 }
+
+export function useGsapInteractionTokens() {
+  const durations = useGsapDurations();
+  return {
+    controlFeedback: {
+      duration: durations.fast,
+      ease: GSAP_EASINGS.smooth
+    },
+    enterExit: {
+      duration: durations.base,
+      ease: GSAP_EASINGS.smooth
+    },
+    expansionCollapse: {
+      duration: durations.base,
+      ease: GSAP_EASINGS.smoothInOut
+    },
+    selectionMovement: {
+      duration: durations.fast,
+      ease: GSAP_EASINGS.smooth
+    },
+    asyncFeedback: {
+      duration: durations.slow,
+      ease: GSAP_EASINGS.linear
+    }
+  };
+}
