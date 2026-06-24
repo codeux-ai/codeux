@@ -18,7 +18,7 @@ interface NavItemProps {
 export const NavItem: FunctionComponent<NavItemProps> = ({ item, isActive, isMinimized, isMobile, onClose, elementRef }) => {
     return (
         <Link
-            aria-label={isMinimized && !isMobile ? item.label : undefined}
+            aria-label={item.label}
             ref={elementRef}
             to={item.path}
             onClick={isMobile ? onClose : undefined}
@@ -36,7 +36,7 @@ export const NavItem: FunctionComponent<NavItemProps> = ({ item, isActive, isMin
             <item.icon aria-hidden="true" className={`relative z-10 w-4 h-4 transition-all duration-300 shrink-0 ${isActive ? 'text-signal-600 dark:text-signal-400 drop-shadow-[0_0_8px_rgba(0,224,160,0.5)]' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} strokeWidth={isActive ? 2 : 1.5} />
 
             <div className={`relative z-10 overflow-hidden transition-all duration-500 ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'opacity-100'}`}>
-                <span className={`font-medium text-sm tracking-wide transition-colors duration-300 whitespace-nowrap ${isActive ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`}>
+                <span aria-hidden={isMinimized && !isMobile ? "true" : "false"} className={`font-medium text-sm tracking-wide transition-colors duration-300 whitespace-nowrap ${isActive ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`}>
                     {item.label}
                 </span>
             </div>

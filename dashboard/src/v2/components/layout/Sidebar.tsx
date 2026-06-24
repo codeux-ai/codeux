@@ -109,22 +109,22 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
             if (isOpen) {
                 triggerRef.current = document.activeElement as HTMLElement;
-                gsap.to(sidebarRef.current, { x: 0, opacity: 1, duration: animDuration, ease: "power3.out" });
+                gsap.to(sidebarRef.current, { x: 0, opacity: 1, duration: animDuration, ease: "power3.out", onComplete: () => {
+                    const firstFocusable = sidebarRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])');
+                    firstFocusable?.focus();
+                } });
                 if (overlayRef.current) {
                     gsap.to(overlayRef.current, { opacity: 1, duration: overlayDuration, ease: "power2.out", display: "block" });
                 }
-                setTimeout(() => {
-                    const firstFocusable = sidebarRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])');
-                    firstFocusable?.focus();
-                }, 420);
+                // Focus handled in GSAP onComplete
             } else {
-                gsap.to(sidebarRef.current, { x: "-100%", opacity: 0, duration: animDuration, ease: "power3.in" });
+                gsap.to(sidebarRef.current, { x: "-100%", opacity: 0, duration: animDuration, ease: "power3.in", onComplete: () => {
+                    triggerRef.current?.focus();
+                } });
                 if (overlayRef.current) {
                     gsap.to(overlayRef.current, { opacity: 0, duration: overlayDuration, ease: "power2.in", display: "none" });
                 }
-                setTimeout(() => {
-                    triggerRef.current?.focus();
-                }, 420);
+                // Focus handled in GSAP onComplete
             }
         } else {
             // Reset transforms if returning to desktop
@@ -139,6 +139,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
     useEffect(() => {
         if (isMobile) return;
         const handleDocumentClick = (e: MouseEvent) => {
+            if (e.detail === 0) return;
             if (!isMinimized && sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
                 setIsMinimized(true);
                 if (typeof window !== 'undefined') {
@@ -172,6 +173,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         )}
         <aside
             id="primary-navigation"
+            onKeyDown={(e) => { if (e.key === 'Escape' && isMobile) onClose?.(); }}
             aria-label="Primary Navigation"
             role={isMobile ? "dialog" : undefined}
             aria-modal={isMobile ? "true" : undefined}
@@ -249,7 +251,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                     <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100" />
                     <Settings aria-hidden="true" className="relative z-10 w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:rotate-90 transition-all duration-700 ease-in-out" strokeWidth={1.5} />
                     <div className={`relative z-10 overflow-hidden transition-all duration-500 ${isMinimized && !isMobile ? 'w-0 opacity-0' : 'opacity-100'}`}>
-                        <span className="font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300 whitespace-nowrap">
+                        <span aria-hidden={isMinimized && !isMobile ? "true" : "false"} className="font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300 whitespace-nowrap">
                             Settings
                         </span>
                     </div>
@@ -274,7 +276,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                             <ChevronLeft aria-hidden="true" className="relative z-10 w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-signal-500 transition-colors duration-300" strokeWidth={1.5} />
                         )}
                         <div className={`relative z-10 overflow-hidden transition-all duration-500 text-left ${isMinimized ? 'w-0 opacity-0 pointer-events-none' : 'flex-1 opacity-100'}`}>
-                            <span className="font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300 whitespace-nowrap">
+                            <span aria-hidden={isMinimized ? "true" : "false"} className="font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300 whitespace-nowrap">
                                 Collapse
                             </span>
                         </div>

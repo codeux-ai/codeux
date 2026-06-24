@@ -22,3 +22,7 @@ When using shared overlay components (`Modal`, `Dialog`, `Drawer`, `Notification
 
 4.  **Notification Panels**:
     *   Flyout menus and notification surfaces should be collision-aware with width and max-height constraints (e.g., `max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)]`) so they remain fully visible from the top nav at tablet widths without clipping.
+
+
+## Navigation
+Mobile drawer navigation and minimized sidebar behavior are explicitly handled as dismissible dialogs, ensuring focus is trapped correctly when open and Escape close behavior is active.
