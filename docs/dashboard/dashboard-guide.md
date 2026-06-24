@@ -727,10 +727,12 @@ The dashboard relies on consistent interaction primitives across all v2 views:
 - **Data Views**: Complex data views (like the Sprint Ledger or Stats page) maintain sticky sort/filter controls while the data scrolls. List windowing and progressive rendering ensure smooth interactions even with large datasets.
 - **Destructive Actions & Flows**: Major flows with side effects, such as rerunning a task or bulk deleting sprints, require explicit confirmation. The confirmation dialog warns about potential downstream impacts (e.g., downstream task resets, existing git merges, cascading sprint deletion effects) and provides localized options to clean up state before proceeding.
 
+
 ## Accessibility Patterns
 
 This dashboard enforces accessibility best practices to ensure an inclusive experience:
 
+- **Landmarks & Skip Links**: The dashboard shell provides exactly one `main` landmark with `id="main-content"`. A visually hidden skip link (which becomes visible on focus) allows keyboard and screen reader users to bypass the primary navigation and jump directly to the main content area.
 - **Dialogs & Modals**: Implemented using proper ARIA roles (`role="dialog"` or `role="alertdialog"`). They manage focus by trapping it within the overlay and restoring it to the trigger upon closing. If a dialog has no focusable elements, the container itself uses `tabIndex={-1}` and an outline-removal class for programmatic focus.
 - **Menus & Overlays**: Use explicit ARIA roles such as `menu`, `menuitem`, `listbox`, and `option`. Keyboard navigation (up/down arrows, Enter/Space, Escape) is strictly supported.
 - **Forms**: All inputs must have associated labels (`<label>` or `aria-label`/`aria-labelledby`). Validation feedback uses `aria-invalid` and dynamically injects messages into `aria-live` regions. Form submissions must guard against duplicate events via `isSubmitting` checks. Upon validation failure, focus should be programmatically restored to the first invalid field. Dependency lists or complex toggles should visually and semantically (`aria-disabled`) expose their unselectable states (e.g., cycle prevention) rather than silently hiding options.

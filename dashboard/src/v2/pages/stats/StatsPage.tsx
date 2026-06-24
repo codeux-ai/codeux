@@ -13,7 +13,7 @@ import { PANEL_CLASS } from "./components/stats-ui-primitives.js";
 import styles from "./StatsPage.module.css";
 
 export const StatsPage: FunctionComponent = () => {
-  const rootRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLElement>(null);
   const hasAnimated = useRef(false);
   const { selectedProject } = useProjectData();
   const reducedMotion = useReducedMotion();

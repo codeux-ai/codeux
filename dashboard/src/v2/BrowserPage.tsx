@@ -369,7 +369,7 @@ export const BrowserPage: FunctionComponent = () => {
 
   if (!selectedProject) {
     return (
-      <PageContainer padding="workbench">
+      <PageContainer aria-label="Browser" padding="workbench">
         <div className="rounded-[2rem] border border-black/[0.06] bg-white/60 p-8 text-sm text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
           Select a project first. The in-app browser launches one isolated preview container per sprint.
         </div>
@@ -378,7 +378,7 @@ export const BrowserPage: FunctionComponent = () => {
   }
 
   return (
-    <PageContainer padding="workbench" className="min-h-full" data-testid="browser-page-root">
+    <PageContainer aria-label="Browser" padding="workbench" className="min-h-full" data-testid="browser-page-root">
       <div className="mb-8 flex flex-col justify-between gap-8 lg:flex-row lg:items-end" data-testid="browser-page-header">
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">

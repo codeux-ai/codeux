@@ -709,7 +709,7 @@ export const MemoryPage: FunctionComponent = () => {
 
     /* ─── Render ──────────────────────────────────────────────────────── */
     return (
-        <PageContainer padding="section" className="gap-8">
+        <PageContainer aria-label="Memory" padding="section" className="gap-8">
 
             <div aria-hidden className="fixed inset-0 pointer-events-none -z-10">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_40%,rgba(0,224,160,0.04)_0%,transparent_70%)]
