@@ -36,6 +36,7 @@ export const KanbanTaskCard: FunctionComponent<{
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
   const isReducedMotion = useReducedMotion();
+  const StatusIcon = STATUS_CFG[task.status].icon;
   const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
 
   const [flashTriggerCount, setFlashTriggerCount] = useState(0);
@@ -128,10 +129,15 @@ export const KanbanTaskCard: FunctionComponent<{
       <BorderTrace accentHex={STATUS_CFG[task.status].hex} />
 
       <div className="flex items-center justify-between mb-3 relative z-10">
-        <span className="font-mono text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-[0.1em]">
-          {task.id.toUpperCase()}
-          <span className="sr-only">, Status: {task.status.replace('_', ' ')}</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-[0.1em]">
+            {task.id.toUpperCase()}
+          </span>
+          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-400">
+            <span className="sr-only">, Status: {task.status.replace('_', ' ')}</span>
+            <StatusIcon className="w-3 h-3" aria-hidden="true" style={{ color: STATUS_CFG[task.status].hex }} />
+          </div>
+        </div>
         <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-[0.14em] ${pri.bg} ${pri.color}`}>
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${pri.dot}`} />
           <span className="sr-only">Priority: </span>{pri.label}
