@@ -41,12 +41,12 @@ Use the standard interaction definitions when designing animations:
    - *Pacing:* Fast with spring/bounce easing.
 
 8. **`asyncFeedback`**
-   - *Use Case:* Slower, deliberate reveal of asynchronous operation results (e.g., Toast notifications, `ActionFeedbackRegion`).
+   - *Use Case:* Slower, deliberate reveal of asynchronous operation results (e.g., Toast notifications, `ActionFeedbackRegion`, `NotificationPanel`).
    - *Pacing:* Slow and linear to ensure visibility.
 
 ## Accessibility & Async Feedback
 
-When announcing asynchronous feedback (e.g., via Toasts or ActionFeedbackRegion), motion is secondary to screen reader announcements.
+When announcing asynchronous feedback (e.g., via Toasts, ActionFeedbackRegion, or NotificationPanel), motion is secondary to screen reader announcements.
 - Ensure that the container uses proper ARIA attributes, typically `aria-live="polite"` or `aria-live="assertive"` with `aria-atomic="true"` so that the full context is announced when it appears.
 - Visual movement (like a toast sliding in) must not interfere with the user's focus or block standard keyboard interaction.
 

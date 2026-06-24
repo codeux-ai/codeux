@@ -17,6 +17,8 @@ export interface ToastProps {
   type: ToastType;
   message: string;
   action?: ToastAction;
+  retryAction?: () => void;
+  retryLabel?: string;
   onDismiss: (id: string) => void;
   autoDismissMs?: number;
   className?: string;
@@ -42,6 +44,8 @@ export const Toast: FunctionComponent<ToastProps> = ({
   type,
   message,
   action,
+  retryAction,
+  retryLabel,
   onDismiss,
   autoDismissMs = 5000,
   className = "",
@@ -123,6 +127,19 @@ export const Toast: FunctionComponent<ToastProps> = ({
         <p className="text-sm font-medium leading-relaxed dark:text-slate-200">
           {message}
         </p>
+        {retryAction && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              retryAction();
+              handleDismiss();
+            }}
+            className="mt-2 text-xs font-bold uppercase tracking-wider underline hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current rounded mr-3"
+          >
+            {retryLabel || "Retry"}
+          </button>
+        )}
         {action && (
           <button
             ref={actionButtonRef}
