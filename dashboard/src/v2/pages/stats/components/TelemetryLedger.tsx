@@ -241,7 +241,7 @@ export const TelemetryLedger: FunctionComponent<{
                     <div className="flex flex-col gap-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/75 text-xs font-black text-slate-900 shadow-[0_6px_16px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-xs font-black text-slate-900 shadow-sm backdrop-blur-xl dark:text-white">
                             {index + 1}
                           </div>
                           <div className="min-w-0">

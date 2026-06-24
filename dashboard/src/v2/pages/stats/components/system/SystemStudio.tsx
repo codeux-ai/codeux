@@ -305,7 +305,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
               const label = category === "rateLimit" ? "Rate Limit" : category === "apiError" ? "API Error" : category === "modelError" ? "Model Error" : category.charAt(0).toUpperCase() + category.slice(1);
               const tone = category === "timeout" ? "bg-amber-500" : category === "rateLimit" ? "bg-orange-500" : category === "cancelled" ? "bg-slate-400" : "bg-red-500";
               return (
-                <div key={category} className={`${SUBPANEL_CLASS} flex items-center justify-between p-4`}>
+                <div key={category} className={`${SUBPANEL_CLASS} flex items-center justify-between p-4 hover:bg-[color:var(--fill-muted-hover)] transition-colors`}>
                   <div className="flex items-center gap-3">
                     <div className={`h-2.5 w-2.5 rounded-full ${tone}`} />
                     <div className="text-sm font-bold text-slate-900 dark:text-white">{label}</div>
@@ -336,7 +336,7 @@ export const SystemStudio: FunctionComponent<{ projectId: string }> = ({ project
         </div>
 
         <div className="space-y-4">
-          <div className="flex gap-1 rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35 self-start">
+          <div className="flex gap-1 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-1 self-start">
             {(["all", "errors", "system"] as SystemTab[]).map((tab) => (
               <button
                 key={tab}

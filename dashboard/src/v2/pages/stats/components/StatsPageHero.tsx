@@ -21,7 +21,7 @@ const HeroKpi: FunctionComponent<{
   value: string;
   valueClassName?: string;
 }> = ({ icon: Icon, label, value, valueClassName = "text-slate-900 dark:text-white" }) => (
-  <div className="flex items-center gap-3 rounded-2xl border border-black/[0.05] bg-white/68 px-4 py-3 backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
+  <div className="flex items-center gap-3 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-4 py-3 backdrop-blur-xl">
     <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-signal-500/10 text-signal-600 dark:text-signal-400">
       <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
     </div>
@@ -104,7 +104,6 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
 
   return (
     <section className={`${PANEL_CLASS} rounded-[2.5rem] p-8 md:p-10`}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
       <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-4xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
@@ -163,10 +162,10 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   type="button"
                   onClick={() => applyPresetWindow(window)}
                   aria-pressed={isActive}
-                  className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all border border-transparent ${
+                  className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${
                     isActive
                       ? "bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                      : "text-slate-500 hover:bg-[color:var(--fill-muted)] hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                   }`}
                 >
                   {window === "all" ? "All time" : window}
