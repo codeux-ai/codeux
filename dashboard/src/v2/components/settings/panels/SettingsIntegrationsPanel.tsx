@@ -22,6 +22,7 @@ import {
   sortProviderConfigEntries,
 } from "../../../lib/settings-view-models.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { sanitizeSystemProviderConfig } from "../../../lib/provider-runtime-preview.js";
 
 const PROVIDER_TYPES: ProviderId[] = ["jules", "gemini", "antigravity", "codex", "claude-code", "qwen-code", "opencode"];
 
@@ -332,10 +333,10 @@ export const SettingsIntegrationsPanel: FunctionComponent<{ state: SettingsPageS
     updateSystem((current) => {
       const nextProviders = {
         ...current.integrations.providers,
-        [providerConfigId]: {
+        [providerConfigId]: sanitizeSystemProviderConfig({
           ...current.integrations.providers[providerConfigId],
           ...updates,
-        },
+        }),
       };
       const nextSystem = {
         ...current,
