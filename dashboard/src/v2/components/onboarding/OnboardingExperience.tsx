@@ -38,6 +38,7 @@ import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { OnboardingIntro } from "./OnboardingIntro.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
+import { sanitizeSystemProviderConfig } from "../../lib/provider-runtime-preview.js";
 import { PillChoiceGroup, Row, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
 import { applyAppearanceSettings } from "../../lib/apply-appearance.js";
 import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
@@ -517,15 +518,16 @@ export const OnboardingExperience: FunctionComponent = () => {
       }
       const nextProviders = {
         ...current.integrations.providers,
-        [providerConfigId]: {
+        [providerConfigId]: sanitizeSystemProviderConfig({
           ...provider,
           ...updates,
-        },
+        }),
       };
       const mountField = providerMountFields[provider.provider];
       const syncedDefaults = syncProjectProvidersToIntegrationCatalog(current, nextProviders);
-      if (mountField && updates.mountAuth !== undefined) {
-        syncedDefaults.cliWorkflow[mountField] = updates.mountAuth as never;
+      const sanitizedProvider = nextProviders[providerConfigId];
+      if (mountField && sanitizedProvider.mountAuth !== undefined) {
+        syncedDefaults.cliWorkflow[mountField] = sanitizedProvider.mountAuth as never;
       }
       return {
         ...current,
@@ -661,6 +663,9 @@ export const OnboardingExperience: FunctionComponent = () => {
       const chosenWorkerValid = Boolean(chosenWorkerProvider?.enabled && chosenWorkerProvider.provider !== "jules");
       if (!chosenWorkerValid && firstSelectedCliProvider) {
         nextSettings.defaults.workers.virtualWorkerProvider = firstSelectedCliProvider;
+      }
+      for (const [providerConfigId, integrationProvider] of Object.entries(nextSettings.integrations.providers)) {
+        nextSettings.integrations.providers[providerConfigId] = sanitizeSystemProviderConfig(integrationProvider);
       }
       nextSettings = await saveSystemSettings(nextSettings);
       setSettings(nextSettings);

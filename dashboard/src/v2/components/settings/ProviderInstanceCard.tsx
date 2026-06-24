@@ -15,6 +15,7 @@ import {
   qwenRegionOptions,
   splitOpenCodeModel,
   type SystemProviderConfig,
+  sanitizeSystemProviderConfig,
 } from "../../lib/provider-runtime-preview.js";
 
 /**
@@ -130,7 +131,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                   updates.openCodeAuthMode = "ENV_KEY";
                 }
               }
-              onUpdate(updates);
+              onUpdate(sanitizeSystemProviderConfig({ ...provider, ...updates }));
             }}
             options={[
               { value: "apiKey", label: "API Key", hint: "API token override" },
@@ -144,7 +145,7 @@ export const ProviderInstanceCard: FunctionComponent<{
       {/* API Key Panel */}
       {currentAuthType === "apiKey" && (
         <Row label="API key" description="Stored for this named provider instance.">
-          <TextInput value={provider.apiKey} onChange={(value) => onUpdate({ apiKey: value })} mono />
+          <TextInput value={provider.apiKey} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, apiKey: value }))} mono />
         </Row>
       )}
 
@@ -175,16 +176,19 @@ export const ProviderInstanceCard: FunctionComponent<{
               <Row label="Authentication sub-mode" description="Configure whether to use Alibaba Cloud Coding Plan or custom modelProviders.">
                 <PillChoiceGroup
                   value={provider.qwenAuthMode || "MODEL_PROVIDER"}
-                  onChange={(value) => onUpdate({
-                    qwenAuthMode: value as SystemProviderConfig["qwenAuthMode"],
-                    ...(value === "MODEL_PROVIDER" ? {
-                      apiKey: provider.apiKey || "your_api_key",
-                      qwenBaseUrl: provider.qwenBaseUrl || "http://127.0.0.1:11434/v1",
-                      qwenEnvKey: provider.qwenEnvKey || "OLLAMA_API_KEY",
-                      qwenModelId: provider.qwenModelId || "glm-4.7-flash",
-                      qwenProtocol: "openai" as const,
-                    } : {}),
-                  })}
+                  onChange={(value) => {
+                    const updates: Partial<SystemProviderConfig> = {
+                      qwenAuthMode: value as SystemProviderConfig["qwenAuthMode"],
+                      ...(value === "MODEL_PROVIDER" ? {
+                        apiKey: provider.apiKey || "your_api_key",
+                        qwenBaseUrl: provider.qwenBaseUrl || "http://127.0.0.1:11434/v1",
+                        qwenEnvKey: provider.qwenEnvKey || "OLLAMA_API_KEY",
+                        qwenModelId: provider.qwenModelId || "glm-4.7-flash",
+                        qwenProtocol: "openai" as const,
+                      } : {}),
+                    };
+                    onUpdate(sanitizeSystemProviderConfig({ ...provider, ...updates }));
+                  }}
                   options={qwenAuthModeOptions.filter((opt) => opt.value !== "LOCAL_AUTH")}
                 />
               </Row>
@@ -234,7 +238,7 @@ export const ProviderInstanceCard: FunctionComponent<{
 
           {currentAuthType === "localAuth" && (
             <Row label="Qwen auth path" description="Usually `~/.qwen`; contains settings.json, .env, and cached OAuth state.">
-              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} mono />
             </Row>
           )}
 
@@ -254,17 +258,20 @@ export const ProviderInstanceCard: FunctionComponent<{
               <Row label="Authentication sub-mode" description="Configure whether to use custom model endpoint or standard environment key.">
                 <PillChoiceGroup
                   value={provider.openCodeAuthMode || "ENV_KEY"}
-                  onChange={(value) => onUpdate({
-                    openCodeAuthMode: value as SystemProviderConfig["openCodeAuthMode"],
-                    ...(value === "CUSTOM_PROVIDER" ? {
-                      apiKey: provider.apiKey || "your_api_key",
-                      openCodeProviderId: provider.openCodeProviderId || "ollama",
-                      openCodeModelId: provider.openCodeModelId || "glm-4.7-flash",
-                      openCodeBaseUrl: provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1",
-                      openCodeEnvKey: provider.openCodeEnvKey || "OLLAMA_API_KEY",
-                      openCodePackage: provider.openCodePackage || "@ai-sdk/openai-compatible",
-                    } : {}),
-                  })}
+                  onChange={(value) => {
+                    const updates: Partial<SystemProviderConfig> = {
+                      openCodeAuthMode: value as SystemProviderConfig["openCodeAuthMode"],
+                      ...(value === "CUSTOM_PROVIDER" ? {
+                        apiKey: provider.apiKey || "your_api_key",
+                        openCodeProviderId: provider.openCodeProviderId || "ollama",
+                        openCodeModelId: provider.openCodeModelId || "glm-4.7-flash",
+                        openCodeBaseUrl: provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1",
+                        openCodeEnvKey: provider.openCodeEnvKey || "OLLAMA_API_KEY",
+                        openCodePackage: provider.openCodePackage || "@ai-sdk/openai-compatible",
+                      } : {}),
+                    };
+                    onUpdate(sanitizeSystemProviderConfig({ ...provider, ...updates }));
+                  }}
                   options={openCodeAuthModeOptions.filter((opt) => opt.value !== "LOCAL_AUTH")}
                 />
               </Row>
@@ -298,7 +305,7 @@ export const ProviderInstanceCard: FunctionComponent<{
 
           {currentAuthType === "localAuth" && (
             <Row label="OpenCode auth path" description="Usually `~/.local/share/opencode`; contains auth.json created by `/connect` or `opencode auth login`.">
-              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} mono />
             </Row>
           )}
 
@@ -315,7 +322,7 @@ export const ProviderInstanceCard: FunctionComponent<{
         <>
           {currentAuthType === "localAuth" && (
             <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance.">
-              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} mono />
             </Row>
           )}
           <Row
@@ -326,7 +333,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                 : "Override OPENAI_BASE_URL. Route Codex through a custom OpenAI-compatible endpoint, e.g. https://openrouter.ai/api/v1. Leave empty to use the default OpenAI API."
             }
           >
-            <TextInput value={provider.customBaseUrl || ""} onChange={(value) => onUpdate({ customBaseUrl: value || undefined })} mono />
+            <TextInput value={provider.customBaseUrl || ""} onChange={(value) => onUpdate({ customBaseUrl: value || undefined })} disabled={currentAuthType !== "apiKey"} mono />
           </Row>
           <Row
             label="Custom model"
@@ -337,7 +344,7 @@ export const ProviderInstanceCard: FunctionComponent<{
             }
             last={isLast}
           >
-            <TextInput value={provider.customModel || ""} onChange={(value) => onUpdate({ customModel: value || undefined })} mono />
+            <TextInput value={provider.customModel || ""} onChange={(value) => onUpdate({ customModel: value || undefined })} disabled={currentAuthType !== "apiKey"} mono />
           </Row>
         </>
       )}
@@ -345,7 +352,7 @@ export const ProviderInstanceCard: FunctionComponent<{
       {/* Standard Local Auth Option for Generic CLI Providers */}
       {provider.provider !== "jules" && provider.provider !== "qwen-code" && provider.provider !== "opencode" && provider.provider !== "claude-code" && provider.provider !== "codex" && currentAuthType === "localAuth" && (
         <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance." last={isLast}>
-          <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+          <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} mono />
         </Row>
       )}
 
