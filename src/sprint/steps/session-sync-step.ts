@@ -167,6 +167,38 @@ const buildProviderActivityEventPayload = (
   sessionCompleted: activity.sessionCompleted ?? null,
 });
 
+const isForeignSessionMatch = (
+  deps: SessionSyncDependencies,
+  task: Subtask,
+  session: JulesSession,
+): boolean => {
+  if (
+    !deps.executionRepository
+    || typeof deps.executionRepository.getLatestTaskRunBySessionId !== "function"
+    || !task.record_id
+    || !task.project_id
+    || !task.sprint_id
+  ) {
+    return false;
+  }
+
+  const sessionId = deps.extractSessionId(session)
+    || deps.resolveSessionName(session)?.replace(/^sessions\//, "")
+    || null;
+  if (!sessionId) {
+    return false;
+  }
+
+  const existingRun = deps.executionRepository.getLatestTaskRunBySessionId(sessionId);
+  if (!existingRun) {
+    return false;
+  }
+
+  return existingRun.projectId !== task.project_id
+    || existingRun.sprintId !== task.sprint_id
+    || existingRun.taskId !== task.record_id;
+};
+
 const resolveWorkerBranch = (session: JulesSession): string | null => {
   const output = Array.isArray(session.outputs)
     ? session.outputs.find((entry) => entry && typeof entry === "object" && "pullRequest" in entry)
@@ -406,6 +438,17 @@ export const runSessionSyncStep = async (
     const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);
     const match = sessionMap.get(expectedRunKey);
     if (match) {
+      if (isForeignSessionMatch(deps, task, match)) {
+        deps.logger.warn("Skipping foreign provider session matched by task run key", {
+          taskId: task.record_id || task.id,
+          projectId: task.project_id,
+          sprintId: task.sprint_id,
+          sessionId: deps.extractSessionId(match),
+          sessionName: deps.resolveSessionName(match),
+        });
+        continue;
+      }
+
       const sessionName = deps.resolveSessionName(match);
       if (sessionName) {
         // Skip fetching activities if the session is already terminal locally
@@ -455,6 +498,17 @@ export const runSessionSyncStep = async (
     const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);
     const match = sessionMap.get(expectedRunKey);
     if (!match) {
+      continue;
+    }
+
+    if (isForeignSessionMatch(deps, task, match)) {
+      deps.logger.warn("Skipping foreign provider session matched by task run key", {
+        taskId: task.record_id || task.id,
+        projectId: task.project_id,
+        sprintId: task.sprint_id,
+        sessionId: deps.extractSessionId(match),
+        sessionName: deps.resolveSessionName(match),
+      });
       continue;
     }
 
