@@ -117,6 +117,8 @@ For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 wit
 
 Jules does not expose a compatible native token contract. Instead of excluding it, Code UX computes **estimated** tokens for Jules by accumulating input and output characters divided by 4 (the characters-per-token heuristic).
 
+During live synchronization (`syncLiveInvocation`), expected 404 responses indicating that a session or activity stream is unavailable are handled gracefully: they are logged at the debug level and skipped to avoid spamming the logs with warnings. For terminal sync (`calculateAndSaveUsageForTask`), the system is conservative: if the session returns a 404, it skips creating a new usage record to prevent saving "fake" empty records unless an existing prompt or usage record is already present to allow safe estimation.
+
 ## OpenTelemetry Integration
 
 Code UX provides a lightweight, dependency-free OpenTelemetry module at `src/infrastructure/providers/cli/otel-span-collector.ts` that:
