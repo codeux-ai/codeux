@@ -23,9 +23,14 @@ vi.mock("../../../hooks/use-confirm-dialog.js", () => ({
   })
 }));
 
-vi.mock("../../../hooks/use-reduced-motion.js", () => ({
-  useReducedMotion: vi.fn().mockReturnValue(false)
-}));
+vi.mock("../../../hooks/use-reduced-motion.js", async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  return {
+    ...actual,
+    useReducedMotion: vi.fn().mockReturnValue(false),
+    useResolvedMotionDuration: vi.fn().mockImplementation((val) => val)
+  };
+});
 
 vi.mock("gsap", async (importOriginal) => {
   const actual = await importOriginal<any>();
