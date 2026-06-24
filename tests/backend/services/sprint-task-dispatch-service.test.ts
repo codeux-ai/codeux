@@ -215,5 +215,7 @@ describe("SprintTaskDispatchService", () => {
       currentCount: 2,
       limit: 2,
     });
+    expect(taskService.startSprintTask).not.toHaveBeenCalled();
+    expect((service as any).guardrailService.record).not.toHaveBeenCalled();
   });
 });

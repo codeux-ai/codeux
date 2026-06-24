@@ -120,6 +120,12 @@ That means:
 - dashboard chat replies, clarification auto-answer, and QA review runs follow the preferred worker CLI provider/model by default instead of inheriting the global primary provider
 - dashboard chat replies resolve from Route Mapping on every turn; stale thread runtime state is used only to decide whether a chat session can continue or must replay after the provider changes
 
+## Provider Capacity Deferrals
+
+Provider `maxConcurrentTasks` is enforced before a task is counted as started. When the selected provider is already at its global cap, sprint task dispatch creates or refreshes a queued dispatch/task-run record, records a `provider_concurrency_wait` event, and returns the task to a retryable `PENDING` state for the next orchestration cycle.
+
+Provider-cap queueing is not a task creation failure. It must not increment the consecutive task creation failure counter, trigger the emergency stop, or record `task_coding` guardrail usage. Real startup failures still use the normal failure path and continue to count toward `maxFailures`.
+
 ## Services Using Invocation Routing
 
 - `src/services/task-service.ts`
@@ -153,6 +159,12 @@ The v2 settings page exposes:
 - quick category search with `/` focus
 - Route Mapping as the main AI routing workspace with route summaries, provider-pool counts, and override counts
 - pill-style controls for common mode switches such as profile, strategy, execution mode, and merge policy
+
+Dashboard route and model controls share provider display metadata from the settings view-model helpers:
+- provider routes use provider instance ids internally but display the settings page instance name, such as `Codex Primary`, instead of legacy virtual-worker labels
+- provider icons use the underlying provider type, so additional Codex, Qwen Code, OpenCode, and Antigravity instances keep the correct brand icon
+- default route/model options show the resolved inherited worker defaults when available, such as `Default Route (Codex Primary)` and `Default Model (gpt-5.5)`
+- model option values remain the provider catalog values returned by `getProviderModelOptions`; only labels and icons are display metadata
 
 File:
 - `dashboard/src/v2/SettingsPage.tsx`

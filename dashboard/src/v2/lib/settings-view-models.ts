@@ -13,6 +13,7 @@ import type {
   SystemProviderCredentialSettings,
   SystemSettings,
   ThinkingMode,
+  VirtualWorkerProvider,
 } from "../../types.js";
 import { cloneGuardrails } from "../../lib/settings.js";
 import { sanitizeSystemProviderConfig } from "./provider-runtime-preview.js";
@@ -21,7 +22,12 @@ import {
   BRANCH_NAME_TOKEN_ALIASES,
   type BranchNameToken,
 } from "../../../../src/domain/settings/branch-name-tokens.js";
-import { DEFAULT_PROVIDER_WEIGHT } from "../../../../src/repositories/settings-defaults.js";
+import {
+  DEFAULT_PROVIDER_CONFIG_NAMES,
+  DEFAULT_PROVIDER_SETTINGS,
+  DEFAULT_PROVIDER_WEIGHT,
+  VIRTUAL_WORKER_PROVIDERS,
+} from "../../../../src/repositories/settings-defaults.js";
 
 const cloneSkills = (skills: SkillToggle[]): SkillToggle[] => skills.map((skill) => ({ ...skill }));
 const cloneMcpTools = (tools: McpToolToggle[]): McpToolToggle[] => tools.map((tool) => ({ ...tool }));
@@ -881,6 +887,98 @@ export const getProviderInstanceModelOptions = (
   return [...optionsByValue.values()];
 };
 
+export interface ProviderDisplayMetadata {
+  providerConfigId: ProviderConfigId;
+  provider: ProviderId;
+  displayLabel: string;
+  iconProviderId: ProviderId;
+  effectiveModel: string;
+}
+
+export interface VirtualProviderDisplayMetadata extends ProviderDisplayMetadata {
+  provider: VirtualWorkerProvider;
+  iconProviderId: VirtualWorkerProvider;
+}
+
+const isVirtualWorkerProvider = (providerId: ProviderId): providerId is VirtualWorkerProvider => (
+  VIRTUAL_WORKER_PROVIDERS.includes(providerId as VirtualWorkerProvider)
+);
+
+const isProviderInstanceAvailableForDisplay = (provider: SystemProviderCredentialSettings): boolean => (
+  provider.apiKey.trim().length > 0 || (provider.provider !== "jules" && provider.mountAuth)
+);
+
+const resolveProviderDisplayModel = (
+  provider: ProviderId,
+  baseModel: string | null | undefined,
+  workerModel?: string | null,
+): string => {
+  const fallbackModel = baseModel?.trim() || DEFAULT_PROVIDER_SETTINGS[provider].model;
+  if (provider === "jules") {
+    return fallbackModel;
+  }
+  const normalizedWorkerModel = typeof workerModel === "string" ? workerModel.trim() : "";
+  if (!normalizedWorkerModel || normalizedWorkerModel === "default") {
+    return fallbackModel;
+  }
+  return (AI_MODEL_CATALOG[provider] || []).includes(normalizedWorkerModel)
+    ? normalizedWorkerModel
+    : fallbackModel;
+};
+
+export const getProviderDisplayMetadata = (
+  systemSettings: SystemSettings | null,
+  providerConfigId: ProviderConfigId,
+  workerModel?: string | null,
+): ProviderDisplayMetadata | null => {
+  const projectProvider = systemSettings?.defaults?.aiProvider?.providers?.[providerConfigId];
+  const systemProvider = systemSettings ? getSystemIntegrationProviders(systemSettings)[providerConfigId] : undefined;
+  const provider = projectProvider?.provider || systemProvider?.provider || inferProviderTypeFromConfigId(providerConfigId);
+  if (!provider) {
+    return null;
+  }
+  const displayLabel = (projectProvider?.name || systemProvider?.name || DEFAULT_PROVIDER_CONFIG_NAMES[provider]).trim()
+    || DEFAULT_PROVIDER_CONFIG_NAMES[provider];
+
+  return {
+    providerConfigId,
+    provider,
+    displayLabel,
+    iconProviderId: provider,
+    effectiveModel: resolveProviderDisplayModel(provider, projectProvider?.model, workerModel),
+  };
+};
+
+export const getVirtualProviderDisplayMetadata = (
+  systemSettings: SystemSettings | null,
+): VirtualProviderDisplayMetadata[] => {
+  if (!systemSettings) {
+    return VIRTUAL_WORKER_PROVIDERS.map((provider) => ({
+      providerConfigId: provider,
+      provider,
+      displayLabel: DEFAULT_PROVIDER_CONFIG_NAMES[provider],
+      iconProviderId: provider,
+      effectiveModel: resolveProviderDisplayModel(provider, DEFAULT_PROVIDER_SETTINGS[provider].model),
+    }));
+  }
+
+  return Object.entries(getSystemIntegrationProviders(systemSettings))
+    .filter(([, provider]) => isVirtualWorkerProvider(provider.provider) && isProviderInstanceAvailableForDisplay(provider))
+    .map(([providerConfigId, provider]) => getProviderDisplayMetadata(systemSettings, providerConfigId))
+    .filter((metadata): metadata is VirtualProviderDisplayMetadata => Boolean(metadata && isVirtualWorkerProvider(metadata.provider)));
+};
+
+export const getDefaultRouteOptionLabel = (
+  defaultProvider: ProviderDisplayMetadata | null,
+): string => defaultProvider ? `Default Route (${defaultProvider.displayLabel})` : "Default Route";
+
+export const getDefaultModelOptionLabel = (
+  defaultProvider: Pick<ProviderDisplayMetadata, "effectiveModel"> | null,
+): string => {
+  const model = defaultProvider?.effectiveModel?.trim();
+  return model ? `Default Model (${model})` : "Default Model";
+};
+
 export const PROVIDER_CARD_TOKENS: Record<ProviderId, {
   watermark: string;
   logoLabel: string;
@@ -984,4 +1082,3 @@ export const getBranchSchemeOptions = (): BranchSchemeOption[] => {
     label: BRANCH_NAME_TOKEN_LABELS[token],
   }));
 };
-
