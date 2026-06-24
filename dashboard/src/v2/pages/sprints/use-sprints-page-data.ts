@@ -16,7 +16,12 @@ import type {
 import type { AddProjectModalSubmission } from "../../components/ui/AddProjectModal.js";
 import type { SystemSettings } from "../../../types.js";
 import { fetchSystemSettings } from "../../lib/settings-api.js";
-import { getSystemIntegrationProviders } from "../../lib/settings-view-models.js";
+import {
+  getDefaultModelOptionLabel,
+  getDefaultRouteOptionLabel,
+  getProviderDisplayMetadata,
+  getVirtualProviderDisplayMetadata,
+} from "../../lib/settings-view-models.js";
 import { useProjectData } from "../../context/project-data.js";
 import { useSprints } from "../../../hooks/useSprints.js";
 import { useExecutions } from "../../../hooks/useExecutions.js";
@@ -50,7 +55,6 @@ import {
   buildPlanningRoute,
   buildShowcaseSprints,
   buildSortedSprints,
-  buildVirtualProviders,
   countInWorkSprints,
   countSprintsByStatus,
 } from "./sprints-page-view-models.js";
@@ -374,8 +378,26 @@ export function useSprintsPageData() {
   });
 
   const virtualProviders = useMemo(
-    () => buildVirtualProviders(systemSettings),
+    () => getVirtualProviderDisplayMetadata(systemSettings),
     [systemSettings],
+  );
+  const defaultVirtualProvider = useMemo(
+    () => workerMode?.virtualWorkerProvider
+      ? getProviderDisplayMetadata(
+        systemSettings,
+        workerMode.virtualWorkerProvider,
+        effectiveSettings?.settings.workers.model,
+      )
+      : null,
+    [effectiveSettings?.settings.workers.model, systemSettings, workerMode?.virtualWorkerProvider],
+  );
+  const defaultRouteOptionLabel = useMemo(
+    () => getDefaultRouteOptionLabel(defaultVirtualProvider),
+    [defaultVirtualProvider],
+  );
+  const defaultModelOptionLabel = useMemo(
+    () => getDefaultModelOptionLabel(defaultVirtualProvider),
+    [defaultVirtualProvider],
   );
 
   return {
@@ -409,6 +431,9 @@ export function useSprintsPageData() {
     setAddTaskForSprint,
     addTaskSprintTasks,
     virtualProviders,
+    defaultRouteOptionLabel,
+    defaultModelOptionLabel,
+    defaultRouteIconProviderId: defaultVirtualProvider?.iconProviderId || null,
     planningEta,
     planningPresets,
     agentPresets,

@@ -13,7 +13,7 @@ import {
 } from "lucide-preact";
 import gsap from "gsap";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
-import type { AgentPreset, ExecutionConnectionSummary, VirtualWorkerProvider } from "../../types.js";
+import type { AgentPreset, ExecutionConnectionSummary, ProviderId } from "../../types.js";
 import type { PlanningRouteOption } from "../../lib/sprint-composer-state.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
@@ -21,6 +21,17 @@ import { getPlanningFeedback } from "../../lib/sprint-planning-feedback.js";
 import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
+import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
+
+interface VirtualProviderOption {
+  id?: string;
+  providerConfigId?: string;
+  provider?: string;
+  label?: string;
+  displayLabel?: string;
+  iconProviderId?: ProviderId;
+  effectiveModel?: string;
+}
 
 /* ─── Icon Map ──────────────────────────────────────────────────────── */
 const IconMap: Record<string, FunctionComponent<LucideProps>> = {
@@ -99,7 +110,10 @@ interface QuicksprintPanelProps {
   templates: QuicksprintTemplateRecord[];
   loading?: boolean;
   agentPresets?: AgentPreset[];
-  virtualProviders?: Array<{ id: VirtualWorkerProvider; label: string }>;
+  virtualProviders?: VirtualProviderOption[];
+  defaultRouteOptionLabel?: string;
+  defaultModelOptionLabel?: string;
+  defaultRouteIconProviderId?: ProviderId | null;
   planningEta?: number;
   onCreateTemplate?: (data: {
     name: string;
@@ -133,6 +147,9 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   loading = false,
   agentPresets = [],
   virtualProviders = [],
+  defaultRouteOptionLabel = "Default Route",
+  defaultModelOptionLabel = "Default Model",
+  defaultRouteIconProviderId = null,
   planningEta = 180_000,
   onCreateTemplate,
   onUpdateTemplate,
@@ -271,16 +288,27 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
       }
     }
     for (const vp of virtualProviders) {
-      opts.push({ type: "virtual", id: vp.id, label: vp.label, provider: vp.id });
+      opts.push({
+        type: "virtual",
+        id: vp.providerConfigId || vp.id || vp.provider || "",
+        label: vp.displayLabel || vp.label || vp.providerConfigId || vp.id || vp.provider || "Provider",
+        provider: vp.providerConfigId || vp.id || vp.provider,
+        iconProviderId: vp.iconProviderId || vp.provider as ProviderId | undefined || vp.id as ProviderId | undefined,
+        effectiveModel: vp.effectiveModel,
+      });
     }
     return opts;
   }, [connections, virtualProviders]);
 
   const showModelOverride = routeOverride?.type === "virtual";
+  const modelProviderId = routeOverride?.iconProviderId;
   const modelOptions = useMemo(
-    () => (showModelOverride && routeOverride?.provider ? getProviderModelOptions(routeOverride.provider) : []),
-    [showModelOverride, routeOverride],
+    () => (showModelOverride && modelProviderId ? getProviderModelOptions(modelProviderId) : []),
+    [showModelOverride, modelProviderId],
   );
+  const defaultModelLabel = routeOverride?.effectiveModel
+    ? `Default Model (${routeOverride.effectiveModel})`
+    : defaultModelOptionLabel;
 
   /* ── Planning feedback / timer ──────────────────────────────────── */
   useEffect(() => {
@@ -589,10 +617,22 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                         if (!opt || opt.type !== "virtual") setModelOverride(null);
                       }}
                       options={[
-                        { value: "", label: "Default Route" },
-                        ...routeOptions.map((opt) => ({ value: opt.id, label: opt.label })),
+                        {
+                          value: "",
+                          label: defaultRouteOptionLabel,
+                          icon: defaultRouteIconProviderId
+                            ? () => <ProviderBrandIcon id={defaultRouteIconProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                            : undefined,
+                        },
+                        ...routeOptions.map((opt) => ({
+                          value: opt.id,
+                          label: opt.label,
+                          icon: opt.iconProviderId
+                            ? () => <ProviderBrandIcon id={opt.iconProviderId!} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                            : undefined,
+                        })),
                       ]}
-                      placeholder="Default Route"
+                      placeholder={defaultRouteOptionLabel}
                     />
                   </div>
                 </div>
@@ -610,10 +650,22 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                       value={modelOverride || ""}
                       onChange={(val) => setModelOverride(val || null)}
                       options={[
-                        { value: "", label: "Default Model" },
-                        ...modelOptions.map((opt) => ({ value: opt.value, label: opt.label })),
+                        {
+                          value: "",
+                          label: defaultModelLabel,
+                          icon: modelProviderId
+                            ? () => <ProviderBrandIcon id={modelProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                            : undefined,
+                        },
+                        ...modelOptions.map((opt) => ({
+                          value: opt.value,
+                          label: opt.label,
+                          icon: modelProviderId
+                            ? () => <ProviderBrandIcon id={modelProviderId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+                            : undefined,
+                        })),
                       ]}
-                      placeholder="Default Model"
+                      placeholder={defaultModelLabel}
                     />
                   </div>
                 </div>
