@@ -120,6 +120,12 @@ That means:
 - dashboard chat replies, clarification auto-answer, and QA review runs follow the preferred worker CLI provider/model by default instead of inheriting the global primary provider
 - dashboard chat replies resolve from Route Mapping on every turn; stale thread runtime state is used only to decide whether a chat session can continue or must replay after the provider changes
 
+## Provider Capacity Deferrals
+
+Provider `maxConcurrentTasks` is enforced before a task is counted as started. When the selected provider is already at its global cap, sprint task dispatch creates or refreshes a queued dispatch/task-run record, records a `provider_concurrency_wait` event, and returns the task to a retryable `PENDING` state for the next orchestration cycle.
+
+Provider-cap queueing is not a task creation failure. It must not increment the consecutive task creation failure counter, trigger the emergency stop, or record `task_coding` guardrail usage. Real startup failures still use the normal failure path and continue to count toward `maxFailures`.
+
 ## Services Using Invocation Routing
 
 - `src/services/task-service.ts`
