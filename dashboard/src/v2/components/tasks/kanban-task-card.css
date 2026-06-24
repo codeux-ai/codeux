@@ -1,7 +1,6 @@
 .kanban-card {
   transition: box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1), scale 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  transform-style: preserve-3d;
-  will-change: transform;
+  cursor: grab;
 }
 .kanban-card:hover {
   scale: 1.02;
@@ -20,6 +19,7 @@
   scale: 1.02;
   box-shadow: 0 20px 40px rgba(0,0,0,0.2);
   outline: 2px solid rgba(0, 224, 160, 1);
+  cursor: grabbing;
 }
 .kanban-card-reduced-motion {
   transition: none !important;
