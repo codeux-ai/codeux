@@ -162,9 +162,9 @@ const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = m
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-2.5">
         <Icon className={`w-5 h-5 ${cfg.color}`} strokeWidth={2} />
-        <span className={`text-sm font-bold tracking-tight ${cfg.color}`}>{cfg.label}</span>
+        <span className={`font-display text-lg font-bold tracking-tight ${cfg.color}`}>{cfg.label}</span>
       </div>
-      <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] ${cfg.color}`}>
+      <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] ${cfg.color}`}>
         {count}
       </span>
     </div>
@@ -906,7 +906,7 @@ export const TasksPage: FunctionComponent = () => {
                   )}
                 >
                 {!loading && columnTasks.length === 0 ? (
-                  <div className={`col-start-1 row-start-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-[1rem] transition-colors ${dropTargetContext?.status === status ? "border-signal-500/30" : "border-black/[0.04] dark:border-white/[0.04]"}`}>
+                  <div className={`col-start-1 row-start-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-[1.5rem] bg-black/[0.015] dark:bg-white/[0.015] transition-colors ${dropTargetContext?.status === status ? "border-signal-500/30" : "border-black/[0.05] dark:border-white/[0.05]"}`}>
                     No {status.replace("_", " ")} tasks
                     <br />
                     {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.

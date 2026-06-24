@@ -16,6 +16,8 @@ export const DependencyStatusIndicators: FunctionComponent<{
           className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[9px] font-bold uppercase tracking-[0.14em] ${
             dep.status === "completed"
               ? "bg-status-green/[0.08] border-status-green/20 text-status-green"
+              : dep.status === "QA_REVIEW_FAILED"
+              ? "bg-red-500/[0.08] border-red-500/20 text-red-500"
               : dep.status === "coding_completed" || dep.status === "in_progress"
               ? "bg-signal-500/[0.08] border-signal-500/20 text-signal-500"
               : "bg-slate-400/[0.08] border-slate-400/20 text-slate-500"
