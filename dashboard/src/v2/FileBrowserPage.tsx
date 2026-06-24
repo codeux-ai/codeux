@@ -309,9 +309,14 @@ export const FileBrowserPage: FunctionComponent = () => {
             <FolderTree class="h-3.5 w-3.5" strokeWidth={2} />
             Sprint File Browser
           </div>
-          <h1 class="mt-3 font-display text-4xl font-black leading-[0.94] tracking-tight text-slate-900 dark:text-white md:text-5xl">
-            Browse and Diff the Sprint Branch.
-          </h1>
+          <div class="relative overflow-hidden mt-3">
+            <h2 aria-hidden class="absolute -top-10 -left-3 text-[7rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.03] pointer-events-none select-none font-display leading-none">
+              FILES
+            </h2>
+            <h1 class="font-display text-5xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] relative z-10 md:text-7xl">
+              Browse and Diff the Sprint Branch.
+            </h1>
+          </div>
           <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300 md:text-[15px]">
             A single containerized snapshot of the active sprint rebuilds automatically as tasks merge. Inspect every file
             and review what changed versus the default branch — all without leaving the dashboard.
