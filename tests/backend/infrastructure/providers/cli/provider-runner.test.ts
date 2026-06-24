@@ -462,6 +462,37 @@ describe("ProviderRunner", () => {
     expect(args).not.toContain(`model_provider="custom_gateway"`);
   });
 
+  it("does not pass custom model provider overrides or API key for Codex when mount auth is selected", async () => {
+    const runArgs = {
+      provider: "codex" as const,
+      prompt: "ship it",
+      cwd: "/repo",
+      model: "gpt-5-codex",
+      apiKey: "sk-openai",
+      customBaseUrl: "https://openrouter.ai/api/v1",
+      customModel: "openai/gpt-5-codex",
+      providerMountAuth: true,
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    };
+    const model = resolveEffectiveModel(runArgs);
+    await runner.runProvider({ ...runArgs, model });
+
+    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
+      command: "codex",
+      providerEnv: expect.not.objectContaining({
+        OPENAI_API_KEY: expect.anything(),
+        OPENAI_BASE_URL: expect.anything(),
+      }),
+    }));
+
+    const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    expect(args).not.toContain("-c");
+    expect(args).not.toContain(`model_provider="custom_gateway"`);
+  });
+
   it("builds OpenCode run commands with generated config content", async () => {
     await runner.runProvider({
       provider: "opencode",
