@@ -131,7 +131,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     type: 'new_project',
                     path: newInitMode === 'new-local' ? localPath.trim() : '',
                     initMode: newInitMode,
-                    repoSlug: gitUrlSlug.trim(),
+                    ...(newInitMode === 'new-remote' && gitUrlSlug.trim()
+                        ? { repoSlug: gitUrlSlug.trim() }
+                        : {}),
                     ...(newInitMode === 'new-remote'
                         ? {
                             remoteProvider: newProvider,
@@ -696,25 +698,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         </div>
                                     </fieldset>
 
-                                    <div className="group/field">
-                                        <label htmlFor="add-project-git-slug" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                            <GitBranch className="w-3.5 h-3.5" /> Git URL Slug
-                                        </label>
-                                        <input
-                                            id="add-project-git-slug"
-                                            type="text"
-                                            value={gitUrlSlug}
-                                            onInput={(e) => {
-                                                setGitUrlSlug((e.target as HTMLInputElement).value);
-                                                setIsSlugEdited(true);
-                                                if (submitError) setSubmitError(null);
-                                            }}
-                                            placeholder="my-awesome-project"
-                                            className={detailInputClass}
-                                            required
-                                        />
-                                    </div>
-
                                     {newInitMode === 'new-local' ? (
                                         <div className="group/field">
                                             <label htmlFor="add-project-new-path" className={`${fieldLabelClass} flex items-center gap-1.5`}>
@@ -753,6 +736,24 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         </div>
                                     ) : (
                                         <>
+                                            <div className="group/field">
+                                                <label htmlFor="add-project-git-slug" className={`${fieldLabelClass} flex items-center gap-1.5`}>
+                                                    <GitBranch className="w-3.5 h-3.5" /> Git URL Slug
+                                                </label>
+                                                <input
+                                                    id="add-project-git-slug"
+                                                    type="text"
+                                                    value={gitUrlSlug}
+                                                    onInput={(e) => {
+                                                        setGitUrlSlug((e.target as HTMLInputElement).value);
+                                                        setIsSlugEdited(true);
+                                                        if (submitError) setSubmitError(null);
+                                                    }}
+                                                    placeholder="my-awesome-project"
+                                                    className={detailInputClass}
+                                                    required
+                                                />
+                                            </div>
                                             <div className="group/field">
                                                 <div className="flex items-center justify-between gap-3">
                                                     <label className={fieldLabelClass}>
