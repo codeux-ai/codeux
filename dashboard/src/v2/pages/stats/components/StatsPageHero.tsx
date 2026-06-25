@@ -224,7 +224,6 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   </span>
                 )}
               </div>
-            </div>
             {customRangeError ? (
               <div aria-live="polite" className="text-xs text-red-500 dark:text-red-400">
                 {customRangeError}

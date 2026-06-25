@@ -17,6 +17,7 @@ export const StatsPage: FunctionComponent = () => {
   const rootRef = useRef<HTMLElement>(null);
   const hasAnimated = useRef(false);
   const { selectedProject } = useProjectData();
+  console.log("DEBUG: selectedProject is:", selectedProject);
   const reducedMotion = useReducedMotion();
   const {
     stats,

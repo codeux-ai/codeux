@@ -33,7 +33,7 @@ describe("ActionFeedbackRegion", () => {
     const { getByRole } = render(
       <ActionFeedbackRegion status="error" message="Error" retryAction={retryAction} />
     );
-    const retryButton = getByRole("button", { name: "Retry: Error" });
+    const retryButton = getByRole("button", { name: "Retry" });
     expect(retryButton).toBeInTheDocument();
   });
 });

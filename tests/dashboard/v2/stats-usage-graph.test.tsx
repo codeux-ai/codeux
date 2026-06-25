@@ -296,7 +296,7 @@ describe("InteractiveUsageChart", () => {
     expect(screen.getByText("Network failed")).toBeInTheDocument();
 
     // Test the retry button
-    const retryButton = screen.getByRole("button", { name: "Retry: Network failed" });
+    const retryButton = screen.getByRole("button", { name: "Retry" });
     retryButton.click();
     expect(mockRefresh).toHaveBeenCalled();
   });
