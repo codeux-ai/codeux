@@ -150,7 +150,7 @@ describe("live task card actions", () => {
     expect(screen.getAllByRole("button", { name: /Edit task/ }).length).toBeGreaterThan(0);
     const forceButtons = screen.getAllByRole("button", { name: /Force complete task/ });
     expect(forceButtons.length).toBeGreaterThan(0);
-    const disabledCompleted = forceButtons.find((button) => button.hasAttribute("disabled"));
+    const disabledCompleted = forceButtons.find((button) => button.getAttribute("aria-disabled") === "true");
     expect(disabledCompleted).toBeTruthy();
   });
 

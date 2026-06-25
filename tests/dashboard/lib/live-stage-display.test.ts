@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getLiveActionDisplayProps } from "../../../dashboard/src/v2/lib/live-session-runtime.js";
 import {
   STAGE_LABELS,
   STAGE_SHORT_LABELS,
@@ -52,5 +53,15 @@ describe("live stage display", () => {
       expect(STAGE_SHORT_LABELS[stage]).toBeDefined();
       expect(STAGE_SHORT_LABELS[stage].length).toBeGreaterThan(0);
     }
+  });
+
+  it("handles getLiveActionDisplayProps for disabled and pending states correctly", () => {
+    const disabledProps = getLiveActionDisplayProps(false, true);
+    expect(disabledProps["aria-disabled"]).toBe(true);
+    expect(disabledProps["aria-busy"]).toBe(false);
+
+    const pendingProps = getLiveActionDisplayProps(true, false);
+    expect(pendingProps["aria-disabled"]).toBe(true);
+    expect(pendingProps["aria-busy"]).toBe(true);
   });
 });

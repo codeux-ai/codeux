@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LiveTaskTimingSummary } from "../../../dashboard/src/v2/lib/live-stats.js";
 import { deriveLiveDurationDisplay } from "../../../dashboard/src/v2/lib/live-duration-display.js";
+import { getLiveActionDisplayProps } from "../../../dashboard/src/v2/lib/live-session-runtime.js";
 
 function makeTaskTiming(overrides: Partial<LiveTaskTimingSummary> = {}): LiveTaskTimingSummary {
   return {
@@ -114,5 +115,11 @@ describe("live duration display", () => {
       mode: "hidden",
       elapsedSeconds: 0,
     });
+  });
+
+  it("handles getLiveActionDisplayProps when action is idle (neither pending nor disabled)", () => {
+    const idleProps = getLiveActionDisplayProps(false, false);
+    expect(idleProps["aria-disabled"]).toBe(false);
+    expect(idleProps["aria-busy"]).toBe(false);
   });
 });

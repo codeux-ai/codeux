@@ -495,23 +495,27 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             onClick={handleForceCompleteClick}
                             aria-label={`Force complete task ${task.id}`}
                             isLoading={isForceCompleting}
-                            disabled={taskPhase === "COMPLETED"}
+                            aria-disabled={taskPhase === "COMPLETED"}
+                            aria-busy={isForceCompleting}
                             variant="ghost"
                             icon={CheckCheck}
-                            className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-green hover:border-status-green/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
+                            className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-green hover:border-status-green/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 aria-disabled:opacity-40 aria-disabled:pointer-events-none"
                         >
                             {isForceCompleting ? "Force completing" : "Force complete"}
+                            {isForceCompleting && <span className="sr-only">Force completing...</span>}
                         </Button>
                         <Button
                             type="button"
                             onClick={handleRerunClick}
                             aria-label={`Rerun task ${task.id}`}
                             isLoading={isRerunning}
+                            aria-busy={isRerunning}
                             variant="ghost"
                             icon={RotateCcw}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
                             {isRerunning ? "Rerunning" : "Rerun"}
+                            {isRerunning && <span className="sr-only">Rerunning task...</span>}
                         </Button>
                     </div>
                     {task.pr_url && (

@@ -20,12 +20,14 @@ describe("MemorySearch Accessibility", () => {
         expect(input).toBeInTheDocument();
     });
 
-    test("clear button has accessible label", () => {
+    test("clear button has accessible label and displays Esc shortcut text", () => {
         searchQuerySignal.value = "test search";
-        const { getByRole } = render(<MemorySearch />);
+        const { getByRole, getByText } = render(<MemorySearch />);
         const clearButton = getByRole("button", { name: "Clear search" });
         expect(clearButton).toBeInTheDocument();
+        expect(getByText("Esc")).toBeInTheDocument();
     });
+
     test("ESC key clears search and blurs input", async () => {
         searchQuerySignal.value = "test search";
         const { getByRole } = render(<MemorySearch />);

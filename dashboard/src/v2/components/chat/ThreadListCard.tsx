@@ -4,6 +4,7 @@ import type { ChatThread } from "../../types.js";
 import { formatRelativeChatTime } from "../../lib/chat-time.js";
 import { ChatAvatar } from "./ChatAvatar.js";
 import { ChatRuntimeBadge } from "./ChatRuntimeBadge.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 const statusTone = (pendingCount: number): string => (
   pendingCount > 0 ? "text-status-amber animate-pulse" : "text-slate-400 dark:text-slate-500"
@@ -30,27 +31,36 @@ export const ThreadListCard: FunctionComponent<{
   onSelect: (threadId: string) => void;
   onDelete: (threadId: string) => void;
   deletingThreadId: string | null;
-}> = ({ threads, selectedThreadId, onSelect, onDelete, deletingThreadId }) => (
-  <div className="space-y-3">
-    {threads.map((thread) => {
-      const isSelected = selectedThreadId === thread.id;
-      const isActive = !!(thread.runtimeState?.sessionIds && thread.runtimeState.sessionIds.length > 0 && !thread.runtimeState?.replayRequired);
-      const isReplay = !!thread.runtimeState?.replayRequired;
+}> = ({ threads, selectedThreadId, onSelect, onDelete, deletingThreadId }) => {
+  const interactionTokens = useInteractionTokens();
 
-      return (
-        <div key={thread.id} className="group relative overflow-hidden rounded-[1.75rem]">
-          <button
-            type="button"
-            onClick={() => onSelect(thread.id)}
-            className={`w-full rounded-[1.75rem] p-5 pr-16 text-left transition-all duration-200
-              bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl
-              shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500
-              ${isSelected
-                ? "border-2 border-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.12)] transition-all duration-300"
-                : "border-2 border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
-              }`}
-          >
+  return (
+    <div className="space-y-3">
+      {threads.map((thread) => {
+        const isSelected = selectedThreadId === thread.id;
+        const isActive = !!(thread.runtimeState?.sessionIds && thread.runtimeState.sessionIds.length > 0 && !thread.runtimeState?.replayRequired);
+        const isReplay = !!thread.runtimeState?.replayRequired;
+
+        return (
+          <div key={thread.id} className="group relative overflow-hidden rounded-[1.75rem]">
+            <button
+              type="button"
+              aria-selected={isSelected ? "true" : "false"}
+              onClick={() => onSelect(thread.id)}
+              style={{
+                transitionProperty: "all",
+                transitionDuration: interactionTokens.controlFeedback.duration,
+                transitionTimingFunction: interactionTokens.controlFeedback.ease,
+              }}
+              className={`w-full rounded-[1.75rem] p-5 pr-16 text-left
+                bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl
+                shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
+                ${isSelected
+                  ? "border-2 border-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.12)]"
+                  : "border-2 border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
+                }`}
+            >
             {/* Ghost ID watermark */}
             <div
               aria-hidden
@@ -123,23 +133,29 @@ export const ThreadListCard: FunctionComponent<{
             </div>
           </button>
 
-          {/* Delete slide-out */}
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete(thread.id);
-            }}
-            disabled={deletingThreadId === thread.id}
-            aria-label={`Delete ${thread.title}`}
-            className={`absolute inset-y-0 right-0 flex w-14 translate-x-full items-center justify-center rounded-r-[1.75rem] border-l border-status-red/15 bg-status-red/10 text-status-red opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 ${deletingThreadId === thread.id ? "translate-x-0 opacity-100 cursor-wait" : ""}`}
-          >
-            {deletingThreadId === thread.id
-              ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.1} />
-              : <Trash2 className="h-4 w-4" strokeWidth={2.1} />}
-          </button>
-        </div>
-      );
-    })}
-  </div>
-);
+            {/* Delete slide-out */}
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(thread.id);
+              }}
+              disabled={deletingThreadId === thread.id}
+              aria-label={`Delete ${thread.title}`}
+              style={{
+                transitionProperty: "all",
+                transitionDuration: interactionTokens.controlFeedback.duration,
+                transitionTimingFunction: interactionTokens.controlFeedback.ease,
+              }}
+              className={`absolute inset-y-0 right-0 flex w-14 translate-x-full items-center justify-center rounded-r-[1.75rem] border-l border-status-red/15 bg-status-red/10 text-status-red opacity-0 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 ${deletingThreadId === thread.id ? "translate-x-0 opacity-100 cursor-wait" : ""}`}
+            >
+              {deletingThreadId === thread.id
+                ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.1} />
+                : <Trash2 className="h-4 w-4" strokeWidth={2.1} />}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+};

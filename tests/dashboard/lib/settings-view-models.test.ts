@@ -17,6 +17,10 @@ import {
   createSystemProviderDraft,
   sortProviderConfigEntries,
   getSystemIntegrationProviders,
+  getDefaultModelOptionLabel,
+  getDefaultRouteOptionLabel,
+  getProviderDisplayMetadata,
+  getVirtualProviderDisplayMetadata,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints } from "../../../dashboard/src/types.js";
 
@@ -308,5 +312,78 @@ describe("provider settings sanitization", () => {
     expect(codex.customBaseUrl).toBe("");
     expect(codex.customModel).toBe("");
     expect(codex.mountAuth).toBe(true);
+  });
+});
+
+describe("provider display metadata helpers", () => {
+  it("uses configured provider instance names, icon provider ids, and effective models", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "codex-staging": {
+            provider: "codex",
+            name: "Codex Credentials",
+            apiKey: "key",
+            mountAuth: false,
+            authPath: "~/.codex",
+          },
+        },
+      },
+      defaults: {
+        aiProvider: {
+          providers: {
+            "codex-staging": {
+              provider: "codex",
+              name: "Codex Staging",
+              enabled: true,
+              model: "gpt-5.4",
+              weight: 50,
+              thinkingMode: "HIGH",
+            },
+          },
+        },
+      },
+    } as SystemSettings;
+
+    expect(getVirtualProviderDisplayMetadata(systemSettings)).toEqual([
+      {
+        providerConfigId: "codex-staging",
+        provider: "codex",
+        displayLabel: "Codex Staging",
+        iconProviderId: "codex",
+        effectiveModel: "gpt-5.4",
+      },
+    ]);
+  });
+
+  it("falls back to default provider config names when settings are unavailable", () => {
+    const providers = getVirtualProviderDisplayMetadata(null);
+
+    expect(providers.map((provider) => provider.provider)).toEqual([
+      "gemini",
+      "codex",
+      "claude-code",
+      "qwen-code",
+      "opencode",
+      "antigravity",
+    ]);
+    expect(providers.find((provider) => provider.provider === "codex")?.displayLabel).toBe("Codex Primary");
+    expect(providers.find((provider) => provider.provider === "antigravity")?.displayLabel).toBe("Antigravity Primary");
+  });
+
+  it("formats default route and model labels when defaults resolve", () => {
+    const metadata = getProviderDisplayMetadata(null, "codex", "gpt-5.5");
+
+    expect(getDefaultRouteOptionLabel(metadata)).toBe("Default Route (Codex Primary)");
+    expect(getDefaultModelOptionLabel(metadata)).toBe("Default Model (gpt-5.5)");
+    expect(getDefaultRouteOptionLabel(null)).toBe("Default Route");
+    expect(getDefaultModelOptionLabel(null)).toBe("Default Model");
+  });
+
+  it("falls back to the provider base model for invalid worker model defaults", () => {
+    const metadata = getProviderDisplayMetadata(null, "codex", "gemini-3-pro-preview");
+
+    expect(metadata?.effectiveModel).toBe("gpt-5.5");
+    expect(getDefaultModelOptionLabel(metadata)).toBe("Default Model (gpt-5.5)");
   });
 });

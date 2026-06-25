@@ -104,7 +104,8 @@ describe("Global Search", () => {
 
         it("shows loading state when isLoading is true", () => {
             render(<SearchOverlay isOpen={true} onClose={vi.fn()} searchQuery="test" onSearchChange={vi.fn()} results={{sprints:[], tasks:[], agents:[], containers:[]}} isLoading={true} />);
-            expect(visibleText("Searching...")).toBeInTheDocument();
+            const spinner = document.querySelector(".animate-spin");
+            expect(spinner).toBeInTheDocument();
         });
 
         it("shows empty state when no results are found", () => {

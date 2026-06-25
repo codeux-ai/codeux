@@ -18,7 +18,6 @@ import {
 import { toNumber } from "./repository-utils.js";
 
 const TERMINAL_TASK_STATES = new Set<TaskRunState>(["CODING_COMPLETED", "COMPLETED", "FAILED", "BLOCKED", "QA_REVIEW_FAILED"]);
-
 function normalizePath(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
     return null;
@@ -41,6 +40,27 @@ function subtaskSignature(subtask: Subtask): string {
     isMerged: Boolean(subtask.is_merged),
     mergeIndicator: subtask.merge_indicator || null,
   });
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function buildSessionIdentityCandidates(sessionId?: string | null, sessionName?: string | null): string[] {
+  const candidates = new Set<string>();
+  for (const value of [sessionId, sessionName]) {
+    const normalized = nonEmptyString(value);
+    if (!normalized) {
+      continue;
+    }
+    candidates.add(normalized);
+    const raw = normalized.replace(/^sessions\//, "");
+    if (raw) {
+      candidates.add(raw);
+      candidates.add(`sessions/${raw}`);
+    }
+  }
+  return [...candidates];
 }
 
 function toPersistedTaskRunState(status: TaskRunState): Exclude<TaskRunState, "CODING_COMPLETED" | "QA_REVIEW_FAILED"> {
@@ -114,16 +134,24 @@ export class ProjectRuntimeRepository {
           continue;
         }
 
-        const runtimeState = subtask.status || "PENDING";
-        if (runtimeState === "RUNNING") {
-          hasRunning = true;
-        } else if (runtimeState === "FAILED") {
-          hasFailure = true;
-        } else if (runtimeState === "BLOCKED") {
-          hasIntervention = true;
+        const artifactScope = this.resolveRuntimeArtifactScope(mappedTask.row, subtask);
+        const scopedSubtask = artifactScope === "foreign"
+          ? this.stripRuntimeArtifacts(subtask)
+          : subtask;
+        const runtimeState = scopedSubtask.status || "PENDING";
+        if (artifactScope !== "foreign") {
+          if (runtimeState === "RUNNING") {
+            hasRunning = true;
+          } else if (runtimeState === "FAILED") {
+            hasFailure = true;
+          } else if (runtimeState === "BLOCKED") {
+            hasIntervention = true;
+          }
         }
 
-        const planningStatus = mapRuntimeStatusToPlanningStatus(runtimeState);
+        const planningStatus = artifactScope === "foreign"
+          ? mappedTask.row.status
+          : mapRuntimeStatusToPlanningStatus(runtimeState);
         // Protect merge_indicator from stale sprint-cycle writes during a task rerun:
         // After a rerun, the management API sets the DB task to status='pending' and
         // merge_indicator=null. A concurrent sprint cycle that loaded the task before
@@ -145,13 +173,15 @@ export class ProjectRuntimeRepository {
         `).run(
           planningStatus,
           Number(Boolean(subtask.is_merged)),
-          subtask.merge_indicator || null,
-          subtask.merge_indicator || null,
+          scopedSubtask.merge_indicator || null,
+          scopedSubtask.merge_indicator || null,
           now,
           mappedTask.row.id
         );
 
-        this.syncTaskRun(mappedTask.row, subtask, now);
+        if (artifactScope !== "foreign") {
+          this.syncTaskRun(mappedTask.row, scopedSubtask, now);
+        }
       }
 
       const projectStatus: ProjectStatus = hasRunning
@@ -521,6 +551,80 @@ export class ProjectRuntimeRepository {
     }
 
     return null;
+  }
+
+  private resolveRuntimeArtifactScope(task: TaskRow, subtask: Subtask): "local" | "foreign" {
+    const sessionCandidates = buildSessionIdentityCandidates(subtask.session_id, subtask.session_name);
+    if (sessionCandidates.length > 0) {
+      const sessionPlaceholders = sessionCandidates.map(() => "?").join(", ");
+      const row = this.db.prepare(`
+        SELECT project_id, sprint_id, task_id
+        FROM task_runs
+        WHERE (session_id IN (${sessionPlaceholders}) OR session_name IN (${sessionPlaceholders}))
+          AND NOT (project_id = ? AND sprint_id = ? AND task_id = ?)
+        ORDER BY rowid DESC
+        LIMIT 1
+      `).get(
+        ...sessionCandidates,
+        ...sessionCandidates,
+        task.project_id,
+        task.sprint_id,
+        task.id,
+      ) as TaskRunRow | undefined;
+      if (row) {
+        return "foreign";
+      }
+
+      const providerInvocation = this.db.prepare(`
+        SELECT project_id, sprint_id, task_id
+        FROM provider_invocations
+        WHERE session_id IN (${sessionPlaceholders})
+          AND NOT (
+            project_id = ?
+            AND (sprint_id = ? OR sprint_id IS NULL)
+            AND (task_id = ? OR task_id IS NULL)
+          )
+        ORDER BY rowid DESC
+        LIMIT 1
+      `).get(
+        ...sessionCandidates,
+        task.project_id,
+        task.sprint_id,
+        task.id,
+      ) as { project_id: string; sprint_id: string | null; task_id: string | null } | undefined;
+      if (providerInvocation) {
+        return "foreign";
+      }
+    }
+
+    const prUrl = nonEmptyString(subtask.pr_url);
+    if (prUrl) {
+      const row = this.db.prepare(`
+        SELECT project_id, sprint_id, task_id
+        FROM task_runs
+        WHERE pr_url = ?
+          AND NOT (project_id = ? AND sprint_id = ? AND task_id = ?)
+        ORDER BY rowid DESC
+        LIMIT 1
+      `).get(prUrl, task.project_id, task.sprint_id, task.id) as TaskRunRow | undefined;
+      if (row) {
+        return "foreign";
+      }
+    }
+
+    return "local";
+  }
+
+  private stripRuntimeArtifacts(subtask: Subtask): Subtask {
+    return {
+      ...subtask,
+      session_id: undefined,
+      session_name: undefined,
+      provider: undefined,
+      worker_branch: undefined,
+      pr_url: undefined,
+      activities: undefined,
+    };
   }
 
   private shouldCreateTaskRun(subtask: Subtask): boolean {

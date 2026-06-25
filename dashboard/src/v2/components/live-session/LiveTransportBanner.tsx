@@ -16,6 +16,7 @@ export interface LiveTransportBannerProps {
 
 export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = ({
   transportState,
+  isRecovering,
   error,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -92,6 +93,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
       role={isUrgent ? "alert" : "status"}
       aria-live={isUrgent ? "assertive" : "polite"}
       aria-atomic="true"
+      aria-busy={isRecovering}
       style={{ padding: isReducedMotion && isVisible ? "16px 20px" : 0, marginBottom: isReducedMotion && isVisible ? 24 : 0 }}
     >
       {shouldRender && (

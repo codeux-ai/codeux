@@ -185,9 +185,17 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     badgeTone = attentionOverride.tone;
   }
 
+  const pendingRowClass = isDeletePending
+    ? "bg-status-red/5 grayscale opacity-50"
+    : isPinPending || isTogglePending || isPauseResumePending
+      ? "bg-signal-500/5 opacity-80"
+      : isAnyBulkPending
+        ? "opacity-60 grayscale-[0.2]"
+        : "";
+
   return (
     <TableRow
-      className={`group transition-all hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${isDeletePending ? "grayscale opacity-50" : ""} hover:bg-[var(--bg-hover-subtle)]`}
+      className={`group transition-all hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)]`}
       style={{ transitionDuration: duration, transitionTimingFunction: ease }}
     >
       <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
@@ -266,9 +274,27 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       </TableCell>
       <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`} mobileLabel="Status">
         <div className="flex flex-wrap items-center gap-2 lg:flex-col lg:items-start">
-          <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
-            {badgeLabel}
-          </span>
+          {isDeletePending ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-status-red/25 bg-status-red/10 px-3 py-1.5 text-[11px] font-bold text-status-red">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> Deleting
+            </span>
+          ) : isPinPending ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[11px] font-bold text-signal-700 dark:text-signal-300">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> Pinning
+            </span>
+          ) : isTogglePending ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[11px] font-bold text-signal-700 dark:text-signal-300">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> {activeRun ? "Stopping" : "Starting"}
+            </span>
+          ) : isPauseResumePending ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[11px] font-bold text-signal-700 dark:text-signal-300">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> {sprint.status === "paused" ? "Resuming" : "Pausing"}
+            </span>
+          ) : (
+            <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
+              {badgeLabel}
+            </span>
+          )}
         </div>
       </TableCell>
       <TableCell align="right" className={`lg:w-[100px] lg:min-w-[100px] ${desktopCellTone}`} mobileLabel="Tasks">

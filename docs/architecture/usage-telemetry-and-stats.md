@@ -199,6 +199,9 @@ The dashboard now has a dedicated `/stats` page.
 
 It focuses on:
 
+- uses standard T01 Interaction Motion Tokens (like `MODAL_MOTION.dropdown` and `MODAL_MOTION.fieldStagger`) to preserve layout and respect `prefers-reduced-motion` constraints during graph filter or stat card mode transitions.
+- uses standard T04 Feedback Surfaces (`ActionFeedbackRegion`) to provide accessible loading, error, and empty-state recovery paths directly within the page, stats graph, and mode containers.
+- explicitly validates custom date ranges in the Hero header and exposes clear accessible error messages immediately when ranges are inverted or incomplete.
 - total cost
 - total tokens
 - The Overview page now reuses project stats telemetry to display a 7-day Total Tokens card for the selected project, maintaining consistency with the Stats page without introducing a separate query path.

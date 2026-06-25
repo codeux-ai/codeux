@@ -99,7 +99,7 @@ describe('StatsPage visual tests', () => {
   });
 
   it('renders empty states with new amber visual language', () => {
-    vi.spyOn(useProjectDataModule, 'useProjectData').mockReturnValue({
+    vi.spyOn(useProjectDataModule, 'useProjectData').mockReturnValueOnce({
       selectedProjectId: null,
       createProject: vi.fn(),
       updateProject: vi.fn(),
@@ -110,8 +110,7 @@ describe('StatsPage visual tests', () => {
       error: null,
       refreshProjects: vi.fn(),
       selectProject: vi.fn(),
-    });
-
+    } as any);
     vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValueOnce({
       stats: null,
       loading: false,

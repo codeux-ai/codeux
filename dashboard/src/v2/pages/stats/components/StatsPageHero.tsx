@@ -7,7 +7,7 @@ import type {
   ProjectStatsQuery,
   ProjectStatsWindow,
 } from "../../../types.js";
-import { formatDateTime, formatDuration, formatTokens } from "../stats-utils.js";
+import { formatDateTime, formatDuration, formatTokens, isValidCustomRange } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   CHIP_CLASS,
@@ -187,31 +187,43 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             })}
           </div>
           {activeQuery.window === "custom" ? (
-            <div className="flex flex-col gap-2 w-full">
+            <div className="w-full flex flex-col gap-2">
               <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-              <input
-                type="date"
-                aria-label="Custom start date"
-                value={customFrom}
-                onInput={(event) => { setCustomFrom((event.currentTarget as HTMLInputElement).value); setCustomRangeError(""); }}
-                className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
-              />
-              <input
-                type="date"
-                aria-label="Custom end date"
-                value={customTo}
-                onInput={(event) => { setCustomTo((event.currentTarget as HTMLInputElement).value); setCustomRangeError(""); }}
-                className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
-              />
-              <button
-                type="button"
-                onClick={handleApplyCustom}
-                disabled={!customFrom || !customTo}
-                aria-disabled={!customFrom || !customTo ? "true" : undefined}
-                className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Apply
-              </button>
+                <input
+                  type="date"
+                  aria-label="Custom start date"
+                  value={customFrom}
+                  onInput={(event) => setCustomFrom((event.currentTarget as HTMLInputElement).value)}
+                  className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
+                  aria-invalid={!isValidCustomRange(customFrom, customTo) ? "true" : undefined}
+                  aria-errormessage={!isValidCustomRange(customFrom, customTo) ? "custom-range-error" : undefined}
+                />
+                <input
+                  type="date"
+                  aria-label="Custom end date"
+                  value={customTo}
+                  onInput={(event) => setCustomTo((event.currentTarget as HTMLInputElement).value)}
+                  className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
+                  aria-invalid={!isValidCustomRange(customFrom, customTo) ? "true" : undefined}
+                  aria-errormessage={!isValidCustomRange(customFrom, customTo) ? "custom-range-error" : undefined}
+                />
+                <button
+                  type="button"
+                  onClick={applyCustomRange}
+                  disabled={!isValidCustomRange(customFrom, customTo)}
+                  aria-disabled={!isValidCustomRange(customFrom, customTo) ? "true" : undefined}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Apply
+                </button>
+              </div>
+              <div className="min-h-[1.25rem]">
+                {!isValidCustomRange(customFrom, customTo) && customFrom && customTo && (
+                  <span id="custom-range-error" className="text-xs text-red-500 dark:text-red-400 font-medium" role="alert">
+                    End date cannot be before start date
+                  </span>
+                )}
+              </div>
             </div>
             {customRangeError ? (
               <div aria-live="polite" className="text-xs text-red-500 dark:text-red-400">

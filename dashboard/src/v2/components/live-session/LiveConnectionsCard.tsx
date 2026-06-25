@@ -206,7 +206,7 @@ export const LiveConnectionsCard: FunctionComponent<{
             No listeners or workers are connected to the selected project yet.
           </p>
         ) : (
-          <div className="dashboard-scrollbar max-h-[30rem] space-y-2 overflow-y-auto pr-1">
+          <div className="dashboard-scrollbar max-h-[30rem] space-y-2 overflow-y-auto pr-1" aria-live="polite">
             {snapshot.connections.map((connection) => (
               <ConnectionRow key={connection.id} connection={connection} />
             ))}

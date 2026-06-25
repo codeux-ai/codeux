@@ -2,6 +2,7 @@ import type { FunctionComponent } from 'preact';
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import gsap from 'gsap';
 import { X } from 'lucide-preact';
+import { MODAL_MOTION } from '../../../lib/motion/modal-motion.js';
 import type {
   ProjectExecutionStatsSnapshot,
 } from '../../../types.js';
@@ -33,15 +34,15 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
       if (isOpen) {
         gsap.fromTo(
           menuRef.current,
-          { opacity: 0, scale: 0.95, y: -10 },
-          { opacity: 1, scale: 1, y: 0, duration: 0.25, ease: 'power2.out' }
+          { opacity: MODAL_MOTION.dropdown.opacityStart, scale: MODAL_MOTION.dropdown.scaleStart, y: MODAL_MOTION.dropdown.yStart },
+          { opacity: MODAL_MOTION.dropdown.opacityEnd, scale: MODAL_MOTION.dropdown.scaleEnd, y: MODAL_MOTION.dropdown.yEnd, duration: MODAL_MOTION.dropdown.duration, ease: MODAL_MOTION.dropdown.ease }
         );
       } else {
         gsap.to(menuRef.current, {
-          opacity: 0,
-          scale: 0.95,
-          y: -10,
-          duration: 0.2,
+          opacity: MODAL_MOTION.dropdown.opacityStart,
+          scale: MODAL_MOTION.dropdown.scaleStart,
+          y: MODAL_MOTION.dropdown.yStart,
+          duration: MODAL_MOTION.dropdown.duration * 0.8,
           ease: 'power2.in',
         });
       }
@@ -49,9 +50,9 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
 
     ctx.add("(prefers-reduced-motion: reduce)", () => {
       if (isOpen) {
-        gsap.set(menuRef.current, { opacity: 1, scale: 1, y: 0 });
+        gsap.set(menuRef.current, { opacity: MODAL_MOTION.dropdown.opacityEnd, scale: MODAL_MOTION.dropdown.scaleEnd, y: MODAL_MOTION.dropdown.yEnd });
       } else {
-        gsap.set(menuRef.current, { opacity: 0, scale: 0.95, y: -10 });
+        gsap.set(menuRef.current, { opacity: MODAL_MOTION.dropdown.opacityStart, scale: MODAL_MOTION.dropdown.scaleStart, y: MODAL_MOTION.dropdown.yStart });
       }
     });
 

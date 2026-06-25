@@ -67,44 +67,9 @@ export const KanbanTaskCard: FunctionComponent<{
   useTaskCardMotion(cardRef, task.status, isReducedMotion, index);
   useTaskCardDragMotion(cardRef, isDragging, isReducedMotion);
 
-  const handleMouseMove = (event: MouseEvent) => {
-    const element = cardRef.current;
-    if (!element || isReducedMotion) return;
-
-    const bounds = element.getBoundingClientRect();
-    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
-    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-
-    gsap.to(element, {
-      rotationY: x * 10,
-      rotationX: -y * 8,
-      z: 12,
-      transformPerspective: 800,
-      duration: 0.4,
-      ease: "power2.out",
-      overwrite: "auto",
-    });
-  };
-
-  const handleMouseLeave = () => {
-    if (!cardRef.current || isReducedMotion) return;
-
-    gsap.to(cardRef.current, {
-      rotationY: 0,
-      rotationX: 0,
-      z: 0,
-      transformPerspective: 800,
-      duration: 0.8,
-      ease: "elastic.out(1, 0.5)",
-      overwrite: "auto",
-    });
-  };
-
   return (
     <div
       ref={cardRef}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
       tabIndex={0}
       draggable={!isReducedMotion}
       onDragStart={!isReducedMotion ? (onDragStart as any) : undefined}
@@ -118,11 +83,10 @@ export const KanbanTaskCard: FunctionComponent<{
           // Optional: Toggle accessible drag mode if implemented
         }
       }}
-      className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${isDragging ? 'opacity-50 ring-2 ring-signal-500 scale-[1.02] shadow-[0_20px_40px_rgba(0,0,0,0.2)]' : ''}`}
-      style={{ transformStyle: "preserve-3d", willChange: "transform" }}
+      className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${isDragging ? 'is-dragging opacity-50 ring-2 ring-signal-500 scale-[1.02] shadow-[0_20px_40px_rgba(0,0,0,0.2)]' : ''}`}
     >
       <span id={`task-card-kbd-${task.recordId}`} className="sr-only">
-        {isReducedMotion ? "Draggable reordering is disabled in reduced motion mode." : "Keyboard reordering is not supported. Use drag and drop to reorder."}
+        {isReducedMotion ? "Draggable reordering is disabled in reduced motion mode." : (!onDragStart ? "Keyboard reordering is not supported. Use drag and drop to reorder." : "Draggable task. Use drag and drop to reorder.")}
       </span>
       <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05]" />
       <WaveFluid accentHex={STATUS_CFG[task.status].hex} />

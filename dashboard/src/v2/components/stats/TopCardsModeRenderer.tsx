@@ -12,6 +12,7 @@ import { buildModelHighlights, formatSuccessRate } from "../../pages/stats/model
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 export interface TopCardsModeRendererProps {
   mode: StatsVisualMode;
@@ -38,8 +39,15 @@ export const TopCardsModeRenderer: FunctionComponent<TopCardsModeRendererProps> 
     gsap.killTweensOf(containerRef.current.children);
     gsap.fromTo(
       containerRef.current.children,
-      { opacity: 0, y: 10 },
-      { opacity: 1, y: 0, duration: 0.4, stagger: 0.05, ease: "power2.out", clearProps: "all" }
+      { opacity: 0, y: MODAL_MOTION.fieldStagger.yStart },
+      {
+        opacity: 1,
+        y: 0,
+        duration: MODAL_MOTION.fieldStagger.duration,
+        stagger: MODAL_MOTION.fieldStagger.stagger,
+        ease: MODAL_MOTION.fieldStagger.ease,
+        clearProps: "all"
+      }
     );
     prevMode.current = mode;
   }, [mode, reducedMotion]);

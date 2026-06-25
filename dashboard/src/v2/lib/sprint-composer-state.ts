@@ -1,6 +1,6 @@
 import { useState, useEffect } from "preact/hooks";
 import { Rocket, ClipboardList, Save, RefreshCw, ListPlus } from "lucide-preact";
-import type { AgentRoutingMode, PlanningOverrides, Sprint, VirtualWorkerProvider } from "../types.js";
+import type { AgentRoutingMode, PlanningOverrides, ProviderId, Sprint } from "../types.js";
 
 export type SprintSubmitMode = "plan_and_start" | "plan_only" | "draft" | "replan" | "append_tasks";
 
@@ -36,7 +36,9 @@ export interface PlanningRouteOption {
   type: 'connected' | 'virtual';
   id: string; // connection id or virtual provider id
   label: string;
-  provider?: VirtualWorkerProvider;
+  provider?: string;
+  iconProviderId?: ProviderId;
+  effectiveModel?: string;
 }
 
 export function toPlanningOverrides(
@@ -55,7 +57,7 @@ export function toPlanningOverrides(
   if (routeOverride?.type === "connected") {
     overrides.workerId = routeOverride.id;
   } else if (routeOverride?.type === "virtual") {
-    overrides.virtualProvider = routeOverride.provider;
+    overrides.virtualProvider = routeOverride.provider as PlanningOverrides["virtualProvider"];
     if (modelOverride) {
       overrides.virtualModel = modelOverride;
     }
@@ -97,6 +99,10 @@ export interface SprintComposerState {
   setWorkerAgentPresetId: (id: string | null) => void;
   sprintKeyOverride: string;
   setSprintKeyOverride: (val: string) => void;
+  hasAttemptedSubmit: boolean;
+  setHasAttemptedSubmit: (val: boolean) => void;
+  hasAttemptedImprove: boolean;
+  setHasAttemptedImprove: (val: boolean) => void;
   isEditing: boolean;
   hasTasks: boolean;
   availableModes: CreateMode[];
@@ -169,6 +175,8 @@ export const useSprintComposerState = (
   const [agentRoutingMode, setAgentRoutingMode] = useState<AgentRoutingMode>(defaults.agentRoutingMode || "MANUAL");
   const [workerAgentPresetId, setWorkerAgentPresetId] = useState<string | null>(defaults.workerAgentPresetId || null);
   const [sprintKeyOverride, setSprintKeyOverride] = useState<string>(defaultSprintKey);
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  const [hasAttemptedImprove, setHasAttemptedImprove] = useState(false);
 
   const isEditing = Boolean(initialSprint);
   const hasTasks = Boolean(initialSprint && initialSprint.tasksCount > 0);
@@ -184,6 +192,8 @@ export const useSprintComposerState = (
     setAgentRoutingMode(defaults.agentRoutingMode || "MANUAL");
     setWorkerAgentPresetId(defaults.workerAgentPresetId || null);
     setSprintKeyOverride(defaultSprintKey);
+    setHasAttemptedSubmit(false);
+    setHasAttemptedImprove(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSprint?.id]);
 
@@ -200,6 +210,8 @@ export const useSprintComposerState = (
     agentRoutingMode, setAgentRoutingMode,
     workerAgentPresetId, setWorkerAgentPresetId,
     sprintKeyOverride, setSprintKeyOverride,
+    hasAttemptedSubmit, setHasAttemptedSubmit,
+    hasAttemptedImprove, setHasAttemptedImprove,
     isEditing,
     hasTasks,
     availableModes,

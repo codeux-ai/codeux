@@ -78,3 +78,14 @@ export function deriveLiveSessionRuntimeState(
     hasSprintContext,
   };
 }
+
+export function getPendingActionState(pendingActionIds: Set<string>, actionId: string): "idle" | "pending" {
+  return pendingActionIds.has(actionId) ? "pending" : "idle";
+}
+
+export function getLiveActionDisplayProps(isPending: boolean, isDisabled: boolean) {
+  return {
+    "aria-disabled": isPending || isDisabled,
+    "aria-busy": isPending,
+  };
+}

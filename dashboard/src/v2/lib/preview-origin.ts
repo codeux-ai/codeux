@@ -6,15 +6,27 @@ import type { SprintPreviewSession } from "../../types.js";
 export const normalizePath = (value: string | null | undefined): string => {
   const trimmed = String(value || "").trim();
   if (!trimmed) return "/";
-  if (/^https?:\/\//i.test(trimmed)) {
-    try {
-      const url = new URL(trimmed);
-      return `${url.pathname || "/"}${url.search}${url.hash}` || "/";
-    } catch {
-      return "/";
+  try {
+    // For absolute URLs provided with scheme, strip it by just parsing it
+    if (/^https?:\/\//i.test(trimmed)) {
+      const parsed = new URL(trimmed);
+      let p = parsed.pathname;
+      if (p.length > 1 && p.endsWith("/")) p = p.slice(0, -1);
+      p = p.replace(/\/+/g, "/"); // collapse redundant slashes
+      return `${p}${parsed.search}${parsed.hash}` || "/";
     }
+
+    const url = new URL(trimmed, "http://localhost");
+    let p = url.pathname;
+    // Collapse redundant slashes
+    p = p.replace(/\/+/g, "/");
+    if (p.length > 1 && p.endsWith("/")) {
+      p = p.slice(0, -1);
+    }
+    return `${p}${url.search}${url.hash}`;
+  } catch {
+    return "/";
   }
-  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 };
 
 /**

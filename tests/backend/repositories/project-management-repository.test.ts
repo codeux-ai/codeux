@@ -143,6 +143,8 @@ describe("ProjectManagementRepository", () => {
     });
 
     expect(project.baseDir).toBe(path.join(os.homedir(), ".codex-ux", "projects", project.slug));
+    expect(project.lastRunAt).toBeNull();
+    expect(project.lastRunStatus).toBeNull();
   });
 
   it("creates projects, sprints, tasks, and dependency summaries in sqlite", async () => {
@@ -243,6 +245,66 @@ describe("ProjectManagementRepository", () => {
       repoUrl: "git@github.com:numnx/jules-agent-mcp.git",
       gitProvider: "github",
       gitHostDomain: "github.com",
+      lastRunAt: null,
+      lastRunStatus: null,
+    });
+  });
+
+  it("tracks the latest run activity for git projects", async () => {
+    const { repository, storage } = await createRepository();
+    const project = repository.createProject({
+      name: "Git Project",
+      sourceType: "git",
+      sourceRef: "https://github.com/acme/widgets.git",
+    });
+
+    const sprint = repository.createSprint(project.id, {
+      name: "Sprint 1",
+    });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task 1",
+    });
+
+    const db = storage.getDatabase();
+    db.prepare(`
+      INSERT INTO sprint_runs (
+        id, project_id, sprint_id, status, trigger_type, executor_mode,
+        started_at, finished_at, last_heartbeat_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "sprint-run-1",
+      project.id,
+      sprint.id,
+      "running",
+      "manual",
+      "mixed",
+      null,
+      null,
+      null,
+      "2026-03-09T12:00:00.000Z",
+      "2026-03-09T12:00:00.000Z",
+    );
+    db.prepare(`
+      INSERT INTO task_runs (
+        id, project_id, sprint_id, task_id, state, started_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      "task-run-1",
+      project.id,
+      sprint.id,
+      task.id,
+      "COMPLETED",
+      "2026-03-09T12:30:00.000Z",
+    );
+
+    const updated = repository.getProject(project.id);
+    expect(updated).not.toBeNull();
+    expect(updated).toMatchObject({
+      sourceType: "git",
+      repoUrl: "https://github.com/acme/widgets.git",
+      lastRunAt: "2026-03-09T12:30:00.000Z",
+      lastRunStatus: "COMPLETED",
     });
   });
 

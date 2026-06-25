@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preac
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
-import { GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface DropdownMenuProps {
@@ -47,6 +47,7 @@ export const DropdownMenu = ({
   computePosition,
 }: DropdownMenuProps) => {
   const isReducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
   const [isRendered, setIsRendered] = useState(false);
   const localTriggerRef = useRef<HTMLDivElement>(null);
   const triggerRef = externalTriggerRef || localTriggerRef;
@@ -103,10 +104,10 @@ export const DropdownMenu = ({
         (menuRef.current && menuRef.current.contains(document.activeElement))
       ) {
         if (previousFocusRef.current?.isConnected) {
-          previousFocusRef.current.focus();
+          previousFocusRef.current.focus({ preventScroll: true });
           previousFocusRef.current = null;
         } else if (triggerRef.current?.isConnected) {
-          triggerRef.current.focus();
+          triggerRef.current.focus({ preventScroll: true });
         }
       }
     }
@@ -147,18 +148,21 @@ export const DropdownMenu = ({
           opacity: 1,
           scale: 1,
           y: 0,
-          duration: isReducedMotion ? 0 : GSAP_INTERACTION_TOKENS.enterExit.duration,
-          ease: GSAP_INTERACTION_TOKENS.enterExit.ease,
+          duration: isReducedMotion ? 0 : gsapTokens.enterExit.duration,
+          ease: gsapTokens.enterExit.ease,
         }
       );
-      requestAnimationFrame(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])')?.focus());
+      requestAnimationFrame(() => {
+        const firstItem = menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])');
+        firstItem?.focus({ preventScroll: true });
+      });
     } else if (isRendered) {
       gsap.to(menuRef.current, {
         opacity: 0,
         scale: 0.95,
         y: position === "bottom" ? -5 : position === "top" ? 5 : 0,
-        duration: isReducedMotion ? 0 : GSAP_INTERACTION_TOKENS.enterExit.duration,
-        ease: GSAP_INTERACTION_TOKENS.enterExit.ease,
+        duration: isReducedMotion ? 0 : gsapTokens.enterExit.duration,
+        ease: gsapTokens.enterExit.ease,
         onComplete: () => setIsRendered(false),
       });
     }

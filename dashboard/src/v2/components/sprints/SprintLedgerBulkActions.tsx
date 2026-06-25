@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import { Heart, Loader2, Play, Trash2, X } from "lucide-preact";
 import gsap from "gsap";
-import { useGsapDurations, GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
+import { useGsapDurations, useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
 export interface SprintLedgerBulkActionsProps {
   selectedCount: number;
@@ -32,7 +32,8 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   onClearSelection,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { expansionCollapse } = GSAP_INTERACTION_TOKENS;
+  const prevSelectedCount = useRef(selectedCount);
+  const { expansionCollapse } = useGsapInteractionTokens();
   const { base: duration } = useGsapDurations();
 
   const durations = useGsapDurations();
@@ -51,7 +52,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           height: "auto",
           opacity: 1,
           duration,
-          ease: GSAP_INTERACTION_TOKENS.expansionCollapse.ease,
+          ease: expansionCollapse.ease,
         });
       }
     } else {
@@ -62,11 +63,15 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           height: 0,
           opacity: 0,
           duration,
-          ease: GSAP_INTERACTION_TOKENS.expansionCollapse.ease,
+          ease: expansionCollapse.ease,
         });
       }
     }
-  }, [selectedCount, durations]);
+  }, [selectedCount, durations, expansionCollapse.ease]);
+
+  useEffect(() => {
+    prevSelectedCount.current = selectedCount;
+  }, [selectedCount]);
 
   return (
     <div
@@ -91,6 +96,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
+            aria-label={isPinPending ? "Pinning selected sprints" : "Pin selected sprints to showcase"}
             aria-disabled={isAnyPending}
             onClick={onBulkShowcaseEnable}
             disabled={isAnyPending}
@@ -101,6 +107,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </button>
           <button
             type="button"
+            aria-label={isPinPending ? "Unpinning selected sprints" : "Unpin selected sprints from showcase"}
             aria-disabled={isAnyPending}
             onClick={onBulkShowcaseDisable}
             disabled={isAnyPending}
@@ -111,6 +118,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </button>
           <button
             type="button"
+            aria-label={isStartPending ? "Starting selected sprints" : "Start selected sprints"}
             aria-disabled={isAnyPending}
             onClick={onBulkStart}
             disabled={isAnyPending}
@@ -121,6 +129,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </button>
           <button
             type="button"
+            aria-label={isDeletePending ? "Deleting selected sprints" : "Delete selected sprints"}
             aria-disabled={isAnyPending}
             onClick={onBulkDelete}
             disabled={isAnyPending}
@@ -131,6 +140,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           </button>
           <button
             type="button"
+            aria-label="Clear sprint selection"
             aria-disabled={isAnyPending}
             onClick={onClearSelection}
             disabled={isAnyPending}
@@ -140,6 +150,9 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
             Clear
           </button>
         </div>
+      </div>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {selectedCount === 0 && prevSelectedCount.current > 0 ? "Selection cleared" : ""}
       </div>
     </div>
   );

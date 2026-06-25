@@ -4,6 +4,7 @@ import {
   isDetailLoading,
   isListLoading,
   resolveSelectedItemId,
+  isPendingRefresh,
 } from "../../../dashboard/src/v2/lib/chat-page-state-utils.js";
 
 const createThread = (id: string): ChatThread => ({
@@ -77,5 +78,12 @@ describe("chat-page-state-utils", () => {
     expect(isDetailLoading("thread-1", false, false)).toBe(false);
     expect(isDetailLoading("thread-1", false, true)).toBe(true);
     expect(isDetailLoading("thread-1", true, true)).toBe(false);
+  });
+
+  it("determines if a refresh is pending", () => {
+    expect(isPendingRefresh(false, false)).toBe(false);
+    expect(isPendingRefresh(true, false)).toBe(true);
+    expect(isPendingRefresh(false, true)).toBe(true);
+    expect(isPendingRefresh(true, true)).toBe(true);
   });
 });

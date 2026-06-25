@@ -4,7 +4,7 @@ import gsap from "gsap";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
-import { GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 
 import { Loader2, AlertTriangle } from "lucide-preact";
@@ -135,6 +135,7 @@ function DestructiveConfirmButton({
       className={`relative overflow-hidden ${className} ${isShaking && !reducedMotion ? "animate-shake" : ""}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       aria-busy={isLoading}
+      aria-live="polite"
       aria-label={isHolding ? `Holding — ${Math.floor(progress / 10) * 10}% complete, release to cancel` : `Hold to ${label}`}
     >
       {isHolding && (
@@ -171,6 +172,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
   const fallbackTriggerRef = useRef<HTMLElement | null>(null);
   const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus: false });
   const reducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
 
   const actualTriggerRef = triggerRef || fallbackTriggerRef;
 
@@ -191,8 +193,8 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
 
   useLayoutEffect(() => {
     if (shouldRender && !isClosing) {
-      const d_backdrop = reducedMotion ? 0 : GSAP_INTERACTION_TOKENS.enterExit.duration;
-      const d_card = reducedMotion ? 0 : GSAP_INTERACTION_TOKENS.enterExit.duration;
+      const d_backdrop = reducedMotion ? 0 : gsapTokens.enterExit.duration;
+      const d_card = reducedMotion ? 0 : gsapTokens.enterExit.duration;
 
       if (backdropRef.current) {
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
@@ -201,7 +203,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
       if (cardRef.current) {
         gsap.fromTo(cardRef.current,
           { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
-          { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: GSAP_INTERACTION_TOKENS.enterExit.ease }
+          { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: gsapTokens.enterExit.ease }
         );
       }
     }
@@ -227,10 +229,10 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
 
   useEffect(() => {
     if (isClosing) {
-      const d = reducedMotion ? 0 : GSAP_INTERACTION_TOKENS.enterExit.duration;
+      const d = reducedMotion ? 0 : gsapTokens.enterExit.duration;
 
       if (cardRef.current) {
-        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: GSAP_INTERACTION_TOKENS.enterExit.ease });
+        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: gsapTokens.enterExit.ease });
       }
 
       const onExitComplete = () => {
