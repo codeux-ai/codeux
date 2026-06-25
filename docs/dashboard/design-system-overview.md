@@ -8,8 +8,7 @@ The overview page acts as a centralized "Polished Operational Command Surface." 
 ## Layout Hierarchy
 
 - **Header Section**: Typography uses deliberate scale. H1 elements should not exceed `text-3xl md:text-5xl` (e.g., `text-5xl font-bold tracking-tight mb-2 font-display leading-[0.95]`). Subtitles are restrained to `text-sm md:text-base`.
-- **Main Grid Container**: The grid holds operational sections (Sources, Tasks, etc.). Structural unity is achieved via a shared wrapper with restrained ambient framing:
-  - `p-8 rounded-[2rem] border border-black/[0.04] dark:border-white/[0.04] bg-white/40 dark:bg-void-800/40 backdrop-blur-md`
+- **Main Grid Container**: The grid holds operational sections (Sources, Tasks, etc.). The sections sit directly on the page background — no wrapping surface/card chrome — so the operational content reads cleanly without a framing panel. The left column is a plain layout container (`xl:col-span-8 flex flex-col gap-16`); structural unity comes from the shared `SectionHeader` treatment on each section, not an outer card.
 - **Gaps**: Use `gap-16` between major vertical sections to prevent sprawling, and keep inner grid/card gaps constrained (e.g., `gap-4` for stat grids, `gap-8 md:gap-10 lg:gap-12` for source tile flex wraps).
 
 ## Decorative Ambient Framing
