@@ -57,8 +57,8 @@ export const ThreadListCard: FunctionComponent<{
                 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                 ${isSelected
-                  ? "border-2 border-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.12)]"
-                  : "border-2 border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
+                  ? "border border-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.12)]"
+                  : "border border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
                 }`}
             >
             {/* Ghost ID watermark */}

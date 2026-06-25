@@ -85,7 +85,7 @@ export const StatsPage: FunctionComponent = () => {
           />
         </div>
       ) : loading && !stats ? (
-        <div className={PANEL_CLASS}>
+        <div className={PANEL_CLASS} role="status">
           <EmptyState
             icon={<Loader2 className="h-8 w-8 animate-spin" />}
             title="Loading telemetry field"
