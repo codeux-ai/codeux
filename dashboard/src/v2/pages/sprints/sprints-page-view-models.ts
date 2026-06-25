@@ -1,9 +1,18 @@
 import type { SprintStatus } from "../../types.js";
 import type { Sprint } from "../../types.js";
 import { filterShowcaseSprints, sortSprintsByRecency } from "../../lib/sprint-gallery.js";
-import type { SystemSettings } from "../../../types.js";
-import { getSystemIntegrationProviders } from "../../lib/settings-view-models.js";
-import type { VirtualWorkerProvider } from "../../types.js";
+import type { DashboardSettings, ProviderConfigId, ProviderId, SystemSettings } from "../../../types.js";
+import {
+  getProviderDisplayMetadata,
+  getVirtualProviderDisplayMetadata,
+  type ProviderDisplayMetadata,
+} from "../../lib/settings-view-models.js";
+import {
+  AI_MODEL_CATALOG,
+  DEFAULT_INVOCATION_ROUTING,
+  DEFAULT_PROVIDER_CONFIG_NAMES,
+  DEFAULT_PROVIDER_SETTINGS,
+} from "../../../../../src/repositories/settings-defaults.js";
 
 const ACTIVE_CONNECTION_STATUSES = new Set(["connected", "listening", "idle"]);
 const IN_WORK_STATUSES = new Set<SprintStatus>(["running", "paused"]);
@@ -20,14 +29,6 @@ const CONNECTION_STATUS_PRIORITY: Record<string, number> = {
   paused: 3,
   stale: 4,
   offline: 5,
-};
-
-const VIRTUAL_PROVIDER_LABELS: Record<string, string> = {
-  gemini: "Virtual Gemini Worker",
-  codex: "Virtual Codex Worker",
-  "claude-code": "Virtual Claude Code Worker",
-  "qwen-code": "Virtual Qwen Code Worker",
-  opencode: "Virtual OpenCode Worker",
 };
 
 export const compareString = (left: string, right: string): number => (
@@ -122,11 +123,21 @@ export function buildPlanningConnection(connections: any[]) {
     })[0] || null;
 }
 
-export function buildPlanningRoute(planningConnection: any | null, workerMode: any) {
+export function buildPlanningRoute(
+  planningConnection: any | null,
+  workerMode: any,
+  systemSettings: SystemSettings | null = null,
+  workerModel?: string | null,
+) {
   if (workerMode?.executionMode === "VIRTUAL") {
+    const providerMetadata = getProviderDisplayMetadata(
+      systemSettings,
+      workerMode.virtualWorkerProvider,
+      workerModel,
+    );
     return {
       available: true,
-      label: VIRTUAL_PROVIDER_LABELS[workerMode.virtualWorkerProvider as string] || "Virtual Worker",
+      label: providerMetadata?.displayLabel || "Virtual Worker",
     };
   }
 
@@ -143,16 +154,70 @@ export function buildPlanningRoute(planningConnection: any | null, workerMode: a
   };
 }
 
-export function buildVirtualProviders(systemSettings: SystemSettings | null) {
-  const availableVirtualIds = systemSettings
-    ? Object.values(getSystemIntegrationProviders(systemSettings))
-        .filter((p) => p.provider !== "jules" && (p.apiKey.trim().length > 0 || p.mountAuth))
-        .map((p) => p.provider)
-    : ["gemini", "claude-code", "codex", "qwen-code", "opencode"]; // Fallback if settings are not loaded yet
+const resolvePlanningRouteWorkerModel = (
+  provider: ProviderId,
+  workerModel: string | null | undefined,
+  fallbackModel: string,
+): string => {
+  if (provider === "jules") {
+    return fallbackModel;
+  }
 
-  return availableVirtualIds
-    .map((id) => ({
-      id: id as VirtualWorkerProvider,
-      label: VIRTUAL_PROVIDER_LABELS[id as string] || `Virtual ${id} Worker`,
-    }));
+  const normalizedModel = typeof workerModel === "string" ? workerModel.trim() : "";
+  if (!normalizedModel || normalizedModel === "default") {
+    return fallbackModel;
+  }
+
+  return (AI_MODEL_CATALOG[provider] || []).includes(normalizedModel)
+    ? normalizedModel
+    : fallbackModel;
+};
+
+export function getDefaultPlanningProviderMetadata(
+  effectiveSettings: DashboardSettings | null | undefined,
+  systemSettings: SystemSettings | null = null,
+): ProviderDisplayMetadata | null {
+  if (!effectiveSettings) {
+    return null;
+  }
+
+  const route = effectiveSettings.aiProvider.invocationRouting?.planning || DEFAULT_INVOCATION_ROUTING.planning;
+  const inheritedProviderConfigId = route.profile === "WORKER"
+    ? effectiveSettings.workers.virtualWorkerProvider
+    : effectiveSettings.aiProvider.provider;
+  const providerConfigId = route.provider || inheritedProviderConfigId;
+  if (!providerConfigId) {
+    return null;
+  }
+
+  const baseMetadata = getProviderDisplayMetadata(systemSettings, providerConfigId);
+  const providerSettings = effectiveSettings.aiProvider.providers[providerConfigId];
+  const provider = providerSettings?.provider || baseMetadata?.provider;
+  if (!provider) {
+    return baseMetadata;
+  }
+
+  const routeModelOverride = route.providers[providerConfigId]?.model?.trim();
+  const baseModel = providerSettings?.model?.trim()
+    || baseMetadata?.effectiveModel?.trim()
+    || DEFAULT_PROVIDER_SETTINGS[provider].model;
+  const effectiveModel = routeModelOverride
+    || (route.profile === "WORKER" && providerConfigId === inheritedProviderConfigId
+      ? resolvePlanningRouteWorkerModel(provider, effectiveSettings.workers.model, baseModel)
+      : baseModel);
+  const displayLabel = providerSettings?.name?.trim()
+    || baseMetadata?.displayLabel
+    || DEFAULT_PROVIDER_CONFIG_NAMES[provider];
+
+  return {
+    providerConfigId: providerConfigId as ProviderConfigId,
+    provider,
+    displayLabel,
+    iconProviderId: provider,
+    effectiveModel,
+  };
+}
+
+export function buildVirtualProviders(systemSettings: SystemSettings | null) {
+  return getVirtualProviderDisplayMetadata(systemSettings);
 }

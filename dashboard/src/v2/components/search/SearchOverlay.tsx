@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import gsap from "gsap";
-import { Search, X, Layers, Activity, Cpu, Box, ArrowRight, Inbox, Loader2 } from "lucide-preact";
+import { Search, X, Layers, Activity, Cpu, Box, ArrowRight, Inbox, Loader2, FileX } from "lucide-preact";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { SearchResultRow } from "./SearchResultRow";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -26,9 +26,10 @@ interface SearchOverlayProps {
     searchQuery: string;
     onSearchChange: (query: string) => void;
     results: SearchResults;
+    hasProjectData?: boolean;
 }
 
-export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef, isOpen, onClose, searchQuery, onSearchChange, results, isLoading }) => {
+export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef, isOpen, onClose, searchQuery, onSearchChange, results, isLoading, hasProjectData = true }) => {
     const overlayRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const triggerElementRef = useRef<HTMLElement | null>(null);
@@ -154,10 +155,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                     if (overlayRef.current) {
                         gsap.set(overlayRef.current, { display: 'none' });
                     }
-                    if (triggerElementRef.current) {
-                        triggerElementRef.current.focus();
-                        triggerElementRef.current = null;
-                    }
+                    triggerElementRef.current = null;
                 }
             });
 
@@ -242,13 +240,14 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                         aria-autocomplete="list"
                         aria-expanded={isOpen}
                         aria-controls="search-results-list"
-                        aria-activedescendant={focusedIndex >= 0 ? `search-result-${allItems[focusedIndex]?.id}` : undefined}
+                        aria-activedescendant={!isLoading && focusedIndex >= 0 ? `search-result-${allItems[focusedIndex]?.id}` : undefined}
                         aria-label="Global search"
                         placeholder="Search sprints, tasks, agents..."
                         value={searchQuery}
                         onInput={(e) => onSearchChange(e.currentTarget.value)}
                         className="flex-1 bg-transparent border-none outline-none text-lg text-slate-900 dark:text-white placeholder-slate-400"
                     />
+                    {isLoading && <Loader2 className="w-5 h-5 animate-spin text-slate-400 mr-2" />}
                     <button
                         onClick={onClose}
                         aria-label="Close search"
@@ -259,7 +258,7 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                 </div>
 
                 <div className="sr-only" role="status" aria-live="polite">
-                    {searchQuery.length === 0 ? '' : isLoading ? '' : allItems.length === 0 ? `No results found for '${searchQuery}'` : `${allItems.length} results available`}
+                    {searchQuery.length === 0 ? '' : isLoading ? 'Searching...' : allItems.length === 0 ? (!hasProjectData ? `Project data unavailable for '${searchQuery}'` : `No results found for '${searchQuery}'`) : `${allItems.length} results available`}
                 </div>
 
                 {/* Results Area */}
@@ -296,20 +295,22 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ anchorRef
                                 </Link>
                             </div>
                         </div>
-                    ) : isLoading ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
-                            <Loader2 className="w-8 h-8 mb-4 animate-spin opacity-50" />
-                            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Searching...</span>
-                            <span className="text-xs mt-1 text-slate-500 dark:text-slate-400">Looking through tasks, sprints, and agents</span>
-                        </div>
-                    ) : allItems.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
-                            <Inbox className="w-8 h-8 mb-4 opacity-50" />
-                            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">No results found for '{searchQuery}'</span>
-                            <span className="text-xs mt-1 text-slate-500 dark:text-slate-400">Try adjusting your search terms or checking for typos.</span>
-                        </div>
+                    ) : allItems.length === 0 && !isLoading ? (
+                        !hasProjectData ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
+                                <FileX className="w-8 h-8 mb-4 opacity-50 text-status-red" />
+                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Project data unavailable</span>
+                                <span className="text-xs mt-1 text-slate-500 dark:text-slate-400">Unable to load project search results.</span>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-12 text-slate-500 dark:text-slate-400" aria-live="polite" role="status">
+                                <Inbox className="w-8 h-8 mb-4 opacity-50" />
+                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">No results found for '{searchQuery}'</span>
+                                <span className="text-xs mt-1 text-slate-500 dark:text-slate-400">Try adjusting your search terms or checking for typos.</span>
+                            </div>
+                        )
                     ) : (
-                        <div id="search-results-list" role="listbox" className="grid grid-cols-1 md:grid-cols-2 gap-4 p-2">
+                        <div id="search-results-list" role="listbox" className={`grid grid-cols-1 md:grid-cols-2 gap-4 p-2 transition-opacity duration-200 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
                             {CATEGORIES.map((category) => {
                                 if (category.items?.length === 0) return null;
                                 return (

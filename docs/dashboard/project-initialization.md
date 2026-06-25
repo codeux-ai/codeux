@@ -8,6 +8,8 @@ Project Initialization runs a repository-specific setup pass through the `Projec
 - Local project creation now accepts a blank directory path in the modal; the backend resolves it to `~/.codex-ux/projects/<slug>` when no source path is provided.
 - `New Project` opens the same modal with the `new_project` source selected, which exposes `Local Repo` / `Remote Repo` init modes instead of the setup scope controls.
 - The `new_project` branch hides the Project Setup Agent section entirely and routes creation through the backend `initMode` fields.
+- `new_project` local init does not require a Git URL slug; it only needs a project name and optional local directory path.
+- `new_project` remote init still requires a Git URL slug and auto-fills it from the project name until the user edits it.
 - Existing projects expose a `Setup Project` action from the project card agent button.
 
 Both flows let the operator choose which artifacts to create:

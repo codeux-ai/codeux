@@ -186,6 +186,18 @@ Checks:
   - `Recovered runtime state on startup`
 - Verify the affected sprint run returns to active monitoring without creating a brand-new sprint run record.
 
+### 8a. Task shows a provider session or PR from another project/sprint
+Symptoms:
+- A task is marked `CODING_COMPLETED` with a PR that targets an unrelated feature branch.
+- The task provider does not match the selected sprint's routing settings.
+- The same `session_id` or `pr_url` appears under another project, sprint, or task in `task_runs`.
+
+Checks:
+- Query the local app database for the session or PR:
+  - `SELECT tr.*, p.name, s.name, t.task_key, t.title FROM task_runs tr JOIN projects p ON p.id = tr.project_id JOIN sprints s ON s.id = tr.sprint_id JOIN tasks t ON t.id = tr.task_id WHERE tr.session_id = '<session>' OR tr.pr_url = '<pr-url>';`
+- If more than one project/sprint/task owns the same session or PR, keep the original owner and clear the duplicate task run before rerunning the affected task.
+- Current runtime sync rejects foreign session and PR artifacts before persisting them. If the duplicate row predates that guard, remove the duplicate `task_runs` row, reset the affected `tasks.status` to `pending`, clear merge flags, restart the dashboard server, then rerun the task.
+
 
 ### Transient Provider Failures
 Transient provider failures are classified and managed in `src/shared/providers/provider-error-classifier.ts`. These shared helpers encapsulate the operational meaning of failures such as:

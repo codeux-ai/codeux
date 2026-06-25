@@ -26,6 +26,10 @@ Threads can dynamically shift their underlying execution backend:
 
 Automatic worker pickup occurs seamlessly. If a project has an inherited worker mode (`VIRTUAL` or `CONNECTED_MCP`), new chat threads inherit this routing configuration automatically.
 
+### UI State Contracts
+
+UI interactions like invocation stats visibility (`code-ux:invocation-stats-visible`) and optimistic feedback states (e.g., `ActionFeedbackRegion` for refresh/errors and `role='status'` for working bubbles) are explicitly managed and durable across navigation to preserve a responsive, readable chat experience.
+
 Route resolution now follows this precedence on each posted message:
 - honor an explicit thread-level worker route when the targeted worker endpoint is still live
 - otherwise honor an explicit thread-level virtual provider route using the stored provider plus current `dashboard_reply` provider settings for model, API key, and thinking mode

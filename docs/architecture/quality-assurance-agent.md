@@ -119,6 +119,7 @@ Recovery guarantees:
 - if QA/runtime recovery closes a provider or execution invocation while the provider process is still unwinding, later telemetry and completion callbacks do not rewrite the recovered terminal rows back to `running` or `completed`.
 - sprint-scoped task loading falls back to the latest unscoped task run when no task run exists for the active sprint run. This keeps continued Jules sessions visible to QA and merge gates after restarts or follow-up messages.
 - remote branch refreshes for task QA are serialized per repository, preventing parallel QA checks from racing while creating local tracking branches and failing on `.git/config` locks.
+- in local-git mode, if a code-complete task loses `worker_branch` / `workerBranch` metadata during redispatch or settlement, task QA recovers the newest matching local worker branch that contains commits ahead of the sprint feature branch. The recovered branch is backfilled onto the task and task run before review so QA inspects the task's actual work instead of the empty sprint feature branch.
 
 Run budgeting:
 

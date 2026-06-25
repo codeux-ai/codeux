@@ -106,6 +106,7 @@ For merge conflicts, Code UX:
 - verifies the resolved source branch actually contains `origin/<targetBranch>` before clearing the merge-conflict attention item
 - exports a Git patch artifact from the isolated workspace
 - applies that patch back onto the host branch as a merge commit that preserves the target branch as an additional parent, then pushes it
+- counts task-scoped merge-conflict attempts in the guardrail ledger; sprint-level final merge conflicts have no task row, so their retry count is stored on the attention item payload as `mergeConflictResolutionAttempts` before each real provider run
 
 Merge-conflict handling intentionally stays isolated from the original task workspace. It always runs in a dedicated ephemeral Docker workspace so conflict resolution cannot pollute the task's normal follow-up workspace.
 

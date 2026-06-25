@@ -50,6 +50,37 @@ describe("SprintComposer", () => {
     expect(getByPlaceholderText("Runtime hardening")).toBeInTheDocument();
   });
 
+  it("renders provider instance route labels, default models, and brand icons", async () => {
+    const { getByRole, getByText, queryByText } = render(
+      <SprintComposer
+        {...defaultProps}
+        virtualProviders={[
+          {
+            providerConfigId: "codex-primary",
+            provider: "codex",
+            displayLabel: "Codex Primary",
+            iconProviderId: "codex",
+            effectiveModel: "gpt-5.5",
+          },
+        ]}
+        defaultRouteOptionLabel="Default Route (Codex Primary)"
+        defaultModelOptionLabel="Default Model (gpt-5.5)"
+        defaultRouteIconProviderId="codex"
+      />
+    );
+
+    expect(getByText("Default Route (Codex Primary)")).toBeInTheDocument();
+    expect(getByText("Default Model (gpt-5.5)")).toBeInTheDocument();
+    expect(document.body.querySelector('img[src="/lobe-icons/codex-color.svg"]')).toBeInTheDocument();
+    expect(queryByText("Virtual Codex Worker")).not.toBeInTheDocument();
+
+    fireEvent.click(getByRole("button", { name: "Planning Route" }));
+    await waitFor(() => {
+      expect(getByText("Codex Primary")).toBeInTheDocument();
+    });
+    expect(document.body.querySelectorAll('img[src="/lobe-icons/codex-color.svg"]').length).toBeGreaterThan(1);
+  });
+
   it("renders linked issue cards and submits them", async () => {
     const onSubmit = vi.fn();
     const issue = {
@@ -287,18 +318,27 @@ describe("SprintComposer", () => {
   });
 
   it("shows New Sprint secondary action and opens a fresh composer without cancelling", async () => {
-    let resolveSubmit: (val: any) => void;
-    const submitPromise = new Promise((resolve) => {
-      resolveSubmit = resolve;
+    let resolveFirstSubmit: (val: any) => void;
+    let resolveSecondSubmit: (val: any) => void;
+    const firstSubmitPromise = new Promise((resolve) => {
+      resolveFirstSubmit = resolve;
+    });
+    const secondSubmitPromise = new Promise((resolve) => {
+      resolveSecondSubmit = resolve;
     });
 
-    const mockOnSubmit = vi.fn(async () => submitPromise);
+    const mockOnSubmit = vi
+      .fn()
+      .mockReturnValueOnce(firstSubmitPromise)
+      .mockReturnValueOnce(secondSubmitPromise);
     const mockOnCancelPlanningRequest = vi.fn();
     const mockOnStartNewSprint = vi.fn();
+    const mockOnClose = vi.fn();
 
     const { getByText, getByPlaceholderText, getAllByText } = render(
       <SprintComposer
         {...defaultProps}
+        onClose={mockOnClose}
         onSubmit={mockOnSubmit}
         onCancelPlanningRequest={mockOnCancelPlanningRequest}
         onStartNewSprint={mockOnStartNewSprint}
@@ -321,7 +361,8 @@ describe("SprintComposer", () => {
     });
 
     expect(mockOnSubmit).toHaveBeenCalled();
-    expect(mockOnSubmit.mock.calls[0]?.[0]?.signal).toBeInstanceOf(AbortSignal);
+    const firstSignal = mockOnSubmit.mock.calls[0]?.[0]?.signal as AbortSignal;
+    expect(firstSignal).toBeInstanceOf(AbortSignal);
 
     // Click New Sprint
     const newSprintBtn = getByText("New Sprint");
@@ -329,6 +370,7 @@ describe("SprintComposer", () => {
 
     expect(mockOnStartNewSprint).toHaveBeenCalled();
     expect(mockOnCancelPlanningRequest).not.toHaveBeenCalled();
+    expect(firstSignal.aborted).toBe(false);
     expect((nameInput as HTMLInputElement).value).toBe("");
     fireEvent.input(nameInput, { target: { value: "Follow-up Sprint" } });
     const secondSubmitBtn = getAllByText("Plan & Start").pop()!;
@@ -336,8 +378,15 @@ describe("SprintComposer", () => {
     fireEvent.click(secondSubmitBtn);
     expect(mockOnSubmit).toHaveBeenCalledTimes(2);
 
-    // Resolve the promise to cleanup
-    resolveSubmit!(undefined);
+    resolveFirstSubmit!(undefined);
+    await Promise.resolve();
+    expect(mockOnClose).not.toHaveBeenCalled();
+    expect(secondSubmitBtn).toBeDisabled();
+
+    resolveSecondSubmit!(undefined);
+    await waitFor(() => {
+      expect(mockOnClose).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
@@ -438,7 +487,7 @@ describe("AddTaskModal Lifecycle", () => {
     const errorRegion = getByRole("alert");
     expect(errorRegion).toBeInTheDocument();
 
-    const dismissBtn = getByRole("button", { name: "Dismiss: API Error 500" });
+    const dismissBtn = getByRole("button", { name: "Dismiss" });
 
     // Explicitly focus it to ensure focus behavior is correctly represented
     dismissBtn.focus();

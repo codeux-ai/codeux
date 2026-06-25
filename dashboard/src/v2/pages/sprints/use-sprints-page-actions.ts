@@ -74,7 +74,6 @@ export interface SprintsPageActionsDeps {
   addTaskForSprint: Sprint | null;
   setAddTaskSprintTasks: (tasks: any[]) => void;
   setAddTaskForSprint: (sprint: Sprint | null) => void;
-  setShowQuicksprint: (show: boolean) => void;
   reloadQuicksprintTemplates: () => Promise<void>;
   createProject: any;
 }
@@ -102,7 +101,6 @@ export function useSprintsPageActions({
   addTaskForSprint,
   setAddTaskSprintTasks,
   setAddTaskForSprint,
-  setShowQuicksprint,
   reloadQuicksprintTemplates,
   createProject,
 }: SprintsPageActionsDeps) {
@@ -647,25 +645,31 @@ export function useSprintsPageActions({
       additionalPrompt?: string,
       routeOverride?: PlanningRouteOption | null,
       modelOverride?: string | null,
+      signal?: AbortSignal,
+      options?: { shouldHandleResult?: () => boolean },
     ) => {
       if (!selectedProject) return;
       const reservedNumber = reserveNextSprintNumber();
       try {
-        await executeQuicksprint(selectedProject.id, {
-          templateId,
-          taskCount,
-          submitMode: submitMode as "plan_only" | "plan_and_start",
-          additionalPrompt,
-          planningOverrides: toPlanningOverrides(
-            routeOverride ?? null,
-            modelOverride ?? null,
-          ),
-        });
-        await refreshPlanningEta(selectedProject.id);
-        setShowQuicksprint(false);
-        await refresh();
+        await executeQuicksprint(
+          selectedProject.id,
+          {
+            templateId,
+            taskCount,
+            submitMode: submitMode as "plan_only" | "plan_and_start",
+            additionalPrompt,
+            planningOverrides: toPlanningOverrides(
+              routeOverride ?? null,
+              modelOverride ?? null,
+            ),
+          },
+          signal,
+        );
+        await Promise.all([refreshPlanningEta(selectedProject.id), refresh()]);
       } catch (error) {
-        setError(error instanceof Error ? error.message : String(error));
+        if (options?.shouldHandleResult?.() ?? true) {
+          setError(error instanceof Error ? error.message : String(error));
+        }
         throw error;
       } finally {
         releaseSprintNumberReservation(reservedNumber);
@@ -678,7 +682,6 @@ export function useSprintsPageActions({
       reserveNextSprintNumber,
       selectedProject,
       setError,
-      setShowQuicksprint,
     ],
   );
 

@@ -54,6 +54,8 @@ interface ProjectRow {
   open_tasks: number | string | null;
   completed_tasks: number | string | null;
   has_active_runs: number | string | null;
+  last_run_at: string | null;
+  last_run_status: string | null;
 }
 
 interface SprintRow {
@@ -741,6 +743,9 @@ export class ProjectManagementRepository {
   deleteTask(taskId: string): void {
     try {
       const task = this.requireTask(taskId);
+      // guardrail_ledger.task_id is not a tasks FK (it also holds synthetic, taskless keys),
+      // so cascade does not clean these up — delete the task's guardrail rows explicitly.
+      this.db.prepare(`DELETE FROM guardrail_ledger WHERE task_id = ?`).run(taskId);
       this.db.prepare(`DELETE FROM tasks WHERE id = ?`).run(taskId);
       this.touchProject(task.projectId);
       this.publishProjectStructureRefresh(task.projectId);
@@ -755,6 +760,7 @@ export class ProjectManagementRepository {
   deleteTasksBySprint(sprintId: string): void {
     try {
       const sprint = this.requireSprint(sprintId);
+      this.db.prepare(`DELETE FROM guardrail_ledger WHERE task_id IN (SELECT id FROM tasks WHERE sprint_id = ?)`).run(sprintId);
       this.db.prepare(`DELETE FROM tasks WHERE sprint_id = ?`).run(sprintId);
       this.touchProject(sprint.projectId);
       this.publishProjectStructureRefresh(sprint.projectId);
@@ -1102,6 +1108,8 @@ export class ProjectManagementRepository {
       isRunning,
       settingsOverrides,
       agentBindings,
+      lastRunAt: row.last_run_at,
+      lastRunStatus: row.last_run_status,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

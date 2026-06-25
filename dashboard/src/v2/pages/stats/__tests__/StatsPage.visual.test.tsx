@@ -21,9 +21,14 @@ vi.mock('../components/system/SystemStudio.js', () => ({
   SystemStudio: (props: { projectId: string }) => <div data-testid="system-studio">{props.projectId}</div>
 }));
 
-vi.mock('../../context/project-data.js', () => ({
-  useProjectData: vi.fn()
-}));
+vi.mock('../../../context/project-data.js', () => {
+  const { createContext } = require("preact");
+  const ProjectDataContext = createContext(null);
+  return {
+    ProjectDataContext,
+    useProjectData: vi.fn()
+  };
+});
 
 vi.mock('../use-stats-page-data.js', () => ({
   useStatsPageData: vi.fn()
@@ -99,7 +104,7 @@ describe('StatsPage visual tests', () => {
   });
 
   it('renders empty states with new amber visual language', () => {
-    vi.spyOn(useProjectDataModule, 'useProjectData').mockReturnValue({
+    vi.mocked(useProjectDataModule.useProjectData).mockReturnValue({
       selectedProjectId: null,
       createProject: vi.fn(),
       updateProject: vi.fn(),
@@ -110,9 +115,8 @@ describe('StatsPage visual tests', () => {
       error: null,
       refreshProjects: vi.fn(),
       selectProject: vi.fn(),
-    });
-
-    vi.spyOn(useStatsPageDataModule, 'useStatsPageData').mockReturnValueOnce({
+    } as any);
+    vi.mocked(useStatsPageDataModule.useStatsPageData).mockReturnValue({
       stats: null,
       loading: false,
       error: null,

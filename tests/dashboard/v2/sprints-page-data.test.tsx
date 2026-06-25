@@ -168,6 +168,41 @@ describe("useSprintsPageData sprint-number reservations", () => {
     });
   });
 
+  it("reserves distinct sprint numbers for multiple unresolved sprint creations", async () => {
+    const firstDeferred = createDeferred<{ id: string }>();
+    const secondDeferred = createDeferred<{ id: string }>();
+    createSprintMock
+      .mockReturnValueOnce(firstDeferred.promise)
+      .mockReturnValueOnce(secondDeferred.promise);
+    render(<HookHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "submit-sprint" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-03");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "submit-sprint" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-04");
+    });
+    expect(createSprintMock.mock.calls[0]?.[1]).toMatchObject({ number: 2 });
+    expect(createSprintMock.mock.calls[1]?.[1]).toMatchObject({ number: 3 });
+
+    firstDeferred.reject(new Error("first create failed"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-03");
+    });
+
+    secondDeferred.reject(new Error("second create failed"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-02");
+    });
+  });
+
   it("advances nextId while quicksprint execution is unresolved and resets after failure", async () => {
     const deferred = createDeferred<{ id: string }>();
     executeQuicksprintMock.mockReturnValueOnce(deferred.promise);
@@ -182,6 +217,39 @@ describe("useSprintsPageData sprint-number reservations", () => {
     });
 
     deferred.reject(new Error("quicksprint failed"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-02");
+    });
+  });
+
+  it("reserves distinct sprint numbers for multiple unresolved quicksprint executions", async () => {
+    const firstDeferred = createDeferred<{ id: string }>();
+    const secondDeferred = createDeferred<{ id: string }>();
+    executeQuicksprintMock
+      .mockReturnValueOnce(firstDeferred.promise)
+      .mockReturnValueOnce(secondDeferred.promise);
+    render(<HookHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "quicksprint" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-03");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "quicksprint" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-04");
+    });
+
+    firstDeferred.reject(new Error("first quicksprint failed"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-03");
+    });
+
+    secondDeferred.reject(new Error("second quicksprint failed"));
 
     await waitFor(() => {
       expect(screen.getByTestId("next-id")).toHaveTextContent("SPR-02");

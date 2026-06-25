@@ -369,7 +369,7 @@ export const BrowserPage: FunctionComponent = () => {
 
   if (!selectedProject) {
     return (
-      <PageContainer padding="workbench">
+      <PageContainer aria-label="Browser" padding="workbench">
         <div className="rounded-[2rem] border border-black/[0.06] bg-white/60 p-8 text-sm text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
           Select a project first. The in-app browser launches one isolated preview container per sprint.
         </div>
@@ -378,7 +378,7 @@ export const BrowserPage: FunctionComponent = () => {
   }
 
   return (
-    <PageContainer padding="workbench" className="min-h-full" data-testid="browser-page-root">
+    <PageContainer aria-label="Browser" padding="workbench" className="min-h-full" data-testid="browser-page-root">
       <div className="mb-8 flex flex-col justify-between gap-8 lg:flex-row lg:items-end" data-testid="browser-page-header">
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
@@ -437,6 +437,8 @@ export const BrowserPage: FunctionComponent = () => {
             retryAction={
               browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("launch") ? () => handleStart() :
               browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("rebuild") ? () => handleRebuild() :
+              browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("stop") ? () => handleStop() :
+              browserFeedback.feedback.status === "error" && browserFeedback.feedback.message?.includes("script") ? () => handleSaveScript() :
               undefined
             }
           />
@@ -485,13 +487,17 @@ export const BrowserPage: FunctionComponent = () => {
           onAddressSubmit={(_value) => navigate()}
           navigationEnabled={navigationEnabled}
         >
+          <div aria-live="polite" role="status" className="sr-only">
+            {visibleSelectedSession ? `Container ${visibleSelectedSession.status}` : "No active session"}
+            {sessionActionPending ? " Action pending." : ""}
+          </div>
           {visibleSelectedSession && frameSrc ? (
             <div className="relative h-full w-full">
               {!navigationEnabled && (
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center p-4">
                   <div className="flex items-center gap-3 rounded-full border border-black/[0.08] bg-white/90 px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-md dark:border-white/[0.08] dark:bg-void-900/90 dark:shadow-[0_8px_32px_rgba(0,0,0,0.24)]">
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-signal-500 border-t-transparent" />
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300" aria-hidden="true">
                       {visibleSelectedSession.status === "starting" ? "Container starting..." : visibleSelectedSession.status === "error" ? "Container failed" : "Waiting for connection..."}
                     </span>
                   </div>
@@ -500,7 +506,7 @@ export const BrowserPage: FunctionComponent = () => {
               <iframe
                 key={visibleSelectedSession.id}
                 ref={frameRef}
-                title={`Sprint preview ${visibleSelectedSession.sprintName}`}
+                title={`Preview: ${selectedProject?.name || 'Unknown Project'} - ${visibleSelectedSession.sprintName}`}
                 src={frameSrc}
                 className="h-full w-full border-0 bg-white"
               />
@@ -553,7 +559,9 @@ export const BrowserPage: FunctionComponent = () => {
                   onClick={handleRebuild}
                   disabled={!visibleSelectedSession || sessionActionPending}
                   aria-disabled={!visibleSelectedSession || sessionActionPending}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                  aria-label="Rebuild preview container"
+                  aria-busy={sessionActionPending}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <RotateCcw className={`h-4 w-4 ${sessionActionPending ? 'animate-spin' : ''}`} strokeWidth={2} />
                   {sessionActionPending ? "Rebuilding..." : "Rebuild"}
@@ -563,7 +571,9 @@ export const BrowserPage: FunctionComponent = () => {
                   onClick={handleStop}
                   disabled={!visibleSelectedSession || sessionActionPending}
                   aria-disabled={!visibleSelectedSession || sessionActionPending}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                  aria-label="Stop preview container"
+                  aria-busy={sessionActionPending}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-300/50 disabled:bg-slate-200/60 disabled:text-slate-500 disabled:opacity-100 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white dark:disabled:border-slate-700 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
                   {sessionActionPending ? "Stopping..." : "Stop"}
@@ -573,7 +583,8 @@ export const BrowserPage: FunctionComponent = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-disabled={!visibleSelectedSession}
-                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none opacity-50" : ""}`}
+                  title={visibleSelectedSession ? "Open preview in new tab" : "Start container to open"}
+                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none opacity-50 cursor-not-allowed" : ""}`}
                 >
                   <ExternalLink className="h-4 w-4" strokeWidth={2} />
                   Open
@@ -604,6 +615,7 @@ export const BrowserPage: FunctionComponent = () => {
                   onClick={handleSaveScript}
                   disabled={savingScript || !scriptTargetSprint}
                   aria-disabled={savingScript || !scriptTargetSprint}
+                  aria-busy={savingScript}
                   className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
                   <Save className="h-4 w-4" strokeWidth={2} />

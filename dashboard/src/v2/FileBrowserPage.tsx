@@ -290,7 +290,7 @@ export const FileBrowserPage: FunctionComponent = () => {
 
   if (!selectedProject) {
     return (
-      <PageContainer padding="workbench">
+      <PageContainer aria-label="File Browser" padding="workbench">
         <div class="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-8 text-sm text-slate-600 shadow-[0_16px_44px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-void-900/45 dark:text-slate-300">
           Select a project to open the sprint file browser. The workspace launches one containerized snapshot of the selected sprint branch.
         </div>
@@ -302,7 +302,7 @@ export const FileBrowserPage: FunctionComponent = () => {
   const changeCount = changes?.files.length ?? 0;
 
   return (
-    <PageContainer padding="workbench" className="min-h-full" data-testid="file-browser-page-root">
+    <PageContainer aria-label="File Browser" padding="workbench" className="min-h-full" data-testid="file-browser-page-root">
       <div class="mb-6 flex flex-wrap items-end justify-between gap-4" data-testid="file-browser-page-header">
         <div>
           <div class="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">

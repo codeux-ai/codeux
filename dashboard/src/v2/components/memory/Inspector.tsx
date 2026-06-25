@@ -127,9 +127,9 @@ export const Inspector: FunctionComponent<{
                             <button onClick={handleDeleteClick}
                                 ref={triggerRef as any}
                                 className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl
-                                           bg-status-red text-white font-bold text-xs
-                                           shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
-                                           transition-shadow duration-300">
+                                           bg-status-red text-white font-bold text-xs cursor-pointer
+                                           shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:bg-status-red/90 hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
+                                           transition-[background-color,box-shadow,color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
                                 <X className="w-3.5 h-3.5" strokeWidth={2.5} />
                                 Excise Memory
                             </button>

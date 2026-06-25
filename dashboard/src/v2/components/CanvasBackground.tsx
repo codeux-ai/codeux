@@ -1,11 +1,14 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 
 export const CanvasBackground: FunctionComponent = () => {
     const splineRef = useRef<SVGPathElement>(null);
+    const isReducedMotion = useReducedMotion();
 
     useEffect(() => {
+        if (isReducedMotion) return;
         if (splineRef.current) {
             const tl = gsap.timeline({ repeat: -1, yoyo: true });
             tl.to(splineRef.current, {
@@ -21,7 +24,7 @@ export const CanvasBackground: FunctionComponent = () => {
                 tl.kill();
             };
         }
-    }, []);
+    }, [isReducedMotion]);
 
     return (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">

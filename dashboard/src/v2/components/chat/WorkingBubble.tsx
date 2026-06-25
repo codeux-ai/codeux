@@ -47,7 +47,7 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
           ) : (
             <div className="flex flex-col w-full rounded-2xl border bg-slate-100/80 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] rounded-tl-sm border-slate-200/60 text-slate-800 dark:bg-white/5 dark:border-white/10 dark:text-slate-200">
               <div className="flex items-center gap-2">
-                <span className="text-[13px] font-medium text-slate-700 dark:text-slate-300">
+                <span aria-live="polite" role="status" className="text-[13px] font-medium text-slate-700 dark:text-slate-300">
                   {displayName || "Listener"} is preparing a reply
                   <span className={`ml-2 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                     phase === "starting" ? "border-slate-500/30 bg-slate-500/10 text-slate-500" : "border-signal-500/30 bg-signal-500/10 text-signal-500"

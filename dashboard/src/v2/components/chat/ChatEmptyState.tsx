@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { Link } from "@tanstack/react-router";
 import { Bot, MessageCircle, Plus, Radio, Sparkles } from "lucide-preact";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 type EmptyChatTone = "project" | "thread" | "messages" | "invocations";
 
@@ -96,8 +97,11 @@ export const ChatRailPlaceholder: FunctionComponent<{
   message: string;
   actionLabel?: string;
   actionTo?: string;
-}> = ({ title = "Thread Rail Ready", message, actionLabel = "New Thread", actionTo }) => (
-  <div className="relative flex min-h-[22rem] flex-col justify-between overflow-hidden rounded-3xl border border-dashed border-signal-500/20 bg-black/[0.025] p-5 dark:bg-white/[0.03]">
+}> = ({ title = "Thread Rail Ready", message, actionLabel = "New Thread", actionTo }) => {
+  const interactionTokens = useInteractionTokens();
+
+  return (
+  <div className="relative flex min-h-[22rem] flex-col justify-between overflow-hidden rounded-[1.5rem] border border-dashed border-signal-500/20 bg-black/[0.025] p-5 dark:bg-white/[0.03]">
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_0%,rgba(0,224,160,0.12),transparent_62%)]" />
     <div className="relative z-10 space-y-3">
       {[
@@ -126,7 +130,12 @@ export const ChatRailPlaceholder: FunctionComponent<{
       {actionTo ? (
         <Link
           to={actionTo}
-          className="mt-5 inline-flex min-h-[36px] items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:border-signal-500/35 hover:bg-signal-500/15 hover:text-signal-700 focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:text-signal-300"
+          style={{
+            transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
+            transitionDuration: interactionTokens.controlFeedback.duration,
+            transitionTimingFunction: interactionTokens.controlFeedback.ease,
+          }}
+          className="mt-5 inline-flex min-h-[36px] items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 hover:border-signal-500/35 hover:bg-signal-500/15 hover:text-signal-700 focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:text-signal-300"
         >
           <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
           {actionLabel}
@@ -139,7 +148,8 @@ export const ChatRailPlaceholder: FunctionComponent<{
       )}
     </div>
   </div>
-);
+  );
+};
 
 export const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => (
   <div className="flex h-full min-h-0 items-center justify-center rounded-3xl border border-dashed border-black/[0.06] bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">

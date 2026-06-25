@@ -19,6 +19,16 @@ import {
 import type { ComponentType } from "preact";
 import type { StatsCardAccent } from "./components/StatsCard.js";
 
+export function isValidCustomRange(from: string, to: string): boolean {
+  if (!from || !to) return false;
+  const fromDate = new Date(from);
+  const toDate = new Date(to);
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    return false;
+  }
+  return fromDate <= toDate;
+}
+
 export const EMPTY_USAGE: ExecutionUsageTotals = {
   invocationCount: 0,
   activeTimeMs: 0,

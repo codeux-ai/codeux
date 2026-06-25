@@ -41,6 +41,58 @@ export function backfillEstimatedDockerCliUsage(db: DatabaseAdapter): void {
   }));
 }
 
+/**
+ * Rebuilds an existing `guardrail_ledger` table to drop the legacy
+ * `FOREIGN KEY (task_id) REFERENCES tasks(id)` constraint.
+ *
+ * The ledger overloads `task_id` to also hold synthetic guardrail keys for taskless,
+ * sprint-level CI fixes (the final feature→default merge gate, keyed by
+ * `main-merge-ci-fix:<sprintRunId>`). The original FK rejected those keys with
+ * "FOREIGN KEY constraint failed", crashing the virtual worker cycle on the final merge
+ * step. SQLite cannot drop a column constraint in place, so we rebuild via the standard
+ * create/copy/drop/rename dance. No-op once the FK is gone.
+ */
+export function migrateGuardrailLedgerDropTaskForeignKey(db: DatabaseAdapter): void {
+  const fks = db.prepare("PRAGMA foreign_key_list(guardrail_ledger)").all() as Array<{
+    table?: string;
+    from?: string;
+  }>;
+  const hasTaskFk = fks.some((fk) => fk.table === "tasks" || fk.from === "task_id");
+  if (!hasTaskFk) {
+    return;
+  }
+
+  // PRAGMA foreign_keys is a no-op inside a transaction, so toggle it outside the BEGIN/COMMIT.
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    db.exec("BEGIN");
+    db.exec(`
+      CREATE TABLE guardrail_ledger_new (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      INSERT INTO guardrail_ledger_new (id, project_id, task_id, purpose, count, created_at, updated_at)
+      SELECT id, project_id, task_id, purpose, count, created_at, updated_at FROM guardrail_ledger
+    `);
+    db.exec("DROP TABLE guardrail_ledger");
+    db.exec("ALTER TABLE guardrail_ledger_new RENAME TO guardrail_ledger");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+}
+
 export function runMigrations(db: DatabaseAdapter): void {
   // We can group future schema changes here.
   // The current phase 1 approach calls schema definitions directly, but these ensure*
@@ -245,6 +297,11 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_scheduler_entries_project_time", "scheduler_entries", "project_id, scheduled_for ASC");
   ensureIndex(db, "idx_scheduler_entries_due", "scheduler_entries", "status, next_run_at ASC");
 
+  // NOTE: `task_id` is intentionally NOT a foreign key to tasks(id). The column is overloaded:
+  // sprint-level CI fixes (the final feature→default merge gate) have no task and key the ledger
+  // by a synthetic id (e.g. `main-merge-ci-fix:<sprintRunId>`). A task FK rejected those synthetic
+  // keys with "FOREIGN KEY constraint failed" and broke the merge-gate CI autofix flow. Cleanup is
+  // handled per-task via GuardrailRepository.reset() and per-project via the project FK cascade.
   db.exec(`
     CREATE TABLE IF NOT EXISTS guardrail_ledger (
       id TEXT PRIMARY KEY,
@@ -254,10 +311,10 @@ export function runMigrations(db: DatabaseAdapter): void {
       count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     )
   `);
+  migrateGuardrailLedgerDropTaskForeignKey(db);
   ensureUniqueIndex(db, "idx_guardrail_ledger_task_purpose", "guardrail_ledger", "task_id, purpose");
   ensureIndex(db, "idx_guardrail_ledger_project", "guardrail_ledger", "project_id, task_id");
 

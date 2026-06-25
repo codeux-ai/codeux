@@ -146,4 +146,38 @@ describe("start-ready-tasks-step", () => {
     expect(setConsecutiveFailures).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
   });
+
+  it("does not trigger emergency stop when multiple tasks are deferred for provider capacity", async () => {
+    const subtasks: Subtask[] = [
+      { id: "1", title: "t1", prompt: "p1", depends_on: [], is_independent: false, status: "PENDING" },
+      { id: "2", title: "t2", prompt: "p2", depends_on: [], is_independent: false, status: "PENDING" },
+      { id: "3", title: "t3", prompt: "p3", depends_on: [], is_independent: false, status: "PENDING" },
+    ];
+    let fails = 2;
+    const startTask = vi.fn().mockRejectedValue(new ProviderCapReachedError("codex", 2, 2));
+    const setConsecutiveFailures = vi.fn(val => fails = val);
+    const infoSpy = vi.fn();
+    const errorSpy = vi.fn();
+
+    const res = await runStartReadyTasksStep(subtasks, {
+      action: "orchestrate",
+      getConsecutiveFailures: () => fails,
+      setConsecutiveFailures,
+      maxFailures: 3,
+      startTask,
+      resolveSessionName: (s: any) => `sessions/${s.id}`,
+      extractSessionId: (s: any) => s.id,
+      logger: { info: infoSpy, error: errorSpy } as any,
+      getProviderForTask: () => "codex",
+      getProviderSettings: () => ({ maxConcurrentTasks: 2 }),
+      getRunningCounts: () => ({ codex: 2 }),
+    });
+
+    expect(startTask).toHaveBeenCalledTimes(3);
+    expect(res.subtasks.map(task => task.status)).toEqual(["PENDING", "PENDING", "PENDING"]);
+    expect(fails).toBe(2);
+    expect(setConsecutiveFailures).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledTimes(3);
+  });
 });

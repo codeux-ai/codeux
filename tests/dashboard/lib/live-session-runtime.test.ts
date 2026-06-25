@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveLiveSessionRuntimeState, resolveLiveSessionSprintScopeId } from "../../../dashboard/src/v2/lib/live-session-runtime.js";
+import { deriveLiveSessionRuntimeState, resolveLiveSessionSprintScopeId, getPendingActionState, getLiveActionDisplayProps } from "../../../dashboard/src/v2/lib/live-session-runtime.js";
 import type { DashboardStatus, ExecutionDashboardSnapshot } from "../../../dashboard/src/types.js";
 
 function createStatus(overrides: Partial<DashboardStatus> = {}): DashboardStatus {
@@ -367,6 +367,20 @@ describe("live session runtime state", () => {
     expect(state.hasSprintContext).toBe(false);
   });
 });
+
+  describe("Optimistic UI display helpers", () => {
+    it("getPendingActionState returns pending if action is in set", () => {
+      const pendingSet = new Set(["action-1", "action-2"]);
+      expect(getPendingActionState(pendingSet, "action-1")).toBe("pending");
+      expect(getPendingActionState(pendingSet, "action-3")).toBe("idle");
+    });
+
+    it("getLiveActionDisplayProps returns correct aria attributes", () => {
+      expect(getLiveActionDisplayProps(true, false)).toEqual({ "aria-disabled": true, "aria-busy": true });
+      expect(getLiveActionDisplayProps(false, true)).toEqual({ "aria-disabled": true, "aria-busy": false });
+      expect(getLiveActionDisplayProps(false, false)).toEqual({ "aria-disabled": false, "aria-busy": false });
+    });
+  });
 
   describe("Coverage padding 6", () => {
     it("should test pad91", () => expect(1).toBe(1));

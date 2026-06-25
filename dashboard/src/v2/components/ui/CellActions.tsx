@@ -5,6 +5,7 @@ import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useCallback } from "preact/hooks";
 import { Link } from "@tanstack/react-router";
 import { SHARED_INTERACTION_CLASSES } from "./Button.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 interface CellActionsProps {
     isRunning: boolean;
@@ -30,6 +31,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
     onSettingsClick,
 }) => {
     const { feedback: primaryFeedback, setPending: setPrimaryPending, setSuccess: setPrimarySuccess, setError: setPrimaryError } = useActionFeedback(1500);
+    const tokens = useInteractionTokens();
     const reducedMotion = useReducedMotion();
 
     const isPrimaryPending = primaryBusy || primaryFeedback.status === "pending";
@@ -56,6 +58,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
     return (
         <div className="absolute bottom-5 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-[50ms] w-full">
             <button
+                style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                 className={`flex items-center justify-center w-9 h-9 rounded-full text-slate-800 dark:text-white bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 relative overflow-hidden ${SHARED_INTERACTION_CLASSES}`}
                 aria-label={isRunning ? "Stop" : "Play"}
                 aria-busy={isPrimaryPending}
@@ -84,6 +87,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
             </button>
             <Link
                 to={to}
+                style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                 onClick={(e: MouseEvent) => {
                     e.stopPropagation();
                     void onSprintsClick?.();
@@ -94,6 +98,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
             </Link>
             <Link
                 to="/config"
+                style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
                 onClick={(e: MouseEvent) => {
                     e.stopPropagation();
                     void onSettingsClick?.();

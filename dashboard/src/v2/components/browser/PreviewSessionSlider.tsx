@@ -65,13 +65,13 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
   };
 
   return (
-    <div className="relative w-full">
+    <div className="relative w-full group">
       {cardCount > 5 && (
         <>
           <button
             type="button"
             onClick={scrollLeft}
-            className="absolute -left-4 top-1/2 z-10 -translate-y-1/2 rounded-full border border-black/[0.08] bg-white/90 p-2 text-slate-600 opacity-0 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-slate-900 group-hover:opacity-100 dark:border-white/[0.08] dark:bg-[#05080d]/90 dark:text-slate-400 dark:hover:bg-[#05080d] dark:hover:text-white lg:flex hidden"
+            className="absolute -left-4 top-1/2 z-10 -translate-y-1/2 rounded-full border border-black/[0.08] bg-white/90 p-2 text-slate-600 opacity-0 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-slate-900 group-hover:opacity-100 dark:border-white/[0.08] dark:bg-[#05080d]/90 dark:text-slate-400 dark:hover:bg-[#05080d] dark:hover:text-white lg:flex lg:group-focus-within:flex focus-within:opacity-100 focus:opacity-100 group-focus-within:opacity-100 hidden"
             title="Scroll left"
           >
             <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
@@ -79,7 +79,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           <button
             type="button"
             onClick={scrollRight}
-            className="absolute -right-4 top-1/2 z-10 -translate-y-1/2 rounded-full border border-black/[0.08] bg-white/90 p-2 text-slate-600 opacity-0 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-slate-900 group-hover:opacity-100 dark:border-white/[0.08] dark:bg-[#05080d]/90 dark:text-slate-400 dark:hover:bg-[#05080d] dark:hover:text-white lg:flex hidden"
+            className="absolute -right-4 top-1/2 z-10 -translate-y-1/2 rounded-full border border-black/[0.08] bg-white/90 p-2 text-slate-600 opacity-0 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:text-slate-900 group-hover:opacity-100 dark:border-white/[0.08] dark:bg-[#05080d]/90 dark:text-slate-400 dark:hover:bg-[#05080d] dark:hover:text-white lg:flex lg:group-focus-within:flex focus-within:opacity-100 focus:opacity-100 group-focus-within:opacity-100 hidden"
             title="Scroll right"
           >
             <ChevronRight className="h-5 w-5" strokeWidth={2.5} />
@@ -157,8 +157,11 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                     : "border-status-red/15 text-status-red hover:border-status-red/30 hover:bg-status-red/8"
                   }`}
                   title="Remove preview container"
+
+                  aria-label="Remove preview container"
                   disabled={removing}
                   aria-disabled={removing}
+                  aria-busy={removing}
                 >
                   {removing ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <Trash2 className="h-3 w-3" strokeWidth={2.5} />}
                   {removing ? "Removing..." : "Remove"}

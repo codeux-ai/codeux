@@ -47,8 +47,8 @@ export const MemoryFilters: FunctionComponent<{
                             tabIndex={activeTier === tab.key ? 0 : -1}
                             className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                             ${activeTier === tab.key
-                                ? "bg-signal-500/[0.12] border border-signal-500/30 text-signal-500"
-                                : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                ? "bg-signal-500/[0.12] border border-signal-500/30 text-signal-500 hover:bg-signal-500/[0.2]"
+                                : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:bg-black/[0.08] dark:hover:bg-white/[0.08] hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
                             }`}
                             onClick={() => activeTierSignal.value = tab.key}
                             onKeyDown={(e) => {
@@ -80,7 +80,7 @@ export const MemoryFilters: FunctionComponent<{
                         value={selectedSprintId ?? ""}
                         onChange={(e) => selectedSprintIdSignal.value = (e.target as HTMLSelectElement).value || undefined}
                         className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
-                                   bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08]
+                                   bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.08] transition-colors duration-200
                                    text-slate-600 dark:text-slate-300 cursor-pointer
                                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
                         {sprints.map(s => (
@@ -97,7 +97,7 @@ export const MemoryFilters: FunctionComponent<{
                         value={selectedAgentPresetId ?? ""}
                         onChange={(e) => selectedAgentPresetIdSignal.value = (e.target as HTMLSelectElement).value || undefined}
                         className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
-                                   bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08]
+                                   bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.08] transition-colors duration-200
                                    text-slate-600 dark:text-slate-300 cursor-pointer
                                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
                         <option value="">All Agents</option>
@@ -112,15 +112,16 @@ export const MemoryFilters: FunctionComponent<{
                     className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
                                bg-signal-500/10 text-signal-500 hover:bg-signal-500/20
                                border border-signal-500/20
+                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                transition-colors duration-200">
                     <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Add Memory
                 </button>
                 <button aria-pressed={showModels} onClick={() => setShowModels(!showModels)}
-                    className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
+                    className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer
                                border transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                ${showModels
-                                   ? "bg-signal-500/[0.12] border-signal-500/30 text-signal-500"
-                                   : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.06] text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                                   ? "bg-signal-500/[0.12] border-signal-500/30 text-signal-500 hover:bg-signal-500/[0.2]"
+                                   : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.06] text-slate-500 hover:bg-black/[0.08] dark:hover:bg-white/[0.08] hover:text-slate-900 dark:hover:text-white"
                                }`}>
                     <HardDrive className="w-3.5 h-3.5" strokeWidth={2} />
                     Models
@@ -130,13 +131,14 @@ export const MemoryFilters: FunctionComponent<{
                 </button>
                 <button aria-pressed={lobotomize} onClick={handleLobotomizeToggle}
                     className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-xs border
-                               transition-[background-color,box-shadow,border-color] duration-300
+                               transition-[background-color,box-shadow,border-color,color] duration-300
+                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                                ${lobotomize
-                                   ? "bg-rose-500 text-white border-rose-500 shadow-[0_0_24px_rgba(244,63,94,0.4)] hover:shadow-[0_0_36px_rgba(244,63,94,0.6)]"
-                                   : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-400 hover:border-rose-500/50 hover:text-rose-500"
+                                   ? "bg-status-red text-white border-status-red shadow-[0_0_24px_rgba(227,0,15,0.4)] hover:bg-status-red/90 hover:shadow-[0_0_36px_rgba(227,0,15,0.6)]"
+                                   : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.08] dark:border-white/[0.08] text-slate-600 dark:text-slate-400 hover:border-status-red/50 hover:text-status-red hover:bg-status-red/[0.04]"
                                }`}>
                     <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
-                    {lobotomize ? "Danger: Delete Mode Active" : "Lobotomize"}
+                    {lobotomize ? "Danger: Delete Mode" : "Lobotomize"}
                 </button>
             </div>
         </div>

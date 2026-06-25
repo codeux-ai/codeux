@@ -1,6 +1,8 @@
 import { h, ComponentChildren, FunctionComponent } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 
 interface OverlayProps {
   isOpen: boolean;
@@ -17,9 +19,11 @@ export const Overlay: FunctionComponent<OverlayProps> = ({
   children,
   className = "",
   blur = true,
-  exitDuration = 150,
+  exitDuration, // deprecated
 }) => {
   const reducedMotion = useReducedMotion();
+  const cssTokens = useInteractionTokens();
+  const gsapTokens = useGsapInteractionTokens();
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [visible, setVisible] = useState(isOpen);
 
@@ -35,10 +39,10 @@ export const Overlay: FunctionComponent<OverlayProps> = ({
       setVisible(false);
       const timer = setTimeout(() => {
         setShouldRender(false);
-      }, reducedMotion ? 0 : exitDuration);
+      }, reducedMotion ? 0 : gsapTokens.enterExit.duration * 1000);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, reducedMotion, exitDuration]);
+  }, [isOpen, reducedMotion, gsapTokens.enterExit.duration]);
 
   if (!shouldRender) return null;
 
@@ -47,7 +51,7 @@ export const Overlay: FunctionComponent<OverlayProps> = ({
       className={`fixed inset-0 z-40 flex items-center justify-center ${className}`}
       style={{
         opacity: visible ? 1 : 0,
-        transition: reducedMotion ? 'none' : 'opacity 150ms linear',
+        transition: reducedMotion ? 'none' : `opacity ${cssTokens.enterExit.duration} ${cssTokens.enterExit.ease}`,
       }}
     >
       <div

@@ -184,6 +184,9 @@ export const SprintsPage: FunctionComponent = () => {
     addTaskForSprint, setAddTaskForSprint,
     addTaskSprintTasks,
     virtualProviders,
+    defaultRouteOptionLabel,
+    defaultModelOptionLabel,
+    defaultRouteIconProviderId,
     planningEta,
     planningPresets,
     defaultPlanningAgentPresetId,
@@ -318,10 +321,10 @@ export const SprintsPage: FunctionComponent = () => {
 
   const onSprintSubmit = useCallback(async (payload: any) => {
     await handleSubmitSprint(payload);
-    if (!editingSprint) {
+    if ((payload.shouldHandleResult?.() ?? true) && !editingSprint) {
         animateLatestCell();
+        setLinkedIssues([]);
     }
-    setLinkedIssues([]);
   }, [handleSubmitSprint, editingSprint, animateLatestCell]);
 
   useEffect(() => {
@@ -373,7 +376,7 @@ export const SprintsPage: FunctionComponent = () => {
         onCancel={handleCancel}
       />
 
-      <PageContainer padding={selectedProject ? "standard" : "sprintsEmpty"} className={selectedProject ? "gap-20" : "gap-4"}>
+      <PageContainer aria-label="Sprints" padding={selectedProject ? "standard" : "sprintsEmpty"} className={selectedProject ? "gap-20" : "gap-4"}>
         <div ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
           <div className="flex flex-col gap-5">
             <div className="flex items-center gap-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-signal-500">
@@ -599,6 +602,9 @@ export const SprintsPage: FunctionComponent = () => {
                     initialSprint={editingSprint}
                     linkedIssues={linkedIssues}
                     virtualProviders={virtualProviders}
+                    defaultRouteOptionLabel={defaultRouteOptionLabel}
+                    defaultModelOptionLabel={defaultModelOptionLabel}
+                    defaultRouteIconProviderId={defaultRouteIconProviderId}
                     planningPresets={planningPresets}
                     agentPresets={agentPresets}
                     defaultPlanningAgentPresetId={defaultPlanningAgentPresetId}
@@ -647,10 +653,15 @@ export const SprintsPage: FunctionComponent = () => {
                     agentPresets={agentPresets}
 
                     virtualProviders={virtualProviders}
+                    defaultRouteOptionLabel={defaultRouteOptionLabel}
+                    defaultModelOptionLabel={defaultModelOptionLabel}
+                    defaultRouteIconProviderId={defaultRouteIconProviderId}
                     planningEta={planningEta}
-                    onExecute={async (templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride) => {
-                      await handleQuicksprintExecute(templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride);
-                      animateLatestCell();
+                    onExecute={async (templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride, signal, options) => {
+                      await handleQuicksprintExecute(templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride, signal, options);
+                      if (options?.shouldHandleResult?.() ?? true) {
+                        animateLatestCell();
+                      }
                     }}
                     onCreateTemplate={handleCreateQuicksprintTemplate}
                     onUpdateTemplate={handleUpdateQuicksprintTemplate}

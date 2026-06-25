@@ -243,7 +243,7 @@ describe("SprintLedger Component", () => {
 
     // In bulk pending mode, ALL row selection buttons should be disabled
     await waitFor(() => {
-      const selectAllBtn = screen.getByTitle("Select all visible");
+      const selectAllBtn = screen.getByTitle("Select all visible sprints");
       expect(selectAllBtn).toBeDisabled();
     });
 
@@ -254,7 +254,7 @@ describe("SprintLedger Component", () => {
     render(<SprintLedger {...defaultProps} pendingActionIds={specificPendingIds} />);
 
     await waitFor(() => {
-      const selectAllBtn = screen.getByTitle("Select all visible");
+      const selectAllBtn = screen.getByTitle("Select all visible sprints");
       expect(selectAllBtn).not.toBeDisabled();
 
       const rows = screen.getAllByRole("row");

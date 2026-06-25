@@ -100,13 +100,13 @@ describe("AttentionLedger", () => {
 
         render(<AttentionLedger />);
 
-        expect(screen.getByRole("button", { name: "Claiming" })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Resolving" })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "Dismissing" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Claiming/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Resolving/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Dismissing/ })).toBeInTheDocument();
 
-        expect(screen.getByRole("button", { name: "Claiming" })).toBeDisabled();
-        expect(screen.getByRole("button", { name: "Resolving" })).toBeDisabled();
-        expect(screen.getByRole("button", { name: "Dismissing" })).toBeDisabled();
+        expect(screen.getByRole("button", { name: /Claiming/ })).toHaveAttribute("aria-disabled", "true");
+        expect(screen.getByRole("button", { name: /Resolving/ })).toHaveAttribute("aria-disabled", "true");
+        expect(screen.getByRole("button", { name: /Dismissing/ })).toHaveAttribute("aria-disabled", "true");
     });
 
     it("renders a collapsible header when requested", () => {

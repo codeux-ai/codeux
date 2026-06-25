@@ -283,7 +283,7 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
             </div>
           </div>
 
-          <main className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
             {error && (
               <div className="mb-4 rounded-[1.1rem] border border-status-red/20 bg-status-red/[0.08] px-4 py-3 text-sm font-semibold text-status-red">
                 {error}
@@ -384,7 +384,7 @@ export const SprintJiraImportModal = ({ projectId, onClose, onImport }: SprintJi
                 })}
               </div>
             )}
-          </main>
+          </div>
 
           <footer className="flex flex-col gap-3 border-t border-black/[0.06] p-5 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between sm:p-7">
             <div className="text-xs font-semibold text-slate-400">

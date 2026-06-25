@@ -36,9 +36,14 @@ vi.mock("../../../src/shared/subprocess/command-runner.js", () => ({
   },
 }));
 
+vi.mock("../../../src/infrastructure/git/local-merge.js", () => ({
+  findRecoverableWorkerBranch: vi.fn(),
+}));
+
 import { syncRemoteBranchIfAvailable } from "../../../src/services/git-branch-sync-service.js";
 import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
 import { commandRunner } from "../../../src/shared/subprocess/command-runner.js";
+import { findRecoverableWorkerBranch } from "../../../src/infrastructure/git/local-merge.js";
 
 const tempDirs: string[] = [];
 
@@ -49,6 +54,101 @@ afterEach(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(syncRemoteBranchIfAvailable).mockResolvedValue(true);
+});
+
+describe("QualityAssuranceService.resolveReviewBranch", () => {
+  const makeService = (updateTaskRun = vi.fn()) =>
+    new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: { updateTaskRun } as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+  it("prefers the recorded worker branch on the task without recovering", async () => {
+    const service = makeService();
+    const branch = await (service as any).resolveReviewBranch({
+      task: { id: "T01", provider: "claude-code", worker_branch: "task/feature-x-t01-claude-code-abc" },
+      taskRun: { id: "run-1", workerBranch: null, provider: "claude-code" },
+      repoPath: "/repo",
+      featureBranch: "feature/x",
+      githubMode: "LOCAL",
+    });
+    expect(branch).toBe("task/feature-x-t01-claude-code-abc");
+    expect(findRecoverableWorkerBranch).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the latest run's worker branch when the task has none", async () => {
+    const service = makeService();
+    const branch = await (service as any).resolveReviewBranch({
+      task: { id: "T01", provider: "claude-code", worker_branch: undefined },
+      taskRun: { id: "run-1", workerBranch: "task/feature-x-t01-claude-code-def", provider: "claude-code" },
+      repoPath: "/repo",
+      featureBranch: "feature/x",
+      githubMode: "LOCAL",
+    });
+    expect(branch).toBe("task/feature-x-t01-claude-code-def");
+    expect(findRecoverableWorkerBranch).not.toHaveBeenCalled();
+  });
+
+  it("recovers the worker branch from local refs in LOCAL mode when metadata was lost", async () => {
+    vi.mocked(findRecoverableWorkerBranch).mockResolvedValue("task/feature-x-t01-claude-code-ghi");
+    const updateTaskRun = vi.fn();
+    const service = makeService(updateTaskRun);
+    const task: any = { id: "T01", provider: "claude-code", worker_branch: undefined };
+    const taskRun: any = { id: "run-1", workerBranch: null, provider: "claude-code" };
+
+    const branch = await (service as any).resolveReviewBranch({
+      task,
+      taskRun,
+      repoPath: "/repo",
+      featureBranch: "feature/x",
+      githubMode: "LOCAL",
+    });
+
+    expect(branch).toBe("task/feature-x-t01-claude-code-ghi");
+    expect(findRecoverableWorkerBranch).toHaveBeenCalledWith(
+      expect.objectContaining({ repoPath: "/repo", featureBranch: "feature/x" }),
+    );
+    // Backfilled onto the task and the run so the fix path / merge gate agree.
+    expect(task.worker_branch).toBe("task/feature-x-t01-claude-code-ghi");
+    expect(taskRun.workerBranch).toBe("task/feature-x-t01-claude-code-ghi");
+    expect(updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: "task/feature-x-t01-claude-code-ghi" });
+  });
+
+  it("falls back to the feature branch when no worker branch with real work exists", async () => {
+    vi.mocked(findRecoverableWorkerBranch).mockResolvedValue(null);
+    const service = makeService();
+    const branch = await (service as any).resolveReviewBranch({
+      task: { id: "T04", provider: "qwen-code", worker_branch: undefined },
+      taskRun: { id: "run-4", workerBranch: null, provider: "qwen-code" },
+      repoPath: "/repo",
+      featureBranch: "feature/x",
+      githubMode: "LOCAL",
+    });
+    expect(branch).toBe("feature/x");
+    expect(findRecoverableWorkerBranch).toHaveBeenCalled();
+  });
+
+  it("does not attempt local-ref recovery in REMOTE mode", async () => {
+    const service = makeService();
+    const branch = await (service as any).resolveReviewBranch({
+      task: { id: "T01", provider: "claude-code", worker_branch: undefined },
+      taskRun: { id: "run-1", workerBranch: null, provider: "claude-code" },
+      repoPath: "/repo",
+      featureBranch: "feature/x",
+      githubMode: "REMOTE",
+    });
+    expect(branch).toBe("feature/x");
+    expect(findRecoverableWorkerBranch).not.toHaveBeenCalled();
+  });
 });
 
 describe("QualityAssuranceService", () => {

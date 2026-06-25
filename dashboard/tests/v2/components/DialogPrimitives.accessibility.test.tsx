@@ -105,6 +105,46 @@ describe('Dialog Primitives Accessibility', () => {
         expect(onClose).toHaveBeenCalled();
       });
 
+
+      it('prevents hidden content from remaining reachable by tab navigation during close animations', async () => {
+        const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+        const onClose = vi.fn();
+
+        const TestComponent = () => {
+          const [isOpen, setIsOpen] = useState(true);
+          return (
+            <div>
+              <Component isOpen={isOpen} onClose={() => setIsOpen(false)} ariaLabel="Test">
+                <button>Inside</button>
+              </Component>
+            </div>
+          );
+        };
+
+        const { unmount } = render(<TestComponent />);
+
+        vi.advanceTimersByTime(200); await Promise.resolve(); // yield // Allow focus trap to initialize
+
+        const insideBtn = screen.getByText("Inside");
+        expect(insideBtn).toBeInTheDocument();
+
+        // Close the dialog
+        await user.keyboard('{Escape}');
+
+        // Assert that the container tabIndex or pointerEvents prevents focus during exit animation
+        // Depending on implementation, we can check if it's inert or wait for unmount
+        // It says "Prevent hidden or exiting dialog content from remaining reachable by tab navigation during close animations."
+        // We'll test by checking if we can tab to it during the animation
+
+        // Advance slightly so it's closing but not closed
+        vi.advanceTimersByTime(50);
+
+        await user.tab();
+        expect(document.activeElement).not.toBe(insideBtn);
+
+        unmount();
+      });
+
       it('returns focus to opener on close', async () => {
         const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
         const onClose = vi.fn();

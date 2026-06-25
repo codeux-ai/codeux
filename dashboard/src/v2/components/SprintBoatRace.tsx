@@ -11,6 +11,7 @@ import { BoatRaceShipsLayer } from "./boat-race/BoatRaceShip.js";
 import { SVG_W, SVG_H, TOW_LINE_LENGTH, BADGE_OFFSET } from "./boat-race/constants.js";
 import { useIsDark } from "./boat-race/utils.js";
 import { useBoatRaceAnimation } from "../hooks/useBoatRaceAnimation.js";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 
 /* ─── Props ──────────────────────────────────────────────────────────────── */
 
@@ -41,7 +42,10 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
     const rippleIdRef = useRef(0);
     const lastRippleRef = useRef(0);
 
+    const prefersReducedMotion = useReducedMotion();
+
     const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (prefersReducedMotion) return;
         const svg = svgRef.current;
         if (!svg) return;
         const now = performance.now();
@@ -54,7 +58,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
         const id = ++rippleIdRef.current;
         ripplesSignal.value = [...ripplesSignal.value.slice(-6), { x, y, id }];
         setTimeout(() => { ripplesSignal.value = ripplesSignal.value.filter(r => r.id !== id); }, 2000);
-    }, []);
+    }, [prefersReducedMotion]);
 
     /* ─── Idle state ─────────────────────────────────────────────── */
     if (!hasSprintContext || tasks.length === 0) {

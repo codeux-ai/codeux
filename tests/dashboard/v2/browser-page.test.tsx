@@ -362,7 +362,7 @@ describe("BrowserPage", () => {
 
     render(<BrowserPage />);
 
-    const iframe = screen.getByTitle("Sprint preview Sprint 2");
+    const iframe = screen.getByTitle("Preview: Project 1 - Sprint 2");
     const { protocol, port } = new URL(window.location.origin);
     expect(iframe).toBeInTheDocument();
     expect(iframe).toHaveAttribute("src", `${protocol}//preview-sess-2.localhost${port ? `:${port}` : ""}/`);

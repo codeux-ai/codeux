@@ -16,7 +16,7 @@ export function useTaskCardMotion(ref: RefObject<HTMLElement>, status: string, i
 
     gsap.fromTo(ref.current,
       { opacity: 0, y: 15 },
-      { opacity: 1, y: 0, duration: parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000, ease: INTERACTION_TOKENS.enterExit.ease, delay: index * 0.05, clearProps: "transform,opacity", overwrite: "auto" }
+      { opacity: 1, y: 0, duration: parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000, ease: INTERACTION_TOKENS.enterExit.ease, delay: index * (parseFloat(INTERACTION_TOKENS.listReorder.duration) / 1000) * 0.2, clearProps: "transform,opacity", overwrite: "auto" }
     );
   }, [isReducedMotion, index]);
 

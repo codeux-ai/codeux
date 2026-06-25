@@ -177,7 +177,11 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
       </div>
 
       <div className="sr-only" aria-live="polite" aria-atomic="true">
-        {ledgerSprintsCount === 0 && hasFilters ? "No matching sprints. Adjust search or filters." : ""}
+        {ledgerSprintsCount === 0 && hasFilters
+          ? "No matching sprints. Adjust search or filters."
+          : hasFilters
+            ? `Showing ${ledgerSprintsCount} filtered sprints out of ${sprintsCount} total.`
+            : `Showing all ${sprintsCount} sprints.`}
       </div>
     </div>
   );

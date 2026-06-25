@@ -324,6 +324,12 @@ describe("sprint-ledger-state", () => {
       const result = pruneSelection(selected, sprints);
       expect(result).toEqual(new Set());
     });
+
+    it("returns empty when all selected elements are filtered out", () => {
+      const selected = new Set(["a", "b"]);
+      const result = pruneSelection(selected, [sprints[2], sprints[3]]); // neither a nor b
+      expect(result).toEqual(new Set());
+    });
   });
 
   describe("getSelectedFilteredSprints", () => {
@@ -337,6 +343,10 @@ describe("sprint-ledger-state", () => {
 
     it("returns empty if nothing selected", () => {
       expect(getSelectedFilteredSprints(new Set(), sprints)).toEqual([]);
+    });
+
+    it("returns empty when all items are filtered out", () => {
+      expect(getSelectedFilteredSprints(new Set(["a"]), [])).toEqual([]);
     });
   });
 
@@ -357,6 +367,11 @@ describe("sprint-ledger-state", () => {
       expect(nextSort({ key: "name", direction: "asc" }, "tasksCount").direction).toBe("desc");
       expect(nextSort({ key: "name", direction: "asc" }, "completion").direction).toBe("desc");
       expect(nextSort({ key: "name", direction: "asc" }, "createdAt").direction).toBe("desc");
+    });
+
+    it("assigns correct default direction when toggling from a different column", () => {
+      expect(nextSort({ key: "name", direction: "asc" }, "tasksCount")).toEqual({ key: "tasksCount", direction: "desc" });
+      expect(nextSort({ key: "tasksCount", direction: "desc" }, "name")).toEqual({ key: "name", direction: "asc" });
     });
   });
 });

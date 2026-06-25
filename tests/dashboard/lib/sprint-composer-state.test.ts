@@ -1,7 +1,26 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { getAvailableModes, toPlanningOverrides, resolveSubmitOriginalPrompt } from "../../../dashboard/src/v2/lib/sprint-composer-state.js";
+import { renderHook, act } from "@testing-library/preact";
+import { getAvailableModes, toPlanningOverrides, resolveSubmitOriginalPrompt, useSprintComposerState } from "../../../dashboard/src/v2/lib/sprint-composer-state.js";
 
 describe("Sprint Composer State Helpers", () => {
+  describe("useSprintComposerState", () => {
+    it("should manage hasAttemptedSubmit and hasAttemptedImprove validation states", () => {
+      const { result } = renderHook(() => useSprintComposerState());
+
+      expect(result.current.hasAttemptedSubmit).toBe(false);
+      expect(result.current.hasAttemptedImprove).toBe(false);
+
+      act(() => {
+        result.current.setHasAttemptedSubmit(true);
+        result.current.setHasAttemptedImprove(true);
+      });
+
+      expect(result.current.hasAttemptedSubmit).toBe(true);
+      expect(result.current.hasAttemptedImprove).toBe(true);
+    });
+  });
+
   describe("getAvailableModes", () => {
     it("returns creation modes for new sprints", () => {
       const modes = getAvailableModes(false, false);

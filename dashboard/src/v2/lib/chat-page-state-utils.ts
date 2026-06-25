@@ -20,3 +20,8 @@ export const isDetailLoading = (
   hasItemSnapshot: boolean,
   loading: boolean,
 ): boolean => Boolean(selectedItemId) && loading && !hasItemSnapshot;
+
+export const isPendingRefresh = (
+  manualRefreshing: boolean,
+  loading: boolean,
+): boolean => manualRefreshing || loading;

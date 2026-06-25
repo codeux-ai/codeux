@@ -7,6 +7,7 @@ import { X } from "lucide-preact";
 import { deleteMemory } from "../../lib/memory-api.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { useInteractionTokens } from "../../lib/motion/index.js";
 
 interface MemoryCardProps {
     id: string;
@@ -37,6 +38,7 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
     const cat = CAT[category] || CAT.context;
     const isSelected = useComputed(() => activeMemoryIdSignal.value === id);
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
+    const interactionTokens = useInteractionTokens();
 
     const handleDelete = async (e: Event) => {
         e.stopPropagation();
@@ -68,22 +70,30 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                     onClick();
                 }
             }}
+            style={{
+                transitionProperty: "background-color, border-color, box-shadow, transform",
+                transitionDuration: `${interactionTokens.enterExit.duration}s`,
+                transitionTimingFunction: interactionTokens.enterExit.ease,
+            }}
             className={`
-                group relative cursor-pointer p-4 rounded-[1.25rem] border transition-all duration-200 text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
+                group relative cursor-pointer p-4 rounded-[1.25rem] border text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                 ${isSelected.value
-                    ? "bg-white dark:bg-void-800 border-signal-500 shadow-[0_4px_24px_rgba(0,224,160,0.15)]"
-                    : "bg-white/60 dark:bg-void-800/50 border-black/[0.06] dark:border-white/[0.06] hover:bg-white dark:hover:bg-void-800 hover:border-black/[0.12] dark:hover:border-white/[0.12] hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+                    ? "bg-white dark:bg-void-800 border-signal-500 shadow-[0_4px_24px_rgba(0,224,160,0.15)] scale-[1.02]"
+                    : "bg-white/60 dark:bg-void-800/50 border-black/[0.06] dark:border-white/[0.06] hover:bg-white dark:hover:bg-void-800 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] scale-100"
                 }
+                ${lobotomizeModeSignal.value && !isSelected.value ? "hover:border-status-red/30" : ""}
             `}
         >
             {lobotomizeModeSignal.value && (
                 <button
                     type="button"
+                    ref={triggerRef as any}
                     aria-label={`Delete ${cat.label} memory: ${content.substring(0, 30)}...`}
                     onClick={handleDelete}
-                    className="absolute top-1 right-1 z-10 p-1 rounded-full transition-all duration-150 hover:bg-status-red/10 text-slate-400 hover:text-status-red cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
+                    className={`absolute top-2 right-2 z-10 p-1.5 rounded-full transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
+                                ${isSelected.value ? "bg-status-red/10 text-status-red hover:bg-status-red hover:text-white" : "bg-black/5 dark:bg-white/5 text-slate-400 hover:bg-status-red hover:text-white"}`}
                 >
-                    <X size={14} />
+                    <X size={14} strokeWidth={2.5} />
                 </button>
             )}
             <div className="flex items-center justify-between mb-2">

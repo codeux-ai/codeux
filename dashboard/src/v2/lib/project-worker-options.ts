@@ -1,7 +1,16 @@
 import type {
   ExecutionDashboardSnapshot,
   ExecutionAssignedWorkerSummary,
+  SystemSettings,
 } from "../../types.js";
+import {
+  getProviderDisplayMetadata,
+  getVirtualProviderDisplayMetadata,
+} from "./settings-view-models.js";
+import {
+  DEFAULT_PROVIDER_CONFIG_NAMES,
+  VIRTUAL_WORKER_PROVIDERS,
+} from "../../../../src/repositories/settings-defaults.js";
 
 const LIVE_WORKER_STATUSES = new Set(["connected", "listening", "idle", "paused"]);
 
@@ -10,21 +19,11 @@ export const VIRTUAL_WORKER_OPTIONS: Array<{
   label: string;
   subLabel: string;
 }> = [
-  {
-    id: "gemini",
-    label: "Virtual Gemini Worker",
+  ...VIRTUAL_WORKER_PROVIDERS.map((id) => ({
+    id,
+    label: DEFAULT_PROVIDER_CONFIG_NAMES[id],
     subLabel: "On-demand CLI",
-  },
-  {
-    id: "codex",
-    label: "Virtual Codex Worker",
-    subLabel: "On-demand CLI",
-  },
-  {
-    id: "claude-code",
-    label: "Virtual Claude Code Worker",
-    subLabel: "On-demand CLI",
-  },
+  })),
 ];
 
 export interface WorkerRoutingPreference {
@@ -44,6 +43,9 @@ export interface WorkerOption {
   workerEndpointId?: string | null;
   workerEndpointKey?: string | null;
   providerId?: string;
+  providerConfigId?: string;
+  iconProviderId?: string;
+  effectiveModel?: string;
 }
 
 export interface ProjectWorkerOptionsResult {
@@ -56,7 +58,8 @@ export interface ProjectWorkerOptionsResult {
 export function getProjectWorkerOptions(
   execution: ExecutionDashboardSnapshot | null,
   routing: WorkerRoutingPreference | null,
-  loading: boolean = false
+  loading: boolean = false,
+  systemSettings: SystemSettings | null = null,
 ): ProjectWorkerOptionsResult {
   const connections = (execution?.connections || []).filter((connection) => connection.role === "worker");
   const primaryAssignedWorker = execution?.primaryAssignedWorker || null;
@@ -101,17 +104,25 @@ export function getProjectWorkerOptions(
     });
   }
 
-  for (const virtualWorker of VIRTUAL_WORKER_OPTIONS) {
+  const virtualWorkers = systemSettings
+    ? getVirtualProviderDisplayMetadata(systemSettings)
+    : VIRTUAL_WORKER_OPTIONS.map((worker) => getProviderDisplayMetadata(null, worker.id))
+        .filter((metadata): metadata is NonNullable<typeof metadata> => Boolean(metadata));
+
+  for (const virtualWorker of virtualWorkers) {
     options.push({
-      id: `virtual:${virtualWorker.id}`,
-      label: virtualWorker.label,
-      subLabel: virtualWorker.subLabel,
+      id: `virtual:${virtualWorker.providerConfigId}`,
+      label: virtualWorker.displayLabel,
+      subLabel: "On-demand CLI",
       status: "available",
-      isPrimary: selectedVirtualProvider === virtualWorker.id,
+      isPrimary: selectedVirtualProvider === virtualWorker.providerConfigId || selectedVirtualProvider === virtualWorker.provider,
       type: "virtual",
       isSelectable: true,
-      providerId: virtualWorker.id,
-      workerEndpointKey: `virtual:${virtualWorker.id}`,
+      providerId: virtualWorker.provider,
+      providerConfigId: virtualWorker.providerConfigId,
+      iconProviderId: virtualWorker.iconProviderId,
+      effectiveModel: virtualWorker.effectiveModel,
+      workerEndpointKey: `virtual:${virtualWorker.providerConfigId}`,
     });
   }
 

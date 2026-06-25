@@ -13,7 +13,7 @@ import {
 } from "lucide-preact";
 import gsap from "gsap";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
-import type { AgentPreset, ExecutionConnectionSummary, VirtualWorkerProvider } from "../../types.js";
+import type { AgentPreset, ExecutionConnectionSummary, ProviderId } from "../../types.js";
 import type { PlanningRouteOption } from "../../lib/sprint-composer-state.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
@@ -21,6 +21,17 @@ import { getPlanningFeedback } from "../../lib/sprint-planning-feedback.js";
 import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
+import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
+
+interface VirtualProviderOption {
+  id?: string;
+  providerConfigId?: string;
+  provider?: string;
+  label?: string;
+  displayLabel?: string;
+  iconProviderId?: ProviderId;
+  effectiveModel?: string;
+}
 
 /* ─── Icon Map ──────────────────────────────────────────────────────── */
 const IconMap: Record<string, FunctionComponent<LucideProps>> = {
@@ -92,14 +103,21 @@ type BuiltinPurposeOption = {
   description?: string;
 };
 
+interface QuicksprintExecutionOptions {
+  shouldHandleResult?: () => boolean;
+}
+
 interface QuicksprintPanelProps {
   projectId: string;
   onClose: () => void;
-  onExecute: (templateId: string, taskCount: number, submitMode: "plan_only" | "plan_and_start", additionalPrompt?: string, routeOverride?: PlanningRouteOption | null, modelOverride?: string | null, signal?: AbortSignal) => Promise<void>;
+  onExecute: (templateId: string, taskCount: number, submitMode: "plan_only" | "plan_and_start", additionalPrompt?: string, routeOverride?: PlanningRouteOption | null, modelOverride?: string | null, signal?: AbortSignal, options?: QuicksprintExecutionOptions) => Promise<void>;
   templates: QuicksprintTemplateRecord[];
   loading?: boolean;
   agentPresets?: AgentPreset[];
-  virtualProviders?: Array<{ id: VirtualWorkerProvider; label: string }>;
+  virtualProviders?: VirtualProviderOption[];
+  defaultRouteOptionLabel?: string;
+  defaultModelOptionLabel?: string;
+  defaultRouteIconProviderId?: ProviderId | null;
   planningEta?: number;
   onCreateTemplate?: (data: {
     name: string;
@@ -133,6 +151,9 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   loading = false,
   agentPresets = [],
   virtualProviders = [],
+  defaultRouteOptionLabel = "Default Route",
+  defaultModelOptionLabel = "Default Model",
+  defaultRouteIconProviderId = null,
   planningEta = 180_000,
   onCreateTemplate,
   onUpdateTemplate,
@@ -176,6 +197,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeRequestRef = useRef<{ id: number; detached: boolean; cancelled: boolean } | null>(null);
+  const requestCounterRef = useRef(0);
   const isBusy = executingMode !== null;
 
   const selectedTemplate = useMemo(
@@ -271,16 +294,44 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
       }
     }
     for (const vp of virtualProviders) {
-      opts.push({ type: "virtual", id: vp.id, label: vp.label, provider: vp.id });
+      opts.push({
+        type: "virtual",
+        id: vp.providerConfigId || vp.id || vp.provider || "",
+        label: vp.displayLabel || vp.label || vp.providerConfigId || vp.id || vp.provider || "Provider",
+        provider: vp.providerConfigId || vp.id || vp.provider,
+        iconProviderId: vp.iconProviderId || (vp.provider as ProviderId | undefined) || (vp.id as ProviderId | undefined),
+        effectiveModel: vp.effectiveModel,
+      });
     }
     return opts;
   }, [connections, virtualProviders]);
 
   const showModelOverride = routeOverride?.type === "virtual";
+  const modelProviderId = routeOverride?.iconProviderId;
   const modelOptions = useMemo(
-    () => (showModelOverride && routeOverride?.provider ? getProviderModelOptions(routeOverride.provider) : []),
-    [showModelOverride, routeOverride],
+    () => (showModelOverride && modelProviderId ? getProviderModelOptions(modelProviderId) : []),
+    [showModelOverride, modelProviderId],
   );
+  const defaultModelLabel = routeOverride?.effectiveModel
+    ? `Default Model (${routeOverride.effectiveModel})`
+    : defaultModelOptionLabel;
+  const renderProviderIcon = (providerId: ProviderId) => (
+    <ProviderBrandIcon id={providerId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+  );
+  const renderConnectedRouteIcon = () => (
+    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-slate-500/18 bg-slate-500/[0.08] text-slate-600 dark:border-slate-300/18 dark:bg-slate-300/[0.08] dark:text-slate-300">
+      <Settings2 className="h-3.5 w-3.5" strokeWidth={2.2} />
+    </span>
+  );
+
+  useEffect(() => {
+    if (!modelOverride) {
+      return;
+    }
+    if (!showModelOverride || !modelOptions.some((option) => option.value === modelOverride)) {
+      setModelOverride(null);
+    }
+  }, [modelOptions, modelOverride, showModelOverride]);
 
   /* ── Planning feedback / timer ──────────────────────────────────── */
   useEffect(() => {
@@ -379,28 +430,59 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
   /* ── Execute ────────────────────────────────────────────────────── */
   const handleExecute = useCallback(async (mode: "plan_only" | "plan_and_start") => {
-    if (!selectedTemplate) return;
+    if (!selectedTemplate || activeRequestRef.current) return;
     setExecutingMode(mode);
     setIsOverlayDismissed(false);
     setElapsedMs(0);
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
     const ac = new AbortController();
+    const requestId = requestCounterRef.current + 1;
+    requestCounterRef.current = requestId;
+    activeRequestRef.current = { id: requestId, detached: false, cancelled: false };
     abortControllerRef.current = ac;
+    const shouldHandleResult = (): boolean => {
+      const activeRequest = activeRequestRef.current;
+      return !!activeRequest
+        && activeRequest.id === requestId
+        && !activeRequest.detached
+        && !activeRequest.cancelled;
+    };
 
     try {
-      await onExecute(selectedTemplate.id, taskCount, mode, additionalPrompt.trim() || undefined, routeOverride, modelOverride, ac.signal);
+      await onExecute(
+        selectedTemplate.id,
+        taskCount,
+        mode,
+        additionalPrompt.trim() || undefined,
+        routeOverride,
+        modelOverride,
+        ac.signal,
+        { shouldHandleResult },
+      );
+      if (shouldHandleResult()) {
+        onClose();
+      }
+    } catch {
+      // Error feedback is owned by the page action; detached requests must not affect the reset panel.
     } finally {
+      const activeRequest = activeRequestRef.current;
+      if (activeRequest?.id === requestId) {
+        activeRequestRef.current = null;
+      }
       if (abortControllerRef.current === ac) {
-        setExecutingMode(null);
         abortControllerRef.current = null;
       }
+      if (!activeRequest || activeRequest.id === requestId) {
+        setExecutingMode(null);
+      }
     }
-  }, [selectedTemplate, taskCount, additionalPrompt, onExecute, routeOverride, modelOverride]);
+  }, [selectedTemplate, taskCount, additionalPrompt, onExecute, onClose, routeOverride, modelOverride]);
 
   const handleCancelExecute = useCallback(() => {
+    if (activeRequestRef.current) {
+      activeRequestRef.current.cancelled = true;
+      activeRequestRef.current = null;
+    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -409,7 +491,19 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   }, []);
 
   const handleNewQuicksprint = useCallback(() => {
+    if (activeRequestRef.current) {
+      activeRequestRef.current.detached = true;
+    }
+    activeRequestRef.current = null;
+    abortControllerRef.current = null;
+    setExecutingMode(null);
     setIsOverlayDismissed(true);
+    setSelectedTemplateId(null);
+    setTaskCount(5);
+    setRouteOverride(null);
+    setModelOverride(null);
+    setShowPrompt(false);
+    setAdditionalPrompt("");
     setPhase("browse");
   }, []);
 
@@ -586,13 +680,26 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                       onChange={(id) => {
                         const opt = routeOptions.find((o) => o.id === id);
                         setRouteOverride(opt || null);
-                        if (!opt || opt.type !== "virtual") setModelOverride(null);
                       }}
                       options={[
-                        { value: "", label: "Default Route" },
-                        ...routeOptions.map((opt) => ({ value: opt.id, label: opt.label })),
+                        {
+                          value: "",
+                          label: defaultRouteOptionLabel,
+                          icon: defaultRouteIconProviderId
+                            ? () => renderProviderIcon(defaultRouteIconProviderId)
+                            : undefined,
+                        },
+                        ...routeOptions.map((opt) => ({
+                          value: opt.id,
+                          label: opt.label,
+                          icon: opt.type === "virtual" && opt.iconProviderId
+                            ? () => renderProviderIcon(opt.iconProviderId!)
+                            : opt.type === "connected"
+                              ? renderConnectedRouteIcon
+                              : undefined,
+                        })),
                       ]}
-                      placeholder="Default Route"
+                      placeholder={defaultRouteOptionLabel}
                     />
                   </div>
                 </div>
@@ -610,10 +717,22 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                       value={modelOverride || ""}
                       onChange={(val) => setModelOverride(val || null)}
                       options={[
-                        { value: "", label: "Default Model" },
-                        ...modelOptions.map((opt) => ({ value: opt.value, label: opt.label })),
+                        {
+                          value: "",
+                          label: defaultModelLabel,
+                          icon: modelProviderId
+                            ? () => renderProviderIcon(modelProviderId)
+                            : undefined,
+                        },
+                        ...modelOptions.map((opt) => ({
+                          value: opt.value,
+                          label: opt.label,
+                          icon: modelProviderId
+                            ? () => renderProviderIcon(modelProviderId)
+                            : undefined,
+                        })),
                       ]}
-                      placeholder="Default Model"
+                      placeholder={defaultModelLabel}
                     />
                   </div>
                 </div>

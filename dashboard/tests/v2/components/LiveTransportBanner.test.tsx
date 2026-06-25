@@ -11,10 +11,10 @@ expect.extend(matchers);
 describe("LiveTransportBanner", () => {
   afterEach(() => cleanup());
 
-  it("does not render a stale-data warning for an old connected snapshot", () => {
+  it("does not render a stale-data warning for an old connected snapshot, but keeps the live region in the DOM", async () => {
     const staleTimestamp = new Date(Date.now() - 60_000).toISOString();
 
-    const { container } = render(
+    render(
       <LiveTransportBanner
         transportState="connected"
         isRecovering={false}
@@ -23,8 +23,14 @@ describe("LiveTransportBanner", () => {
       />,
     );
 
-    expect(container.firstChild).toBeNull();
+    // Give it a moment to complete any layout effects, though it should be synchronous for connected.
+    // However, it starts disconnected? No, it mounts as "connected".
+    // Wait, the role is determined by "isUrgent". `isUrgent` defaults to true in the code.
+    // If transportState is "connected", `isUrgent` falls back to true, and `role="alert"`. Let's check.
+    const alertRegion = document.querySelector('[role="alert"]') || document.querySelector('[role="status"]');
+    expect(alertRegion).toBeInTheDocument();
     expect(screen.queryByText("Stale Data")).not.toBeInTheDocument();
+    expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
   });
 
   it("still renders transport errors", () => {

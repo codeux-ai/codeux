@@ -16,6 +16,7 @@ export interface LiveTransportBannerProps {
 
 export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = ({
   transportState,
+  isRecovering,
   error,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,10 +63,6 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
     }
   }, [isVisible, isReducedMotion, enterDuration]);
 
-  if (!shouldRender) {
-    return null;
-  }
-
   let icon = <WifiOff className="w-5 h-5 shrink-0" />;
   let title = "Disconnected";
   let message = "Lost connection to the live stream. Retrying...";
@@ -92,18 +89,24 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   return (
     <div
       ref={containerRef}
-      className={`flex items-center gap-4 rounded-2xl border bg-white shadow-sm dark:bg-void-800 overflow-hidden ${wrapperClass}`}
+      className={shouldRender ? `flex items-center gap-4 rounded-2xl border backdrop-blur-md overflow-hidden ${wrapperClass}` : "overflow-hidden"}
       role={isUrgent ? "alert" : "status"}
       aria-live={isUrgent ? "assertive" : "polite"}
+      aria-atomic="true"
+      aria-busy={isRecovering}
       style={{ padding: isReducedMotion && isVisible ? "16px 20px" : 0, marginBottom: isReducedMotion && isVisible ? 24 : 0 }}
     >
-      <div className={`flex items-center justify-center ${iconClass}`}>
-        {icon}
-      </div>
-      <div className="flex flex-col">
-        <span className="text-sm font-bold tracking-tight">{title}</span>
-        <span className="text-sm opacity-90">{message}</span>
-      </div>
+      {shouldRender && (
+        <>
+          <div className={`flex items-center justify-center ${iconClass}`}>
+            {icon}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-bold tracking-tight">{title}</span>
+            <span className="text-sm opacity-90">{message}</span>
+          </div>
+        </>
+      )}
     </div>
   );
 };

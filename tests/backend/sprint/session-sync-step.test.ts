@@ -235,6 +235,124 @@ describe("runSessionSyncStep", () => {
     expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
   });
 
+  it("does not attach a run-key-matched session already owned by another project task", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "code-ux-session-sync-foreign-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const sourceProject = projectRepository.createProject({
+      name: "Code UX Fork",
+      sourceType: "local",
+      sourceRef: "/tmp/source-codeux",
+    });
+    const sourceSprint = projectRepository.createSprint(sourceProject.id, {
+      name: "Source Sprint",
+      number: 4,
+    });
+    const sourceTask = projectRepository.createTask(sourceProject.id, {
+      sprintId: sourceSprint.id,
+      taskKey: "T02",
+      title: "Source task",
+    });
+    executionRepository.createTaskRun({
+      projectId: sourceProject.id,
+      sprintId: sourceSprint.id,
+      taskId: sourceTask.id,
+      provider: "jules",
+      sessionId: "foreign-session",
+      sessionName: "sessions/foreign-session",
+      state: "COMPLETED",
+      prUrl: "https://github.com/numnx/codeux/pull/106",
+      startedAt: "2026-06-15T19:42:30.153Z",
+      finishedAt: "2026-06-15T22:22:18.707Z",
+    });
+
+    const currentProject = projectRepository.createProject({
+      name: "Code UX CC",
+      sourceType: "local",
+      sourceRef: "/tmp/current-codeux",
+    });
+    const currentSprint = projectRepository.createSprint(currentProject.id, {
+      name: "Improve Projects Page",
+      number: 4,
+    });
+    const currentTask = projectRepository.createTask(currentProject.id, {
+      sprintId: currentSprint.id,
+      taskKey: "T02",
+      title: "Fix local new-project creation",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: currentTask.taskKey,
+        record_id: currentTask.id,
+        project_id: currentProject.id,
+        sprint_id: currentSprint.id,
+        title: currentTask.title,
+        prompt: currentTask.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING",
+      },
+    ];
+
+    const fetchRecentActivities = vi.fn().mockResolvedValue([]);
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    };
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "foreign-session",
+              name: "sessions/foreign-session",
+              title: "Sprint 4: [run:codeux/s4/t02] [t02] Fix local new-project creation",
+              state: "COMPLETED",
+              provider: "jules",
+              outputs: [{ pullRequest: { url: "https://github.com/numnx/codeux/pull/106" } }],
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities,
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        executionRepository,
+        projectManagementRepository: projectRepository,
+        logger,
+      },
+      false,
+      {
+        repoPath: "/tmp/codeux",
+        sprintNumber: 4,
+      },
+    );
+
+    expect(result.subtasks[0].status).toBe("PENDING");
+    expect(result.subtasks[0].session_id).toBeUndefined();
+    expect(result.subtasks[0].provider).toBeUndefined();
+    expect(result.subtasks[0].pr_url).toBeUndefined();
+    expect(fetchRecentActivities).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Skipping foreign provider session matched by task run key",
+      expect.objectContaining({
+        taskId: currentTask.id,
+        projectId: currentProject.id,
+        sprintId: currentSprint.id,
+        sessionId: "foreign-session",
+      }),
+    );
+  });
+
   it("does not resurrect a human-owned QA_REVIEW_FAILED task from a stale COMPLETED session", async () => {
     const subtasks: Subtask[] = [
       {

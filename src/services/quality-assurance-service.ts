@@ -5,6 +5,7 @@ import {
   buildWorkerBranch
 } from "./cli-workflow-utils.js";
 import { GitStatusQueryClient } from "../infrastructure/git/git-status-query-client.js";
+import { findRecoverableWorkerBranch } from "../infrastructure/git/local-merge.js";
 import { resolveRepositoryHost, selectHostToken } from "../infrastructure/git/repository-host-resolver.js";
 import { parseOpenPrs, parseMergedPrs } from "../infrastructure/git/git-status-mappers.js";
 import { extractJsonFromText } from "../domain/llm/json-extraction.js";
@@ -246,6 +247,21 @@ export class QualityAssuranceService {
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
 
+    // Resolve which branch QA should check out. In LOCAL git mode the worker
+    // branch is the only record of a code-complete task's work, and that metadata
+    // is routinely cleared from the task/run during the re-dispatch + settlement
+    // cycle. When it is missing we must recover it from local refs before falling
+    // back to the (usually empty) feature branch - otherwise the QA snapshot is
+    // checked out on the feature branch, every review wrongly reports the work
+    // missing, and the QA-gated merge never lands (the LOCAL-mode stuck-sprint bug).
+    const reviewBranch = await this.resolveReviewBranch({
+      task: args.task,
+      taskRun,
+      repoPath: args.repoPath,
+      featureBranch: sprintFeatureBranch,
+      githubMode: settings.git.githubMode,
+    });
+
     try {
       const review = await this.runReview({
         triggerType,
@@ -259,11 +275,7 @@ export class QualityAssuranceService {
         taskRun,
         sprintRunId: args.sprintRunId || null,
         agentPresetId: agentPresetId,
-        // Task QA reviews the task's own feature/worker branch, falling back to
-        // the sprint base branch when the worker branch metadata is missing.
-        reviewBranch: args.task.worker_branch?.trim()
-          || taskRun?.workerBranch?.trim()
-          || sprintFeatureBranch,
+        reviewBranch,
         baseBranch: sprintFeatureBranch,
       });
 
@@ -1270,6 +1282,62 @@ export class QualityAssuranceService {
         || "No summary";
       return `- ${message}`;
     }).join("\n");
+  }
+
+  /**
+   * Determine which branch a task-level QA review should check out. Prefers the
+   * recorded worker branch (on the task or its latest run); in LOCAL mode, when
+   * that evidence was lost, recovers the most recent `task/<prefix>-*` branch that
+   * carries commits ahead of the feature branch so QA reviews the real work
+   * instead of the empty feature branch. Backfills the recovered branch onto the
+   * task/run so the downstream fix path and merge gate agree. Falls back to the
+   * feature branch only when no worker branch with actual work can be found (e.g.
+   * the task genuinely produced no changes).
+   */
+  private async resolveReviewBranch(args: {
+    task: Subtask;
+    taskRun: TaskRunRecord | null;
+    repoPath: string;
+    featureBranch: string;
+    githubMode: "REMOTE" | "LOCAL";
+  }): Promise<string> {
+    const direct = args.task.worker_branch?.trim() || args.taskRun?.workerBranch?.trim();
+    if (direct) {
+      return direct;
+    }
+
+    if (args.githubMode === "LOCAL") {
+      const provider = (args.task.provider || args.taskRun?.provider || undefined) as ProviderId | undefined;
+      if (args.featureBranch && args.task.id && provider) {
+        try {
+          const recovered = await findRecoverableWorkerBranch({
+            repoPath: args.repoPath,
+            featureBranch: args.featureBranch,
+            branchPrefix: buildWorkerBranchPrefix(args.featureBranch, args.task.id, provider),
+          });
+          if (recovered) {
+            // Backfill so the fix path and feature-PR merge gate see the same evidence.
+            args.task.worker_branch = recovered;
+            if (args.taskRun && !args.taskRun.workerBranch) {
+              args.taskRun.workerBranch = recovered;
+              try {
+                this.deps.executionRepository.updateTaskRun(args.taskRun.id, { workerBranch: recovered });
+              } catch (err) {
+                this.deps.logger?.warn?.(`Failed to backfill recovered worker branch on task run: ${err}`);
+              }
+            }
+            this.deps.logger?.info?.(
+              `LOCAL Mode: Recovered worker branch ${recovered} for QA review of task ${args.task.id} from local refs.`,
+            );
+            return recovered;
+          }
+        } catch (err) {
+          this.deps.logger?.warn?.(`Failed to recover worker branch for QA review of task ${args.task.id}: ${err}`);
+        }
+      }
+    }
+
+    return args.featureBranch;
   }
 
   private resolveTaskRunForSubtask(task: Subtask, sprintRunId?: string): TaskRunRecord | null {

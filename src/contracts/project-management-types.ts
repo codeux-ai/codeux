@@ -30,6 +30,8 @@ export interface ProjectSummary {
   isRunning: boolean;
   settingsOverrides: ProjectSettingsOverride;
   agentBindings: ProjectWorkerAssignmentRecord[];
+  lastRunAt: string | null;
+  lastRunStatus: string | null;
   createdAt: string;
   updatedAt: string;
 }

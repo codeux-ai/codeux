@@ -33,6 +33,7 @@ To preserve memory efficiency, the core scoring and sorting operate strictly on 
 Memory records encapsulate the base `content` string alongside its vectorized byte representation (`embeddingBlob`). The byte buffer must correctly decode based on its stored `embeddingDimension`. The system expects IEEE 754 32-bit floats.
 
 ## UI Updates and Accessibility
-- Added keyboard-accessible clear search functionality to `MemorySearch.tsx` (supports clearing via `Escape` and a dedicated clear button).
-- Improved memory list accessibility and reduced motion fallbacks in `MemoryList.tsx`.
-- `MemoryFilters.tsx` implements proper tab semantics and uses clear danger state indicators for lobotomize mode.
+- Added keyboard-accessible clear search functionality to `MemorySearch.tsx` (supports clearing via `Escape` and a dedicated clear button with an explicit `<kbd>Esc</kbd>` visual affordance).
+- Enhanced `MemoryList.tsx` to prominently display active search result counts directly in the UI instead of relying solely on `sr-only` live regions.
+- Improved memory list accessibility and reduced motion fallbacks in `MemoryList.tsx`, utilizing `useInteractionTokens` to respect OS-level reduced motion preferences.
+- `MemoryFilters.tsx` implements proper tab semantics and uses clear, high-contrast danger state indicators (`bg-status-red`) for lobotomize (delete) mode to prevent accidental removals.

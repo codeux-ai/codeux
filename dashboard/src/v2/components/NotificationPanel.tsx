@@ -83,6 +83,10 @@ export const NotificationPanel: FunctionComponent<{
       aria-label="Notifications Panel"
         className="absolute right-0 top-full mt-2 w-[23rem] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-white/95 shadow-2xl backdrop-blur-2xl dark:bg-void-800/95 z-50 flex flex-col"
     >
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}
+      </div>
+
       <div className="absolute left-0 right-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-signal-500/40 to-transparent" />
 
       <div className="flex items-center justify-between gap-3 border-b border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.02]">

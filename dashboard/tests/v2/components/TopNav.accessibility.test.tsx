@@ -308,4 +308,37 @@ describe("TopNav Selectors Accessibility", () => {
         expect(themeBtn).toHaveAttribute("aria-label", expect.stringContaining("Light"));
     });
 
+    it("shows empty state when filtering yields no results", async () => {
+        renderNav();
+        const projectBtn = document.getElementById("project-selector-button") as HTMLButtonElement;
+        projectBtn.focus();
+        await user.keyboard("{Enter}");
+
+        const filterInput = screen.getByRole("textbox", { name: /Filter projects/i });
+        await user.type(filterInput, "ZzZzZ");
+
+        expect(screen.getByText("No projects found.")).toBeInTheDocument();
+    });
+
+    it("announces switching and switches context correctly", async () => {
+        renderNav();
+        const projectBtn = document.getElementById("project-selector-button") as HTMLButtonElement;
+        projectBtn.focus();
+        await user.keyboard("{Enter}");
+
+        const betaOption = screen.getByRole("option", { name: /Project Beta/i });
+        betaOption.focus();
+        await user.keyboard("{Enter}");
+
+        const liveRegion = document.querySelector('[aria-live="polite"]');
+        expect(liveRegion).toBeInTheDocument();
+        expect(liveRegion?.textContent).toContain("Project switched");
+    });
+
+    it("has a discoverable skip link that points to main content", async () => {
+        renderNav();
+        const skipLink = screen.getByText(/Skip to main content/i);
+        expect(skipLink).toBeInTheDocument();
+        expect(skipLink).toHaveAttribute("href", "#main-content");
+    });
 });

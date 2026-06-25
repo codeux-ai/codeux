@@ -26,7 +26,7 @@ export function Table({ children, className = "", caption, ariaLabel, ariaLabell
 
 export function TableHeader({ children }: { children: ComponentChildren }) {
   return (
-    <thead className="sr-only lg:not-sr-only lg:table-header-group">
+    <thead className="sr-only lg:not-sr-only lg:table-header-group" role="rowgroup">
       <tr className="text-[color:var(--text-metadata)] text-xs font-medium">
         {children}
       </tr>
@@ -35,7 +35,7 @@ export function TableHeader({ children }: { children: ComponentChildren }) {
 }
 
 export function TableBody({ children }: { children: ComponentChildren }) {
-  return <tbody className="block lg:table-row-group">{children}</tbody>;
+  return <tbody className="block lg:table-row-group" role="rowgroup">{children}</tbody>;
 }
 
 export function TableRow({ children, className = "", selected, onClick, style }: { children: ComponentChildren; className?: string; selected?: boolean; onClick?: (e: MouseEvent) => void; style?: import("preact").JSX.CSSProperties }) {

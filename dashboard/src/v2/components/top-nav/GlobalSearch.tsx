@@ -27,7 +27,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
 
     const durations = useGsapDurations();
     const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null);
-    const { sessions } = usePreviewSessions({ projectId: isSearchOpen ? projectId : null, pollInterval: 0 });
+    const { sessions } = usePreviewSessions({ projectId: isSearchOpen ? projectId : null, pollInterval: isSearchOpen ? 5000 : 0 });
 
     useEffect(() => {
         if (isSearchOpen && selectedProject?.id) {
@@ -192,6 +192,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                 onSearchChange={setSearchQuery}
                 results={searchResults}
                 isLoading={searchQuery !== debouncedQuery}
+                hasProjectData={!!selectedProject}
             />
         </>
     );

@@ -132,11 +132,16 @@ export const MemoryList: FunctionComponent<{
     }
 
     return (
-        <div id="memory-panel" className="flex flex-col gap-3 h-full overflow-y-auto dashboard-scrollbar p-2" ref={listRef} role="listbox">
+        <div id="memory-panel" className="flex flex-col gap-3 h-full overflow-y-auto dashboard-scrollbar p-2" role="listbox">
             <div className="sr-only" aria-live="polite" aria-atomic="true">
                 {renderedNodes.length} memories found
             </div>
-            <div className="sticky top-0 z-10 w-full mb-2">
+            <div className="sticky top-0 z-10 w-full flex flex-col gap-2">
+                {searchQuerySignal.value && (
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400 px-2 py-1 bg-black/[0.02] dark:bg-white/[0.02] rounded-lg inline-block self-start border border-black/[0.04] dark:border-white/[0.04]">
+                        Showing {renderedNodes.length} result{renderedNodes.length !== 1 ? 's' : ''}
+                    </div>
+                )}
                 <ActionFeedbackRegion
                     status={memoryMutationsSignal.value.feedback?.status || "idle"}
                     message={memoryMutationsSignal.value.feedback?.message}
@@ -145,18 +150,20 @@ export const MemoryList: FunctionComponent<{
                     retryLabel={memoryMutationsSignal.value.feedback?.retryLabel}
                 />
             </div>
-            {renderedNodes.map(({ node, index }: any) => (
-                <div key={node.id} data-memory-id={node.id}>
-                    <MemoryCard
-                    key={node.id}
-                    id={node.id}
-                    content={node.content}
-                    category={node.category}
-                    strength={node.strength}
-                                        onClick={() => onSelectNode(index)}
-                    />
-                </div>
-            ))}
+            <div className="flex flex-col gap-3" ref={listRef}>
+                {renderedNodes.map(({ node, index }: any) => (
+                    <div key={node.id} data-memory-id={node.id} className="will-change-transform transform-gpu">
+                        <MemoryCard
+                            key={node.id}
+                            id={node.id}
+                            content={node.content}
+                            category={node.category}
+                            strength={node.strength}
+                            onClick={() => onSelectNode(index)}
+                        />
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };

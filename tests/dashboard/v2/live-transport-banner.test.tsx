@@ -23,7 +23,8 @@ describe("LiveTransportBanner", () => {
         error={null}
       />
     );
-    expect(container.firstChild).toBeNull();
+    expect(container.firstChild).toHaveClass("overflow-hidden");
+    expect(container.firstChild).toBeEmptyDOMElement();
   });
 
   it("renders Disconnected when disconnected", () => {
@@ -72,7 +73,8 @@ describe("LiveTransportBanner", () => {
         error={null}
       />
     );
-    expect(container.firstChild).toBeNull();
+    expect(container.firstChild).toHaveClass("overflow-hidden");
+    expect(container.firstChild).toBeEmptyDOMElement();
     expect(screen.queryByText("Recovering State")).not.toBeInTheDocument();
   });
 
@@ -85,7 +87,8 @@ describe("LiveTransportBanner", () => {
         error={null}
       />
     );
-    expect(container.firstChild).toBeNull();
+    expect(container.firstChild).toHaveClass("overflow-hidden");
+    expect(container.firstChild).toBeEmptyDOMElement();
     expect(screen.queryByText("Recovering State")).not.toBeInTheDocument();
   });
 
@@ -99,7 +102,8 @@ describe("LiveTransportBanner", () => {
       />
     );
 
-    expect(container.firstChild).toBeNull();
+    expect(container.firstChild).toHaveClass("overflow-hidden");
+    expect(container.firstChild).toBeEmptyDOMElement();
     expect(screen.queryByText("Stale Data")).not.toBeInTheDocument();
   });
 });

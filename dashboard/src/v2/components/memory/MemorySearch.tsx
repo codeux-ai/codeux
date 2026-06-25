@@ -24,8 +24,9 @@ export const MemorySearch: FunctionComponent = () => {
                 <button
                     aria-label="Clear search"
                     onClick={() => searchQuerySignal.value = ""}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-md text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-150"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center gap-1.5 px-1.5 py-1 rounded-md text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-void-900 transition-colors duration-150"
                 >
+                    <kbd className="hidden sm:inline-block text-[10px] font-mono border border-black/[0.1] dark:border-white/[0.1] rounded px-1 text-slate-400">Esc</kbd>
                     <X className="w-3.5 h-3.5" />
                 </button>
             )}

@@ -429,7 +429,7 @@ export const LiveSessionPage: FunctionComponent = () => {
 
 
     return (
-        <PageContainer className="gap-16">
+        <PageContainer aria-label="Live Session" className="gap-16">
             <h1 className="sr-only">Live Session</h1>
             <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
             <LiveTransportBanner
@@ -493,6 +493,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                     <button
                         key={filter}
                         onClick={() => setFilter(filter)}
+                        aria-pressed={activeFilter === filter}
                         className={`text-xs font-semibold tracking-wide px-4 py-1.5 rounded-lg
                                    transition-all duration-200 flex items-center gap-2
                                    ${activeFilter === filter

@@ -181,7 +181,7 @@ export const ViewToggle: FunctionComponent<{
   ];
 
   return (
-    <div className={`inline-flex p-1 ${CHIP_CLASS}`}>
+    <div role="group" aria-label="Visual Modes" className={`inline-flex p-1 ${CHIP_CLASS}`}>
       {modes.map((mode) => {
         const Icon = mode.icon;
         return (
@@ -390,10 +390,14 @@ export const DonutCard: FunctionComponent<{
         <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-center">
           <div className="flex items-center justify-center">
             <div className="relative h-60 w-60">
+              <div className="sr-only" role="region" aria-label={title}>
+                {description}. {segments.map(s => `${s.label}: ${s.value}`).join(", ")}
+              </div>
               <svg
                 ref={wheelRef}
                 viewBox="0 0 240 240"
                 className="h-full w-full overflow-visible"
+                aria-hidden="true"
               >
                 <defs>
                   <filter id="stats-donut-glow" x="-40%" y="-40%" width="180%" height="180%">

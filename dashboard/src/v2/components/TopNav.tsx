@@ -29,6 +29,7 @@ export function useDropdownKeyboard(
     onFilterChange?: (val: string) => void
 ) {
     const toggleRef = useRef<HTMLButtonElement>(null);
+    const [activeDescendantId, setActiveDescendantId] = useState<string | undefined>(undefined);
 
     const onToggleKeyDown = useCallback((e: KeyboardEvent) => {
         if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
@@ -52,9 +53,9 @@ export function useDropdownKeyboard(
 
             const focusableElements = Array.from(
                 containerRef.current.querySelectorAll<HTMLElement>(
-                    'button, a[href], input'
+                    'button:not([disabled]), a[href], input'
                 )
-            ).filter(el => el !== toggleRef.current);
+            ).filter(el => el !== toggleRef.current && el.id !== 'sprint-selector-button' && el.id !== 'project-selector-button');
 
             if (focusableElements.length === 0) return;
 
@@ -71,9 +72,30 @@ export function useDropdownKeyboard(
                 nextIndex = focusableElements.length - 1;
             }
 
-            focusableElements[nextIndex]?.focus();
+            const nextEl = focusableElements[nextIndex];
+            nextEl?.focus();
+            if (nextEl?.id) {
+                setActiveDescendantId(nextEl.id);
+            }
         }
     }, [isOpen, setIsOpen, containerRef]);
+
+    useEffect(() => {
+        if (!isOpen || !containerRef.current) return;
+        const handleFocusIn = (e: FocusEvent) => {
+            const target = e.target as HTMLElement;
+            if (target.id && target.role === 'option') {
+                setActiveDescendantId(target.id);
+            } else if (target.tagName === 'INPUT') {
+                // If focus goes back to input, we might want to clear active descendant if we are using activedescendant on the input natively,
+                // but actually if we arrow down we might want to keep it? Let's just track the focused ID.
+                setActiveDescendantId(target.id);
+            }
+        };
+        const container = containerRef.current;
+        container.addEventListener('focusin', handleFocusIn);
+        return () => container.removeEventListener('focusin', handleFocusIn);
+    }, [isOpen, containerRef]);
 
     useEffect(() => {
         if (isOpen && containerRef.current) {
@@ -88,17 +110,21 @@ export function useDropdownKeyboard(
 
                 if (focusableElements.length > 0) {
                     focusableElements[0]?.focus();
+                    if (focusableElements[0]?.id) {
+                        setActiveDescendantId(focusableElements[0].id);
+                    }
                 }
             }, 0);
         } else if (!isOpen) {
             onFilterChange?.("");
+            setActiveDescendantId(undefined);
             if (toggleRef.current && document.activeElement && containerRef.current?.contains(document.activeElement)) {
                 toggleRef.current.focus();
             }
         }
     }, [isOpen, containerRef, onFilterChange]);
 
-    return { toggleRef, onToggleKeyDown, onContainerKeyDown };
+    return { toggleRef, onToggleKeyDown, onContainerKeyDown, activeDescendantId };
 }
 
 interface TopNavProps {
@@ -122,6 +148,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
     const [projectSwitchBusy, setProjectSwitchBusy] = useState(false);
     const [sprintSwitchBusy, setSprintSwitchBusy] = useState(false);
     const [projectFilter, setProjectFilter] = useState('');
+    const [navAnnouncement, setNavAnnouncement] = useState('');
 
     // Notification Panel State
     const [notificationInteractionState, setNotificationInteractionState] = useState<'closed' | 'hover' | 'open'>('closed');
@@ -238,10 +265,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
     const handleCreateProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
+            const sourceRef = project.initMode === 'new-local'
+                ? (project.path || project.name)
+                : (project.repoSlug || project.name);
+
             await createProject({
                 name: project.name,
                 sourceType: project.initMode === 'new-local' ? 'local' : 'git',
-                sourceRef: project.path || project.name,
+                sourceRef,
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
@@ -287,7 +318,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                         id="project-selector-button"
                         aria-label={`Selected project: ${selectedProject?.name || "None"}`}
                         aria-controls="project-listbox"
-                        aria-activedescendant={dropdownOpen && filteredProjects.length > 0 ? `project-option-${selectedProject?.id || 'none'}` : undefined}
+                        aria-activedescendant={dropdownOpen && filteredProjects.length > 0 ? (projectKb.activeDescendantId || `project-option-${selectedProject?.id || 'none'}`) : undefined}
                         aria-busy={projectSwitchBusy || loading ? "true" : "false"}
                         className="flex h-9 items-center gap-2.5 rounded-xl border border-black/[0.06] bg-black/[0.04] px-3.5 py-0 transition-all group hover:border-black/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/[0.06] dark:bg-white/[0.04] dark:hover:border-white/[0.08]"
                     >
@@ -313,10 +344,18 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     placeholder="Filter projects..."
                                     value={projectFilter}
                                     onInput={(e) => setProjectFilter(e.currentTarget.value)}
-                                    className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/50"
+                                    aria-describedby="project-filter-desc"
+                                    aria-activedescendant={projectKb.activeDescendantId}
+                                    className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
                                 />
+                                <span id="project-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
                             </div>
                             <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
+                            {filteredProjects.length === 0 && (
+                                <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                                    No projects found.
+                                </div>
+                            )}
                             {filteredProjects.map((source) => (
                                 <button
                                     key={source.id}
@@ -325,8 +364,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     aria-selected={selectedProject?.id === source.id}
                                     onClick={async () => {
                                         setProjectSwitchBusy(true);
+                                        setNavAnnouncement(`Switching project to ${source.name}...`);
                                         try {
                                             await selectProject(source.id);
+                                            setNavAnnouncement(`Project switched to ${source.name}`);
                                             setDropdownOpen(false);
                                         } finally {
                                             setProjectSwitchBusy(false);
@@ -381,7 +422,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                             id="sprint-selector-button"
                             aria-label={`Selected sprint: ${sprintsLoading ? "Loading..." : selectedSprint ? formatSprintDisplay(selectedSprint, sprintKeyPrefix) : "All Sprints"}`}
                             aria-controls="sprint-listbox"
-                            aria-activedescendant={sprintDropdownOpen && sprints.length > 0 ? `sprint-option-${selectedSprintId || 'none'}` : undefined}
+                            aria-activedescendant={sprintDropdownOpen && sprints.length > 0 ? (sprintKb.activeDescendantId || `sprint-option-${selectedSprintId || 'none'}`) : undefined}
                             aria-busy={sprintSwitchBusy || sprintsLoading ? "true" : "false"}
                             onClick={(e) => {
                                 if (sprints.length === 0) {
@@ -423,18 +464,29 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                         placeholder="Filter sprints..."
                                         value={sprintFilter}
                                         onInput={(e) => setSprintFilter(e.currentTarget.value)}
-                                        className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/50"
+                                        aria-describedby="sprint-filter-desc"
+                                        aria-activedescendant={sprintKb.activeDescendantId}
+                                        className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
                                     />
+                                    <span id="sprint-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
                                 </div>
                                 <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
+                                {filteredSprints.length === 0 && !sprintFilter.toLowerCase().includes('all') && (
+                                    <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                                        No sprints found.
+                                    </div>
+                                )}
+                                {(sprintFilter === '' || 'all sprints'.includes(sprintFilter.toLowerCase())) && (
                                 <button
                                     id="sprint-option-none"
                                     role="option"
                                     aria-selected={selectedSprintId === null}
                                     onClick={async () => {
                                         setSprintSwitchBusy(true);
+                                        setNavAnnouncement('Switching sprint to All Sprints...');
                                         try {
                                             await selectSprint(null);
+                                            setNavAnnouncement('Sprint switched to All Sprints');
                                             setSprintDropdownOpen(false);
                                         } finally {
                                             setSprintSwitchBusy(false);
@@ -449,6 +501,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                         <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
                                     )}
                                 </button>
+                                )}
                                 {filteredSprints.map((sprint) => (
                                     <button
                                         key={sprint.id}
@@ -457,8 +510,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                         aria-selected={selectedSprintId === sprint.id}
                                         onClick={async () => {
                                             setSprintSwitchBusy(true);
+                                            setNavAnnouncement(`Switching sprint to ${sprint.name}...`);
                                             try {
                                                 await selectSprint(sprint.id);
+                                                setNavAnnouncement(`Sprint switched to ${sprint.name}`);
                                                 setSprintDropdownOpen(false);
                                             } finally {
                                                 setSprintSwitchBusy(false);
@@ -544,6 +599,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                 </Tooltip>
             </div>
             </nav>
+            <div aria-live="polite" aria-atomic="true" className="sr-only" role="status">
+                {navAnnouncement}
+            </div>
         </header>
 
             {showAddProject && (
