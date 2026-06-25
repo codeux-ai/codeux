@@ -161,7 +161,7 @@ export const Row: FunctionComponent<{
   onReset?: () => void;
 }> = ({ label, description, children, last, badge, info, onReset }) => (
   <div
-    className={`group flex flex-col gap-4 rounded-[1.35rem] border border-[color:var(--border-hairline)] hover:border-[color:var(--border-hairline)] bg-[var(--surface-glass)] hover:bg-[var(--surface-glass-hover)] px-4 py-4 md:flex-row md:items-start md:justify-between transition-colors duration-200 ${!last ? "" : ""}`}
+    className={`group flex flex-col gap-4 rounded-[1.35rem] border border-[color:var(--border-hairline)] hover:border-[color:var(--border-hairline)] bg-[var(--fill-muted)] hover:bg-[var(--fill-muted-hover)] px-4 py-4 md:flex-row md:items-start md:justify-between transition-colors duration-200 ${!last ? "" : ""}`}
   >
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-2">

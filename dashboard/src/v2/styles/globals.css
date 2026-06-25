@@ -45,12 +45,12 @@
     --accent-primary: #00e0a0;
     --accent-hover: #33ffb8;
 
-    /* Shared Primitives */
-    --surface-glass: rgba(255, 255, 255, 0.03);
-    --surface-glass-hover: rgba(255, 255, 255, 0.06);
-    --fill-muted: rgba(255, 255, 255, 0.03);
-    --fill-muted-hover: rgba(255, 255, 255, 0.06);
-    --border-hairline: rgba(255, 255, 255, 0.06);
+    /* Shared Primitives — warm void surfaces (brand "Warm Void" identity) */
+    --surface-glass: rgba(24, 20, 17, 0.66); /* void-800 tint, frosted panel */
+    --surface-glass-hover: rgba(35, 31, 27, 0.76); /* void-700 tint */
+    --fill-muted: rgba(250, 244, 237, 0.035); /* warm-white inset fill */
+    --fill-muted-hover: rgba(250, 244, 237, 0.06);
+    --border-hairline: rgba(250, 244, 237, 0.08); /* warm hairline */
     --accent-focus-ring: var(--accent-primary);
     --text-metadata: #94a3b8; /* slate-400 */
   }

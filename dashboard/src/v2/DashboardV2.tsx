@@ -69,7 +69,7 @@ export const DashboardV2: FunctionComponent = () => {
             {/* Main Grid */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-12 md:gap-24 flex-grow relative z-20">
                 {/* Sources and Tasks */}
-                <div className="xl:col-span-8 flex flex-col gap-16 p-8 rounded-[2rem] border border-black/[0.04] dark:border-white/[0.04] bg-white/40 dark:bg-void-800/40 backdrop-blur-md">
+                <div className="xl:col-span-8 flex flex-col gap-16">
                     <section aria-label="Sources" className="w-full relative">
                         <SourcesGrid />
                     </section>
