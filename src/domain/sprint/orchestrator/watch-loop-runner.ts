@@ -24,7 +24,7 @@ import type { ProjectAttentionItemRecord } from "../../../contracts/project-atte
 import { isCompletedTaskSettled } from "../task-merge-state.js";
 import { transitionSprintRun } from "./sprint-run-transitions.js";
 import { buildTaskAttentionPayload } from "./attention-payload-builder.js";
-import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "./watch-loop-policies.js";
+import { decideMainMergeWaitOrPause, decideTerminalCompletion, isHumanEscalatedAttentionItem } from "./watch-loop-policies.js";
 import { decideFinalizationTransition } from "./watch-loop-finalization-policy.js";
 import { buildConflictSummaryMarkdown, selectMergedTaskContexts } from "./conflict-summary-utils.js";
 import { WorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
@@ -678,6 +678,23 @@ export class WatchLoopRunner {
               })]);
             }
 
+            // A virtual worker is actively resolving the conflict — keep the sprint
+            // alive and wait for it, rather than flipping the run to `paused`. Pausing
+            // mid-resolution misrepresents in-progress work as a stalled sprint and
+            // requires a manual resume even though the orchestrator is still working.
+            // Only pause once the worker has given up and escalated to a human (or when
+            // worker resolution is disabled, so a human must act from the start).
+            const humanMustAct =
+              !isWorkerOwned ||
+              activeMainMergeAttentionItems.some((item) => isHumanEscalatedAttentionItem(item));
+
+            if (!humanMustAct) {
+              return {
+                status: "wait",
+                report: report + `- ⏳ **Local Merge Conflict:** Resolving \`${defaultFeatureBranch}\` → \`${defaultBranch}\` automatically via virtual worker. Sprint remains active.\n`,
+              };
+            }
+
             transitionSprintRun(
               this.deps.executionRepository,
               sprintRunId,
@@ -685,18 +702,14 @@ export class WatchLoopRunner {
               "sprint_paused",
               {
                 reason: "main_merge_blocked",
-                message: isWorkerOwned
-                  ? `Local merge conflict merging ${defaultFeatureBranch} into ${defaultBranch}. Virtual worker is resolving conflicts automatically.`
-                  : `Local merge conflict merging ${defaultFeatureBranch} into ${defaultBranch}. Resolve conflicts locally.`,
+                message: `Local merge conflict merging ${defaultFeatureBranch} into ${defaultBranch}. Resolve conflicts locally.`,
               },
               `sprint-paused:${sprintRunId}:local-main-merge-blocked`
             );
 
             return {
               status: "exit",
-              report: report + (isWorkerOwned
-                ? `- ⏳ **Local Merge Conflict:** Failed to merge \`${defaultFeatureBranch}\` into \`${defaultBranch}\`. Virtual worker is resolving conflicts automatically.\n`
-                : `- ⚠️ **Local Merge Conflict:** Failed to merge \`${defaultFeatureBranch}\` into \`${defaultBranch}\`. Resolve conflicts locally.\n`),
+              report: report + `- ⚠️ **Local Merge Conflict:** Failed to merge \`${defaultFeatureBranch}\` into \`${defaultBranch}\`. Resolve conflicts locally.\n`,
             };
           }
         }
