@@ -57,8 +57,8 @@ export const ThreadListCard: FunctionComponent<{
                 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900
                 ${isSelected
-                  ? "border-2 border-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.12)]"
-                  : "border-2 border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
+                  ? "border border-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.12)]"
+                  : "border border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
                 }`}
             >
             {/* Ghost ID watermark */}
@@ -117,9 +117,13 @@ export const ThreadListCard: FunctionComponent<{
                 {/* Right column */}
                 <div className="shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
                   <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(thread.pendingMessageCount)}`}>
-                    {thread.pendingMessageCount > 0 ? `${thread.pendingMessageCount} pending` : "synced"}
+                    {thread.pendingMessageCount > 0 ? (
+                      <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-signal-500 animate-pulse" /> pending</span>
+                    ) : (
+                      "synced"
+                    )}
                   </div>
-                  <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                  <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                     {formatRelativeChatTime(thread.lastMessageAt)}
                   </div>
                   {thread.messageCount > 0 && (

@@ -249,7 +249,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
               onInput={handleInput}
               spellcheck={false}
               placeholder={`# ${file.label}\n\nWrite the instructions agents should follow in this project…`}
-              className="block h-[60vh] min-h-[420px] w-full resize-y rounded-2xl border border-black/[0.05] bg-white/40 px-5 py-4 font-mono text-[13px] leading-relaxed text-slate-900 outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
+              className="block h-[60vh] min-h-[420px] w-full resize-y rounded-2xl border border-black/[0.05] bg-white/40 px-5 py-4 font-mono text-[13px] leading-relaxed text-slate-900 shadow-sm outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
             />
             {!exists && content.trim() === "" && (
               <div className="pointer-events-none absolute inset-x-5 bottom-5 flex justify-center">
@@ -266,7 +266,7 @@ export const InstructionFileEditorPanel: FunctionComponent<{
           </div>
         ) : content.trim() ? (
           <div
-            className={`h-[60vh] min-h-[420px] overflow-auto rounded-2xl border border-black/[0.05] bg-white/40 px-6 py-5 backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] ${MARKDOWN_PROSE_CLASS}`}
+            className={`h-[60vh] min-h-[420px] overflow-auto rounded-2xl border border-black/[0.05] bg-white/40 px-6 py-5 shadow-sm backdrop-blur-md dark:border-white/[0.05] dark:bg-white/[0.02] ${MARKDOWN_PROSE_CLASS}`}
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
         ) : (

@@ -84,11 +84,12 @@ export const KanbanTaskCard: FunctionComponent<{
         }
       }}
       className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${isDragging ? 'is-dragging opacity-50 ring-2 ring-signal-500 scale-[1.02] shadow-[0_20px_40px_rgba(0,0,0,0.2)]' : ''}`}
+      style={{ transformStyle: "preserve-3d", willChange: "transform" }}
     >
       <span id={`task-card-kbd-${task.recordId}`} className="sr-only">
         {isReducedMotion ? "Draggable reordering is disabled in reduced motion mode." : (!onDragStart ? "Keyboard reordering is not supported. Use drag and drop to reorder." : "Draggable task. Use drag and drop to reorder.")}
       </span>
-      <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05]" />
+      <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.02] dark:group-hover:bg-signal-500/[0.02]" />
       <WaveFluid accentHex={STATUS_CFG[task.status].hex} />
       <BorderTrace accentHex={STATUS_CFG[task.status].hex} />
 
@@ -121,16 +122,16 @@ export const KanbanTaskCard: FunctionComponent<{
         {agentPresetName && (
           <span className="inline-flex items-center gap-1 rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5">
             <AgentSelectAvatarIcon avatarConfig={agentPresetAvatarConfig} seed={agentPresetName} />
-            <span className="max-w-[60px] truncate">{agentPresetName}</span>
+            <span className="max-w-[120px] truncate">{agentPresetName}</span>
           </span>
         )}
         {sessionState && (
-          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 max-w-[72px] truncate">
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 max-w-[120px] truncate">
             {sessionState}
           </span>
         )}
         {sessionId && (
-          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono max-w-[80px] truncate">
+          <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1 font-mono max-w-[120px] truncate">
             {sessionId}
           </span>
         )}
@@ -139,7 +140,7 @@ export const KanbanTaskCard: FunctionComponent<{
       <div className="flex items-center gap-3 mt-auto relative z-10">
         <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
           <FolderGit2 className="w-3 h-3 text-slate-300 dark:text-slate-600 group-hover:text-signal-500 transition-colors" strokeWidth={2} />
-          <span className="font-mono truncate max-w-[100px]">{task.source}</span>
+          <span className="font-mono truncate max-w-[120px]">{task.source}</span>
         </div>
 
         <span className="text-slate-200 dark:text-slate-700 text-[9px]">·</span>

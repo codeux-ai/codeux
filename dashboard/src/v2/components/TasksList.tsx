@@ -5,6 +5,7 @@ import { TaskRow } from "./ui/TaskRow.js";
 import { SprintStreamRow } from "./ui/SprintStreamRow.js";
 import { FilterStrip } from "./ui/FilterStrip.js";
 import { SkeletonRow } from "./layout/SkeletonLoader.js";
+import { EmptyState } from "./ui/EmptyState.js";
 import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../lib/overview-streams.js";
 import { useOverviewStreamActions } from "../hooks/use-overview-stream-actions.js";
 import { useListReorder } from "../lib/motion/use-list-reorder.js";
@@ -69,7 +70,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
             {/* Section Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 md:mb-12 gap-6 sm:gap-8">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
-                    <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Active Streams</h2>
+                    <h2 className="text-lg md:text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Active Streams</h2>
                     <div className="w-full sm:w-auto">
                         <FilterStrip
                             options={FILTER_OPTIONS}
@@ -119,12 +120,16 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         )),
                     ])
                 ) : (
-                    <div data-flip-id="empty-state" className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-                        <svg className="w-12 h-12 mb-4 text-slate-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                        </svg>
-                        <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">No Results Found</div>
-                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">There are no tasks currently matching the selected filter in active sprints.</div>
+                    <div data-flip-id="empty-state">
+                        <EmptyState
+                            title="No Active Streams"
+                            description="There are no tasks currently matching the selected filter in active sprints."
+                            icon={
+                                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                                </svg>
+                            }
+                        />
                     </div>
                 )}
             </div>

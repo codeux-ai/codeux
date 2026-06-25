@@ -155,7 +155,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
                     ref={tooltipRef}
                     className={unstyled
                         ? `fixed z-[9999] pointer-events-none bg-transparent p-0 shadow-none ${className}`
-                        : `fixed z-[9999] px-2.5 py-1.5 text-xs font-medium text-white bg-slate-900 dark:bg-black rounded-lg shadow-xl pointer-events-none ${className.includes("whitespace-") ? className : "whitespace-nowrap " + className}`}
+                        : `fixed z-[9999] px-2.5 py-1.5 text-xs font-medium text-white bg-slate-900 dark:bg-black rounded-xl shadow-xl pointer-events-none ${className.includes("whitespace-") ? className : "whitespace-nowrap " + className}`}
                     style={{ top: coords.top, left: coords.left }}
                     role="tooltip"
                 >

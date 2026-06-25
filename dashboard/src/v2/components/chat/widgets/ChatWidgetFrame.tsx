@@ -31,7 +31,7 @@ export const ChatWidgetFrame: FunctionComponent<ChatWidgetFrameProps> = ({
   };
 
   const getContainerStyles = (): string => {
-    const base = "relative rounded-2xl bg-white/60 dark:bg-void-800/40 backdrop-blur-xl border transition-all duration-300";
+    const base = "relative rounded-2xl bg-slate-50/50 dark:bg-white/[0.02] backdrop-blur-xl border transition-all duration-300";
 
     if (status === "queued") {
       return `${base} border-dashed border-black/[0.08] dark:border-white/[0.08]`;

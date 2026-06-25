@@ -9,7 +9,7 @@ import { getAccentHex } from "../../lib/agent-avatar.js";
 const syncBadge = (preset: AgentPreset) => {
   switch (preset.syncStatus) {
     case "out_of_sync":
-      return { cls: "border-amber-400/20 bg-amber-400/8 text-amber-600 dark:text-amber-400", label: "Out of Sync", icon: true };
+      return { cls: "border-amber-400/30 bg-amber-400/15 text-amber-600 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-400", label: "Out of Sync", icon: true };
     case "missing_source":
       return { cls: "border-status-red/20 bg-status-red/8 text-status-red", label: "Missing", icon: true };
     case "synced":
@@ -46,7 +46,7 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
       className={`group relative flex w-full overflow-hidden rounded-[1.4rem] border text-left backdrop-blur-xl transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
         isSelected
           ? "border-signal-500/40 bg-white/85 shadow-[0_8px_32px_rgba(0,224,160,0.12)] dark:border-signal-500/40 dark:bg-void-800/75 dark:shadow-[0_8px_32px_rgba(0,224,160,0.10)]"
-          : "border-black/[0.06] bg-white/55 hover:-translate-y-0.5 hover:border-signal-500/20 hover:bg-white/75 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] dark:border-white/[0.06] dark:bg-void-800/40 dark:hover:border-signal-500/25 dark:hover:bg-void-800/60 dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.25)]"
+          : "border-black/[0.06] bg-white/55 hover:-translate-y-0.5 hover:border-signal-500/30 hover:bg-white/80 hover:shadow-[0_8px_24px_rgba(0,224,160,0.06)] dark:border-white/[0.06] dark:bg-void-800/40 dark:hover:border-signal-500/30 dark:hover:bg-void-800/60 dark:hover:shadow-[0_8px_24px_rgba(0,0,0,0.25)]"
       }`}
     >
       {/* Left accent strip */}

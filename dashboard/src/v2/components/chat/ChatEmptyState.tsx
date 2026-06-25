@@ -47,7 +47,7 @@ export const EmptyChat: FunctionComponent<{
   const Icon = config.icon;
 
   return (
-    <div className="relative flex h-full min-h-[24rem] items-center justify-center overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/82 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+    <div className="relative flex h-full min-h-[24rem] items-center justify-center overflow-hidden rounded-3xl border border-black/[0.06] bg-white/82 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_50%_45%,rgba(0,224,160,0.08),transparent_62%)] dark:bg-[radial-gradient(ellipse_70%_55%_at_50%_45%,rgba(0,224,160,0.11),transparent_62%)]" />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <div className="h-44 w-44 rounded-full border border-signal-500/16 animate-[ping_4.8s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
@@ -60,8 +60,8 @@ export const EmptyChat: FunctionComponent<{
 
       <div className="relative z-10 w-full max-w-xl">
         <div className="relative mx-auto mb-7 flex h-20 w-20 items-center justify-center">
-          <div className="absolute inset-0 rounded-[1.6rem] bg-signal-500/12 blur-[18px] animate-pulse" />
-          <div className="absolute inset-2 rounded-[1.4rem] border border-signal-500/20 bg-white/80 shadow-[0_18px_40px_rgba(0,224,160,0.12)] backdrop-blur-xl dark:bg-white/[0.06]" />
+          <div className="absolute inset-0 rounded-3xl bg-signal-500/12 blur-[18px] animate-pulse" />
+          <div className="absolute inset-2 rounded-2xl border border-signal-500/20 bg-white/80 shadow-[0_18px_40px_rgba(0,224,160,0.12)] backdrop-blur-xl dark:bg-white/[0.06]" />
           <Icon className={`relative h-8 w-8 ${config.accentClass}`} strokeWidth={1.6} />
         </div>
 
@@ -109,7 +109,7 @@ export const ChatRailPlaceholder: FunctionComponent<{
         { width: "w-2/3", delay: "[animation-delay:160ms]" },
         { width: "w-5/6", delay: "[animation-delay:320ms]" },
       ].map((item, index) => (
-        <div key={index} className="rounded-[1.15rem] border border-white/60 bg-white/70 p-3 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.035]">
+        <div key={index} className="rounded-xl border border-white/60 bg-white/70 p-3 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.035]">
           <div className="flex items-center gap-3">
             <div className={`h-9 w-9 rounded-xl bg-signal-500/10 ${item.delay} animate-pulse`} />
             <div className="min-w-0 flex-1 space-y-2">
@@ -152,7 +152,7 @@ export const ChatRailPlaceholder: FunctionComponent<{
 };
 
 export const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => (
-  <div className="flex h-full min-h-0 items-center justify-center rounded-[1.9rem] border border-dashed border-black/[0.06] bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+  <div className="flex h-full min-h-0 items-center justify-center rounded-3xl border border-dashed border-black/[0.06] bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
     <div className="space-y-4">
       <div className="mx-auto flex items-center justify-center gap-1.5">
         <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500" />

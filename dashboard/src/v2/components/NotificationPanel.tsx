@@ -81,7 +81,7 @@ export const NotificationPanel: FunctionComponent<{
     <div
       ref={panelRef}
       aria-label="Notifications Panel"
-      className="absolute right-0 top-full mt-2 w-[23rem] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_20px_40px_rgba(0,0,0,0.12)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/95 dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] z-50 flex flex-col"
+        className="absolute right-0 top-full mt-2 w-[23rem] max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)] overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.08] bg-white/95 shadow-2xl backdrop-blur-2xl dark:bg-void-800/95 z-50 flex flex-col"
     >
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {unreadCount} unread notification{unreadCount !== 1 ? 's' : ''}
@@ -102,7 +102,7 @@ export const NotificationPanel: FunctionComponent<{
           <button
             type="button"
             onClick={onRefresh}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
             aria-label="Refresh notifications"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -111,7 +111,7 @@ export const NotificationPanel: FunctionComponent<{
             type="button"
             onClick={onMarkAllRead}
             disabled={unreadCount === 0}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
             aria-label="Mark all notifications read"
           >
             <CheckCheck className="h-3.5 w-3.5" />
@@ -166,7 +166,7 @@ export const NotificationPanel: FunctionComponent<{
                     <button
                       type="button"
                       onClick={() => onMarkRead(notification.id)}
-                      className="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+                      className="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:bg-black/[0.04] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
                     >
                       {notification.unread ? "Mark read" : "Read"}
                     </button>
@@ -183,14 +183,13 @@ export const NotificationPanel: FunctionComponent<{
                             onMarkRead(notification.id);
                             notification.onAction?.();
                           }}
-                          className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/10 hover:text-slate-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white transition-colors"
+                          className="rounded-full border border-black/10 bg-black/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/10 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white transition-colors"
                         >
                           {notification.actionLabel}
                         </button>
                       ) : null}
                       {notification.dismissible ? (
                         <button
-
                           type="button"
                           onClick={(e) => {
                             if (document.activeElement === e.currentTarget) {
@@ -200,7 +199,7 @@ export const NotificationPanel: FunctionComponent<{
                             }
                             onDismiss(notification.id);
                           }}
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-black/[0.05] hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-black/[0.05] hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
                           aria-label={`Dismiss ${notification.title}`}
                         >
                           <X className="h-3.5 w-3.5" />

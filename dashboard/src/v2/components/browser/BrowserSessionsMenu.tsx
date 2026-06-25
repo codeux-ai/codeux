@@ -124,10 +124,10 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     };
 
     const statusColors: Record<SprintPreviewSession["status"], string> = {
-        starting: "bg-signal-500",
+        starting: "bg-ember-500",
         running: "bg-signal-500",
         stopped: "bg-slate-500",
-        error: "bg-ember-500",
+        error: "bg-status-red",
     };
 
     if (!enabled) {

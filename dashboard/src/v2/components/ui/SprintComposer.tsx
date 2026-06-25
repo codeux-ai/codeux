@@ -571,7 +571,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
           </div>
 
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-3">
-            <div className="group rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 transition-colors focus-within:bg-white dark:border-white/[0.06] dark:bg-white/[0.03] dark:focus-within:bg-black/[0.05]">
+            <div className="group rounded-xl border border-black/[0.06] bg-black/[0.025] p-3 transition-colors focus-within:bg-white dark:border-white/[0.06] dark:bg-white/[0.03] dark:focus-within:bg-black/[0.05]">
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Key</div>
               <input
                 type="text"
@@ -584,7 +584,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               />
             </div>
 
-            <div className={`rounded-[1.4rem] border p-4 transition-all ${
+            <div className={`rounded-xl border p-3 transition-all ${
               isBusy ? "border-black/[0.06] bg-black/[0.025] opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03]" : "border-black/[0.06] bg-black/[0.025] dark:border-white/[0.06] dark:bg-white/[0.03]"
             }`}>
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Route</div>

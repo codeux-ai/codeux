@@ -150,7 +150,7 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
   const isEdit = kind === "edit";
 
   return (
-    <div class="overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.02]">
+    <div class="overflow-hidden rounded-xl border border-black/[0.04] dark:border-white/[0.04] bg-slate-50/50 dark:bg-white/[0.02]">
       <button
         type="button"
         disabled={!hasDetails}

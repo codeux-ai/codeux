@@ -106,11 +106,12 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
 
   return (
     <div
-      className="absolute inset-0 z-50 flex cursor-pointer flex-col items-center justify-center bg-white/80 p-8 backdrop-blur-xl dark:bg-void-900/80"
+      className="absolute inset-0 z-50 flex cursor-pointer items-center justify-center bg-void-900/50 backdrop-blur-sm p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onDismiss();
       }}
     >
+      <div className="flex flex-col items-center justify-center bg-white dark:bg-void-800 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] max-w-2xl w-full p-8 relative cursor-default" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         onClick={onDismiss}
@@ -212,6 +213,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
             </button>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

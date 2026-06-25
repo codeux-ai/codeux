@@ -33,6 +33,7 @@ import { buildProjectCardViewModel, PROJECT_CARD_EMPTY_VALUE } from "./lib/proje
 
 const EMBER_HEX = '#FFB800';
 
+
 type Filter = 'All' | 'Running' | 'Idle' | 'Failed';
 
 const statusLabel: Record<SourceStatus, string> = {
@@ -439,28 +440,15 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
                    p-7
                    bg-white/55 dark:bg-void-800/40
                    backdrop-blur-2xl
-                   border-2 border-dashed border-signal-500/25 hover:border-signal-500/50
+                   border border-dashed border-black/[0.1] dark:border-white/[0.1] hover:border-signal-500/50
                    rounded-[1.75rem]
                    shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.18)]
                    transition-colors duration-500
                    hover:bg-signal-500/[0.025] cursor-pointer"
     >
-        {/* Morphing organic icon */}
-        <div
-            className="relative w-16 h-16 flex items-center justify-center
-                       border-2 border-dashed border-signal-500/25
-                       group-hover:border-signal-500 group-hover:bg-signal-500/[0.1]
-                       transition-all duration-400 animate-organic"
-        >
-            <div
-                className="absolute inset-0 bg-signal-500/0 group-hover:bg-signal-500/[0.08]
-                           transition-colors duration-300 animate-organic-reverse"
-            />
-            <Plus
-                className="w-6 h-6 text-signal-500/40 group-hover:text-signal-500
-                           group-hover:rotate-90 transition-all duration-400 relative z-10"
-                strokeWidth={2}
-            />
+        {/* Simple Icon */}
+        <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-black/[0.02] dark:bg-white/[0.02] group-hover:bg-signal-500/[0.1] transition-colors duration-300">
+            <Plus className="w-5 h-5 text-slate-400 group-hover:text-signal-500" strokeWidth={2} />
         </div>
 
         <div className="flex flex-col items-center gap-1.5">

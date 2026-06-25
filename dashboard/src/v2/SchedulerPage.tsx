@@ -65,17 +65,17 @@ const TARGET_OPTIONS: Array<{
     value: "quicksprint",
     label: "Quicksprint",
     icon: RefreshCw,
-    tone: "text-signal-500",
-    activeClassName: "border-signal-500/35 bg-signal-500/10 shadow-[0_12px_34px_rgba(0,224,160,0.13)]",
-    chipClassName: "bg-signal-500/12 text-signal-600 dark:text-signal-400",
+    tone: "text-sky-500",
+    activeClassName: "border-sky-500/35 bg-sky-500/10 shadow-[0_12px_34px_rgba(14,165,233,0.13)]",
+    chipClassName: "bg-sky-500/12 text-sky-600 dark:text-sky-400",
   },
   {
     value: "chat",
     label: "Chat message",
     icon: MessageCircle,
-    tone: "text-signal-500",
-    activeClassName: "border-signal-500/35 bg-signal-500/10 shadow-[0_12px_34px_rgba(0,224,160,0.13)]",
-    chipClassName: "bg-signal-500/12 text-signal-600 dark:text-signal-400",
+    tone: "text-violet-500",
+    activeClassName: "border-violet-500/35 bg-violet-500/10 shadow-[0_12px_34px_rgba(139,92,246,0.13)]",
+    chipClassName: "bg-violet-500/12 text-violet-600 dark:text-violet-400",
   },
 ];
 

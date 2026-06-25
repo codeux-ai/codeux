@@ -9,8 +9,8 @@ import {
     Ship, BarChart3,
 } from "lucide-preact";
 import { SprintStatsDeck, useLiveTaskTimingSummaries } from "./components/SprintStatsDeck.js";
-import { WaveFluid } from "./components/ui/WaveFluid.js";
-import { BorderTrace } from "./components/ui/BorderTrace.js";
+
+
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
 import { useProjectGitStatus } from "./hooks/use-project-git-status.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";

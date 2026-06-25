@@ -56,9 +56,9 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
                   </span>
                 </span>
                 <span className="flex items-center gap-1 ml-1">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-signal-500" />
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-signal-500 [animation-delay:120ms]" />
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-signal-500 [animation-delay:240ms]" />
+                  <span className="h-1.5 w-4 animate-pulse rounded-full bg-signal-500/80" />
+                  <span className="h-1.5 w-4 animate-pulse rounded-full bg-signal-500/80 [animation-delay:120ms]" />
+                  <span className="h-1.5 w-4 animate-pulse rounded-full bg-signal-500/80 [animation-delay:240ms]" />
                 </span>
               </div>
             </div>

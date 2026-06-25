@@ -48,7 +48,7 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
 
     if (!events || events.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400 dark:text-slate-600 rounded-xl border border-black/[0.04] bg-black/[0.015] dark:border-white/[0.05] dark:bg-white/[0.015]">
+            <div className="flex flex-col items-center justify-center py-12 text-slate-400 dark:text-slate-600 rounded-xl border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
                 <Activity className="w-8 h-8 mb-3 opacity-40 text-signal-500" strokeWidth={1.5} />
                 <p className="text-sm font-bold tracking-tight text-slate-600 dark:text-slate-400">No runtime events yet</p>
                 <p className="text-xs mt-1 font-mono opacity-80">Listening for execution activity...</p>

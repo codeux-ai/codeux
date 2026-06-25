@@ -571,7 +571,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               <>
                 {/* Built-in templates */}
                 <div data-qs-stagger className="mt-10">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div className="space-y-2">
                       <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Default Templates</div>
                       <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">

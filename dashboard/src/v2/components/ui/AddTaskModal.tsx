@@ -147,7 +147,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
       isOpen={true}
       onClose={handleClose}
       ariaLabelledBy="add-task-modal-title"
-      className="w-[calc(100vw-2rem)] sm:w-full max-w-4xl !p-0 !rounded-[2.5rem]"
+      className="w-[calc(100vw-2rem)] sm:w-full max-w-4xl !p-0 rounded-2xl"
     >
       <div
         className="relative w-full max-h-[calc(100dvh-2rem)] overflow-hidden sm:overflow-y-auto flex flex-col sm:flex-row"

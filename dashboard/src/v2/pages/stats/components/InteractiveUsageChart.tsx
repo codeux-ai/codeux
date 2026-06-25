@@ -307,7 +307,6 @@ export const InteractiveUsageChart: FunctionComponent<{
 
   return (
     <div ref={panelRef} className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7 border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] shadow-[var(--stats-card-shadow)]`}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
       <div className="relative flex flex-col gap-8">
         {/* Screen reader summary */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
@@ -355,22 +354,22 @@ export const InteractiveUsageChart: FunctionComponent<{
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-5`}>
+          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Tokens</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatTokens(peakTokens)}</div>
             <div className="mt-1 text-xs text-[var(--stats-detail-color)]">Highest bucket in view</div>
           </div>
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-5`}>
+          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Time</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatDuration(peakTime)}</div>
             <div className="mt-1 text-xs text-[var(--stats-detail-color)]">Active model runtime</div>
           </div>
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-5`}>
+          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Average Tokens</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatTokens(averageTokens)}</div>
             <div className="mt-1 text-xs text-[var(--stats-detail-color)]">{stats.range.resolutionLabel}</div>
           </div>
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-5`}>
+          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Invocations</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{peakInvocations.toLocaleString()}</div>
             <div className="mt-1 text-xs text-[var(--stats-detail-color)]">CLI calls in one bucket</div>
@@ -378,22 +377,22 @@ export const InteractiveUsageChart: FunctionComponent<{
         </div>
 
         <div className="grid grid-cols-1 gap-8 items-start xl:grid-cols-[minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className={`${SUBPANEL_CLASS} flex flex-col border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/20 p-5 md:p-6`}>
+          <div className={`${SUBPANEL_CLASS} flex flex-col border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5 md:p-6`}>
             <div className="mb-6 flex flex-wrap items-center gap-4">
               <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">Interactive Plot</div>
-              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 ${CHIP_CLASS} truncate max-w-full`}>
+              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} truncate max-w-full`}>
                 Hover buckets for exact values
               </div>
-              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 ${CHIP_CLASS} truncate max-w-full`}>
+              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} truncate max-w-full`}>
                 {zoomLabel}
               </div>
               <button
                 type="button"
                 onClick={toggleFilters} aria-expanded={isFiltersOpen}
-                className={`group flex items-center gap-2 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-all border shadow-sm active:scale-95 ${CHIP_CLASS} ${
+                className={`group flex items-center gap-2 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-all border shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${CHIP_CLASS} ${
                   isFiltersOpen 
                     ? 'border-signal-500/30 bg-signal-500/[0.08] text-signal-500 shadow-signal-500/5' 
-                    : 'border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 text-[var(--stats-detail-color)] hover:text-[var(--stats-value-color)] hover:border-[var(--stats-value-color)]/20'
+                    : 'border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-[var(--stats-detail-color)] hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)] hover:border-[var(--stats-value-color)]/20'
                 }`}
               >
                 <Filter className={`h-3 w-3 transition-colors ${isFiltersOpen ? 'text-signal-500' : 'text-[var(--stats-detail-color)] group-hover:text-signal-500'}`} strokeWidth={2.2} />
@@ -403,7 +402,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                 <button
                   type="button"
                   onClick={() => setZoomRange(null)}
-                  className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500 transition-all hover:bg-signal-500/10 border border-signal-500/20 rounded-full active:scale-95`}
+                  className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500 transition-all hover:bg-[color:var(--fill-muted)] border border-signal-500/20 rounded-full active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]`}
                 >
                   Reset zoom <span className="sr-only">to {stats.range.label}</span>
                 </button>
@@ -615,7 +614,7 @@ export const InteractiveUsageChart: FunctionComponent<{
               enabledSeries={enabledSeries}
               activeIndex={activeIndex}
             />
-            <div className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-6`}>
+            <div className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-6`}>
               <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">Focused Bucket</div>
               <div className="mt-4 text-2xl font-black tracking-tight text-[var(--stats-value-color)]">
                 {activeBucket ? activeBucket.label : "--"}
@@ -623,7 +622,7 @@ export const InteractiveUsageChart: FunctionComponent<{
               <div className="mt-2 text-sm leading-relaxed text-[var(--stats-detail-color)]">
                 {activeBucket ? `${formatDateTime(activeBucket.bucketStart)} to ${formatDateTime(activeBucket.bucketEnd)}` : "No bucket data yet."}
               </div>
-              <div className="mt-5 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 px-4 py-3.5 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)] shadow-sm">
+              <div className="mt-5 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-4 py-3.5 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)] shadow-sm">
                 {zoomRange
                   ? `${visibleBuckets.length} buckets in zoom`
                   : `${stats.range.bucketCount} buckets in ${stats.range.label.toLowerCase()}`}

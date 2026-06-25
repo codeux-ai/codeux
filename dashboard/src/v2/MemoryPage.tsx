@@ -5,7 +5,7 @@ import { effect } from "@preact/signals";
 import { Inspector } from "./components/memory/Inspector.js";
 import { MemoryFilters, MemoryDetails, MemoryCard } from "./components/memory/index.js";
 import MemorySidebar from "./components/memory/MemorySidebar.js";
-import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./components/memory/memoryState.js";
+import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, hoveredMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./components/memory/memoryState.js";
 
 import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
@@ -30,11 +30,11 @@ interface Pulse { edgeIdx: number; progress: number; speed: number }
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
     architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
     codebase:     { label: "Codebase",     hex: "#FFB800", r: 255, g: 184, b: 0   },
-    context:      { label: "Context",      hex: "#00AB84", r: 0,   g: 171, b: 132 },
-    preferences:  { label: "Preferences",  hex: "#94a3b8", r: 148, g: 163, b: 184 },
+    context:      { label: "Context",      hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
+    preferences:  { label: "Preferences",  hex: "#94A3B8", r: 148, g: 163, b: 184 },
     patterns:     { label: "Patterns",     hex: "#F59E0B", r: 245, g: 158, b: 11  },
-    decision:     { label: "Decision",     hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
-    error:        { label: "Error",        hex: "#EF4444", r: 239, g: 68,  b: 68  },
+    decision:     { label: "Decision",     hex: "#64748B", r: 100, g: 116, b: 139 },
+    error:        { label: "Error",        hex: "#F43F5E", r: 244, g: 63,  b: 94  },
     learning:     { label: "Learning",     hex: "#33FFB8", r: 51,  g: 255, b: 184 },
 };
 
@@ -94,6 +94,14 @@ export const MemoryPage: FunctionComponent = () => {
             if (canvasRef.current) {
                 window.dispatchEvent(new Event("resize"));
             }
+        });
+    }, []);
+
+    useEffect(() => {
+        return effect(() => {
+            const hId = hoveredMemoryIdSignal.value;
+            const idx = hId ? S.current.graph.nodes.findIndex(n => n.id === hId) : -1;
+            S.current.hoveredIdx = idx;
         });
     }, []);
 
@@ -864,7 +872,7 @@ export const MemoryPage: FunctionComponent = () => {
                             className="w-9 h-9 rounded-xl flex items-center justify-center
                                        bg-white/80 dark:bg-void-800/80 backdrop-blur-2xl
                                        border border-black/[0.06] dark:border-white/[0.06]
-                                       text-slate-500 hover:text-slate-900 dark:hover:text-white
+                                       text-slate-500 hover:text-signal-500 hover:border-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:hover:text-signal-400
                                        shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.3)]
                                        transition-colors duration-200">
                             <Icon className="w-4 h-4" strokeWidth={1.5} />

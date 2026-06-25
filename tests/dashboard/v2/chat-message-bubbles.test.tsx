@@ -519,8 +519,8 @@ describe("Chat Message Bubbles", () => {
       const buttonUnselected = containerUnselected.querySelector('[role="button"]');
       expect(buttonUnselected).not.toBeNull();
       const classesUnselected = buttonUnselected!.className.split(/\s+/);
-      expect(classesUnselected).toContain("border-2");
-      expect(classesUnselected).not.toContain("border");
+      expect(classesUnselected).toContain("border");
+      expect(classesUnselected).not.toContain("border-2");
       unmountUnselected();
 
       // Selected
@@ -534,8 +534,8 @@ describe("Chat Message Bubbles", () => {
       const buttonSelected = containerSelected.querySelector('[role="button"]');
       expect(buttonSelected).not.toBeNull();
       const classesSelected = buttonSelected!.className.split(/\s+/);
-      expect(classesSelected).toContain("border-2");
-      expect(classesSelected).not.toContain("border");
+      expect(classesSelected).toContain("border");
+      expect(classesSelected).not.toContain("border-2");
     });
   });
 
@@ -589,8 +589,8 @@ describe("Chat Message Bubbles", () => {
       const buttonUnselected = containerUnselected.querySelector("button");
       expect(buttonUnselected).not.toBeNull();
       const classesUnselected = buttonUnselected!.className.split(/\s+/);
-      expect(classesUnselected).toContain("border-2");
-      expect(classesUnselected).not.toContain("border");
+      expect(classesUnselected).toContain("border");
+      expect(classesUnselected).not.toContain("border-2");
       unmountUnselected();
 
       // Selected
@@ -606,8 +606,8 @@ describe("Chat Message Bubbles", () => {
       const buttonSelected = containerSelected.querySelector("button");
       expect(buttonSelected).not.toBeNull();
       const classesSelected = buttonSelected!.className.split(/\s+/);
-      expect(classesSelected).toContain("border-2");
-      expect(classesSelected).not.toContain("border");
+      expect(classesSelected).toContain("border");
+      expect(classesSelected).not.toContain("border-2");
     });
   });
 });

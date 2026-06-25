@@ -625,14 +625,14 @@ export const BrowserPage: FunctionComponent = () => {
               <textarea
                 value={scriptDraft}
                 onInput={(event) => setScriptDraft((event.currentTarget as HTMLTextAreaElement).value)}
-                className="h-72 w-full rounded-[1.5rem] border border-black/[0.08] bg-slate-100/80 p-4 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-void-950 dark:text-slate-100"
+                className="min-h-[18rem] w-full rounded-[1.5rem] border border-black/[0.08] bg-slate-100/80 p-4 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-void-950 dark:text-slate-100"
               />
             </div>
           )}
 
           <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/45 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container logs</div>
-            <pre className="max-h-[360px] overflow-auto rounded-[1.5rem] bg-slate-100/80 p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-void-950 dark:text-slate-300">
+            <pre className="min-h-[18rem] max-h-[360px] overflow-auto rounded-[1.5rem] bg-slate-100/80 p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-void-950 dark:text-slate-300">
               {logs || "No logs yet."}
             </pre>
           </div>

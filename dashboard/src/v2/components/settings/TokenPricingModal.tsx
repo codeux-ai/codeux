@@ -107,7 +107,7 @@ export const TokenPricingModal: FunctionComponent<TokenPricingModalProps> = ({
           <button
             type="button"
             onClick={handleSave}
-            className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 transition-colors"
+            className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow-[var(--elevation-raised)] hover:bg-amber-600 transition-colors"
           >
             Save pricing
           </button>

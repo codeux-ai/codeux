@@ -19,10 +19,10 @@ interface ActionFeedbackRegionProps {
 }
 
 const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: FunctionComponent<any>, colors: string, progressColors: string }> = {
-  pending: { icon: Loader2, colors: "bg-signal-500/10 text-signal-700 border-signal-500/20 dark:text-signal-400", progressColors: "bg-signal-500" },
-  success: { icon: CheckCircle, colors: "bg-status-green/10 text-status-green border-status-green/20", progressColors: "bg-status-green" },
-  warning: { icon: AlertTriangle, colors: "bg-status-amber/10 text-status-amber border-status-amber/20", progressColors: "bg-status-amber" },
-  error: { icon: XCircle, colors: "bg-status-red/10 text-status-red border-status-red/20", progressColors: "bg-status-red" },
+  pending: { icon: Loader2, colors: "text-signal-700 border-black/[0.08] dark:border-white/[0.08] dark:text-signal-400", progressColors: "bg-signal-500" },
+  success: { icon: CheckCircle, colors: "text-status-green border-black/[0.08] dark:border-white/[0.08]", progressColors: "bg-status-green" },
+  warning: { icon: AlertTriangle, colors: "text-status-amber border-black/[0.08] dark:border-white/[0.08]", progressColors: "bg-status-amber" },
+  error: { icon: XCircle, colors: "text-status-red border-black/[0.08] dark:border-white/[0.08]", progressColors: "bg-status-red" },
 };
 
 export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000, autoDismiss, retryAction, retryLabel }: ActionFeedbackRegionProps) {
@@ -137,7 +137,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       role={isError ? "alert" : "status"}
       aria-live={isError ? "assertive" : "polite"}
       aria-atomic="true"
-      className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl border ${config.colors} ${className}`}
+      className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.2)] border ${config.colors} bg-white dark:bg-void-800 ${className}`}
     >
       <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out]`} />
       <div className="flex-1 text-sm font-medium mt-0.5 relative">

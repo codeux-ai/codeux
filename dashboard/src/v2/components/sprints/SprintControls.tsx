@@ -44,7 +44,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
                 ? "Resume sprint execution"
                 : "Pause sprint execution"
         }
-        className={`inline-flex h-10 min-w-[6.25rem] flex-1 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
+        className={`inline-flex h-8 min-w-[6.25rem] flex-1 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isPaused
             ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
             : "border-status-amber/25 bg-status-amber/10 text-status-amber hover:bg-status-amber/15"
@@ -78,7 +78,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
               ? "Stop sprint execution"
               : "Start sprint execution"
         }
-        className={`inline-flex h-10 min-w-[6rem] flex-1 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
+        className={`inline-flex h-8 min-w-[6rem] flex-1 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isActive
             ? "border-status-red/20 bg-status-red/[0.1] text-status-red hover:bg-status-red/[0.14]"
             : "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"

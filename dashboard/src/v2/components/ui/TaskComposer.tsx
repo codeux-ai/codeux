@@ -169,7 +169,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                   <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                 ))}
               </select>
-              <div className="min-h-[20px] mt-1">
+              <div className="min-h-[1.5rem] mt-1">
                 {(state.hasAttemptedSubmit || state.touchedFields.sprintId) && state.sprintIdError && (
                   <div id="task-composer-sprint-error" className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
                     <AlertCircle className="w-3.5 h-3.5" />

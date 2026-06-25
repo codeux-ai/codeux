@@ -31,7 +31,7 @@ export const MemoryList: FunctionComponent<{
             .filter(({ node }) => node.alive && (node.content.toLowerCase().includes(lower) || node.category.toLowerCase().includes(lower)));
     });
 
-        const reducedMotion = useReducedMotion();
+    const reducedMotion = useReducedMotion();
     const listRef = useRef<HTMLDivElement>(null);
     const [renderedNodes, setRenderedNodes] = useState(filteredNodes.value);
     const prevRenderedIds = useRef<Set<string>>(new Set());

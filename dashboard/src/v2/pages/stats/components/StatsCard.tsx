@@ -1,6 +1,4 @@
 import type { FunctionComponent, ComponentType, ComponentChildren } from "preact";
-import { WaveFluid } from "../../../components/ui/WaveFluid.js";
-import { BorderTrace } from "../../../components/ui/BorderTrace.js";
 import styles from "./StatsCard.module.css";
 import "../styles/stats-theme.css";
 
@@ -59,10 +57,6 @@ export const StatsCard: FunctionComponent<StatsCardProps> = ({
       {/* Background Tint */}
       <div className={styles.tint} />
       
-      {/* Animated Visual Foundations */}
-      <WaveFluid accentHex={accentHex} isActive={isActive} />
-      <BorderTrace accentHex={accentHex} />
-
       {/* Header: Title and Trend */}
       <div className={styles.header}>
         <div className={styles.titleGroup}>

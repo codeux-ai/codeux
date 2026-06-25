@@ -179,7 +179,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                 aria-label="Open search"
                 aria-expanded={isSearchOpen}
                 aria-haspopup="dialog"
-                className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 md:hidden shrink-0"
+                className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 md:hidden shrink-0"
             >
                 <Search aria-hidden="true" className="w-4 h-4 text-slate-600 dark:text-slate-300" strokeWidth={2} />
             </button>

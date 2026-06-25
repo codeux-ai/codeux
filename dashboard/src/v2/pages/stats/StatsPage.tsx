@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
+import { Folder, Loader2, AlertTriangle } from "lucide-preact";
 import { useProjectData } from "../../context/project-data.js";
 import { useStatsPageData } from "./use-stats-page-data.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -9,7 +10,7 @@ import { AnalysisStudioSection } from "./components/AnalysisStudioSection.js";
 import { TopCardsModeRenderer } from "../../components/stats/TopCardsModeRenderer.js";
 import { Button } from "../../components/ui/Button.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
-import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
+import { EmptyState } from "../../components/ui/EmptyState.js";
 import { PANEL_CLASS } from "./components/stats-ui-primitives.js";
 import styles from "./StatsPage.module.css";
 
@@ -76,36 +77,32 @@ export const StatsPage: FunctionComponent = () => {
       />
 
       {!selectedProject ? (
-        <div className={`${PANEL_CLASS} py-12 px-6 flex justify-center`}>
-          <div className="w-full max-w-2xl">
-            <ActionFeedbackRegion
-              status="warning"
-              message="Select a project. Choose a project to load telemetry and execution history."
-              autoDismiss={false}
-            />
-          </div>
+        <div className={PANEL_CLASS}>
+          <EmptyState
+            icon={<Folder className="h-8 w-8" />}
+            title="Select a project"
+            description="Choose a project to load telemetry and execution history."
+          />
         </div>
       ) : loading && !stats ? (
-        <div className={`${PANEL_CLASS} py-12 px-6 flex justify-center`}>
-          <div className="w-full max-w-2xl">
-            <ActionFeedbackRegion
-              status="pending"
-              message={`Loading telemetry field. Gathering statistics for ${selectedProject.name}...`}
-              autoDismiss={false}
-            />
-          </div>
+        <div className={PANEL_CLASS} role="status">
+          <EmptyState
+            icon={<Loader2 className="h-8 w-8 animate-spin" />}
+            title="Loading telemetry field"
+            description={`Gathering statistics for ${selectedProject.name}...`}
+          />
         </div>
       ) : error && !stats ? (
-        <div className={`${PANEL_CLASS} py-12 px-6 flex justify-center`}>
-          <div className="w-full max-w-2xl">
-            <ActionFeedbackRegion
-              status="error"
-              message={error}
-              retryAction={() => refresh()}
-              retryLabel="Retry"
-              autoDismiss={false}
-            />
-          </div>
+        <div className={PANEL_CLASS}>
+          <EmptyState
+            icon={<AlertTriangle className="h-8 w-8 text-rose-500" />}
+            title={error}
+            primaryAction={
+              <Button variant="danger" size="sm" onClick={() => refresh()}>
+                Retry
+              </Button>
+            }
+          />
         </div>
       ) : stats ? (
         <>

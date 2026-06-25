@@ -42,7 +42,7 @@ export const ProviderInstanceCard: FunctionComponent<{
   const currentAuthType = provider.authType || (provider.mountAuth ? "localAuth" : "apiKey");
 
   return (
-    <div className="space-y-3 rounded-[1.45rem] border border-black/[0.06] bg-white/84 p-6 shadow-[0_16px_38px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+    <div className="space-y-3 rounded-[1.45rem] border border-[var(--border-hairline)] bg-[var(--surface-glass)] p-6 shadow-[var(--elevation-base)] ">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
         <div className="flex items-start gap-3">
           {index !== undefined && total !== undefined ? (
@@ -59,7 +59,7 @@ export const ProviderInstanceCard: FunctionComponent<{
         <div className="flex items-center gap-2">
 
           {onToggleEnabled ? (
-            <label className="flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            <label className="flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500  dark:text-slate-300">
               Enabled
               <Toggle aria-label="Toggle setting" value={enabled ?? true} onChange={() => onToggleEnabled(!(enabled ?? true))} />
             </label>
@@ -67,7 +67,7 @@ export const ProviderInstanceCard: FunctionComponent<{
           <button
             type="button"
             onClick={() => setShowPricingModal(true)}
-            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/[0.04] dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.06]"
+            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/[0.04]  dark:text-slate-300 dark:hover:bg-white/[0.06]"
           >
             <Banknote className="h-3.5 w-3.5" />
             Token pricing
@@ -161,7 +161,7 @@ export const ProviderInstanceCard: FunctionComponent<{
               <Terminal className="h-3.5 w-3.5" />
               Connect & Login
             </button>
-            <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 text-[11px] font-mono text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
+            <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 text-[11px] font-mono text-slate-500  dark:text-slate-400">
               Path: <span className="font-semibold text-slate-700 dark:text-slate-200">~/.code-ux/credentials/{providerConfigId}</span>
             </div>
           </div>
@@ -243,7 +243,7 @@ export const ProviderInstanceCard: FunctionComponent<{
           )}
 
           <Row label="Generated settings preview" description="Masked Qwen settings.json fragment produced for Docker runtime." last={isLast}>
-            <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600  dark:text-slate-300">
               {buildQwenSettingsPreview(provider, providerModel, dockerExecutionEnabled)}
             </pre>
           </Row>
@@ -310,7 +310,7 @@ export const ProviderInstanceCard: FunctionComponent<{
           )}
 
           <Row label="Generated config preview" description="Masked OpenCode config materialized from OPENCODE_CONFIG_CONTENT for host and Docker runs." last={isLast}>
-            <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600  dark:text-slate-300">
               {buildOpenCodeConfigPreview(provider, providerModel, dockerExecutionEnabled)}
             </pre>
           </Row>

@@ -115,13 +115,13 @@ export const InvocationMessageBubble: FunctionComponent<InvocationMessageBubbleP
           />
         </div>
 
-        <div className={`flex flex-col min-w-0 w-full max-w-[calc(100%-3rem)] rounded-2xl border bg-slate-100/80 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] dark:bg-white/5 ${
+        <div className={`flex flex-col min-w-0 w-full max-w-[calc(100%-3rem)] rounded-2xl border backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
           fromUser || fromTool
-            ? "rounded-tr-sm border-signal-500/20"
-            : "rounded-tl-sm border-slate-200/60 dark:border-white/10"
+            ? "rounded-tr-sm border-signal-500/20 bg-signal-500/[0.08] dark:bg-signal-500/[0.1]"
+            : "rounded-tl-sm border-slate-200/60 dark:border-white/10 bg-slate-100/80 dark:bg-white/5"
         }`}>
           {/* Header Row */}
-          <div className={`flex flex-wrap items-center gap-2 mb-2 text-[11px] font-mono text-slate-400 ${fromUser || fromTool ? "justify-end flex-row-reverse" : "justify-start"}`}>
+          <div className={`flex flex-wrap items-center gap-2 mb-1.5 text-xs text-slate-500 dark:text-slate-400 ${fromUser || fromTool ? "justify-end flex-row-reverse" : "justify-start"}`}>
             <span className={`font-semibold text-slate-900 dark:text-slate-300 flex items-center gap-1.5 ${message.role === "assistant" && agentName ? "" : "capitalize"}`}>
               {message.role === "assistant" && agentName ? agentName : message.role}
               {isExternalApi && <Cloud className="h-3 w-3 text-signal-500" />}

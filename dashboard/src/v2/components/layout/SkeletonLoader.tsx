@@ -89,7 +89,7 @@ export const SkeletonRow: FunctionComponent = () => (
 
 export const SkeletonCard: FunctionComponent = () => (
   <div
-    className="skeleton-card-entry relative overflow-hidden flex h-40 w-full flex-col gap-4 rounded-[1.25rem] border border-black/[0.04] bg-black/[0.02] p-5 dark:border-white/[0.04] dark:bg-white/[0.02]"
+    className="skeleton-card-entry relative overflow-hidden flex h-40 w-full flex-col gap-4 rounded-2xl border border-black/[0.04] bg-black/[0.02] p-5 dark:border-white/[0.04] dark:bg-white/[0.02]"
   >
     <span className="sr-only">Loading card...</span>
     <div className="flex items-center justify-between">
@@ -109,7 +109,7 @@ export const SkeletonCard: FunctionComponent = () => (
 
 export const SkeletonPanel: FunctionComponent = () => (
   <div
-    className="skeleton-panel-entry relative overflow-hidden flex h-64 w-full flex-col gap-6 rounded-[1.75rem] border border-black/[0.04] bg-black/[0.02] p-7 dark:border-white/[0.04] dark:bg-white/[0.02]"
+    className="skeleton-panel-entry relative overflow-hidden flex h-64 w-full flex-col gap-6 rounded-2xl border border-black/[0.04] bg-black/[0.02] p-7 dark:border-white/[0.04] dark:bg-white/[0.02]"
   >
     <span className="sr-only">Loading panel...</span>
     <SkeletonBlock className="h-6 w-1/4 rounded" />

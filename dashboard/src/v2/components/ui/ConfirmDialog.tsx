@@ -283,7 +283,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-body"
-        className="bg-white dark:bg-void-800 w-full max-w-md rounded-[1.75rem] shadow-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.06] flex flex-col"
+        className="bg-white dark:bg-void-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-black/[0.08] dark:border-white/[0.08] flex flex-col"
       >
         <div className="p-6 pb-4">
           <h2 id="confirm-dialog-title" className="text-xl font-semibold text-void-900 dark:text-white">

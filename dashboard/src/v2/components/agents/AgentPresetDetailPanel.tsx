@@ -445,7 +445,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             type="button"
             onClick={() => onDelete(preset.id)}
             disabled={deleting}
-            className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:bg-status-red/15 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
+            className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:border-status-red/30 hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
           >
             {deleting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /> : <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />}
             Delete

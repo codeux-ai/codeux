@@ -120,7 +120,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm p-4 rounded-xl shadow-lg border backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
+      className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm p-4 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
     >
       <Icon aria-hidden="true" className="w-5 h-5 shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">

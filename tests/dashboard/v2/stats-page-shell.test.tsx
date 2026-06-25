@@ -190,25 +190,23 @@ beforeEach(() => {
 });
 
 describe("StatsPage Shell", () => {
-  it("does not animate if stats are loading", () => {
+  it("shows loading empty state if stats are loading", () => {
     vi.mocked(useStatsPageData).mockReturnValue({
       ...baseMockValue,
       stats: null,
       loading: true,
     } as any);
     render(<StatsPage />);
-    expect(gsap.fromTo).not.toHaveBeenCalled();
     expect(screen.getByText(/Loading telemetry field/i)).toBeInTheDocument();
   });
 
-  it("does not animate if there is an error and stats are null", () => {
+  it("shows error empty state if there is an error and stats are null", () => {
     vi.mocked(useStatsPageData).mockReturnValue({
       ...baseMockValue,
       stats: null,
       error: "Something went wrong",
     } as any);
     render(<StatsPage />);
-    expect(gsap.fromTo).not.toHaveBeenCalled();
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
   });
 

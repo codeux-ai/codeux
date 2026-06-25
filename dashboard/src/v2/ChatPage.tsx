@@ -299,7 +299,7 @@ export const ChatPage: FunctionComponent = () => {
           </div>
 
           <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
-            <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <div className={`rounded-2xl border bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:bg-white/[0.03] ${error ? 'border-status-red/50 dark:border-status-red/50' : 'border-black/[0.06] dark:border-white/[0.06]'}`}>
               <label htmlFor="message-composer" className="sr-only">Message</label>
               <textarea
                 id="message-composer"
@@ -307,7 +307,7 @@ export const ChatPage: FunctionComponent = () => {
                 ref={composerRef}
                 value={input}
                 rows={1}
-                placeholder={activeConnection ? "Send a dashboard message to the active listener…" : "Write a project note or queue a message for a future listener…"}
+                placeholder={activeConnection ? "Ask anything..." : "Write a project note or queue a message..."}
                 className="max-h-[180px] min-h-[38px] w-full resize-none bg-transparent px-2 py-2 text-[15px] min-w-0 leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600"
                 onInput={(event) => {
                   const element = event.currentTarget;
@@ -341,14 +341,14 @@ export const ChatPage: FunctionComponent = () => {
                   onClick={() => void handleSend()}
                   disabled={!selectedProject || !input.trim() || sending}
                   className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] transition-all self-end sm:self-auto ${
-                    !selectedProject || !input.trim()
+                    !selectedProject || (!input.trim() && !sending)
                       ? "cursor-not-allowed bg-black/[0.06] text-slate-400 shadow-none dark:bg-white/[0.06]"
                       : sending
-                        ? "cursor-wait bg-signal-500/50 text-void-900 shadow-none"
-                        : "bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400"
+                        ? "cursor-wait bg-signal-500/50 text-void-900 shadow-none scale-95"
+                        : "bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] hover:bg-signal-400 hover:scale-105 active:scale-95"
                   }`}
                 >
-                  {sending ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} /> : <ArrowUp className="h-4 w-4" strokeWidth={2.5} />}
+                  {sending ? <RefreshCw className="h-4 w-4 animate-spin text-void-900/70" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.5} />}
                 </button>
               </div>
             </div>

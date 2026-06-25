@@ -389,7 +389,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
 
   const modalContent = (
     <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-      <div className="relative flex h-[600px] w-[800px] max-w-full flex-col overflow-hidden rounded-[1.75rem] border border-white/[0.08] bg-void-950 shadow-[0_24px_60px_rgba(0,0,0,0.8)] dark:bg-void-950">
+      <div className="relative flex h-[600px] w-[800px] max-w-full flex-col overflow-hidden rounded-[1.75rem] border border-black/[0.08] dark:border-white/[0.08] bg-white dark:bg-void-800 shadow-[var(--elevation-floating)]">
         {/* Glow Effects */}
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent" />
 
@@ -467,7 +467,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
               </div>
               <button 
                 onClick={onClose}
-                className="mt-4 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/20 transition-colors"
+                className="mt-4 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white shadow-[var(--elevation-raised)] hover:bg-white/20 transition-colors"
               >
                 Close Window
               </button>
@@ -522,7 +522,7 @@ export const TerminalLoginModal: FunctionComponent<TerminalLoginModalProps> = ({
                   href={getSafeUrl(detectedLoginUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-void-950 hover:bg-signal-400 transition-all duration-200 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_4px_30px_rgba(0,224,160,0.4)] cursor-pointer"
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-signal-500 px-4 py-2.5 text-xs font-bold text-void-950 hover:bg-signal-400 transition-all duration-200 shadow-[var(--elevation-raised)] cursor-pointer"
                 >
                   Authorize {providerName}
                 </a>

@@ -43,7 +43,7 @@ export const AgentAvatarStage: FunctionComponent<{
   const activeMeta = EXPRESSION_META[expression];
   return (
     <div
-      className={`relative overflow-hidden rounded-[1.5rem] border border-black/[0.06] dark:border-white/[0.07] ${className}`}
+      className={`relative overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/40 shadow-sm backdrop-blur-2xl dark:border-white/[0.07] dark:bg-void-800/40 ${className}`}
       style={{
         backgroundImage: `radial-gradient(circle at 50% 38%, ${accentHex}26, transparent 62%)`,
       }}

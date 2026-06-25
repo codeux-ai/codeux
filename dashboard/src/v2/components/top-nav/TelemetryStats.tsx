@@ -17,9 +17,9 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
     const queuedCount = allTasks.filter((t: Task) => t.status === "pending" && activeSprintIds.has(t.sprintId)).length;
 
     return (
-        <div className="hidden items-center gap-0.5 rounded-xl border border-black/[0.04] bg-black/[0.02] px-1 dark:border-white/[0.04] dark:bg-white/[0.02] xl:flex">
+        <div className="hidden h-9 items-center gap-0.5 rounded-xl border border-black/[0.06] bg-black/[0.02] px-1 dark:border-white/[0.06] dark:bg-white/[0.02] xl:flex">
             {/* Running tasks */}
-            <div className="flex items-center gap-2 px-2.5 py-1.5">
+            <div className="flex items-center gap-2 px-2.5">
                 <span className="relative flex h-2 w-2">
                     {runningCount > 0 && (
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -37,7 +37,7 @@ export const TelemetryStats: FunctionComponent<TelemetryStatsProps> = ({ project
             <div className="h-4 w-px bg-black/[0.06] dark:bg-white/[0.06]" />
 
             {/* Queued tasks */}
-            <div className="flex items-center gap-2 px-2.5 py-1.5">
+            <div className="flex items-center gap-2 px-2.5">
                 <span className={`inline-flex h-2 w-2 rounded-full ${queuedCount > 0 ? "bg-amber-400" : "bg-slate-300 dark:bg-slate-600"}`} />
                 <div className="flex items-baseline gap-1.5">
                     <span className="font-mono text-sm font-semibold leading-none text-slate-700 dark:text-slate-200">

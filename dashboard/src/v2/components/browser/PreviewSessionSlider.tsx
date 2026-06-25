@@ -153,7 +153,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   }}
                   className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border px-3 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/50 ${
                     removing
-                    ? "border-status-red/15 bg-status-red/5 text-status-red/50 cursor-not-allowed"
+                    ? "border-status-red/15 text-status-red cursor-not-allowed disabled:opacity-50"
                     : "border-status-red/15 text-status-red hover:border-status-red/30 hover:bg-status-red/8"
                   }`}
                   title="Remove preview container"

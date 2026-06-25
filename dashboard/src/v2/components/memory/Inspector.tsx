@@ -5,14 +5,14 @@ import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
-    architecture: { label: "Architecture", hex: "#E8A317", r: 232, g: 163, b: 23 },
-    codebase: { label: "Codebase", hex: "#4285F4", r: 66, g: 133, b: 244 },
-    context: { label: "Context", hex: "#9B51E0", r: 155, g: 81, b: 224 },
-    preferences: { label: "Preferences", hex: "#EC407A", r: 236, g: 64, b: 122 },
-    patterns: { label: "Patterns", hex: "#00E0A0", r: 0, g: 224, b: 160 },
-    decision: { label: "Decisions", hex: "#FF7043", r: 255, g: 112, b: 67 },
-    error: { label: "Errors", hex: "#E3000F", r: 227, g: 0, b: 15 },
-    learning: { label: "Learnings", hex: "#26C6DA", r: 38, g: 198, b: 218 },
+    architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
+    codebase:     { label: "Codebase",     hex: "#FFB800", r: 255, g: 184, b: 0   },
+    context:      { label: "Context",      hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
+    preferences:  { label: "Preferences",  hex: "#94A3B8", r: 148, g: 163, b: 184 },
+    patterns:     { label: "Patterns",     hex: "#F59E0B", r: 245, g: 158, b: 11  },
+    decision:     { label: "Decision",     hex: "#64748B", r: 100, g: 116, b: 139 },
+    error:        { label: "Error",        hex: "#F43F5E", r: 244, g: 63,  b: 94  },
+    learning:     { label: "Learning",     hex: "#33FFB8", r: 51,  g: 255, b: 184 },
 };
 
 export const Inspector: FunctionComponent<{
@@ -80,7 +80,7 @@ export const Inspector: FunctionComponent<{
                             {node.scope}
                         </span>
                     </div>
-                    <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
+                    <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed break-words whitespace-pre-wrap">
                         {node.content}
                     </p>
                     <div className="flex flex-col gap-3 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">

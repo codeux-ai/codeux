@@ -277,7 +277,7 @@ export const DropdownMenu = ({
             id={menuId}
             ref={menuRef}
             role="menu"
-            className={`fixed z-[100] bg-white/92 dark:bg-void-800/92 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] shadow-md dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-[1.75rem] p-2 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
+            className={`fixed z-[100] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-2 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
             style={{ top: coords.top, left: coords.left, transformOrigin }}
             onClick={(e) => e.stopPropagation()}
           >

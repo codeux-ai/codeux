@@ -396,7 +396,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 {renderSortIndicator("createdAt")}
               </button>
             </TableCell>
-            <TableCell isHeader align="right" isLast className="w-[140px] min-w-[140px]">Controls</TableCell>
+            <TableCell isHeader align="right" isLast className="w-[140px] min-w-[140px] pr-6">Controls</TableCell>
           </TableHeader>
           <TableBody>
             {isLoading && windowedSprints.length === 0 ? (

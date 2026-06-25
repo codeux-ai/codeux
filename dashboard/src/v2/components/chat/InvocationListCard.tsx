@@ -163,7 +163,7 @@ export const InvocationListCard: FunctionComponent<{
       const stretchLast = cells.length % 2 === 1 && !cells[lastIndex].full;
 
       return (
-        <div key={invocation.id} className="group relative overflow-hidden rounded-[1.5rem]">
+        <div key={invocation.id} className="group relative overflow-hidden rounded-3xl">
           {/* Rendered as a clickable div (not a button) so the sprint/task links
               below can be real anchors without nesting interactive elements. */}
           <div
@@ -188,8 +188,8 @@ export const InvocationListCard: FunctionComponent<{
               ${isOptimistic ? "opacity-70" : ""}
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500
               ${isSelected
-                ? "border-2 border-signal-500/30 shadow-[0_0_24px_rgba(0,224,160,0.08)]"
-                : "border-2 border-black/[0.06] dark:border-white/[0.06] hover:border-slate-400 dark:hover:border-white/[0.2]"
+                ? "bg-signal-500/[0.05] border border-black/[0.06] dark:border-white/[0.06] border-l-[3px] border-l-signal-500"
+                : "bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] border-l-[3px] border-l-transparent hover:border-slate-300 dark:hover:border-white/[0.12]"
               }`}
           >
             <WaveFluid accentHex={accentHex} isActive={isRunning} />

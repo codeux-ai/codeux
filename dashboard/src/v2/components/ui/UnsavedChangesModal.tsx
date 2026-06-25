@@ -72,7 +72,7 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
         aria-modal="true"
         aria-labelledby="unsaved-modal-title"
         aria-describedby="unsaved-modal-body"
-        className="bg-white dark:bg-void-800 w-full max-w-md rounded-[1.75rem] shadow-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.06] flex flex-col"
+        className="bg-white dark:bg-void-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-black/[0.08] dark:border-white/[0.08] flex flex-col"
       >
         <div className="p-7 pb-5">
           <div className="flex items-center gap-3">

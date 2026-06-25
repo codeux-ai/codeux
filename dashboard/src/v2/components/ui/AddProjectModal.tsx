@@ -606,7 +606,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     </div>
 
                                     {showSetupOptions && (
-                                        <div className="rounded-[1.35rem] border border-ember-500/25 bg-ember-500/[0.045] p-4 shadow-[0_14px_38px_rgba(255,184,0,0.08)] dark:bg-ember-500/[0.06]">
+                                        <div className="rounded-[1.35rem] border border-black/[0.06] dark:border-white/[0.08] p-4 bg-transparent">
                                             <div className="mb-3 flex items-center justify-between gap-4">
                                                 <div>
                                                     <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-ember-600 dark:text-ember-400">
@@ -634,8 +634,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                             onClick={() => setSetupOptions(prev => ({ ...prev, [key]: !prev[key] }))}
                                                             className={`flex min-w-0 items-start gap-3 rounded-2xl border p-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                                                                 checked
-                                                                    ? "border-ember-500/30 bg-white text-slate-900 shadow-sm dark:bg-white/[0.08] dark:text-white"
-                                                                    : "border-black/[0.06] bg-white/45 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
+                                                                    ? "border-ember-500/35 bg-ember-500/[0.08] text-slate-900 dark:text-white"
+                                                                    : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
                                                             }`}
                                                             aria-pressed={checked}
                                                         >

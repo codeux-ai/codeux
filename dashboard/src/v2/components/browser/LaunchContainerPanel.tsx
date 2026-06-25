@@ -34,7 +34,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
           disabled={!launchEnabled || launchBusy || sprints.length === 0}
           aria-disabled={!launchEnabled || launchBusy || sprints.length === 0}
           className={`w-full rounded-2xl border border-black/[0.08] bg-white/85 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 ${
-            (!launchEnabled || launchBusy || sprints.length === 0) ? "cursor-not-allowed opacity-60 pointer-events-none" : ""
+            (!launchEnabled || launchBusy || sprints.length === 0) ? "cursor-not-allowed disabled:opacity-50 pointer-events-none" : ""
           }`}
         >
           {sprints.length === 0 && <option value="">No sprints available</option>}
@@ -57,7 +57,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
           aria-busy={launchBusy}
           className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold text-void-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
             (!launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId)
-              ? "bg-slate-300 text-slate-600 cursor-not-allowed dark:bg-slate-700 dark:text-slate-300"
+              ? "bg-signal-500 cursor-not-allowed opacity-50"
               : "bg-signal-500 hover:bg-signal-400"
           }`}
         >

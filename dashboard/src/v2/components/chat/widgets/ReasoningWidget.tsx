@@ -29,7 +29,7 @@ export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({ text 
   const preview = isLong ? `${trimmed.slice(0, PREVIEW_CHARS).trimEnd()}…` : trimmed;
 
   return (
-    <div class="overflow-hidden rounded-xl border border-dashed border-black/[0.07] bg-black/[0.015] dark:border-white/[0.08] dark:bg-white/[0.015]">
+    <div class="overflow-hidden rounded-xl border border-dashed border-black/[0.04] dark:border-white/[0.04] bg-slate-50/50 dark:bg-white/[0.02]">
       <button
         type="button"
         disabled={!isLong}

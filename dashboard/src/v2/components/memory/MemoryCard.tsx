@@ -1,7 +1,7 @@
 import { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useState } from "preact/hooks";
-import { activeMemoryIdSignal, lobotomizeModeSignal, memoriesSignal, memoryMutationsSignal } from "./memoryState.js";
+import { activeMemoryIdSignal, hoveredMemoryIdSignal, lobotomizeModeSignal, memoriesSignal, memoryMutationsSignal } from "./memoryState.js";
 import { useComputed } from "@preact/signals";
 import { X } from "lucide-preact";
 import { deleteMemory } from "../../lib/memory-api.js";
@@ -20,11 +20,11 @@ interface MemoryCardProps {
 const CAT: Record<string, { label: string; hex: string }> = {
     architecture: { label: "Architecture", hex: "#00E0A0" },
     codebase:     { label: "Codebase",     hex: "#FFB800" },
-    context:      { label: "Context",      hex: "#00AB84" },
-    preferences:  { label: "Preferences",  hex: "#94a3b8" },
+    context:      { label: "Context",      hex: "#8B5CF6" },
+    preferences:  { label: "Preferences",  hex: "#94A3B8" },
     patterns:     { label: "Patterns",     hex: "#F59E0B" },
-    decision:     { label: "Decision",     hex: "#8B5CF6" },
-    error:        { label: "Error",        hex: "#EF4444" },
+    decision:     { label: "Decision",     hex: "#64748B" },
+    error:        { label: "Error",        hex: "#F43F5E" },
     learning:     { label: "Learning",     hex: "#33FFB8" },
 };
 
@@ -62,6 +62,8 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
             aria-selected={isSelected.value}
             aria-label={`${cat.label} memory, strength ${Math.round(strength * 100)}%. ${content}`}
             onClick={onClick}
+            onMouseEnter={() => { hoveredMemoryIdSignal.value = id; }}
+            onMouseLeave={() => { hoveredMemoryIdSignal.value = null; }}
             onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
