@@ -68,7 +68,7 @@ describe("GuardrailRepository", () => {
     expect(repo.getCount(taskId, "task_coding")).toBe(0);
   });
 
-  it("cascades deletes when the task is removed", async () => {
+  it("cleans up ledger rows when the task is removed", async () => {
     const { repo, projects, projectId, taskId } = await createFixture();
 
     repo.record({ projectId, taskId, purpose: "task_coding" });
@@ -76,5 +76,16 @@ describe("GuardrailRepository", () => {
 
     projects.deleteTask(taskId);
     expect(repo.getTotal(taskId)).toBe(0);
+  });
+
+  it("records taskless, synthetic guardrail keys (sprint-level main-merge CI fixes)", async () => {
+    // Sprint-level CI fixes have no task and key the ledger by a synthetic id. The column
+    // must NOT enforce a tasks(id) foreign key, or this throws "FOREIGN KEY constraint failed".
+    const { repo, projectId } = await createFixture();
+    const syntheticKey = "main-merge-ci-fix:b7bc5a5a-7618-457a-950b-26059578476e";
+
+    expect(() => repo.record({ projectId, taskId: syntheticKey, purpose: "ci_fix" })).not.toThrow();
+    expect(repo.record({ projectId, taskId: syntheticKey, purpose: "ci_fix" })).toBe(2);
+    expect(repo.getCount(syntheticKey, "ci_fix")).toBe(2);
   });
 });
