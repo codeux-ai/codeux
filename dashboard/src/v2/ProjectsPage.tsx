@@ -5,11 +5,12 @@ import { useNavigate } from "@tanstack/react-router";
 import {
     Bot,
     Check,
+    Circle,
     Clock3,
-    ExternalLink,
     FolderOpen,
     GitBranch,
     Globe,
+    Link,
     Loader2,
     MapPin,
     Plus,
@@ -29,7 +30,7 @@ import { startProjectSetup } from "./lib/project-api.js";
 import { fetchProjectInvocations } from "./lib/invocation-api.js";
 import { useToast } from "./components/feedback/ToastProvider.js";
 import { prefetchRoute } from "./router/route-prefetch.js";
-import { buildProjectCardViewModel, PROJECT_CARD_EMPTY_VALUE } from "./lib/project-card-view-model.js";
+import { buildProjectCardViewModel } from "./lib/project-card-view-model.js";
 
 const EMBER_HEX = '#FFB800';
 
@@ -50,48 +51,89 @@ const statusColor: Record<SourceStatus, string> = {
     idle:         'text-slate-400 dark:text-slate-500',
 };
 
-type ProjectCardActionKind = "open-project" | "setup-project" | "settings" | "delete";
+// Vertical status spine running down the card's left edge.
+const statusSpine: Record<SourceStatus, string> = {
+    running:      'bg-status-green',
+    failed:       'bg-status-red',
+    intervention: 'bg-status-amber',
+    idle:         'bg-slate-300 dark:bg-white/15',
+};
 
-const ACTION_ICON_CLASS = "w-3.5 h-3.5 shrink-0";
-type ProjectMetaCardIcon = any;
+
+type ProjectMetaIcon = any;
 
 /* ─── Project Card ──────────────────────────────────────────────────────── */
 
-const ProjectMetaCard: FunctionComponent<{
+/** One manifest row — label, dotted leader, value (editorial / invoice aesthetic). */
+const MetaRow: FunctionComponent<{
+    icon: ProjectMetaIcon;
     label: string;
     value: string;
     isEmpty: boolean;
-    description?: string;
-    icon?: ProjectMetaCardIcon;
-}> = ({ label, value, isEmpty, description, icon: Icon }) => (
-    <div className="rounded-[1.2rem] border border-black/[0.06] bg-black/[0.03] p-3.5 dark:border-white/[0.06] dark:bg-white/[0.03]">
-        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-            {Icon ? <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} aria-hidden="true" /> : null}
-            <span>{label}</span>
-        </div>
-        <div className={`mt-2 break-words text-sm font-semibold leading-snug ${isEmpty ? "text-slate-400 dark:text-slate-500" : "text-slate-900 dark:text-white"}`}>
+    mono?: boolean;
+}> = ({ icon: Icon, label, value, isEmpty, mono }) => (
+    <div className="flex items-baseline gap-2 min-w-0">
+        <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+            <Icon className="h-3 w-3 shrink-0 -translate-y-px" strokeWidth={2.4} aria-hidden="true" />
+            {label}
+        </span>
+        <span aria-hidden="true" className="-translate-y-[3px] flex-1 border-b border-dotted border-black/[0.14] dark:border-white/[0.14]" />
+        <span
+            title={isEmpty ? undefined : value}
+            className={`max-w-[58%] shrink truncate text-[12px] leading-snug ${mono ? "font-mono" : "font-semibold"} ${
+                isEmpty ? "italic text-slate-300 dark:text-slate-600" : "text-slate-800 dark:text-slate-100"
+            }`}
+        >
             {value}
-        </div>
-        {description ? (
-            <div className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-500">
-                {description}
-            </div>
-        ) : null}
+        </span>
     </div>
 );
 
-const ProjectActionIcon = ({ kind }: { kind: ProjectCardActionKind }) => {
-    switch (kind) {
-        case "open-project":
-            return <ExternalLink className={ACTION_ICON_CLASS} strokeWidth={2.2} aria-hidden="true" />;
-        case "setup-project":
-            return <Bot className={ACTION_ICON_CLASS} strokeWidth={2.2} aria-hidden="true" />;
-        case "settings":
-            return <Settings className={ACTION_ICON_CLASS} strokeWidth={2.2} aria-hidden="true" />;
-        case "delete":
-            return <Trash2 className={ACTION_ICON_CLASS} strokeWidth={2.2} aria-hidden="true" />;
-    }
-};
+/** A big editorial stat numeral (Sprints / Open / Done). */
+const StatTile: FunctionComponent<{ label: string; value: number; accent?: boolean }> = ({ label, value, accent }) => (
+    <div className="flex flex-col items-center justify-center gap-1 py-0.5">
+        <div className={`font-display text-2xl font-black tabular-nums leading-none ${accent ? "bg-gradient-to-br from-ember-500 to-signal-500 bg-clip-text text-transparent" : "text-slate-900 dark:text-white"}`}>
+            {value}
+        </div>
+        <div className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+            {label}
+        </div>
+    </div>
+);
+
+/** Compact secondary action — icon-only, used for the card action toolbar. */
+const IconAction: FunctionComponent<{
+    icon: ProjectMetaIcon;
+    label: string;
+    onClick: () => void;
+    danger?: boolean;
+    busy?: boolean;
+    disabled?: boolean;
+    onHover?: () => void;
+}> = ({ icon: Icon, label, onClick, danger, busy, disabled, onHover }) => (
+    <button
+        type="button"
+        onClick={(event) => {
+            event.stopPropagation();
+            if (disabled) return;
+            onClick();
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        onMouseEnter={(event) => { event.stopPropagation(); onHover?.(); }}
+        onFocus={(event) => { event.stopPropagation(); onHover?.(); }}
+        disabled={disabled}
+        aria-label={label}
+        aria-busy={busy}
+        title={label}
+        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/30 ${
+            danger
+                ? "border-status-red/15 bg-status-red/[0.05] text-status-red/80 hover:border-status-red/30 hover:bg-status-red/[0.12] hover:text-status-red"
+                : "border-black/[0.06] bg-white/60 text-slate-500 hover:bg-black/[0.05] hover:text-slate-900 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-white"
+        } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+    >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}
+    </button>
+);
 
 const ProjectCard: FunctionComponent<{
     source: Source;
@@ -112,24 +154,15 @@ const ProjectCard: FunctionComponent<{
     const totalTasks = source.completedTasks + source.openTasks;
     const completion = totalTasks > 0 ? Math.round((source.completedTasks / totalTasks) * 100) : 0;
     const isCardSelected = isSelected;
-    const gitUrlValue = viewModel.gitUrl.isEmpty
-        ? (source.sourceType === "local" ? "No git URL configured" : "No repository URL available")
-        : viewModel.gitUrl.value;
-    const gitUrlDescription = viewModel.gitUrl.isEmpty
-        ? (source.sourceType === "local" ? "Local projects only need a workspace path." : "A git project should usually expose a repository URL.")
-        : undefined;
-    const branchValue = viewModel.branch.isEmpty ? "No default branch set" : viewModel.branch.value;
-    const branchDescription = viewModel.branch.isEmpty ? "Set a default branch to simplify sprint setup." : undefined;
+
+    // Repository URL (git projects) and on-disk workspace path (shown for every project).
+    const hasRepoUrl = !viewModel.gitUrl.isEmpty;
+    const pathValue = viewModel.localDirectory.isEmpty ? "Not set" : viewModel.localDirectory.value;
+    const branchValue = viewModel.branch.isEmpty ? "Not set" : viewModel.branch.value;
+    const hostValue = viewModel.hostLabel.isEmpty ? viewModel.providerLabel.value : viewModel.hostLabel.value;
+    const hostIsEmpty = viewModel.hostLabel.isEmpty && viewModel.providerLabel.isEmpty;
     const lastRunValue = viewModel.lastRunAt.isEmpty ? "No runs yet" : viewModel.lastRunAt.value;
-    const lastRunDescription = viewModel.lastRunAt.isEmpty
-        ? "Project runs will appear here after the first setup or sprint execution."
-        : viewModel.lastRunStatus.isEmpty ? "Latest run timestamp" : `Latest run status: ${viewModel.lastRunStatus.value}`;
-    const providerValue = viewModel.providerLabel.isEmpty ? PROJECT_CARD_EMPTY_VALUE : viewModel.providerLabel.value;
-    const providerDescription = source.gitProvider === "local" ? "Managed locally" : "Remote provider";
-    const hostValue = viewModel.hostLabel.isEmpty ? "No host" : viewModel.hostLabel.value;
-    const hostDescription = viewModel.hostLabel.isEmpty ? "No remote host has been detected." : "Repository host";
     const selectedLabel = isCardSelected ? "Selected project" : "Select project";
-    const actionClass = "inline-flex items-center justify-center gap-2 rounded-[1rem] border px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/30";
 
     const handleSelect = () => {
         onSelect();
@@ -195,56 +228,71 @@ const ProjectCard: FunctionComponent<{
             <div
                 className={`relative flex h-full flex-col overflow-hidden rounded-[1.75rem] border backdrop-blur-2xl transition-shadow duration-300 ${
                     isCardSelected
-                        ? "border-ember-500/45 bg-white/78 shadow-[0_10px_30px_rgba(255,184,0,0.08)] ring-1 ring-ember-500/20 dark:bg-void-800/78"
+                        ? "border-ember-500/45 bg-white/80 shadow-[0_14px_44px_rgba(255,184,0,0.12)] ring-1 ring-ember-500/25 dark:bg-void-800/80"
                         : "border-black/[0.06] bg-white/72 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/64 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
                 }`}
             >
-                <div className="absolute inset-0 bg-signal-500/[0.025] opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100" />
-                <div className="absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(255,184,0,0.08)_0%,transparent_100%)] opacity-60" />
+                {/* Status spine — left edge, status-encoded */}
                 <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute -bottom-6 -right-2 select-none font-display text-[6rem] font-black leading-none tracking-tighter text-black/[0.03] dark:text-white/[0.025]"
+                    className={`pointer-events-none absolute left-0 top-0 z-20 h-full w-[3px] ${statusSpine[source.status]} ${isRunning ? "animate-pulse" : ""}`}
+                />
+                <div className="absolute inset-0 bg-signal-500/[0.025] opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100" />
+                {/* Corner wash — status-green while running, else a soft warm amber */}
+                <div className={`pointer-events-none absolute -top-16 -left-10 h-40 w-40 rounded-full blur-3xl opacity-40 ${
+                    isRunning ? "bg-status-green/20" : "bg-ember-500/10"
+                }`} />
+                {/* Oversized editorial monogram watermark */}
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -bottom-10 -right-3 select-none font-display text-[7rem] font-black leading-none tracking-tighter text-black/[0.035] dark:text-white/[0.03]"
                 >
-                    {source.name.slice(0, 3).toUpperCase()}
+                    {source.name.slice(0, 2).toUpperCase()}
                 </div>
                 <WaveFluid accentHex={EMBER_HEX} />
                 <BorderTrace accentHex={EMBER_HEX} />
 
-                <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-5">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="truncate font-display text-[1.05rem] font-black tracking-tight text-slate-900 dark:text-white">
-                                    {source.name}
-                                </h3>
-                                {isCardSelected ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full border border-ember-500/20 bg-ember-500/[0.12] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-700 dark:text-ember-200">
-                                        <Check className="h-3 w-3" strokeWidth={3} aria-hidden={true} />
-                                        Selected
-                                    </span>
-                                ) : null}
-                            </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                                <span className="font-mono">{source.id}</span>
-                                <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" aria-hidden="true" />
-                                <span className={statusClass}>
-                                    <StatusDot status={source.status} />
-                                    <span>{statusText}</span>
+                <div className="relative z-10 flex flex-1 flex-col gap-4 p-5 pl-6">
+                    {/* Top line — status + source kind */}
+                    <div className="flex items-center justify-between gap-3">
+                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] ${statusClass}`}>
+                            <StatusDot status={source.status} />
+                            <span>{statusText}</span>
+                        </span>
+                        <div className="flex items-center gap-2">
+                            {isCardSelected ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-ember-500/[0.14] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-ember-700 dark:text-ember-200">
+                                    <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden={true} />
+                                    Selected
                                 </span>
-                            </div>
-                            <div className="mt-2 text-[11px] leading-snug text-slate-500 dark:text-slate-500">
-                                {viewModel.sourceBadge.description}
-                            </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                            <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                            ) : null}
+                            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${
                                 viewModel.sourceBadge.kind === "remote-git"
                                     ? "border-status-green/20 bg-status-green/[0.08] text-status-green"
                                     : viewModel.sourceBadge.kind === "local-repository"
                                         ? "border-signal-500/20 bg-signal-500/[0.1] text-signal-700 dark:text-signal-300"
-                                        : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300"
+                                        : "border-black/[0.07] bg-black/[0.03] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300"
                             }`}>
                                 {viewModel.sourceBadge.label}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Identity — monogram + name */}
+                    <div className="flex items-center gap-3.5">
+                        <div
+                            aria-hidden="true"
+                            className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl border border-ember-500/20 bg-gradient-to-br from-ember-500/[0.16] to-ember-600/[0.08] font-display text-xl font-black text-ember-700 dark:border-ember-400/15 dark:text-ember-200"
+                        >
+                            <span className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,184,0,0.12)_0%,transparent_55%)]" />
+                            <span className="relative">{source.name.slice(0, 1).toUpperCase()}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <h3 className="truncate font-display text-lg font-black leading-tight tracking-tight text-slate-900 dark:text-white">
+                                {source.name}
+                            </h3>
+                            <div className="mt-0.5 truncate font-mono text-[10px] tracking-wide text-slate-400 dark:text-slate-500">
+                                {source.id}
                             </div>
                         </div>
                     </div>
@@ -258,7 +306,7 @@ const ProjectCard: FunctionComponent<{
                                     onOpenInvocation();
                                 }
                             }}
-                            className="flex items-center justify-between rounded-[1.25rem] border border-ember-500/25 bg-ember-500/[0.08] px-3 py-2.5 text-left text-ember-700 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-200"
+                            className="flex items-center justify-between rounded-xl border border-ember-500/25 bg-ember-500/[0.08] px-3 py-2.5 text-left text-ember-700 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-200"
                             disabled={!setupInvocationId}
                             title={setupInvocationId ? "Open setup invocation" : "Invocation starting"}
                         >
@@ -274,156 +322,76 @@ const ProjectCard: FunctionComponent<{
                         </button>
                     ) : null}
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <ProjectMetaCard
-                            label="Git URL"
-                            value={gitUrlValue}
-                            isEmpty={viewModel.gitUrl.isEmpty}
-                            description={gitUrlDescription}
-                            icon={Globe}
+                    {/* Manifest — repo URL, workspace path, target branch, host, last run */}
+                    <div className="flex flex-col gap-2 border-t border-black/[0.06] pt-3.5 dark:border-white/[0.07]">
+                        {hasRepoUrl ? (
+                            <MetaRow icon={Link} label="Repo" value={viewModel.gitUrl.value} isEmpty={false} mono />
+                        ) : null}
+                        <MetaRow icon={MapPin} label="Path" value={pathValue} isEmpty={viewModel.localDirectory.isEmpty} mono />
+                        <MetaRow icon={GitBranch} label="Branch" value={branchValue} isEmpty={viewModel.branch.isEmpty} mono />
+                        <MetaRow icon={Globe} label="Host" value={hostValue} isEmpty={hostIsEmpty} />
+                        <MetaRow icon={Clock3} label="Last run" value={lastRunValue} isEmpty={viewModel.lastRunAt.isEmpty} />
+                    </div>
+
+                    {/* Stats band */}
+                    <div className="grid grid-cols-3 divide-x divide-black/[0.06] border-y border-black/[0.06] py-2 dark:divide-white/[0.07] dark:border-white/[0.07]">
+                        <StatTile label="Sprints" value={source.sprintsCount} />
+                        <StatTile label="Open" value={source.openTasks} />
+                        <StatTile label="Done" value={source.completedTasks} accent={completion === 100 && totalTasks > 0} />
+                    </div>
+
+                    {/* Completion meter */}
+                    <div>
+                        <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                            <span>Completion</span>
+                            <span className="font-mono tabular-nums text-slate-600 dark:text-slate-300">{completion}%</span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.08]">
+                            <div
+                                className="h-full rounded-full bg-gradient-to-r from-ember-500 via-ember-400 to-signal-500 shadow-[0_0_10px_rgba(255,184,0,0.4)] transition-[width] duration-700"
+                                style={{ width: `${completion}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Actions — select toggle + compact icon toolbar */}
+                    <div className="mt-auto flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={(event) => { event.stopPropagation(); onSelect(); }}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            aria-pressed={isCardSelected}
+                            aria-label={isCardSelected ? `${source.name} is selected` : `Select ${source.name}`}
+                            className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold tracking-wide transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/40 ${
+                                isCardSelected
+                                    ? "bg-ember-500 text-void-900 shadow-[0_4px_18px_rgba(255,184,0,0.3)] hover:bg-ember-400"
+                                    : "border border-black/[0.1] bg-white/50 text-slate-700 hover:border-ember-500/45 hover:bg-ember-500/[0.08] hover:text-ember-700 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-slate-200 dark:hover:border-ember-500/45 dark:hover:text-ember-200"
+                            }`}
+                        >
+                            {isCardSelected
+                                ? <Check className="h-4 w-4" strokeWidth={2.6} aria-hidden="true" />
+                                : <Circle className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden="true" />}
+                            {isCardSelected ? "Selected" : "Select project"}
+                        </button>
+                        <IconAction
+                            icon={Bot}
+                            label={isSettingUp ? "Project setup is already running" : "Setup project"}
+                            onClick={onSetup}
+                            busy={isSettingUp}
+                            disabled={isSettingUp}
                         />
-                        <ProjectMetaCard
-                            label="Local directory"
-                            value={viewModel.localDirectory.value}
-                            isEmpty={viewModel.localDirectory.isEmpty}
-                            description={viewModel.localDirectory.isEmpty ? "This project has no recorded local workspace path." : undefined}
-                            icon={MapPin}
-                        />
-                        <ProjectMetaCard
-                            label="Created"
-                            value={viewModel.createdAt.value}
-                            isEmpty={viewModel.createdAt.isEmpty}
-                            description={viewModel.createdAt.isEmpty ? "Creation time is unavailable." : undefined}
-                            icon={Clock3}
-                        />
-                        <ProjectMetaCard
-                            label="Updated"
-                            value={viewModel.updatedAt.value}
-                            isEmpty={viewModel.updatedAt.isEmpty}
-                            description={viewModel.updatedAt.isEmpty ? "Last update time is unavailable." : undefined}
-                            icon={Clock3}
-                        />
-                        <ProjectMetaCard
-                            label="Last run"
-                            value={lastRunValue}
-                            isEmpty={viewModel.lastRunAt.isEmpty}
-                            description={lastRunDescription}
-                            icon={Clock3}
-                        />
-                        <ProjectMetaCard
-                            label="Branch"
-                            value={branchValue}
-                            isEmpty={viewModel.branch.isEmpty}
-                            description={branchDescription}
-                            icon={GitBranch}
-                        />
-                        <ProjectMetaCard
-                            label="Provider"
-                            value={providerValue}
-                            isEmpty={viewModel.providerLabel.isEmpty}
-                            description={providerDescription}
+                        <IconAction
                             icon={Settings}
+                            label="Project settings"
+                            onClick={onSettings}
+                            onHover={() => prefetchRoute("/config")}
                         />
-                        <ProjectMetaCard
-                            label="Host"
-                            value={hostValue}
-                            isEmpty={viewModel.hostLabel.isEmpty}
-                            description={hostDescription}
-                            icon={Globe}
+                        <IconAction
+                            icon={Trash2}
+                            label="Delete project"
+                            onClick={onDelete}
+                            danger
                         />
-                    </div>
-
-                    <div className="grid gap-3 rounded-[1.25rem] border border-black/[0.05] bg-black/[0.02] p-3 dark:border-white/[0.05] dark:bg-white/[0.02] sm:grid-cols-3">
-                        <div className="rounded-[1rem] border border-black/[0.05] bg-white/55 px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Sprints</div>
-                            <div className="mt-1 text-lg font-black text-slate-900 dark:text-white">
-                                {source.sprintsCount}
-                            </div>
-                        </div>
-                        <div className="rounded-[1rem] border border-black/[0.05] bg-white/55 px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Open tasks</div>
-                            <div className="mt-1 text-lg font-black text-slate-900 dark:text-white">
-                                {source.openTasks}
-                            </div>
-                        </div>
-                        <div className="rounded-[1rem] border border-black/[0.05] bg-white/55 px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Done</div>
-                            <div className="mt-1 text-lg font-black text-slate-900 dark:text-white">
-                                {source.completedTasks}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="mt-auto grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                        {viewModel.actions.map((action) => {
-                            const isSetupAction = action.kind === "setup-project";
-                            const isDanger = action.tone === "danger";
-                            const isDisabled = isSetupAction && isSettingUp;
-                            const handleAction = () => {
-                                switch (action.kind) {
-                                    case "open-project":
-                                        onSelect();
-                                        return;
-                                    case "setup-project":
-                                        onSetup();
-                                        return;
-                                    case "settings":
-                                        onSettings();
-                                        return;
-                                    case "delete":
-                                        onDelete();
-                                        return;
-                                }
-                            };
-
-                            return (
-                                <button
-                                    key={action.kind}
-                                    type="button"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        if (isDisabled) {
-                                            return;
-                                        }
-                                        handleAction();
-                                    }}
-                                    onPointerDown={(event) => event.stopPropagation()}
-                                    onMouseEnter={(event) => {
-                                        event.stopPropagation();
-                                        if (action.kind === "settings") {
-                                            prefetchRoute("/config");
-                                        }
-                                    }}
-                                    onFocus={(event) => {
-                                        event.stopPropagation();
-                                        if (action.kind === "settings") {
-                                            prefetchRoute("/config");
-                                        }
-                                    }}
-                                    disabled={isDisabled}
-                                    aria-label={action.ariaLabel}
-                                    title={isDisabled ? "Project setup is already running" : action.title}
-                                    aria-busy={isDisabled}
-                                    className={`${actionClass} ${
-                                        isDanger
-                                            ? "border-status-red/20 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]"
-                                            : "border-black/[0.06] bg-white/80 text-slate-600 hover:bg-black/[0.05] hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
-                                    } ${isDisabled ? "cursor-not-allowed opacity-60" : ""}`}
-                                >
-                                    <ProjectActionIcon kind={action.kind} />
-                                    <span className="truncate">{action.label}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3 pt-1 text-[10px] font-medium text-slate-400 dark:text-slate-500">
-                        <span className="truncate">
-                            Last run status: {viewModel.lastRunStatus.isEmpty ? "No run recorded" : viewModel.lastRunStatus.value}
-                        </span>
-                        <span className="shrink-0 font-mono">
-                            {completion}% complete
-                        </span>
                     </div>
                 </div>
             </div>
@@ -436,28 +404,33 @@ const ProjectCard: FunctionComponent<{
 const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
     <button
         onClick={onClick}
-        className="group relative flex h-full min-h-[260px] w-full flex-col items-center justify-center gap-5
-                   p-7
-                   bg-white/55 dark:bg-void-800/40
+        className="group relative flex h-full min-h-[300px] w-full flex-col items-center justify-center gap-5
+                   overflow-hidden p-7
+                   bg-white/45 dark:bg-void-800/35
                    backdrop-blur-2xl
-                   border border-dashed border-black/[0.1] dark:border-white/[0.1] hover:border-signal-500/50
+                   border border-dashed border-black/[0.12] dark:border-white/[0.12] hover:border-ember-500/50
                    rounded-[1.75rem]
                    shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.18)]
-                   transition-colors duration-500
-                   hover:bg-signal-500/[0.025] cursor-pointer"
+                   transition-all duration-500
+                   hover:bg-ember-500/[0.03] cursor-pointer"
     >
-        {/* Simple Icon */}
-        <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-black/[0.02] dark:bg-white/[0.02] group-hover:bg-signal-500/[0.1] transition-colors duration-300">
-            <Plus className="w-5 h-5 text-slate-400 group-hover:text-signal-500" strokeWidth={2} />
+        {/* Ghost watermark + corner wash to echo the project cards */}
+        <span aria-hidden="true" className="pointer-events-none absolute -top-14 -left-8 h-36 w-36 rounded-full bg-ember-500/10 blur-3xl opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+        <span aria-hidden="true" className="pointer-events-none absolute -bottom-10 -right-3 select-none font-display text-[7rem] font-black leading-none tracking-tighter text-black/[0.03] dark:text-white/[0.025]">
+            +
+        </span>
+
+        <div className="relative grid h-14 w-14 place-items-center rounded-2xl border border-black/[0.06] bg-black/[0.02] transition-all duration-300 group-hover:scale-110 group-hover:border-ember-500/30 group-hover:bg-ember-500/[0.12] dark:border-white/[0.06] dark:bg-white/[0.02]">
+            <Plus className="h-6 w-6 text-slate-400 transition-colors duration-300 group-hover:text-ember-500" strokeWidth={2.2} />
         </div>
 
-        <div className="flex flex-col items-center gap-1.5">
-            <span className="text-xs font-bold uppercase tracking-[0.2em]
-                             text-slate-300 dark:text-slate-600
-                             group-hover:text-signal-500 transition-colors duration-300">
+        <div className="relative flex flex-col items-center gap-1.5">
+            <span className="font-display text-sm font-black uppercase tracking-[0.18em]
+                             text-slate-400 dark:text-slate-500
+                             group-hover:text-ember-600 dark:group-hover:text-ember-300 transition-colors duration-300">
                 Add Project
             </span>
-            <span className="text-[9px] font-mono text-slate-200 dark:text-slate-700
+            <span className="text-[9px] font-mono uppercase tracking-[0.16em] text-slate-300 dark:text-slate-600
                              group-hover:text-slate-400 transition-colors duration-200">
                 Local or Git
             </span>
@@ -689,7 +662,7 @@ export const ProjectsPage: FunctionComponent = () => {
 
     return (
         <>
-            <PageContainer aria-label="Projects" containerRef={mainRef} className="gap-16">
+            <PageContainer aria-label="Projects" containerRef={mainRef} className="gap-10">
                 {/* ── Ambient glows (max 2 per page) ─────────────────── */}
                 <div
                     aria-hidden="true"
@@ -703,33 +676,21 @@ export const ProjectsPage: FunctionComponent = () => {
 
                 {/* ── Page Header ─────────────────────────────────────── */}
                 <div className="flex items-end justify-between gap-8">
-                    <div className="flex flex-col gap-5">
+                    <div className="flex flex-col gap-3">
                         {/* Eyebrow */}
                         <div className="flex items-center gap-2.5 text-ember-500 font-bold tracking-[0.2em] uppercase text-[10px] font-mono">
                             <FolderOpen className="w-3.5 h-3.5" strokeWidth={2.5} />
                             Source Repositories
                         </div>
 
-                        {/* Hero headline with ghost watermark */}
-                        <div className="relative overflow-hidden">
-                            <h2
-                                aria-hidden="true"
-                                className="text-[7rem] font-black tracking-tighter
-                                           text-black/[0.04] dark:text-white/[0.03]
-                                           absolute -top-10 -left-3
-                                           pointer-events-none select-none font-display leading-none"
-                            >
-                                PROJ
-                            </h2>
-                            <h1 className="text-5xl md:text-7xl font-black tracking-tighter
-                                           text-slate-900 dark:text-white
-                                           leading-[0.92] font-display relative z-10">
-                                Manage <br />
-                                <span className="text-ember-500">Projects.</span>
-                            </h1>
-                        </div>
+                        {/* Hero headline */}
+                        <h1 className="text-3xl md:text-4xl font-black tracking-tighter
+                                       text-slate-900 dark:text-white
+                                       leading-[1.05] font-display">
+                            Manage <span className="text-ember-500">Projects.</span>
+                        </h1>
 
-                        <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
+                        <p className="text-sm text-slate-500 dark:text-slate-500 font-medium max-w-md leading-relaxed">
                             Connected repositories and local directories. Monitor health, tasks, and sprint activity.
                         </p>
                     </div>
@@ -805,7 +766,7 @@ export const ProjectsPage: FunctionComponent = () => {
                         show={showSkeletons}
                         className="col-start-1 row-start-1"
                         skeleton={(
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
                                 <SkeletonPanel />
                                 <SkeletonPanel />
                                 <SkeletonPanel />
@@ -814,7 +775,7 @@ export const ProjectsPage: FunctionComponent = () => {
                         )}
                     >
                     {!loading ? (
-                        <div className="col-start-1 row-start-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                        <div className="col-start-1 row-start-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
                             {filtered.map(source => (
                                 <div key={source.id} className="project-card-entry h-full">
                                     <ProjectCard

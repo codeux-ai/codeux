@@ -109,6 +109,12 @@ export function getProjectCardLocalDirectory(project: ProjectSummary): ProjectCa
 }
 
 export function getProjectCardBranch(project: ProjectSummary): ProjectCardDisplayValue {
+  // Prefer the project-scope configured target branch (settings override) over the
+  // raw project row default, so the card reflects what sprints actually merge into.
+  const scopedBranch = project.settingsOverrides?.git?.defaultBranch;
+  if (typeof scopedBranch === "string" && scopedBranch.trim().length > 0) {
+    return formatProjectCardDisplayValue(scopedBranch);
+  }
   return formatProjectCardDisplayValue(project.defaultBranch);
 }
 

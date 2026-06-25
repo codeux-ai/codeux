@@ -185,6 +185,30 @@ describe("project-card-view-model", () => {
     });
   });
 
+  it("prefers the project-scope configured target branch over the row default", () => {
+    const project = createProject({
+      defaultBranch: "main",
+      settingsOverrides: { git: { defaultBranch: "release/2026" } },
+    });
+
+    expect(buildProjectCardViewModel(project).branch).toEqual({
+      value: "release/2026",
+      isEmpty: false,
+    });
+  });
+
+  it("falls back to the row default branch when no scope override is set", () => {
+    const project = createProject({
+      defaultBranch: "develop",
+      settingsOverrides: { git: {} },
+    });
+
+    expect(buildProjectCardViewModel(project).branch).toEqual({
+      value: "develop",
+      isEmpty: false,
+    });
+  });
+
   it("exposes pure action descriptors without JSX", () => {
     expect(buildProjectCardActions()).toEqual([
       {

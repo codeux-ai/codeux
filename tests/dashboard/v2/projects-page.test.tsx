@@ -119,15 +119,15 @@ describe("ProjectsPage", () => {
   it("renders repository metadata, project settings, and isolated quick actions", () => {
     render(<ProjectsPage />);
 
+    // Repo URL and on-disk path are both surfaced for git projects.
     expect(screen.getByText("https://github.com/acme/widget-service.git")).toBeInTheDocument();
     expect(screen.getByText("/workspace/widget-service")).toBeInTheDocument();
-    expect(screen.getByText("Jan 2, 2026, 3:04 AM")).toBeInTheDocument();
-    expect(screen.getByText("Jan 3, 2026, 4:05 AM")).toBeInTheDocument();
+    // Last run timestamp is shown in the manifest.
     expect(screen.getByText("Jan 4, 2026, 5:06 AM")).toBeInTheDocument();
-    expect(screen.getAllByText("GitHub").length).toBeGreaterThan(0);
     expect(screen.getAllByText("github.com").length).toBeGreaterThan(0);
 
-    expect(screen.getByRole("button", { name: /Open project/i })).toBeInTheDocument();
+    // The selected project's primary action is a select toggle in its "selected" state.
+    expect(screen.getByRole("button", { name: /Widget Service is selected/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Setup project/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Project settings/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Delete project/i })).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe("ProjectsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Selected project: Widget Service/i }));
     expect(selectProjectMock).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: /Open project/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Widget Service is selected/i }));
     expect(selectProjectMock).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getByRole("button", { name: /Project settings/i }));
