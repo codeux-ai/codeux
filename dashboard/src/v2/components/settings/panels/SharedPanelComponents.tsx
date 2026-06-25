@@ -11,10 +11,10 @@ export const SectionCard: FunctionComponent<{
   icon?: ComponentChildren;
   actions?: ComponentChildren;
 }> = ({ title, children, danger, badge, icon, actions }) => (
-  <section className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] ${
+  <section className={`relative overflow-hidden rounded-[1.75rem] border p-5 shadow-[var(--elevation-base)] backdrop-blur-sm ${
     danger
       ? "border-status-red/20 bg-status-red/[0.03] dark:border-status-red/20 dark:bg-status-red/[0.04]"
-      : "border-black/[0.06] bg-white/80 dark:border-white/[0.06] dark:bg-void-800/75"
+      : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)]"
   }`}>
     <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
 
@@ -119,19 +119,19 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
   const isInherited = badge === "Inherited";
 
   return (
-    <section className={`rounded-[2rem] border transition-colors duration-300 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-sm dark:shadow-[0_12px_36px_rgba(0,0,0,0.22)] ${
+    <section className={`rounded-[2rem] border transition-colors duration-300 p-6 shadow-[var(--elevation-base)] backdrop-blur-sm ${
       isOverridden
         ? "border-amber-500/20 bg-amber-500/[0.03] dark:border-amber-500/20 dark:bg-amber-500/[0.02]"
         : isMixed
           ? "border-sky-500/20 bg-sky-500/[0.02] dark:border-sky-500/20 dark:bg-sky-500/[0.02]"
-          : "border-black/[0.06] bg-white/72 dark:border-white/[0.06] dark:bg-white/[0.03]"
+          : "border-[color:var(--border-hairline)] bg-[var(--surface-glass)]"
     }`}>
       <div className={`mb-5 flex flex-wrap items-start justify-between gap-3 border-b pb-4 transition-colors duration-300 ${
         isOverridden
           ? "border-amber-500/10 dark:border-amber-500/10"
           : isMixed
             ? "border-sky-500/10 dark:border-sky-500/10"
-            : "border-black/[0.06] dark:border-white/[0.06]"
+            : "border-[color:var(--border-hairline)]"
       }`}>
         <div>
           <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
@@ -157,7 +157,7 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
   );
 };
 
-export const OverrideBadge: FunctionComponent<{ label: string; onReset?: () => void }> = ({ label, onReset }) => (
+export const OverrideBadge: FunctionComponent<{ label: string; contextLabel?: string; onReset?: () => void }> = ({ label, contextLabel, onReset }) => (
   <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
     <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300" />
     {label}
@@ -169,6 +169,7 @@ export const OverrideBadge: FunctionComponent<{ label: string; onReset?: () => v
           onReset();
         }}
         title="Delete project override (revert to system default)"
+        aria-label={`Delete project override for ${contextLabel || "setting"}`}
         className="ml-1 rounded-full p-0.5 text-amber-600 hover:bg-amber-500/20 hover:text-amber-800 dark:text-amber-300 dark:hover:bg-amber-300/25 dark:hover:text-amber-100 transition-colors duration-150 cursor-pointer"
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" className="h-2.5 w-2.5">
@@ -191,7 +192,7 @@ export const Row: FunctionComponent<{
   info?: ComponentChildren;
   onReset?: () => void;
 }> = ({ label, description, children, badge, last, info, onReset }) => (
-  <SharedRow label={label} description={description} badge={badge ? <OverrideBadge label={badge} onReset={onReset} /> : undefined} last={last} info={info}>
+  <SharedRow label={label} description={description} badge={badge ? <OverrideBadge label={badge} contextLabel={label} onReset={onReset} /> : undefined} last={last} info={info}>
     {children}
   </SharedRow>
 );

@@ -45,7 +45,7 @@ describe("MemoryCard", () => {
         expect(getByText("test-content")).toBeInTheDocument();
     });
 
-    test("shows X button when lobotomizeModeSignal is true and deletes on click", async () => {
+    test("shows Danger button when lobotomizeModeSignal is true and deletes on click", async () => {
         lobotomizeModeSignal.value = true;
         memoriesSignal.value = [{ id: "test-id" }];
 
@@ -59,7 +59,7 @@ describe("MemoryCard", () => {
             />
         );
 
-        const deleteButton = getByRole("button", { name: "Delete memory" });
+        const deleteButton = getByRole("button", { name: /Delete Context memory: test-content/i });
         expect(deleteButton).toBeInTheDocument();
 
         await fireEvent.click(deleteButton);
@@ -80,6 +80,22 @@ describe("MemoryCard", () => {
             />
         );
 
-        expect(queryByRole("button", { name: "Delete memory" })).not.toBeInTheDocument();
+        expect(queryByRole("button", { name: /Delete Context memory: test-content/i })).not.toBeInTheDocument();
+    });
+
+    test("has correct accessibility attributes", () => {
+        const { getByRole } = render(
+            <MemoryCard
+                id="test-id"
+                content="accessible-test-content"
+                category="architecture"
+                strength={0.75}
+                onClick={vi.fn()}
+            />
+        );
+
+        const card = getByRole("option", { name: "Architecture memory, strength 75%. accessible-test-content" });
+        expect(card).toBeInTheDocument();
+        expect(card).toHaveAttribute("aria-selected", "false");
     });
 });

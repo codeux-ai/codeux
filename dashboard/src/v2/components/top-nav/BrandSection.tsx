@@ -24,10 +24,10 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
                 <button
                     type="button"
                     onClick={onMenuToggle}
-                    aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+                    aria-label={isMobileMenuOpen ? "Close mobile menu" : "Open mobile menu"}
                     aria-expanded={!!isMobileMenuOpen}
                     aria-controls="primary-navigation"
-                    className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 shrink-0"
+                    className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 shrink-0"
                 >
                     <Menu aria-hidden="true" className="w-5 h-5 text-slate-600 dark:text-slate-300" strokeWidth={2} />
                 </button>
@@ -41,7 +41,7 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
                 onBlur={() => setBrandActive(false)}
                 className="flex items-center gap-3 cursor-pointer group shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-xl"
             >
-                <div className="relative w-9 h-9 rounded-2xl overflow-hidden ring-1 ring-inset ring-white/[0.05] dark:ring-white/[0.08] shadow-[0_0_22px_rgba(0,224,160,0.22)] transition-shadow duration-500 group-hover:shadow-[0_0_32px_rgba(0,224,160,0.42)]">
+                <div className="relative w-9 h-9 rounded-2xl overflow-hidden ring-1 ring-inset ring-white/[0.06] dark:ring-white/[0.08] shadow-[0_0_22px_rgba(0,224,160,0.22)] transition-shadow duration-500 group-hover:shadow-[0_0_32px_rgba(0,224,160,0.42)]">
                     <RobotLogo
                         size={36}
                         rounded={false}

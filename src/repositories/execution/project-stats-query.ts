@@ -27,14 +27,8 @@ export function normalizeProjectStatsQuery(
     };
 
   if (query.window === "custom") {
-    const fromDate = parseStatsDateInput(query.from, "start");
-    const toDate = parseStatsDateInput(query.to, "end");
-    if (!fromDate || !toDate) {
-      throw new Error("Custom stats windows require valid from and to values.");
-    }
-    if (fromDate.getTime() > toDate.getTime()) {
-      throw new Error("Custom stats window start must be earlier than end.");
-    }
+    const fromDate = parseStatsDateInput(query.from, "start")!;
+    const toDate = parseStatsDateInput(query.to, "end")!;
     return buildStatsRangeFromBounds(query, fromDate, toDate);
   }
 

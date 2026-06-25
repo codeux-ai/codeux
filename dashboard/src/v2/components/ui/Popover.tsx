@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preac
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
-import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface PopoverProps {
@@ -32,6 +32,7 @@ export const Popover = ({
   isTooltip = false,
 }: PopoverProps) => {
   const isReducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
   const [isRendered, setIsRendered] = useState(false);
   const localTriggerRef = useRef<HTMLButtonElement>(null);
   const triggerRef = externalTriggerRef || localTriggerRef;
@@ -65,11 +66,17 @@ export const Popover = ({
     } else if (isRendered) { // Only restore if it was previously open
       // Restore focus on close
       if (!isTooltip) {
-        if (previousFocusRef.current) {
-          previousFocusRef.current.focus();
-          previousFocusRef.current = null;
-        } else if (triggerRef.current) {
-          triggerRef.current.focus();
+        if (
+          !document.activeElement ||
+          document.activeElement === document.body ||
+          (popoverRef.current && popoverRef.current.contains(document.activeElement))
+        ) {
+          if (previousFocusRef.current?.isConnected) {
+            previousFocusRef.current.focus({ preventScroll: true });
+            previousFocusRef.current = null;
+          } else if (triggerRef.current?.isConnected) {
+            triggerRef.current.focus({ preventScroll: true });
+          }
         }
       }
     }
@@ -112,8 +119,8 @@ export const Popover = ({
           opacity: 1,
           scale: 1,
           y: 0,
-          duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
-          ease: MOTION_TOKENS.easing.standard,
+          duration: isReducedMotion ? 0 : gsapTokens.enterExit.duration,
+          ease: gsapTokens.enterExit.ease,
         }
       );
     } else if (isRendered) {
@@ -121,8 +128,8 @@ export const Popover = ({
         opacity: 0,
         scale: 0.95,
         y: position === "bottom" ? -5 : position === "top" ? 5 : 0,
-        duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
-        ease: MOTION_TOKENS.easing.standard,
+        duration: isReducedMotion ? 0 : gsapTokens.enterExit.duration,
+        ease: gsapTokens.enterExit.ease,
         onComplete: () => setIsRendered(false),
       });
     }
@@ -144,14 +151,6 @@ export const Popover = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
         onOpenChange(false);
-        if (!isTooltip) {
-        if (previousFocusRef.current) {
-          previousFocusRef.current.focus();
-          previousFocusRef.current = null;
-        } else if (triggerRef.current) {
-          triggerRef.current.focus();
-        }
-      }
       }
     };
 
@@ -202,7 +201,7 @@ export const Popover = ({
             ref={popoverRef}
             role={isTooltip ? "tooltip" : "dialog"}
             tabIndex={-1}
-            className={`fixed z-[9999] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-4 ${className}`}
+            className={`fixed z-[9999] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-4 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
             style={{ top: coords.top, left: coords.left }}
           >
             {content}

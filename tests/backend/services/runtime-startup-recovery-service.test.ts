@@ -5,6 +5,7 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
+import { QaReviewRepository } from "../../../src/repositories/qa-review-repository.js";
 import { SessionTrackingRepository } from "../../../src/repositories/session-tracking-repository.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { RuntimeStartupRecoveryService } from "../../../src/services/runtime-startup-recovery-service.js";
@@ -23,12 +24,14 @@ async function createFixture(options?: {
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const projectRepository = new ProjectManagementRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
+  const qaReviewRepository = new QaReviewRepository(storage);
   const sessionTracking = new SessionTrackingRepository(path.join(dir, "session-tracking.db"));
   const recoverSprintRun = options?.recoverSprintRun ?? vi.fn().mockResolvedValue(null);
 
   const service = new RuntimeStartupRecoveryService({
     sessionTracking,
     executionRepository,
+    qaReviewRepository,
     projectManagementRepository: projectRepository,
     sprintOrchestrator: {
       recoverSprintRun,
@@ -41,6 +44,7 @@ async function createFixture(options?: {
   return {
     projectRepository,
     executionRepository,
+    qaReviewRepository,
     sessionTracking,
     service,
     recoverSprintRun,
@@ -52,6 +56,311 @@ afterEach(async () => {
 });
 
 describe("RuntimeStartupRecoveryService", () => {
+  it("fails stale running QA review rows without provider runtime linkage on startup", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      qaReviewRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "QA Startup Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/qa-startup-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "QA Startup Recovery Sprint",
+      number: 7,
+      status: "running",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const qaRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      triggerType: "sprint_completion",
+      runIndex: 1,
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      type: "qa_review",
+      provider: "qwen-code",
+      status: "running",
+      startedAt: "2026-03-29T10:00:10.000Z",
+    });
+    executionRepository.appendExecutionInvocationMessage(invocation.id, {
+      role: "system",
+      contentMarkdown: "QA review started",
+      createdAt: "2026-03-29T10:00:10.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledQaReviewRunIds).toEqual([qaRun.id]);
+    expect(qaReviewRepository.getRun(qaRun.id)).toMatchObject({
+      status: "failed",
+      summaryMarkdown: expect.stringContaining("without provider runtime linkage"),
+    });
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+      status: "failed",
+      errorMessage: expect.stringContaining("without provider runtime linkage"),
+    });
+  });
+
+  it("fails stale running planning invocation audit rows without provider runtime linkage on startup", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Planning Audit Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/planning-audit-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Planning Audit Recovery Sprint",
+      number: 8,
+      status: "planning",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      type: "planning",
+      provider: "qwen-code",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledStructuredInvocationIds).toContain(invocation.id);
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+      status: "failed",
+      errorMessage: expect.stringContaining("without provider runtime linkage"),
+    });
+  });
+
+  it("reconciles stale task coding invocation audit rows when the provider invocation already finished", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Task Coding Audit Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/task-coding-audit-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Task Coding Audit Recovery Sprint",
+      number: 9,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Recover stale coding audit",
+      executorType: "jules",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "jules",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "jules-stale-task-coding",
+      state: "RUNNING",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      taskRunId: taskRun.id,
+      sessionId: "jules-stale-task-coding",
+      provider: "jules",
+      purpose: "task_coding",
+      status: "completed",
+      startedAt: "2026-03-29T10:00:00.000Z",
+      finishedAt: "2026-03-29T10:02:00.000Z",
+    });
+    const invocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      taskRunId: taskRun.id,
+      providerInvocationId: providerInvocation.id,
+      type: "task_coding",
+      provider: "jules",
+      status: "running",
+      startedAt: "2026-03-29T10:00:01.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTaskCodingInvocationIds).toContain(invocation.id);
+    expect(executionRepository.getExecutionInvocation(invocation.id)).toMatchObject({
+      status: "completed",
+      errorMessage: null,
+    });
+  });
+
+  it("reconciles stale active task runs from terminal project task state on startup", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Task Run Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/task-run-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Task Run Recovery Sprint",
+      number: 10,
+      status: "completed",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Completed task with stale run",
+      executorType: "jules",
+      status: "completed",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "jules-terminal-task-run",
+      state: "RUNNING",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledTaskRunIds).toEqual([taskRun.id]);
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "COMPLETED",
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "task_run_reconciled",
+          payload: expect.objectContaining({
+            previousState: "RUNNING",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("reconciles orphaned running task coding provider invocations from terminal task state", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Provider Orphan Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/provider-orphan-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Provider Orphan Recovery Sprint",
+      number: 11,
+      status: "completed",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Completed task with orphaned provider",
+      executorType: "jules",
+      status: "completed",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "jules",
+      status: "completed",
+      finishedAt: "2026-03-29T10:03:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      sessionId: "jules-orphan-provider",
+      provider: "jules",
+      purpose: "task_coding",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+    const result = await service.recover();
+
+    expect(result.reconciledTaskCodingProviderIds).toContain(providerInvocation.id);
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      status: "completed",
+    });
+  });
+
+  it("fails paused sprint runs whose associated sprint reached a terminal state", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Paused Sprint Cleanup Project",
+      sourceType: "local",
+      sourceRef: "/workspace/paused-sprint-cleanup-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Paused Sprint Cleanup",
+      number: 12,
+      status: "completed",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "paused",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledPausedSprintRunIds).toEqual([sprintRun.id]);
+    expect(executionRepository.getSprintRun(sprintRun.id)).toMatchObject({
+      status: "failed",
+      finishedAt: expect.any(String),
+    });
+  });
+
   it("fails interrupted local CLI dispatches back to a retryable state and resumes the sprint run", async () => {
     const {
       projectRepository,
@@ -69,6 +378,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Startup Recovery Sprint",
       number: 42,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -167,6 +477,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Interrupted Jules Sprint",
       number: 3,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -250,6 +561,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Durable Jules Sprint",
       number: 4,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -317,6 +629,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Duplicate Active Run Sprint",
       number: 7,
+      status: "running",
     });
     const olderRun = executionRepository.createSprintRun({
       projectId: project.id,
@@ -366,6 +679,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Terminal Task Run Sprint",
       number: 13,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -430,6 +744,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Unrecoverable Dispatch Sprint",
       number: 21,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -588,6 +903,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Recovered Fix Follow-Up Sprint",
       number: 56,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -771,6 +1087,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Quota Wait Task Sprint",
       number: 58,
+      status: "running",
     });
     const task = projectRepository.createTask(project.id, {
       sprintId: sprint.id,
@@ -874,6 +1191,7 @@ describe("RuntimeStartupRecoveryService", () => {
     const sprint = projectRepository.createSprint(project.id, {
       name: "Recovery Logger Sprint",
       number: 77,
+      status: "running",
     });
     const sprintRun = executionRepository.createSprintRun({
       projectId: project.id,
@@ -892,6 +1210,12 @@ describe("RuntimeStartupRecoveryService", () => {
       reconciledProviderDispatches: 0,
       reconciledRetryInvocations: 0,
       reconciledContainerInvocations: 0,
+      reconciledQaReviewRuns: 0,
+      reconciledStructuredInvocations: 0,
+      reconciledTaskCodingInvocations: 0,
+      reconciledTaskCodingProviders: 0,
+      reconciledTaskRuns: 0,
+      reconciledPausedSprintRuns: 0,
       resumedSprintRuns: 1,
       supersededSprintRuns: 0,
     });
@@ -901,5 +1225,104 @@ describe("RuntimeStartupRecoveryService", () => {
       projectId: project.id,
       error: "recover failed",
     });
+  });
+
+  it("does not recover sprint runs if the associated sprint is terminal (cancelled/completed)", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Terminal Sprint Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/terminal-sprint-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Cancelled Sprint",
+      number: 88,
+      status: "cancelled",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+
+    const result = await service.recover();
+
+    expect(result.resumedSprintRunIds).toEqual([]);
+    expect(result.supersededSprintRunIds).toEqual([sprintRun.id]);
+    expect(recoverSprintRun).not.toHaveBeenCalled();
+
+    const updatedRun = executionRepository.getSprintRun(sprintRun.id);
+    expect(updatedRun?.status).toBe("failed");
+  });
+
+  it("recovers active sprint runs whose sprint sits at the default idle status", async () => {
+    // Regression guard: active orchestration tracks "running" on the sprint_run,
+    // not the `sprints.status` column (which commonly stays "idle"). Recovery must
+    // resume these runs on restart instead of force-failing them.
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Idle Sprint Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/idle-sprint-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Idle Sprint",
+      number: 89,
+      status: "idle",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+
+    const result = await service.recover();
+
+    expect(result.resumedSprintRunIds).toEqual([sprintRun.id]);
+    expect(result.supersededSprintRunIds).toEqual([]);
+    expect(recoverSprintRun).toHaveBeenCalledWith(sprintRun.id);
+  });
+
+  it("leaves paused sprint runs paused when the sprint is not terminal", async () => {
+    // A paused run awaiting human action / a pending merge must survive a restart.
+    // `sprints.status` is "idle" while paused, so it must not be treated as stale.
+    const { projectRepository, executionRepository, service } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Paused Sprint Recovery Project",
+      sourceType: "local",
+      sourceRef: "/workspace/paused-sprint-recovery-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Paused Sprint",
+      number: 90,
+      status: "idle",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "paused",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledPausedSprintRunIds).toEqual([]);
+    const updatedRun = executionRepository.getSprintRun(sprintRun.id);
+    expect(updatedRun?.status).toBe("paused");
   });
 });

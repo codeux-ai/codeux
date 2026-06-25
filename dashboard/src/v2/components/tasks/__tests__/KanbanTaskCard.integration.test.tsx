@@ -4,40 +4,51 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import userEvent from "@testing-library/user-event";
+import gsap from "gsap";
 import { KanbanTaskCard } from "../KanbanTaskCard.js";
 import type { TaskCardViewModel } from "../../../lib/tasks/task-card-view-model.js";
 
 expect.extend(matchers);
 
+const mockRequestConfirm = vi.fn().mockResolvedValue(true);
+
 vi.mock("../../../hooks/use-confirm-dialog.js", () => ({
   useConfirmDialog: () => ({
     isOpen: false,
     options: null,
-    requestConfirm: vi.fn().mockResolvedValue(true),
+    requestConfirm: mockRequestConfirm,
     handleConfirm: vi.fn(),
     handleCancel: vi.fn(),
     triggerRef: { current: null }
   })
 }));
 
-// Mock gsap since it's used heavily in motion hooks
-vi.mock("gsap", () => {
+vi.mock("../../../hooks/use-reduced-motion.js", async (importOriginal) => {
+  const actual = await importOriginal<any>();
   return {
-    default: {
-      killTweensOf: vi.fn(),
-      set: vi.fn(),
-      to: vi.fn().mockImplementation((el, config) => {
-        if (config?.onComplete) config.onComplete();
-      }),
-      fromTo: vi.fn().mockImplementation((el, from, to) => {
-        if (to?.onComplete) to.onComplete();
-      }),
-      context: vi.fn().mockImplementation((fn) => {
-        if (fn) fn();
-        return { revert: vi.fn() };
-      }),
-    },
+    ...actual,
+    useReducedMotion: vi.fn().mockReturnValue(false),
+    useResolvedMotionDuration: vi.fn().mockImplementation((val) => val)
   };
+});
+
+vi.mock("gsap", async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  const mockGsap = {
+    killTweensOf: vi.fn(),
+    set: vi.fn(),
+    to: vi.fn().mockImplementation((el, config) => {
+      if (config?.onComplete) config.onComplete();
+    }),
+    fromTo: vi.fn().mockImplementation((el, from, to) => {
+      if (to?.onComplete) to.onComplete();
+    }),
+    context: vi.fn().mockImplementation((fn) => {
+      if (fn) fn();
+      return { revert: vi.fn() };
+    }),
+  };
+  return { ...actual, default: mockGsap, gsap: mockGsap };
 });
 
 describe("KanbanTaskCard Integration", () => {
@@ -193,8 +204,8 @@ describe("KanbanTaskCard Integration", () => {
     );
 
     // Ensure buttons have accessible titles/labels
-    const editBtn = getByTitle("Edit task");
-    const deleteBtn = getByTitle("Delete task");
+    const editBtn = getByTitle(/Edit task/i);
+    const deleteBtn = getByTitle(/Delete task/i);
     expect(editBtn).toBeInTheDocument();
     expect(deleteBtn).toBeInTheDocument();
 
@@ -210,6 +221,99 @@ describe("KanbanTaskCard Integration", () => {
     if (card) {
       await user.click(card);
       expect(card).toHaveFocus();
+    }
+
+    const actionsContainer = editBtn.parentElement;
+    expect(actionsContainer).toHaveClass("group-focus:opacity-100");
+
+    // Simulate delete click to ensure confirm dialog is requested
+    await user.click(deleteBtn);
+    expect(mockRequestConfirm).toHaveBeenCalled();
+  });
+
+  it("renders status transition clearly when a task status updates", () => {
+    const { container, rerender } = render(
+      <KanbanTaskCard
+        viewModel={mockViewModel} // status: in_progress
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    // Rerender with a new status to trigger the status flash animation
+    const updatedViewModel = {
+      ...mockViewModel,
+      task: { ...mockViewModel.task, status: "completed" as const }
+    };
+
+    rerender(
+      <KanbanTaskCard
+        viewModel={updatedViewModel}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    // Using gsap.fromTo for status flash, mock should have been called
+    expect(vi.mocked(gsap.fromTo)).toHaveBeenCalled();
+    // The specific flash logic creates a temporary div, but the test ensures the component renders without crashing
+    expect(container).toBeInTheDocument();
+  });
+
+  it("disables drag handlers and updates description text in reduced motion", async () => {
+    // Override the mock to return true for this test
+    const { useReducedMotion } = await import("../../../hooks/use-reduced-motion.js");
+    vi.mocked(useReducedMotion).mockReturnValue(true);
+
+    const onDragStart = vi.fn();
+    const { container, getByText } = render(
+      <KanbanTaskCard
+        viewModel={mockViewModel}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onDragStart={onDragStart as any}
+      />
+    );
+
+    const card = container.querySelector(".kanban-card");
+    expect(card).toHaveAttribute("draggable", "false");
+
+    // Simulate drag start
+    if (card) {
+      const event = new Event('dragstart', { bubbles: true });
+      card.dispatchEvent(event);
+    }
+
+    // Handlers should not have been called because onDragStart should be undefined
+    expect(onDragStart).not.toHaveBeenCalled();
+
+    // Verify screen-reader text is updated
+    const srText = getByText("Draggable reordering is disabled in reduced motion mode.");
+    expect(srText).toBeInTheDocument();
+  });
+
+  it("ensures dependency indicators have clear screen-reader support", () => {
+    const { getAllByText, getByTitle, container } = render(
+      <KanbanTaskCard
+        viewModel={mockViewModel}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    );
+
+    // Check that 'Depends on' text is in the document (from the new sr-only span)
+    const srTexts = getAllByText(/Depends on task/);
+    expect(srTexts.length).toBeGreaterThan(0);
+    expect(srTexts[0]).toHaveClass("sr-only");
+
+    // Ensure the ID spans have aria-hidden to prevent redundant readouts
+    const task124Elements = container.querySelectorAll('span[aria-hidden="true"]');
+    expect(Array.from(task124Elements).some(el => el.textContent === "TASK-124")).toBeTruthy();
+
+    // Check aria-hidden is applied to visually distinct but screen-reader-hidden icons
+    const indicatorIcon = getByTitle(/Depends on Backend API/i).querySelector("svg");
+    if (indicatorIcon) {
+       expect(indicatorIcon).toHaveAttribute("aria-hidden", "true");
     }
   });
 });

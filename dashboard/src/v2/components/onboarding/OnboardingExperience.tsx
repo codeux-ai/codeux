@@ -38,6 +38,7 @@ import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { OnboardingIntro } from "./OnboardingIntro.js";
 import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
 import { ProviderInstanceCard } from "../settings/ProviderInstanceCard.js";
+import { sanitizeSystemProviderConfig } from "../../lib/provider-runtime-preview.js";
 import { PillChoiceGroup, Row, SelectInput, TextInput, Toggle } from "../settings/SettingsFormFields.js";
 import { applyAppearanceSettings } from "../../lib/apply-appearance.js";
 import { SectionCard } from "../settings/panels/SharedPanelComponents.js";
@@ -45,6 +46,7 @@ import { JiraIcon } from "../icons/JiraIcon.js";
 
 type IntroPhase = "intro" | "transitioning" | "onboarding";
 import type { OnboardingProviderCredentialStatus, OnboardingRuntimeReadiness, ProviderConfigId, ProviderId, ProjectSettings, SystemSettings } from "../../../types.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
 import {
   createProjectProviderDraft,
   createSystemProviderDraft,
@@ -289,7 +291,7 @@ export const OnboardingExperience: FunctionComponent = () => {
   const backdropRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLElement>(null);
   const sideRef = useRef<HTMLElement>(null);
-  const contentRef = useRef<HTMLElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [readiness, setReadiness] = useState<OnboardingRuntimeReadiness>(defaultReadiness);
@@ -516,15 +518,16 @@ export const OnboardingExperience: FunctionComponent = () => {
       }
       const nextProviders = {
         ...current.integrations.providers,
-        [providerConfigId]: {
+        [providerConfigId]: sanitizeSystemProviderConfig({
           ...provider,
           ...updates,
-        },
+        }),
       };
       const mountField = providerMountFields[provider.provider];
       const syncedDefaults = syncProjectProvidersToIntegrationCatalog(current, nextProviders);
-      if (mountField && updates.mountAuth !== undefined) {
-        syncedDefaults.cliWorkflow[mountField] = updates.mountAuth as never;
+      const sanitizedProvider = nextProviders[providerConfigId];
+      if (mountField && sanitizedProvider.mountAuth !== undefined) {
+        syncedDefaults.cliWorkflow[mountField] = sanitizedProvider.mountAuth as never;
       }
       return {
         ...current,
@@ -660,6 +663,9 @@ export const OnboardingExperience: FunctionComponent = () => {
       const chosenWorkerValid = Boolean(chosenWorkerProvider?.enabled && chosenWorkerProvider.provider !== "jules");
       if (!chosenWorkerValid && firstSelectedCliProvider) {
         nextSettings.defaults.workers.virtualWorkerProvider = firstSelectedCliProvider;
+      }
+      for (const [providerConfigId, integrationProvider] of Object.entries(nextSettings.integrations.providers)) {
+        nextSettings.integrations.providers[providerConfigId] = sanitizeSystemProviderConfig(integrationProvider);
       }
       nextSettings = await saveSystemSettings(nextSettings);
       setSettings(nextSettings);
@@ -868,7 +874,7 @@ export const OnboardingExperience: FunctionComponent = () => {
             </button>
           </header>
 
-          <main ref={contentRef} className="dashboard-scrollbar relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 dark:text-slate-100 md:px-8">
+          <div ref={contentRef} className="dashboard-scrollbar relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 dark:text-slate-100 md:px-8">
             {error ? (
               <div className="mb-4 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm font-semibold text-status-red">
                 {error}
@@ -907,17 +913,17 @@ export const OnboardingExperience: FunctionComponent = () => {
                           {(dependency.id === "docker-cli" || dependency.id === "docker-daemon") && (
                             <div className="flex flex-col gap-2 pt-1">
                               <a
-                                href={getOSInfo(platform).dockerDesktopLink}
+                                href={getSafeUrl(getOSInfo(platform).dockerDesktopLink)}
                                 target="_blank"
-                                rel="noreferrer noopener"
+                                rel="noopener noreferrer"
                                 className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
                               >
                                 Docker Desktop for {getOSInfo(platform).osLabel}
                               </a>
                               <a
-                                href={getOSInfo(platform).dockerDownloadLink}
+                                href={getSafeUrl(getOSInfo(platform).dockerDownloadLink)}
                                 target="_blank"
-                                rel="noreferrer noopener"
+                                rel="noopener noreferrer"
                                 className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-black/[0.03] py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-slate-600 hover:bg-black/[0.06] dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:bg-white/[0.08]"
                               >
                                 Docker Download
@@ -927,9 +933,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                           {dependency.id === "git-cli" && (
                             <div className="flex flex-col gap-2 pt-1">
                               <a
-                                href={getOSInfo(platform).gitLink}
+                                href={getSafeUrl(getOSInfo(platform).gitLink)}
                                 target="_blank"
-                                rel="noreferrer noopener"
+                                rel="noopener noreferrer"
                                 className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-signal-500/20 bg-signal-500/10 py-2 text-center text-xs font-bold uppercase tracking-[0.12em] text-signal-700 hover:bg-signal-500/15 dark:text-signal-200"
                               >
                                 Download Git for {getOSInfo(platform).osLabel}
@@ -974,9 +980,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                         return (
                           <a
                             key={String(label)}
-                            href={String(href)}
+                            href={getSafeUrl(String(href))}
                             target="_blank"
-                            rel="noreferrer noopener"
+                            rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 rounded-2xl border border-black/[0.06] bg-white/80 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:border-signal-500/25 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.055] dark:text-slate-300 dark:hover:text-white"
                           >
                             <BadgeIcon className="h-3.5 w-3.5 text-signal-600 dark:text-signal-300" strokeWidth={2.4} />
@@ -1013,9 +1019,9 @@ export const OnboardingExperience: FunctionComponent = () => {
                         <div className="text-sm font-black uppercase tracking-[0.16em] text-slate-700 dark:text-slate-200">License</div>
                       </div>
                       <a
-                        href={`${CODEUX_REPO_URL}/blob/main/LICENSE`}
+                        href={getSafeUrl(`${CODEUX_REPO_URL}/blob/main/LICENSE`)}
                         target="_blank"
-                        rel="noreferrer noopener"
+                        rel="noopener noreferrer"
                         className="text-[10px] font-black uppercase tracking-[0.14em] text-signal-600 hover:text-signal-700 dark:text-signal-300 dark:hover:text-signal-200"
                       >
                         View on GitHub
@@ -1189,8 +1195,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                           />
                         </Row>
                         <Row label="Mount GitHub auth" description="Copy the host `gh` credential directory into Docker.">
-                          <Toggle
-                            value={settings.defaults.cliWorkflow.containerMountGithubAuth}
+                          <Toggle aria-label="Toggle setting"                             value={settings.defaults.cliWorkflow.containerMountGithubAuth}
                             onChange={() => updateCliWorkflow({ containerMountGithubAuth: !settings.defaults.cliWorkflow.containerMountGithubAuth })}
                           />
                         </Row>
@@ -1220,8 +1225,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 <div data-onboarding-card>
                   <SectionCard title="Git identity" watermark="ID" icon={<GitBranch strokeWidth={2.4} />}>
                     <Row label="Copy local git config" description="Use the host `.gitconfig` in Docker instead of the configured Code UX git identity." last={settings.defaults.cliWorkflow.containerMountGitConfig}>
-                      <Toggle
-                        value={settings.defaults.cliWorkflow.containerMountGitConfig}
+                      <Toggle aria-label="Toggle setting"                         value={settings.defaults.cliWorkflow.containerMountGitConfig}
                         onChange={() => updateCliWorkflow({ containerMountGitConfig: !settings.defaults.cliWorkflow.containerMountGitConfig })}
                       />
                     </Row>
@@ -1282,7 +1286,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                       <TextInput value={jiraSettings.closeTransitionName} onChange={(value) => updateJira({ closeTransitionName: value })} />
                     </Row>
                     <Row label="Auto-close Jira issues" description="Move linked Jira issues through the configured transition after the sprint completes." last>
-                      <Toggle value={jiraSettings.autoCloseLinkedIssues} onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })} />
+                      <Toggle aria-label="Toggle setting" value={jiraSettings.autoCloseLinkedIssues} onChange={() => updateJira({ autoCloseLinkedIssues: !jiraSettings.autoCloseLinkedIssues })} />
                     </Row>
                   </SectionCard>
                 </div>
@@ -1311,6 +1315,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 <ToggleRow title="Auto-approve plans" description="Let planning continue without manual approval when the generated plan is available." checked={settings.defaults.automationInterventions.autoApprovePlan} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, automationInterventions: { ...current.defaults.automationInterventions, autoApprovePlan: checked } } }))} />
                 <ToggleRow title="Memory system" description="Capture sprint and agent learnings for later retrieval." checked={settings.defaults.memory.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, memory: { ...current.defaults.memory, enabled: checked } } }))} />
                 <ToggleRow title="Resolve main merge conflicts" description="Let a virtual worker attempt conflicts on the main branch merge gate before escalating." checked={settings.defaults.ciIntelligence.resolveMainMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeConflicts: checked } } }))} />
+                <ToggleRow title="Fix main merge CI failures" description="Let a virtual worker fix failing CI on the main branch merge gate before escalating." checked={settings.defaults.ciIntelligence.resolveMainMergeFailedChecks} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMainMergeFailedChecks: checked } } }))} />
                 <ToggleRow title="Resolve feature merge conflicts" description="Let a virtual worker resolve feature PR conflicts against the sprint branch when safe." checked={settings.defaults.ciIntelligence.resolveMergeConflicts} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, ciIntelligence: { ...current.defaults.ciIntelligence, resolveMergeConflicts: checked } } }))} />
                 <ToggleRow title="Enable QA agent" description="Run quality-assurance reviews after task and sprint completion events." checked={settings.defaults.agents.qualityAssurance.enabled} onChange={(checked) => updateSettings((current) => ({ ...current, defaults: { ...current.defaults, agents: { ...current.defaults.agents, qualityAssurance: { ...current.defaults.agents.qualityAssurance, enabled: checked } } } }))} />
               </div>
@@ -1518,7 +1523,7 @@ export const OnboardingExperience: FunctionComponent = () => {
                 )}
               </div>
             ) : null}
-          </main>
+          </div>
 
           <footer className="relative flex shrink-0 items-center justify-between gap-3 border-t border-black/[0.06] bg-white/45 px-5 py-4 backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-950/28 md:px-8">
             <button

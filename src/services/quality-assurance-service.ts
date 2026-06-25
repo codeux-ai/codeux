@@ -1,4 +1,13 @@
-import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workflow-utils.js";
+import {
+  buildProviderPrompt,
+  DEFAULT_CLI_WORKFLOW_SETTINGS,
+  buildWorkerBranchPrefix,
+  buildWorkerBranch
+} from "./cli-workflow-utils.js";
+import { GitStatusQueryClient } from "../infrastructure/git/git-status-query-client.js";
+import { findRecoverableWorkerBranch } from "../infrastructure/git/local-merge.js";
+import { resolveRepositoryHost, selectHostToken } from "../infrastructure/git/repository-host-resolver.js";
+import { parseOpenPrs, parseMergedPrs } from "../infrastructure/git/git-status-mappers.js";
 import { extractJsonFromText } from "../domain/llm/json-extraction.js";
 import { StructuredAgentRequestService } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
@@ -25,18 +34,25 @@ import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import type { MemoryService } from "./memory-service.js";
 import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
+import {
+  QA_INFRA_FAILURE_GRACE,
+  RECOVERED_STALE_QA_SUMMARY_PREFIX,
+  evaluateQaReviewBudget,
+  isRecoveredStaleQaRun
+} from "../domain/qa-review/qa-review-budget.js";
+
 import { parseQaError, type QaReviewError } from "../domain/qa-review/qa-review-types.js";
 import { normalizeQaReviewResult } from "../domain/qa-review/qa-review-result-normalizer.js";
 import type { NormalizedQaReviewResult } from "../domain/qa-review/qa-review-types.js";
 
 import { clearMergeProjectionForRerun, MERGE_PROJECTION_RESET } from "../domain/sprint/task-reset-state.js";
+import { buildQaReviewRequest, resolveTaskTriggerType } from "../domain/qa-review/qa-review-request-builder.js";
 
 type CliQaProvider = Exclude<ProviderId, "jules">;
 
 const SPRINT_RUN_KEEPALIVE_MS = 30_000;
 const SPRINT_LEASE_EXTENSION_MS = 5 * 60 * 1000;
 const QA_RUN_START_TIMEOUT_MS = 60_000;
-const RECOVERED_STALE_QA_SUMMARY_PREFIX = "Recovered stale QA review run";
 /**
  * How many extra QA attempts beyond `maxTaskReviewRuns` we tolerate when the
  * reviewer keeps failing for infrastructure reasons (auth/config/container).
@@ -45,7 +61,6 @@ const RECOVERED_STALE_QA_SUMMARY_PREFIX = "Recovered stale QA review run";
  * reviewer must still stop retrying eventually and escalate the task to a human
  * (QA_REVIEW_FAILED) rather than loop forever or — worse — fail open.
  */
-const QA_INFRA_FAILURE_GRACE = 3;
 
 export interface TaskQaReviewOutcome {
   reviewed: boolean;
@@ -170,83 +185,49 @@ export class QualityAssuranceService {
       return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
     }
 
-    const triggerType = this.resolveTaskTriggerType(args.task, qaSettings);
-    if (!triggerType) {
-      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
-    }
-
     const existingRuns = this.deps.qaReviewRepository.countTaskRuns(taskId);
     const decisiveRuns = this.deps.qaReviewRepository.countDecisiveTaskRuns(taskId);
     const latestRun = this.deps.qaReviewRepository.getLatestTaskRun(taskId);
-    // The budget is spent once we have enough real verdicts, or once total
-    // attempts (including reviewer infra crashes) hit the infra ceiling. Until
-    // then, keep retrying — a reviewer that crashed on auth/config produced no
-    // verdict and the task still needs reviewing before it can merge.
-    const budgetSpent = decisiveRuns >= qaSettings.maxTaskReviewRuns
-      || existingRuns >= qaSettings.maxTaskReviewRuns + QA_INFRA_FAILURE_GRACE;
-    const allowPostContinuationVerification = budgetSpent
-      && this.shouldVerifyContinuedQaFix(latestRun);
-    const allowRecoveredStaleRetry = budgetSpent
-      && this.isRecoveredStaleQaRun(latestRun);
-    if (budgetSpent && !allowPostContinuationVerification && !allowRecoveredStaleRetry) {
-      await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
-      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
-    }
-
-    // Separate per-task QA guardrail (independent of the QA agent's own maxTaskReviewRuns).
-    const qaGuardrail = this.deps.guardrailService.evaluateQa(scope, taskId);
-    if (!qaGuardrail.allowed && qaGuardrail.action !== "WARN_ONLY") {
-      await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
-      this.deps.logger?.info("QA review skipped: guardrail cap reached", {
-        taskId,
-        count: qaGuardrail.count,
-        cap: qaGuardrail.cap,
-      });
-      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
-    }
-
     const taskRun = this.resolveTaskRunForSubtask(args.task, args.sprintRunId);
-    const project = this.deps.projectManagementRepository.getProject(args.projectId);
-    const sprint = this.deps.projectManagementRepository.getSprint(args.sprintId);
-    if (!project || !sprint) {
-      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
-    }
 
-    const sprintFeatureBranch = sprint.featureBranch?.trim()
-      || `${settings.git.featureBranchPrefix || "feature/"}sprint-${sprint.number ?? 0}`;
-
-    const agentPresetId = triggerType === "completed_task_without_pr"
-      ? qaSettings.completedTaskWithoutPr.agentPresetId
-      : qaSettings.taskCompletion.agentPresetId;
-    const agent = await this.deps.agentPresetSyncService.resolveTargetedQualityAssuranceAgent(args.projectId, agentPresetId);
-
-    const memoryInstructions = resolveAgentMemoryInstructions(
-      agent,
-      settings.memory?.workerLearningsInstruction
-    );
-    let agentInstructions = agent.instructionMarkdown + (memoryInstructions ? `\n\n### Memory Capture Instructions\n${memoryInstructions}` : "");
-
-    const run = this.deps.qaReviewRepository.createRun({
-      projectId: args.projectId,
-      sprintId: args.sprintId,
+    const request = await buildQaReviewRequest({
+      task: args.task,
+      taskRun,
+      project: this.deps.projectManagementRepository.getProject(args.projectId) || null,
+      sprint: this.deps.projectManagementRepository.getSprint(args.sprintId) || null,
       sprintRunId: args.sprintRunId || null,
-      taskId,
-      taskRunId: taskRun?.id || null,
-      triggerType,
-      runIndex: existingRuns + 1,
-      agentPresetId: agent.id,
-      agentName: agent.name,
-      targetTaskKey: args.task.id,
-      targetSessionId: args.task.session_id || null,
-      targetProvider: args.task.provider || null,
-      payload: {
-        taskKey: args.task.id,
-        runIndex: existingRuns + 1,
+      settings,
+      budgetArgs: {
+        existingRuns,
+        decisiveRuns,
+        latestRun,
       },
+      resolveAgent: (projectId, agentPresetId) =>
+        this.deps.agentPresetSyncService.resolveTargetedQualityAssuranceAgent(projectId, agentPresetId),
     });
 
-    // Record the QA invocation against the per-task guardrail ledger.
-    this.deps.guardrailService.record(scope, taskId, "qa_review");
+    if (!request) {
+      const budget = evaluateQaReviewBudget({
+        existingRuns,
+        decisiveRuns,
+        maxTaskReviewRuns: qaSettings.maxTaskReviewRuns,
+        latestRun,
+      });
+      if (!budget.allowed) {
+        await this.cleanupCliWorkspaceIfNeeded(args.task, args.repoPath, scope);
+      }
+      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
+    }
+
+    const {
+      triggerType,
+      sprintFeatureBranch,
+      agentPresetId,
+      agentInstructions,
+      runPayload,
+    } = request;
+
+    const run = this.deps.qaReviewRepository.createRun(runPayload as any);
 
     // Signal that the task has entered the QA stage so the live view advances
     // from coding-completed → QA and starts timing the review immediately
@@ -260,6 +241,27 @@ export class QualityAssuranceService {
     });
     this.setTaskQaPending(args.task, true);
 
+    const project = this.deps.projectManagementRepository.getProject(args.projectId);
+    const sprint = this.deps.projectManagementRepository.getSprint(args.sprintId);
+    if (!project || !sprint) {
+      return { reviewed: false, reopenedTask: false, mergeBlocked: false, reportText: "" };
+    }
+
+    // Resolve which branch QA should check out. In LOCAL git mode the worker
+    // branch is the only record of a code-complete task's work, and that metadata
+    // is routinely cleared from the task/run during the re-dispatch + settlement
+    // cycle. When it is missing we must recover it from local refs before falling
+    // back to the (usually empty) feature branch - otherwise the QA snapshot is
+    // checked out on the feature branch, every review wrongly reports the work
+    // missing, and the QA-gated merge never lands (the LOCAL-mode stuck-sprint bug).
+    const reviewBranch = await this.resolveReviewBranch({
+      task: args.task,
+      taskRun,
+      repoPath: args.repoPath,
+      featureBranch: sprintFeatureBranch,
+      githubMode: settings.git.githubMode,
+    });
+
     try {
       const review = await this.runReview({
         triggerType,
@@ -272,16 +274,22 @@ export class QualityAssuranceService {
         currentTask: args.task,
         taskRun,
         sprintRunId: args.sprintRunId || null,
-        agentPresetId: agent.id,
-        // Task QA reviews the task's own feature/worker branch, falling back to
-        // the sprint base branch when the worker branch metadata is missing.
-        reviewBranch: args.task.worker_branch?.trim()
-          || taskRun?.workerBranch?.trim()
-          || sprintFeatureBranch,
+        agentPresetId: agentPresetId,
+        reviewBranch,
         baseBranch: sprintFeatureBranch,
       });
 
-      if (review.verdict === "pass" || (triggerType === "completed_task_without_pr" && review.shouldHavePr === false)) {
+      // A `completed_task_without_pr` task may legitimately need no PR (the work
+      // was a no-op / nothing to commit) — `shouldHavePr === false` lets it pass
+      // instead of blocking forever on a PR that should not exist. But an explicit
+      // `changes_requested` verdict must win over that flag: a reviewer that finds
+      // the work wrong yet also reports "no PR needed" would otherwise force-pass
+      // broken work, which then resurfaces at sprint-completion QA and drives the
+      // change loop. Trust the changes_requested verdict (fail-closed).
+      const noPrNeeded = triggerType === "completed_task_without_pr"
+        && review.shouldHavePr === false
+        && review.verdict !== "changes_requested";
+      if (review.verdict === "pass" || noPrNeeded) {
         this.deps.qaReviewRepository.updateRun(run.id, {
           status: "completed",
           outcome: "pass",
@@ -452,7 +460,7 @@ export class QualityAssuranceService {
       || `${settings.git.featureBranchPrefix || "feature/"}sprint-${sprint.number ?? 0}`;
 
     const latestRun = this.reconcileRunningQaRun(this.deps.qaReviewRepository.getLatestSprintRun(args.sprintId));
-    const maxRuns = qaSettings.maxTaskReviewRuns;
+    const maxRuns = qaSettings.maxSprintReviewRuns;
     const latestTaskSnapshot = readSprintQaSnapshot(latestRun);
     const currentTaskSnapshot = buildSprintQaSnapshot(args.subtasks);
     const latestTaskUpdatedAt = this.getLatestSprintTaskUpdatedAt(args.projectId, args.sprintId);
@@ -465,7 +473,7 @@ export class QualityAssuranceService {
         ? latestTaskSnapshot !== currentTaskSnapshot
         : hasTaskUpdatesSinceLatestRun)
       : true;
-    const recoveredStaleLatestRun = this.isRecoveredStaleQaRun(latestRun);
+    const recoveredStaleLatestRun = isRecoveredStaleQaRun(latestRun);
     // Only count the budget as exhausted when the latest run actually produced a
     // verdict (`completed`) at/over the cap. A reviewer that crashed for infra
     // reasons (`failed`) yielded no judgement and must not let the sprint settle
@@ -673,7 +681,7 @@ export class QualityAssuranceService {
     const scope = { projectId: args.projectId, sprintId: args.sprintId };
     const settings = this.deps.getDashboardSettings(scope);
     const qaSettings = settings.agents.qualityAssurance;
-    const triggerType = this.resolveTaskTriggerType(args.task, qaSettings);
+    const triggerType = resolveTaskTriggerType(args.task, qaSettings);
     if (!qaSettings.enabled || !triggerType) {
       return {
         mergeAllowed: true,
@@ -711,18 +719,7 @@ export class QualityAssuranceService {
       };
     }
 
-    if (latestRun?.outcome === "changes_requested") {
-      return {
-        mergeAllowed: false,
-        reason: "changes_requested",
-        summary: latestRun.summaryMarkdown || "QA requested follow-up fixes.",
-        latestRun,
-        runsUsed,
-        maxRuns,
-      };
-    }
-
-    const recoveredStaleLatestRun = this.isRecoveredStaleQaRun(latestRun);
+    const recoveredStaleLatestRun = isRecoveredStaleQaRun(latestRun);
 
     // Only runs that produced a real verdict (pass / changes_requested) spend
     // the review budget. Reviewer crashes (missing auth, container/parse
@@ -731,17 +728,31 @@ export class QualityAssuranceService {
     // stops and escalates instead of looping or failing open.
     const decisiveRuns = this.deps.qaReviewRepository.countDecisiveTaskRuns(taskId);
     const infraCeiling = maxRuns + QA_INFRA_FAILURE_GRACE;
+    const budgetExhausted = (maxRuns > 0 && decisiveRuns >= maxRuns) || runsUsed >= infraCeiling;
 
-    // Fail CLOSED on exhaustion. A genuine pass returns above, so reaching here
-    // means QA never affirmatively cleared the task. Never let an exhausted gate
-    // allow the merge/settle — that is exactly what silently shipped tasks with
-    // no PR. Hold the merge; the orchestrator escalates the task to a human.
-    if (decisiveRuns >= maxRuns || runsUsed >= infraCeiling) {
+    // Exhaustion is checked BEFORE the changes_requested verdict on purpose: a
+    // task that keeps getting "changes requested" until its budget is spent must
+    // surface as `retries_exhausted` so the orchestrator can apply the configured
+    // exhaustion policy. Otherwise the gate stays on `changes_requested` forever
+    // (the bug that hung sprints when a weak agent never landed the change).
+    // A genuine pass returns above, so reaching here means QA never cleared it.
+    if (budgetExhausted) {
       return {
         mergeAllowed: false,
         reason: "retries_exhausted",
         summary: latestRun?.summaryMarkdown
           || `QA could not clear this task (${decisiveRuns}/${maxRuns} verdicts, ${runsUsed} attempts) — human attention required.`,
+        latestRun,
+        runsUsed,
+        maxRuns,
+      };
+    }
+
+    if (latestRun?.outcome === "changes_requested") {
+      return {
+        mergeAllowed: false,
+        reason: "changes_requested",
+        summary: latestRun.summaryMarkdown || "QA requested follow-up fixes.",
         latestRun,
         runsUsed,
         maxRuns,
@@ -990,16 +1001,6 @@ export class QualityAssuranceService {
       summaryMarkdown,
       finishedAt,
     });
-  }
-
-  private isRecoveredStaleQaRun(run: QaReviewRunRecord | null): boolean {
-    return typeof run?.summaryMarkdown === "string" && run.summaryMarkdown.startsWith(RECOVERED_STALE_QA_SUMMARY_PREFIX);
-  }
-
-  private shouldVerifyContinuedQaFix(run: QaReviewRunRecord | null): boolean {
-    return run?.status === "completed"
-      && run.outcome === "changes_requested"
-      && run.payload?.continued === true;
   }
 
   private findLatestQaExecutionInvocation(run: QaReviewRunRecord): ExecutionInvocationRecord | null {
@@ -1283,6 +1284,62 @@ export class QualityAssuranceService {
     }).join("\n");
   }
 
+  /**
+   * Determine which branch a task-level QA review should check out. Prefers the
+   * recorded worker branch (on the task or its latest run); in LOCAL mode, when
+   * that evidence was lost, recovers the most recent `task/<prefix>-*` branch that
+   * carries commits ahead of the feature branch so QA reviews the real work
+   * instead of the empty feature branch. Backfills the recovered branch onto the
+   * task/run so the downstream fix path and merge gate agree. Falls back to the
+   * feature branch only when no worker branch with actual work can be found (e.g.
+   * the task genuinely produced no changes).
+   */
+  private async resolveReviewBranch(args: {
+    task: Subtask;
+    taskRun: TaskRunRecord | null;
+    repoPath: string;
+    featureBranch: string;
+    githubMode: "REMOTE" | "LOCAL";
+  }): Promise<string> {
+    const direct = args.task.worker_branch?.trim() || args.taskRun?.workerBranch?.trim();
+    if (direct) {
+      return direct;
+    }
+
+    if (args.githubMode === "LOCAL") {
+      const provider = (args.task.provider || args.taskRun?.provider || undefined) as ProviderId | undefined;
+      if (args.featureBranch && args.task.id && provider) {
+        try {
+          const recovered = await findRecoverableWorkerBranch({
+            repoPath: args.repoPath,
+            featureBranch: args.featureBranch,
+            branchPrefix: buildWorkerBranchPrefix(args.featureBranch, args.task.id, provider),
+          });
+          if (recovered) {
+            // Backfill so the fix path and feature-PR merge gate see the same evidence.
+            args.task.worker_branch = recovered;
+            if (args.taskRun && !args.taskRun.workerBranch) {
+              args.taskRun.workerBranch = recovered;
+              try {
+                this.deps.executionRepository.updateTaskRun(args.taskRun.id, { workerBranch: recovered });
+              } catch (err) {
+                this.deps.logger?.warn?.(`Failed to backfill recovered worker branch on task run: ${err}`);
+              }
+            }
+            this.deps.logger?.info?.(
+              `LOCAL Mode: Recovered worker branch ${recovered} for QA review of task ${args.task.id} from local refs.`,
+            );
+            return recovered;
+          }
+        } catch (err) {
+          this.deps.logger?.warn?.(`Failed to recover worker branch for QA review of task ${args.task.id}: ${err}`);
+        }
+      }
+    }
+
+    return args.featureBranch;
+  }
+
   private resolveTaskRunForSubtask(task: Subtask, sprintRunId?: string): TaskRunRecord | null {
     const taskId = task.record_id?.trim();
     if (!taskId) {
@@ -1372,6 +1429,10 @@ export class QualityAssuranceService {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
     };
+    const gitAuth: GitHttpAuthOptions = {
+      githubToken: settings.git.githubToken,
+      gitlabToken: settings.git.gitlabToken,
+    };
     const resumeWorkspacePath = await this.workspaceManager.resolveResumeWorktreePath(
       args.repoPath,
       args.sessionId,
@@ -1383,10 +1444,91 @@ export class QualityAssuranceService {
     const resolvedWorkspaceBranch = hasPreservedWorkspace
       ? await this.workspaceManager.resolveCurrentBranch(worktreePath)
       : null;
-    const workerBranch = args.task.worker_branch?.trim()
+    let workerBranch = args.task.worker_branch?.trim()
       || args.taskRun?.workerBranch?.trim()
       || resolvedWorkspaceBranch
       || undefined;
+    let isRecovered = Boolean(workerBranch);
+
+    if (!workerBranch) {
+      const prUrl = args.task.pr_url?.trim() || args.taskRun?.prUrl?.trim();
+      if (prUrl) {
+        try {
+          const client = new GitStatusQueryClient(args.repoPath);
+          const remoteRes = await client.gitRemoteUrl("origin", settings.git.githubToken);
+          const remoteUrl = remoteRes.ok ? remoteRes.stdout.trim() : null;
+          const { provider, hostDomain, repoTarget } = resolveRepositoryHost(remoteUrl);
+          const hostTokens = {
+            githubToken: settings.git.githubToken,
+            gitlabToken: settings.git.gitlabToken,
+          };
+          const effectiveToken = selectHostToken(provider, hostTokens);
+          client.setProvider(provider, hostDomain, repoTarget, Boolean(effectiveToken));
+
+          const openRes = await client.ghPrListOpen(effectiveToken);
+          if (openRes.ok) {
+            const { data } = parseOpenPrs(openRes.stdout);
+            const match = data.find(p => p.url?.trim() === prUrl);
+            if (match && match.headRefName) {
+              workerBranch = match.headRefName;
+              isRecovered = true;
+            }
+          }
+          if (!workerBranch) {
+            const mergedRes = await client.ghPrListMerged(effectiveToken);
+            if (mergedRes.ok) {
+              const { data } = parseMergedPrs(mergedRes.stdout);
+              const match = data.find(p => p.url?.trim() === prUrl);
+              if (match && match.headRefName) {
+                workerBranch = match.headRefName;
+                isRecovered = true;
+              }
+            }
+          }
+        } catch (err) {
+          this.deps.logger?.warn?.(`Failed to recover worker branch from PR metadata: ${err}`);
+        }
+      }
+    }
+
+    if (!workerBranch) {
+      if (args.featureBranch && args.task?.id && args.provider) {
+        const prefix = buildWorkerBranchPrefix(args.featureBranch, args.task.id, args.provider);
+        try {
+          const gitAllRes = await runCommandStrict("git", ["branch", "-a", "--list", `*${prefix}*`], args.repoPath);
+          if (gitAllRes.ok) {
+            const branches = gitAllRes.stdout
+              .split("\n")
+              .map(b => b.replace(/^\*?\s*/, "").trim())
+              .filter(Boolean);
+            const localMatch = branches.find(b => !b.startsWith("remotes/"));
+            if (localMatch) {
+              workerBranch = localMatch;
+              isRecovered = true;
+            } else {
+              const remoteMatch = branches.find(b => b.startsWith("remotes/origin/"));
+              if (remoteMatch) {
+                workerBranch = remoteMatch.replace("remotes/origin/", "");
+                isRecovered = true;
+              }
+            }
+          }
+        } catch (err) {
+          this.deps.logger?.warn?.(`Failed to recover worker branch from git branch listing: ${err}`);
+        }
+      }
+    }
+
+    if (!workerBranch) {
+      if (args.featureBranch?.trim() && args.task?.id?.trim() && args.provider) {
+        try {
+          workerBranch = buildWorkerBranch(args.featureBranch, args.task.id, args.provider);
+        } catch (err) {
+          this.deps.logger?.warn?.(`Failed to build deterministic worker branch: ${err}`);
+        }
+      }
+    }
+
     if (!workerBranch) {
       const workspaceState = hasPreservedWorkspace
         ? `resume workspace ${worktreePath} does not expose a current branch`
@@ -1396,22 +1538,46 @@ export class QualityAssuranceService {
       );
     }
 
-    await this.syncRemoteBranchesIfNeeded(
-      args.repoPath,
-      workerBranch,
-      args.scope,
-      "continuing QA follow-up",
-    );
+    // Persist recovered worker-branch metadata back to the task run and project-management task when available
+    if (workerBranch && isRecovered) {
+      if (args.task.worker_branch !== workerBranch) {
+        args.task.worker_branch = workerBranch;
+      }
+      if (args.taskRun && args.taskRun.workerBranch !== workerBranch) {
+        args.taskRun.workerBranch = workerBranch;
+        if (args.taskRun.id) {
+          try {
+            this.deps.executionRepository.updateTaskRun(args.taskRun.id, { workerBranch });
+          } catch (err) {
+            this.deps.logger?.warn?.(`Failed to update taskRun workerBranch: ${err}`);
+          }
+        }
+      }
+    }
 
-    const gitAuth: GitHttpAuthOptions = {
-      githubToken: settings.git.githubToken,
-      gitlabToken: settings.git.gitlabToken,
-    };
+    try {
+      await this.syncRemoteBranchesIfNeeded(
+        args.repoPath,
+        workerBranch,
+        args.scope,
+        "continuing QA follow-up",
+      );
 
-    if (!hasPreservedWorkspace) {
-      await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch, undefined, gitAuth);
-    } else {
-      await this.syncExistingCliFollowUpWorkspace(worktreePath, workerBranch, args.repoPath, gitAuth);
+      if (!hasPreservedWorkspace) {
+        await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch, undefined, gitAuth);
+      } else {
+        await this.syncExistingCliFollowUpWorkspace(worktreePath, workerBranch, args.repoPath, gitAuth);
+      }
+    } catch (prepareError) {
+      if (!isRecovered) {
+        const workspaceState = hasPreservedWorkspace
+          ? `resume workspace ${worktreePath} does not expose a current branch`
+          : `resume workspace is missing for session ${args.sessionId}`;
+        throw new Error(
+          `Cannot continue CLI QA fixes for ${args.task.id}: worker branch metadata is missing and ${workspaceState}.`,
+        );
+      }
+      throw prepareError;
     }
 
     const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath);
@@ -1712,23 +1878,6 @@ export class QualityAssuranceService {
     }
   }
 
-  private resolveTaskTriggerType(
-    task: Pick<Subtask, "pr_url" | "worker_branch" | "is_merged">,
-    qaSettings: DashboardSettings["agents"]["qualityAssurance"],
-  ): QaReviewTriggerType | null {
-    // A task with merge evidence clearly did NOT complete without a PR. We must
-    // check `is_merged`/`worker_branch` too, not just `pr_url`: `pr_url` is not a
-    // persisted task column — it is reconstructed at runtime — so when an old
-    // merged task is reloaded (e.g. a sprint resumes) its `pr_url` comes back
-    // empty and the no-PR trigger would misfire QA on already-merged work.
-    const hasMergeEvidence = Boolean(task.pr_url?.trim())
-      || Boolean(task.worker_branch?.trim())
-      || Boolean(task.is_merged);
-    if (!hasMergeEvidence && qaSettings.completedTaskWithoutPr.enabled) {
-      return "completed_task_without_pr";
-    }
-    return qaSettings.taskCompletion.enabled ? "task_completion" : null;
-  }
 
   private getLatestSprintTaskUpdatedAt(projectId: string, sprintId: string): number {
     const timestamps = this.deps.projectManagementRepository.listTasks(projectId, sprintId)

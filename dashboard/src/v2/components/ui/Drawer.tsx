@@ -46,6 +46,8 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
     initialFocusRef 
   });
 
+  const hasAccessibleName = ariaLabel || ariaLabelledBy || ariaLabelledby;
+
   const isRight = position === "right";
   const alignmentClass = isRight ? "right-0" : "left-0";
 
@@ -58,13 +60,13 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
         if (containerRef.current) {
           gsap.fromTo(containerRef.current,
             { x: xStart },
-            { x: "0%", duration: reducedMotion ? 0 : MODAL_MOTION.overlay.cardEntry, ease: MODAL_MOTION.overlay.cardEntryEase }
+            { x: "0%", duration: reducedMotion ? 0 : MODAL_MOTION.entry.duration, ease: MODAL_MOTION.entry.ease }
           );
         }
         if (backdropRef.current) {
           gsap.fromTo(backdropRef.current,
             { opacity: 0 },
-            { opacity: 1, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.entry, ease: MODAL_MOTION.overlay.entryEase }
+            { opacity: 1, duration: reducedMotion ? 0 : MODAL_MOTION.backdrop.duration, ease: MODAL_MOTION.backdrop.ease }
           );
         }
       });
@@ -80,16 +82,16 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
       if (containerRef.current) {
         tl.to(containerRef.current, {
           x: xEnd,
-          duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit,
-          ease: MODAL_MOTION.overlay.exitEase,
+          duration: reducedMotion ? 0 : MODAL_MOTION.exit.duration,
+          ease: MODAL_MOTION.exit.ease,
         }, 0);
       }
 
       if (backdropRef.current) {
         tl.to(backdropRef.current, {
           opacity: 0,
-          duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit,
-          ease: MODAL_MOTION.overlay.exitEase,
+          duration: reducedMotion ? 0 : MODAL_MOTION.backdrop.duration,
+          ease: MODAL_MOTION.backdrop.ease,
         }, 0);
       }
 
@@ -126,10 +128,11 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        aria-label={ariaLabel}
+        aria-label={ariaLabel }
         aria-labelledby={ariaLabelledBy || ariaLabelledby}
         aria-describedby={ariaDescribedBy || ariaDescribedby}
         tabIndex={-1}
+        inert={!isOpen ? true : undefined}
         className={`fixed top-0 bottom-0 ${alignmentClass} z-50 w-[calc(100vw-2rem)] sm:w-full max-w-md bg-white dark:bg-void-800 rounded-[12px] shadow-lg border-x border-black/[0.06] dark:border-white/[0.06] outline-none h-[100dvh] overflow-y-auto ${className}`}
         onClick={(e) => e.stopPropagation()}
       >

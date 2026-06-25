@@ -14,10 +14,53 @@ import type { Logger } from "../shared/logging/logger.js";
  * retry on a later cycle rather than counting it toward the emergency-stop failure budget.
  */
 export class ProviderCapReachedError extends Error {
-  constructor(public readonly provider: string, public readonly limit: number) {
-    super(`Provider concurrency cap reached for ${provider} (limit ${limit}); task deferred.`);
+  readonly retryableDispatchDeferral = true;
+  readonly deferralReason = "provider_concurrency_cap" as const;
+
+  constructor(public readonly provider: string, public readonly limit: number, public readonly currentCount: number) {
+    super(`Provider concurrency cap reached for ${provider} (limit ${limit}, current ${currentCount}); task deferred.`);
     this.name = "ProviderCapReachedError";
   }
+}
+
+export interface TaskDispatchDeferral {
+  reason: "provider_concurrency_cap";
+  provider?: string;
+  limit?: number;
+  currentCount?: number;
+}
+
+export function getTaskDispatchDeferral(error: unknown): TaskDispatchDeferral | null {
+  if (error instanceof ProviderCapReachedError) {
+    return {
+      reason: error.deferralReason,
+      provider: error.provider,
+      limit: error.limit,
+      currentCount: error.currentCount,
+    };
+  }
+
+  if (typeof error !== "object" || error === null) {
+    return null;
+  }
+
+  const candidate = error as {
+    retryableDispatchDeferral?: unknown;
+    deferralReason?: unknown;
+    provider?: unknown;
+    limit?: unknown;
+    currentCount?: unknown;
+  };
+  if (candidate.retryableDispatchDeferral !== true || candidate.deferralReason !== "provider_concurrency_cap") {
+    return null;
+  }
+
+  return {
+    reason: "provider_concurrency_cap",
+    provider: typeof candidate.provider === "string" ? candidate.provider : undefined,
+    limit: typeof candidate.limit === "number" ? candidate.limit : undefined,
+    currentCount: typeof candidate.currentCount === "number" ? candidate.currentCount : undefined,
+  };
 }
 
 export interface StartSprintDispatchArgs {
@@ -69,13 +112,39 @@ export class SprintTaskDispatchService {
     const provider = this.taskService.resolveTaskProvider(args.task, settingsScope, preferredExecutor);
     const executorType: TaskDispatchExecutorType = provider === "jules" ? "jules" : "docker_cli";
 
+    const settings = this.getDashboardSettings(settingsScope);
+    const providerSettings = provider
+      ? (settings.aiProvider.providers[provider as ProviderId]
+         ?? Object.values(settings.aiProvider.providers).find((entry) => entry.provider === provider))
+      : undefined;
+    const limit = providerSettings?.maxConcurrentTasks ?? 0;
+
+    if (provider && limit > 0) {
+      const counts = this.providerConcurrencyService.getGlobalRunningCounts([provider]);
+      const currentCount = counts[provider] || 0;
+      if (currentCount >= limit) {
+        throw this.deferForProviderCapacity(args, taskRecordId, provider, executorType, limit, currentCount);
+      }
+    }
+
     // Jules sessions run remotely and are not gated by the CLI execution path's atomic slot
     // claim. Claim a global concurrency slot here — before creating any dispatch/task-run
     // records or calling the Jules API — so the provider cap is enforced atomically across all
     // sprints and projects. CLI/docker tasks claim their slot later inside ProviderExecutionService.
-    const julesClaim = executorType === "jules"
-      ? await this.claimJulesSlot(args, taskRecordId, settingsScope)
-      : null;
+    let julesClaim: ProviderInvocationUsageRecord | null = null;
+    try {
+      julesClaim = executorType === "jules"
+        ? await this.claimJulesSlot(args, taskRecordId, settingsScope)
+        : null;
+    } catch (error) {
+      if (error instanceof ProviderCapReachedError) {
+        const pStr = provider || "jules";
+        const counts = this.providerConcurrencyService.getGlobalRunningCounts([pStr]);
+        const currentCount = counts[pStr] || 0;
+        throw this.deferForProviderCapacity(args, taskRecordId, pStr, executorType, error.limit, currentCount);
+      }
+      throw error;
+    }
 
     const queuedAt = new Date().toISOString();
     const dispatch = this.executionRepository.createTaskDispatch({
@@ -241,7 +310,9 @@ export class SprintTaskDispatchService {
     });
 
     if (!claim) {
-      throw new ProviderCapReachedError("jules", limit);
+      const counts = this.providerConcurrencyService.getGlobalRunningCounts(["jules"]);
+      const currentCount = counts["jules"] || 0;
+      throw new ProviderCapReachedError("jules", limit, currentCount);
     }
 
     return claim;
@@ -252,6 +323,72 @@ export class SprintTaskDispatchService {
       return task.record_id;
     }
     throw new Error(`Task ${task.id} is missing its database record id.`);
+  }
+
+  private deferForProviderCapacity(
+    args: StartSprintDispatchArgs,
+    taskRecordId: string,
+    provider: string,
+    executorType: TaskDispatchExecutorType,
+    limit: number,
+    currentCount: number,
+  ): ProviderCapReachedError {
+    let taskRun = this.executionRepository.getLatestTaskRun(taskRecordId, args.sprintRunId);
+    let dispatch = taskRun?.dispatchId ? this.executionRepository.getTaskDispatch(taskRun.dispatchId) : null;
+
+    if (!taskRun) {
+      const queuedAt = new Date().toISOString();
+      dispatch = this.executionRepository.createTaskDispatch({
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        taskId: taskRecordId,
+        sprintRunId: args.sprintRunId,
+        executorType,
+        queuedAt,
+        status: "queued",
+      });
+
+      taskRun = this.executionRepository.createTaskRun({
+        projectId: args.projectId,
+        sprintId: args.sprintId,
+        taskId: taskRecordId,
+        sprintRunId: args.sprintRunId,
+        dispatchId: dispatch.id,
+        provider,
+        mode: executorType,
+        state: "PENDING",
+        startedAt: queuedAt,
+      });
+    } else {
+      this.executionRepository.updateTaskRun(taskRun.id, {
+        state: "PENDING",
+        provider,
+        mode: executorType,
+      });
+      if (dispatch) {
+        this.executionRepository.updateTaskDispatch(dispatch.id, {
+          status: "queued",
+        });
+      }
+    }
+
+    this.executionRepository.appendTaskRunEvent(taskRun.id, "provider_concurrency_wait", "system", {
+      provider,
+      currentCount,
+      limit,
+    });
+    this.logger?.info("Sprint task dispatch deferred: provider concurrency cap reached", {
+      taskId: args.task.id,
+      taskRecordId,
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+      sprintRunId: args.sprintRunId,
+      provider,
+      limit,
+      currentCount,
+    });
+
+    return new ProviderCapReachedError(provider, limit, currentCount);
   }
 
   private resolveWorkerBranch(session: JulesSession): string | null {

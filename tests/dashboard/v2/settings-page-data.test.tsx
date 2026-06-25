@@ -22,6 +22,7 @@ vi.mock("gsap", () => ({
     },
     fromTo: vi.fn(),
     set: vi.fn(),
+    timeline: vi.fn(() => ({ to: vi.fn(), fromTo: vi.fn(), play: vi.fn() })),
     to: vi.fn((_: unknown, options?: { onComplete?: () => void }) => {
       options?.onComplete?.();
     }),
@@ -29,6 +30,7 @@ vi.mock("gsap", () => ({
 }));
 
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useResolvedMotionDuration: (d: any) => d,
   useReducedMotion: () => true,
 }));
 
@@ -198,6 +200,8 @@ describe("SettingsPage data interactions", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it("should preserve dirty state and prevent background refreshes from stomping edits", async () => {
     const { container } = render(<SettingsPage />);

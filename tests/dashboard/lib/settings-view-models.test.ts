@@ -16,6 +16,11 @@ import {
   providerLabels,
   createSystemProviderDraft,
   sortProviderConfigEntries,
+  getSystemIntegrationProviders,
+  getDefaultModelOptionLabel,
+  getDefaultRouteOptionLabel,
+  getProviderDisplayMetadata,
+  getVirtualProviderDisplayMetadata,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints } from "../../../dashboard/src/types.js";
 
@@ -259,7 +264,7 @@ describe("provider availability helpers", () => {
     // Jules available via hint
     expect(getProviderAuthLabel("jules", mockSystemSettings, mockHints, false)).toBe("API key");
     // Gemini available via system setting + per-instance mount enabled
-    expect(getProviderAuthLabel("gemini", mockSystemSettings, mockHints, true)).toBe("Auth mount + API key");
+    expect(getProviderAuthLabel("gemini", mockSystemSettings, mockHints, true)).toBe("Auth mount enabled");
     // Codex local auth should not surface as an active auth source by itself
     expect(getProviderAuthLabel("codex", mockSystemSettings, mockHints, false)).toBeNull();
     // Claude can still surface an active auth mount in Docker mode without an API key
@@ -279,5 +284,106 @@ describe("provider availability helpers", () => {
     // codex local auth alone should not activate it
     // claude-code is activated via auth mount and enabled
     expect(eligible).toEqual(["jules", "claude-code"]);
+  });
+});
+
+describe("provider settings sanitization", () => {
+  it("sanitizes SystemProviderConfig/provider settings mutually exclusively", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "codex": {
+            provider: "codex",
+            name: "Codex Primary",
+            apiKey: "stale-key",
+            authType: "localAuth",
+            mountAuth: true,
+            authPath: "~/.codex",
+            customBaseUrl: "https://custom.api",
+            customModel: "gpt-custom",
+          },
+        },
+      },
+    } as any;
+
+    const providers = getSystemIntegrationProviders(systemSettings);
+    const codex = providers["codex"];
+    expect(codex.apiKey).toBe("");
+    expect(codex.customBaseUrl).toBe("");
+    expect(codex.customModel).toBe("");
+    expect(codex.mountAuth).toBe(true);
+  });
+});
+
+describe("provider display metadata helpers", () => {
+  it("uses configured provider instance names, icon provider ids, and effective models", () => {
+    const systemSettings = {
+      integrations: {
+        providers: {
+          "codex-staging": {
+            provider: "codex",
+            name: "Codex Credentials",
+            apiKey: "key",
+            mountAuth: false,
+            authPath: "~/.codex",
+          },
+        },
+      },
+      defaults: {
+        aiProvider: {
+          providers: {
+            "codex-staging": {
+              provider: "codex",
+              name: "Codex Staging",
+              enabled: true,
+              model: "gpt-5.4",
+              weight: 50,
+              thinkingMode: "HIGH",
+            },
+          },
+        },
+      },
+    } as SystemSettings;
+
+    expect(getVirtualProviderDisplayMetadata(systemSettings)).toEqual([
+      {
+        providerConfigId: "codex-staging",
+        provider: "codex",
+        displayLabel: "Codex Staging",
+        iconProviderId: "codex",
+        effectiveModel: "gpt-5.4",
+      },
+    ]);
+  });
+
+  it("falls back to default provider config names when settings are unavailable", () => {
+    const providers = getVirtualProviderDisplayMetadata(null);
+
+    expect(providers.map((provider) => provider.provider)).toEqual([
+      "gemini",
+      "codex",
+      "claude-code",
+      "qwen-code",
+      "opencode",
+      "antigravity",
+    ]);
+    expect(providers.find((provider) => provider.provider === "codex")?.displayLabel).toBe("Codex Primary");
+    expect(providers.find((provider) => provider.provider === "antigravity")?.displayLabel).toBe("Antigravity Primary");
+  });
+
+  it("formats default route and model labels when defaults resolve", () => {
+    const metadata = getProviderDisplayMetadata(null, "codex", "gpt-5.5");
+
+    expect(getDefaultRouteOptionLabel(metadata)).toBe("Default Route (Codex Primary)");
+    expect(getDefaultModelOptionLabel(metadata)).toBe("Default Model (gpt-5.5)");
+    expect(getDefaultRouteOptionLabel(null)).toBe("Default Route");
+    expect(getDefaultModelOptionLabel(null)).toBe("Default Model");
+  });
+
+  it("falls back to the provider base model for invalid worker model defaults", () => {
+    const metadata = getProviderDisplayMetadata(null, "codex", "gemini-3-pro-preview");
+
+    expect(metadata?.effectiveModel).toBe("gpt-5.5");
+    expect(getDefaultModelOptionLabel(metadata)).toBe("Default Model (gpt-5.5)");
   });
 });

@@ -167,6 +167,45 @@ describe("JulesUsageService", () => {
         expect.objectContaining({ projectId: "proj-1", taskId: "task-1", sessionId: "session-1", error: expect.any(Error) }),
       );
     });
+
+    it("skips and does not create usage record when 404 occurs and no safe context exists", async () => {
+      const error404 = new Error("Request failed with status code 404");
+      (error404 as any).status = 404;
+      getFullConversationMock.mockRejectedValue(error404);
+
+      await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
+
+      expect(createUsageMock).not.toHaveBeenCalled();
+      expect(loggerInfoMock).toHaveBeenCalledWith(
+        "Skipping Jules usage telemetry for missing session (no existing prompt/record)",
+        { sessionId: "session-1" }
+      );
+    });
+
+    it("proceeds with empty activities when 404 occurs but safe context exists (passed prompt)", async () => {
+      const error404 = new Error("Request failed with status code 404");
+      (error404 as any).status = 404;
+      getFullConversationMock.mockRejectedValue(error404);
+
+      await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1", "Safe prompt");
+
+      expect(createUsageMock).toHaveBeenCalled();
+      expect(updateUsageMock).toHaveBeenCalled();
+      expect(loggerErrorMock).not.toHaveBeenCalled();
+    });
+
+    it("proceeds with empty activities when 404 occurs but safe context exists (existing record)", async () => {
+      const error404 = new Error("Request failed with status code 404");
+      (error404 as any).status = 404;
+      getFullConversationMock.mockRejectedValue(error404);
+
+      getLatestMock.mockReturnValue({ id: "existing-id", createdAt: "2026-05-21T07:29:52.209Z" });
+
+      await service.calculateAndSaveUsageForTask("proj-1", "task-1", "session-1");
+
+      expect(updateUsageMock).toHaveBeenCalled();
+      expect(loggerErrorMock).not.toHaveBeenCalled();
+    });
   });
 
   describe("syncLiveInvocation", () => {
@@ -190,6 +229,34 @@ describe("JulesUsageService", () => {
       await service.syncLiveInvocation("proj-1", "task-1", "session-a", "x");
       await service.syncLiveInvocation("proj-1", "task-2", "session-b", "y");
       expect(getFullConversationMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("handles 404 gracefully without logging a warning during live sync", async () => {
+      const error404 = new Error("Request failed with status code 404");
+      (error404 as any).status = 404;
+      getFullConversationMock.mockRejectedValue(error404);
+
+      await service.syncLiveInvocation("proj-1", "task-1", "session-1", "Build it");
+
+      expect(loggerWarnMock).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(
+        "Live Jules session is not available (404), skipping live sync",
+        { sessionId: "session-1" }
+      );
+      expect(createUsageMock).not.toHaveBeenCalled();
+    });
+
+    it("logs a warning for non-404 errors during live sync", async () => {
+      const error500 = new Error("Internal Server Error");
+      (error500 as any).status = 500;
+      getFullConversationMock.mockRejectedValue(error500);
+
+      await service.syncLiveInvocation("proj-1", "task-1", "session-1", "Build it");
+
+      expect(loggerWarnMock).toHaveBeenCalledWith(
+        "Failed live Jules invocation sync",
+        expect.objectContaining({ error: error500, sessionId: "session-1" })
+      );
     });
   });
 });

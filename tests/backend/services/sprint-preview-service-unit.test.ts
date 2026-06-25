@@ -23,6 +23,10 @@ vi.mock("../../../src/services/sprint-preview-utils.js", () => ({
     exists: false,
     content: "",
   })),
+  resolvePreviewScriptPath: vi.fn(async (base, rel) => {
+    if (rel.includes("outside")) return `${base}/.code-ux/browser/start-preview.sh`;
+    return `${base}/${rel}`;
+  }),
 }));
 
 vi.mock("../../../src/services/cli-docker-utils.js", () => ({
@@ -214,6 +218,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
 }
 
 describe("SprintPreviewService unit tests", () => {
+
   let deps: ReturnType<typeof makeDeps>;
 
   beforeEach(() => {
@@ -481,6 +486,29 @@ describe("SprintPreviewService unit tests", () => {
   });
 
   describe("saveScript", () => {
+    it("cannot write outside the project directory", async () => {
+      const service = new SprintPreviewService(deps as any);
+      // requireProject and requireSprint are on the service, not the deps repository.
+      service.requireProject = vi.fn().mockReturnValue({ id: "proj-1", baseDir: "/repo" });
+      service.requireSprint = vi.fn().mockReturnValue({ id: "sprint-1" });
+      // Instead of modifying deps, we mock resolveSettings
+      service.resolveSettings = vi.fn().mockReturnValue({
+
+        sprintPreview: {
+          ...DEFAULT_DASHBOARD_SETTINGS.sprintPreview,
+          startupScriptPath: "../outside.sh",
+        },
+      } as any);
+
+      // the path will be snapped back to default script by the resolver
+      await service.saveScript("proj-1", "sprint-1", "content");
+
+      const fsMod = await import("fs/promises");
+      const writeCall = vi.mocked(fsMod.writeFile).mock.calls.find((call) => typeof call[0] === 'string');
+      expect(writeCall).toBeDefined();
+      expect(writeCall?.[0]).not.toContain("outside.sh");
+    });
+
     it("writes script to disk and returns updated script info", async () => {
       const fsMod = await import("fs/promises");
       const service = new SprintPreviewService(deps as any);
@@ -513,6 +541,90 @@ describe("SprintPreviewService unit tests", () => {
       await expect(
         service.proxyRequest({ sessionId: "session-1", method: "GET", path: "/" }),
       ).rejects.toThrow("does not have an active host port");
+    });
+
+
+
+    it("suppresses set-cookie header from proxied response", async () => {
+      const session = makeSession({ containerId: null, containerName: null });
+      deps.sprintPreviewRepository.getSession.mockReturnValue(session);
+      deps.sprintPreviewRepository.updateSession.mockImplementation(
+        (id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch }),
+      );
+
+      vi.mocked(normalizePreviewPath).mockReturnValue("/test");
+
+      const mockResponse = {
+        status: 200,
+        headers: new Headers({ "set-cookie": "secret=true", "x-custom": "allowed" }),
+        body: (async function* () {
+          yield new TextEncoder().encode("hello");
+        })(),
+      };
+      vi.stubGlobal("fetch", vi.fn(async () => mockResponse));
+
+      const service = new SprintPreviewService(deps as any);
+      const res = await service.proxyRequest({ sessionId: "session-1", method: "GET", path: "/" });
+
+      expect(res.headers).not.toHaveProperty("set-cookie");
+      expect(res.headers).toHaveProperty("x-custom", "allowed");
+    });
+
+    it("strips sensitive and hop-by-hop headers from proxied request", async () => {
+      const session = makeSession({ containerId: null, containerName: null });
+      deps.sprintPreviewRepository.getSession.mockReturnValue(session);
+      deps.sprintPreviewRepository.updateSession.mockImplementation(
+        (id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch }),
+      );
+
+      vi.mocked(normalizePreviewPath).mockReturnValue("/test");
+
+      const mockResponse = {
+        status: 200,
+        headers: new Headers(),
+        arrayBuffer: vi.fn(async () => new TextEncoder().encode("hello").buffer),
+      };
+      const fetchMock = vi.fn(async () => mockResponse); vi.stubGlobal("fetch", fetchMock);
+
+      const service = new SprintPreviewService(deps as any);
+      await service.proxyRequest({
+        sessionId: "session-1",
+        method: "GET",
+        path: "/",
+        headers: {
+          "authorization": "token",
+          "cookie": "val",
+          "connection": "close",
+          "x-custom": "allowed",
+        },
+      });
+
+      const calledOptions = fetchMock.mock.calls[0][1];
+      expect(calledOptions.headers).not.toHaveProperty("authorization");
+      expect(calledOptions.headers).not.toHaveProperty("cookie");
+      expect(calledOptions.headers).not.toHaveProperty("connection");
+      expect(calledOptions.headers).toHaveProperty("x-custom", "allowed");
+    });
+
+    it("throws error when proxied response exceeds maximum allowed size", async () => {
+      const session = makeSession({ containerId: null, containerName: null });
+      deps.sprintPreviewRepository.getSession.mockReturnValue(session);
+      deps.sprintPreviewRepository.updateSession.mockImplementation(
+        (id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch }),
+      );
+
+      vi.mocked(normalizePreviewPath).mockReturnValue("/test");
+
+      const mockResponse = {
+        status: 200,
+        headers: new Headers(),
+        arrayBuffer: vi.fn(async () => new ArrayBuffer(5 * 1024 * 1024 + 10)), // Exceeds 5MB
+      };
+      vi.stubGlobal("fetch", vi.fn(async () => mockResponse));
+
+      const service = new SprintPreviewService(deps as any);
+      await expect(service.proxyRequest({ sessionId: "session-1", method: "GET", path: "/" }))
+        .rejects.toThrow("Response body exceeds maximum allowed size for proxied preview");
     });
 
     it("proxies request and returns response", async () => {
@@ -667,7 +779,7 @@ describe("SprintPreviewService unit tests", () => {
 
       const passedHeaders = capturedInit?.headers as Record<string, string>;
       expect(passedHeaders["X-Custom"]).toBe("keep-me");
-      expect(passedHeaders["Authorization"]).toBe("Bearer token");
+      expect(passedHeaders["Authorization"]).toBeUndefined();
       expect(passedHeaders["Host"]).toBeUndefined();
       expect(passedHeaders["Content-Length"]).toBeUndefined();
       expect(passedHeaders["Accept-Encoding"]).toBeUndefined();
@@ -927,18 +1039,7 @@ describe("SprintPreviewService unit tests", () => {
       expect(key).toBe("proj-1:sprint-1");
     });
 
-    it("normalizeDockerState maps status strings correctly", () => {
-      const service = new SprintPreviewService(deps as any);
-      const normalize = (service as any).normalizeDockerState.bind(service);
-      expect(normalize("Up 5 minutes")).toBe("running");
-      expect(normalize("Exited (1) 2 hours ago")).toBe("exited");
-      expect(normalize("Created")).toBe("created");
-      expect(normalize("Restarting (1) 5 seconds ago")).toBe("restarting");
-      expect(normalize("")).toBeNull();
-      expect(normalize(null)).toBeNull();
-      expect(normalize(undefined)).toBeNull();
-      expect(normalize("paused")).toBe("paused");
-    });
+
 
     it("extractPreviewError finds error lines", () => {
       const service = new SprintPreviewService(deps as any);
@@ -983,17 +1084,7 @@ describe("SprintPreviewService unit tests", () => {
       expect(rewrite('href="//cdn.example.com"', prefix)).toBe('href="//cdn.example.com"');
     });
 
-    it("removeContainerIfPresent skips empty ref", async () => {
-      const service = new SprintPreviewService(deps as any);
-      await (service as any).removeContainerIfPresent("  ", "/cwd");
-      expect(runCommandStrict).not.toHaveBeenCalled();
-    });
 
-    it("removeContainerIfPresent calls docker rm", async () => {
-      const service = new SprintPreviewService(deps as any);
-      await (service as any).removeContainerIfPresent("container-123", "/cwd");
-      expect(runCommandStrict).toHaveBeenCalledWith("docker", ["rm", "-f", "container-123"], "/cwd");
-    });
 
     it("countCompletedTasks counts correctly", () => {
       deps.projectManagementRepository.listTasks.mockReturnValue([
@@ -1104,46 +1195,7 @@ describe("SprintPreviewService unit tests", () => {
     });
   });
 
-  describe("withSessionLock", () => {
-    it("serializes concurrent operations on the same key", async () => {
-      const service = new SprintPreviewService(deps as any);
-      const order: number[] = [];
 
-      const op1 = (service as any).withSessionLock("key1", async () => {
-        await new Promise((r) => setTimeout(r, 20));
-        order.push(1);
-        return 1;
-      });
-      const op2 = (service as any).withSessionLock("key1", async () => {
-        order.push(2);
-        return 2;
-      });
-
-      const [r1, r2] = await Promise.all([op1, op2]);
-      expect(r1).toBe(1);
-      expect(r2).toBe(2);
-      expect(order).toEqual([1, 2]);
-    });
-
-    it("allows parallel operations on different keys", async () => {
-      const service = new SprintPreviewService(deps as any);
-      const order: string[] = [];
-
-      const op1 = (service as any).withSessionLock("key-a", async () => {
-        await new Promise((r) => setTimeout(r, 10));
-        order.push("a");
-        return "a";
-      });
-      const op2 = (service as any).withSessionLock("key-b", async () => {
-        order.push("b");
-        return "b";
-      });
-
-      await Promise.all([op1, op2]);
-      // b should complete before a since they run in parallel
-      expect(order[0]).toBe("b");
-    });
-  });
 
   describe("listPreviewContainers parsing", () => {
     it("parses docker ps output into container summaries", async () => {

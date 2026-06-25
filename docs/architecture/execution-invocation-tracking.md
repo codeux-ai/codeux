@@ -51,3 +51,11 @@ This prevents stale `qa_review` or worker invocations from remaining indefinitel
 Execution invocations cascade when their parent \`project_id\`, \`sprint_id\`, or \`task_id\` are deleted. They optionally reference \`task_run_id\` or \`dispatch_id\` but function independently to track planning sweeps, conflict resolution, or ad-hoc agent activity.
 
 Additionally, every execution invocation explicitly links to a `provider_invocations` usage row. The execution transcripts stored in `execution_invocation_messages` serve as the replayable prompt history corresponding to the exact token and time consumption recorded in the usage row, allowing the dashboard Stats page to drill down into the exact sequence that generated specific costs.
+
+## Provider Slot Waiting Semantics
+
+When a provider's global concurrency limit is reached, ready tasks are deferred rather than blocked with a failure:
+1. The task status remains `PENDING` in memory, allowing the task to be rescheduled and retried on subsequent sprint cycles.
+2. A `task_run` record is created or updated to have a `state` of `"PENDING"`, and a linked `task_dispatch` is created with a status of `"queued"`.
+3. A durable event of type `"provider_concurrency_wait"` is appended to the `task_run_events` table carrying the `provider`, `currentCount`, and `limit` in its payload. This allows the dashboard to display the slot waiting status and show the usage (e.g., `2/2` waiting for slot) without inventing run-failure or code-execution attempts.
+

@@ -11,6 +11,7 @@ Use this page as the main entrypoint.
 2. [System Overview](./architecture/system-overview.md)
 3. [Dashboard Guide](./dashboard/dashboard-guide.md)
 4. [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
+4.1. [Interaction Patterns](./dashboard/interaction-patterns.md)
 5. [Sprint Imports](./dashboard/sprint-imports.md)
 5. [Project Initialization](./dashboard/project-initialization.md)
 6. [Quicksprint Templates](./dashboard/quicksprint-templates.md)
@@ -68,7 +69,8 @@ Use this page as the main entrypoint.
 2. [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
 3. [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
 4. [Operations Runbook](./operations/runbook.md)
-5. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
+5. [Security Hardening](./operations/security-hardening.md)
+6. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 
 ## Full Table of Contents
 
@@ -119,6 +121,7 @@ Use this page as the main entrypoint.
 - [Instruction Template System](./instructions/markdown-template-system.md)
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
 - [Dashboard Accessibility Patterns](./dashboard/dashboard-guide.md#accessibility-patterns)
+- [Interaction Patterns](./dashboard/interaction-patterns.md)
 - [Dashboard Onboarding](./dashboard/onboarding.md)
 - [Project Initialization](./dashboard/project-initialization.md)
 - [Sprint Imports](./dashboard/sprint-imports.md)
@@ -129,6 +132,7 @@ Use this page as the main entrypoint.
 - [Qwen Code Integration](./settings/qwen-code-integration.md)
 - [OpenCode Integration](./settings/opencode-integration.md)
 - [Operations Runbook](./operations/runbook.md)
+- [Security Hardening](./operations/security-hardening.md)
 - [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [Testing and Quality](./development/testing-and-quality.md)
 - [Electron Desktop App](./deployment/electron-desktop.md)

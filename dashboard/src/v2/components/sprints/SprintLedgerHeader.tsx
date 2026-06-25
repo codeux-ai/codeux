@@ -108,7 +108,7 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
                 type="button"
                 onClick={() => onFiltersChange({ ...filters, query: "" })}
                 className="absolute right-3.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.06] dark:hover:text-slate-200"
-                title="Clear search"
+                title="Clear search" aria-label="Clear search"
               >
                 <X className="h-3.5 w-3.5" strokeWidth={2.2} />
               </button>
@@ -120,23 +120,25 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
               onChange={onListWindowChange}
               label="Show"
             />
-            <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1.5 font-mono text-xs text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
+            <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1.5 font-mono text-xs text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400" aria-live="polite" aria-atomic="true" aria-label={`Showing ${ledgerSprintsCount} of ${sprintsCount} sprints`}>
               {ledgerSprintsCount} / {sprintsCount}
             </span>
             {hasFilters ? (
               <button
                 type="button"
                 onClick={clearFilters}
+                title="Clear all filters"
+                aria-label="Clear all applied filters to show all sprints"
                 className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1.5 text-xs font-bold text-signal-700 transition-colors hover:bg-signal-500/15 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:text-signal-300"
               >
                 <X className="h-3.5 w-3.5" strokeWidth={2.2} />
-                Clear
+                Clear Filters
               </button>
             ) : null}
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-3">
           <AvantgardeSelect
             options={[
               { value: "all", label: "All Status" },
@@ -172,6 +174,14 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
             aria-label="Filter ledger by pin state"
           />
         </div>
+      </div>
+
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {ledgerSprintsCount === 0 && hasFilters
+          ? "No matching sprints. Adjust search or filters."
+          : hasFilters
+            ? `Showing ${ledgerSprintsCount} filtered sprints out of ${sprintsCount} total.`
+            : `Showing all ${sprintsCount} sprints.`}
       </div>
     </div>
   );

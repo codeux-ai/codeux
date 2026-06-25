@@ -116,3 +116,53 @@ test('renders clear button when showClear is true and onClear provided', () => {
     rerender(<FilterStrip options={options} active="a" onChange={onChange} showClear={false} onClear={onClear} />);
     expect(screen.queryByText('Clear All')).not.toBeInTheDocument();
 });
+
+test('passes aria properties to tablist and options correctly', () => {
+    const options = [
+        { value: 'a', label: 'A', ariaLabel: 'Option A' },
+        { value: 'b', label: 'B' }
+    ] as const;
+    render(<FilterStrip options={options} active="a" onChange={vi.fn()} ariaLabel="My Filters" />);
+
+    const tablist = screen.getByRole('tablist');
+    expect(tablist).toHaveAttribute('aria-label', 'My Filters');
+
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs[0]).toHaveAttribute('aria-label', 'Option A');
+    expect(tabs[1]).not.toHaveAttribute('aria-label');
+});
+
+test('renders clear button with accessible name when showClear is true', () => {
+    const options = ['a'] as const;
+    const { rerender } = render(<FilterStrip options={options} active="a" onChange={vi.fn()} showClear={true} onClear={vi.fn()} ariaLabel="Test Label" />);
+
+    const clearBtn = screen.getByRole('button', { name: 'Clear filters for Test Label' });
+    expect(clearBtn).toBeInTheDocument();
+
+    rerender(<FilterStrip options={options} active="a" onChange={vi.fn()} showClear={true} onClear={vi.fn()} />);
+    const clearBtnDefault = screen.getByRole('button', { name: 'Clear filters' });
+    expect(clearBtnDefault).toBeInTheDocument();
+});
+
+test('respects reduced motion when changing tabs', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation(query => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+    }));
+
+    const options = ['a', 'b'] as const;
+    const onChange = vi.fn();
+    render(<FilterStrip options={options} active="a" onChange={onChange} />);
+
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs[0]).toBeInTheDocument();
+
+    window.matchMedia = originalMatchMedia;
+});

@@ -292,6 +292,8 @@ Create one dashboard-side client module responsible for:
 - sending subscribe and unsubscribe messages
 - tracking `lastSequence`
 - notifying consumers
+- filtering out stale socket events via strict identity checks
+- completely cleaning up timers and cleanly resetting state on disconnect
 
 This should be shared across dashboard pages instead of each page opening its own socket.
 
@@ -521,3 +523,15 @@ If implemented this way, Code UX gets:
 - lower repeated polling load
 - no regression to MCP listener behavior
 - a durable, debuggable realtime foundation instead of another temporary shortcut
+
+## Realtime Backpressure and Metrics
+
+To maintain reliability under heavy load, the internal realtime publisher tracks several backpressure metrics per scope. These metrics are available for observability and are updated continuously:
+
+- `coalesced`: The number of times a publish request was deduplicated because an identical request was already pending in the active flush debounce window.
+- `throttled`: The number of times a scheduled snapshot was skipped because the request arrived sooner than the defined minimum interval (e.g. `PROJECT_LIVE_MIN_INTERVAL_MS`).
+- `unchanged`: The number of times a snapshot loader successfully ran, but the resulting payload fingerpint was identical to the previously published value, skipping network broadcast.
+- `published`: The number of times a raw realtime event was successfully appended and broadcasted to listeners.
+- `failures`: The number of times a snapshot loader or publisher pipeline threw an unhandled error during the publish task.
+
+These metrics ensure we can verify backpressure logic (such as coalescing high-frequency execution refreshes) functions smoothly without impacting client contracts.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useState, useRef } from "preact/hooks";
 import type { ProjectExecutionStatsSnapshot } from "../../types.js";
 import type { ChartZoomRange, StatsVisualMode } from "./components/StatsShared.js";
 
@@ -27,9 +27,11 @@ export function useUsageChartState(
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
   const [dragCurrentIndex, setDragCurrentIndex] = useState<number | null>(null);
   
+  const activeProjectRef = useRef<string | null>(projectId);
   const [enabledSeries, setEnabledSeries] = useState<Record<string, boolean>>(() => {
     try {
-      const stored = localStorage.getItem('jules_stats_enabled_series');
+      const storageKey = `jules_stats_enabled_series_${projectId || 'default'}`;
+      const stored = localStorage.getItem(storageKey);
       if (stored) {
         return JSON.parse(stored);
       }
@@ -40,14 +42,30 @@ export function useUsageChartState(
   });
 
   useEffect(() => {
-    if (Object.keys(enabledSeries).length > 0) {
+    if (Object.keys(enabledSeries).length > 0 && activeProjectRef.current === projectId) {
       try {
-        localStorage.setItem('jules_stats_enabled_series', JSON.stringify(enabledSeries));
+        localStorage.setItem(`jules_stats_enabled_series_${projectId || 'default'}`, JSON.stringify(enabledSeries));
       } catch (e) {
         // ignore
       }
     }
-  }, [enabledSeries]);
+  }, [enabledSeries, projectId]);
+
+  // Load project-specific series config when project changes
+  useEffect(() => {
+    activeProjectRef.current = projectId;
+    try {
+      const storageKey = `jules_stats_enabled_series_${projectId || 'default'}`;
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        setEnabledSeries(JSON.parse(stored));
+      } else {
+        setEnabledSeries({});
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [projectId]);
 
   // Reconcile and initialize series on stats load
   useEffect(() => {
@@ -57,6 +75,15 @@ export function useUsageChartState(
       let changed = false;
       const next = { ...curr };
       let enabledCount = 0;
+
+
+      const validIds = new Set(stats.chartSeries.map(s => s.id));
+      for (const key of Object.keys(next)) {
+        if (!validIds.has(key)) {
+          delete next[key];
+          changed = true;
+        }
+      }
 
       for (const series of stats.chartSeries) {
         if (next[series.id] === undefined) {

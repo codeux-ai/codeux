@@ -197,6 +197,7 @@ Legacy runtime:
 - Top-nav project selector persists the active project in sqlite
 - Top-nav sprint selector persists the active sprint for the selected project
 - Top-nav search sits in the left header cluster beside the brand, while the active task counter uses the same compact height as the project, sprint, and worker selectors
+- Global Search preserves previous results during debounce to avoid layout shift, only polls for container previews when opened, and uses `aria-activedescendant` for keyboard navigation.
 - The Live Sprint Clock card in the Sprint Stats deck now shows a six-tile grid with Finished, Avg Finish, Accumulated, Input, Output, and Cached values, and the token tiles reuse the shared compact formatter from the Stats page.
 - Live runtime pages now use the persisted top-nav sprint selection as the page scope, so the Live view follows the selected sprint from the header menu
 - That selection is view-only for the dashboard surface; it does not change which sprint run is actually executing in the backend
@@ -206,6 +207,8 @@ Legacy runtime:
 - Selecting a virtual worker from the top nav switches the selected project into `workers.executionMode = VIRTUAL` with that provider
 - Connected MCP worker selection has been removed; the worker selector is now virtual-only
 - Projects page is DB-backed and can create/select/delete projects
+- Project cards now surface richer read-only metadata from `GET /api/projects`, including source badges, repository URL or workspace path, created/updated timestamps, last run timestamp/status, branch details, provider, host, and task-completion counts.
+- Project card quick actions are always visible and include `Open`, `Setup project`, `Project settings`, and `Delete`; the settings action first selects the project and then routes to `/config` so the existing scoped settings surface opens for the right project.
 - Project source cells now select the clicked project before routing: the `Sprints` action loads `/sprints`, and the settings gear loads `/config`.
 - The Projects page now uses the dashed grid Add Project card as the single entry point for creating a project; the top-right header CTA was removed to keep creation affordance in one place.
 - The `Add Project` dialog now keeps keyboard focus inside the active form field while typing, and its initial focus respects the form's `autofocus` input instead of jumping to the header close button
@@ -218,6 +221,7 @@ Legacy runtime:
 - Git URL projects are cloned into a local checkout before the project record is created. When the optional clone directory is left empty, Code UX uses `~/.code-ux/projects/<repo-name>` so Docker workspaces always seed from a real repository root instead of a relative placeholder path.
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown plus GitHub/GitLab/Jira issue import capabilities, plus markdown export controls. See [Sprint Imports](./sprint-imports.md).
+- Sprint and Quicksprint planning route controls list virtual provider instances by their settings-page names (for example, `Codex Primary`) with provider brand icons, keep connected worker routes visually distinct, and show resolved default route/model labels such as `Default Route (Codex Primary)` and `Default Model (gpt-5.5)`.
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
 - Sprint cells and ledger rows now surface a dedicated human-intervention badge when a paused sprint needs merge work, planning, or another operator action, and the hover card explains what to do before resuming
 - Sprint and Live status messaging now uses a shared presentation mapper (`dashboard/src/v2/lib/sprint-status-presentation.ts`) so manual pauses, system-stopped states, QA gates, attempts to merge into the base branch, and base branch merge conflicts render consistent title/reason/detail copy and consistent human-intervention badge visibility across cards, rows, and live detail panels
@@ -243,7 +247,7 @@ Legacy runtime:
 - Settings -> Sprint -> Git Flow includes `Auto-close linked issues`, which closes imported GitHub/GitLab issues only after sprint completion and the main merge gate is no longer blocking. Jira auto-close is configured separately in Settings -> Integrations -> Jira and uses the configured transition name.
 - The sprint composer now features a visible, animated planning feedback overlay that replaces the generic spinner during `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan` actions.
 - Planning feedback is deterministic and staged, using an animated ship treatment (Wooden Ship for AI improvement, Container Ship for planning) that drifts across the composer based on elapsed time to make progress visible
-- Planning and prompt-improvement requests continue server-side if the browser tab is refreshed or closed. The overlay's `Cancel Active Request` action now sends an explicit cancellation request, while `New Sprint` detaches the current planning run from the composer and opens a fresh sprint form without blocking the active run.
+- Planning and prompt-improvement requests continue server-side if the browser tab is refreshed or closed. The overlay's `Cancel Active Request` action now sends an explicit cancellation request and leaves visible UI feedback in the composer. Form validation ensuring required sprint name and goal appear interactively post-interaction rather than silently disabling actions. The `Save Draft` and `Append Tasks` modes now also have defined progressive text for planning feedback, while `New Sprint` and `New Quicksprint` detach the current planning run from the visible composer, immediately reset the form controls, and leave the old run to finish without closing or mutating the fresh composer.
 - Clicking `Minimize` fully dismisses the planning overlay action row (`Minimize`, secondary action, and overlay cancel button). Any progress restore affordance remains inside the composer/quicksprint panel layout instead of floating over unrelated page content.
 - Sprints page `View Tasks`/`Open` links pass the sprint id to the Tasks page and the Tasks page persists that sprint as the global selected sprint scope, keeping the top navigation selector and page-wide task filtering aligned.
 - Settings now expose separate CLI retry controls for quota resets and rate limits, including the rate-limit delay and a max rate-limit retry count (`5` by default). Session sync preserves quota/rate-limit dispatch errors so active retry timers remain visible, while expired or missing cooldown metadata requeues the task instead of leaving it stuck in `QUOTA`.
@@ -336,18 +340,20 @@ Legacy runtime:
   - restrained panel surfaces for sidebar and viewer regions using shared neutral/light-dark borders and backgrounds
   - launch state card matching Browser Preview container-launch conventions (accent icon treatment, selector styling, and primary action button)
   - file browsing/diff behavior remains unchanged (`files` and `changes` modes, selected path display, side-by-side toggle, and status semantics)
-- Stats page now matches the high-interaction v2 dashboard card language more closely with a unified **Analysis Studio UX**:
+- Stats page now matches the high-interaction v2 dashboard card language more closely with a unified **Analysis Studio UX**, including light/dark mode support and responsive behavior across screen sizes:
   - unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
-  - an embedded grouped metric selector instead of separate tabs, organizing Tokens, Time, and Git metrics into unified groupings
-  - relocated analysis-mode controls that focus the workspace on trend, composition, or reliability
-  - a full-width interactive trend graph (Usage Graph) with hover bucket inspection and drag-to-zoom timeframe selection
+  - visual-mode navigation controls that focus the workspace on Trend, Composition, Models, Providers/Reliability, Ledgers, or System subpages
+  - a full-width interactive trend graph (Usage Graph) with hover bucket inspection and drag-to-zoom timeframe selection, integrating Tokens, Time, Git metrics, and Cost into unified groupings
+  - Settings Integrations provider-instance `Token pricing` values now feed Stats cost metrics; if a provider has no pricing configured (or $0.00), its invocations are tracked but contribute $0.00 to aggregate cost series
   - a Trend Studio summary band above the chart and a purpose activity section below it, keeping the trend tab self-contained for window-level analysis
-  - a Composition Studio that now layers cache efficiency, token-flight timing, and a per-provider activity ledger beneath the donut charts so the provider picture stays readable without tab switching
+  - a Composition Studio that layers cache efficiency, token-flight timing, and a per-provider activity ledger beneath donut charts so the provider picture stays readable without tab switching
   - a persistent right-side selected-metrics rail for configuring the chart series; same-window refreshes preserve user chart selections
   - hourly views keep one-hour hover targets while reducing visible axis labels to a three-hour rhythm for readability
   - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
-  - tabbed task and sprint telemetry sections replacing the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
-  - Git stats (Insertions, Deletions, Files Changed, Pull Requests, Merged PRs) are integrated directly alongside Tokens and Time metrics in the Analysis Studio
+  - Models and Providers/Reliability tracking specifically surface model performance, API error rates, and retry counts
+  - tabbed Ledgers telemetry section replaces the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
+  - System subpage for deeper debugging and internal telemetry info, exposing internal cache hit rates, pub/sub connection stability, worker execution loops, queue lengths, and unhandled exception traces
+  - Git stats (Insertions, Deletions, Files Changed, Pull Requests, Merged PRs) are integrated directly alongside Tokens, Time, and Cost metrics in the Analysis Studio
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and route-assignment tags, rather than a raw edit form.
@@ -392,6 +398,7 @@ Legacy runtime:
 ### Dashboard view
 - Task statistics
 - Execution runtime panel for sprint runs, dispatch queue state, live project connections, worker assignment, lease ownership, and recent runtime events
+  - Queued/deferred dispatches show a stable status indicator `Waiting for slot (current/limit)` when an invocation is waiting for a provider concurrency slot.
 - Live runtime visuals are only considered active when the selected project has a `running` or `queued` sprint run; cancelled, paused, and completed runs fall back to a waiting state
 - When no sprint is running but a paused sprint needs human intervention, the overview telemetry now switches from an empty state to an attention state with the exact reason and operator instructions
 - Task pipeline cards
@@ -670,6 +677,16 @@ For provider-backed runs, session polling is now used to ingest durable runtime 
 - Provider activity is mirrored into `task_run_events` and shown through the runtime feed.
 - PR URL is shown once the workflow creates the PR.
 
+## Provider Authentication Modes
+
+Provider credentials and authentication modes support local auth-copy mounts, API keys, or dashboard-guided Docker logins.
+
+### Mutual-Exclusion Contract
+To prevent credential and runtime config conflicts, provider configurations enforce a strict mutual-exclusion contract between API keys and local mounting:
+- **API Key mode**: API key input is rendered, and switching away from this mode dynamically clears the saved API key. Qwen Code and OpenCode authentication sub-modes (e.g. Alibaba Cloud Coding Plan, Custom model provider/endpoint options) are available only in API Key mode.
+- **Local Copy mode / Dashboard Login mode**: Local auth paths (e.g., host paths like `~/.qwen` or `~/.config/gcloud`) or Dashboard Login paths (`~/.code-ux/credentials/{providerConfigId}`) are rendered only when selected. Switching to local copy or dashboard-guided login automatically clears runtime API keys, custom base URLs, and custom models to prevent coexistence conflicts.
+- **Mode-Incompatible Controls**: Any mode-incompatible inputs (such as Claude/Codex custom base URLs and custom models) that remain visible in local copy mode are clearly disabled to reflect the active configuration state.
+
 ## Security Notes
 
 - API keys are masked in UI inputs.
@@ -694,6 +711,7 @@ For provider-backed runs, session polling is now used to ingest durable runtime 
 - Immutable settings state updates are centralized in `dashboard/src/lib/settings-updaters.ts`; settings sections consume these typed helpers instead of manually reconstructing nested objects.
 - Task cards use button semantics and ARIA expansion state for title/details/log toggles.
 - The v2 frontend is organized into page-scoped module boundaries (overview, sprints, tasks, stats, live), exclusively loading resources they need.
+- The Sprints page uses a data/action/view-model split: `useSprintsPageData` coordinates state, `useSprintsPageActions` manages side effects and API calls, `useSprintsPageModals` manages transient UI state, and deterministic derived state is extracted into pure view-model helpers (`sprints-page-view-models.ts`).
 - A shared dashboard resource layer manages resource keys, caching, and invalidation, deduplicating fetches and avoiding UI flashing during background updates.
 - Heavy list views use a progressive list strategy (`useProgressiveList`) with an intersection observer to render items in batches and prevent main-thread blocking.
 - Backend read-model optimizations efficiently project data to support the resource layer while leaving API routes and backend contracts entirely unchanged.
@@ -701,14 +719,37 @@ For provider-backed runs, session polling is now used to ingest durable runtime 
 
 - A "Live Preview" CTA link now appears in the Live view header when the relevant sprint has an active (`running`) preview session with a resolved `hostPort`. The link securely routes directly to the iframe preview origin (`buildPreviewUrl`) at the `lastKnownPath`.
 
+
+## Interaction Patterns
+
+The dashboard relies on consistent interaction primitives across all v2 views:
+
+- **Data Views**: The Sprint Ledger maintains robust selection scope by pruning selections when filters change to prevent hidden bulk actions. Sort states explicitly surface unsorted, ascending, and descending affordances, and row actions clearly differentiate between deletion, pinning, and execution pending states without relying solely on opacity reductions.
+- **Cursor Affordance**: All interactive controls (buttons, links, tab controls, form toggles, menu/popover triggers, DAG nodes, cards, and dismissible overlays) explicitly use a pointer cursor. Disabled controls retain `cursor-not-allowed` or default arrow cursors.
+- **Async Feedback & Loading**: Active states (like waiting for CI, running tasks, or loading large datasets) use visual indicators like spinners or pulsing dots.
+- **Reduced Motion**: All animated feedback (like CI spinners or GSAP transitions) uses Tailwind's `motion-reduce:animate-none` or explicit reduced-motion checks to disable looping animations if the user prefers reduced motion. The dashboard provides a shared motion vocabulary to ensure consistent timing and easing. Developers should use `INTERACTION_TOKENS` (for CSS/React transitions) or `GSAP_INTERACTION_TOKENS` (for GSAP) exported from `lib/motion` for interactions such as `controlFeedback`, `enterExit`, `expansionCollapse`, `selectionMovement`, and `asyncFeedback`. Do not introduce arbitrary new timings outside the token system. Use `useResolvedMotionDuration` from `hooks/use-reduced-motion` to safely resolve durations to zero when reduced motion is active.
+- **Overlays & Modals**: Dismissible surfaces (dialogs, side panels, search overlays) can be closed via explicit buttons, clicking the backdrop, or pressing the Escape key. Focus is trapped within the overlay while open and restored to the trigger when closed.
+- **Data Views**: Complex data views (like the Sprint Ledger or Stats page) maintain sticky sort/filter controls while the data scrolls. List windowing and progressive rendering ensure smooth interactions even with large datasets.
+- **Destructive Actions & Flows**: Major flows with side effects, such as rerunning a task or bulk deleting sprints, require explicit confirmation. The confirmation dialog warns about potential downstream impacts (e.g., downstream task resets, existing git merges, cascading sprint deletion effects) and provides localized options to clean up state before proceeding.
+
+
 ## Accessibility Patterns
 
 This dashboard enforces accessibility best practices to ensure an inclusive experience:
 
-- **Dialogs & Modals**: Implemented using proper ARIA roles (`role="dialog"` or `role="alertdialog"`). They manage focus by trapping it within the overlay and restoring it to the trigger upon closing. If a dialog has no focusable elements, the container itself uses `tabIndex={-1}` and an outline-removal class for programmatic focus.
-- **Menus & Overlays**: Use explicit ARIA roles such as `menu`, `menuitem`, `listbox`, and `option`. Keyboard navigation (up/down arrows, Enter/Space, Escape) is strictly supported.
-- **Forms**: All inputs must have associated labels (`<label>` or `aria-label`/`aria-labelledby`). Validation feedback uses `aria-invalid` and dynamically injects messages into `aria-live` regions.
+- **Landmarks & Skip Links**: The dashboard shell provides exactly one `main` landmark with `id="main-content"`. A visually hidden skip link (which becomes visible on focus) allows keyboard and screen reader users to bypass the primary navigation and jump directly to the main content area.
+- **Dialogs & Modals**: Implemented using proper ARIA roles (`role="dialog"` or `role="alertdialog"`). They must have explicit accessible names (via `ariaLabel`, `ariaLabelledBy`, or fallback "Dialog"). They manage focus by trapping it within the overlay, defaulting initial focus appropriately, and restoring it to the trigger upon closing. Exit animations use `pointer-events-none` to ensure hidden elements cannot be reached by Tab navigation while closing. If a dialog has no focusable elements, the container itself uses `tabIndex={-1}` and an outline-removal class for programmatic focus.
+- **Menus & Overlays**: Use explicit ARIA roles such as `menu`, `menuitem`, `listbox`, and `option`. Keyboard navigation (up/down arrows, Enter/Space, Escape) is strictly supported. Dropdowns with search filters must track active descendants on inputs, clearly read out selection transitions using polite live regions, and expose explicit empty states when filtering yields no results.
+- **Forms**: All inputs must have associated labels (`<label>` or `aria-label`/`aria-labelledby`). Shared form fields must be understandable and recoverable by connecting labels, helper text, errors, required indicators, and validation state through accessible relationships (e.g., using `aria-describedby`, `aria-errormessage`, and `aria-invalid`). Form submissions must guard against duplicate events via `isSubmitting` checks. Upon validation failure, focus should be programmatically restored to the first invalid field. Dependency lists or complex toggles should visually and semantically (`aria-disabled`) expose their unselectable states (e.g., cycle prevention) rather than silently hiding options.
 - **Live Regions**: Non-visual state changes (like toast notifications or saving states) are announced using `aria-live="polite"` or `aria-live="assertive"`. Loading spinners use `aria-hidden="true"` with a visually hidden fallback, while their containers use `aria-busy="true"`.
 - **Tables & Ledgers**: Complex data displays like the Sprint Ledger use semantic HTML (`<table>`, `<th>`, `<td>`) or explicit ARIA grid roles to support screen reader cell navigation.
 - **Charts**: Data visualizations are wrapped in a region with `role="region"` and an `aria-label`, providing an accessible name for the visual content.
-- **Reduced Motion**: Component animations using GSAP and Tailwind respect user preferences via the `prefers-reduced-motion` media query, disabling unnecessary visual transitions where appropriate.
+- **Stats & Analytics**: Analytics controls (like visual mode tabs and time windows) use semantic `role="group"` with `aria-pressed` states. Charts and sparklines include `sr-only` descriptive summaries of their data, allowing non-visual users to understand distributions and trends.
+- **Custom Date Ranges**: Date range inputs include clear `aria-label` attributes and use `aria-live="polite"` regions to announce validation errors (like end date before start date).
+- **Loading States**: All loading and error panels use `role="status"` or `role="alert"` to ensure screen reader announcement, and spinning animations use `motion-safe:animate-spin` to respect reduced motion.
+- **Reduced Motion**: Component animations using GSAP and Tailwind respect user preferences via the `prefers-reduced-motion` media query. Features like the Kinetic Dock immediately snap indicator positions without transition. Decorative background loops (e.g., CanvasBackground) and GSAP ticker updates (e.g., Sprint Boat Race) instantly skip interpolations, disable hover magnetism, remove visual ripples, and substitute animated motion with immediate static state reflections to preserve functional state comprehension.
+- **Feedback Surfaces**: Feedback surfaces (like `ToastProvider` and `ActionFeedbackRegion`) separate polite status announcements (success, warning, info) from assertive error announcements. Action buttons (Dismiss, Retry) use concise accessible names without repeating the entire dynamic message. When a focused feedback control removes itself, focus is predictably restored to a sensible fallback (e.g., `[role="main"]` or `body`). Live regions for notifications and status banners are kept in the DOM to ensure reliable screen reader announcements when their text changes.
+- **Task Board State Ownership:** To prevent lane mapping drift across views, `dashboard/src/v2/lib/task-board-state.ts` is the strict single source of truth for all task status to lane derivations (via `getTaskLane`). It correctly groups transient implementation statuses like `coding_completed` and `QA_REVIEW_FAILED` into the "in_progress" lane for consistent Kanban rendering.
+- **Task Card Affordances:** Task cards visually represent task states cleanly without expensive 3D transformations. Dependency indicators provide distinct visual styles and full screen-reader readouts for missing, blocked (`QA_REVIEW_FAILED`), running (`in_progress`, `coding_completed`), and completed dependencies. Drag actions utilize explicit `cursor-grab` interactions while gracefully degrading in reduced motion or disabled states.
+
+- **Form Validation & Submission**: When a form submission fails due to validation errors, focus should be automatically shifted to the first invalid field to assist users (especially screen readers). When submission fails due to network or logic errors, a retry action should be presented via `ActionFeedbackRegion`. Also, ensure duplicate form submissions are prevented by verifying the `isSubmitting` state before processing the submit event. Dependencies should explicitly indicate if they cannot be selected due to cycle-prevention logic, rather than silently filtering them out.

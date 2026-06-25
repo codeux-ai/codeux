@@ -67,12 +67,28 @@ export function useSprints(projectId: string | null): UseSprintsResult {
     }
     let request = sprintResourceState.inflightRequests.get(projectId);
     if (!request) {
-      request = fetchSprints(projectId, signal).finally(() => {
-        sprintResourceState.inflightRequests.delete(projectId);
-      });
+      request = (async () => {
+        try {
+          return await fetchSprints(projectId, signal);
+        } finally {
+          if (sprintResourceState.inflightRequests.get(projectId) === request) {
+            sprintResourceState.inflightRequests.delete(projectId);
+          }
+        }
+      })();
       sprintResourceState.inflightRequests.set(projectId, request);
     }
-    const resolvedCollection = await request;
+
+    let resolvedCollection;
+    try {
+      resolvedCollection = await request;
+    } catch (err: any) {
+      if (err.name === "AbortError" && (!signal || !signal.aborted)) {
+        return fetchResource(signal);
+      }
+      throw err;
+    }
+
     const cached = sprintResourceState.cache.get(projectId) || null;
     const nextCollection = areNullableSprintCollectionsEqual(cached, resolvedCollection)
       ? cached

@@ -2,6 +2,7 @@ import type { FunctionComponent } from 'preact';
 import type { JSX } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import gsap from 'gsap';
+import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import type {
   ProjectExecutionStatsSnapshot,
 } from '../../../types.js';
@@ -9,6 +10,7 @@ import {
   formatTokens,
   formatDuration,
   formatDateTime,
+  formatCost
 } from '../stats-utils.js';
 import {
   CHIP_CLASS,
@@ -80,6 +82,7 @@ export const InteractiveUsageChart: FunctionComponent<{
     setEnabledSeries,
   } = chartState;
 
+  const isReducedMotion = useReducedMotion();
   const buckets = stats.buckets;
 
   const dimensionsRef = useRef({ width: 1200, height: 256 });
@@ -97,7 +100,7 @@ export const InteractiveUsageChart: FunctionComponent<{
   const padding = 34;
   const viewStart = viewStartRef.current;
   const viewEnd = viewEndRef.current;
-  const visibleBuckets = getVisibleBuckets(buckets, viewStart, viewEnd);
+  const visibleBuckets = useMemo(() => getVisibleBuckets(buckets, viewStart, viewEnd), [buckets, viewStart, viewEnd]);
 
   // Keep the visibleBucketsRef updated
   const visibleBucketsRef = useRef(visibleBuckets);
@@ -214,9 +217,9 @@ export const InteractiveUsageChart: FunctionComponent<{
 
   const visibleSeries = chartData.filter((series) => enabledSeries[series.id]);
 
-  const { activeIndex, activeBucket, tooltipLeft, xPositions } = getTooltipState(
+  const { activeIndex, activeBucket, tooltipLeft, xPositions } = useMemo(() => getTooltipState(
     visibleBuckets, chartData, hoveredIndex, padding, width
-  );
+  ), [visibleBuckets, chartData, hoveredIndex, padding, width]);
 
   const selectionBounds = dragStartIndex !== null && dragCurrentIndex !== null
     ? {
@@ -229,7 +232,7 @@ export const InteractiveUsageChart: FunctionComponent<{
     : stats.range.label;
   const axisLabelStep = getAxisLabelStep(stats.range);
 
-  const { peakTokens, peakTime, peakInvocations, averageTokens } = calculateChartMetrics(visibleBuckets);
+  const { peakTokens, peakTime, peakInvocations, averageTokens } = useMemo(() => calculateChartMetrics(visibleBuckets), [visibleBuckets]);
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -259,29 +262,42 @@ export const InteractiveUsageChart: FunctionComponent<{
     const pointsNodes = Array.from(panelRef.current.querySelectorAll<SVGCircleElement>("[data-chart-point]"));
     const cards = Array.from(panelRef.current.querySelectorAll<HTMLElement>("[data-chart-card]"));
 
-    const timeline = gsap.timeline();
-    if (areas.length > 0) {
-      gsap.set(areas, { opacity: 0 });
-    }
-    if (pointsNodes.length > 0) {
-      gsap.set(pointsNodes, { opacity: 0, scale: 0.35, transformOrigin: "center center" });
-    }
-    paths.forEach((path) => {
-      const length = typeof path.getTotalLength === "function" ? path.getTotalLength() : 100;
-      gsap.set(path, { strokeDasharray: `${length} ${length}`, strokeDashoffset: length });
-      timeline.to(path, { strokeDashoffset: 0, duration: 1.05, ease: "power3.out", clearProps: "strokeDashoffset,strokeDasharray" }, 0);
-    });
-    if (areas.length > 0) {
-      timeline.to(areas, { opacity: (_index, target) => Number((target as SVGPathElement).dataset.areaOpacity || "0.3"), duration: 0.7, stagger: 0.08, ease: "power2.out" }, 0.18);
-    }
-    if (pointsNodes.length > 0) {
-      timeline.to(pointsNodes, { opacity: 1, scale: 1, duration: 0.38, stagger: 0.012, ease: "back.out(1.8)" }, 0.3);
-    }
-    if (cards.length > 0) {
-      timeline.fromTo(cards, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.55, stagger: 0.05, ease: "power3.out" }, 0.18);
-    }
+    const ctx = gsap.matchMedia();
 
-    return () => timeline.kill();
+    ctx.add("(prefers-reduced-motion: no-preference)", () => {
+      const timeline = gsap.timeline();
+      if (areas.length > 0) {
+        gsap.set(areas, { opacity: 0 });
+      }
+      if (pointsNodes.length > 0) {
+        gsap.set(pointsNodes, { opacity: 0, scale: 0.35, transformOrigin: "center center" });
+      }
+      paths.forEach((path) => {
+        const length = typeof path.getTotalLength === "function" ? path.getTotalLength() : 100;
+        gsap.set(path, { strokeDasharray: `${length} ${length}`, strokeDashoffset: length });
+        timeline.to(path, { strokeDashoffset: 0, duration: 1.05, ease: "power3.out", clearProps: "strokeDashoffset,strokeDasharray" }, 0);
+      });
+      if (areas.length > 0) {
+        timeline.to(areas, { opacity: (_index, target) => Number((target as SVGPathElement).dataset.areaOpacity || "0.3"), duration: 0.7, stagger: 0.08, ease: "power2.out" }, 0.18);
+      }
+      if (pointsNodes.length > 0) {
+        timeline.to(pointsNodes, { opacity: 1, scale: 1, duration: 0.38, stagger: 0.012, ease: "back.out(1.8)" }, 0.3);
+      }
+      if (cards.length > 0) {
+        timeline.fromTo(cards, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.55, stagger: 0.05, ease: "power3.out" }, 0.18);
+      }
+    });
+
+    ctx.add("(prefers-reduced-motion: reduce)", () => {
+      if (areas.length > 0) gsap.set(areas, { opacity: (_index, target) => Number((target as SVGPathElement).dataset.areaOpacity || "0.3") });
+      if (pointsNodes.length > 0) gsap.set(pointsNodes, { opacity: 1, scale: 1 });
+      paths.forEach((path) => {
+        gsap.set(path, { strokeDasharray: "none", strokeDashoffset: 0, clearProps: "strokeDashoffset,strokeDasharray" });
+      });
+      if (cards.length > 0) gsap.set(cards, { opacity: 1, y: 0 });
+    });
+
+    return () => ctx.revert();
   }, [enabledSeries, visibleBuckets.length, stats.range.from, stats.range.to]);
 
   const onToggleSeries = (id: string) => {
@@ -291,17 +307,36 @@ export const InteractiveUsageChart: FunctionComponent<{
 
   return (
     <div ref={panelRef} className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7 border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] shadow-[var(--stats-card-shadow)]`}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
       <div className="relative flex flex-col gap-8">
         {/* Screen reader summary */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
-          <h2 className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
+          <h2 id="chart-summary-heading" className="sr-only">Data Visualization for {zoomRange ? "zoomed timeframe" : stats.range.label}</h2>
           <p>
             Currently showing {visibleBuckets.length} buckets.
             {activeBucket ? `Focused bucket: ${activeBucket.label}. Tokens: ${activeBucket.usage.totalTokens}` : "No bucket focused."}
             Active series: {visibleSeries.map(s => s.label).join(", ")}.
             Peak Tokens: {formatTokens(peakTokens)}. Peak Time: {formatDuration(peakTime)}. Average Tokens: {formatTokens(averageTokens)}. Peak Invocations: {peakInvocations.toLocaleString()}.
           </p>
+          <table className="sr-only">
+            <thead>
+              <tr>
+                <th>Time</th>
+                {visibleSeries.map(s => (
+                  <th key={s.id}>{s.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleBuckets.map((bucket, i) => (
+                <tr key={bucket.bucketStart}>
+                  <td>{bucket.label}</td>
+                  {visibleSeries.map(s => (
+                    <td key={s.id}>{s.formatter(s.values[i] ?? 0)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
         <UsageGraphHeader
           title={zoomRange ? "Zoomed telemetry window" : stats.range.label}
@@ -319,22 +354,22 @@ export const InteractiveUsageChart: FunctionComponent<{
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4">
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-5`}>
+          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Tokens</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatTokens(peakTokens)}</div>
             <div className="mt-1 text-xs text-[var(--stats-detail-color)]">Highest bucket in view</div>
           </div>
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-5`}>
+          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Time</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatDuration(peakTime)}</div>
             <div className="mt-1 text-xs text-[var(--stats-detail-color)]">Active model runtime</div>
           </div>
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-5`}>
+          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Average Tokens</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{formatTokens(averageTokens)}</div>
             <div className="mt-1 text-xs text-[var(--stats-detail-color)]">{stats.range.resolutionLabel}</div>
           </div>
-          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-5`}>
+          <div data-chart-card className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--stats-label-color)]">Peak Invocations</div>
             <div className="mt-2 text-2xl font-black text-[var(--stats-value-color)]">{peakInvocations.toLocaleString()}</div>
             <div className="mt-1 text-xs text-[var(--stats-detail-color)]">CLI calls in one bucket</div>
@@ -342,22 +377,22 @@ export const InteractiveUsageChart: FunctionComponent<{
         </div>
 
         <div className="grid grid-cols-1 gap-8 items-start xl:grid-cols-[minmax(0,1fr)_18rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className={`${SUBPANEL_CLASS} flex flex-col border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/20 p-5 md:p-6`}>
+          <div className={`${SUBPANEL_CLASS} flex flex-col border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-5 md:p-6`}>
             <div className="mb-6 flex flex-wrap items-center gap-4">
               <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">Interactive Plot</div>
-              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 ${CHIP_CLASS} truncate max-w-full`}>
+              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} truncate max-w-full`}>
                 Hover buckets for exact values
               </div>
-              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 ${CHIP_CLASS} truncate max-w-full`}>
+              <div className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--stats-detail-color)] border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] ${CHIP_CLASS} truncate max-w-full`}>
                 {zoomLabel}
               </div>
               <button
                 type="button"
                 onClick={toggleFilters} aria-expanded={isFiltersOpen}
-                className={`group flex items-center gap-2 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-all border shadow-sm active:scale-95 ${CHIP_CLASS} ${
+                className={`group flex items-center gap-2 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-all border shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${CHIP_CLASS} ${
                   isFiltersOpen 
                     ? 'border-signal-500/30 bg-signal-500/[0.08] text-signal-500 shadow-signal-500/5' 
-                    : 'border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 text-[var(--stats-detail-color)] hover:text-[var(--stats-value-color)] hover:border-[var(--stats-value-color)]/20'
+                    : 'border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] text-[var(--stats-detail-color)] hover:bg-[color:var(--fill-muted-hover)] hover:text-[var(--stats-value-color)] hover:border-[var(--stats-value-color)]/20'
                 }`}
               >
                 <Filter className={`h-3 w-3 transition-colors ${isFiltersOpen ? 'text-signal-500' : 'text-[var(--stats-detail-color)] group-hover:text-signal-500'}`} strokeWidth={2.2} />
@@ -367,7 +402,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                 <button
                   type="button"
                   onClick={() => setZoomRange(null)}
-                  className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500 transition-all hover:bg-signal-500/10 border border-signal-500/20 rounded-full active:scale-95`}
+                  className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500 transition-all hover:bg-[color:var(--fill-muted)] border border-signal-500/20 rounded-full active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)]`}
                 >
                   Reset zoom <span className="sr-only">to {stats.range.label}</span>
                 </button>
@@ -420,7 +455,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                   <UsageGraphEmpty />
                 </div>
               ) : (
-                <svg aria-hidden="true" viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
+                <svg role="img" aria-labelledby="chart-summary-heading" viewBox={`0 0 ${width} ${height}`} className={`absolute inset-0 h-full w-full overflow-visible transition-opacity duration-300 motion-reduce:transition-none ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
                   <defs>
                     {chartData.map((series) => (
                       <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">
@@ -512,16 +547,21 @@ export const InteractiveUsageChart: FunctionComponent<{
                     return (
                       <rect
                         key={`hover-${index}`}
+                        tabIndex={0}
                         x={startX}
                         y={padding}
                         width={rectWidth}
                         height={height - padding * 2}
                         fill="transparent"
+                        className="focus:outline-none focus:ring-2 focus:ring-signal-500"
                         onMouseDown={() => {
                           setDragStartIndex(absoluteIndex);
                           setDragCurrentIndex(absoluteIndex);
                         }}
                         onMouseEnter={() => setHoveredIndex(index)}
+                        onFocus={() => setHoveredIndex(index)}
+                        onBlur={() => setHoveredIndex(null)}
+                        aria-label={buckets[absoluteIndex]?.label || "Bucket"}
                         onMouseMove={() => {
                           if (dragStartIndex !== null) {
                             setDragCurrentIndex(absoluteIndex);
@@ -574,7 +614,7 @@ export const InteractiveUsageChart: FunctionComponent<{
               enabledSeries={enabledSeries}
               activeIndex={activeIndex}
             />
-            <div className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/40 p-6`}>
+            <div className={`${SUBPANEL_CLASS} border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] p-6`}>
               <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--stats-label-color)]">Focused Bucket</div>
               <div className="mt-4 text-2xl font-black tracking-tight text-[var(--stats-value-color)]">
                 {activeBucket ? activeBucket.label : "--"}
@@ -582,13 +622,21 @@ export const InteractiveUsageChart: FunctionComponent<{
               <div className="mt-2 text-sm leading-relaxed text-[var(--stats-detail-color)]">
                 {activeBucket ? `${formatDateTime(activeBucket.bucketStart)} to ${formatDateTime(activeBucket.bucketEnd)}` : "No bucket data yet."}
               </div>
-              <div className="mt-5 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)]/60 px-4 py-3.5 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)] shadow-sm">
+              <div className="mt-5 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-4 py-3.5 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--stats-detail-color)] shadow-sm">
                 {zoomRange
                   ? `${visibleBuckets.length} buckets in zoom`
                   : `${stats.range.bucketCount} buckets in ${stats.range.label.toLowerCase()}`}
               </div>
-              {activeBucket ? (
+              {activeBucket ? (() => {
+                const hasCost = activeBucket.usage.totalCostUsd > 0;
+                return (
                 <div className="mt-6 space-y-4">
+                  {hasCost ? (
+                  <div className="flex items-center justify-between rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-4 shadow-sm transition-all hover:bg-emerald-500/[0.15]">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">Total Cost</div>
+                    <div className="text-base font-black text-[var(--stats-value-color)]">{formatCost(activeBucket.usage.totalCostUsd)}</div>
+                  </div>
+                ) : null}
                   <div className="flex items-center justify-between rounded-2xl border border-signal-500/20 bg-signal-500/10 px-5 py-4 shadow-sm transition-all hover:bg-signal-500/[0.15]">
                     <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">Tokens</div>
                     <div className="text-base font-black text-[var(--stats-value-color)]">{formatTokens(activeBucket.usage.totalTokens)}</div>
@@ -602,7 +650,8 @@ export const InteractiveUsageChart: FunctionComponent<{
                     <div className="text-base font-black text-[var(--stats-value-color)]">{activeBucket.usage.invocationCount.toLocaleString()}</div>
                   </div>
                 </div>
-              ) : null}
+                );
+              })() : null}
             </div>
           </div>
         </div>

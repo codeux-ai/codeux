@@ -829,7 +829,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                       onInput={(event) => setModel(event.currentTarget.value)}
                       disabled={saving || !providerConfigId}
                       placeholder={selectedProvider?.model || "Inherited"}
-                      className="rounded-2xl border border-black/[0.05] bg-white/40 px-4 py-3 text-[13px] font-medium text-slate-900 outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 disabled:opacity-50 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
+                      className="rounded-2xl border border-black/[0.05] bg-white/40 px-5 py-3 shadow-sm text-[13px] font-medium text-slate-900 outline-none backdrop-blur-md transition-all placeholder-slate-400 focus:border-signal-500 focus:ring-4 focus:ring-signal-500/10 disabled:opacity-50 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-white dark:placeholder-slate-600 dark:focus:ring-signal-500/15"
                     />
                   </FieldShell>
                 </div>

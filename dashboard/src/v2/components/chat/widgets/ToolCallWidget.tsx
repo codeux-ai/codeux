@@ -1,5 +1,8 @@
 import { type FunctionComponent } from "preact";
-import { useState } from "preact/hooks";
+import { useState, useRef, useLayoutEffect } from "preact/hooks";
+import gsap from "gsap";
+import { INTERACTION_TOKENS } from "../../../lib/motion/tokens.js";
+import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import {
   Terminal,
   FilePen,
@@ -121,6 +124,22 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
   callId,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
+
+  useLayoutEffect(() => {
+    if (!contentRef.current) return;
+    const el = contentRef.current;
+    if (prefersReducedMotion) {
+      gsap.set(el, { height: expanded ? "auto" : 0, opacity: expanded ? 1 : 0 });
+      return;
+    }
+    if (expanded) {
+      gsap.to(el, { height: "auto", opacity: 1, duration: parseFloat(INTERACTION_TOKENS.expansionCollapse.duration) / 1000, ease: INTERACTION_TOKENS.expansionCollapse.ease });
+    } else {
+      gsap.to(el, { height: 0, opacity: 0, duration: parseFloat(INTERACTION_TOKENS.expansionCollapse.duration) / 1000, ease: INTERACTION_TOKENS.expansionCollapse.ease });
+    }
+  }, [expanded, prefersReducedMotion]);
   const name = toolName || "tool";
   const kind = classifyTool(name);
   const Icon = ICONS[kind];
@@ -131,7 +150,7 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
   const isEdit = kind === "edit";
 
   return (
-    <div class="overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.02]">
+    <div class="overflow-hidden rounded-xl border border-black/[0.04] dark:border-white/[0.04] bg-slate-50/50 dark:bg-white/[0.02]">
       <button
         type="button"
         disabled={!hasDetails}
@@ -168,7 +187,8 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
         )}
       </button>
 
-      {expanded && hasDetails && (
+      <div ref={contentRef} style={{ height: 0, overflow: "hidden", visibility: expanded ? "visible" : "hidden" }} aria-hidden={!expanded}>
+      {hasDetails && (
         <div class="space-y-3 border-t border-black/[0.04] px-3 py-3 dark:border-white/[0.04]">
           {args && args.trim() && (
             <div>
@@ -204,6 +224,7 @@ export const ToolCallWidget: FunctionComponent<ToolCallWidgetProps> = ({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 };

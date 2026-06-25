@@ -2,6 +2,7 @@ import type { FunctionComponent } from 'preact';
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import gsap from 'gsap';
 import { X } from 'lucide-preact';
+import { MODAL_MOTION } from '../../../lib/motion/modal-motion.js';
 import type {
   ProjectExecutionStatsSnapshot,
 } from '../../../types.js';
@@ -28,23 +29,39 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
   useLayoutEffect(() => {
     if (!menuRef.current) return;
 
+    const ctx = gsap.matchMedia();
+    ctx.add("(prefers-reduced-motion: no-preference)", () => {
+      if (isOpen) {
+        gsap.fromTo(
+          menuRef.current,
+          { opacity: MODAL_MOTION.dropdown.opacityStart, scale: MODAL_MOTION.dropdown.scaleStart, y: MODAL_MOTION.dropdown.yStart },
+          { opacity: MODAL_MOTION.dropdown.opacityEnd, scale: MODAL_MOTION.dropdown.scaleEnd, y: MODAL_MOTION.dropdown.yEnd, duration: MODAL_MOTION.dropdown.duration, ease: MODAL_MOTION.dropdown.ease }
+        );
+      } else {
+        gsap.to(menuRef.current, {
+          opacity: MODAL_MOTION.dropdown.opacityStart,
+          scale: MODAL_MOTION.dropdown.scaleStart,
+          y: MODAL_MOTION.dropdown.yStart,
+          duration: MODAL_MOTION.dropdown.duration * 0.8,
+          ease: 'power2.in',
+        });
+      }
+    });
+
+    ctx.add("(prefers-reduced-motion: reduce)", () => {
+      if (isOpen) {
+        gsap.set(menuRef.current, { opacity: MODAL_MOTION.dropdown.opacityEnd, scale: MODAL_MOTION.dropdown.scaleEnd, y: MODAL_MOTION.dropdown.yEnd });
+      } else {
+        gsap.set(menuRef.current, { opacity: MODAL_MOTION.dropdown.opacityStart, scale: MODAL_MOTION.dropdown.scaleStart, y: MODAL_MOTION.dropdown.yStart });
+      }
+    });
+
     if (isOpen) {
-      gsap.fromTo(
-        menuRef.current,
-        { opacity: 0, scale: 0.95, y: -10 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.25, ease: 'power2.out' }
-      );
       // Focus the close button when opened for keyboard support
       closeButtonRef.current?.focus();
-    } else {
-      gsap.to(menuRef.current, {
-        opacity: 0,
-        scale: 0.95,
-        y: -10,
-        duration: 0.2,
-        ease: 'power2.in',
-      });
     }
+
+    return () => ctx.revert();
   }, [isOpen]);
 
   useEffect(() => {
@@ -69,6 +86,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
     >
       <div className={styles.content}>
         <div className={`${styles.header} flex items-center justify-between`}>
+          <div aria-live="polite" className="sr-only">Showing {activeSeriesCount} filter{activeSeriesCount !== 1 ? 's' : ''}</div>
           <div className="flex items-center gap-3">
             <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900 dark:text-white">
               Graph Filters
@@ -77,7 +95,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
               <button
                 type="button"
                 onClick={() => setEnabledSeries({})}
-                className="text-xs text-slate-400 transition-colors hover:text-amber-600"
+                className="text-xs text-slate-400 transition-colors hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 rounded"
               >
                 Reset filters
               </button>
@@ -87,7 +105,8 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200"
+            aria-label="Close graph filters"
+            className="rounded-full p-1 text-slate-400 hover:bg-black/[0.05] hover:text-slate-600 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
           >
             <X className="h-4 w-4" />
           </button>
@@ -139,8 +158,9 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
                                 if (activeSeriesCount === 1 && enabledSeries[s.id]) return;
                                 setEnabledSeries((curr) => ({ ...curr, [s.id]: !curr[s.id] }));
                               }}
-                              disabled={disabled}
-                              className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all ${
+                              aria-disabled={disabled ? "true" : undefined}
+                              aria-pressed={active}
+                              className={`flex items-center justify-between rounded-xl border px-3 py-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
                                 active
                                   ? 'border-amber-500/28 bg-amber-500/12 text-amber-700 dark:text-amber-300'
                                   : 'border-black/[0.05] bg-transparent text-slate-500 hover:border-black/[0.1] dark:border-white/[0.05] dark:text-slate-400'

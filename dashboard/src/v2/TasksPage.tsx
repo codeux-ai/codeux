@@ -1,5 +1,3 @@
-// We need to define getLane since it's only in task-board-state.ts
-const getLane = (status: string) => (status === "coding_completed" || status === "QA_REVIEW_FAILED") ? "in_progress" : status;
 
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
@@ -35,7 +33,7 @@ import { useProjectData } from "./context/project-data.js";
 import { useSprints } from "../hooks/useSprints.js";
 import { useProjectTasks } from "./hooks/use-project-tasks.js";
 import { createTask, deleteTask, updateTask } from "./lib/project-api.js";
-import { deriveTaskBoardState } from "./lib/task-board-state.js";
+import { deriveTaskBoardState, getTaskLane } from "./lib/task-board-state.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
 import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
 import { SkeletonCard, SkeletonLoader } from "./components/layout/SkeletonLoader.js";
@@ -164,9 +162,9 @@ const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = m
     <div className="flex items-center justify-between mb-6">
       <div className="flex items-center gap-2.5">
         <Icon className={`w-5 h-5 ${cfg.color}`} strokeWidth={2} />
-        <span className={`text-sm font-bold tracking-tight ${cfg.color}`}>{cfg.label}</span>
+        <span className={`font-display text-lg font-bold tracking-tight ${cfg.color}`}>{cfg.label}</span>
       </div>
-      <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] ${cfg.color}`}>
+      <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] ${cfg.color}`}>
         {count}
       </span>
     </div>
@@ -637,7 +635,7 @@ export const TasksPage: FunctionComponent = () => {
     if (!draggedTask) return;
 
     // We don't have sortOrder on Task currently, but we might just update the status for now
-    // Actually, in the task board state it usually filters by getLane(task.status).
+    // Actually, in the task board state it usually filters by getTaskLane(task.status).
     // Let's just update the status if it changed lane, and for reordering, update sorting if we had it.
     // For now we will just use updateTask(task.id, { status })
     // If the dropped column is 'completed', and original isn't... etc.
@@ -655,7 +653,7 @@ export const TasksPage: FunctionComponent = () => {
     // Even if it's the same lane, we should allow it.
     // However, updating the order within the same column via updateTask might not be fully supported by the API yet if it lacks an 'order' field.
     // Assuming we want to optimistically update or at least support cross-status drops in the same lane.
-    if (getLane(draggedTask.status) !== status) {
+    if (getTaskLane(draggedTask.status) !== status) {
       const targetStatus = laneMap[status] || draggedTask.status;
 
       // Optimistic update
@@ -707,10 +705,14 @@ export const TasksPage: FunctionComponent = () => {
 
   const handleAddProject = useCallback(async (project: AddProjectModalSubmission) => {
     if (project.type === 'new_project') {
+      const sourceRef = project.initMode === 'new-local'
+        ? (project.path || project.name)
+        : (project.repoSlug || project.name);
+
       await createProject({
         name: project.name,
         sourceType: project.initMode === 'new-local' ? 'local' : 'git',
-        sourceRef: project.path || project.name,
+        sourceRef,
         initMode: project.initMode,
         remoteProvider: project.remoteProvider,
         isPrivate: project.isPrivate,
@@ -892,7 +894,7 @@ export const TasksPage: FunctionComponent = () => {
             <div key={status} className="flex flex-col">
               <ColumnHeader status={status} count={count} />
               <div
-              className="flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border border-black/[0.03] dark:border-white/[0.03] relative"
+              className={`flex-1 grid grid-cols-1 grid-rows-1 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border relative transition-colors duration-300 ${dropTargetContext?.status === status ? "border-signal-500/50 bg-signal-500/5" : "border-black/[0.03] dark:border-white/[0.03]"}`}
               onDragOver={(e) => handleDragOver(status, columnTasks.length, e)}
               onDrop={(e) => handleDrop(status, columnTasks.length, e)}
             >
@@ -908,7 +910,7 @@ export const TasksPage: FunctionComponent = () => {
                   )}
                 >
                 {!loading && columnTasks.length === 0 ? (
-                  <div className="col-start-1 row-start-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed border-black/[0.04] dark:border-white/[0.04] rounded-[1rem]">
+                  <div className={`col-start-1 row-start-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed rounded-[1.5rem] bg-black/[0.015] dark:bg-white/[0.015] transition-colors ${dropTargetContext?.status === status ? "border-signal-500/30" : "border-black/[0.05] dark:border-white/[0.05]"}`}>
                     No {status.replace("_", " ")} tasks
                     <br />
                     {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.

@@ -102,10 +102,17 @@ export const UsageChartMinimap: FunctionComponent<{
       <div
         ref={containerRef}
         data-testid="usage-chart-minimap"
-        className="relative h-[4.5rem] w-full cursor-crosshair touch-none select-none overflow-hidden rounded-2xl border border-black/[0.05] bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.03]"
+        tabIndex={0}
+        className="relative h-[4.5rem] w-full cursor-crosshair touch-none select-none overflow-hidden rounded-2xl border border-black/[0.05] bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onZoomChange(null);
+          }
+        }}
       >
         <svg
           aria-hidden="true"

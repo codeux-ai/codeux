@@ -90,6 +90,25 @@ describe("AttentionLedger", () => {
         expect(screen.queryByRole("button", { name: /Attention Queue/i })).toBeNull();
     });
 
+
+    it("shows loading states for claim, resolve, and dismiss actions", () => {
+        const customContext = {
+            ...baseContext,
+            pendingActionIds: new Set(["attention-claim:item-1", "attention-resolve:item-1", "attention-dismiss:item-1"])
+        };
+        vi.mocked(useExecutionTimeline).mockReturnValue(customContext as never);
+
+        render(<AttentionLedger />);
+
+        expect(screen.getByRole("button", { name: /Claiming/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Resolving/ })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Dismissing/ })).toBeInTheDocument();
+
+        expect(screen.getByRole("button", { name: /Claiming/ })).toHaveAttribute("aria-disabled", "true");
+        expect(screen.getByRole("button", { name: /Resolving/ })).toHaveAttribute("aria-disabled", "true");
+        expect(screen.getByRole("button", { name: /Dismissing/ })).toHaveAttribute("aria-disabled", "true");
+    });
+
     it("renders a collapsible header when requested", () => {
         render(<AttentionLedger collapsible />);
 

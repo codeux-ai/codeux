@@ -5,6 +5,7 @@ import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import gsap from "gsap";
+import { GSAP_INTERACTION_TOKENS } from "../../lib/motion/constants.js";
 import { useComputed } from "@preact/signals";
 import { MemoryCard } from "./MemoryCard.js";
 import { searchQuerySignal, activeMemoryIdSignal, memoryMutationsSignal } from "./memoryState.js";
@@ -30,13 +31,28 @@ export const MemoryList: FunctionComponent<{
             .filter(({ node }) => node.alive && (node.content.toLowerCase().includes(lower) || node.category.toLowerCase().includes(lower)));
     });
 
-        const reducedMotion = useReducedMotion();
+    const reducedMotion = useReducedMotion();
     const listRef = useRef<HTMLDivElement>(null);
     const [renderedNodes, setRenderedNodes] = useState(filteredNodes.value);
     const prevRenderedIds = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         if (reducedMotion) {
+            const currentIds = new Set(filteredNodes.value.map((n: any) => n.node.id));
+            const renderedIds = new Set(renderedNodes.map((n: any) => n.node.id));
+            const removedIds = Array.from(renderedIds).filter(id => !currentIds.has(id));
+            if (removedIds.length > 0 && listRef.current) {
+                const elementsToRemove = removedIds.map(id => listRef.current?.querySelector(`[data-memory-id="${id}"]`)).filter(Boolean);
+                if (elementsToRemove.length > 0) {
+                    gsap.set(elementsToRemove, {
+                        opacity: 0,
+                        scale: 0.95,
+                        height: 0,
+                        marginBottom: 0,
+                        padding: 0
+                    });
+                }
+            }
             setRenderedNodes(filteredNodes.value);
             return;
         }
@@ -54,8 +70,8 @@ export const MemoryList: FunctionComponent<{
                     height: 0,
                     marginBottom: 0,
                     padding: 0,
-                    duration: 0.2,
-                    ease: "power2.in",
+                    duration: GSAP_INTERACTION_TOKENS.expansionCollapse.duration,
+                    ease: GSAP_INTERACTION_TOKENS.expansionCollapse.ease,
                     onComplete: () => {
                         setRenderedNodes(filteredNodes.value);
                     }
@@ -67,8 +83,17 @@ export const MemoryList: FunctionComponent<{
     }, [filteredNodes.value, reducedMotion, renderedNodes]);
 
     useLayoutEffect(() => {
-        if (!listRef.current || reducedMotion) {
-            prevRenderedIds.current = new Set(renderedNodes.map((n: any) => n.node.id as string));
+        if (!listRef.current) return;
+        if (reducedMotion) {
+            const currentRenderedIds = new Set(renderedNodes.map((n: any) => n.node.id));
+            const addedIds = Array.from(currentRenderedIds).filter(id => !prevRenderedIds.current.has(id));
+            if (addedIds.length > 0) {
+                const addedElements = addedIds.map(id => listRef.current?.querySelector(`[data-memory-id="${id}"]`)).filter(Boolean);
+                if (addedElements.length > 0) {
+                    gsap.set(addedElements, { opacity: 1, y: 0, clearProps: "all" });
+                }
+            }
+            prevRenderedIds.current = currentRenderedIds as unknown as Set<string>;
             return;
         }
 
@@ -84,9 +109,9 @@ export const MemoryList: FunctionComponent<{
                 }, {
                     opacity: 1,
                     y: 0,
-                    duration: 0.3,
+                    duration: GSAP_INTERACTION_TOKENS.enterExit.duration,
                     stagger: 0.05,
-                    ease: "power2.out",
+                    ease: GSAP_INTERACTION_TOKENS.enterExit.ease,
                     clearProps: "all"
                 });
             }
@@ -96,17 +121,27 @@ export const MemoryList: FunctionComponent<{
     }, [renderedNodes, reducedMotion]);
 
     if (renderedNodes.length === 0) {
-
+        const isEmpty = nodes.length === 0;
+        const message = isEmpty ? "No memories exist" : "No memories match your search or filters";
         return (
             <div className="flex flex-col items-center justify-center p-8 text-center text-slate-400">
-                <p className="text-sm font-medium">No memories found</p>
+                <div className="sr-only" aria-live="polite" aria-atomic="true">{message}</div>
+                <p className="text-sm font-medium">{message}</p>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col gap-3 h-full overflow-y-auto dashboard-scrollbar p-2" ref={listRef}>
-            <div className="sticky top-0 z-10 w-full mb-2">
+        <div id="memory-panel" className="flex flex-col gap-3 h-full overflow-y-auto dashboard-scrollbar p-2" role="listbox">
+            <div className="sr-only" aria-live="polite" aria-atomic="true">
+                {renderedNodes.length} memories found
+            </div>
+            <div className="sticky top-0 z-10 w-full flex flex-col gap-2">
+                {searchQuerySignal.value && (
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400 px-2 py-1 bg-black/[0.02] dark:bg-white/[0.02] rounded-lg inline-block self-start border border-black/[0.04] dark:border-white/[0.04]">
+                        Showing {renderedNodes.length} result{renderedNodes.length !== 1 ? 's' : ''}
+                    </div>
+                )}
                 <ActionFeedbackRegion
                     status={memoryMutationsSignal.value.feedback?.status || "idle"}
                     message={memoryMutationsSignal.value.feedback?.message}
@@ -115,18 +150,20 @@ export const MemoryList: FunctionComponent<{
                     retryLabel={memoryMutationsSignal.value.feedback?.retryLabel}
                 />
             </div>
-            {renderedNodes.map(({ node, index }: any) => (
-                <div key={node.id} data-memory-id={node.id}>
-                    <MemoryCard
-                    key={node.id}
-                    id={node.id}
-                    content={node.content}
-                    category={node.category}
-                    strength={node.strength}
-                                        onClick={() => onSelectNode(index)}
-                    />
-                </div>
-            ))}
+            <div className="flex flex-col gap-3" ref={listRef}>
+                {renderedNodes.map(({ node, index }: any) => (
+                    <div key={node.id} data-memory-id={node.id} className="will-change-transform transform-gpu">
+                        <MemoryCard
+                            key={node.id}
+                            id={node.id}
+                            content={node.content}
+                            category={node.category}
+                            strength={node.strength}
+                            onClick={() => onSelectNode(index)}
+                        />
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };

@@ -1,4 +1,4 @@
-import { h, ComponentChildren, VNode, cloneElement, isValidElement } from "preact";
+import { h, ComponentChildren, VNode, cloneElement, isValidElement, toChildArray } from "preact";
 import { useEffect, useState, useId } from "preact/hooks";
 import { FormError } from "./FormError";
 
@@ -55,26 +55,37 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
   }
 
   // Clone children to append aria attributes if valid
-  const existingOnBlur = (children as any)?.props?.onBlur;
-  const child = isValidElement(children) ? cloneElement(children as VNode<any>, {
-    id: inputId,
-    "aria-invalid": showError ? "true" : undefined,
-    ...(ariaDescribedBy ? { "aria-describedby": ariaDescribedBy } : {}),
-    "aria-errormessage": errorId,
-    ...(required ? { "aria-required": true } : {}),
-    onBlur: (e: any) => {
-      setTouched(true);
-      existingOnBlur?.(e);
-    },
-    valid: !error ? valid : undefined,
-  }) : children;
+  let idAssigned = false;
+  const child = toChildArray(children).map(child => {
+    if (!isValidElement(child)) return child;
+    const existingOnBlur = (child as any)?.props?.onBlur;
+
+    const childProps: any = {
+      "aria-invalid": showError ? "true" : undefined,
+      "aria-describedby": ariaDescribedBy || undefined,
+      "aria-errormessage": showError ? errorId : undefined,
+      "aria-required": required ? "true" : undefined,
+      onBlur: (e: any) => {
+        setTouched(true);
+        existingOnBlur?.(e);
+      },
+      valid: !error ? valid : undefined,
+    };
+
+    if (!idAssigned) {
+      childProps.id = inputId;
+      idAssigned = true;
+    }
+
+    return cloneElement(child as VNode<any>, childProps);
+  });
 
   return (
     <div class="flex flex-col mb-4">
       <label htmlFor={inputId} class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex gap-1">
         {label}
         {required && <span class="text-status-red" aria-hidden="true">*</span>}
-        {required && <span class="sr-only">(required)</span>}
+        {required && <span class="sr-only">(Required)</span>}
       </label>
       <div
         class={`

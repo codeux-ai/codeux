@@ -18,10 +18,10 @@ const pageContainerPadding = {
 
 type PageContainerPadding = keyof typeof pageContainerPadding;
 
-type PageContainerProps = Omit<JSX.HTMLAttributes<HTMLDivElement>, "ref"> & {
+type PageContainerProps = Omit<JSX.HTMLAttributes<HTMLElement>, "ref"> & {
   children: ComponentChildren;
   className?: string;
-  containerRef?: Ref<HTMLDivElement>;
+  containerRef?: Ref<HTMLElement>;
   padding?: PageContainerPadding;
 };
 
@@ -40,9 +40,9 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
   ].filter(Boolean).join(" ");
 
   return (
-    <div {...props} ref={containerRef} className={classes}>
+    <main id="main-content" tabIndex={-1} {...props} ref={containerRef} className={classes}>
       {children}
-    </div>
+    </main>
   );
 };
 

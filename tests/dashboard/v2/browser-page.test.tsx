@@ -186,6 +186,75 @@ afterEach(() => {
 });
 
 describe("BrowserPage", () => {
+
+  it("shows loading state overlay when navigation is disabled", async () => {
+    vi.mocked(usePreviewSessions).mockImplementation(() => ({
+      sessions: [
+        {
+          id: "sess-starting",
+          projectId: "p1",
+          sprintId: "s1",
+          sprintName: "Sprint Starting",
+          status: "starting",
+          healthStatus: "unknown",
+          containerAppPort: 3000,
+          hostPort: null,
+        } as any,
+      ],
+      selectedSession: {
+        id: "sess-starting",
+        projectId: "p1",
+        sprintId: "s1",
+        sprintName: "Sprint Starting",
+        status: "starting",
+        healthStatus: "unknown",
+        containerAppPort: 3000,
+        hostPort: null,
+      } as any,
+      loading: false,
+      error: null,
+      refresh: mockRefreshSessions,
+    }));
+
+    render(<BrowserPage />);
+
+    expect(screen.getByText("Container starting...")).toBeInTheDocument();
+  });
+
+  it("shows loading state overlay when session is stopped", async () => {
+    vi.mocked(usePreviewSessions).mockImplementation(() => ({
+      sessions: [
+        {
+          id: "sess-stopped",
+          projectId: "p1",
+          sprintId: "s1",
+          sprintName: "Sprint Stopped",
+          status: "stopped",
+          healthStatus: "unknown",
+          containerAppPort: 3000,
+          hostPort: null,
+        } as any,
+      ],
+      selectedSession: {
+        id: "sess-stopped",
+        projectId: "p1",
+        sprintId: "s1",
+        sprintName: "Sprint Stopped",
+        status: "stopped",
+        healthStatus: "unknown",
+        containerAppPort: 3000,
+        hostPort: null,
+      } as any,
+      loading: false,
+      error: null,
+      refresh: mockRefreshSessions,
+    }));
+
+    render(<BrowserPage />);
+
+    expect(screen.getByText("Waiting for connection...")).toBeInTheDocument();
+  });
+
   afterEach(() => {
     mockStartPreviewSession.mockClear();
     mockRemovePreviewSession.mockClear();
@@ -293,7 +362,7 @@ describe("BrowserPage", () => {
 
     render(<BrowserPage />);
 
-    const iframe = screen.getByTitle("Sprint preview Sprint 2");
+    const iframe = screen.getByTitle("Preview: Project 1 - Sprint 2");
     const { protocol, port } = new URL(window.location.origin);
     expect(iframe).toBeInTheDocument();
     expect(iframe).toHaveAttribute("src", `${protocol}//preview-sess-2.localhost${port ? `:${port}` : ""}/`);

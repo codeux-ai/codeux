@@ -690,3 +690,13 @@ export function classifyProviderError(
 
   return buildUnknownClassification(provider, combined);
 }
+
+export function isTransientCodexTransportError(result: CommandResult): boolean {
+  const text = `${result.stdout}\n${result.stderr}`.toLowerCase();
+  return text.includes("stream disconnected before completion") || text.includes("error sending request for url") || text.includes("channel closed");
+}
+
+export function isClaudeConversationNotFoundError(result: CommandResult): boolean {
+  const text = `${result.stdout}\n${result.stderr}`.toLowerCase();
+  return text.includes("no conversation found");
+}

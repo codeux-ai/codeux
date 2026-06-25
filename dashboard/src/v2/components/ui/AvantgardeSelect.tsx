@@ -5,6 +5,7 @@ import { Check, ChevronDown } from "lucide-preact";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export interface SelectOption {
   value: string;
@@ -13,6 +14,7 @@ export interface SelectOption {
 }
 
 interface AvantgardeSelectProps {
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
@@ -22,8 +24,14 @@ interface AvantgardeSelectProps {
   variant?: "default" | "compact" | "card";
   className?: string;
   searchable?: boolean;
+  invalid?: boolean;
   "aria-label"?: string;
   "aria-labelledby"?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean | "false" | "true" | "grammar" | "spelling";
+  "aria-errormessage"?: string;
+  "aria-required"?: boolean | "false" | "true";
+  onBlur?: (e: FocusEvent) => void;
 }
 
 interface DropdownPosition {
@@ -65,6 +73,7 @@ function findBoundaryAncestor(el: HTMLElement): HTMLElement | null {
 }
 
 export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
+  id,
   value,
   onChange,
   options,
@@ -73,8 +82,14 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   variant = "default",
   className = "",
   searchable = false,
+  invalid = false,
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledby,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
+  "aria-errormessage": ariaErrorMessage,
+  "aria-required": ariaRequired,
+  onBlur,
 }) => {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -85,6 +100,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<DropdownPosition | null>(null);
   const reducedMotion = useReducedMotion();
+  const tokens = useInteractionTokens();
   const durations = useGsapDurations();
 
   const updatePosition = useCallback(() => {
@@ -308,22 +324,25 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
   const triggerClass =
     variant === "compact"
-      ? `flex w-full items-center justify-between gap-2 bg-transparent py-1 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 transition-colors ${
+      ? `flex w-full items-center justify-between gap-2 bg-transparent py-1 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 ${
           disabled
             ? "cursor-not-allowed text-slate-400"
             : "cursor-pointer text-signal-600 hover:text-signal-500 dark:text-signal-300 dark:hover:text-signal-200"
         }`
       : variant === "card"
-        ? `flex w-full items-center justify-between gap-2 rounded-[1.2rem] border bg-white/66 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus:border-signal-500/30 focus-visible:ring-2 focus-visible:ring-signal-500/20 transition-all ${
+        ? `flex w-full items-center justify-between gap-2 rounded-[1.2rem] border bg-white/66 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus:border-signal-500/30 focus-visible:ring-2 focus-visible:ring-signal-500/20 ${
             disabled
               ? "cursor-not-allowed border-black/[0.06] text-slate-400 opacity-60"
               : `cursor-pointer text-signal-600 dark:bg-white/[0.02] dark:text-signal-300 ${open ? 'border-signal-500/30 dark:border-signal-500/30' : 'border-black/[0.06] hover:border-black/[0.1] dark:border-white/[0.06] dark:hover:border-white/[0.1]'}`
           }`
-        : `flex w-full items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium outline-none focus:border-signal-500/30 focus-visible:ring-2 focus-visible:ring-signal-500/20 transition-all ${
+        : `flex w-full items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium outline-none focus:border-signal-500/30 focus-visible:ring-2 focus-visible:ring-signal-500/20 ${
             disabled
               ? "cursor-not-allowed border-black/[0.04] bg-black/[0.02] text-slate-400 opacity-60 dark:border-white/[0.04] dark:bg-white/[0.02]"
               : `cursor-pointer bg-white/52 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl dark:bg-white/[0.045] dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_24px_rgba(0,0,0,0.18)] ${open ? 'border-signal-500/30 dark:border-signal-500/30' : 'border-black/[0.06] hover:border-black/[0.12] dark:border-white/[0.06] dark:hover:border-white/[0.12]'}`
           }`;
+
+  const finalTriggerClass = `${triggerClass} ${invalid ? '!border-ember-500 !text-ember-600 dark:!border-ember-500 dark:!text-ember-400' : ''} ${invalid && !reducedMotion ? 'animate-form-shake' : ''}`;
+
   const panel = isRendered && position
     ? createPortal(
         <div
@@ -409,7 +428,9 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   return (
     <div className={`relative ${className}`}>
       <button
+        id={id}
         ref={triggerRef}
+        style={{ transitionProperty: "all", transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
         type="button"
         onClick={() => !disabled && setOpen(!open)}
         onKeyDown={(e) => {
@@ -418,17 +439,23 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
             setOpen(true);
           }
         }}
-        className={triggerClass}
+        onBlur={onBlur}
+        className={finalTriggerClass}
         disabled={disabled}
+        aria-invalid={ariaInvalid ?? (invalid ? "true" : "false")}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledby}
+        aria-describedby={ariaDescribedBy}
+        aria-errormessage={ariaErrorMessage}
+        aria-required={ariaRequired}
       >
         {selected?.icon ? <span className="flex-shrink-0">{renderOptionIcon(selected.icon)}</span> : null}
         <span className="truncate">{selected?.label || placeholder}</span>
         <ChevronDown
-          className={`h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+          style={{ transitionProperty: "transform", transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
+          className={`h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform  ${open ? "rotate-180" : ""}`}
           strokeWidth={2}
         />
       </button>

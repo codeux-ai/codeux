@@ -8,6 +8,7 @@ import { usePreviewSessions } from "../../hooks/use-preview-sessions.js";
 import type { SprintPreviewSession } from "../../../types.js";
 import type { Task, Source, Sprint, AgentPreset } from "../../types.js";
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
+import { GSAP_INTERACTION_TOKENS, useGsapDurations } from "../../lib/motion/constants.js";
 
 interface GlobalSearchProps {
     projectId: string | null;
@@ -24,8 +25,9 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
     const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
 
+    const durations = useGsapDurations();
     const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null);
-    const { sessions } = usePreviewSessions({ projectId: isSearchOpen ? projectId : null, pollInterval: 0 });
+    const { sessions } = usePreviewSessions({ projectId: isSearchOpen ? projectId : null, pollInterval: isSearchOpen ? 5000 : 0 });
 
     useEffect(() => {
         if (isSearchOpen && selectedProject?.id) {
@@ -43,6 +45,10 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
     useEffect(() => {
         const handleCmdK = (e: KeyboardEvent) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                const target = e.target as HTMLElement;
+                if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+                    return;
+                }
                 e.preventDefault();
                 setIsSearchOpen(true);
             }
@@ -55,23 +61,31 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
         if (!searchBarContainerRef.current) return;
         gsap.to(searchBarContainerRef.current, {
             scaleX: 1.05,
-            duration: 0.35,
-            ease: "expo.out",
+            duration: durations.base,
+            ease: GSAP_INTERACTION_TOKENS.controlFeedback.ease,
             boxShadow: "0 0 0 2px rgba(0,224,160,0.3)",
             overwrite: "auto"
         });
     };
 
     const handleSearchLeave = () => {
-        if (!searchBarContainerRef.current) return;
+        if (!searchBarContainerRef.current || isSearchOpen) return;
         gsap.to(searchBarContainerRef.current, {
             scaleX: 1,
-            duration: 0.35,
-            ease: "expo.out",
+            duration: durations.base,
+            ease: GSAP_INTERACTION_TOKENS.controlFeedback.ease,
             boxShadow: "0 0 0 0px rgba(0,224,160,0)",
             overwrite: "auto"
         });
     };
+
+    useEffect(() => {
+        if (!isSearchOpen) {
+            handleSearchLeave();
+        } else {
+            handleSearchEnter();
+        }
+    }, [isSearchOpen]);
 
     const searchResults = useMemo(() => {
         if (!debouncedQuery.trim()) {
@@ -147,6 +161,8 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                     onFocus={handleSearchEnter}
                     onBlur={handleSearchLeave}
                     className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl text-sm text-left text-slate-400 focus:outline-none focus-visible:outline-none transition-all relative z-0"
+                    aria-expanded={isSearchOpen}
+                    aria-haspopup="dialog"
                 >
                     Search...
                 </button>
@@ -161,7 +177,9 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                 type="button"
                 onClick={() => setIsSearchOpen(true)}
                 aria-label="Open search"
-                className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 md:hidden shrink-0"
+                aria-expanded={isSearchOpen}
+                aria-haspopup="dialog"
+                className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 md:hidden shrink-0"
             >
                 <Search aria-hidden="true" className="w-4 h-4 text-slate-600 dark:text-slate-300" strokeWidth={2} />
             </button>
@@ -174,6 +192,7 @@ export const GlobalSearch: FunctionComponent<GlobalSearchProps> = ({ projectId, 
                 onSearchChange={setSearchQuery}
                 results={searchResults}
                 isLoading={searchQuery !== debouncedQuery}
+                hasProjectData={!!selectedProject}
             />
         </>
     );

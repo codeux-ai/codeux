@@ -6,6 +6,7 @@ import { useProjectData } from "../../context/project-data.js";
 import { fetchPreviewSessions } from "../../lib/browser-api.js";
 import { buildPreviewUrl } from "../../lib/preview-origin.js";
 import type { SprintPreviewSession } from "../../../types.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 type InteractionState = 'closed' | 'hover' | 'open';
 
@@ -98,7 +99,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
             if (e.key === 'Escape' && isMenuVisible) {
                 setInteractionState('closed');
                 const triggerBtn = containerRef.current?.querySelector('button');
-                setTimeout(() => triggerBtn?.focus(), 0);
+                triggerBtn?.focus();
             }
         };
         document.addEventListener('keydown', handleKeyDown);
@@ -123,10 +124,10 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
     };
 
     const statusColors: Record<SprintPreviewSession["status"], string> = {
-        starting: "bg-signal-500",
+        starting: "bg-ember-500",
         running: "bg-signal-500",
         stopped: "bg-slate-500",
-        error: "bg-ember-500",
+        error: "bg-status-red",
     };
 
     if (!enabled) {
@@ -150,7 +151,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                 aria-haspopup="menu"
                 aria-expanded={isMenuVisible}
                 aria-controls={isMenuVisible ? menuId : undefined}
-                aria-label="Toggle active browser sessions"
+                aria-label={`Browser Sessions: ${sessions.length} active`}
                 className={`relative w-11 h-11 flex items-center justify-center rounded-xl transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
                     isMenuVisible
                     ? "bg-signal-500/8 dark:bg-signal-400/10"
@@ -177,20 +178,21 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                             Open App
                         </Link>
                     </div>
-                    <div className="max-h-64 overflow-y-auto pb-1 flex flex-col">
+                    <div className="max-h-64 overflow-y-auto pb-1 flex flex-col" onKeyDown={handleMenuKeyDown as any}>
                         {loading ? (
-                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3">
+                            <div className="px-4 py-8 text-center flex flex-col items-center justify-center gap-3" aria-busy={loading}>
                                 <Loader2 className="w-5 h-5 text-signal-500 animate-spin" />
                                 <p className="text-xs text-slate-500 font-medium">Discovering active sessions...</p>
                             </div>
                         ) : sessions.length > 0 ? (
-                            sessions.map((session) => (
+                            sessions.map((session, index) => (
                                 <a
                                     key={session.id}
-                                    href={buildPreviewUrl(session.id, session.lastKnownPath)}
+                                    href={getSafeUrl(buildPreviewUrl(session.id, session.lastKnownPath))}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     role="menuitem"
+                                    tabIndex={index === 0 ? 0 : -1}
                                     className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex flex-col gap-1.5 px-3 py-3 text-left transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.04] group border-b border-black/[0.04] dark:border-white/[0.04] last:border-0"
                                 >
                                     <div className="flex items-center justify-between min-w-0 w-full gap-2">

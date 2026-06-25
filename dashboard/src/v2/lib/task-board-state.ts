@@ -3,7 +3,7 @@ import { type ListWindowOption, resolveListWindow } from "./list-window.js";
 
 const BOARD_LANES: TaskStatus[] = ["pending", "in_progress", "completed"];
 
-const getLane = (status: TaskStatus): TaskStatus =>
+export const getTaskLane = (status: TaskStatus): TaskStatus =>
   (status === "coding_completed" || status === "QA_REVIEW_FAILED") ? "in_progress" : status;
 
 export interface TaskBoardState {
@@ -29,7 +29,7 @@ export function deriveTaskBoardState(
   listWindow: ListWindowOption
 ): TaskBoardState {
   const filteredTasks = tasks.filter((task) => {
-    if (statusFilter !== "all" && getLane(task.status) !== statusFilter) return false;
+    if (statusFilter !== "all" && getTaskLane(task.status) !== statusFilter) return false;
     if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
     return true;
   });
@@ -39,15 +39,15 @@ export function deriveTaskBoardState(
 
   const stats = {
     total: filteredTasks.length,
-    inProgress: filteredTasks.filter((task) => getLane(task.status) === "in_progress").length,
-    completed: filteredTasks.filter((task) => getLane(task.status) === "completed").length,
+    inProgress: filteredTasks.filter((task) => getTaskLane(task.status) === "in_progress").length,
+    completed: filteredTasks.filter((task) => getTaskLane(task.status) === "completed").length,
     critical: filteredTasks.filter((task) => task.priority === "critical").length,
   };
 
   const allColumns = BOARD_LANES.map((lane) => ({
     status: lane,
-    count: filteredTasks.filter((task) => getLane(task.status) === lane).length,
-    tasks: visibleTasks.filter((task) => getLane(task.status) === lane),
+    count: filteredTasks.filter((task) => getTaskLane(task.status) === lane).length,
+    tasks: visibleTasks.filter((task) => getTaskLane(task.status) === lane),
   }));
 
   const columns = statusFilter !== "all"

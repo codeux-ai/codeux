@@ -22,3 +22,11 @@ When using shared overlay components (`Modal`, `Dialog`, `Drawer`, `Notification
 
 4.  **Notification Panels**:
     *   Flyout menus and notification surfaces should be collision-aware with width and max-height constraints (e.g., `max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-5rem)]`) so they remain fully visible from the top nav at tablet widths without clipping.
+
+## Responsive Data Display
+
+When using the `Table` component for responsive data displays:
+1. **Semantics:** Wrap the entire table in `<Table>`, and ensure `role="rowgroup"` is preserved on `<TableHeader>` and `<TableBody>` to prevent responsive `div` wrappers or `display: block` overrides from breaking native table semantics for assistive technology.
+2. **Captions:** Always provide an explicit, descriptive `caption` prop to the `Table` to describe its purpose.
+3. **Mobile Labels:** Supply a `mobileLabel` prop to `<TableCell>` components. This programmatic label acts as a substitute for standard column headers when the layout switches to a stacked card presentation on narrow screens.
+4. **Accessible Sort States:** Apply `ariaSort` explicitly only on the active sort column.

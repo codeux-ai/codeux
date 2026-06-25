@@ -6,6 +6,11 @@ Test files are organized under `tests/`:
 - `tests/backend/**`
 - `tests/dashboard/**`
 
+
+## Local Scratch Files
+
+Temporary experiments, scratch files, or test scripts should be created outside the repository root or matched by local `.gitignore` rules (e.g. \`tmp*\` or \`test-*\`). Do not commit or leave these in the root directory.
+
 ## Core Commands
 
 - Run tests
@@ -88,6 +93,10 @@ pnpm run typecheck:dashboard
 - Page-shell tests should focus on page-level state and mock expensive visual children instead of importing full chart/editor stacks
 - Live page regression coverage should explicitly assert sidebar composition (`Live Connections`, `Git / CI / PR`, `Attention Queue`, `Runtime Timeline`, `Execution Runtime`) and order, while asserting removed cards (`Latest Activity`, `Protocol`) stay absent and the Live Connections header counts include listener, worker, and manager/dashboard state.
 - Live sidebar Git CI coverage should include at least one active CI run and assert both the status text (for example `IN_PROGRESS`) and an active indicator query (`.animate-spin`) so CI-state rendering regressions are detected quickly.
+
+- Interaction behavior tests should verify pointer cursors, focus management, overlay dismissibility, and reduced-motion states for animated components.
+- Flow-specific tests (like destructive actions) must assert that confirmation dialogs appear and that side-effect actions (like "Reset downstream tasks") are triggered correctly based on user selection.
+
 
 ## Quality Expectations
 

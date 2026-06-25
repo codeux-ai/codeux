@@ -290,7 +290,7 @@ export const FileBrowserPage: FunctionComponent = () => {
 
   if (!selectedProject) {
     return (
-      <PageContainer padding="workbench">
+      <PageContainer aria-label="File Browser" padding="workbench">
         <div class="rounded-[1.75rem] border border-black/[0.06] bg-white/72 p-8 text-sm text-slate-600 shadow-[0_16px_44px_rgba(15,23,42,0.06)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-void-900/45 dark:text-slate-300">
           Select a project to open the sprint file browser. The workspace launches one containerized snapshot of the selected sprint branch.
         </div>
@@ -302,16 +302,21 @@ export const FileBrowserPage: FunctionComponent = () => {
   const changeCount = changes?.files.length ?? 0;
 
   return (
-    <PageContainer padding="workbench" className="min-h-full" data-testid="file-browser-page-root">
+    <PageContainer aria-label="File Browser" padding="workbench" className="min-h-full" data-testid="file-browser-page-root">
       <div class="mb-6 flex flex-wrap items-end justify-between gap-4" data-testid="file-browser-page-header">
         <div>
           <div class="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
             <FolderTree class="h-3.5 w-3.5" strokeWidth={2} />
             Sprint File Browser
           </div>
-          <h1 class="mt-3 font-display text-4xl font-black leading-[0.94] tracking-tight text-slate-900 dark:text-white md:text-5xl">
-            Browse and Diff the Sprint Branch.
-          </h1>
+          <div class="relative overflow-hidden mt-3">
+            <h2 aria-hidden class="absolute -top-10 -left-3 text-[7rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.03] pointer-events-none select-none font-display leading-none">
+              FILES
+            </h2>
+            <h1 class="font-display text-5xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.92] relative z-10 md:text-7xl">
+              Browse and Diff the Sprint Branch.
+            </h1>
+          </div>
           <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300 md:text-[15px]">
             A single containerized snapshot of the active sprint rebuilds automatically as tasks merge. Inspect every file
             and review what changed versus the default branch — all without leaving the dashboard.

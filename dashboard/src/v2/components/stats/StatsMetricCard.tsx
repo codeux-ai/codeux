@@ -40,6 +40,7 @@ export const StatsMetricCard: FunctionComponent<StatsMetricCardProps> = ({
       accent={accent}
     >
       <Sparkline points={sparkline} color={accentHex} />
+      <div className="sr-only">{label} metric sparkline showing activity across the selected window.</div>
       <div className="mt-4 flex flex-col gap-1 border-t border-black/[0.06] pt-4 dark:border-white/[0.06]">
         <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
           {detail}

@@ -5,6 +5,7 @@ import {
   parsePreferredWorkerAssignment,
   parseResolveAttentionItemPayload,
   parseCreateDashboardConversationMessageInput,
+  parseProjectStatsQuery,
 } from "../../../src/server/request-parsers.js";
 
 describe("Request Parsers", () => {
@@ -129,6 +130,35 @@ describe("Request Parsers", () => {
         connectionId: null,
         metadata: { some: "data" }
       });
+    });
+  });
+  describe("parseProjectStatsQuery", () => {
+    it("returns 7d as default when window is absent or invalid", () => {
+      expect(parseProjectStatsQuery({}).window).toBe("7d");
+      expect(parseProjectStatsQuery({ window: "unknown" }).window).toBe("7d");
+    });
+
+    it("validates and formats custom ranges", () => {
+      const result = parseProjectStatsQuery({ window: "custom", from: "2024-01-01", to: "2024-01-31" });
+      expect(result.window).toBe("custom");
+      expect(result.from).toBe("2024-01-01T00:00:00.000Z");
+      expect(result.to).toBe("2024-01-31T23:59:59.999Z");
+    });
+
+    it("caps unreasonable future and past ranges", () => {
+      const result = parseProjectStatsQuery({ window: "custom", from: "1990-01-01", to: "2100-01-01" });
+      expect(new Date(result.from!).getTime()).toBe(new Date("2000-01-01T00:00:00.000Z").getTime());
+      expect(new Date(result.to!).getTime()).toBeLessThanOrEqual(Date.now() + 31 * 24 * 60 * 60 * 1000);
+    });
+
+    it("rejects invalid or missing bounds for custom", () => {
+      expect(() => parseProjectStatsQuery({ window: "custom" })).toThrow();
+      expect(() => parseProjectStatsQuery({ window: "custom", from: "  ", to: "" })).toThrow();
+      expect(() => parseProjectStatsQuery({ window: "custom", from: "invalid", to: "2024-01-01" })).toThrow();
+    });
+
+    it("rejects reversed bounds", () => {
+      expect(() => parseProjectStatsQuery({ window: "custom", from: "2024-02-01", to: "2024-01-01" })).toThrow();
     });
   });
 });

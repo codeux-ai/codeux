@@ -71,6 +71,8 @@ describe("dashboard-realtime-client", () => {
       },
       setTimeout,
       clearTimeout,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
     });
   });
 
@@ -209,5 +211,209 @@ describe("dashboard-realtime-client", () => {
 
     // The websocket should now be closed
     expect(firstSocket.readyState).toBe(MockWebSocket.CLOSED);
+  });
+
+  it("clears timers when the last subscription is removed", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+    const unsubscribe1 = subscribeToDashboardRealtime(["overview"], () => {});
+    const unsubscribe2 = subscribeToDashboardRealtime(["project:1"], () => {});
+
+    const socket = MockWebSocket.instances[0]!;
+    socket.emit("open");
+
+    expect(MockWebSocket.instances.length).toBe(1);
+
+    unsubscribe1();
+
+    // Removing one subscription shouldn't close the socket
+    vi.advanceTimersByTime(250);
+    expect(socket.readyState).toBe(MockWebSocket.OPEN);
+
+    // clear the spy so we can track the final disconnect
+    clearTimeoutSpy.mockClear();
+
+    // Remove the last subscription
+    unsubscribe2();
+
+    // The subscription sync should have been scheduled, we can clear it now to ensure
+    // we test the timer clear in disconnect. Since we advanced 250ms above, any previous
+    // sync timer has already fired. Unsubscribing schedules another one.
+
+    // We advance exactly enough for disconnect check to run, which calls disconnect()
+    vi.advanceTimersByTime(250);
+
+    expect(socket.readyState).toBe(MockWebSocket.CLOSED);
+
+    // Ensure all timers are properly cleared
+    expect(vi.getTimerCount()).toBe(0);
+
+    clearTimeoutSpy.mockRestore();
+  });
+
+  it("ignores messages from stale sockets", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const listener = vi.fn();
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], listener);
+
+    const firstSocket = MockWebSocket.instances[0]!;
+    firstSocket.emit("open");
+
+    // Close unexpectedly to force a reconnect
+    firstSocket.emit("close");
+    vi.advanceTimersByTime(250);
+
+    const secondSocket = MockWebSocket.instances[1]!;
+    secondSocket.emit("open");
+
+    // Now emit from the first (stale) socket
+    firstSocket.emit("message", {
+      type: "event",
+      event: { scope: "overview", type: "updated", sequence: 2 },
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+
+    unsubscribe();
+  });
+
+  it("handles malformed JSON gracefully", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const listener = vi.fn();
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], listener);
+
+    const firstSocket = MockWebSocket.instances[0]!;
+    firstSocket.emit("open");
+
+    // To test malformed JSON gracefully, we need to bypass `JSON.stringify` logic
+    // in our `emit("message", ...)` utility, so we'll just invoke the raw listener.
+    const messageListeners = (firstSocket as any).listeners.get("message") || [];
+
+    expect(() => {
+      for (const msgListener of messageListeners) {
+        msgListener({ data: "{ malformed_json..." });
+      }
+    }).not.toThrow();
+
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it("reconnects when the window online event fires", async () => {
+    let onlineListener: () => void = () => {};
+    vi.stubGlobal("window", {
+      location: { protocol: "http:", host: "localhost:4444" },
+      setTimeout, clearTimeout,
+      addEventListener: (type: string, listener: any) => { if (type === "online") onlineListener = listener; },
+      removeEventListener: vi.fn(),
+    });
+
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const transportSpy = vi.fn();
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], () => {}, transportSpy);
+
+    const firstSocket = MockWebSocket.instances[0]!;
+    firstSocket.emit("open");
+    expect(transportSpy).toHaveBeenCalledWith("connected");
+
+    // Close to go into reconnecting state
+    firstSocket.emit("close");
+    expect(transportSpy).toHaveBeenCalledWith("reconnecting");
+
+    // Simulate window "online" event
+    onlineListener();
+
+    // The reconnection should be triggered immediately, creating a new socket
+    expect(MockWebSocket.instances.length).toBe(2);
+
+    unsubscribe();
+  });
+
+  it("updates lastSequence when a subscribed message arrives", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], () => {});
+
+    const firstSocket = MockWebSocket.instances[0]!;
+    firstSocket.emit("open");
+    vi.advanceTimersByTime(25);
+
+    // Check initial subscription sync message
+    let sent = JSON.parse(firstSocket.sentMessages[0] || "{}");
+    expect(sent.lastSequence).toBe(null);
+
+    // Simulate backend acknowledging subscription and providing a watermark
+    firstSocket.emit("message", {
+      type: "subscribed",
+      scopes: ["overview"],
+      lastSequence: 100,
+    });
+
+    // Close the socket to force a reconnect
+    firstSocket.emit("close");
+    vi.advanceTimersByTime(250);
+
+    const secondSocket = MockWebSocket.instances[1]!;
+    secondSocket.emit("open");
+    vi.advanceTimersByTime(25);
+
+    // Ensure the new connection uses the updated sequence 100
+    sent = JSON.parse(secondSocket.sentMessages[0] || "{}");
+    expect(sent.lastSequence).toBe(100);
+
+    unsubscribe();
+  });
+
+  it("guards subscription dispatch so a removed listener does not receive later messages", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const listenerA = vi.fn();
+    const listenerB = vi.fn();
+
+    let unsubscribeA: () => void;
+
+    unsubscribeA = subscribeToDashboardRealtime(["overview"], (msg) => {
+      listenerA(msg);
+      // Remove listener B during dispatch
+      unsubscribeB();
+    });
+
+    const unsubscribeB = subscribeToDashboardRealtime(["overview"], listenerB);
+
+    const firstSocket = MockWebSocket.instances[0]!;
+    firstSocket.emit("open");
+
+    firstSocket.emit("message", {
+      type: "event",
+      event: { scope: "overview", type: "updated", sequence: 1 },
+    });
+
+    expect(listenerA).toHaveBeenCalledTimes(1);
+    expect(listenerB).not.toHaveBeenCalled();
+
+    unsubscribeA();
+  });
+
+  it("can reset the shared client for tests and cleans up its listeners", async () => {
+    let addListenerSpy = vi.fn();
+    let removeListenerSpy = vi.fn();
+    vi.stubGlobal("window", {
+      location: { protocol: "http:", host: "localhost:4444" },
+      setTimeout, clearTimeout,
+      addEventListener: addListenerSpy,
+      removeEventListener: removeListenerSpy,
+    });
+
+    const { subscribeToDashboardRealtime, resetSharedDashboardRealtimeClientForTest } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+
+    // Instantiates shared client
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], () => {});
+
+    expect(addListenerSpy).toHaveBeenCalledWith("online", expect.any(Function));
+
+    resetSharedDashboardRealtimeClientForTest();
+
+    expect(removeListenerSpy).toHaveBeenCalledWith("online", expect.any(Function));
+
+    unsubscribe();
   });
 });

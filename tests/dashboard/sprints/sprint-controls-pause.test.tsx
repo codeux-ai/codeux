@@ -19,7 +19,7 @@ describe("SprintControls pause and resume actions", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pause sprint" }));
     expect(onPauseResume).toHaveBeenCalledTimes(1);
   });
 
@@ -36,7 +36,7 @@ describe("SprintControls pause and resume actions", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resume sprint" }));
     expect(onPauseResume).toHaveBeenCalledTimes(1);
   });
 
@@ -52,6 +52,6 @@ describe("SprintControls pause and resume actions", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: "Pausing" }).getAttribute("disabled")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Pausing..." }).getAttribute("disabled")).not.toBeNull();
   });
 });

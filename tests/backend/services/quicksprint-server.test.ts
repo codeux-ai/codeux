@@ -134,10 +134,10 @@ describe("dashboard-server quicksprint routes", () => {
   });
 
   it("POST /api/projects/:projectId/quicksprints/templates", async () => {
-    const res = await request(app).post("/api/projects/p1/quicksprints/templates").send({ name: "n" });
+    const res = await request(app).post("/api/projects/p1/quicksprints/templates").send({ name: "n", description: "d", icon: "i", category: "c", agentInstructionMarkdown: "aim" });
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ id: "t2" });
-    expect(quicksprintService.createCustomTemplate).toHaveBeenCalledWith("p1", { name: "n" });
+    expect(quicksprintService.createCustomTemplate).toHaveBeenCalledWith("p1", { name: "n", description: "d", icon: "i", category: "c", agentInstructionMarkdown: "aim" });
   });
 
   it("PATCH /api/projects/:projectId/quicksprints/templates/:templateId", async () => {

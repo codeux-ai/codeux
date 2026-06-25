@@ -15,6 +15,7 @@ import {
 import type { ProjectSummary, SprintLinkedIssueInput } from "../../types.js";
 import { fetchProjectIssuePromptContexts, searchProjectIssues, type RemoteIssueSummary } from "../../lib/project-api.js";
 import { MultiSelect } from "../ui/MultiSelect.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
 
 interface SprintIssueImportModalProps {
   project: ProjectSummary;
@@ -278,7 +279,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
             </div>
           </div>
 
-          <main className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
             {error && (
               <div className="mb-4 rounded-[1.1rem] border border-status-red/20 bg-status-red/[0.08] px-4 py-3 text-sm font-semibold text-status-red">
                 {error}
@@ -352,9 +353,9 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
                           </label>
                         </div>
                         <a
-                          href={issue.url}
+                          href={getSafeUrl(issue.url)}
                           target="_blank"
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           onClick={(event) => event.stopPropagation()}
                           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-900 dark:hover:bg-white/[0.06] dark:hover:text-white"
                           aria-label={`Open ${issue.title}`}
@@ -367,7 +368,7 @@ export const SprintIssueImportModal: FunctionComponent<SprintIssueImportModalPro
                 })}
               </div>
             )}
-          </main>
+          </div>
 
           <footer className="flex flex-col gap-3 border-t border-black/[0.06] p-5 dark:border-white/[0.06] sm:flex-row sm:items-center sm:justify-between sm:p-7">
             <div className="text-xs font-semibold text-slate-400">

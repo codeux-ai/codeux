@@ -4,6 +4,7 @@ import type {
   FeaturePrAutoMergeMode,
   GuardrailJobType,
   GuardrailOnLimitAction,
+  QaExhaustionPolicy,
   InvocationRoutingId,
   InvocationRoutingProfile,
   InvocationRoutingSettings,
@@ -203,6 +204,11 @@ export const GUARDRAIL_ON_LIMIT_ACTIONS: GuardrailOnLimitAction[] = [
   "BLOCK_AND_ESCALATE",
   "STOP_AND_WAIT",
   "WARN_ONLY",
+];
+export const QA_EXHAUSTION_POLICIES: QaExhaustionPolicy[] = [
+  "ESCALATE_TO_HUMAN",
+  "FAIL_TASK",
+  "FINISH_TASK",
 ];
 /** Fallback cap used when migrating the legacy hardcoded clarification auto-answer limit. */
 export const LEGACY_CLARIFICATION_RETRY_CAP = 3;
@@ -432,6 +438,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     enableLivePrMonitoring: true,
     resolveAllCommentsBeforeMainMerge: true,
     resolveMainMergeConflicts: true,
+    resolveMainMergeFailedChecks: true,
     resolveAllCommentsBeforeFeatureMerge: true,
     resolveMergeConflicts: true,
     waitForJulesCiAutofix: false,
@@ -449,8 +456,6 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       clarification_reply: { cap: 3, onLimit: "STOP_AND_WAIT" },
       planning: { cap: 5, onLimit: "BLOCK_AND_ESCALATE" },
     },
-    qaRunsCap: 10,
-    qaRunsOnLimit: "BLOCK_AND_ESCALATE",
   },
   sprintLoopSteps: {
     branchPreflight: true,
@@ -538,7 +543,9 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     instructionTemplates: { ...DEFAULT_INSTRUCTION_TEMPLATES },
     qualityAssurance: {
       enabled: true,
-      maxTaskReviewRuns: 1,
+      maxTaskReviewRuns: 5,
+      maxSprintReviewRuns: 5,
+      exhaustionPolicy: "ESCALATE_TO_HUMAN",
       taskCompletion: {
         enabled: true,
         agentPresetId: null,

@@ -17,7 +17,7 @@ export interface WatchLoopDecision {
  * Returns true when the attention item requires a human to act — i.e. it has escalated
  * beyond worker ownership. Items still assigned to a worker do not block the sprint.
  */
-function isHumanEscalatedAttentionItem(item: { attentionType: string; ownerType?: string }): boolean {
+export function isHumanEscalatedAttentionItem(item: { attentionType: string; ownerType?: string }): boolean {
   // An item is human-escalated when it is explicitly owned by a human, or when its type
   // signals that the worker could not resolve it automatically.
   if (item.ownerType === "human") {

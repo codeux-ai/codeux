@@ -95,6 +95,7 @@ import type {
   SprintLinkedIssueInput,
   SprintLinkedIssueRecord,
 } from "../contracts/project-management-types.js";
+import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { MemoryRepository } from "../repositories/memory-repository.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
@@ -139,6 +140,7 @@ export interface DashboardServerOptions {
   knowledgeService?: KnowledgeService;
   agentPresetRepository?: AgentPresetRepository;
   projectManagementRepository?: ProjectManagementRepository;
+  executionRepository?: ExecutionRepository;
   getStatus: () => unknown;
   getLiveSnapshot: (projectId?: string | null) => Promise<ProjectLiveDashboardSnapshot> | ProjectLiveDashboardSnapshot;
   getExecutionSnapshot: () => ExecutionDashboardSnapshot;

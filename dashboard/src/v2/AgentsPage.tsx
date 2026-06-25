@@ -25,7 +25,6 @@ import { AgentPresetEditorPanel } from "./components/agents/AgentPresetEditorPan
 import { InstructionFileCard } from "./components/agents/InstructionFileCard.js";
 import { InstructionFileEditorPanel } from "./components/agents/InstructionFileEditorPanel.js";
 import { PageContainer } from "./components/layout/PageContainer.js";
-import { EmptyState } from "./components/ui/EmptyState.js";
 import { SectionDivider } from "./components/ui/SectionDivider.js";
 
 /* ── Roster summary stat ── */
@@ -70,7 +69,7 @@ const normalizeAgentName = (value: string): string => (
 
 /* ── Main Page ── */
 export const AgentsPage: FunctionComponent = () => {
-  const contentRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLElement>(null);
   const { selectedProject, loading: projectLoading } = useProjectData();
   const [presets, setPresets] = useState<AgentPreset[]>([]);
   const [loading, setLoading] = useState(false);
@@ -349,7 +348,7 @@ export const AgentsPage: FunctionComponent = () => {
 
       {/* Error */}
       {(error || effectiveSettingsError) && (
-        <div className="rounded-2xl border border-status-red/20 bg-status-red/[0.06] px-5 py-4 text-sm font-medium text-status-red backdrop-blur-md">
+        <div className="rounded-2xl border border-status-red/30 bg-status-red/[0.08] px-5 py-4 text-sm font-medium text-status-red backdrop-blur-md shadow-[0_0_20px_rgba(255,0,0,0.05)]">
           {error || effectiveSettingsError}
         </div>
       )}
@@ -371,9 +370,27 @@ export const AgentsPage: FunctionComponent = () => {
 
       {/* Content */}
       {!selectedProject ? (
-        <EmptyState title="Pick A Project To Begin" description="Choose a project from the top navigation and your roster of agents will load here." icon={<Bot className="h-8 w-8 text-signal-600 dark:text-signal-400" strokeWidth={1.2} />} />
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/40 px-8 py-16 text-center backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/40">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5 dark:bg-signal-500/15 dark:text-signal-400 dark:ring-white/[0.06]">
+            <Bot className="h-8 w-8 text-signal-600 dark:text-signal-400" strokeWidth={1.2} />
+          </div>
+          <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">Pick A Project To Begin</h3>
+          <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">Choose a project from the top navigation and your roster of agents will load here.</p>
+        </div>
       ) : presets.length === 0 && instructionFiles.length === 0 && !loading ? (
-        <EmptyState title="The Workshop Is Quiet" description="Spin up your first specialist. Give it a name, a personality, an avatar — and operator-grade system instructions." icon={<Bot className="h-8 w-8 text-signal-600 dark:text-signal-400" strokeWidth={1.2} />}><button type="button" onClick={() => void handleCreate()} className="group mt-2 inline-flex items-center gap-2 rounded-full bg-signal-500 px-6 py-3 text-sm font-bold text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"><Plus className="h-4.5 w-4.5 transition-transform group-hover:rotate-90" strokeWidth={2.5} />Create First Agent</button></EmptyState>
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-[1.9rem] border border-dashed border-black/[0.08] bg-white/40 px-8 py-16 text-center backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/40">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5 dark:bg-signal-500/15 dark:text-signal-400 dark:ring-white/[0.06]">
+            <Bot className="h-8 w-8 text-signal-600 dark:text-signal-400" strokeWidth={1.2} />
+          </div>
+          <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-slate-900 dark:text-white">The Workshop Is Quiet</h3>
+          <p className="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">Spin up your first specialist. Give it a name, a personality, an avatar — and operator-grade system instructions.</p>
+          <div className="mt-4">
+            <button type="button" onClick={() => void handleCreate()} className="group inline-flex items-center gap-2 rounded-full bg-signal-500 px-6 py-3 text-sm font-bold text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:scale-[1.03] hover:bg-signal-400 hover:shadow-[0_0_32px_rgba(0,224,160,0.36)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2">
+              <Plus className="h-4.5 w-4.5 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
+              Create First Agent
+            </button>
+          </div>
+        </div>
       ) : presets.length > 0 || instructionFiles.length > 0 ? (
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-start">
           {/* Sidebar rail */}

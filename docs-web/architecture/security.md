@@ -123,7 +123,7 @@ Avoid storing API keys in the settings DB if the runner is ephemeral; use `JULES
 
 ## Known limitations
 
-- **No CSRF protection** on dashboard REST routes — acceptable for loopback usage but not for cross-origin contexts. If exposing remotely, ensure the reverse proxy strips suspicious origins or use SameSite cookies.
+- **Cross-Origin Protections**: Dashboard REST routes and WebSocket connections enforce strict `Origin` and `Sec-Fetch-Site` validation. External untrusted origins are actively blocked from performing mutations, mitigating standard CSRF vectors. Still, if exposing remotely, ensure your reverse proxy enforces strong authentication.
 - **No rate limiting** at the application layer (other than `express.json({ limit: "1mb" })` for body size). Reverse proxy if needed.
 - **No structured RBAC.** Add it at a layer above Code UX (proxy, separate service mesh).
 

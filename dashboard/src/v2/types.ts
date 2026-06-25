@@ -8,6 +8,8 @@ import type {
 import type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
+  ProjectInvocationsQuery,
+  ProjectInvocationsQueryResult,
   ExecutionInvocationStatus,
 } from "../../../src/contracts/invocation-types.js";
 import type {
@@ -113,6 +115,56 @@ export type AgentConnection = McpConnectionRecord;
 export type AgentPreset = AgentPresetRecord;
 export type ChatThread = ConversationThreadRecord;
 export type ChatMessageRecord = ConversationMessageRecord;
+
+export type ProjectCardSourceBadgeKind = "local" | "remote-git" | "local-repository";
+export type ProjectCardActionKind = "open-project" | "settings" | "setup-project" | "delete";
+export type ProjectCardActionTone = "default" | "danger";
+
+export interface ProjectCardDisplayValue {
+  value: string;
+  isEmpty: boolean;
+}
+
+export interface ProjectCardSourceBadge {
+  kind: ProjectCardSourceBadgeKind;
+  label: string;
+  description: string;
+}
+
+export interface ProjectCardActionDescriptor {
+  kind: ProjectCardActionKind;
+  label: string;
+  ariaLabel: string;
+  title: string;
+  tone: ProjectCardActionTone;
+}
+
+export interface ProjectCardTaskCompletion {
+  value: string;
+  percentage: number | null;
+  completedTasks: number;
+  openTasks: number;
+  totalTasks: number;
+  isEmpty: boolean;
+}
+
+export interface ProjectCardViewModel {
+  sourceBadge: ProjectCardSourceBadge;
+  sourceTypeLabel: string;
+  providerLabel: ProjectCardDisplayValue;
+  hostLabel: ProjectCardDisplayValue;
+  gitUrl: ProjectCardDisplayValue;
+  localDirectory: ProjectCardDisplayValue;
+  createdAt: ProjectCardDisplayValue;
+  updatedAt: ProjectCardDisplayValue;
+  lastRunAt: ProjectCardDisplayValue;
+  lastRunStatus: ProjectCardDisplayValue;
+  branch: ProjectCardDisplayValue;
+  featureBranchPrefix: ProjectCardDisplayValue;
+  taskCompletion: ProjectCardTaskCompletion;
+  emptyValue: string;
+  actions: ProjectCardActionDescriptor[];
+}
 
 export interface Sprint extends SprintRecord {
   date: string;
@@ -234,3 +286,5 @@ export type {
 };
 
 export type { SprintReviewSummary };
+
+export type { ProjectInvocationsQuery, ProjectInvocationsQueryResult };

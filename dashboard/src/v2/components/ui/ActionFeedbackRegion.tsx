@@ -19,10 +19,10 @@ interface ActionFeedbackRegionProps {
 }
 
 const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: FunctionComponent<any>, colors: string, progressColors: string }> = {
-  pending: { icon: Loader2, colors: "bg-signal-500/10 text-signal-700 border-signal-500/20 dark:text-signal-400", progressColors: "bg-signal-500" },
-  success: { icon: CheckCircle, colors: "bg-status-green/10 text-status-green border-status-green/20", progressColors: "bg-status-green" },
-  warning: { icon: AlertTriangle, colors: "bg-status-amber/10 text-status-amber border-status-amber/20", progressColors: "bg-status-amber" },
-  error: { icon: XCircle, colors: "bg-status-red/10 text-status-red border-status-red/20", progressColors: "bg-status-red" },
+  pending: { icon: Loader2, colors: "text-signal-700 border-black/[0.08] dark:border-white/[0.08] dark:text-signal-400", progressColors: "bg-signal-500" },
+  success: { icon: CheckCircle, colors: "text-status-green border-black/[0.08] dark:border-white/[0.08]", progressColors: "bg-status-green" },
+  warning: { icon: AlertTriangle, colors: "text-status-amber border-black/[0.08] dark:border-white/[0.08]", progressColors: "bg-status-amber" },
+  error: { icon: XCircle, colors: "text-status-red border-black/[0.08] dark:border-white/[0.08]", progressColors: "bg-status-red" },
 };
 
 export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000, autoDismiss, retryAction, retryLabel }: ActionFeedbackRegionProps) {
@@ -61,7 +61,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
             duration: durations.fast,
             onComplete: () => {
               setDisplayedMessage(message);
-              gsap.fromTo(messageRef.current, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: durations.fast });
+              gsap.fromTo(messageRef.current, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: durations.fast, ease: GSAP_EASINGS.smooth });
             }
           });
         });
@@ -129,14 +129,15 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
   const config = statusConfig[displayedStatus === "idle" ? "pending" : displayedStatus];
   const Icon = config.icon;
 
-  const ariaLive = displayedStatus === "error" ? "assertive" : "polite";
+  const isError = displayedStatus === "error";
 
   return (
     <div
       ref={containerRef}
-      role="status"
-      aria-live={ariaLive}
-      className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl border ${config.colors} ${className}`}
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
+      aria-atomic="true"
+      className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.2)] border ${config.colors} bg-white dark:bg-void-800 ${className}`}
     >
       <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out]`} />
       <div className="flex-1 text-sm font-medium mt-0.5 relative">
@@ -149,6 +150,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
           <button
             type="button"
             onClick={retryAction}
+            aria-label={retryLabel || "Retry"}
             className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -162,12 +164,16 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
             onClick={() => {
               if (document.activeElement === dismissBtnRef.current) {
                 // attempt to restore focus contextually or drop it safely
-                dismissBtnRef.current?.blur();
+                const fallback = document.querySelector('[role="main"]') || document.body;
+                (fallback as HTMLElement).focus();
+                if (document.activeElement === dismissBtnRef.current) {
+                    dismissBtnRef.current?.blur();
+                }
               }
               onDismiss?.();
             }}
             className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-            aria-label="Dismiss message"
+            aria-label="Dismiss"
           >
             <X className="w-4 h-4" />
           </button>
@@ -176,6 +182,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       {(displayedStatus === "success" || displayedStatus === "warning") && autoDismiss !== false && !retryAction && (
         <div
           ref={progressRef}
+          aria-hidden="true"
           className={`absolute bottom-0 left-0 h-1 opacity-20 ${config.progressColors}`}
         />
       )}

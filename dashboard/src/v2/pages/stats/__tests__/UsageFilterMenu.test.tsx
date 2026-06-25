@@ -2,7 +2,21 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent } from '@testing-library/preact';
+import { render, fireEvent, cleanup } from '@testing-library/preact';
+import gsap from 'gsap';
+
+vi.mock('gsap', () => ({
+  default: {
+    matchMedia: vi.fn().mockReturnValue({
+      add: vi.fn().mockImplementation((_q, cb) => { if (_q.includes('no-preference')) cb(); }),
+      revert: vi.fn()
+    }),
+    fromTo: vi.fn(),
+    to: vi.fn(),
+    set: vi.fn(),
+    getProperty: vi.fn()
+  }
+}));
 import { UsageFilterMenu } from '../components/UsageFilterMenu.js';
 
 describe('UsageFilterMenu', () => {
@@ -27,7 +41,7 @@ describe('UsageFilterMenu', () => {
 
   it('should call onClose when close button is clicked', () => {
     const { getAllByRole } = render(<UsageFilterMenu {...mockProps} />);
-    const closeButton = getAllByRole('button', { name: '' })[0]; // The X icon button
+    const closeButton = getAllByRole('button').find(b => b.getAttribute('aria-label') === 'Close graph filters')!;
     fireEvent.click(closeButton);
     expect(mockProps.onClose).toHaveBeenCalled();
   });
@@ -40,14 +54,20 @@ describe('UsageFilterMenu', () => {
   });
 
   it('should not allow disabling the last enabled series', () => {
+    cleanup();
     const setEnabledSeriesSpy = vi.fn();
     const singleSeriesProps = {
       ...mockProps,
       enabledSeries: { tokens: true, active: false }, setEnabledSeries: setEnabledSeriesSpy
     };
-    const { getAllByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
+    const { getAllByText, getByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
     setEnabledSeriesSpy.mockClear();
+
+    // Check live region
+    expect(getByText('Showing 1 filter')).toBeTruthy();
+
     const tokensButton = getAllByText('Tokens')[0].closest('button');
+    expect(tokensButton!.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(tokensButton!);
     expect(setEnabledSeriesSpy).not.toHaveBeenCalled();
   });

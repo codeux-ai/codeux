@@ -109,4 +109,30 @@ describe("dashboard settings updater helpers", () => {
     expect(workflow.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
     expect(settings.cliWorkflow.executionMode).toBe("DOCKER");
   });
+
+  it("enforces mutual exclusion when updating non-Jules provider settings", () => {
+    const settings = cloneDefaultSettings();
+
+    // 1. Changing to localAuth clears API key and custom base URL / model
+    const local = updateProviderConfig(settings, "codex", {
+      authType: "localAuth",
+      apiKey: "stale-key",
+      customBaseUrl: "https://custom.api",
+      customModel: "gpt-custom",
+    });
+    expect(local.aiProvider.providers.codex.mountAuth).toBe(true);
+    expect(local.aiProvider.providers.codex.apiKey).toBe("");
+    expect(local.aiProvider.providers.codex.customBaseUrl).toBe("");
+    expect(local.aiProvider.providers.codex.customModel).toBe("");
+
+    // 2. Changing to apiKey clears mountAuth and authPath
+    const apikey = updateProviderConfig(settings, "codex", {
+      authType: "apiKey",
+      authPath: "~/.stale-path",
+      apiKey: "valid-key",
+    });
+    expect(apikey.aiProvider.providers.codex.mountAuth).toBe(false);
+    expect(apikey.aiProvider.providers.codex.authPath).toBe("");
+    expect(apikey.aiProvider.providers.codex.apiKey).toBe("valid-key");
+  });
 });

@@ -51,25 +51,31 @@ export const ModelCard: FunctionComponent<{
         <div className="flex items-center gap-2 pt-1">
             {!model.downloaded && !model.downloading && (
                 <button onClick={() => onDownload(model.id)}
+                    disabled={model.downloading || reembedding}
+                    aria-disabled={model.downloading || reembedding}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                               bg-signal-500 text-void-900 hover:bg-signal-400 transition-colors duration-200
-                               shadow-[0_2px_8px_rgba(0,224,160,0.25)]">
+                               bg-violet-500 text-white hover:bg-violet-400 transition-colors duration-200
+                               shadow-[0_2px_8px_rgba(139,92,246,0.25)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-violet-500">
                     <Download className="w-3 h-3" strokeWidth={2.5} />
                     Download
                 </button>
             )}
             {model.downloaded && !model.active && (
                 <button onClick={() => onSelect(model.id)}
+                    disabled={model.downloading || reembedding}
+                    aria-disabled={model.downloading || reembedding}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                               bg-signal-500/10 text-signal-500 hover:bg-signal-500/20 transition-colors duration-200">
+                               bg-signal-500/10 text-signal-500 hover:bg-signal-500/20 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                     <Power className="w-3 h-3" strokeWidth={2.5} />
                     Activate
                 </button>
             )}
             {model.active && !reembedding && (
                 <button onClick={onReembed}
+                    disabled={model.downloading || reembedding}
+                    aria-disabled={model.downloading || reembedding}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                               bg-signal-500/10 text-signal-500 hover:bg-signal-500/20 transition-colors duration-200">
+                               bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                     <RefreshCw className="w-3 h-3" strokeWidth={2.5} />
                     Re-embed{staleCount > 0 ? ` (${staleCount} stale)` : " All"}
                 </button>
@@ -82,13 +88,16 @@ export const ModelCard: FunctionComponent<{
             )}
             {model.downloaded && (
                 <button onClick={() => onDelete(model.id)}
+                    disabled={model.downloading || reembedding || model.active}
+                    aria-label={`Delete ${model.displayName}`}
+                    aria-disabled={model.downloading || reembedding || model.active}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                               text-slate-400 hover:text-status-red transition-colors duration-200">
+                               text-slate-400 hover:text-rose-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-slate-400">
                     <Trash2 className="w-3 h-3" strokeWidth={2} />
                 </button>
             )}
             {model.error && (
-                <span className="text-[10px] text-status-red font-medium">{model.error}</span>
+                <span className="text-[10px] text-rose-500 font-medium">{model.error}</span>
             )}
         </div>
     </div>

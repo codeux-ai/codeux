@@ -4,6 +4,8 @@ import gsap from "gsap";
 import { MessageCircle, RefreshCw, Plus } from "lucide-preact";
 import type { Source } from "../../types.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
+import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 import { PageContainer } from "../layout/PageContainer.js";
 
 export const ChatPageShell: FunctionComponent<{
@@ -33,6 +35,7 @@ export const ChatPageShell: FunctionComponent<{
 }) => {
   const headerRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
+  const interactionTokens = useInteractionTokens();
 
   useLayoutEffect(() => {
     const ctx = gsap.context(() => {
@@ -69,11 +72,19 @@ export const ChatPageShell: FunctionComponent<{
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
-          <div className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <div role="tablist" aria-label="Chat Mode" className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
             <button
+              role="tab"
+              aria-selected={chatMode === "threads"}
+              aria-controls="chat-panel"
               type="button"
               onClick={() => onSetChatMode("threads")}
-              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
+              style={{
+                transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
+                transitionDuration: interactionTokens.controlFeedback.duration,
+                transitionTimingFunction: interactionTokens.controlFeedback.ease,
+              }}
+              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
                 chatMode === "threads"
                   ? "bg-slate-900 text-white dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -82,9 +93,17 @@ export const ChatPageShell: FunctionComponent<{
               Threads
             </button>
             <button
+              role="tab"
+              aria-selected={chatMode === "invocations"}
+              aria-controls="chat-panel"
               type="button"
               onClick={() => onSetChatMode("invocations")}
-              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
+              style={{
+                transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
+                transitionDuration: interactionTokens.controlFeedback.duration,
+                transitionTimingFunction: interactionTokens.controlFeedback.ease,
+              }}
+              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
                 chatMode === "invocations"
                   ? "bg-slate-900 text-white dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -98,12 +117,18 @@ export const ChatPageShell: FunctionComponent<{
               <span className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
                 {activeConnectionLabel || "Unassigned"}
               </span>
-              <span className={`rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
+              <span className={`flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
                 pendingDashboardMessages > 0
                   ? "border-status-amber/30 bg-status-amber/10 text-status-amber"
                   : "border-signal-500/20 bg-signal-500/10 text-signal-500"
               }`}>
-                {pendingDashboardMessages > 0 ? `${pendingDashboardMessages} pending` : "Inbox clear"}
+                {pendingDashboardMessages > 0 && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-amber opacity-75"></span>
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-status-amber"></span>
+                  </span>
+                )}
+                {pendingDashboardMessages > 0 ? <>{pendingDashboardMessages} pending<span className="sr-only"> messages</span></> : "Inbox clear"}
               </span>
             </>
           )}
@@ -111,7 +136,12 @@ export const ChatPageShell: FunctionComponent<{
             type="button"
             onClick={onRefresh}
             disabled={manualRefreshing}
-            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
+            style={{
+              transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
+              transitionDuration: interactionTokens.controlFeedback.duration,
+              transitionTimingFunction: interactionTokens.controlFeedback.ease,
+            }}
+            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${manualRefreshing ? "animate-spin" : ""}`} strokeWidth={2.1} />
             Refresh
@@ -121,7 +151,12 @@ export const ChatPageShell: FunctionComponent<{
               type="button"
               onClick={onCreateThread}
               disabled={!selectedProject}
-              className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-void-900 transition-colors hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{
+                transitionProperty: "color, background-color, border-color, text-decoration-color, fill, stroke",
+                transitionDuration: interactionTokens.controlFeedback.duration,
+                transitionTimingFunction: interactionTokens.controlFeedback.ease,
+              }}
+              className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-void-900 hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
               New Thread
@@ -130,15 +165,18 @@ export const ChatPageShell: FunctionComponent<{
         </div>
       </div>
 
-      {error && (
-        <div className="shrink-0 rounded-[1.4rem] border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm text-status-red">
-          {error}
+      {(error || manualRefreshing) && (
+        <div className="shrink-0">
+          <ActionFeedbackRegion
+            status={error ? "error" : "pending"}
+            message={error || "Refreshing chat state..."}
+          />
         </div>
       )}
 
       <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[360px_minmax(0,1fr)] gap-6 pb-6">
         {railSlot}
-        <section className="flex flex-col min-h-0 flex-1 rounded-[1.9rem] border border-black/[0.06] bg-white/80 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+        <section className="flex flex-col min-h-0 flex-1 rounded-3xl border border-black/[0.06] bg-white/80 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
           {detailSlot}
         </section>
       </div>

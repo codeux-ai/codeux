@@ -1,6 +1,6 @@
 import type { Subtask } from "../../contracts/app-types.js";
 import type { Logger } from "../../shared/logging/logger.js";
-import { ProviderCapReachedError } from "../../services/sprint-task-dispatch-service.js";
+import { getTaskDispatchDeferral } from "../../services/sprint-task-dispatch-service.js";
 
 interface StartReadyTasksOptions {
   action: "status" | "orchestrate" | "plan";
@@ -49,18 +49,6 @@ export const runStartReadyTasksStep = async (
     }
 
     const provider = options.getProviderForTask(task);
-    if (provider) {
-      const providerSettings = options.getProviderSettings(provider);
-      const limit = providerSettings.maxConcurrentTasks ?? 0;
-      if (limit > 0) {
-        const currentCount = currentRunningCounts[provider] || 0;
-        if (currentCount >= limit) {
-          task.status = "BLOCKED";
-          options.logger.info("Task blocked: provider concurrency cap reached", { taskId: task.id, provider, limit, currentCount });
-          continue;
-        }
-      }
-    }
 
     try {
       const session = await options.startTask(task);
@@ -77,14 +65,18 @@ export const runStartReadyTasksStep = async (
       reportText += `🚀 **Started ${providerLabel} Session** for task \`${task.id}\`: [${session.id}](${session.id})\n`;
       options.setConsecutiveFailures(0);
     } catch (error: unknown) {
-      // A provider cap deferral is not a dispatch failure: block the task and retry next cycle
-      // without counting it toward the emergency-stop failure budget.
-      if (error instanceof ProviderCapReachedError) {
-        task.status = "BLOCKED";
+      const deferral = getTaskDispatchDeferral(error);
+      if (deferral) {
+        const deferredProvider = deferral.provider || provider || undefined;
+        const providerSettings = deferredProvider ? options.getProviderSettings(deferredProvider) : {};
+        const runningCount = deferredProvider ? currentRunningCounts[deferredProvider] : undefined;
+
+        task.status = "PENDING";
         options.logger.info("Task blocked: provider concurrency cap reached at dispatch", {
           taskId: task.id,
-          provider: error.provider,
-          limit: error.limit,
+          provider: deferredProvider,
+          limit: deferral.limit ?? providerSettings.maxConcurrentTasks,
+          currentCount: deferral.currentCount ?? runningCount,
         });
         continue;
       }

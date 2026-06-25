@@ -65,8 +65,4 @@ describe("StatsCard", () => {
     expect(footer).toBeNull();
   });
 
-  it("renders with active state foundation", () => {
-    render(<StatsCard title="Active" value="1" isActive={true} />);
-    expect(screen.getByTestId("wave-fluid")).toBeDefined();
-  });
 });

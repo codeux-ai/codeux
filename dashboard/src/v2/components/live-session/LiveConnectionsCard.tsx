@@ -1,11 +1,14 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useMemo } from "preact/hooks";
+import { useMemo, useEffect, useRef } from "preact/hooks";
 import { Bot, Radio, Server, Wifi } from "lucide-preact";
+import gsap from "gsap";
 import { formatTime } from "../../../lib/time.js";
 import type { ExecutionDashboardSnapshot } from "../../../types.js";
 import { BorderTrace } from "../ui/BorderTrace.js";
 import { WaveFluid } from "../ui/WaveFluid.js";
+import { useReducedMotion, useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
+import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
 
 const CONNECTION_ROLE_LABELS: Record<string, string> = {
   listener: "Listener",
@@ -24,6 +27,133 @@ const statusTone = (value: string | null): string => {
   if (normalized === "ONLINE") return "text-status-green";
   return "text-slate-400";
 };
+
+const ConnectionRow: FunctionComponent<{ connection: ExecutionDashboardSnapshot["connections"][0] }> = memo(({ connection }) => {
+  const rowRef = useRef<HTMLElement>(null);
+  const isReducedMotion = useReducedMotion();
+  const highlightDuration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.controlFeedback.duration) / 1000);
+
+  // Track changes to emphasize
+  const prevHeartbeatRef = useRef(connection.lastHeartbeatAt);
+  const prevStatusRef = useRef(connection.status);
+  const prevInboxRef = useRef(connection.pendingInboxCount);
+
+  useEffect(() => {
+    if (!rowRef.current) return;
+
+    const hasChanged =
+      prevHeartbeatRef.current !== connection.lastHeartbeatAt ||
+      prevStatusRef.current !== connection.status ||
+      prevInboxRef.current !== connection.pendingInboxCount;
+
+    if (hasChanged) {
+      if (isReducedMotion) {
+        // No motion emphasis: brief background class toggle
+        const el = rowRef.current;
+        el.classList.add("bg-signal-500/10", "border-signal-500/20");
+        setTimeout(() => {
+          if (el) el.classList.remove("bg-signal-500/10", "border-signal-500/20");
+        }, 500);
+      } else {
+        // Motion emphasis: flash using GSAP
+        gsap.killTweensOf(rowRef.current);
+        gsap.fromTo(rowRef.current,
+          { backgroundColor: "rgba(0, 224, 160, 0.15)", borderColor: "rgba(0, 224, 160, 0.3)" },
+          { backgroundColor: "rgba(0, 0, 0, 0.015)", borderColor: "rgba(0, 0, 0, 0.04)", duration: highlightDuration * 2, ease: "power2.out", overwrite: "auto", clearProps: "backgroundColor,borderColor" }
+        );
+      }
+    }
+
+    prevHeartbeatRef.current = connection.lastHeartbeatAt;
+    prevStatusRef.current = connection.status;
+    prevInboxRef.current = connection.pendingInboxCount;
+  }, [connection.lastHeartbeatAt, connection.status, connection.pendingInboxCount, isReducedMotion, highlightDuration]);
+
+  return (
+    <section
+      ref={rowRef}
+      className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.05] dark:bg-white/[0.015] transition-colors"
+    >
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">{connection.displayName}</span>
+            <span className="rounded-full border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
+              {CONNECTION_ROLE_LABELS[connection.role] || connection.role}
+            </span>
+            {connection.listenMode && (
+              <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">
+                Listening
+              </span>
+            )}
+          </div>
+
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
+            <span>{connection.transport}</span>
+            {connection.model ? <span>· {connection.model}</span> : null}
+            <span className="truncate">· {connection.connectionKey}</span>
+          </div>
+
+          {(connection.machineName || connection.platform || connection.arch || connection.localExecutionRuntime) && (
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
+              {connection.machineName ? <span>{connection.machineName}</span> : null}
+              {connection.platform ? <span>· {connection.platform}</span> : null}
+              {connection.arch ? <span>· {connection.arch}</span> : null}
+              {connection.localExecutionRuntime ? <span>· {connection.localExecutionRuntime}</span> : null}
+            </div>
+          )}
+        </div>
+
+        <div className="text-right">
+          <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(connection.status)}`}>
+            {connection.status}
+          </div>
+          <div className="mt-1 text-[10px] font-mono text-slate-400">
+            {connection.lastHeartbeatAt ? formatTime(connection.lastHeartbeatAt) : "no heartbeat"}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
+        <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
+          inbox {connection.pendingInboxCount}
+        </span>
+        <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
+          dispatch {connection.activeDispatchCount}
+        </span>
+        <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
+          threads {connection.threadCount}
+        </span>
+        <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
+          runs {connection.tasksRunCount}
+        </span>
+      </div>
+
+      {(connection.labels.length > 0 || connection.instruction) && (
+        <div className="mt-3 border-t border-black/[0.04] pt-2.5 dark:border-white/[0.05]">
+          {connection.labels.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {connection.labels.slice(0, 6).map((label) => (
+                <span
+                  key={label}
+                  className="rounded-full border border-ember-500/20 bg-ember-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-ember-500"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {connection.instruction && (
+            <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              {connection.instruction}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+});
 
 export const LiveConnectionsCard: FunctionComponent<{
   snapshot: ExecutionDashboardSnapshot;
@@ -76,90 +206,9 @@ export const LiveConnectionsCard: FunctionComponent<{
             No listeners or workers are connected to the selected project yet.
           </p>
         ) : (
-          <div className="dashboard-scrollbar max-h-[30rem] space-y-2 overflow-y-auto pr-1">
+          <div className="dashboard-scrollbar max-h-[30rem] space-y-2 overflow-y-auto pr-1" aria-live="polite">
             {snapshot.connections.map((connection) => (
-              <section
-                key={connection.id}
-                className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 dark:border-white/[0.05] dark:bg-white/[0.015]"
-              >
-                <div className="flex items-start justify-between gap-2.5">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">{connection.displayName}</span>
-                      <span className="rounded-full border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
-                        {CONNECTION_ROLE_LABELS[connection.role] || connection.role}
-                      </span>
-                      {connection.listenMode && (
-                        <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500">
-                          Listening
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                      <span>{connection.transport}</span>
-                      {connection.model ? <span>· {connection.model}</span> : null}
-                      <span className="truncate">· {connection.connectionKey}</span>
-                    </div>
-
-                    {(connection.machineName || connection.platform || connection.arch || connection.localExecutionRuntime) && (
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                        {connection.machineName ? <span>{connection.machineName}</span> : null}
-                        {connection.platform ? <span>· {connection.platform}</span> : null}
-                        {connection.arch ? <span>· {connection.arch}</span> : null}
-                        {connection.localExecutionRuntime ? <span>· {connection.localExecutionRuntime}</span> : null}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="text-right">
-                    <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(connection.status)}`}>
-                      {connection.status}
-                    </div>
-                    <div className="mt-1 text-[10px] font-mono text-slate-400">
-                      {connection.lastHeartbeatAt ? formatTime(connection.lastHeartbeatAt) : "no heartbeat"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
-                  <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
-                    inbox {connection.pendingInboxCount}
-                  </span>
-                  <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
-                    dispatch {connection.activeDispatchCount}
-                  </span>
-                  <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
-                    threads {connection.threadCount}
-                  </span>
-                  <span className="rounded-full border border-black/[0.05] px-2 py-1 text-slate-500 dark:border-white/[0.07] dark:text-slate-400">
-                    runs {connection.tasksRunCount}
-                  </span>
-                </div>
-
-                {(connection.labels.length > 0 || connection.instruction) && (
-                  <div className="mt-3 border-t border-black/[0.04] pt-2.5 dark:border-white/[0.05]">
-                    {connection.labels.length > 0 && (
-                      <div className="mb-2 flex flex-wrap gap-1.5">
-                        {connection.labels.slice(0, 6).map((label) => (
-                          <span
-                            key={label}
-                            className="rounded-full border border-ember-500/20 bg-ember-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-ember-500"
-                          >
-                            {label}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {connection.instruction && (
-                      <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                        {connection.instruction}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </section>
+              <ConnectionRow key={connection.id} connection={connection} />
             ))}
           </div>
         )}

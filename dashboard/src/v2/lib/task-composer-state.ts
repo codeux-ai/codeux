@@ -48,6 +48,16 @@ export interface TaskComposerState {
   titleError: string | undefined;
   isSprintIdValid: boolean;
   sprintIdError: string | undefined;
+  isDescriptionValid: boolean;
+  descriptionError: string | undefined;
+  isPromptMarkdownValid: boolean;
+  promptMarkdownError: string | undefined;
+  isExecutorTypeValid: boolean;
+  executorTypeError: string | undefined;
+  isPriorityValid: boolean;
+  priorityError: string | undefined;
+  isStatusValid: boolean;
+  statusError: string | undefined;
   getPayload: () => TaskDraft;
 }
 
@@ -89,8 +99,23 @@ export const useTaskComposerState = (
     } else if (title.trim().length < 3) {
       errors.title = "Task title must be at least 3 characters long.";
     }
+    if (!description.trim()) {
+      errors.description = "Task details are required.";
+    }
+    if (!promptMarkdown.trim()) {
+      errors.promptMarkdown = "Execution prompt is required.";
+    }
+    if (!executorType) {
+      errors.executorType = "Executor selection is required.";
+    }
+    if (!priority) {
+      errors.priority = "Priority selection is required.";
+    }
+    if (!status) {
+      errors.status = "Status selection is required.";
+    }
     return errors;
-  }, [sprintId, title]);
+  }, [sprintId, title, description, promptMarkdown, executorType, priority, status]);
 
   useEffect(() => {
     if (initialTask) {
@@ -127,6 +152,20 @@ export const useTaskComposerState = (
     return availableTasks.filter((task) => {
       if (task.sprintId !== sprintId) return false;
       if (task.recordId === initialTask?.recordId) return false;
+
+      // Cycle detection: if making initialTask depend on this task would create a cycle
+      if (initialTask?.recordId) {
+        const visited = new Set<string>();
+        const checkCycle = (currentId: string): boolean => {
+          if (currentId === initialTask.recordId) return true;
+          if (visited.has(currentId)) return false;
+          visited.add(currentId);
+          const currentTask = availableTasks.find((t) => t.recordId === currentId);
+          if (!currentTask) return false;
+          return currentTask.dependsOnTaskIds.some(checkCycle);
+        };
+        if (checkCycle(task.recordId)) return false;
+      }
 
       if (dependencySearchQuery) {
         const query = dependencySearchQuery.toLowerCase();
@@ -184,6 +223,16 @@ export const useTaskComposerState = (
     titleError: validationErrors.title,
     isSprintIdValid: !validationErrors.sprintId,
     sprintIdError: validationErrors.sprintId,
+    isDescriptionValid: !validationErrors.description,
+    descriptionError: validationErrors.description,
+    isPromptMarkdownValid: !validationErrors.promptMarkdown,
+    promptMarkdownError: validationErrors.promptMarkdown,
+    isExecutorTypeValid: !validationErrors.executorType,
+    executorTypeError: validationErrors.executorType,
+    isPriorityValid: !validationErrors.priority,
+    priorityError: validationErrors.priority,
+    isStatusValid: !validationErrors.status,
+    statusError: validationErrors.status,
     getPayload,
   };
 };

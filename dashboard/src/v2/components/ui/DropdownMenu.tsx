@@ -1,9 +1,9 @@
-import { h, ComponentChildren, RefObject } from "preact";
+import { h, ComponentChildren, RefObject, isValidElement, cloneElement } from "preact";
 import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
-import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface DropdownMenuProps {
@@ -47,6 +47,7 @@ export const DropdownMenu = ({
   computePosition,
 }: DropdownMenuProps) => {
   const isReducedMotion = useReducedMotion();
+  const gsapTokens = useGsapInteractionTokens();
   const [isRendered, setIsRendered] = useState(false);
   const localTriggerRef = useRef<HTMLDivElement>(null);
   const triggerRef = externalTriggerRef || localTriggerRef;
@@ -97,11 +98,17 @@ export const DropdownMenu = ({
       previousFocusRef.current = document.activeElement as HTMLElement | null;
     } else if (isRendered) { // Only restore if it was previously open
       // Restore focus on close
-      if (previousFocusRef.current) {
-        previousFocusRef.current.focus();
-        previousFocusRef.current = null;
-      } else if (triggerRef.current) {
-        triggerRef.current.focus();
+      if (
+        !document.activeElement ||
+        document.activeElement === document.body ||
+        (menuRef.current && menuRef.current.contains(document.activeElement))
+      ) {
+        if (previousFocusRef.current?.isConnected) {
+          previousFocusRef.current.focus({ preventScroll: true });
+          previousFocusRef.current = null;
+        } else if (triggerRef.current?.isConnected) {
+          triggerRef.current.focus({ preventScroll: true });
+        }
       }
     }
   }, [isOpen]);
@@ -141,18 +148,21 @@ export const DropdownMenu = ({
           opacity: 1,
           scale: 1,
           y: 0,
-          duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
-          ease: MOTION_TOKENS.easing.standard,
+          duration: isReducedMotion ? 0 : gsapTokens.enterExit.duration,
+          ease: gsapTokens.enterExit.ease,
         }
       );
-      requestAnimationFrame(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
+      requestAnimationFrame(() => {
+        const firstItem = menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])');
+        firstItem?.focus({ preventScroll: true });
+      });
     } else if (isRendered) {
       gsap.to(menuRef.current, {
         opacity: 0,
         scale: 0.95,
         y: position === "bottom" ? -5 : position === "top" ? 5 : 0,
-        duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
-        ease: MOTION_TOKENS.easing.standard,
+        duration: isReducedMotion ? 0 : gsapTokens.enterExit.duration,
+        ease: gsapTokens.enterExit.ease,
         onComplete: () => setIsRendered(false),
       });
     }
@@ -176,18 +186,12 @@ export const DropdownMenu = ({
 
       if (e.key === "Escape") {
         onOpenChange(false);
-        if (previousFocusRef.current) {
-          previousFocusRef.current.focus();
-          previousFocusRef.current = null;
-        } else if (triggerRef.current) {
-          triggerRef.current.focus();
-        }
         return;
       }
 
       if (!menuRef.current) return;
 
-      const items = Array.from(menuRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]')) as HTMLElement[];
+      const items = Array.from(menuRef.current.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])')) as HTMLElement[];
       if (items.length === 0) return;
 
       const currentIndex = items.findIndex((item) => item === document.activeElement);
@@ -230,24 +234,42 @@ export const DropdownMenu = ({
 
   return (
     <>
-      <div
-        ref={externalTriggerRef ? undefined : localTriggerRef}
-        className="inline-flex cursor-pointer"
-        onClick={(e) => { e.stopPropagation(); onOpenChange(!isOpen); }}
-        onKeyDown={(e) => {
+      {isValidElement(children) ? cloneElement(children as preact.VNode<any>, {
+        ref: externalTriggerRef ? undefined : localTriggerRef,
+        onClick: (e: MouseEvent) => {
+          e.stopPropagation();
+          onOpenChange(!isOpen);
+          if ((children.props as any).onClick) (children.props as any).onClick(e);
+        },
+        onKeyDown: (e: KeyboardEvent) => {
           if (!externalTriggerRef && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
             onOpenChange(!isOpen);
           }
-        }}
-        tabIndex={!externalTriggerRef ? 0 : undefined}
-        role={!externalTriggerRef ? "button" : undefined}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
-        aria-controls={isOpen ? menuId : undefined}
-      >
-        {children}
-      </div>
+          if ((children.props as any).onKeyDown) (children.props as any).onKeyDown(e);
+        },
+        "aria-haspopup": "menu",
+        "aria-expanded": isOpen,
+        "aria-controls": isOpen ? menuId : undefined,
+      }) : (
+        <button
+          type="button"
+          ref={externalTriggerRef ? undefined : (localTriggerRef as unknown as RefObject<HTMLButtonElement>)}
+          className="inline-flex cursor-pointer text-left"
+          onClick={(e) => { e.stopPropagation(); onOpenChange(!isOpen); }}
+          onKeyDown={(e) => {
+            if (!externalTriggerRef && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault();
+              onOpenChange(!isOpen);
+            }
+          }}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? menuId : undefined}
+        >
+          {children}
+        </button>
+      )}
 
       {isRendered && typeof document !== "undefined" &&
         createPortal(
@@ -255,7 +277,7 @@ export const DropdownMenu = ({
             id={menuId}
             ref={menuRef}
             role="menu"
-            className={`fixed z-[100] bg-white/92 dark:bg-void-800/92 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] shadow-md dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-[1.75rem] p-2 ${className}`}
+            className={`fixed z-[100] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-2 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
             style={{ top: coords.top, left: coords.left, transformOrigin }}
             onClick={(e) => e.stopPropagation()}
           >

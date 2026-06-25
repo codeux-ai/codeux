@@ -5,10 +5,11 @@ import { Check, X, Loader2 } from "lucide-preact";
 import gsap from "gsap";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useMagnetic } from "../../hooks/use-magnetic.js";
-import { useGsapDurations, GSAP_EASINGS } from "../../lib/motion/constants.js";
+import { useGsapDurations, GSAP_EASINGS, GSAP_INTERACTION_TOKENS, useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useInteractionTokens } from "../../lib/motion/tokens.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
-export const SHARED_INTERACTION_CLASSES = "cursor-pointer transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed motion-safe:active:scale-[0.98] touch-target";
+export const SHARED_INTERACTION_CLASSES = "cursor-pointer transition-all duration-[150ms] motion-reduce:duration-0 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:ease-none focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--accent-focus-ring)] focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed motion-safe:active:scale-[0.98] active:brightness-95 dark:active:brightness-110 touch-target";
 
 export interface ButtonProps extends ComponentProps<"button"> {
   success?: boolean;
@@ -20,17 +21,17 @@ export interface ButtonProps extends ComponentProps<"button"> {
 }
 
 const VARIANTS = {
-  primary: "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-black dark:bg-white dark:text-void-900 dark:hover:bg-slate-100",
-  secondary: "border border-[color:var(--color-border-muted)] bg-white/72 text-slate-600 hover:text-slate-900 hover:bg-[rgba(0,115,82,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white",
+  primary: "bg-slate-900 text-white shadow-[var(--elevation-raised)] hover:bg-black dark:bg-white dark:text-void-900 dark:hover:bg-slate-100",
+  secondary: "border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] text-slate-600 hover:text-slate-900 hover:bg-[var(--surface-glass-hover)] dark:text-slate-300 dark:hover:text-white",
   danger: "border border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]",
-  ghost: "bg-transparent text-slate-600 hover:text-slate-900 hover:bg-[rgba(0,115,82,0.08)] dark:hover:text-slate-300 dark:hover:bg-white/[0.03]",
-  signal: "bg-signal-500 hover:bg-signal-400 text-void-900 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] aria-disabled:shadow-none",
+  ghost: "bg-transparent text-slate-600 hover:text-slate-900 hover:bg-[var(--fill-muted-hover)] dark:hover:text-slate-300",
+  signal: "bg-signal-500 hover:bg-signal-400 text-void-900 shadow-[var(--elevation-raised)] aria-disabled:shadow-none",
 };
 
 const SIZES = {
   sm: "px-3 py-1.5 text-xs rounded-[var(--radius-ui)]",
-  md: "px-4 py-2 text-xs rounded-[var(--radius-ui)]",
-  lg: "px-6 py-3 text-sm rounded-[var(--radius-ui)]",
+  md: "px-4 py-2 text-sm rounded-[var(--radius-ui)]",
+  lg: "px-6 py-3 text-base rounded-[var(--radius-ui)]",
 };
 
 export const Button: FunctionComponent<ButtonProps> = memo(({
@@ -51,8 +52,10 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   const isPending = pending || isLoading || feedback.status === "pending";
   const isSuccess = success || feedback.status === "success";
   const isError = feedback.status === "error";
+  const gsapTokens = useGsapInteractionTokens();
   const durations = useGsapDurations();
   const reducedMotion = useReducedMotion();
+  const tokens = useInteractionTokens();
 
   const buttonRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -84,7 +87,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
         gsap.fromTo(
           activeIcon,
           { x: -4, scale: 0.6, opacity: 0 },
-          { x: 0, scale: 1, opacity: 1, duration: reducedMotion ? 0 : 0.2, ease: "power2.out", clearProps: "all" }
+          { x: 0, scale: 1, opacity: 1, duration: gsapTokens.controlFeedback.duration, ease: "power2.out", clearProps: "all" }
         );
       }
     }
@@ -94,8 +97,9 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
 
   const handleClick = useCallback(
     (e: any) => {
-      if (isPending) {
+      if (disabled || isPending || props["aria-disabled"] === true || props["aria-disabled"] === "true") {
         e?.preventDefault();
+        e?.stopPropagation();
         return;
       }
       if (!onClick) return;
@@ -126,10 +130,11 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   return (
     <button
       {...props}
+      style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease }}
       ref={buttonRef}
       onClick={handleClick}
-      disabled={disabled}
-      aria-disabled={disabled || isPending}
+      disabled={disabled && !isPending}
+      aria-disabled={disabled || isPending || props["aria-disabled"] === true || props["aria-disabled"] === "true"}
       aria-busy={isPending}
       className={`${baseClasses} ${variantClasses} ${sizeClasses} ${overrideClasses} relative overflow-hidden ${className}`}
     >

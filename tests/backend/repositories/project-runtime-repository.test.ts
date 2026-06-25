@@ -425,6 +425,97 @@ describe("ProjectRuntimeRepository", () => {
     expect(status2.subtasks[0].status).toBe("PENDING");
   });
 
+  it("rejects provider session and PR artifacts already owned by another project task", async () => {
+    const { executionRepository, projectRepository, runtimeRepository, storage } = await createRepositories();
+
+    const sourceProject = projectRepository.createProject({
+      name: "Code UX Fork",
+      sourceType: "local",
+      sourceRef: "/workspace/codeux-fork",
+    });
+    const sourceSprint = projectRepository.createSprint(sourceProject.id, {
+      name: "Source Sprint",
+      number: 4,
+    });
+    const sourceTask = projectRepository.createTask(sourceProject.id, {
+      sprintId: sourceSprint.id,
+      taskKey: "T02",
+      title: "Foreign task",
+      status: "completed",
+    });
+    executionRepository.createTaskRun({
+      projectId: sourceProject.id,
+      sprintId: sourceSprint.id,
+      taskId: sourceTask.id,
+      provider: "jules",
+      sessionId: "foreign-session",
+      sessionName: "sessions/foreign-session",
+      state: "COMPLETED",
+      prUrl: "https://github.com/numnx/codeux/pull/106",
+      startedAt: "2026-06-15T19:42:30.153Z",
+      finishedAt: "2026-06-15T22:22:18.707Z",
+    });
+
+    const currentProject = projectRepository.createProject({
+      name: "Code UX CC",
+      sourceType: "local",
+      sourceRef: "/workspace/codeux-cc",
+    });
+    const currentSprint = projectRepository.createSprint(currentProject.id, {
+      name: "Improve Projects Page",
+      number: 4,
+    });
+    const currentTask = projectRepository.createTask(currentProject.id, {
+      sprintId: currentSprint.id,
+      taskKey: "T02",
+      title: "Fix local new-project creation",
+      status: "pending",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: currentProject.id,
+      sprint_id: currentSprint.id,
+      sprint_number: 4,
+      feature_branch: "feature/CODUXC-4-improve-projects-page",
+      subtasks: [
+        {
+          id: "T02",
+          record_id: currentTask.id,
+          project_id: currentProject.id,
+          sprint_id: currentSprint.id,
+          title: "Fix local new-project creation",
+          prompt: "Do the current sprint work.",
+          depends_on: [],
+          is_independent: true,
+          status: "CODING_COMPLETED",
+          provider: "jules",
+          session_id: "foreign-session",
+          session_name: "sessions/foreign-session",
+          pr_url: "https://github.com/numnx/codeux/pull/106",
+        },
+      ],
+    });
+
+    const persistedTask = projectRepository.getTask(currentTask.id);
+    expect(persistedTask?.status).toBe("pending");
+
+    const leakedRuns = storage.getDatabase().getRawDatabase().prepare(`
+      SELECT id
+      FROM task_runs
+      WHERE project_id = ? AND sprint_id = ? AND task_id = ?
+    `).all(currentProject.id, currentSprint.id, currentTask.id);
+    expect(leakedRuns).toEqual([]);
+
+    const status = runtimeRepository.getProjectStatus(currentProject.id, currentSprint.id);
+    expect(status.subtasks[0]).toMatchObject({
+      id: "T02",
+      status: "PENDING",
+    });
+    expect(status.subtasks[0].provider).toBeUndefined();
+    expect(status.subtasks[0].session_id).toBeUndefined();
+    expect(status.subtasks[0].pr_url).toBeUndefined();
+  });
+
   it("resolves live project status from the most recent active sprint instead of a stale selected sprint", async () => {
     const { executionRepository, projectRepository, runtimeRepository } = await createRepositories();
 

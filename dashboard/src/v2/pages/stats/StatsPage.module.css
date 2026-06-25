@@ -4,7 +4,7 @@
 
 .purposeSection {
   border: 1px solid var(--stats-card-border);
-  background: color-mix(in srgb, var(--stats-card-bg) 88%, transparent);
+  background: var(--stats-card-bg);
   box-shadow: var(--stats-card-shadow);
   border-radius: 2rem;
   padding: 1.5rem;
@@ -33,7 +33,7 @@
 .purposeCards {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @media (min-width: 768px) {

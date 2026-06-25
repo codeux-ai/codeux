@@ -6,6 +6,8 @@ import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 import { FormError } from "../forms/FormError.js";
+import { Modal } from "./Modal.js";
+import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { fetchLocalDirectories } from "../../lib/project-api.js";
 import type { LocalDirectoryBrowserResponse } from "../../types.js";
 
@@ -95,6 +97,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const reducedMotion = useReducedMotion();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
+    const nameInputRef = useRef<HTMLInputElement>(null);
     const [touched, setTouched] = useState({ name: false, path: false });
 
     const validationErrors = useMemo(() => {
@@ -109,45 +112,13 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         return errors;
     }, [name, gitUrl, sourceType]);
 
-    useLayoutEffect(() => {
-        const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
-        const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
-        gsap.fromTo(cardRef.current,
-            { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
-            { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease, clearProps: "filter" }
-        );
-        if (fieldsRef.current) {
-            gsap.fromTo(Array.from(fieldsRef.current.children),
-                { y: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.yStart, opacity: 0 },
-                {
-                    y: 0,
-                    opacity: 1,
-                    stagger: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.stagger,
-                    duration: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.duration,
-                    ease: MODAL_MOTION.fieldStagger.ease,
-                    delay: reducedMotion ? 0 : MODAL_MOTION.fieldStagger.delay
-                }
-            );
-        }
-    }, [reducedMotion]);
 
     const handleClose = () => {
         if (isSubmitting) return;
-        setIsClosing(true);
-
-        const d_card = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
-        const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
-
-        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d_card, ease: MODAL_MOTION.exit.ease });
-        gsap.to(backdropRef.current, { opacity: 0, duration: d_backdrop, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
+        onClose();
     };
 
-    const backdropRef = useFocusTrap(!isClosing, { onClose: handleClose, restoreFocus: true });
 
-    const handleBackdropClick = (e: PointerEvent) => {
-        if (e.target === backdropRef.current) handleClose();
-    };
 
     const submitProject = async () => {
         setIsSubmitting(true);
@@ -160,7 +131,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     type: 'new_project',
                     path: newInitMode === 'new-local' ? localPath.trim() : '',
                     initMode: newInitMode,
-                    repoSlug: gitUrlSlug.trim(),
+                    ...(newInitMode === 'new-remote' && gitUrlSlug.trim()
+                        ? { repoSlug: gitUrlSlug.trim() }
+                        : {}),
                     ...(newInitMode === 'new-remote'
                         ? {
                             remoteProvider: newProvider,
@@ -190,6 +163,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     };
 
     const handleSubmit = async (e: Event) => {
+
         e.preventDefault();
 
         setTouched(prev => ({ ...prev, path: true }));
@@ -377,17 +351,15 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     ] as const;
 
     return (
-        <div
-            ref={backdropRef}
-            onPointerDown={handleBackdropClick}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-project-modal-title"
-            className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/50 dark:bg-black/70 backdrop-blur-xl"
+        <Modal
+            isOpen={true}
+            onClose={handleClose}
+            initialFocusRef={nameInputRef}
+            ariaLabelledBy="add-project-modal-title"
+            className="w-[calc(100vw-2rem)] sm:w-full max-w-2xl lg:max-w-3xl !p-0 !rounded-[2.5rem]"
         >
             <div
-                ref={cardRef}
-                className="relative flex flex-col sm:flex-row w-[calc(100vw-2rem)] sm:w-full max-w-2xl lg:max-w-3xl max-h-[calc(100dvh-2rem)] overflow-hidden sm:overflow-y-auto rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
+                className="relative flex flex-col sm:flex-row w-full max-h-[calc(100dvh-2rem)] overflow-hidden sm:overflow-y-auto"
                 style={{ minHeight: modalMinHeight }}
             >
                 {/* ── Left decorative panel ── */}
@@ -425,6 +397,10 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 Connect a local directory or remote repository
                             </p>
                         </div>
+                        <div className="sr-only" aria-live="polite" role="status">
+                            {sourceType === 'new_project' ? 'New Project selected' : sourceType === 'git' ? 'Git Repo selected' : 'Local Project selected'}
+                            {showSetupOptions ? '. Setup Options step.' : ''}
+                        </div>
                         <button
                             onClick={handleClose}
                             aria-label="Close dialog"
@@ -439,10 +415,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <div ref={fieldsRef} className="flex flex-col gap-5 lg:gap-6 flex-1">
 
                             {submitError && (
-                                // form errors demand immediate user attention to proceed.
-                                <div role="alert" aria-live="assertive" id="project-form-error" className="text-status-red text-sm font-medium">
-                                    {submitError}
-                                </div>
+                                <ActionFeedbackRegion status="error" message={submitError} onDismiss={() => setSubmitError(null)} />
                             )}
 
                             {/* Project Name */}
@@ -452,21 +425,17 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 </label>
                                 <input
                                     id="add-project-name"
+                                    ref={nameInputRef}
                                     type="text"
                                     value={name}
                                     onInput={(e) => {
                                         const newName = (e.target as HTMLInputElement).value;
                                         setName(newName);
                                         if (!isSlugEdited) {
-                                            setGitUrlSlug(slugify(newName));
+                                            setGitUrlSlug(newName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""));
                                         }
-                                        if (submitError) setSubmitError(null);
+                                        setTouched(prev => ({ ...prev, name: true }));
                                     }}
-                                    placeholder="My Awesome Project"
-                                    className={projectNameInputClass}
-                                    required
-                                    autoFocus
-                                    autoComplete="off"
                                     aria-invalid={!!validationErrors.name && touched.name}
                                     aria-errormessage="project-name-error"
                                     aria-describedby={validationErrors.name && touched.name ? "project-name-error" : undefined}
@@ -637,7 +606,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     </div>
 
                                     {showSetupOptions && (
-                                        <div className="rounded-[1.35rem] border border-ember-500/25 bg-ember-500/[0.045] p-4 shadow-[0_14px_38px_rgba(255,184,0,0.08)] dark:bg-ember-500/[0.06]">
+                                        <div className="rounded-[1.35rem] border border-black/[0.06] dark:border-white/[0.08] p-4 bg-transparent">
                                             <div className="mb-3 flex items-center justify-between gap-4">
                                                 <div>
                                                     <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-ember-600 dark:text-ember-400">
@@ -665,8 +634,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                             onClick={() => setSetupOptions(prev => ({ ...prev, [key]: !prev[key] }))}
                                                             className={`flex min-w-0 items-start gap-3 rounded-2xl border p-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                                                                 checked
-                                                                    ? "border-ember-500/30 bg-white text-slate-900 shadow-sm dark:bg-white/[0.08] dark:text-white"
-                                                                    : "border-black/[0.06] bg-white/45 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
+                                                                    ? "border-ember-500/35 bg-ember-500/[0.08] text-slate-900 dark:text-white"
+                                                                    : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.035] dark:text-slate-400"
                                                             }`}
                                                             aria-pressed={checked}
                                                         >
@@ -729,25 +698,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         </div>
                                     </fieldset>
 
-                                    <div className="group/field">
-                                        <label htmlFor="add-project-git-slug" className={`${fieldLabelClass} flex items-center gap-1.5`}>
-                                            <GitBranch className="w-3.5 h-3.5" /> Git URL Slug
-                                        </label>
-                                        <input
-                                            id="add-project-git-slug"
-                                            type="text"
-                                            value={gitUrlSlug}
-                                            onInput={(e) => {
-                                                setGitUrlSlug((e.target as HTMLInputElement).value);
-                                                setIsSlugEdited(true);
-                                                if (submitError) setSubmitError(null);
-                                            }}
-                                            placeholder="my-awesome-project"
-                                            className={detailInputClass}
-                                            required
-                                        />
-                                    </div>
-
                                     {newInitMode === 'new-local' ? (
                                         <div className="group/field">
                                             <label htmlFor="add-project-new-path" className={`${fieldLabelClass} flex items-center gap-1.5`}>
@@ -786,6 +736,24 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         </div>
                                     ) : (
                                         <>
+                                            <div className="group/field">
+                                                <label htmlFor="add-project-git-slug" className={`${fieldLabelClass} flex items-center gap-1.5`}>
+                                                    <GitBranch className="w-3.5 h-3.5" /> Git URL Slug
+                                                </label>
+                                                <input
+                                                    id="add-project-git-slug"
+                                                    type="text"
+                                                    value={gitUrlSlug}
+                                                    onInput={(e) => {
+                                                        setGitUrlSlug((e.target as HTMLInputElement).value);
+                                                        setIsSlugEdited(true);
+                                                        if (submitError) setSubmitError(null);
+                                                    }}
+                                                    placeholder="my-awesome-project"
+                                                    className={detailInputClass}
+                                                    required
+                                                />
+                                            </div>
                                             <div className="group/field">
                                                 <div className="flex items-center justify-between gap-3">
                                                     <label className={fieldLabelClass}>
@@ -889,6 +857,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     </form>
                 </div>
             </div>
-        </div>
+        </Modal>
     );
 };

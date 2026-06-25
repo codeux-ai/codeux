@@ -6,8 +6,8 @@ import {
     Clock, ChevronDown, ChevronRight, Eye, EyeOff,
     FileText, RotateCcw, GitPullRequest, ExternalLink, Timer, CheckCheck, PencilLine,
 } from "lucide-preact";
-import { WaveFluid } from "./ui/WaveFluid.js";
-import { BorderTrace } from "./ui/BorderTrace.js";
+
+
 import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { TaskStagePills } from "./SprintStatsDeck.js";
 import { RuntimeEventFeed } from "./RuntimeEventFeed.js";
@@ -28,6 +28,7 @@ import { Button } from "./ui/Button.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { AgentSelectAvatarIcon } from "./agents/AgentSelectAvatarIcon.js";
 import { SprintReviewBadge } from "./sprints/SprintReviewBadge.js";
+import { getSafeUrl } from "../lib/safe-url.js";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -299,15 +300,15 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
             ref={cardRef}
             tabIndex={0}
             className="group relative overflow-hidden focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-signal-500 focus-visible:ring-offset-4 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800
-                       bg-white/80 dark:bg-void-800/75
-                       backdrop-blur-sm
-                       border border-black/[0.06] dark:border-white/[0.06]
+                       bg-white dark:bg-void-800
+
+                       border border-black/[0.08] dark:border-white/[0.08]
                        rounded-[1.75rem] p-7
-                       shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
+                       shadow-sm
                        transition-[border-color] duration-300"
         >
-            <WaveFluid accentHex={cfg.hex} isActive={taskPhase === "RUNNING"} />
-            <BorderTrace accentHex={cfg.hex} />
+
+
 
             <div
                 ref={flareRef}
@@ -453,6 +454,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             <button
                                 type="button"
                                 onClick={handleToggleFeed}
+                                aria-label={`${showFeed ? 'Hide' : 'Show'} runtime feed for task ${task.id}`}
                                 className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                            transition-all duration-200 border
                                            ${showFeed
@@ -467,6 +469,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         <button
                             type="button"
                             onClick={handleToggleExpand}
+                                aria-label={`${expanded ? 'Collapse' : 'Expand'} prompt for task ${task.id}`}
                             className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                        transition-all duration-200 border
                                        ${expanded
@@ -480,6 +483,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         <Button
                             type="button"
                             onClick={handleEditClick}
+                            aria-label={`Edit task ${task.id}`}
                             variant="ghost"
                             icon={PencilLine}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-signal-500 hover:border-signal-500/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
@@ -489,35 +493,43 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         <Button
                             type="button"
                             onClick={handleForceCompleteClick}
+                            aria-label={`Force complete task ${task.id}`}
                             isLoading={isForceCompleting}
-                            disabled={taskPhase === "COMPLETED"}
+                            aria-disabled={taskPhase === "COMPLETED"}
+                            aria-busy={isForceCompleting}
                             variant="ghost"
                             icon={CheckCheck}
-                            className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-green hover:border-status-green/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
+                            className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-green hover:border-status-green/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 aria-disabled:opacity-40 aria-disabled:pointer-events-none"
                         >
-                            Force complete
+                            {isForceCompleting ? "Force completing" : "Force complete"}
+                            {isForceCompleting && <span className="sr-only">Force completing...</span>}
                         </Button>
                         <Button
                             type="button"
                             onClick={handleRerunClick}
+                            aria-label={`Rerun task ${task.id}`}
                             isLoading={isRerunning}
+                            aria-busy={isRerunning}
                             variant="ghost"
                             icon={RotateCcw}
                             className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
-                            Rerun
+                            {isRerunning ? "Rerunning" : "Rerun"}
+                            {isRerunning && <span className="sr-only">Rerunning task...</span>}
                         </Button>
                     </div>
                     {task.pr_url && (
                         <a
-                            href={task.pr_url}
+                            href={getSafeUrl(task.pr_url)}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
+                            aria-label={`View Pull Request for task ${task.id}`}
                             className="text-[10px] font-mono text-signal-500 hover:text-signal-400 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 focus-visible:rounded"
                         >
                             <span className="py-2.5 min-h-[44px] inline-flex items-center gap-1.5">
-                                <GitPullRequest className="w-3 h-3" strokeWidth={2} />
-                                PR
+                                <GitPullRequest className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
+                                <span className="sr-only">Pull Request</span>
+                                <span aria-hidden="true">PR</span>
                                 <ExternalLink className="w-2.5 h-2.5 opacity-50" strokeWidth={2} />
                             </span>
                         </a>

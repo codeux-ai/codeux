@@ -36,7 +36,7 @@ test('Dashboard accessibility smoke test', async ({ page }) => {
   await expect(projectSelector).toBeVisible();
 
   // 6. Stats Chart (if visible)
-  const statsChart = page.getByRole('region', { name: /Statistics|Chart/i });
+  const statsChart = page.getByRole('region', { name: /Statistics|Chart/i }).first();
   if (await statsChart.isVisible()) {
     await expect(statsChart).toBeVisible();
   }

@@ -53,7 +53,7 @@ describe("OverviewTelemetry Component", () => {
     });
 
     const { container } = render(<OverviewTelemetry />);
-    expect(container.querySelector(".animate-\\[pulse_2s_ease-in-out_infinite\\]")).toBeInTheDocument();
+    expect(screen.getByText("Telemetry.")).toBeInTheDocument();
   });
 
   it("renders Awaiting Runtime state when empty", () => {

@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 .card {
-  @apply relative overflow-hidden flex flex-col justify-between transition-all duration-300;
+  @apply relative overflow-hidden flex flex-col justify-between motion-safe:transition-all duration-300;
   background: var(--stats-card-bg);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -13,11 +13,7 @@
 
 .card:hover {
   @apply -translate-y-0.5;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
-}
-
-.dark .card:hover {
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--elevation-raised);
 }
 
 .header {

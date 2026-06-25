@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ExecutionRuntimeEventSummary } from "../../../dashboard/src/types.js";
-import { getExecutionEventText } from "../../../dashboard/src/v2/lib/live-session-config.js";
+import { getExecutionEventText, getTaskCfg } from "../../../dashboard/src/v2/lib/live-session-config.js";
 
 function createEvent(payload: Record<string, unknown>): ExecutionRuntimeEventSummary {
   return {
@@ -55,5 +55,20 @@ describe("live-session-config", () => {
     }));
 
     expect(text).toBe("Refreshing workspace snapshot");
+  });
+
+  it("renders Waiting for slot (current/limit) for provider_concurrency_wait events", () => {
+    const event = createEvent({
+      currentCount: 2,
+      limit: 3,
+    });
+    event.eventType = "provider_concurrency_wait";
+    const text = getExecutionEventText(event);
+    expect(text).toBe("Waiting for slot (2/3)");
+  });
+
+  it("resolves PENDING_cap status to dynamic waiting slot labels in getTaskCfg", () => {
+    const cfg = getTaskCfg("PENDING_cap_2_3");
+    expect(cfg.label).toBe("Waiting for slot (2/3)");
   });
 });

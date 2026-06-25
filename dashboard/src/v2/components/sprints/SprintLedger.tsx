@@ -9,6 +9,8 @@ import {
   Square,
 } from "lucide-preact";
 import { SkeletonRow } from "../layout/SkeletonLoader.js";
+import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
 import { resolveListWindow, type ListWindowOption } from "../../lib/list-window.js";
 import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ConfirmDialog } from "../ui/ConfirmDialog.js";
@@ -186,6 +188,9 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
 
   const allFilteredSelected = ledgerSprints.length > 0 && ledgerSprints.every((s) => selectedIds.has(s.id));
 
+  const sortDuration = useResolvedMotionDuration(INTERACTION_TOKENS.controlFeedback.duration);
+  const sortEase = INTERACTION_TOKENS.controlFeedback.ease;
+
   const handleSort = (key: SprintTableSortKey) => {
     setSort((current) => nextSort(current, key));
   };
@@ -217,7 +222,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   const handleBulkDelete = useCallback(async () => {
     const confirmed = await requestConfirm({
       title: "Delete Sprints?",
-      body: `Are you sure you want to delete ${selectedFiltered.length} selected sprint${selectedFiltered.length === 1 ? "" : "s"}? All associated tasks and execution history will be permanently removed.`,
+      body: `Are you sure you want to delete ${selectedFiltered.length} selected sprint${selectedFiltered.length === 1 ? "" : "s"}? This action is permanent and will cascade to all downstream tasks, logs, and associated git artifacts. Please ensure you have cleaned up your repository branches if needed before proceeding.`,
       confirmLabel: "Delete Sprints",
       cancelLabel: "Cancel",
       destructive: true,
@@ -225,7 +230,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
 
     if (confirmed) {
       onBulkDelete(selectedFiltered.map((s) => s.id));
-      setSelectedIds(deselectAll());
+      // Selection clears naturally as items are removed, keeping the pending state visible
     }
   }, [onBulkDelete, selectedFiltered, requestConfirm]);
 
@@ -254,11 +259,11 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
 
   const renderSortIndicator = (key: SprintTableSortKey) => {
     if (sort.key !== key) {
-      return <ArrowUpDown className="h-3 w-3 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-slate-600" strokeWidth={2.2} />;
+      return <ArrowUpDown aria-hidden="true" className="h-3 w-3 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:text-slate-600" strokeWidth={2.2} style={{ transitionDuration: sortDuration, transitionTimingFunction: sortEase }} />;
     }
     return sort.direction === "asc"
-      ? <ArrowUp className="h-3 w-3 text-signal-500" strokeWidth={2.2} />
-      : <ArrowDown className="h-3 w-3 text-signal-500" strokeWidth={2.2} />;
+      ? <ArrowUp aria-hidden="true" className="h-3 w-3 text-signal-500 opacity-100 transition-transform" strokeWidth={2.2} style={{ transitionDuration: sortDuration, transitionTimingFunction: sortEase }} />
+      : <ArrowDown aria-hidden="true" className="h-3 w-3 text-signal-500 opacity-100 transition-transform" strokeWidth={2.2} style={{ transitionDuration: sortDuration, transitionTimingFunction: sortEase }} />;
   };
 
   return (
@@ -297,7 +302,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       />
 
       <div className="min-h-[20rem] px-3 py-4 sm:px-4 lg:px-5">
-        <Table>
+        <Table caption="Sprint ledger with selection, sorting, and bulk actions.">
           <TableHeader>
             <TableCell isHeader isFirst className="w-[80px] min-w-[80px]">
               <span className="sr-only">Select</span>
@@ -306,84 +311,92 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 disabled={windowedSprints.length === 0 || isAnyBulkPending}
                 onClick={handleToggleSelectAll}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-black/[0.04] hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:bg-white/[0.05] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-                title={allFilteredSelected ? "Deselect all" : "Select all visible"}
+                title={allFilteredSelected ? "Deselect all visible sprints" : "Select all visible sprints"}
+                aria-label={allFilteredSelected ? "Deselect all visible sprints" : "Select all visible sprints"}
               >
                 {allFilteredSelected
                   ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
                   : <Square className="h-4 w-4" strokeWidth={2.2} />}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[80px] min-w-[80px]">
+            <TableCell isHeader className="group w-[80px] min-w-[80px]" ariaSort={sort.key === "showcasePinned" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
               <button
                 type="button"
                 onClick={() => handleSort("showcasePinned")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Showcase, currently ${sort.key === "showcasePinned" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Showcase in ${sort.key === "showcasePinned" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 Showcase
                 {renderSortIndicator("showcasePinned")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "sprintKey" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
               <button
                 type="button"
                 onClick={() => handleSort("sprintKey")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Sprint ID, currently ${sort.key === "sprintKey" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Sprint ID in ${sort.key === "sprintKey" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 Sprint ID
                 {renderSortIndicator("sprintKey")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[220px] min-w-[220px]">
+            <TableCell isHeader className="group w-[220px] min-w-[220px]" ariaSort={sort.key === "name" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
               <button
                 type="button"
                 onClick={() => handleSort("name")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Sprint, currently ${sort.key === "name" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Sprint in ${sort.key === "name" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 Sprint
                 {renderSortIndicator("name")}
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "status" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
               <button
                 type="button"
                 onClick={() => handleSort("status")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Status, currently ${sort.key === "status" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Status in ${sort.key === "status" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 Status
                 {renderSortIndicator("status")}
               </button>
             </TableCell>
-            <TableCell isHeader align="right" className="group w-[100px] min-w-[100px]">
+            <TableCell isHeader align="right" className="group w-[100px] min-w-[100px]" ariaSort={sort.key === "tasksCount" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
               <button
                 type="button"
                 onClick={() => handleSort("tasksCount")}
                 className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Tasks, currently ${sort.key === "tasksCount" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Tasks in ${sort.key === "tasksCount" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 {renderSortIndicator("tasksCount")}
                 Tasks
               </button>
             </TableCell>
-            <TableCell isHeader align="right" className="group w-[140px] min-w-[140px]">
+            <TableCell isHeader align="right" className="group w-[140px] min-w-[140px]" ariaSort={sort.key === "completion" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
               <button
                 type="button"
                 onClick={() => handleSort("completion")}
                 className="inline-flex w-full items-center justify-end gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Completion, currently ${sort.key === "completion" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Completion in ${sort.key === "completion" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 {renderSortIndicator("completion")}
                 Completion
               </button>
             </TableCell>
-            <TableCell isHeader className="group w-[120px] min-w-[120px]">
+            <TableCell isHeader className="group w-[120px] min-w-[120px]" ariaSort={sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
               <button
                 type="button"
                 onClick={() => handleSort("createdAt")}
                 className="inline-flex items-center gap-2 rounded-lg transition-colors hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:hover:text-slate-200"
+                aria-label={`Sort by Created, currently ${sort.key === "createdAt" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Created in ${sort.key === "createdAt" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
               >
                 Created
                 {renderSortIndicator("createdAt")}
               </button>
             </TableCell>
-            <TableCell isHeader align="right" isLast className="w-[140px] min-w-[140px]">Controls</TableCell>
+            <TableCell isHeader align="right" isLast className="w-[140px] min-w-[140px] pr-6">Controls</TableCell>
           </TableHeader>
           <TableBody>
             {isLoading && windowedSprints.length === 0 ? (
@@ -401,7 +414,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/80 text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.05]">
                       <Inbox className="h-5 w-5" strokeWidth={2.1} />
                     </div>
-                    <div className="mt-4 font-display text-xl font-bold text-slate-800 dark:text-white">
+                    <div aria-live="polite" className="mt-4 font-display text-xl font-bold text-slate-800 dark:text-white">
                       {filters.query || filters.qa !== "all" || filters.showcase !== "all" || filters.status !== "all"
                         ? "No matching sprints"
                         : "No sprints yet"}

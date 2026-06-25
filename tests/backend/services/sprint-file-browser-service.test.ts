@@ -177,6 +177,51 @@ describe("SprintFileBrowserService", () => {
     expect(removedForeign).toBe(true);
   });
 
+
+  it("caches tree results and invalidates on rebuild or stop", async () => {
+    const { service, fileBrowserRepository, project, sprint } = await createHarness();
+    const containerTsv = `cid123\tcode-ux-filebrowser-x-y\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
+    const session = fileBrowserRepository.createSession({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      featureBranch: "feature/test",
+      defaultBranch: "main",
+      workspacePath: "/runtime-root/file-browser/x/workspace",
+    });
+    fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123", containerName: "code-ux-filebrowser-x-y" });
+
+    runCommandStrict.mockImplementation(async (cmd: string, args: string[]) =>
+      cmd === "docker" && args[0] === "ps" && args.includes("--format") ? ok(containerTsv) : ok(),
+    );
+    commandRun.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === "docker" && args[0] === "exec") {
+        return ok("D./src\nF./src/index.ts\nF./README.md\nD./src/lib\nF./src/lib/util.ts\n");
+      }
+      return ok();
+    });
+
+    const tree1 = await service.getTree(session.id);
+    expect(tree1.fileCount).toBe(3);
+    const firstCallCount = commandRun.mock.calls.length;
+
+    const tree2 = await service.getTree(session.id);
+    expect(tree2.fileCount).toBe(3);
+    expect(commandRun.mock.calls.length).toBe(firstCallCount);
+
+    fileBrowserRepository.updateSession(session.id, { lastBuildAt: new Date().toISOString() });
+    const tree3 = await service.getTree(session.id);
+    expect(tree3.fileCount).toBe(3);
+    expect(commandRun.mock.calls.length).toBeGreaterThan(firstCallCount);
+    const secondCallCount = commandRun.mock.calls.length;
+
+    await service.stopSession(session.id);
+    fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123", containerName: "code-ux-filebrowser-x-y" });
+    const tree4 = await service.getTree(session.id);
+    expect(tree4.fileCount).toBe(3);
+    expect(commandRun.mock.calls.length).toBeGreaterThan(secondCallCount);
+  });
+
   it("parses the container file listing into a sorted tree", async () => {
     const { service, fileBrowserRepository, project, sprint } = await createHarness();
     const containerTsv = `cid123\tcode-ux-filebrowser-x-y\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
@@ -318,6 +363,9 @@ describe("SprintFileBrowserService", () => {
         const ref = args[1] as string;
         return ref.startsWith("deadbeef") ? ok("const a = 1;\n") : ok("const a = 2;\n");
       }
+      if (args[0] === "rev-parse" && args.includes("--verify")) {
+        return ok("deadbeef\n");
+      }
       return ok();
     });
 
@@ -396,5 +444,107 @@ describe("SprintFileBrowserService", () => {
     expect(rebuilt).toBe(true);
     const refreshed = fileBrowserRepository.getSession(session.id);
     expect(refreshed?.lastCompletedTaskCount).toBe(1);
+  });
+});
+
+  describe("file truncation limits", () => {
+    it("truncates large files when reading diff original/modified content", async () => {
+      const { service, project, sprint } = await createHarness();
+
+      const smallContent = "A".repeat(100);
+      const largeContent = "A".repeat(2_000_000 + 100);
+
+      // Override runGit specifically for this test
+      vi.spyOn(service as any, "runGit").mockImplementation(async (repoPath, args) => {
+        if (args[0] === "show") {
+          // If the path is requested Path, make it large. Else small
+          const pathArg = args[1];
+          if (pathArg.includes("large-file.txt")) {
+             return { ok: true, stdout: largeContent };
+          }
+          return { ok: true, stdout: smallContent };
+        }
+
+        if (args[0] === "diff" && args[1] === "--name-status") {
+           return { ok: true, stdout: "M\tlarge-file.txt\nM\tsmall-file.txt\n" };
+        }
+
+        // Mock branch stuff
+        return { ok: true, stdout: "ref" };
+      });
+
+      const session = await service.startSession(project.id, sprint.id, "feature", "sess");
+      const result = await service.getDiff(session.id, "large-file.txt");
+      expect(result.truncated).toBe(true);
+      expect(result.original?.length).toBe(2_000_000);
+      expect(result.modified?.length).toBe(2_000_000);
+    });
+
+  describe("file truncation and limits", () => {
+    it("truncates tree entries when exceeding max limit", async () => {
+      const { service, fileBrowserRepository, project, sprint } = await createHarness();
+      const containerTsv = `cid123\tcode-ux-filebrowser-x-y\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
+      const session = fileBrowserRepository.createSession({
+        projectId: project.id,
+        sprintId: sprint.id,
+        status: "running",
+        featureBranch: "feature/test",
+        defaultBranch: "main",
+        workspacePath: "/runtime-root/file-browser/x/workspace",
+      });
+      fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123", containerName: "code-ux-filebrowser-x-y" });
+
+      runCommandStrict.mockImplementation(async (cmd: string, args: string[]) =>
+        cmd === "docker" && args[0] === "ps" && args.includes("--format") ? ok(containerTsv) : ok(),
+      );
+
+      // Generate slightly more than MAX_TREE_ENTRIES (20000)
+      const fakeOutput = Array.from({ length: 20005 }).map((_, i) => `F./file${i}.txt`).join("\n") + "\n";
+
+      commandRun.mockImplementation(async (cmd: string, args: string[]) => {
+        if (cmd === "docker" && args[0] === "exec") {
+          return ok(fakeOutput);
+        }
+        return ok();
+      });
+
+      const tree = await service.getTree(session.id);
+      expect(tree.truncated).toBe(true);
+      expect(tree.fileCount).toBe(20000); // Or whatever the limit logic does
+    });
+  });
+
+  describe("file oversized limits via head", () => {
+    it("handles large files returned by head", async () => {
+      const { service, fileBrowserRepository, project, sprint } = await createHarness();
+      const containerTsv = `cid123\tcode-ux-filebrowser-x-y\tUp 2 seconds\t${project.id}\t${sprint.id}\tsess`;
+      const session = fileBrowserRepository.createSession({
+        projectId: project.id,
+        sprintId: sprint.id,
+        status: "running",
+        featureBranch: "feature/test",
+        defaultBranch: "main",
+        workspacePath: "/runtime-root/file-browser/x/workspace",
+      });
+      fileBrowserRepository.updateSession(session.id, { status: "running", containerId: "cid123", containerName: "code-ux-filebrowser-x-y" });
+
+      runCommandStrict.mockImplementation(async (cmd: string, args: string[]) =>
+        cmd === "docker" && args[0] === "ps" && args.includes("--format") ? ok(containerTsv) : ok(),
+      );
+
+      const MAX_FILE_BYTES = 2_000_000;
+      const fakeOutput = "A".repeat(MAX_FILE_BYTES + 1);
+
+      commandRun.mockImplementation(async (cmd: string, args: string[]) => {
+        if (cmd === "docker" && args[0] === "exec" && args.join(" ").includes("head")) {
+          return ok(fakeOutput);
+        }
+        return ok();
+      });
+
+      const result = await service.readFile(session.id, "large-file.txt");
+      expect(result.truncated).toBe(true);
+      expect(result.size).toBe(MAX_FILE_BYTES);
+    });
   });
 });

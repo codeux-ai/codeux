@@ -37,7 +37,8 @@ Group changes into orthogonal concerns:
 For **imports**: Before retaining imports from both sides, verify each import is actually referenced in the file body by running `grep -n '<imported-name>' <file>` for each imported symbol. Only keep imports that are used — unused imports can remain from stale code that was already removed. Concatenate both sets of truly-used import lines, preserving whitespace conventions (blank line between groups is allowed).
 
 For **JSX blocks**: Decide on a merge strategy:
-- **Condition gate**: Choose the semantically correct gate (e.g., `showInterventionBadge` from a presentation mapper rather than raw `humanIntervention`), then layer T04's wrapper/presentation changes (e.g., pulse div, repositioning classes) on top.
+- **Condition gate**: Choose the semantically correct gate (e.g., `showInterventionBadge` from a presentation mapper rather than raw `humanIntervention`), then layer the incoming branch's wrapper/presentation changes (e.g., pulse div, repositioning classes) on top.
+- **Accessibility (ARIA)**: If the incoming branch adds critical accessibility attributes (e.g., `aria-label`, `aria-sort`, `aria-live`, `aria-atomic`), ensure they are merged into the final JSX, even if the structure of the parent element has changed.
 - **Positioning/classes**: Accept the newer or more specific version when one supersedes the other.
 - **Wrappers**: Wrap the condition's child element(s) with the incoming branch's wrapper if it adds animation or accessibility improvements.
 
@@ -54,6 +55,7 @@ npm run typecheck
 npm run lint
 npx vitest run <focused-test-file>  # test the affected module
 npm run build
+npm run test:dashboard # Verify dashboard-specific component integration
 ```
 
 All gates must pass (exit 0) before committing.

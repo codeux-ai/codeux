@@ -54,14 +54,14 @@ export const AgentsHero: FunctionComponent<{
 
         {total > 0 && (
           <div className="flex flex-wrap items-center gap-2" data-hero-anim>
-            <span className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/8 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:bg-signal-500/10 dark:text-signal-400">
+            <span className="inline-flex items-center gap-2 rounded-full border border-signal-500/30 bg-signal-500/10 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 shadow-sm dark:border-signal-500/25 dark:bg-signal-500/15 dark:text-signal-400">
               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-signal-500 font-mono text-[9px] font-black text-white dark:text-void-900">
                 {total}
               </span>
               Active
             </span>
             {synced > 0 && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+              <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/80 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 shadow-sm backdrop-blur-md dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-signal-500 shadow-[0_0_8px_rgba(0,224,160,0.6)]" />
                 {synced} synced
               </span>
@@ -81,7 +81,7 @@ export const AgentsHero: FunctionComponent<{
           type="button"
           onClick={onSyncAll}
           disabled={!selectedProject || syncingAll}
-          className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 backdrop-blur-md transition-all hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
+          className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 backdrop-blur-md transition-all hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/70 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white disabled:dark:hover:bg-white/[0.03] disabled:dark:hover:text-slate-300"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${syncingAll ? "animate-spin" : ""}`} strokeWidth={2.3} />
           Sync All

@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { Loader2, Pause, Play, Square } from "lucide-preact";
 
 export interface SprintControlsProps {
+  sprintName?: string;
   isActive: boolean;
   isPaused: boolean;
   isStartStopPending: boolean;
@@ -17,6 +18,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
   isPauseResumePending,
   onStartStop,
   onPauseResume,
+  sprintName = "sprint",
 }) => {
   const canPauseResume = isActive || isPaused;
 
@@ -25,8 +27,24 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
       <button
         type="button"
         onClick={onPauseResume}
+        aria-label={
+          isPauseResumePending
+            ? (isPaused ? "Resuming..." : "Pausing...")
+            : isPaused
+              ? `Resume ${sprintName}`
+              : `Pause ${sprintName}`
+        }
         disabled={!canPauseResume || isPauseResumePending || isStartStopPending}
-        className={`inline-flex h-10 min-w-[6.25rem] flex-1 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
+        title={
+          isPauseResumePending || isStartStopPending
+            ? "Wait for the current action to finish"
+            : !canPauseResume
+              ? "Sprint must be running to pause"
+              : isPaused
+                ? "Resume sprint execution"
+                : "Pause sprint execution"
+        }
+        className={`inline-flex h-8 min-w-[6.25rem] flex-1 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isPaused
             ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
             : "border-status-amber/25 bg-status-amber/10 text-status-amber hover:bg-status-amber/15"
@@ -39,14 +57,28 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         ) : (
           <Pause className="h-3.5 w-3.5" fill="currentColor" />
         )}
-        {isPauseResumePending ? (isPaused ? "Resuming" : "Pausing") : (isPaused ? "Resume" : "Pause")}
+        {isPauseResumePending ? (isPaused ? "Resuming..." : "Pausing...") : (isPaused ? "Resume" : "Pause")}
       </button>
 
       <button
         type="button"
         onClick={onStartStop}
+        aria-label={
+          isStartStopPending
+            ? (isActive ? "Stopping..." : "Starting...")
+            : isActive
+              ? `Stop ${sprintName}`
+              : `Start ${sprintName}`
+        }
         disabled={isStartStopPending || isPauseResumePending}
-        className={`inline-flex h-10 min-w-[6rem] flex-1 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
+        title={
+          isStartStopPending || isPauseResumePending
+            ? "Wait for the current action to finish"
+            : isActive
+              ? "Stop sprint execution"
+              : "Start sprint execution"
+        }
+        className={`inline-flex h-8 min-w-[6rem] flex-1 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 sm:flex-none ${
           isActive
             ? "border-status-red/20 bg-status-red/[0.1] text-status-red hover:bg-status-red/[0.14]"
             : "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
@@ -59,7 +91,7 @@ export const SprintControls: FunctionComponent<SprintControlsProps> = ({
         ) : (
           <Play className="h-3.5 w-3.5" fill="currentColor" />
         )}
-        {isStartStopPending ? (isActive ? "Stopping" : "Starting") : (isActive ? "Stop" : "Start")}
+        {isStartStopPending ? (isActive ? "Stopping..." : "Starting...") : (isActive ? "Stop" : "Start")}
       </button>
     </>
   );

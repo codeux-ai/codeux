@@ -33,6 +33,7 @@ import { WatchLoopRunner } from "../domain/sprint/orchestrator/watch-loop-runner
 import { SprintActionRunner } from "../domain/sprint/orchestrator/sprint-action-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { MainMergeGateService, type MergeFeedbackResult } from "../domain/sprint/ci/main-merge-gate.js";
+import { MergeConflictDebouncer } from "../domain/sprint/ci/merge-conflict-debouncer.js";
 import type { ResolvePullRequestResult } from "../services/git-status-service.js";
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
@@ -129,6 +130,9 @@ export class SprintOrchestrator {
   private readonly watchLoopRunner: WatchLoopRunner;
   private readonly actionRunner: SprintActionRunner;
   private readonly activeOrchestrations = new Set<string>();
+  // Debounces transient `DIRTY` states on the feature→main PR (keyed by PR url, so
+  // concurrent sprints don't collide) across watch-loop cycles.
+  private readonly mainMergeConflictDebouncer = new MergeConflictDebouncer();
 
   constructor(private readonly deps: SprintOrchestratorDependencies) {
     this.cycleRunner = new CycleRunner(deps);
@@ -240,6 +244,9 @@ export class SprintOrchestrator {
     githubMode: "REMOTE" | "LOCAL";
     subtasks?: Subtask[];
 }): Promise<MergeFeedbackResult> {
+    // Advance the debouncer once per cycle (this runs once per watch-loop cycle);
+    // the two evaluate calls below observe the same PR idempotently within it.
+    this.mainMergeConflictDebouncer.beginCycle();
     if (!this.deps.getCiStatusForScope) {
       return {
         text: "",
@@ -268,6 +275,7 @@ export class SprintOrchestrator {
       ...args,
       gitStatus,
       autoMergeMainBranchPr: this.deps.autoMergeFeaturePr,
+      mergeConflictDebouncer: this.mainMergeConflictDebouncer,
     });
     if (
       feedback.state === "missing_pr"
@@ -304,6 +312,7 @@ export class SprintOrchestrator {
       ...args,
       gitStatus,
       autoMergeMainBranchPr: this.deps.autoMergeFeaturePr,
+      mergeConflictDebouncer: this.mainMergeConflictDebouncer,
     });
     return createdPrNote
       ? {
@@ -376,7 +385,12 @@ export class SprintOrchestrator {
     const repoPath = executionContext.repoPath;
     const defaultFeatureBranch = executionContext.featureBranch;
     const defaultBranch = executionContext.defaultBranch;
-    const githubMode = this.deps.settings.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
+    // Use the project/sprint-scoped git mode (LOCAL vs REMOTE) - `this.deps.settings`
+    // is the global snapshot and never carries a top-level `githubMode`, so reading it
+    // here always collapsed to REMOTE and silently disabled the LOCAL worker-to-feature
+    // merge path for LOCAL-mode projects. Mirror how QA and the gates resolve it
+    // (`settings.git.githubMode`).
+    const githubMode = dashboardSettings.git.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
     const retryFailed = true;
     const loopSteps = this.getLoopStepSettings(dashboardSettings);
     const ciIntelligence = this.getCiIntelligenceSettings(dashboardSettings);
@@ -466,7 +480,12 @@ export class SprintOrchestrator {
     const sprintScopeKey = `${executionContext.project.id}:${executionContext.sprint.id}`;
     const defaultFeatureBranch = executionContext.featureBranch;
     const defaultBranch = executionContext.defaultBranch;
-    const githubMode = this.deps.settings.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
+    // Use the project/sprint-scoped git mode (LOCAL vs REMOTE) - `this.deps.settings`
+    // is the global snapshot and never carries a top-level `githubMode`, so reading it
+    // here always collapsed to REMOTE and silently disabled the LOCAL worker-to-feature
+    // merge path for LOCAL-mode projects. Mirror how QA and the gates resolve it
+    // (`settings.git.githubMode`).
+    const githubMode = dashboardSettings.git.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
     const retryFailed = args.retry_failed !== false;
     const loopSteps = this.getLoopStepSettings(dashboardSettings);
     const ciIntelligence = this.getCiIntelligenceSettings(dashboardSettings);

@@ -4,6 +4,8 @@ import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { Info, Copy, Check } from "lucide-preact";
 import { calculatePosition } from "../../lib/positioning/index.js";
+import { MOTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface InfoIconPopoverProps {
     className?: string;
@@ -13,6 +15,7 @@ interface InfoIconPopoverProps {
 }
 
 export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ className = "", title = "Placeholders", items = [], label }) => {
+    const isReducedMotion = useReducedMotion();
     const [isVisible, setIsVisible] = useState(false);
     const [isRendered, setIsRendered] = useState(false);
 
@@ -62,6 +65,25 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
         }
     };
 
+    useEffect(() => {
+        if (!isVisible && isRendered) {
+            if (hasInteractiveContent) {
+                if (
+                    !document.activeElement ||
+                    document.activeElement === document.body ||
+                    (popoverRef.current && popoverRef.current.contains(document.activeElement))
+                ) {
+                    if (previousFocusRef.current?.isConnected) {
+                        previousFocusRef.current.focus();
+                        previousFocusRef.current = null;
+                    } else if (wrapperRef.current?.isConnected) {
+                        wrapperRef.current.focus();
+                    }
+                }
+            }
+        }
+    }, [isVisible]);
+
     useLayoutEffect(() => {
         if (isVisible && wrapperRef.current && popoverRef.current) {
             const { top, left } = calculatePosition({
@@ -84,19 +106,26 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
         if (isVisible) {
             gsap.fromTo(
                 popoverRef.current,
-                { opacity: 0, scale: 0.9, y: 10 },
-                { opacity: 1, scale: 1, y: 0, duration: 0.4, ease: "back.out(1.7)" }
+                { opacity: 0, scale: 0.95, y: 5 },
+                {
+                    opacity: 1,
+                    scale: 1,
+                    y: 0,
+                    duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
+                    ease: MOTION_TOKENS.easing.standard,
+                }
             );
         } else if (isRendered) {
             gsap.to(popoverRef.current, {
                 opacity: 0,
                 scale: 0.95,
-                duration: 0.15,
-                ease: "power2.in",
+                y: 5,
+                duration: isReducedMotion ? 0 : parseFloat(MOTION_TOKENS.timing.fast) / 1000,
+                ease: MOTION_TOKENS.easing.standard,
                 onComplete: () => setIsRendered(false)
             });
         }
-    }, [isVisible, isRendered]);
+    }, [isVisible, isRendered, isReducedMotion]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -104,13 +133,6 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
                 if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
                 if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
                 setIsVisible(false);
-                if (hasInteractiveContent) {
-                    if (wrapperRef.current) {
-                        wrapperRef.current.focus();
-                    } else if (previousFocusRef.current) {
-                        previousFocusRef.current.focus();
-                    }
-                }
             }
         };
 

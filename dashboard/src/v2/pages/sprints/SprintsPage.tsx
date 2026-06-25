@@ -36,6 +36,8 @@ import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsO
 import { SprintImportMenu } from "../../components/sprints/SprintImportMenu.js";
 import { SprintIssueImportModal } from "../../components/sprints/SprintIssueImportModal.js";
 import { SprintJiraImportModal } from "../../components/sprints/SprintJiraImportModal.js";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog.js";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { useProgressiveList } from "../../hooks/use-progressive-list.js";
@@ -141,6 +143,7 @@ const SprintsProjectPlaceholder: FunctionComponent<{
 );
 
 export const SprintsPage: FunctionComponent = () => {
+  const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
   const searchParams = useSearch({ strict: false });
   const headerRef = useRef<HTMLDivElement>(null);
   const bubblesRef = useRef<HTMLDivElement>(null);
@@ -181,6 +184,9 @@ export const SprintsPage: FunctionComponent = () => {
     addTaskForSprint, setAddTaskForSprint,
     addTaskSprintTasks,
     virtualProviders,
+    defaultRouteOptionLabel,
+    defaultModelOptionLabel,
+    defaultRouteIconProviderId,
     planningEta,
     planningPresets,
     defaultPlanningAgentPresetId,
@@ -315,10 +321,10 @@ export const SprintsPage: FunctionComponent = () => {
 
   const onSprintSubmit = useCallback(async (payload: any) => {
     await handleSubmitSprint(payload);
-    if (!editingSprint) {
+    if ((payload.shouldHandleResult?.() ?? true) && !editingSprint) {
         animateLatestCell();
+        setLinkedIssues([]);
     }
-    setLinkedIssues([]);
   }, [handleSubmitSprint, editingSprint, animateLatestCell]);
 
   useEffect(() => {
@@ -363,7 +369,14 @@ export const SprintsPage: FunctionComponent = () => {
       execution={execution}
       pendingActionIds={pendingActionIds}
     >
-      <PageContainer padding={selectedProject ? "standard" : "sprintsEmpty"} className={selectedProject ? "gap-20" : "gap-4"}>
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        options={confirmOptions}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
+
+      <PageContainer aria-label="Sprints" padding={selectedProject ? "standard" : "sprintsEmpty"} className={selectedProject ? "gap-20" : "gap-4"}>
         <div ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
           <div className="flex flex-col gap-5">
             <div className="flex items-center gap-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-signal-500">
@@ -416,7 +429,7 @@ export const SprintsPage: FunctionComponent = () => {
               onClick={() => setShowSprintGallery((current) => !current)}
               disabled={!selectedProject}
               aria-pressed={showSprintGallery}
-              className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-all hover:-translate-y-px hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/40 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               {showSprintGallery ? (
                 <EyeOff className="h-3.5 w-3.5 text-ember-500" strokeWidth={2.2} />
@@ -520,7 +533,19 @@ export const SprintsPage: FunctionComponent = () => {
                           setShowCreateComposer(false);
                           setLinkedIssues(sprint.linkedIssues || []);
                         }}
-                        onDelete={() => { void handleDeleteSprint(sprint.id); }}
+                        onDelete={() => {
+                          void requestConfirm({
+                            title: "Delete Sprint?",
+                            body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
+                            confirmLabel: "Delete Sprint",
+                            cancelLabel: "Cancel",
+                            destructive: true,
+                          }).then((confirmed) => {
+                            if (confirmed) {
+                              void handleDeleteSprint(sprint.id);
+                            }
+                          });
+                        }}
                         onExport={() => { void handleOpenExport(sprint.id, sprint.name); }}
                         onOverrides={() => { setOverrideSprint(sprint); }}
                         onToggleShowcase={() => { void handleToggleShowcase(sprint); }}
@@ -577,6 +602,9 @@ export const SprintsPage: FunctionComponent = () => {
                     initialSprint={editingSprint}
                     linkedIssues={linkedIssues}
                     virtualProviders={virtualProviders}
+                    defaultRouteOptionLabel={defaultRouteOptionLabel}
+                    defaultModelOptionLabel={defaultModelOptionLabel}
+                    defaultRouteIconProviderId={defaultRouteIconProviderId}
                     planningPresets={planningPresets}
                     agentPresets={agentPresets}
                     defaultPlanningAgentPresetId={defaultPlanningAgentPresetId}
@@ -625,10 +653,15 @@ export const SprintsPage: FunctionComponent = () => {
                     agentPresets={agentPresets}
 
                     virtualProviders={virtualProviders}
+                    defaultRouteOptionLabel={defaultRouteOptionLabel}
+                    defaultModelOptionLabel={defaultModelOptionLabel}
+                    defaultRouteIconProviderId={defaultRouteIconProviderId}
                     planningEta={planningEta}
-                    onExecute={async (templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride) => {
-                      await handleQuicksprintExecute(templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride);
-                      animateLatestCell();
+                    onExecute={async (templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride, signal, options) => {
+                      await handleQuicksprintExecute(templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride, signal, options);
+                      if (options?.shouldHandleResult?.() ?? true) {
+                        animateLatestCell();
+                      }
                     }}
                     onCreateTemplate={handleCreateQuicksprintTemplate}
                     onUpdateTemplate={handleUpdateQuicksprintTemplate}
@@ -668,7 +701,17 @@ export const SprintsPage: FunctionComponent = () => {
                   void handleMarkCompleted(sprintId);
                 }}
                 onDeleteSprint={(sprintId) => {
-                  void handleDeleteSprint(sprintId);
+                  void requestConfirm({
+                    title: "Delete Sprint?",
+                    body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
+                    confirmLabel: "Delete Sprint",
+                    cancelLabel: "Cancel",
+                    destructive: true,
+                  }).then((confirmed) => {
+                    if (confirmed) {
+                      void handleDeleteSprint(sprintId);
+                    }
+                  });
                 }}
                 onBulkStart={handleBulkStart}
                 onBulkDelete={handleBulkDelete}
@@ -797,11 +840,21 @@ export const SprintsPage: FunctionComponent = () => {
                 void handleMarkCompleted(activeRowMenuSprint.id);
               }}
               onDelete={() => {
-                void handleDeleteSprint(activeRowMenuSprint.id);
+                void requestConfirm({
+                  title: "Delete Sprint?",
+                  body: "Are you sure you want to delete this sprint? All associated tasks and execution history will be permanently removed.",
+                  confirmLabel: "Delete Sprint",
+                  cancelLabel: "Cancel",
+                  destructive: true,
+                }).then((confirmed) => {
+                  if (confirmed) {
+                    void handleDeleteSprint(activeRowMenuSprint.id);
+                  }
+                });
               }}
               onClose={() => setRowMenu(null)}
               markCompletedIcon="square"
-              buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none"
             />
           </div>
         </div>,

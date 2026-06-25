@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { evaluateSprintRunState } from "../../../../../src/domain/sprint/orchestrator/sprint-state-evaluator.js";
+import { evaluateSprintRunState, isMainMergeAttentionItem } from "../../../../../src/domain/sprint/orchestrator/sprint-state-evaluator.js";
 import type { Subtask } from "../../../../../src/contracts/app-types.js";
 import type { ProjectAttentionItemRecord } from "../../../../../src/contracts/project-attention-types.js";
 
@@ -168,5 +168,28 @@ describe("evaluateSprintRunState", () => {
     expect(result.needsManualMerge).toBe(true);
     expect(result.waitingOnWorkerAttention).toBe(true);
     expect(result.allFinished).toBe(false);
+  });
+});
+
+describe("isMainMergeAttentionItem", () => {
+  it("recognizes a main-stage merge conflict", () => {
+    expect(isMainMergeAttentionItem({ attentionType: "merge_conflict", payload: { mergeStage: "main" } })).toBe(true);
+  });
+
+  it("recognizes a main-stage ci_fix_required item", () => {
+    expect(isMainMergeAttentionItem({ attentionType: "ci_fix_required", payload: { mergeStage: "main" } })).toBe(true);
+  });
+
+  it("recognizes an escalation handoff for a main-stage ci_fix", () => {
+    expect(isMainMergeAttentionItem({
+      attentionType: "human_escalation_required",
+      payload: { mergeStage: "main", sourceAttentionType: "ci_fix_required" },
+    })).toBe(true);
+  });
+
+  it("ignores a ci_fix_required item that is not at the main merge stage", () => {
+    // Per-task feature-PR CI fixes must not be mistaken for the sprint-level gate.
+    expect(isMainMergeAttentionItem({ attentionType: "ci_fix_required", payload: {} })).toBe(false);
+    expect(isMainMergeAttentionItem({ attentionType: "ci_fix_required", payload: { mergeStage: "feature" } })).toBe(false);
   });
 });

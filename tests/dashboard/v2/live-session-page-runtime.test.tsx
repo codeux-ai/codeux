@@ -263,6 +263,117 @@ describe("LiveSessionPage Runtime Status", () => {
     expect(screen.getAllByText("Resolve the stop condition and restart when ready.").length).toBeGreaterThan(0);
     expect(screen.queryByText("Needs you")).not.toBeInTheDocument();
   });
+
+  it("renders Waiting for slot (2/2) for a queued dispatch with concurrency wait event", () => {
+    const task = {
+      record_id: "task-rec-cap",
+      sprint_id: "s1",
+      project_id: "p1",
+      id: "T_CAP",
+      title: "Concurrency Capped Task",
+      prompt: "Some prompt",
+      depends_on: [],
+      is_independent: true,
+      status: "PENDING" as const,
+    };
+
+    const dispatch = {
+      id: "dispatch-cap",
+      projectId: "p1",
+      sprintId: "s1",
+      sprintRunId: "run-1",
+      sprintName: "Sprint 1",
+      sprintNumber: 1,
+      taskId: "task-rec-cap",
+      taskKey: "T_CAP",
+      taskTitle: "Concurrency Capped Task",
+      status: "queued",
+      executorType: "jules",
+      priority: 0,
+      connectionId: null,
+      connectionDisplayName: null,
+      connectionRole: null,
+      taskRunId: "task-run-cap",
+      taskRunState: "PENDING",
+      provider: "gemini",
+      sessionId: "session-cap",
+      sessionName: "session-cap",
+      workerBranch: null,
+      prUrl: null,
+      queuedAt: "2024-01-01T10:00:00Z",
+      claimedAt: null,
+      startedAt: null,
+      finishedAt: null,
+      errorMessage: null,
+      activeLeaseOwnerKey: null,
+      activeLeaseExpiresAt: null,
+    };
+
+    const event = {
+      id: "event-cap",
+      scopeType: "task_run" as const,
+      taskRunId: "task-run-cap",
+      sprintRunId: "run-1",
+      dispatchId: "dispatch-cap",
+      projectId: "p1",
+      sprintId: "s1",
+      sprintName: "Sprint 1",
+      sprintNumber: 1,
+      sprintRunStatus: "running",
+      taskId: "task-rec-cap",
+      taskKey: "T_CAP",
+      taskTitle: "Concurrency Capped Task",
+      taskRunState: "PENDING",
+      eventType: "provider_concurrency_wait",
+      originator: "system",
+      sourceEventKey: "wait-1",
+      provider: "gemini",
+      sessionId: "session-cap",
+      sessionName: "session-cap",
+      workerBranch: null,
+      prUrl: null,
+      connectionId: null,
+      connectionDisplayName: null,
+      connectionRole: null,
+      createdAt: "2024-01-01T10:01:00Z",
+      payload: {
+        provider: "gemini",
+        currentCount: 2,
+        limit: 2,
+      },
+    };
+
+    vi.mocked(useDashboardRuntimeData).mockReturnValue({
+      error: null,
+      gitStatus: null,
+      gitStatusError: null,
+      initialLoadComplete: true,
+      transportState: "connected",
+      isRecovering: false,
+      snapshotUpdatedAt: new Date().toISOString(),
+      refreshGitStatus: vi.fn(),
+      refreshRuntimeStatus: vi.fn(),
+      selectedSprintId: "s1",
+      status: {
+        project_id: "p1",
+        sprint_id: "s1",
+        sprint_number: 1,
+        timestamp: "2024-01-01T10:30:00Z",
+        subtasks: [task],
+      },
+      execution: {
+        ...mockExecution,
+        taskDispatches: [dispatch],
+        recentEvents: [event],
+      },
+      stats: { total: 1, completed: 0, running: 0, failed: 0, pending: 1 } as any,
+      tasksWithLiveActivities: [task],
+    });
+
+    render(<LiveSessionPage />);
+    expect(screen.getAllByText("Waiting for slot (2/2)").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Quota exhausted")).not.toBeInTheDocument();
+  });
 });
 
 describe("LiveSessionPage Integration Isolation", () => {
@@ -582,7 +693,7 @@ describe("LiveSessionPage Integration Isolation", () => {
 
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).queryByText("Needs clarification before continuing")).not.toBeInTheDocument();
-    expect(within(card as HTMLElement).getByRole("link", { name: /PR/i })).toHaveAttribute("href", "https://github.com/example/repo/pull/101");
+    expect(within(card as HTMLElement).getByRole("link", { name: /View Pull Request/i })).toHaveAttribute("href", "https://github.com/example/repo/pull/101");
   });
 
   it("does not surface a previous failure banner once the latest dispatch is running", () => {

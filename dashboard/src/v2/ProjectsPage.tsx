@@ -1,7 +1,22 @@
-import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import type { FunctionComponent, JSX } from "preact";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bot, FolderOpen, Plus, ExternalLink, Loader2, Trash2, Sparkles } from "lucide-preact";
+import { useNavigate } from "@tanstack/react-router";
+import {
+    Bot,
+    Check,
+    Clock3,
+    ExternalLink,
+    FolderOpen,
+    GitBranch,
+    Globe,
+    Loader2,
+    MapPin,
+    Plus,
+    Settings,
+    Sparkles,
+    Trash2,
+} from "lucide-preact";
 import type { Source, SourceStatus } from "./types.js";
 import { AddProjectModal, type AddProjectModalSubmission, type SourceType as AddProjectModalSourceType } from "./components/ui/AddProjectModal.js";
 import { StatusDot } from "./components/ui/StatusDot.js";
@@ -13,8 +28,11 @@ import { PageContainer } from "./components/layout/PageContainer.js";
 import { startProjectSetup } from "./lib/project-api.js";
 import { fetchProjectInvocations } from "./lib/invocation-api.js";
 import { useToast } from "./components/feedback/ToastProvider.js";
+import { prefetchRoute } from "./router/route-prefetch.js";
+import { buildProjectCardViewModel, PROJECT_CARD_EMPTY_VALUE } from "./lib/project-card-view-model.js";
 
 const EMBER_HEX = '#FFB800';
+
 
 type Filter = 'All' | 'Running' | 'Idle' | 'Failed';
 
@@ -32,16 +50,48 @@ const statusColor: Record<SourceStatus, string> = {
     idle:         'text-slate-400 dark:text-slate-500',
 };
 
-const timeAgo = (iso: string) => {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
-};
+type ProjectCardActionKind = "open-project" | "setup-project" | "settings" | "delete";
+
+const ACTION_ICON_CLASS = "w-3.5 h-3.5 shrink-0";
+type ProjectMetaCardIcon = any;
 
 /* ─── Project Card ──────────────────────────────────────────────────────── */
+
+const ProjectMetaCard: FunctionComponent<{
+    label: string;
+    value: string;
+    isEmpty: boolean;
+    description?: string;
+    icon?: ProjectMetaCardIcon;
+}> = ({ label, value, isEmpty, description, icon: Icon }) => (
+    <div className="rounded-[1.2rem] border border-black/[0.06] bg-black/[0.03] p-3.5 dark:border-white/[0.06] dark:bg-white/[0.03]">
+        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            {Icon ? <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} aria-hidden="true" /> : null}
+            <span>{label}</span>
+        </div>
+        <div className={`mt-2 break-words text-sm font-semibold leading-snug ${isEmpty ? "text-slate-400 dark:text-slate-500" : "text-slate-900 dark:text-white"}`}>
+            {value}
+        </div>
+        {description ? (
+            <div className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-500">
+                {description}
+            </div>
+        ) : null}
+    </div>
+);
+
+const ProjectActionIcon = ({ kind }: { kind: ProjectCardActionKind }) => {
+    switch (kind) {
+        case "open-project":
+            return <ExternalLink className={ACTION_ICON_CLASS} strokeWidth={2.2} aria-hidden="true" />;
+        case "setup-project":
+            return <Bot className={ACTION_ICON_CLASS} strokeWidth={2.2} aria-hidden="true" />;
+        case "settings":
+            return <Settings className={ACTION_ICON_CLASS} strokeWidth={2.2} aria-hidden="true" />;
+        case "delete":
+            return <Trash2 className={ACTION_ICON_CLASS} strokeWidth={2.2} aria-hidden="true" />;
+    }
+};
 
 const ProjectCard: FunctionComponent<{
     source: Source;
@@ -52,36 +102,47 @@ const ProjectCard: FunctionComponent<{
     onDelete: () => void;
     onSetup: () => void;
     onOpenInvocation: () => void;
-}> = ({ source, isSelected, isSettingUp, setupInvocationId, onSelect, onDelete, onSetup, onOpenInvocation }) => {
-    const cardRef  = useRef<HTMLDivElement>(null);
-    const label    = statusLabel[source.status];
-    const color    = statusColor[source.status];
-    const isRunning = source.status === 'running';
-    const accentHex = '#00AB84';
-    const watermark = source.name.slice(0, 3).toUpperCase();
-    const total     = source.completedTasks + source.openTasks;
-    const completion = total > 0 ? Math.round((source.completedTasks / total) * 100) : 0;
+    onSettings: () => void;
+}> = ({ source, isSelected, isSettingUp, setupInvocationId, onSelect, onDelete, onSetup, onOpenInvocation, onSettings }) => {
+    const cardRef = useRef<HTMLDivElement>(null);
+    const viewModel = useMemo(() => buildProjectCardViewModel(source), [source]);
+    const statusText = statusLabel[source.status];
+    const statusClass = statusColor[source.status];
+    const isRunning = source.status === "running";
+    const totalTasks = source.completedTasks + source.openTasks;
+    const completion = totalTasks > 0 ? Math.round((source.completedTasks / totalTasks) * 100) : 0;
+    const isCardSelected = isSelected;
+    const gitUrlValue = viewModel.gitUrl.isEmpty
+        ? (source.sourceType === "local" ? "No git URL configured" : "No repository URL available")
+        : viewModel.gitUrl.value;
+    const gitUrlDescription = viewModel.gitUrl.isEmpty
+        ? (source.sourceType === "local" ? "Local projects only need a workspace path." : "A git project should usually expose a repository URL.")
+        : undefined;
+    const branchValue = viewModel.branch.isEmpty ? "No default branch set" : viewModel.branch.value;
+    const branchDescription = viewModel.branch.isEmpty ? "Set a default branch to simplify sprint setup." : undefined;
+    const lastRunValue = viewModel.lastRunAt.isEmpty ? "No runs yet" : viewModel.lastRunAt.value;
+    const lastRunDescription = viewModel.lastRunAt.isEmpty
+        ? "Project runs will appear here after the first setup or sprint execution."
+        : viewModel.lastRunStatus.isEmpty ? "Latest run timestamp" : `Latest run status: ${viewModel.lastRunStatus.value}`;
+    const providerValue = viewModel.providerLabel.isEmpty ? PROJECT_CARD_EMPTY_VALUE : viewModel.providerLabel.value;
+    const providerDescription = source.gitProvider === "local" ? "Managed locally" : "Remote provider";
+    const hostValue = viewModel.hostLabel.isEmpty ? "No host" : viewModel.hostLabel.value;
+    const hostDescription = viewModel.hostLabel.isEmpty ? "No remote host has been detected." : "Repository host";
+    const selectedLabel = isCardSelected ? "Selected project" : "Select project";
+    const actionClass = "inline-flex items-center justify-center gap-2 rounded-[1rem] border px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/30";
 
-    const onEnter = () => {
-        if (!cardRef.current) return;
-        gsap.to(cardRef.current, {
-            y: -6,
-            scale: 1.022,
-            duration: 0.5,
-            ease: "back.out(2)",
-            overwrite: "auto",
-        });
+    const handleSelect = () => {
+        onSelect();
     };
 
-    const onLeave = () => {
-        if (!cardRef.current) return;
-        gsap.to(cardRef.current, {
-            y: 0,
-            scale: 1,
-            duration: 0.8,
-            ease: "elastic.out(1, 0.5)",
-            overwrite: "auto",
-        });
+    const handleKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
+        if (event.currentTarget !== event.target) {
+            return;
+        }
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+        }
     };
 
     useEffect(() => {
@@ -95,194 +156,277 @@ const ProjectCard: FunctionComponent<{
     return (
         <div
             ref={cardRef}
-            onClick={onSelect}
-            onMouseEnter={onEnter}
-            onMouseLeave={onLeave}
-            className="group relative"
+            role="button"
+            tabIndex={0}
+            aria-pressed={isCardSelected}
+            aria-label={`${selectedLabel}: ${source.name}`}
+            title={`${selectedLabel}: ${source.name}`}
+            onClick={handleSelect}
+            onKeyDown={handleKeyDown}
+            onMouseEnter={() => {
+                if (!cardRef.current) return;
+                gsap.to(cardRef.current, {
+                    y: -4,
+                    scale: 1.01,
+                    duration: 0.45,
+                    ease: "back.out(1.8)",
+                    overwrite: "auto",
+                });
+            }}
+            onMouseLeave={() => {
+                if (!cardRef.current) return;
+                gsap.to(cardRef.current, {
+                    y: 0,
+                    scale: 1,
+                    duration: 0.65,
+                    ease: "power2.out",
+                    overwrite: "auto",
+                });
+            }}
+            className="group relative h-full outline-none focus-visible:ring-2 focus-visible:ring-ember-500/35 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
         >
-          {/* Running project: stable layered breathing glow aura */}
-          {isRunning && (
-            <div
-              className="absolute inset-0 rounded-[1.75rem] pointer-events-none scale-[1.012]"
-              style={{ zIndex: 0 }}
-            >
-              {/* Crisp accent border */}
-              <div
-                className="absolute inset-0 rounded-[1.75rem]"
-                style={{ border: `1px solid ${accentHex}70` }}
-              />
-              {/* Ambient breathing glow */}
-              <div
-                className="absolute inset-0 rounded-[1.75rem] animate-[pulse_3.5s_ease-in-out_infinite]"
-                style={{ boxShadow: `0 0 20px ${accentHex}40, inset 0 0 10px ${accentHex}20` }}
-              />
-            </div>
-          )}
-          <div
-            className={`relative flex flex-col
-                       backdrop-blur-2xl
-                       rounded-[1.75rem]
-                       p-7
-                       overflow-hidden cursor-pointer
-                       ${isRunning ? "bg-white/72 dark:bg-void-800/82" : "bg-white/70 dark:bg-void-800/60"}
-                       ${isSelected
-                         ? "border border-ember-500/45 shadow-[0_8px_30px_rgba(255,184,0,0.08)] ring-1 ring-ember-500/18"
-                         : "border border-black/[0.06] dark:border-white/[0.06] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
-                       }`}
-          >
-            {/* Ghost watermark */}
-            <div
-                aria-hidden="true"
-                className="absolute -bottom-5 -right-2 text-[7rem] font-black tracking-tighter
-                           text-black/[0.03] dark:text-white/[0.025]
-                           pointer-events-none select-none font-display leading-none"
-            >
-                {watermark}
-            </div>
-
-            {/* Hover tint */}
-            <div className="absolute inset-0 bg-signal-500/0 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05] transition-colors duration-300 pointer-events-none" />
-
-            {/* Wave + border trace */}
-            <WaveFluid accentHex={EMBER_HEX} />
-            <BorderTrace accentHex={EMBER_HEX} />
-
-            {/* ── Header ────────────────────────────────────────────── */}
-            <div className="flex items-start justify-between mb-6 relative z-10">
-                <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-11 h-11 rounded-2xl bg-ember-500/[0.08] dark:bg-ember-500/[0.1] flex items-center justify-center group-hover:bg-ember-500/[0.18] transition-colors duration-300 shrink-0">
-                        <FolderOpen className="w-5 h-5 text-ember-600 dark:text-ember-400" strokeWidth={1.75} />
-                    </div>
-                    <div className="min-w-0">
-                        <h3 className="font-bold text-[15px] text-slate-900 dark:text-white tracking-tight truncate leading-snug">
-                            {source.name}
-                        </h3>
-                        <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.14em]">{source.id}</span>
-                    </div>
-                </div>
-
-                <div className={`flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] shrink-0 ml-3 ${color}`}>
-                    <StatusDot status={source.status} />
-                    {label}
-                </div>
-            </div>
-
-            {isSettingUp && (
-                <button
-                    type="button"
-                    onClick={(event) => {
-                        event.stopPropagation();
-                        if (setupInvocationId) {
-                            onOpenInvocation();
-                        }
-                    }}
-                    className="relative z-10 mb-4 flex w-full items-center justify-between rounded-2xl border border-ember-500/25 bg-ember-500/[0.08] px-3 py-2 text-left text-ember-700 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-300"
-                    disabled={!setupInvocationId}
-                    title={setupInvocationId ? "Open setup invocation" : "Invocation starting"}
-                >
-                    <span className="flex min-w-0 items-center gap-2">
-                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                        <span className="truncate text-[10px] font-black uppercase tracking-[0.14em]">
-                            Initializing
-                        </span>
-                    </span>
-                    <span className="ml-2 shrink-0 font-mono text-[9px] font-bold opacity-80">
-                        {setupInvocationId ? setupInvocationId.slice(0, 8) : "starting"}
-                    </span>
-                </button>
+            {isRunning && (
+                <div
+                    className="pointer-events-none absolute inset-0 rounded-[1.75rem] scale-[1.01]"
+                    style={{ boxShadow: "0 0 0 1px rgba(0,171,132,0.42), 0 0 24px rgba(0,171,132,0.14)" }}
+                />
             )}
 
-            {/* ── Stats ─────────────────────────────────────────────── */}
-            <div className="grid grid-cols-3 gap-2 mb-6 relative z-10">
-                {([
-                    { label: 'Sprints', value: source.sprintsCount },
-                    { label: 'Open',    value: source.openTasks     },
-                    { label: 'Done',    value: source.completedTasks },
-                ] as const).map(({ label: l, value }) => (
-                    <div
-                        key={l}
-                        className="flex flex-col items-center py-3.5 rounded-[1rem]
-                                   bg-black/[0.03] dark:bg-white/[0.03]
-                                   border border-black/[0.04] dark:border-white/[0.04]
-                                   group-hover:border-ember-500/[0.08] transition-colors duration-300"
-                    >
-                        <span className="text-[1.6rem] font-black text-slate-900 dark:text-white font-mono leading-none">
-                            {value}
+            <div
+                className={`relative flex h-full flex-col overflow-hidden rounded-[1.75rem] border backdrop-blur-2xl transition-shadow duration-300 ${
+                    isCardSelected
+                        ? "border-ember-500/45 bg-white/78 shadow-[0_10px_30px_rgba(255,184,0,0.08)] ring-1 ring-ember-500/20 dark:bg-void-800/78"
+                        : "border-black/[0.06] bg-white/72 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/64 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
+                }`}
+            >
+                <div className="absolute inset-0 bg-signal-500/[0.025] opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100" />
+                <div className="absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(255,184,0,0.08)_0%,transparent_100%)] opacity-60" />
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -bottom-6 -right-2 select-none font-display text-[6rem] font-black leading-none tracking-tighter text-black/[0.03] dark:text-white/[0.025]"
+                >
+                    {source.name.slice(0, 3).toUpperCase()}
+                </div>
+                <WaveFluid accentHex={EMBER_HEX} />
+                <BorderTrace accentHex={EMBER_HEX} />
+
+                <div className="relative z-10 flex flex-1 flex-col gap-4 p-4 sm:p-5">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="truncate font-display text-[1.05rem] font-black tracking-tight text-slate-900 dark:text-white">
+                                    {source.name}
+                                </h3>
+                                {isCardSelected ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-ember-500/20 bg-ember-500/[0.12] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-700 dark:text-ember-200">
+                                        <Check className="h-3 w-3" strokeWidth={3} aria-hidden={true} />
+                                        Selected
+                                    </span>
+                                ) : null}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                                <span className="font-mono">{source.id}</span>
+                                <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" aria-hidden="true" />
+                                <span className={statusClass}>
+                                    <StatusDot status={source.status} />
+                                    <span>{statusText}</span>
+                                </span>
+                            </div>
+                            <div className="mt-2 text-[11px] leading-snug text-slate-500 dark:text-slate-500">
+                                {viewModel.sourceBadge.description}
+                            </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                            <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                                viewModel.sourceBadge.kind === "remote-git"
+                                    ? "border-status-green/20 bg-status-green/[0.08] text-status-green"
+                                    : viewModel.sourceBadge.kind === "local-repository"
+                                        ? "border-signal-500/20 bg-signal-500/[0.1] text-signal-700 dark:text-signal-300"
+                                        : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300"
+                            }`}>
+                                {viewModel.sourceBadge.label}
+                            </div>
+                        </div>
+                    </div>
+
+                    {isSettingUp ? (
+                        <button
+                            type="button"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                if (setupInvocationId) {
+                                    onOpenInvocation();
+                                }
+                            }}
+                            className="flex items-center justify-between rounded-[1.25rem] border border-ember-500/25 bg-ember-500/[0.08] px-3 py-2.5 text-left text-ember-700 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-200"
+                            disabled={!setupInvocationId}
+                            title={setupInvocationId ? "Open setup invocation" : "Invocation starting"}
+                        >
+                            <span className="flex items-center gap-2">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                <span className="text-[10px] font-black uppercase tracking-[0.14em]">
+                                    Project setup running
+                                </span>
+                            </span>
+                            <span className="ml-3 font-mono text-[10px] font-bold opacity-80">
+                                {setupInvocationId ? setupInvocationId.slice(0, 8) : "starting"}
+                            </span>
+                        </button>
+                    ) : null}
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <ProjectMetaCard
+                            label="Git URL"
+                            value={gitUrlValue}
+                            isEmpty={viewModel.gitUrl.isEmpty}
+                            description={gitUrlDescription}
+                            icon={Globe}
+                        />
+                        <ProjectMetaCard
+                            label="Local directory"
+                            value={viewModel.localDirectory.value}
+                            isEmpty={viewModel.localDirectory.isEmpty}
+                            description={viewModel.localDirectory.isEmpty ? "This project has no recorded local workspace path." : undefined}
+                            icon={MapPin}
+                        />
+                        <ProjectMetaCard
+                            label="Created"
+                            value={viewModel.createdAt.value}
+                            isEmpty={viewModel.createdAt.isEmpty}
+                            description={viewModel.createdAt.isEmpty ? "Creation time is unavailable." : undefined}
+                            icon={Clock3}
+                        />
+                        <ProjectMetaCard
+                            label="Updated"
+                            value={viewModel.updatedAt.value}
+                            isEmpty={viewModel.updatedAt.isEmpty}
+                            description={viewModel.updatedAt.isEmpty ? "Last update time is unavailable." : undefined}
+                            icon={Clock3}
+                        />
+                        <ProjectMetaCard
+                            label="Last run"
+                            value={lastRunValue}
+                            isEmpty={viewModel.lastRunAt.isEmpty}
+                            description={lastRunDescription}
+                            icon={Clock3}
+                        />
+                        <ProjectMetaCard
+                            label="Branch"
+                            value={branchValue}
+                            isEmpty={viewModel.branch.isEmpty}
+                            description={branchDescription}
+                            icon={GitBranch}
+                        />
+                        <ProjectMetaCard
+                            label="Provider"
+                            value={providerValue}
+                            isEmpty={viewModel.providerLabel.isEmpty}
+                            description={providerDescription}
+                            icon={Settings}
+                        />
+                        <ProjectMetaCard
+                            label="Host"
+                            value={hostValue}
+                            isEmpty={viewModel.hostLabel.isEmpty}
+                            description={hostDescription}
+                            icon={Globe}
+                        />
+                    </div>
+
+                    <div className="grid gap-3 rounded-[1.25rem] border border-black/[0.05] bg-black/[0.02] p-3 dark:border-white/[0.05] dark:bg-white/[0.02] sm:grid-cols-3">
+                        <div className="rounded-[1rem] border border-black/[0.05] bg-white/55 px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.03]">
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Sprints</div>
+                            <div className="mt-1 text-lg font-black text-slate-900 dark:text-white">
+                                {source.sprintsCount}
+                            </div>
+                        </div>
+                        <div className="rounded-[1rem] border border-black/[0.05] bg-white/55 px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.03]">
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Open tasks</div>
+                            <div className="mt-1 text-lg font-black text-slate-900 dark:text-white">
+                                {source.openTasks}
+                            </div>
+                        </div>
+                        <div className="rounded-[1rem] border border-black/[0.05] bg-white/55 px-3 py-2 dark:border-white/[0.05] dark:bg-white/[0.03]">
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Done</div>
+                            <div className="mt-1 text-lg font-black text-slate-900 dark:text-white">
+                                {source.completedTasks}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-auto grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        {viewModel.actions.map((action) => {
+                            const isSetupAction = action.kind === "setup-project";
+                            const isDanger = action.tone === "danger";
+                            const isDisabled = isSetupAction && isSettingUp;
+                            const handleAction = () => {
+                                switch (action.kind) {
+                                    case "open-project":
+                                        onSelect();
+                                        return;
+                                    case "setup-project":
+                                        onSetup();
+                                        return;
+                                    case "settings":
+                                        onSettings();
+                                        return;
+                                    case "delete":
+                                        onDelete();
+                                        return;
+                                }
+                            };
+
+                            return (
+                                <button
+                                    key={action.kind}
+                                    type="button"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        if (isDisabled) {
+                                            return;
+                                        }
+                                        handleAction();
+                                    }}
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onMouseEnter={(event) => {
+                                        event.stopPropagation();
+                                        if (action.kind === "settings") {
+                                            prefetchRoute("/config");
+                                        }
+                                    }}
+                                    onFocus={(event) => {
+                                        event.stopPropagation();
+                                        if (action.kind === "settings") {
+                                            prefetchRoute("/config");
+                                        }
+                                    }}
+                                    disabled={isDisabled}
+                                    aria-label={action.ariaLabel}
+                                    title={isDisabled ? "Project setup is already running" : action.title}
+                                    aria-busy={isDisabled}
+                                    className={`${actionClass} ${
+                                        isDanger
+                                            ? "border-status-red/20 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]"
+                                            : "border-black/[0.06] bg-white/80 text-slate-600 hover:bg-black/[0.05] hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
+                                    } ${isDisabled ? "cursor-not-allowed opacity-60" : ""}`}
+                                >
+                                    <ProjectActionIcon kind={action.kind} />
+                                    <span className="truncate">{action.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 pt-1 text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                        <span className="truncate">
+                            Last run status: {viewModel.lastRunStatus.isEmpty ? "No run recorded" : viewModel.lastRunStatus.value}
                         </span>
-                        <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-400 mt-1.5">
-                            {l}
+                        <span className="shrink-0 font-mono">
+                            {completion}% complete
                         </span>
                     </div>
-                ))}
-            </div>
-
-            {/* ── Progress bar ──────────────────────────────────────── */}
-            <div className="mb-6 relative z-10">
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Completion</span>
-                    <span className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-400">{completion}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-black/[0.05] dark:bg-white/[0.05] rounded-full overflow-hidden">
-                    <div
-                        className="h-full rounded-full transition-all duration-700"
-                        style={{
-                            width: `${completion}%`,
-                            background: 'linear-gradient(90deg, #FFB800, #FFD080)',
-                            boxShadow: completion > 0 ? '0 0 10px rgba(255,184,0,0.45)' : 'none',
-                        }}
-                    />
                 </div>
             </div>
-
-            {/* ── Footer ────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between relative z-10 mt-auto">
-                <span className="text-[9px] font-mono text-slate-400 dark:text-slate-600">
-                    {timeAgo(source.updatedAt)}
-                </span>
-
-                {/* Actions — slide up on hover */}
-                <div
-                    className="flex items-center gap-1
-                               opacity-0 group-hover:opacity-100
-                               translate-y-1.5 group-hover:translate-y-0
-                               transition-[opacity,transform] duration-300"
-                >
-                    <button className="w-7 h-7 flex items-center justify-center rounded-xl
-                                       bg-black/[0.04] dark:bg-white/[0.04]
-                                       hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
-                                       text-slate-400 hover:text-slate-900 dark:hover:text-white
-                                       transition-colors duration-200"
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                onSelect();
-                            }}>
-                        <ExternalLink className="w-3 h-3" strokeWidth={2} />
-                    </button>
-                    <button className="w-7 h-7 flex items-center justify-center rounded-xl
-                                       bg-black/[0.04] dark:bg-white/[0.04]
-                                       hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
-                                       text-slate-400 hover:text-slate-900 dark:hover:text-white
-                                       transition-colors duration-200"
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                onSetup();
-                            }}>
-                        <Bot className="w-3 h-3" strokeWidth={2} />
-                    </button>
-                    <button className="w-7 h-7 flex items-center justify-center rounded-xl
-                                       bg-black/[0.04] dark:bg-white/[0.04]
-                                       hover:bg-status-red/[0.1]
-                                       text-slate-400 hover:text-status-red
-                                       transition-colors duration-200"
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                onDelete();
-                            }}>
-                        <Trash2 className="w-3 h-3" strokeWidth={2} />
-                    </button>
-                </div>
-            </div>
-          </div>
         </div>
     );
 };
@@ -296,28 +440,15 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
                    p-7
                    bg-white/55 dark:bg-void-800/40
                    backdrop-blur-2xl
-                   border-2 border-dashed border-signal-500/25 hover:border-signal-500/50
+                   border border-dashed border-black/[0.1] dark:border-white/[0.1] hover:border-signal-500/50
                    rounded-[1.75rem]
                    shadow-[0_2px_20px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.18)]
                    transition-colors duration-500
                    hover:bg-signal-500/[0.025] cursor-pointer"
     >
-        {/* Morphing organic icon */}
-        <div
-            className="relative w-16 h-16 flex items-center justify-center
-                       border-2 border-dashed border-signal-500/25
-                       group-hover:border-signal-500 group-hover:bg-signal-500/[0.1]
-                       transition-all duration-400 animate-organic"
-        >
-            <div
-                className="absolute inset-0 bg-signal-500/0 group-hover:bg-signal-500/[0.08]
-                           transition-colors duration-300 animate-organic-reverse"
-            />
-            <Plus
-                className="w-6 h-6 text-signal-500/40 group-hover:text-signal-500
-                           group-hover:rotate-90 transition-all duration-400 relative z-10"
-                strokeWidth={2}
-            />
+        {/* Simple Icon */}
+        <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-black/[0.02] dark:bg-white/[0.02] group-hover:bg-signal-500/[0.1] transition-colors duration-300">
+            <Plus className="w-5 h-5 text-slate-400 group-hover:text-signal-500" strokeWidth={2} />
         </div>
 
         <div className="flex flex-col items-center gap-1.5">
@@ -339,6 +470,7 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
 export const ProjectsPage: FunctionComponent = () => {
     const mainRef      = useRef<HTMLDivElement>(null);
     const gridRef = useRef<HTMLDivElement>(null);
+    const navigate = useNavigate();
     const [showModal, setShowModal]   = useState(false);
     const [modalSourceType, setModalSourceType] = useState<AddProjectModalSourceType>('local');
     const [setupProjectId, setSetupProjectId] = useState<string | null>(null);
@@ -410,6 +542,11 @@ export const ProjectsPage: FunctionComponent = () => {
 
     const openInvocation = (invocationId: string) => {
         window.location.href = `/chat?mode=invocations&invocation=${encodeURIComponent(invocationId)}`;
+    };
+
+    const openProjectSettings = (projectId: string) => {
+        void selectProject(projectId);
+        navigate({ to: "/config" });
     };
 
     const waitForSetupInvocation = async (projectId: string, invocationId: string) => {
@@ -490,12 +627,14 @@ export const ProjectsPage: FunctionComponent = () => {
 
     const handleAddProject = async (project: AddProjectModalSubmission) => {
         if (project.type === 'new_project') {
+            const sourceRef = project.initMode === 'new-local'
+                ? (project.path || project.name)
+                : (project.repoSlug || project.name);
+
             await createProject({
                 name: project.name,
                 sourceType: project.initMode === 'new-local' ? 'local' : 'git',
-                sourceRef: project.initMode === 'new-local'
-                    ? (project.path || project.repoSlug || project.name)
-                    : (project.repoSlug || project.name),
+                sourceRef,
                 initMode: project.initMode,
                 remoteProvider: project.remoteProvider,
                 isPrivate: project.isPrivate,
@@ -550,7 +689,7 @@ export const ProjectsPage: FunctionComponent = () => {
 
     return (
         <>
-            <PageContainer containerRef={mainRef} className="gap-16">
+            <PageContainer aria-label="Projects" containerRef={mainRef} className="gap-16">
                 {/* ── Ambient glows (max 2 per page) ─────────────────── */}
                 <div
                     aria-hidden="true"
@@ -696,6 +835,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                                 openInvocation(invocationId);
                                             }
                                         }}
+                                        onSettings={() => openProjectSettings(source.id)}
                                     />
                                 </div>
                             ))}

@@ -73,6 +73,19 @@ describe("ChatThreadHeader", () => {
     expect(screen.queryByText("Active Session")).not.toBeInTheDocument();
   });
 
+  it("shows compacting state styling when isCompacting is true", () => {
+    const { container } = render(
+      <ChatThreadHeader
+        thread={baseThread}
+        onCompact={() => {}}
+        isCompacting={true}
+      />
+    );
+    const compactButton = container.querySelector('button[title="Compact Conversation"]');
+    expect(compactButton).toHaveClass("cursor-wait");
+    expect(compactButton).toHaveClass("opacity-70");
+  });
+
   it("calls onCompact when compact button is clicked", () => {
     const onCompact = vi.fn();
     const { container } = render(

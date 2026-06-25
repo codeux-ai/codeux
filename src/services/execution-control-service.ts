@@ -149,6 +149,7 @@ export class ExecutionControlService {
       finishedAt: now,
       lastHeartbeatAt: now,
     });
+    this.reapTransientMergeAttention(sprintRun.projectId, sprintRunId, "sprint_cancelled");
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "user", {
       requestedBy: "dashboard",
       reason: "cancelled",
@@ -156,6 +157,25 @@ export class ExecutionControlService {
       sourceEventKey: `dashboard-cancel:${sprintRunId}`,
     });
     return updated;
+  }
+
+  /**
+   * Resolve orchestration-managed merge attention items left open for a sprint
+   * run that is ending. These are transient escalations the CI/merge gates raise
+   * and normally clear on a later cycle; if the run stops first they orphan and
+   * keep the project pinned to `intervention` with nothing left to act on.
+   */
+  private reapTransientMergeAttention(projectId: string, sprintRunId: string, reason: string): void {
+    try {
+      this.deps.projectAttentionService.resolveItemsForSprintRun(
+        projectId,
+        sprintRunId,
+        ["merge_required", "merge_conflict", "manual_attention"],
+        reason,
+      );
+    } catch {
+      // Best-effort cleanup — never block cancellation on attention housekeeping.
+    }
   }
 
   async forceCancelSprintRun(sprintRunId: string): Promise<SprintRunRecord> {
@@ -181,6 +201,7 @@ export class ExecutionControlService {
       finishedAt: now,
       lastHeartbeatAt: now,
     });
+    this.reapTransientMergeAttention(sprintRun.projectId, sprintRunId, "sprint_force_cancelled");
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "user", {
       requestedBy: "dashboard",
       reason: "force_cancelled",

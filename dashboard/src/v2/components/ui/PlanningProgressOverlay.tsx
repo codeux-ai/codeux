@@ -95,6 +95,10 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         return "The Planning agent is researching the codebase to decompose your sprint into grounded, atomic subtasks. Execution will wait for your review.";
       case "plan_and_start":
         return "The Planning agent is researching the codebase to decompose your sprint into grounded, atomic subtasks and will begin execution immediately.";
+      case "draft":
+        return "Saving your sprint definition without generating subtasks.";
+      case "append_tasks":
+        return "Adding new tasks to your existing sprint.";
       default:
         return "The Planning agent is researching the codebase to decompose your sprint into grounded, atomic subtasks.";
     }
@@ -102,11 +106,12 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
 
   return (
     <div
-      className="absolute inset-0 z-50 flex cursor-pointer flex-col items-center justify-center bg-white/80 p-8 backdrop-blur-xl dark:bg-void-900/80"
+      className="absolute inset-0 z-50 flex cursor-pointer items-center justify-center bg-void-900/50 backdrop-blur-sm p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onDismiss();
       }}
     >
+      <div className="flex flex-col items-center justify-center bg-white dark:bg-void-800 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] max-w-2xl w-full p-8 relative cursor-default" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         onClick={onDismiss}
@@ -143,7 +148,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
       <div className="cursor-default space-y-4 text-center">
         <div className={`inline-flex items-center gap-3 rounded-full border px-5 py-2 text-xs font-bold uppercase tracking-[0.2em] ${theme.badgeBorder} ${theme.badgeBg} ${theme.badgeText}`}>
           <span className="relative flex h-2 w-2">
-            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${theme.pingBg1}`}></span>
+            <span className={`absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full opacity-75 ${theme.pingBg1}`}></span>
             <span className={`relative inline-flex h-2 w-2 rounded-full ${theme.pingBg2}`}></span>
           </span>
           {getBadgeText()}
@@ -152,21 +157,21 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
           <div className="flex flex-col items-center">
             <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">ETA</div>
             <div className="font-mono text-xl font-medium tracking-tight text-slate-900 dark:text-white">
-              {Math.floor(Math.max(0, planningEta - elapsedMs) / 60000)}:{String(Math.floor((Math.max(0, planningEta - elapsedMs) % 60000) / 1000)).padStart(2, "0")}
+              {String(Math.floor(Math.max(0, planningEta - elapsedMs) / 60000)).padStart(2, "0")}:{String(Math.floor((Math.max(0, planningEta - elapsedMs) % 60000) / 1000)).padStart(2, "0")}
             </div>
           </div>
           <div className="h-8 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
           <div className="flex flex-col items-center">
             <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Elapsed</div>
             <div className="font-mono text-xl font-medium tracking-tight text-slate-500">
-              {Math.floor(elapsedMs / 60000)}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")}
+              {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")}
             </div>
           </div>
         </div>
         <div className="flex flex-col items-center overflow-hidden h-10 w-full">
           <div className="flex items-center gap-3" ref={textContainerRef}>
             <span className="relative flex h-3 w-3">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${theme.pingBg1}`}></span>
+              <span className={`motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${theme.pingBg1}`}></span>
               <span className={`relative inline-flex rounded-full h-3 w-3 ${theme.pingBg2}`}></span>
             </span>
             <h3
@@ -208,6 +213,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
             </button>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

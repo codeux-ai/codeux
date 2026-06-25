@@ -77,14 +77,22 @@ function withLeadingUserTurn(conversation: ParsedConversationTurn[], prompt: str
   if (conversation.length === 0) {
     return conversation;
   }
-  if (conversation[0]?.kind === "user") {
+  // Harness-injected `<system-reminder>` context is split into a leading
+  // `injected_context` turn ahead of the user prompt; treat it as transparent
+  // so we neither miss an existing prompt nor synthesise a duplicate one.
+  const firstPromptIndex = conversation.findIndex((turn) => turn.kind !== "injected_context");
+  if (firstPromptIndex === -1 || conversation[firstPromptIndex]?.kind === "user") {
     return conversation;
   }
   const trimmed = prompt.trim();
   if (!trimmed) {
     return conversation;
   }
-  return [{ kind: "user", text: trimmed }, ...conversation];
+  return [
+    ...conversation.slice(0, firstPromptIndex),
+    { kind: "user", text: trimmed },
+    ...conversation.slice(firstPromptIndex),
+  ];
 }
 
 function toNumber(value: unknown): number {

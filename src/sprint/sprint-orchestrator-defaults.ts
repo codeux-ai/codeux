@@ -24,6 +24,7 @@ export const DEFAULT_CI_INTELLIGENCE_SETTINGS: CiIntelligenceSettings = {
   enableLivePrMonitoring: true,
   resolveAllCommentsBeforeMainMerge: true,
   resolveMainMergeConflicts: true,
+  resolveMainMergeFailedChecks: true,
   resolveAllCommentsBeforeFeatureMerge: true,
   resolveMergeConflicts: true,
   waitForJulesCiAutofix: false,

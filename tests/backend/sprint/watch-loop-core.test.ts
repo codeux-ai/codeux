@@ -1,10 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { WatchLoopRunner } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
 
 vi.mock("../../../src/services/cli-process-runner.js", () => ({
   runCommandStrict: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }),
   runStreamingCommand: vi.fn(),
 }));
+import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
 import { evaluateSprintRunState } from "../../../src/domain/sprint/orchestrator/sprint-state-evaluator.js";
 import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "../../../src/domain/sprint/orchestrator/watch-loop-policies.js";
 import { buildMockSettings } from "../../builders/settings-builder.js";
@@ -93,6 +94,13 @@ const buildCycleRunner = () => ({
 });
 
 describe("WatchLoopRunner", () => {
+  afterEach(() => {
+    // Some tests override the shared runCommandStrict mock (e.g. to simulate a LOCAL
+    // merge conflict). Reset it to the default no-op success so it never leaks across tests.
+    vi.mocked(runCommandStrict).mockReset();
+    vi.mocked(runCommandStrict).mockResolvedValue({ stdout: "", stderr: "" } as any);
+  });
+
   it.skip("continues past checkpoint boundaries until a terminal condition is reached", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
@@ -942,6 +950,205 @@ describe("WatchLoopRunner", () => {
       expect.objectContaining({ status: "paused" }),
     );
     expect(cycleRunner.run).toHaveBeenCalledTimes(2);
+    nowSpy.mockRestore();
+  });
+
+  it("LOCAL: stays active (wait, not pause) while a virtual worker resolves a main-merge conflict, then completes", async () => {
+    // Regression: the LOCAL final-merge path flipped the run to 'paused' the moment
+    // mergeBranchLocally hit a conflict, even though it had just dispatched a virtual
+    // worker to resolve it. The sprint must stay active and wait for the worker.
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowValues = [0, 1_000, 2_000, 3_000, 61_000];
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowValues.shift() ?? 61_000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+    deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({ status: "running" });
+    deps.projectAttentionService.listActiveProjectItems = vi.fn().mockReturnValue([]);
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "worker/task-1" })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    // First local merge attempt conflicts (worker resolves it); the next succeeds.
+    let mergeAttempts = 0;
+    vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === "merge" && args[1] !== "--abort") {
+        mergeAttempts += 1;
+        if (mergeAttempts === 1) {
+          throw new Error("CONFLICT (add/add): Merge conflict in conflict.md");
+        }
+      }
+      return { stdout: "", stderr: "" } as any;
+    });
+
+    const renderMergeFeedbackMock = vi.fn().mockResolvedValue({
+      text: "FB",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMergeFeedbackMock);
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 0.01 } as any,
+      ciIntelligence: { resolveMainMergeConflicts: true } as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    // The conflict cycle must NOT pause the run; it dispatches a worker and waits.
+    expect(result).not.toContain("Sprint Paused");
+    expect(deps.executionRepository.updateSprintRun).not.toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "paused" }),
+    );
+    expect(deps.projectAttentionService.openItems).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({
+        attentionType: "merge_conflict",
+        ownerType: "worker",
+        payload: expect.objectContaining({ mergeStage: "main" }),
+      })]),
+    );
+    // Once the worker resolves it, a later cycle merges cleanly and completes.
+    expect(result).toContain("Sprint Execution Finished");
+
+    vi.mocked(runCommandStrict).mockResolvedValue({ stdout: "", stderr: "" } as any);
+    nowSpy.mockRestore();
+  });
+
+  it("LOCAL: pauses when a main-merge conflict has escalated to a human", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValueOnce(0).mockReturnValue(1000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+    // A human-escalation handoff for the main merge is already open.
+    deps.projectAttentionService.listActiveProjectItems = vi.fn().mockReturnValue([
+      {
+        id: "attention-main-escalation",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: null,
+        sprintRunId: "run-1",
+        dispatchId: null,
+        attentionType: "human_escalation_required",
+        severity: "high",
+        ownerType: "human",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "Virtual worker escalation: Main merge conflict",
+        summaryMarkdown: "Worker gave up",
+        payload: { sourceAttentionType: "merge_conflict", mergeStage: "main" },
+        openedAt: "2026-03-10T00:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-10T00:00:00.000Z",
+      },
+    ]);
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true, worker_branch: "worker/task-1" })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    // Local merge keeps conflicting.
+    vi.mocked(runCommandStrict).mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === "merge" && args[1] !== "--abort") {
+        throw new Error("CONFLICT (add/add): Merge conflict in conflict.md");
+      }
+      return { stdout: "", stderr: "" } as any;
+    });
+
+    const renderMergeFeedbackMock = vi.fn().mockResolvedValue({
+      text: "FB",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMergeFeedbackMock);
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: { resolveMainMergeConflicts: true } as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(result).toContain("Resolve conflicts locally");
+    expect(result).not.toContain("Sprint Execution Finished");
+    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "paused" }),
+    );
+    // An escalation already exists, so no duplicate worker item is opened.
+    expect(deps.projectAttentionService.openItems).not.toHaveBeenCalled();
+
+    vi.mocked(runCommandStrict).mockResolvedValue({ stdout: "", stderr: "" } as any);
     nowSpy.mockRestore();
   });
 
@@ -1810,6 +2017,88 @@ describe("Watch Loop Policies", () => {
           id: "item-dashboard",
           attentionType: "dashboard_reply_required",
           ownerType: "worker",  // ownerType may still be worker, but type overrides
+        }],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision?.status).toBe("exit");
+      expect(decision?.terminalState).toBe("paused");
+    });
+
+    it("waits (does not pause) when a worker-owned ci_fix item is handling failing main-merge checks", () => {
+      // Auto-remediation: a worker is fixing the failing CI on the feature branch,
+      // so the sprint should stay alive rather than pause for a human.
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Failing checks",
+          state: "failed_checks",
+          prNumber: 7,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "UNSTABLE",
+          hasFailedChecks: true,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: ["Dashboard Tests"],
+        },
+        attentionItems: [{
+          id: "item-cifix-1",
+          attentionType: "ci_fix_required",
+          ownerType: "worker",
+        }],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision?.status).toBe("wait");
+      expect(decision?.terminalState).toBeUndefined();
+    });
+
+    it("pauses on failing main-merge checks when no worker is remediating", () => {
+      // With remediation disabled (or unable to open a worker item) the sprint
+      // still pauses for a human — the safe fallback.
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Failing checks",
+          state: "failed_checks",
+          prNumber: 7,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "UNSTABLE",
+          hasFailedChecks: true,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: ["Security Audit"],
+        },
+        attentionItems: [],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision?.status).toBe("exit");
+      expect(decision?.terminalState).toBe("paused");
+      expect(decision?.pauseReason).toBe("main_merge_blocked");
+    });
+
+    it("pauses once a worker escalates a failing main-merge check to a human", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Failing checks",
+          state: "failed_checks",
+          prNumber: 7,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "UNSTABLE",
+          hasFailedChecks: true,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: ["Dashboard Tests"],
+        },
+        attentionItems: [{
+          id: "item-cifix-escalated",
+          attentionType: "human_escalation_required",
+          ownerType: "human",
         }],
         mainMergeMode: "WHEN_GREEN",
         sprintNumber: 5,

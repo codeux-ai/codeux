@@ -67,7 +67,7 @@ Each virtual cycle is project-scoped and one-shot:
 
 This is intentionally not an endless watch loop.
 
-The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state.
+The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state. Decisions about whether to schedule a cycle and which attention items are eligible are handled by a set of pure policy helpers (`virtual-worker-scheduling-policy.ts`). Scheduling operations use microtask queueing to consolidate rapid sync events while preventing simultaneous cycle overlap for the same project.
 
 ## Supported Work
 
@@ -87,7 +87,7 @@ For planning flows, Code UX (`src/services/planning-agent-service.ts`):
 - honors per-request planning overrides for virtual provider selection, so choosing `codex` in the sprint composer actually launches the Codex CLI and credentials even if the project default is `gemini`
 - creates the same planning thread record in the dashboard, but stores the request/response as system messages instead of waiting on an MCP reply
 - executes a retry loop up to `cliWorkflow.maxPlanningJsonRetries` (default 3) times if the initial response cannot be parsed as valid JSON
-- maintains same-session continuation semantics during retries (`src/infrastructure/providers/cli/provider-runner.ts`); subsequent JSON retry requests continue the same underlying provider session using `continueSessionId` (falling back from `nativeSessionId` to the logical `sessionId`)
+- maintains same-session continuation semantics during retries (`src/infrastructure/providers/cli/provider-runner.ts` and `src/infrastructure/providers/cli/provider-runtime-artifacts.ts`); subsequent JSON retry requests continue the same underlying provider session using `continueSessionId` (falling back from `nativeSessionId` to the logical `sessionId`)
 - records execution and provider invocation trails during retries, so operators will see an initial system message indicating the retry followed by a new provider invocation recording the follow-up prompt and reply
 - when Docker execution mode is active, planning runs inside a snapshot workspace volume and captures `.task-learnings.md` back out of that snapshot instead of trying to read host files directly
 - allows sprint compose, improve, and `Plan & Start` to work even when no live MCP listener is attached
@@ -106,6 +106,7 @@ For merge conflicts, Code UX:
 - verifies the resolved source branch actually contains `origin/<targetBranch>` before clearing the merge-conflict attention item
 - exports a Git patch artifact from the isolated workspace
 - applies that patch back onto the host branch as a merge commit that preserves the target branch as an additional parent, then pushes it
+- counts task-scoped merge-conflict attempts in the guardrail ledger; sprint-level final merge conflicts have no task row, so their retry count is stored on the attention item payload as `mergeConflictResolutionAttempts` before each real provider run
 
 Merge-conflict handling intentionally stays isolated from the original task workspace. It always runs in a dedicated ephemeral Docker workspace so conflict resolution cannot pollute the task's normal follow-up workspace.
 
@@ -152,3 +153,6 @@ When running inside isolated or containerized worker environments (e.g., Gemini 
 - **Virtual Worker Claiming**: Virtual workers (using claim reason prefixes starting with `virtual_worker_`) or automated attention types (`ci_fix_required`, `merge_conflict`) can bypass the `assignedWorkerEndpointId` mismatch check. This ensures that when a virtual worker reconciles and attempts to claim/reclaim an attention item that was originally opened/assigned to a different containerized worker endpoint, the claim is successfully allowed instead of stalling.
 - **Path and Workspace Normalization**: Remote origins and git remote URLs under `/workspace` container directories are dynamically resolved to correctly identify the host repository name. This allows `buildTaskRunKey` to match and reuse the correct containerized workspace targets when runs are resumed.
 - **POSIX and Windows Path Matching**: CLI session queries in the tracking repository match using both Windows and POSIX-normalized host paths, falling back to `/workspace` when matching containerized sessions.
+
+## Scheduling and Execution Split
+To enable pure unit testing of virtual worker scheduling rules, Code UX extracts cycle planning into a pure domain function (`planVirtualWorkerCycle`). The VirtualWorkerService gathers state (e.g. attention items, task dispatches, available provider concurrency) and passes it to the planner. The planner then returns an explicit `VirtualWorkerCycleAction` without producing side effects, and the service executes the requested routing decision.

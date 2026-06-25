@@ -1,4 +1,287 @@
 import type {
+  ProjectStatsQuery,
+  ProjectStatsWindow,
+} from "../contracts/app-types.js";
+import type {
+  CreateProjectInput,
+  UpdateProjectInput,
+  CreateSprintInput,
+  UpdateSprintInput,
+  CreateTaskInput,
+  UpdateTaskInput,
+  ProjectStatus,
+  ProjectSourceType,
+  ProjectInitMode,
+  SprintStatus,
+  TaskStatus,
+  TaskPriority,
+  TaskExecutorType,
+  SprintLinkedIssueInput,
+  ProjectSetupRequestInput,
+} from "../contracts/project-management-types.js";
+import type {
+  CreateQuicksprintTemplateInput,
+  UpdateQuicksprintTemplateInput,
+  QuicksprintExecutionInput,
+} from "../contracts/quicksprint-types.js";
+
+// Validation Helpers
+
+function parseEnum<T extends string>(value: unknown, allowedValues: T[], fieldName: string): T | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string" || !allowedValues.includes(value as T)) {
+    throw new Error(`Invalid value for ${fieldName}. Must be one of: ${allowedValues.join(", ")}`);
+  }
+  return value as T;
+}
+
+function parseOptionalString(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") return undefined;
+  return value.trim();
+}
+
+function parseOptionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function parseOptionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined || value === null) return undefined;
+  return Boolean(value);
+}
+
+// Project Parsers
+
+export function parseCreateProjectInput(body: unknown): CreateProjectInput {
+  if (!body || typeof body !== "object") throw new Error("Invalid input: body must be an object");
+  const input = body as Record<string, unknown>;
+
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (!name) throw new Error("Missing or empty required field: name");
+
+  const sourceType = parseEnum(input.sourceType, ["local", "git"], "sourceType");
+  if (!sourceType) throw new Error("Invalid value for sourceType. Must be one of: local, git");
+
+  const sourceRef = typeof input.sourceRef === "string" ? input.sourceRef.trim() : "";
+  if (!sourceRef) throw new Error("Missing or empty required field: sourceRef");
+
+  return {
+    name,
+    sourceType,
+    sourceRef,
+    cloneDir: parseOptionalString(input.cloneDir),
+    setup: input.setup as ProjectSetupRequestInput | undefined,
+    defaultBranch: parseOptionalString(input.defaultBranch),
+    featureBranchPrefix: parseOptionalString(input.featureBranchPrefix),
+    status: parseEnum(input.status, ["running", "failed", "intervention", "idle"], "status"),
+    initMode: parseEnum(input.initMode, ["existing", "new-local", "new-remote"], "initMode"),
+    isPrivate: parseOptionalBoolean(input.isPrivate),
+    remoteProvider: parseEnum(input.remoteProvider, ["github", "gitlab"], "remoteProvider"),
+  };
+}
+
+export function parseUpdateProjectInput(body: unknown): UpdateProjectInput {
+  if (!body || typeof body !== "object") throw new Error("Invalid input: body must be an object");
+  const input = body as Record<string, unknown>;
+
+  return {
+    name: parseOptionalString(input.name),
+    sourceType: parseEnum(input.sourceType, ["local", "git"], "sourceType"),
+    sourceRef: parseOptionalString(input.sourceRef),
+    baseDir: parseOptionalString(input.baseDir),
+    defaultBranch: parseOptionalString(input.defaultBranch) ?? (input.defaultBranch === null ? null : undefined),
+    featureBranchPrefix: parseOptionalString(input.featureBranchPrefix) ?? (input.featureBranchPrefix === null ? null : undefined),
+    status: parseEnum(input.status, ["running", "failed", "intervention", "idle"], "status"),
+  };
+}
+
+// Sprint Parsers
+
+export function parseCreateSprintInput(body: unknown): CreateSprintInput {
+  if (!body || typeof body !== "object") throw new Error("Invalid input: body must be an object");
+  const input = body as Record<string, unknown>;
+
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (!name) throw new Error("Missing or empty required field: name");
+
+  return {
+    name,
+    originalPrompt: parseOptionalString(input.originalPrompt) ?? (input.originalPrompt === null ? null : undefined),
+    goal: parseOptionalString(input.goal),
+    linkedIssues: input.linkedIssues as SprintLinkedIssueInput[] | undefined,
+    number: parseOptionalNumber(input.number) ?? (input.number === null ? null : undefined),
+    slug: parseOptionalString(input.slug),
+    status: parseEnum(input.status, ["running", "paused", "completed", "failed", "cancelled", "idle"], "status"),
+    showcasePinned: parseOptionalBoolean(input.showcasePinned),
+    startDate: parseOptionalString(input.startDate) ?? (input.startDate === null ? null : undefined),
+    endDate: parseOptionalString(input.endDate) ?? (input.endDate === null ? null : undefined),
+    featureBranch: parseOptionalString(input.featureBranch) ?? (input.featureBranch === null ? null : undefined),
+    baseCommitSha: parseOptionalString(input.baseCommitSha) ?? (input.baseCommitSha === null ? null : undefined),
+  };
+}
+
+export function parseUpdateSprintInput(body: unknown): UpdateSprintInput {
+  if (!body || typeof body !== "object") throw new Error("Invalid input: body must be an object");
+  const input = body as Record<string, unknown>;
+
+  return {
+    name: parseOptionalString(input.name),
+    originalPrompt: parseOptionalString(input.originalPrompt) ?? (input.originalPrompt === null ? null : undefined),
+    goal: parseOptionalString(input.goal),
+    linkedIssues: input.linkedIssues as SprintLinkedIssueInput[] | undefined,
+    number: parseOptionalNumber(input.number) ?? (input.number === null ? null : undefined),
+    slug: parseOptionalString(input.slug),
+    status: parseEnum(input.status, ["running", "paused", "completed", "failed", "cancelled", "idle"], "status"),
+    showcasePinned: parseOptionalBoolean(input.showcasePinned),
+    startDate: parseOptionalString(input.startDate) ?? (input.startDate === null ? null : undefined),
+    endDate: parseOptionalString(input.endDate) ?? (input.endDate === null ? null : undefined),
+    featureBranch: parseOptionalString(input.featureBranch) ?? (input.featureBranch === null ? null : undefined),
+    baseCommitSha: parseOptionalString(input.baseCommitSha) ?? (input.baseCommitSha === null ? null : undefined),
+  };
+}
+
+// Task Parsers
+
+export function parseCreateTaskInput(body: unknown): CreateTaskInput {
+  if (!body || typeof body !== "object") throw new Error("Invalid input: body must be an object");
+  const input = body as Record<string, unknown>;
+
+  const sprintId = typeof input.sprintId === "string" ? input.sprintId.trim() : "";
+  if (!sprintId) throw new Error("Missing or empty required field: sprintId");
+
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+  if (!title) throw new Error("Missing or empty required field: title");
+
+  return {
+    sprintId,
+    title,
+    taskKey: parseOptionalString(input.taskKey),
+    promptMarkdown: parseOptionalString(input.promptMarkdown),
+    description: parseOptionalString(input.description),
+    status: parseEnum(input.status, ["pending", "in_progress", "coding_completed", "completed", "QA_REVIEW_FAILED"], "status"),
+    priority: parseEnum(input.priority, ["critical", "high", "medium", "low"], "priority"),
+    executorType: parseEnum(input.executorType, ["auto", "docker_cli", "jules"], "executorType"),
+    agentPresetId: parseOptionalString(input.agentPresetId) ?? (input.agentPresetId === null ? null : undefined),
+    sortOrder: parseOptionalNumber(input.sortOrder),
+    dependsOnTaskIds: Array.isArray(input.dependsOnTaskIds) ? input.dependsOnTaskIds.map(String) : undefined,
+    isIndependent: parseOptionalBoolean(input.isIndependent),
+    isMerged: parseOptionalBoolean(input.isMerged),
+    mergeIndicator: parseOptionalString(input.mergeIndicator) ?? (input.mergeIndicator === null ? null : undefined),
+    sourceType: parseOptionalString(input.sourceType) ?? (input.sourceType === null ? null : undefined),
+    sourcePath: parseOptionalString(input.sourcePath) ?? (input.sourcePath === null ? null : undefined),
+    model: parseOptionalString(input.model) ?? (input.model === null ? null : undefined),
+  };
+}
+
+export function parseUpdateTaskInput(body: unknown): UpdateTaskInput {
+  if (!body || typeof body !== "object") throw new Error("Invalid input: body must be an object");
+  const input = body as Record<string, unknown>;
+
+  return {
+    title: parseOptionalString(input.title),
+    promptMarkdown: parseOptionalString(input.promptMarkdown),
+    description: parseOptionalString(input.description),
+    status: parseEnum(input.status, ["pending", "in_progress", "coding_completed", "completed", "QA_REVIEW_FAILED"], "status"),
+    priority: parseEnum(input.priority, ["critical", "high", "medium", "low"], "priority"),
+    executorType: parseEnum(input.executorType, ["auto", "docker_cli", "jules"], "executorType"),
+    agentPresetId: parseOptionalString(input.agentPresetId) ?? (input.agentPresetId === null ? null : undefined),
+    model: parseOptionalString(input.model) ?? (input.model === null ? null : undefined),
+    sortOrder: parseOptionalNumber(input.sortOrder),
+    dependsOnTaskIds: Array.isArray(input.dependsOnTaskIds) ? input.dependsOnTaskIds.map(String) : undefined,
+    isIndependent: parseOptionalBoolean(input.isIndependent),
+    isMerged: parseOptionalBoolean(input.isMerged),
+    mergeIndicator: parseOptionalString(input.mergeIndicator) ?? (input.mergeIndicator === null ? null : undefined),
+    sourceType: parseOptionalString(input.sourceType) ?? (input.sourceType === null ? null : undefined),
+    sourcePath: parseOptionalString(input.sourcePath) ?? (input.sourcePath === null ? null : undefined),
+  };
+}
+
+// Quicksprint Parsers
+
+export function parseCreateQuicksprintTemplateInput(body: unknown): CreateQuicksprintTemplateInput {
+  if (!body || typeof body !== "object") throw new Error("Invalid input: body must be an object");
+  const input = body as Record<string, unknown>;
+
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (!name) throw new Error("Missing or empty required field: name");
+
+  const description = typeof input.description === "string" ? input.description.trim() : "";
+  if (!description) throw new Error("Missing or empty required field: description");
+
+  const icon = typeof input.icon === "string" ? input.icon.trim() : "";
+  if (!icon) throw new Error("Missing or empty required field: icon");
+
+  const category = typeof input.category === "string" ? input.category.trim() : "";
+  if (!category) throw new Error("Missing or empty required field: category");
+
+  const agentInstructionMarkdown = typeof input.agentInstructionMarkdown === "string" ? input.agentInstructionMarkdown.trim() : "";
+  if (!agentInstructionMarkdown) throw new Error("Missing or empty required field: agentInstructionMarkdown");
+
+  return {
+    name,
+    description,
+    icon,
+    category,
+    categoryColor: parseOptionalString(input.categoryColor),
+    agentInstructionMarkdown,
+    defaultTaskCount: parseOptionalNumber(input.defaultTaskCount),
+    agentPresetId: parseOptionalString(input.agentPresetId),
+  };
+}
+
+export function parseUpdateQuicksprintTemplateInput(body: unknown): UpdateQuicksprintTemplateInput {
+  if (!body || typeof body !== "object") throw new Error("Invalid input: body must be an object");
+  const input = body as Record<string, unknown>;
+
+  return {
+    name: parseOptionalString(input.name),
+    description: parseOptionalString(input.description),
+    icon: parseOptionalString(input.icon),
+    category: parseOptionalString(input.category),
+    categoryColor: parseOptionalString(input.categoryColor),
+    agentInstructionMarkdown: parseOptionalString(input.agentInstructionMarkdown),
+    defaultTaskCount: parseOptionalNumber(input.defaultTaskCount),
+    agentPresetId: parseOptionalString(input.agentPresetId),
+  };
+}
+
+export function parseQuicksprintExecutionInput(body: unknown): QuicksprintExecutionInput {
+  if (!body || typeof body !== "object") throw new Error("Invalid input: body must be an object");
+  const input = body as Record<string, unknown>;
+
+  const templateId = typeof input.templateId === "string" ? input.templateId.trim() : "";
+  if (!templateId) throw new Error("Missing or empty required field: templateId");
+
+  const taskCount = typeof input.taskCount === "number" && Number.isFinite(input.taskCount)
+    ? Math.floor(input.taskCount)
+    : undefined;
+  if (taskCount === undefined || taskCount <= 0) {
+    throw new Error("Missing or invalid required field: taskCount");
+  }
+
+  if (input.submitMode !== "plan_only" && input.submitMode !== "plan_and_start") {
+    throw new Error("Invalid submitMode. Must be 'plan_only' or 'plan_and_start'.");
+  }
+
+  return {
+    templateId,
+    taskCount,
+    submitMode: input.submitMode,
+    routeOverride: typeof input.routeOverride === "string" ? input.routeOverride : undefined,
+    modelOverride: typeof input.modelOverride === "string" ? input.modelOverride : undefined,
+    agentPresetId: typeof input.agentPresetId === "string" ? input.agentPresetId : undefined,
+    additionalPrompt: typeof input.additionalPrompt === "string" ? input.additionalPrompt : undefined,
+    planningOverrides: parsePlanningOverrides(input.planningOverrides),
+  };
+}
+
+import type {
   ImprovePromptInput,
   PlanningOverrides,
   PlanSprintOptions,
@@ -215,4 +498,59 @@ export function parseCreateDashboardConversationMessageInput(body: unknown): Cre
     connectionId: typeof typedBody.connectionId === "string" ? typedBody.connectionId.trim() : (typedBody.connectionId === null ? null : undefined),
     metadata: typedBody.metadata as CreateDashboardConversationMessageInput["metadata"],
   };
+}
+
+export function parseStatsDateInput(value: string | undefined, edge: "start" | "end"): Date | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return new Date(`${trimmed}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}Z`);
+  }
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function parseProjectStatsQuery(query: Record<string, unknown>): ProjectStatsQuery {
+  const requestedWindow = typeof query.window === "string" ? query.window.trim() : "";
+  const window: ProjectStatsWindow = (
+    requestedWindow === "1h" ||
+    requestedWindow === "24h" ||
+    requestedWindow === "7d" ||
+    requestedWindow === "30d" ||
+    requestedWindow === "all" ||
+    requestedWindow === "custom"
+  ) ? (requestedWindow as ProjectStatsWindow) : "7d";
+
+  let from = typeof query.from === "string" && query.from.trim().length > 0 ? query.from.trim() : undefined;
+  let to = typeof query.to === "string" && query.to.trim().length > 0 ? query.to.trim() : undefined;
+
+  if (window === "custom") {
+    const fromDate = parseStatsDateInput(from, "start");
+    const toDate = parseStatsDateInput(to, "end");
+
+    if (!fromDate || !toDate) {
+      throw new Error("Custom stats windows require valid from and to values.");
+    }
+    if (fromDate.getTime() > toDate.getTime()) {
+      throw new Error("Custom stats window start must be earlier than end.");
+    }
+
+    const MIN_DATE = new Date("2000-01-01T00:00:00.000Z").getTime();
+    const MAX_DATE = Date.now() + 30 * 24 * 60 * 60 * 1000;
+
+    if (fromDate.getTime() < MIN_DATE) {
+      from = "2000-01-01T00:00:00.000Z";
+    } else {
+      from = fromDate.toISOString();
+    }
+
+    if (toDate.getTime() > MAX_DATE) {
+      to = new Date(MAX_DATE).toISOString();
+    } else {
+      to = toDate.toISOString();
+    }
+  }
+
+  return { window, from, to };
 }

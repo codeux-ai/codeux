@@ -117,6 +117,8 @@ For Docker-backed Antigravity runs, the SQLite database is encoded to Base64 wit
 
 Jules does not expose a compatible native token contract. Instead of excluding it, Code UX computes **estimated** tokens for Jules by accumulating input and output characters divided by 4 (the characters-per-token heuristic).
 
+During live synchronization (`syncLiveInvocation`), expected 404 responses indicating that a session or activity stream is unavailable are handled gracefully: they are logged at the debug level and skipped to avoid spamming the logs with warnings. For terminal sync (`calculateAndSaveUsageForTask`), the system is conservative: if the session returns a 404, it skips creating a new usage record to prevent saving "fake" empty records unless an existing prompt or usage record is already present to allow safe estimation.
+
 ## OpenTelemetry Integration
 
 Code UX provides a lightweight, dependency-free OpenTelemetry module at `src/infrastructure/providers/cli/otel-span-collector.ts` that:
@@ -163,20 +165,23 @@ The dashboard must show these states explicitly and must not invent fake precisi
 
 ## Dashboard API Surface
 
-Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets.
+Overview telemetry uses chunk-safe event loading, preventing the risk of hitting SQLite placeholder limits for large active sprint sets. The duration aggregation strategy bounds memory usage by using pre-aggregated metrics coupled with bounded percentile sampling.
 
 Usage data now appears in two read models:
 
 - `GET /api/projects/:projectId/execution`
   - task and sprint execution summaries now include usage rollups
 - `GET /api/projects/:projectId/stats?window=24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
-  - project-scoped statistics snapshot for the Stats page
+  - project-scoped statistics snapshot for the Stats page. Custom ranges must be parseable dates, where from <= to, and are capped to historical (e.g. Jan 1 2000) and future limits.
 
 Historical Docker-backed CLI invocations that were persisted as `unavailable` before container telemetry fallback support are backfilled at startup when they have prompt or transcript character counts. The backfill marks them as `estimated` using the same conservative character heuristic, preserving rows that already have provider-reported or provider-specific estimated usage.
 
 The stats snapshot includes:
 
-- project totals
+- project totals (including dynamic cost rollups based on typed token-pricing configurations which calculate input, output, and cached input costs in USD based on per-million token rates, defaulting to zero if unset or unconfigured)
+- total provider cost totals (e.g. `providerCost` map)
+- total model cost totals (e.g. `modelCost` map)
+- usage cost chart series for historical visualization (e.g. `core_total_cost`, `provider_cost_*`)
 - active sprint metadata
 - the original query (`window`, optional `from`, optional `to`)
 - normalized range metadata (`label`, `resolution`, `resolutionLabel`, `from`, `to`, `bucketCount`, `isCustom`)
@@ -194,6 +199,10 @@ The dashboard now has a dedicated `/stats` page.
 
 It focuses on:
 
+- uses standard T01 Interaction Motion Tokens (like `MODAL_MOTION.dropdown` and `MODAL_MOTION.fieldStagger`) to preserve layout and respect `prefers-reduced-motion` constraints during graph filter or stat card mode transitions.
+- uses standard T04 Feedback Surfaces (`ActionFeedbackRegion`) to provide accessible loading, error, and empty-state recovery paths directly within the page, stats graph, and mode containers.
+- explicitly validates custom date ranges in the Hero header and exposes clear accessible error messages immediately when ranges are inverted or incomplete.
+- total cost
 - total tokens
 - The Overview page now reuses project stats telemetry to display a 7-day Total Tokens card for the selected project, maintaining consistency with the Stats page without introducing a separate query path.
 - active AI time
@@ -254,3 +263,10 @@ The telemetry model is designed for future exact reporting across:
 - per week
 
 Because the canonical source is per invocation, additional reporting surfaces can be added later without changing how usage is recorded.
+
+
+### ProviderTelemetryWatcher
+
+Live provider telemetry polling is extracted into `ProviderTelemetryWatcher`. This helper is responsible for the periodic read of provider log artifacts during an active session (e.g. while `provider-runner` waits for the CLI to complete). It handles the polling loop, background error swallowing, and temporary database cleanup without affecting the core completion result. Note that telemetry emitted by `ProviderTelemetryWatcher` is best-effort for live dashboarding; the final usage data collected by `ProviderRunner` after process exit remains authoritative.
+
+Client-side chart state persistence (such as enabled chart series) is scoped per project id to prevent visual regressions when switching between projects.

@@ -114,6 +114,7 @@ function makeBasePayload() {
       enableLivePrMonitoring: true,
       resolveAllCommentsBeforeMainMerge: true,
       resolveMainMergeConflicts: true,
+      resolveMainMergeFailedChecks: true,
       resolveAllCommentsBeforeFeatureMerge: true,
       resolveMergeConflicts: true,
       waitForJulesCiAutofix: true,
@@ -232,6 +233,8 @@ function makeBasePayload() {
       qualityAssurance: {
         enabled: true,
         maxTaskReviewRuns: 3,
+        maxSprintReviewRuns: 3,
+        exhaustionPolicy: "ESCALATE_TO_HUMAN",
         taskCompletion: { enabled: true, agentPresetId: "default" },
         sprintCompletion: { enabled: true, agentPresetId: "default" },
         completedTaskWithoutPr: { enabled: true, agentPresetId: "default" },

@@ -68,6 +68,20 @@ export async function attemptAutoMerge(args: {
     };
   }
 
+  // A non-conflict failure here is almost always transient: when auto-merge is
+  // enabled the gate issues an immediate `gh pr merge` as soon as its local CI
+  // snapshot looks ready, but GitHub may not have finished computing the PR's
+  // mergeability yet (it briefly reports the PR as not-mergeable right after the
+  // branch is pushed), so the command fails for one cycle and then succeeds.
+  // Leaving the task in CODING_COMPLETED makes it look "awaiting merge" for the
+  // rest of the cycle, so the merge protocol escalates a spurious `merge_required`
+  // attention item even though the gate re-attempts and lands the PR moments
+  // later. Park it in the same retry state as an armed/scheduled auto-merge
+  // (RUNNING + CI) so the watch loop keeps cycling and retries the merge instead
+  // of escalating. A genuine conflict is handled above and still escalates.
+  args.task.is_merged = false;
+  args.task.status = "RUNNING";
+  args.task.merge_indicator = "CI";
   return {
     reportText: buildAutoMergeFailedText(
       args.task.id,

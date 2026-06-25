@@ -94,7 +94,7 @@ Code UX now performs a dedicated execution recovery pass during server startup b
 
 That startup pass is intentionally different from stale-runtime cleanup:
 
-- `queued` and `running` sprint runs are resumed in place, keeping the original `sprint_run` id instead of creating a fresh restart run
+- `queued` and `running` sprint runs are resumed in place (provided their associated sprint in the `sprints` table is still in the `running` status; if the sprint is no longer active, the run is finalized as failed), keeping the original `sprint_run` id instead of creating a fresh restart run
 - Code UX releases the orphaned in-process sprint lease from the old server process before reacquiring a fresh lease for the resumed watch loop
 - if corrupted state left more than one active `queued` or `running` run for the same sprint, Code UX resumes only the newest run and fails older duplicates as superseded
 - interrupted local CLI task dispatches (`docker_cli`) are not treated as still running after process restart; they are rewritten to failed/retryable state so the resumed sprint loop can launch them again safely
@@ -152,3 +152,10 @@ That limitation is explicit in the runtime model:
 - Code UX records `cancel_requested` separately from final `cancelled`
 - live runtime panels show stop-pending state while work is still shutting down
 - terminal outcomes are only written once the executor path actually reports back or exits, except for Jules where Code UX finalizes immediately after sending the close message
+
+## Idle Overhead Optimization
+
+The dashboard and background loops now optimize system resources during idle periods to eliminate CPU spikes and avoid unnecessary Docker container query overhead:
+
+- **Idle Reconcile Gating**: The background sprint preview and file browser reconciliation loops (`reconcileSessions()`) now skip the expensive filtered `docker ps` container listings entirely when no active preview or file browser sessions are registered.
+- **Docker Query Coalescing & Caching**: Added promise coalescing and a 2-second cache to Docker container queries in `DockerService.listContainers()`, merging concurrent/parallel `docker ps` calls into a single execution.

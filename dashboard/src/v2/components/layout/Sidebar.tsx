@@ -54,7 +54,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         return false;
     });
 
-    const trapRef = useFocusTrap(!!isMobile && !!isOpen, { onClose: isMobile ? onClose : undefined, restoreFocus: true });
+    const trapRef = useFocusTrap(!!isMobile && !!isOpen, { onClose: isMobile ? onClose : undefined, restoreFocus: true, initialFocusRef: undefined });
 
     const browserVisible = !selectedProject || (
         (effectiveSettings?.settings.sprintPreview.enabled ?? true)
@@ -177,9 +177,9 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
             aria-modal={isMobile ? "true" : undefined}
             tabIndex={-1}
             ref={(el) => { (sidebarRef as any).current = el; (trapRef as any).current = el; }}
-            className={`${isMobile ? 'h-[100dvh]' : 'h-full'} shrink-0 border-r border-black/[0.05] dark:border-white/[0.04] bg-[#F5F3EF]/60 dark:bg-void-900 flex flex-col justify-between py-8 z-50 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+            className={`${isMobile ? 'h-[100dvh]' : 'h-full'} shrink-0 border-r border-black/[0.06] dark:border-white/[0.06] bg-[#F9F8F4]/80 dark:bg-void-900/80 backdrop-blur-xl flex flex-col justify-between py-8 z-50 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
                 isMobile 
-                    ? 'fixed left-0 top-0 w-[260px] -translate-x-full opacity-0 shadow-2xl bg-[#F5F3EF] dark:bg-void-900 overflow-y-auto overflow-x-hidden'
+                    ? 'fixed left-0 top-0 w-[260px] -translate-x-full opacity-0 shadow-2xl bg-[#F9F8F4] dark:bg-void-900 overflow-y-auto overflow-x-hidden'
                     : (isMinimized ? 'relative w-[88px]' : 'relative w-[260px]')
             }`}
         >
@@ -244,7 +244,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                     onFocus={() => prefetchRoute("/config")}
                     aria-label="Settings"
                     data-tour-id="nav-config" 
-                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-3 min-h-[44px] rounded-2xl transition-all duration-300 group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none`}
+                    className={`relative flex items-center ${isMinimized && !isMobile ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-all duration-300 group mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 decoration-none`}
                 >
                     <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100" />
                     <Settings aria-hidden="true" className="relative z-10 w-4 h-4 shrink-0 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:rotate-90 transition-all duration-700 ease-in-out" strokeWidth={1.5} />
@@ -254,7 +254,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                         </span>
                     </div>
                     {isMinimized && !isMobile && (
-                        <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold tracking-wide rounded-lg opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none shadow-xl z-[100] whitespace-nowrap flex items-center gap-2">
+                        <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none shadow-2xl z-[100] whitespace-nowrap flex items-center gap-2">
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-500/80"></span>
                             Settings
                         </div>
@@ -264,7 +264,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                 {!isMobile && (
                     <button
                         onClick={toggleMinimize}
-                        className={`mt-2 relative flex items-center ${isMinimized ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-3 min-h-[44px] rounded-2xl transition-all duration-300 group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 bg-transparent border-0 cursor-pointer`}
+                        className={`mt-2 relative flex items-center ${isMinimized ? 'justify-center mx-4' : 'gap-3.5 px-5 mx-4'} py-2 min-h-[40px] rounded-2xl transition-all duration-300 group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-2xl focus-visible:z-10 bg-transparent border-0 cursor-pointer`}
                         aria-label={isMinimized ? "Expand sidebar" : "Collapse sidebar"}
                     >
                         <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100" />
@@ -280,7 +280,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                         </div>
                         
                         {isMinimized && (
-                            <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold tracking-wide rounded-lg opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none shadow-xl z-[100] whitespace-nowrap flex items-center gap-2">
+                            <div aria-hidden="true" className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white/95 dark:bg-void-800/95 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.08] text-slate-800 dark:text-slate-100 text-xs font-bold tracking-wide rounded-2xl opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none shadow-2xl z-[100] whitespace-nowrap flex items-center gap-2">
                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-500/80"></span>
                                 Expand
                             </div>
@@ -289,7 +289,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                 )}
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#F5F3EF] dark:from-void-900 to-transparent pointer-events-none z-0" />
+            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#F9F8F4] dark:from-void-900 to-transparent pointer-events-none z-0" />
         </aside>
         </>
     );

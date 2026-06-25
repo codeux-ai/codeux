@@ -27,6 +27,25 @@ describe("preview-origin utilities", () => {
     it("handles invalid URLs", () => {
       expect(normalizePath("http://%%")).toBe("/");
     });
+
+    it("handles trailing slashes", () => {
+      expect(normalizePath("/path/to/resource/")).toBe("/path/to/resource");
+      expect(normalizePath("/path/to/resource")).toBe("/path/to/resource");
+    });
+
+    it("handles redundant slashes", () => {
+      expect(normalizePath("/path//to//resource")).toBe("/path/to/resource");
+    });
+
+    it("handles relative segments", () => {
+      expect(normalizePath("/path/./to/resource")).toBe("/path/to/resource");
+      expect(normalizePath("/path/to/../other")).toBe("/path/other");
+    });
+
+    it("handles edge cases", () => {
+      expect(normalizePath("/")).toBe("/");
+      expect(normalizePath("/path with spaces")).toBe("/path%20with%20spaces");
+    });
   });
 
   describe("buildPreviewOrigin", () => {

@@ -104,7 +104,7 @@ describe("PreviewSessionSlider", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByLabelText("Remove preview container"));
     expect(onRemoveSession).toHaveBeenCalledWith("slider-sess-1");
   });
 });

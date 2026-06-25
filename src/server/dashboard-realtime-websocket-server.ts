@@ -6,6 +6,8 @@ import type {
   DashboardRealtimeEvent,
   DashboardRealtimeServerMessage,
 } from "../contracts/app-types.js";
+import type { Request } from "express";
+import { isHostileBrowserOrigin } from "./dashboard-security.js";
 import { parseDashboardRealtimeScope } from "../repositories/dashboard-realtime-event-repository.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import type { Logger } from "../shared/logging/logger.js";
@@ -201,6 +203,23 @@ export function bootDashboardRealtimeWebSocketServer(args: {
 
     const wsKey = String(req.headers["sec-websocket-key"] || "").trim();
     if (!wsKey) {
+      socket.destroy();
+      return;
+    }
+
+    const mockReq = {
+      method: "POST", // Bypass the GET/HEAD/OPTIONS fast-path skip in isHostileBrowserOrigin
+      path: args.pathName,
+      headers: req.headers,
+    } as unknown as Request;
+
+    if (isHostileBrowserOrigin(mockReq)) {
+      args.logger.warn("websocket_upgrade_rejected_hostile_origin", {
+        logPurpose: "security",
+        path: args.pathName,
+      });
+      // Important: don't respond with a 101, explicitly reject and close.
+      socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
       socket.destroy();
       return;
     }

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { DashboardSnapshotCachePolicy } from "../../../../src/app/lifecycle/dashboard-snapshot-cache-policy.js";
 import { DashboardSnapshotCache, mapExecutionConnections, mapAssignedWorkers, mapAttentionItems } from "../../../../src/app/lifecycle/dashboard-snapshot-cache.js";
 
 describe("DashboardSnapshotCache", () => {
@@ -28,6 +29,25 @@ describe("DashboardSnapshotCache", () => {
     cache = new DashboardSnapshotCache(mockDeps);
   });
 
+
+  describe("DashboardSnapshotCachePolicy", () => {
+    it("generates stable cache keys for project stats queries", () => {
+      const key1 = DashboardSnapshotCachePolicy.getProjectStatsCacheKey("p1", { window: "7d" });
+      const key2 = DashboardSnapshotCachePolicy.getProjectStatsCacheKey("p1", { window: "7d" });
+      expect(key1).toBe(key2);
+      expect(key1).toBe('p1:{"window":"7d"}');
+
+      const key3 = DashboardSnapshotCachePolicy.getProjectStatsCacheKey("p1", { window: "30d" });
+      expect(key1).not.toBe(key3);
+    });
+
+    it("matches cache keys correctly for invalidation", () => {
+      const key1 = DashboardSnapshotCachePolicy.getProjectStatsCacheKey("p1", { window: "7d" });
+      expect(DashboardSnapshotCachePolicy.isProjectStatsCacheKeyMatch(key1, "p1")).toBe(true);
+      expect(DashboardSnapshotCachePolicy.isProjectStatsCacheKeyMatch(key1, "p2")).toBe(false);
+    });
+  });
+
   describe("snapshots caching", () => {
     it("caches project snapshots", () => {
       const snap1 = cache.getProjectsSnapshot();
@@ -50,10 +70,11 @@ describe("DashboardSnapshotCache", () => {
       expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledTimes(1);
     });
 
+
     it("caches project stats snapshots", () => {
       const snap1 = cache.getProjectStatsSnapshot("p1");
       const snap2 = cache.getProjectStatsSnapshot("p1");
-      expect(snap1).toBe(snap2);
+      expect(snap1).toBe(snap2); // Immutability: returned snapshot identity is preserved
       expect(mockDeps.executionRepository.getProjectStatsSnapshot).toHaveBeenCalledTimes(1);
     });
   });
@@ -87,6 +108,9 @@ describe("DashboardSnapshotCache", () => {
       expect(mockDeps.projectManagementRepository.listProjects).toHaveBeenCalledTimes(2);
     });
 
+
+
+
     it("invalidates all", () => {
       cache.getProjectsSnapshot();
       cache.getOverviewTelemetrySnapshot();
@@ -105,6 +129,22 @@ describe("DashboardSnapshotCache", () => {
       expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledTimes(2);
       expect(mockDeps.executionRepository.getProjectStatsSnapshot).toHaveBeenCalledTimes(2);
     });
+
+    it("reuses cached project execution snapshot before mutation", () => {
+      const snap1 = cache.getProjectExecutionSnapshot("p1");
+      const snap2 = cache.getProjectExecutionSnapshot("p1");
+      expect(snap1).toBe(snap2);
+      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("invalidates project execution snapshot after mutation event via invalidator", () => {
+      const snap1 = cache.getProjectExecutionSnapshot("p1");
+      cache.invalidateProjectExecution("p1");
+      const snap3 = cache.getProjectExecutionSnapshot("p1");
+      expect(snap1).not.toBe(snap3);
+      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledTimes(2);
+    });
+
   });
 
   describe("mapping functions", () => {

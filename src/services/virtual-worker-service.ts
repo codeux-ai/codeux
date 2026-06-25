@@ -18,7 +18,7 @@ import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import { ProviderExecutionService, resolveEffectiveModel } from "./provider-execution-service.js";
-import type { GuardrailService } from "./guardrail-service.js";
+import type { GuardrailEvaluation, GuardrailScope, GuardrailService } from "./guardrail-service.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { buildGitHttpAuthEnvForRepoWithFallbacks, type GitHttpAuthOptions } from "./git-http-auth.js";
 import { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
@@ -36,6 +36,13 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 import { DockerService } from "./docker-service.js";
+import {
+  isOrchestratorHandledClarificationItem,
+  projectNeedsVirtualWorker,
+  peekNextWorkerAttention,
+  resolveWorkerExecutionMode,
+} from "../domain/workers/virtual-worker-scheduling-policy.js";
+import { planVirtualWorkerCycle } from "../domain/workers/virtual-worker-cycle-plan.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
@@ -168,12 +175,6 @@ export class VirtualWorkerService {
     });
   }
 
-  private isOrchestratorHandledClarificationItem(item: ProjectAttentionItemRecord): boolean {
-    return item.summaryMarkdown.includes("Clarification cooldown active")
-      || item.summaryMarkdown.includes("already answered automatically")
-      || item.summaryMarkdown.includes("Resume instruction already sent");
-  }
-
   start(): void {
     if (this.reconcileTimer) {
       return;
@@ -196,29 +197,29 @@ export class VirtualWorkerService {
     }
   }
 
-  scheduleProject(projectId: string, reason: string): void {
+  scheduleProject(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): void {
     if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId)) {
       return;
     }
-    if (!this.projectNeedsVirtualWorker(projectId)) {
+    if (!this.projectNeedsVirtualWorker(projectId, resolver)) {
       return;
     }
 
     this.scheduledProjects.add(projectId);
     queueMicrotask(() => {
       this.scheduledProjects.delete(projectId);
-      if (this.activeCycles.has(projectId) || !this.projectNeedsVirtualWorker(projectId)) {
+      if (this.activeCycles.has(projectId) || !this.projectNeedsVirtualWorker(projectId, resolver)) {
         return;
       }
 
-      const cycle = this.runProjectCycle(projectId, reason)
+      const cycle = this.runProjectCycle(projectId, reason, resolver)
         .catch((error) => {
           this.deps.logger?.error("Virtual worker cycle failed", { projectId, reason, error });
         })
         .finally(() => {
           this.activeCycles.delete(projectId);
-          if (this.projectNeedsVirtualWorker(projectId)) {
-            this.scheduleProject(projectId, "remaining_worker_work");
+          if (this.projectNeedsVirtualWorker(projectId, resolver)) {
+            this.scheduleProject(projectId, "remaining_worker_work", resolver);
           }
         });
 
@@ -227,39 +228,50 @@ export class VirtualWorkerService {
   }
 
   async reconcile(): Promise<void> {
+    const cycleCache = new Map<string, DashboardSettings>();
+    const resolver = (pId: string, sId?: string | null): DashboardSettings => {
+      const key = `${pId}:${sId ?? ""}`;
+      if (cycleCache.has(key)) {
+        return cycleCache.get(key)!;
+      }
+      const settings = this.resolveDashboardSettings(pId, sId);
+      cycleCache.set(key, settings);
+      return settings;
+    };
+
     for (const project of this.deps.projectManagementRepository.listProjects().projects) {
-      if (this.projectNeedsVirtualWorker(project.id)) {
-        this.scheduleProject(project.id, "reconcile");
+      if (this.projectNeedsVirtualWorker(project.id, resolver)) {
+        this.scheduleProject(project.id, "reconcile", resolver);
       }
     }
   }
 
   private projectUsesVirtualWorkers(projectId: string, sprintId?: string | null): boolean {
-    return this.resolveWorkerExecutionMode(projectId, sprintId) === "VIRTUAL";
-  }
-
-  private resolveWorkerExecutionMode(projectId: string, sprintId?: string | null): WorkerExecutionMode {
-    return resolveEffectiveDashboardSettings(this.deps.settingsRepository, projectId, sprintId).settings.workers.executionMode;
+    return resolveWorkerExecutionMode(this.resolveDashboardSettings(projectId, sprintId)) === "VIRTUAL";
   }
 
   private resolveDashboardSettings(projectId: string, sprintId?: string | null): DashboardSettings {
     return resolveEffectiveDashboardSettings(this.deps.settingsRepository, projectId, sprintId).settings;
   }
 
-  private projectNeedsVirtualWorker(projectId: string): boolean {
-    if (this.activeCycles.has(projectId)) {
-      return false;
-    }
-
-    return this.peekNextWorkerAttention(projectId) !== null;
+  private projectNeedsVirtualWorker(projectId: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): boolean {
+    return projectNeedsVirtualWorker(
+      this.activeCycles.has(projectId),
+      this.peekNextWorkerAttention(projectId, resolver)
+    );
   }
 
-  private async runProjectCycle(projectId: string, reason: string): Promise<void> {
-    const cycleSettings = this.resolveCycleSettings(projectId);
-    const cycleProviderType = cycleSettings.aiProvider.providers[cycleSettings.workers.virtualWorkerProvider]?.provider || "codex";
+  private async runProjectCycle(projectId: string, reason: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): Promise<void> {
+    const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
+
+    // Create the virtual endpoint first so that downstream operations (like task dispatch) have a valid target ID.
+    // If the planner determines no work is needed, the endpoint is safely cleaned up in the finally block.
+    const initialCycleSettings = this.resolveCycleSettings(projectId, resolver);
+    const initialCycleProviderType = initialCycleSettings.aiProvider.providers[initialCycleSettings.workers.virtualWorkerProvider]?.provider || "codex";
+
     const endpoint = this.deps.workerEndpointRepository.createVirtualEndpoint({
       endpointKey: `virtual:${projectId}:${Date.now().toString(36)}:${sanitizeToken(randomUUID().slice(0, 8))}`,
-      displayName: `Virtual ${this.getProviderLabel(cycleProviderType)} Worker`,
+      displayName: `Virtual ${this.getProviderLabel(initialCycleProviderType)} Worker`,
       status: "connected",
       transport: "internal",
       capabilities: {
@@ -271,9 +283,31 @@ export class VirtualWorkerService {
     this.deps.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, endpoint.id);
 
     try {
-      const attentionItem = this.pickNextWorkerAttention(projectId);
-      if (attentionItem) {
-        await this.handleAttentionItem(endpoint.id, attentionItem, reason);
+      const attentionItem = this.peekNextWorkerAttention(projectId, resolver);
+      const dispatchClaim = this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
+        projectId,
+        workerEndpointId: endpoint.id,
+        executionMode: "VIRTUAL"
+      });
+
+      const plan = await planVirtualWorkerCycle({
+        projectId,
+        attentionItem,
+        dispatchClaim,
+        isProviderConcurrencyAvailable: async (pId, limit) => await this.deps.providerConcurrencyService.hasAvailableCapacity(pId, limit),
+        resolveSettings: effectiveResolver
+      });
+
+      if (plan.type === "HANDLE_ATTENTION") {
+        // We peeked earlier, so we need to properly claim it now exactly as pickNextWorkerAttention did
+        const nextItem = plan.attentionItem;
+        if (nextItem.status === "open") {
+          this.deps.projectAttentionService.resolveItem(nextItem.id, { status: "claimed" } as any);
+          nextItem.status = "claimed";
+        }
+        await this.handleAttentionItem(endpoint.id, nextItem, reason);
+      } else if (plan.type === "DISPATCH_READY") {
+        await this.handleTaskDispatch(endpoint.id, plan.dispatchClaim);
       }
     } finally {
       this.deps.projectWorkerAssignmentService.releaseWorkerAssignment(projectId, endpoint.id, "virtual_worker_cycle_complete");
@@ -281,55 +315,13 @@ export class VirtualWorkerService {
     }
   }
 
-  private peekNextWorkerAttention(projectId: string): ProjectAttentionItemRecord | null {
-    return this.deps.projectAttentionService.listActiveProjectItems(projectId)
-      .find((item) => {
-        if (item.ownerType !== "worker") {
-          return false;
-        }
-        if (item.status !== "open" && !(item.status === "claimed" && !item.assignedWorkerEndpointId)) {
-          return false;
-        }
-
-        // Avoid clarification/recovery items already being held in orchestrator-managed automated recovery.
-        if (this.isOrchestratorHandledClarificationItem(item)) {
-          return false;
-        }
-
-        const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
-
-        if (item.attentionType === "merge_required") {
-          return false;
-        }
-
-        if (item.attentionType === "merge_conflict") {
-          return settings.ciIntelligence.resolveMergeConflicts;
-        }
-
-        if (item.attentionType === "ci_fix_required") {
-          return settings.ciIntelligence.waitForJulesCiAutofix;
-        }
-
-        if (item.attentionType === "action_required") {
-          return settings.automationInterventions.autoAnswerClarification || settings.automationInterventions.autoApprovePlan;
-        }
-
-        // Default: worker-owned items are handleable unless explicitly excluded above
-        return true;
-      }) || null;
+  private peekNextWorkerAttention(projectId: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): ProjectAttentionItemRecord | null {
+    const items = this.deps.projectAttentionService.listActiveProjectItems(projectId);
+    const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
+    return peekNextWorkerAttention(items, effectiveResolver);
   }
 
-  private pickNextWorkerAttention(projectId: string): ProjectAttentionItemRecord | null {
-    const nextItem = this.peekNextWorkerAttention(projectId);
 
-    if (nextItem && nextItem.status === "open") {
-      // Explicitly set the item's status to claimed so subsequent HI queries filter it out
-      this.deps.projectAttentionService.resolveItem(nextItem.id, { status: "claimed" } as any);
-      nextItem.status = "claimed";
-    }
-
-    return nextItem;
-  }
 
   private async handleTaskDispatch(workerEndpointId: string, claim: WorkerTaskDispatchClaim): Promise<void> {
     const settings = this.resolveDashboardSettings(claim.project.id, claim.sprint.id);
@@ -455,19 +447,20 @@ export class VirtualWorkerService {
     ].filter(Boolean).join("\n");
   }
 
-  private resolveCycleSettings(projectId: string): DashboardSettings {
+  private resolveCycleSettings(projectId: string, resolver?: (pId: string, sId?: string | null) => DashboardSettings): DashboardSettings {
+    const effectiveResolver = resolver || ((pId, sId) => this.resolveDashboardSettings(pId, sId));
     const attentionItem = this.deps.projectAttentionService.listActiveProjectItems(projectId)
       .find((item) => item.ownerType === "worker");
     if (attentionItem) {
-      return this.resolveDashboardSettings(projectId, attentionItem.sprintId);
+      return effectiveResolver(projectId, attentionItem.sprintId);
     }
 
-    return this.resolveDashboardSettings(projectId);
+    return effectiveResolver(projectId);
   }
 
   private async handleAttentionItem(workerEndpointId: string, item: ProjectAttentionItemRecord, reason: string): Promise<void> {
     // Check if it's an orchestrator-managed clarification recovery item we somehow claimed anyway.
-    if (this.isOrchestratorHandledClarificationItem(item)) {
+    if (isOrchestratorHandledClarificationItem(item.summaryMarkdown)) {
       // Just release it, don't escalate. The orchestrator will handle it.
       return;
     }
@@ -592,9 +585,7 @@ export class VirtualWorkerService {
   private async resolveMergeConflictAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
     const guardrailScope = { projectId: item.projectId, sprintId: item.sprintId };
-    const mergeConflictEval = item.taskId
-      ? this.deps.guardrailService?.evaluate(guardrailScope, item.taskId, "merge_conflict") ?? null
-      : null;
+    const mergeConflictEval = this.evaluateMergeConflictGuardrail(settings, guardrailScope, item);
     if (mergeConflictEval && !mergeConflictEval.allowed && mergeConflictEval.action !== "WARN_ONLY") {
       this.escalateAttentionToHuman(
         workerEndpointId,
@@ -652,6 +643,12 @@ export class VirtualWorkerService {
     }
     const sourceBranch = sourceBranchRaw.trim();
     const targetBranch = this.readRequiredString(conflictingBranches?.target ?? payload.featureBranch, "targetBranch");
+    // LOCAL git mode has no `origin` remote: the seeded merge workspace only carries the
+    // target branch as a local ref (`refs/heads/…`), never `refs/remotes/origin/…`. Merging
+    // (or verifying) against `origin/<target>` therefore fails with "not something we can
+    // merge". Reference the local branch directly in that mode. (Matches the parentRefs
+    // selection below.)
+    const targetRef = settings.git.githubMode === "LOCAL" ? targetBranch : `origin/${targetBranch}`;
     const gitAuth: GitHttpAuthOptions = {
       githubToken: settings.git.githubToken,
       gitlabToken: settings.git.gitlabToken,
@@ -663,9 +660,8 @@ export class VirtualWorkerService {
     // the attention item — re-dispatching here would only spin up a no-op worker.
     if (settings.git.githubMode !== "LOCAL"
       && await this.isMergeConflictResolvedOnRemote(repoPath, sourceBranch, targetBranch, gitAuth)) {
-      if (item.taskId) {
-        this.deps.guardrailService?.record(guardrailScope, item.taskId, "merge_conflict");
-      }
+      // No provider runs here (the remote is already merged), so this must not consume
+      // the retry budget — otherwise GitHub mergeability lag could falsely trip the cap.
       this.deps.projectAttentionService.resolveItem(item.id, {
         status: "resolved",
         reason: "virtual_worker_merge_conflict_already_resolved",
@@ -685,6 +681,12 @@ export class VirtualWorkerService {
       });
       return;
     }
+
+    // Count every real resolution attempt up-front — before spinning up the provider — so
+    // failures, crashes, and quota-exhausted runs all consume the retry budget. Recording
+    // only on success (the previous behavior) meant a conflict that never resolved retried
+    // indefinitely until the provider API limit was hit instead of escalating after `cap`.
+    this.recordMergeConflictAttempt(guardrailScope, item);
 
     const sessionId = `virtual-merge-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);
@@ -733,7 +735,7 @@ export class VirtualWorkerService {
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
       initialHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
-      const hasConflicts = await this.runMergeIntoSource(finalWorktreePath, targetBranch, sessionId);
+      const hasConflicts = await this.runMergeIntoSource(finalWorktreePath, targetRef, sessionId);
       if (hasConflicts) {
         const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
         const providerPrompt = buildProviderPrompt(
@@ -782,7 +784,7 @@ export class VirtualWorkerService {
       }
       await this.ensureMergeConflictResolved(finalWorktreePath);
       await this.finalizeMergeCommit(finalWorktreePath, sourceBranch, targetBranch);
-      await this.ensureTargetMergedIntoSource(finalWorktreePath, targetBranch);
+      await this.ensureTargetMergedIntoSource(finalWorktreePath, targetRef);
       if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
         await this.captureMemoriesFromWorkspace(
           item.projectId,
@@ -839,9 +841,6 @@ export class VirtualWorkerService {
           ? `Pushed resolved merge conflict to ${sourceBranch} at ${headSha}.`
           : `Resolved merge-conflict run completed on ${sourceBranch} at ${headSha}.`,
       });
-      if (item.taskId) {
-        this.deps.guardrailService?.record(guardrailScope, item.taskId, "merge_conflict");
-      }
       this.deps.projectAttentionService.resolveItem(item.id, {
         status: "resolved",
         reason: "virtual_worker_merge_conflict_resolved",
@@ -896,6 +895,49 @@ export class VirtualWorkerService {
     }
   }
 
+  private evaluateMergeConflictGuardrail(
+    settings: DashboardSettings,
+    scope: GuardrailScope,
+    item: ProjectAttentionItemRecord,
+  ): GuardrailEvaluation | null {
+    if (item.taskId) {
+      return this.deps.guardrailService?.evaluate(scope, item.taskId, "merge_conflict") ?? null;
+    }
+
+    const jobConfig = settings.guardrails?.jobs?.merge_conflict;
+    if (!settings.guardrails?.enabled || !jobConfig) {
+      return { allowed: true, count: 0, cap: 0, action: jobConfig?.onLimit ?? "WARN_ONLY" };
+    }
+
+    const count = this.readNonNegativeInteger(item.payload?.mergeConflictResolutionAttempts);
+    const cap = jobConfig.cap;
+    if (cap <= 0) {
+      return { allowed: true, count, cap, action: jobConfig.onLimit };
+    }
+
+    return {
+      allowed: count < cap,
+      count,
+      cap,
+      action: jobConfig.onLimit,
+      reason: count < cap ? undefined : `Reached max merge_conflict invocations for this sprint-level attention item (${count}/${cap}).`,
+    };
+  }
+
+  private recordMergeConflictAttempt(scope: GuardrailScope, item: ProjectAttentionItemRecord): void {
+    if (item.taskId) {
+      this.deps.guardrailService?.record(scope, item.taskId, "merge_conflict");
+      return;
+    }
+
+    const nextCount = this.readNonNegativeInteger(item.payload?.mergeConflictResolutionAttempts) + 1;
+    const updated = this.deps.projectAttentionService.patchItemPayload(item.id, {
+      mergeConflictResolutionAttempts: nextCount,
+      mergeConflictGuardrailSubject: `attention:${item.id}`,
+    });
+    item.payload = updated.payload;
+  }
+
   private async resolveCiFixAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
     const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
     const workerAgent = await this.deps.agentPresetSyncService?.resolveTargetedCodingAgent(
@@ -938,9 +980,13 @@ export class VirtualWorkerService {
       : (settings.git.defaultBranch || "main");
 
     const guardrailScope = { projectId: item.projectId, sprintId: item.sprintId };
-    const ciFixEval = item.taskId
-      ? this.deps.guardrailService?.evaluate(guardrailScope, item.taskId, "ci_fix") ?? null
-      : null;
+    // Task-level CI fixes key the guardrail by task id. Sprint-level fixes (e.g. the
+    // final feature→default merge gate) have no task, so key by a stable synthetic id
+    // derived from the attention item — otherwise an unfixable failure would retry
+    // forever and the sprint would wait indefinitely instead of escalating.
+    const guardrailKey = item.taskId
+      || `main-merge-ci-fix:${item.sprintRunId ?? item.id}`;
+    const ciFixEval = this.deps.guardrailService?.evaluate(guardrailScope, guardrailKey, "ci_fix") ?? null;
     const retryCount = ciFixEval?.count ?? 0;
     const maxRetries = ciFixEval?.cap ?? 0;
     const capLabel = maxRetries > 0 ? String(maxRetries) : "∞";
@@ -949,6 +995,11 @@ export class VirtualWorkerService {
       this.escalateAttentionToHuman(workerEndpointId, item, `Virtual worker reached the CI autofix guardrail (${retryCount}/${capLabel}). Escalating to human.`);
       return;
     }
+
+    // Record the attempt up-front so failed/crashed CI-fix runs also consume the retry
+    // budget — recording only on success let an unfixable failure retry until the
+    // provider API limit instead of escalating after `cap` attempts.
+    this.deps.guardrailService?.record(guardrailScope, guardrailKey, "ci_fix");
 
     const sessionId = `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const resumeTarget = this.deps.sessionTracking.findLatestCliSessionForBranch({
@@ -1111,10 +1162,6 @@ export class VirtualWorkerService {
           : `CI fix run completed on ${branchName} at ${headSha}.`,
       });
 
-      if (item.taskId) {
-        this.deps.guardrailService?.record(guardrailScope, item.taskId, "ci_fix");
-      }
-
       this.deps.projectAttentionService.resolveItem(item.id, {
         status: "resolved",
         reason: "virtual_worker_ci_fix_resolved",
@@ -1262,12 +1309,12 @@ export class VirtualWorkerService {
     ].filter(Boolean).join("\n");
   }
 
-  private async runMergeIntoSource(worktreePath: string, targetBranch: string, sessionId: string): Promise<boolean> {
+  private async runMergeIntoSource(worktreePath: string, targetRef: string, sessionId: string): Promise<boolean> {
     try {
-      await this.runWorkspaceCommand(worktreePath, "git", ["merge", "--no-ff", "--no-commit", `origin/${targetBranch}`]);
+      await this.runWorkspaceCommand(worktreePath, "git", ["merge", "--no-ff", "--no-commit", targetRef]);
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
-        description: `Prepared merge of origin/${targetBranch} into the source branch without conflicts.`,
+        description: `Prepared merge of ${targetRef} into the source branch without conflicts.`,
       });
       return false;
     } catch (error) {
@@ -1390,14 +1437,51 @@ export class VirtualWorkerService {
 
   private async ensureMergeConflictResolved(worktreePath: string): Promise<void> {
     const unresolved = await this.listUnresolvedFiles(worktreePath);
-    if (unresolved.length > 0) {
-      throw new Error(`Unresolved merge conflicts remain: ${unresolved.join(", ")}`);
+    if (unresolved.length === 0) {
+      return;
+    }
+    // The agent almost always edits the working-tree files to resolve the conflict but
+    // leaves them unstaged, so the index still records unmerged stage entries and
+    // `git diff --diff-filter=U` keeps listing them. That is NOT an unresolved conflict —
+    // only files that still contain conflict markers are. (Every provider — Qwen, Codex,
+    // Antigravity — hits this: they remove the markers, run tests, then hand back without
+    // staging, expecting the orchestrator to finalize the index.) Stage the agent's edits
+    // first so resolved unmerged entries collapse, then verify no markers survived.
+    await this.runWorkspaceCommand(worktreePath, "git", ["add", "-A"]);
+    const stillConflicted = await this.listFilesWithConflictMarkers(worktreePath, unresolved);
+    if (stillConflicted.length > 0) {
+      throw new Error(`Unresolved merge conflicts remain: ${stillConflicted.join(", ")}`);
     }
   }
 
   private async listUnresolvedFiles(worktreePath: string): Promise<string[]> {
     const result = await this.runWorkspaceCommand(worktreePath, "git", ["diff", "--name-only", "--diff-filter=U"]);
     return result.stdout.split("\n").map((entry) => entry.trim()).filter(Boolean);
+  }
+
+  private async listFilesWithConflictMarkers(worktreePath: string, files: string[]): Promise<string[]> {
+    if (files.length === 0) {
+      return [];
+    }
+    try {
+      // Search the staged content for surviving conflict markers. Requiring the start
+      // (`<<<<<<<`) or end (`>>>>>>>`) markers — rather than the `=======` separator,
+      // which appears legitimately in markdown/RST — avoids false positives.
+      const result = await this.runWorkspaceCommand(worktreePath, "git", [
+        "grep",
+        "--cached",
+        "-l",
+        "-E",
+        "^(<{7}|>{7})( |$)",
+        "--",
+        ...files,
+      ]);
+      return result.stdout.split("\n").map((entry) => entry.trim()).filter(Boolean);
+    } catch {
+      // `git grep` exits non-zero when it finds no matches, which is exactly the
+      // success case here: the agent removed every conflict marker.
+      return [];
+    }
   }
 
   private async finalizeMergeCommit(worktreePath: string, sourceBranch: string, targetBranch: string): Promise<void> {
@@ -1422,11 +1506,11 @@ export class VirtualWorkerService {
     }
   }
 
-  private async ensureTargetMergedIntoSource(worktreePath: string, targetBranch: string): Promise<void> {
+  private async ensureTargetMergedIntoSource(worktreePath: string, targetRef: string): Promise<void> {
     try {
-      await this.runWorkspaceCommand(worktreePath, "git", ["merge-base", "--is-ancestor", `origin/${targetBranch}`, "HEAD"]);
+      await this.runWorkspaceCommand(worktreePath, "git", ["merge-base", "--is-ancestor", targetRef, "HEAD"]);
     } catch {
-      throw new Error(`Merge verification failed: origin/${targetBranch} is not contained in the resolved source branch.`);
+      throw new Error(`Merge verification failed: ${targetRef} is not contained in the resolved source branch.`);
     }
   }
 
@@ -1590,6 +1674,17 @@ export class VirtualWorkerService {
       throw new Error(`Missing ${label} in virtual worker attention payload.`);
     }
     return normalized;
+  }
+
+  private readNonNegativeInteger(value: unknown): number {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(0, Math.floor(value));
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+    }
+    return 0;
   }
 
   private asRecord(value: unknown): Record<string, unknown> | null {

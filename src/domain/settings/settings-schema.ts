@@ -32,6 +32,7 @@ import {
   RUNTIME_LOG_LEVELS,
   GUARDRAIL_JOB_TYPES,
   GUARDRAIL_ON_LIMIT_ACTIONS,
+  QA_EXHAUSTION_POLICIES,
 } from "../../repositories/settings-defaults.js";
 import { INSTRUCTION_TEMPLATE_IDS } from "../../instructions/instruction-template-catalog.js";
 import { BRANCH_NAME_TOKENS, BRANCH_NAME_TOKEN_ALIASES, LEGACY_BRANCH_NAME_TOKENS } from "./branch-name-tokens.js";
@@ -295,6 +296,7 @@ const validateCiIntelligence = (
   if (typeof value.enableLivePrMonitoring !== "boolean") issues.push({ path: `${path}.enableLivePrMonitoring`, message: "Expected a boolean" });
   if (typeof value.resolveAllCommentsBeforeMainMerge !== "boolean") issues.push({ path: `${path}.resolveAllCommentsBeforeMainMerge`, message: "Expected a boolean" });
   if (typeof value.resolveMainMergeConflicts !== "boolean") issues.push({ path: `${path}.resolveMainMergeConflicts`, message: "Expected a boolean" });
+  if (typeof value.resolveMainMergeFailedChecks !== "boolean") issues.push({ path: `${path}.resolveMainMergeFailedChecks`, message: "Expected a boolean" });
   if (typeof value.resolveAllCommentsBeforeFeatureMerge !== "boolean") issues.push({ path: `${path}.resolveAllCommentsBeforeFeatureMerge`, message: "Expected a boolean" });
   if (typeof value.resolveMergeConflicts !== "boolean") issues.push({ path: `${path}.resolveMergeConflicts`, message: "Expected a boolean" });
   if (typeof value.waitForJulesCiAutofix !== "boolean") issues.push({ path: `${path}.waitForJulesCiAutofix`, message: "Expected a boolean" });
@@ -318,10 +320,6 @@ const validateGuardrails = (
   }
   if (typeof value.enabled !== "boolean") issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
   if (typeof value.perTaskTotalCeiling !== "number") issues.push({ path: `${path}.perTaskTotalCeiling`, message: "Expected a number" });
-  if (typeof value.qaRunsCap !== "number") issues.push({ path: `${path}.qaRunsCap`, message: "Expected a number" });
-  if (typeof value.qaRunsOnLimit !== "string" || !GUARDRAIL_ON_LIMIT_ACTIONS.includes(value.qaRunsOnLimit as never)) {
-    issues.push({ path: `${path}.qaRunsOnLimit`, message: `Expected one of: ${GUARDRAIL_ON_LIMIT_ACTIONS.join(", ")}` });
-  }
   if (!isRecord(value.jobs)) {
     issues.push({ path: `${path}.jobs`, message: "Expected an object" });
     return;
@@ -429,7 +427,14 @@ const validateSprintPreview = (
   if (typeof value.hostPortRangeStart !== "number") issues.push({ path: `${path}.hostPortRangeStart`, message: "Expected a number" });
   if (typeof value.hostPortRangeEnd !== "number") issues.push({ path: `${path}.hostPortRangeEnd`, message: "Expected a number" });
   if (typeof value.containerAppPort !== "number") issues.push({ path: `${path}.containerAppPort`, message: "Expected a number" });
-  if (typeof value.startupScriptPath !== "string") issues.push({ path: `${path}.startupScriptPath`, message: "Expected a string" });
+  if (typeof value.startupScriptPath !== "string") {
+    issues.push({ path: `${path}.startupScriptPath`, message: "Expected a string" });
+  } else {
+    const trimmed = value.startupScriptPath.trim();
+    if (trimmed.includes("..") || trimmed.startsWith("/") || trimmed.match(/^[a-zA-Z]:\\/) || trimmed.includes("~") || trimmed.includes("$") || trimmed.includes("%")) {
+      issues.push({ path: `${path}.startupScriptPath`, message: "Expected a safe relative path without traversal or environment variables" });
+    }
+  }
 };
 
 const validateWorkers = (
@@ -521,6 +526,12 @@ const validateAgents = (
   }
   if (typeof qa.maxTaskReviewRuns !== "number" || qa.maxTaskReviewRuns < 1) {
     issues.push({ path: `${path}.qualityAssurance.maxTaskReviewRuns`, message: "Expected a positive number" });
+  }
+  if (typeof qa.maxSprintReviewRuns !== "number" || qa.maxSprintReviewRuns < 1) {
+    issues.push({ path: `${path}.qualityAssurance.maxSprintReviewRuns`, message: "Expected a positive number" });
+  }
+  if (typeof qa.exhaustionPolicy !== "string" || !QA_EXHAUSTION_POLICIES.includes(qa.exhaustionPolicy as never)) {
+    issues.push({ path: `${path}.qualityAssurance.exhaustionPolicy`, message: `Expected one of: ${QA_EXHAUSTION_POLICIES.join(", ")}` });
   }
   const triggerIds = ["taskCompletion", "sprintCompletion", "completedTaskWithoutPr"] as const;
   for (const triggerId of triggerIds) {

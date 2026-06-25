@@ -1,16 +1,18 @@
 import { FunctionComponent } from "preact";
 import { X } from "lucide-react";
 import type { MemNode, Edge } from "../../lib/memory-graph.js";
+import { ConfirmDialog } from "../ui/ConfirmDialog.js";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
 
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
-    architecture: { label: "Architecture", hex: "#E8A317", r: 232, g: 163, b: 23 },
-    codebase: { label: "Codebase", hex: "#4285F4", r: 66, g: 133, b: 244 },
-    context: { label: "Context", hex: "#9B51E0", r: 155, g: 81, b: 224 },
-    preferences: { label: "Preferences", hex: "#EC407A", r: 236, g: 64, b: 122 },
-    patterns: { label: "Patterns", hex: "#00E0A0", r: 0, g: 224, b: 160 },
-    decision: { label: "Decisions", hex: "#FF7043", r: 255, g: 112, b: 67 },
-    error: { label: "Errors", hex: "#E3000F", r: 227, g: 0, b: 15 },
-    learning: { label: "Learnings", hex: "#26C6DA", r: 38, g: 198, b: 218 },
+    architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
+    codebase:     { label: "Codebase",     hex: "#FFB800", r: 255, g: 184, b: 0   },
+    context:      { label: "Context",      hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
+    preferences:  { label: "Preferences",  hex: "#94A3B8", r: 148, g: 163, b: 184 },
+    patterns:     { label: "Patterns",     hex: "#F59E0B", r: 245, g: 158, b: 11  },
+    decision:     { label: "Decision",     hex: "#64748B", r: 100, g: 116, b: 139 },
+    error:        { label: "Error",        hex: "#F43F5E", r: 244, g: 63,  b: 94  },
+    learning:     { label: "Learning",     hex: "#33FFB8", r: 51,  g: 255, b: 184 },
 };
 
 export const Inspector: FunctionComponent<{
@@ -21,6 +23,21 @@ export const Inspector: FunctionComponent<{
     onClose: () => void;
     onDelete: (id: string) => void;
 }> = ({ node, allNodes, edges, lobotomize, onClose, onDelete }) => {
+    const { isOpen, options, requestConfirm, handleConfirm, handleCancel, triggerRef } = useConfirmDialog();
+
+    const handleDeleteClick = async () => {
+        if (!node) return;
+        const confirmed = await requestConfirm({
+            title: "Excise Memory",
+            body: "Are you sure you want to delete this memory? This action cannot be undone.",
+            confirmLabel: "Excise",
+            destructive: true
+        });
+        if (confirmed) {
+            onDelete(node.id);
+        }
+    };
+
     const cat = node ? (CAT[node.category] || CAT.context) : CAT.architecture;
     const nodeIdx = node ? allNodes.findIndex(n => n.id === node.id) : -1;
     const connected = node ? edges
@@ -63,7 +80,7 @@ export const Inspector: FunctionComponent<{
                             {node.scope}
                         </span>
                     </div>
-                    <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
+                    <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed break-words whitespace-pre-wrap">
                         {node.content}
                     </p>
                     <div className="flex flex-col gap-3 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
@@ -91,6 +108,7 @@ export const Inspector: FunctionComponent<{
                                 <div key={cn.id} className="flex items-start gap-2 py-1">
                                     <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
                                         style={{ background: (CAT[cn.category] || CAT.context).hex }} />
+                                    <span className="sr-only">{(CAT[cn.category] || CAT.context).label}</span>
                                     <div className="flex-1 min-w-0">
                                         <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 font-medium">
                                             {cn.content}
@@ -105,14 +123,24 @@ export const Inspector: FunctionComponent<{
                         </div>
                     )}
                     {lobotomize && (
-                        <button onClick={() => onDelete(node.id)}
-                            className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl
-                                       bg-status-red text-white font-bold text-xs
-                                       shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
-                                       transition-shadow duration-300">
-                            <X className="w-3.5 h-3.5" strokeWidth={2.5} />
-                            Excise Memory
-                        </button>
+                        <>
+                            <button onClick={handleDeleteClick}
+                                ref={triggerRef as any}
+                                className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl
+                                           bg-status-red text-white font-bold text-xs cursor-pointer
+                                           shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:bg-status-red/90 hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
+                                           transition-[background-color,box-shadow,color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900">
+                                <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+                                Excise Memory
+                            </button>
+                            <ConfirmDialog
+                                isOpen={isOpen}
+                                options={options}
+                                onConfirm={handleConfirm}
+                                onCancel={handleCancel}
+                                triggerRef={triggerRef}
+                            />
+                        </>
                     )}
                 </>
             )}

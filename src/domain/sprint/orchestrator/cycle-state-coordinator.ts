@@ -3,6 +3,7 @@ import type { TaskStatus as PlanningTaskStatus } from "../../../contracts/projec
 import type { ProjectAttentionItemRecord, ProjectAttentionOwnerType } from "../../../contracts/project-attention-types.js";
 import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orchestrator.js";
 import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
+import type { MergeConflictDebouncer } from "../ci/merge-conflict-debouncer.js";
 import { resolveTaskSessionId } from "../../../sprint/action-required-automation.js";
 import { buildTaskAttentionPayload } from "./attention-payload-builder.js";
 import { buildConflictSummaryMarkdown, selectMergedTaskContexts, type MergeConflictTaskContext } from "./conflict-summary-utils.js";
@@ -121,6 +122,7 @@ export class CycleStateCoordinator {
     args: CycleRunnerArgs,
     gitStatus: GitTrackingStatus | null,
     activeWorkerMergeConflictTaskIds: Set<string>,
+    mergeConflictDebouncer?: MergeConflictDebouncer,
   ): void {
     const projectId = args.executionContext.project.id;
     const sprintId = args.executionContext.sprint.id;
@@ -145,6 +147,7 @@ export class CycleStateCoordinator {
         args,
         gitStatus,
         activeWorkerMergeConflictTaskIds,
+        mergeConflictDebouncer,
       );
       const mergedFeatureTasks = selectMergedFeatureTaskContexts(subtasks, taskId);
 
@@ -298,6 +301,7 @@ export function shouldEscalateFeatureMergeConflict(
   args: CycleRunnerArgs,
   gitStatus: GitTrackingStatus | null,
   activeWorkerMergeConflictTaskIds: Set<string>,
+  mergeConflictDebouncer?: MergeConflictDebouncer,
 ): boolean {
   if (!args.ciIntelligence.resolveMergeConflicts) {
     return false;
@@ -317,7 +321,13 @@ export function shouldEscalateFeatureMergeConflict(
   }
 
   const pr = matchPrForTask(task, gitStatus);
-  return pr?.mergeStateStatus === "DIRTY";
+  // Debounce transient `DIRTY` states so a phantom conflict (GitHub still
+  // recomputing mergeability) does not escalate before it has actually persisted.
+  // `observe` is idempotent within a cycle, so sharing the debouncer with the CI
+  // gate keeps both in agreement on what counts as a confirmed conflict.
+  return mergeConflictDebouncer
+    ? mergeConflictDebouncer.observe(pr?.url, pr?.mergeStateStatus)
+    : pr?.mergeStateStatus === "DIRTY";
 }
 
 export function collectActiveWorkerMergeConflictTaskIds(subtasks: Array<{

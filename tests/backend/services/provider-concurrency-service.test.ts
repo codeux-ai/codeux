@@ -17,7 +17,9 @@ describe("ProviderConcurrencyService", () => {
       listExecutionInvocationsByProviderInvocationId: vi.fn().mockReturnValue([]),
       updateExecutionInvocation: vi.fn(),
       appendExecutionInvocationMessage: vi.fn(),
+      getLatestTaskRunBySessionId: vi.fn(),
     };
+    executionRepository.listRunningProviderInvocationUsages.mockReturnValue([]);
     logger = {
       info: vi.fn(),
       error: vi.fn(),
@@ -31,7 +33,7 @@ describe("ProviderConcurrencyService", () => {
   describe("waitForSlot", () => {
     it("should return immediately if limit is 0", async () => {
       await service.waitForSlot("jules", 0);
-      expect(executionRepository.listRunningProviderInvocationUsages).not.toHaveBeenCalled();
+      expect(executionRepository.listRunningProviderInvocationUsages).toHaveBeenCalledWith(["jules"]);
     });
 
     it("should return immediately if current count is less than limit", async () => {
@@ -124,6 +126,44 @@ describe("ProviderConcurrencyService", () => {
 
       expect(result.id).toBe("inv-1");
       expect(executionRepository.createProviderInvocationUsage).toHaveBeenCalledWith(input);
+    });
+
+    it("releases stale Docker provider slots before unlimited claims", async () => {
+      const staleInvocation = {
+        id: "provider-stale",
+        provider: "qwen-code",
+        purpose: "planning",
+        status: "running",
+        executionMode: "DOCKER",
+        sessionId: "planning-qwen-code-stale",
+        startedAt: "2000-01-01T00:00:00.000Z",
+        durationMs: null,
+      };
+      executionRepository.listRunningProviderInvocationUsages.mockReturnValue([staleInvocation]);
+      executionRepository.listExecutionInvocationsByProviderInvocationId.mockReturnValue([
+        { id: "exec-stale", status: "running", startedAt: "2000-01-01T00:00:00.000Z", lastMessageAt: null },
+      ]);
+      executionRepository.createProviderInvocationUsage.mockReturnValue({ id: "provider-new" });
+      service = new ProviderConcurrencyService({
+        executionRepository,
+        logger,
+        dockerService: {
+          isAvailable: vi.fn().mockResolvedValue(true),
+          listContainers: vi.fn().mockResolvedValue([]),
+        },
+      });
+
+      const result = await service.waitForSlotAndClaim("qwen-code", 0, { provider: "qwen-code" } as any);
+
+      expect(result.id).toBe("provider-new");
+      expect(executionRepository.updateProviderInvocationUsage).toHaveBeenCalledWith("provider-stale", expect.objectContaining({
+        status: "failed",
+      }));
+      expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith("exec-stale", expect.objectContaining({
+        status: "failed",
+        errorMessage: expect.stringContaining("Docker container disappeared"),
+      }));
+      expect(executionRepository.createProviderInvocationUsage).toHaveBeenCalledWith({ provider: "qwen-code" });
     });
 
     it("should claim immediately if tryCreate returns a record", async () => {

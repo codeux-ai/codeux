@@ -14,12 +14,21 @@ import {
 import { toNumber } from "./execution-utils.js";
 import { StatsEntityMetadata, ProjectStatsQueryDependencies } from "./execution-stats-types.js";
 import {
+  usageFields,
+  mapAggregatedUsage,
+  mergeAggregatedUsage,
+  accumulateBucketUsage,
+  mapEntityUsage,
+} from "./project-stats-aggregation.js";
+import {
   addStatusCount,
   buildModelStatsKey,
   buildModelStatsLabel,
   computeDurationStats,
+  computeDurationStatsFromAggregates,
   computeSuccessRate,
   createEmptyStatusCounts,
+  ExecutionDurationAggregates,
 } from "./model-stats.js";
 import {
   ExecutionInvocationStatusCounts,
@@ -57,52 +66,6 @@ export function queryProjectStatsSnapshot(
     normalized.bucketSizeMs,
     firstBucketStartMs
   );
-
-  const usageFields = `
-    COUNT(*) as invocationCount,
-    SUM(COALESCE(duration_ms, 0)) as activeTimeMs,
-    SUM(input_tokens) as inputTokens,
-    SUM(cached_input_tokens) as cachedInputTokens,
-    SUM(output_tokens) as outputTokens,
-    SUM(reasoning_output_tokens) as reasoningOutputTokens,
-    SUM(total_tokens) as totalTokens,
-    SUM(tool_call_count) as toolCallCount,
-    SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reportedInvocationCount,
-    SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimatedInvocationCount,
-    SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupportedInvocationCount,
-    SUM(CASE WHEN usage_source NOT IN ('reported', 'estimated', 'unsupported') THEN 1 ELSE 0 END) as unavailableInvocationCount
-  `;
-
-  const mapAggregatedUsage = (row: any): ExecutionUsageTotals => ({
-    invocationCount: toNumber(row.invocationCount),
-    activeTimeMs: toNumber(row.activeTimeMs),
-    wallTimeMs: 0,
-    inputTokens: toNumber(row.inputTokens),
-    cachedInputTokens: toNumber(row.cachedInputTokens),
-    outputTokens: toNumber(row.outputTokens),
-    reasoningOutputTokens: toNumber(row.reasoningOutputTokens),
-    totalTokens: toNumber(row.totalTokens),
-    toolCallCount: toNumber(row.toolCallCount),
-    reportedInvocationCount: toNumber(row.reportedInvocationCount),
-    estimatedInvocationCount: toNumber(row.estimatedInvocationCount),
-    unsupportedInvocationCount: toNumber(row.unsupportedInvocationCount),
-    unavailableInvocationCount: toNumber(row.unavailableInvocationCount),
-  });
-
-  const mergeAggregatedUsage = (target: ExecutionUsageTotals, source: ExecutionUsageTotals) => {
-    target.invocationCount += source.invocationCount;
-    target.activeTimeMs += source.activeTimeMs;
-    target.inputTokens += source.inputTokens;
-    target.cachedInputTokens += source.cachedInputTokens;
-    target.outputTokens += source.outputTokens;
-    target.reasoningOutputTokens += source.reasoningOutputTokens;
-    target.totalTokens += source.totalTokens;
-    target.toolCallCount = (target.toolCallCount ?? 0) + (source.toolCallCount ?? 0);
-    target.reportedInvocationCount += source.reportedInvocationCount;
-    target.estimatedInvocationCount += source.estimatedInvocationCount;
-    target.unsupportedInvocationCount += source.unsupportedInvocationCount;
-    target.unavailableInvocationCount += source.unavailableInvocationCount;
-  };
 
   const usage = createEmptyUsageTotals();
   const taskUsage = new Map<string, ExecutionUsageTotals>();
@@ -145,6 +108,15 @@ export function queryProjectStatsSnapshot(
 
   for (const row of mainAggs) {
     const u = mapAggregatedUsage(row);
+    if (row.provider) {
+      const pricing = deps.getProviderPricing?.(row.provider, row.model);
+      if (pricing) {
+        u.inputCostUsd = (u.inputTokens / 1_000_000) * (pricing.inputTokens || 0);
+        u.outputCostUsd = (u.outputTokens / 1_000_000) * (pricing.outputTokens || 0);
+        u.cachedInputCostUsd = (u.cachedInputTokens / 1_000_000) * (pricing.cachedInputTokens || 0);
+        u.totalCostUsd = u.inputCostUsd + u.outputCostUsd + u.cachedInputCostUsd;
+      }
+    }
     mergeAggregatedUsage(usage, u);
 
     // Task aggregations
@@ -200,26 +172,75 @@ export function queryProjectStatsSnapshot(
 
     // Buckets
     if (buckets.length > 0 && row.bucketIndex >= 0 && row.bucketIndex < buckets.length) {
-      const bucket = buckets[row.bucketIndex];
-      mergeAggregatedUsage(bucket.usage, u);
-      bucket.providerTokens.set(row.provider, (bucket.providerTokens.get(row.provider) || 0) + u.totalTokens);
-      bucket.purposeTime.set(row.purpose, (bucket.purposeTime.get(row.purpose) || 0) + u.activeTimeMs);
-      bucket.purposeInvocations.set(row.purpose, (bucket.purposeInvocations.get(row.purpose) || 0) + u.invocationCount);
-      bucket.modelTokens.set(modelKey, (bucket.modelTokens.get(modelKey) || 0) + u.totalTokens);
+      accumulateBucketUsage(buckets[row.bucketIndex], u, row.provider, row.purpose, modelKey);
     }
   }
 
+  // Duration distribution aggregates
+  const durationAggRows = db.prepare(`
+    SELECT
+      provider,
+      model,
+      COUNT(duration_ms) as sampleCount,
+      MIN(duration_ms) as minMs,
+      MAX(duration_ms) as maxMs,
+      AVG(duration_ms) as avgMs
+    FROM provider_invocations
+    WHERE project_id = ? AND started_at >= ? AND started_at < ?
+      AND duration_ms IS NOT NULL AND duration_ms > 0
+    GROUP BY provider, model
+  `).all(projectId, rangeStartIso, rangeEndIso) as Array<{
+    provider: string | null;
+    model: string | null;
+    sampleCount: number;
+    minMs: number;
+    maxMs: number;
+    avgMs: number;
+  }>;
+
+  const modelDurationAggs = new Map<string, ExecutionDurationAggregates>();
+  let overallSampleCount = 0;
+  let overallMinMs = Number.MAX_SAFE_INTEGER;
+  let overallMaxMs = 0;
+  let overallSumMs = 0;
+
+  for (const row of durationAggRows) {
+    const key = buildModelStatsKey(row.provider, row.model);
+    modelDurationAggs.set(key, {
+      sampleCount: toNumber(row.sampleCount),
+      minMs: toNumber(row.minMs),
+      maxMs: toNumber(row.maxMs),
+      avgMs: toNumber(row.avgMs),
+    });
+
+    const count = toNumber(row.sampleCount);
+    overallSampleCount += count;
+    overallMinMs = Math.min(overallMinMs, toNumber(row.minMs));
+    overallMaxMs = Math.max(overallMaxMs, toNumber(row.maxMs));
+    overallSumMs += toNumber(row.avgMs) * count;
+  }
+
+  const overallDurationAggs: ExecutionDurationAggregates = {
+    sampleCount: overallSampleCount,
+    minMs: overallSampleCount > 0 ? overallMinMs : 0,
+    maxMs: overallMaxMs,
+    avgMs: overallSampleCount > 0 ? overallSumMs / overallSampleCount : 0,
+  };
+
   // Duration distribution per model (percentiles need raw samples, not SUM aggregates)
-  const durationRows = db.prepare(`
+  // Bound to the most recent 10000 invocations to prevent unbounded memory growth
+  const durationSampleRows = db.prepare(`
     SELECT provider, model, duration_ms as durationMs
     FROM provider_invocations
     WHERE project_id = ? AND started_at >= ? AND started_at < ?
       AND duration_ms IS NOT NULL AND duration_ms > 0
+    ORDER BY started_at DESC
+    LIMIT 10000
   `).all(projectId, rangeStartIso, rangeEndIso) as Array<{ provider: string | null; model: string | null; durationMs: number | string }>;
 
   const allDurations: number[] = [];
   const modelDurations = new Map<string, number[]>();
-  for (const row of durationRows) {
+  for (const row of durationSampleRows) {
     const durationMs = toNumber(row.durationMs);
     if (durationMs <= 0) continue;
     allDurations.push(durationMs);
@@ -259,6 +280,7 @@ export function queryProjectStatsSnapshot(
 
   const chartSeries: ProjectExecutionStatsChartSeries[] = [
     { id: "core_total_tokens", label: "Total Tokens", grouping: "totals", defaultEnabled: true, data: buckets.map((b) => b.usage.totalTokens), color: '#00E0A0', signalLabel: 'Throughput', formatter: 'tokens' },
+    { id: "core_total_cost", label: "Total Cost (USD)", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.totalCostUsd), color: '#10B981', signalLabel: 'Cost', formatter: 'number' },
     { id: "core_active_time", label: "Active Time (ms)", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.activeTimeMs), color: '#FFB800', signalLabel: 'Latency', formatter: 'duration' },
     { id: "core_invocations", label: "Invocations", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.invocationCount), color: '#0EA5E9', signalLabel: 'Volume', formatter: 'number' },
     { id: "core_input_tokens", label: "Input Tokens", grouping: "details", defaultEnabled: false, data: buckets.map((b) => b.usage.inputTokens), formatter: 'tokens' },
@@ -282,6 +304,10 @@ export function queryProjectStatsSnapshot(
       id: `provider_${providerId}`, label: `${providerId} Tokens`, grouping: "providers", defaultEnabled: false,
       data: buckets.map((b) => b.providerTokens.get(providerId) || 0), formatter: 'tokens' as const
     })),
+    ...Array.from(providerUsage.keys()).map((providerId) => ({
+      id: `provider_cost_${providerId}`, label: `${providerId} Cost (USD)`, grouping: "providers_cost", defaultEnabled: false,
+      data: buckets.map((b) => b.providerCost.get(providerId) || 0), formatter: 'number' as const
+    })),
     ...Array.from(modelUsage.keys()).map((modelKey) => {
       const meta = modelMeta.get(modelKey);
       return {
@@ -293,6 +319,17 @@ export function queryProjectStatsSnapshot(
         formatter: 'tokens' as const,
       };
     }),
+    ...Array.from(modelUsage.keys()).map((modelKey) => {
+      const meta = modelMeta.get(modelKey);
+      return {
+        id: `model_cost_${modelKey}`,
+        label: `${buildModelStatsLabel(meta?.provider, meta?.model)} Cost (USD)`,
+        grouping: "models_cost",
+        defaultEnabled: false,
+        data: buckets.map((b) => b.modelCost.get(modelKey) || 0),
+        formatter: 'number' as const,
+      };
+    }),
     ...Array.from(purposeUsage.keys()).map((purposeId) => ({
       id: `purpose_time_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Time`, grouping: "purposes_time", defaultEnabled: false,
       data: buckets.map((b) => b.purposeTime.get(purposeId) || 0), formatter: 'duration' as const
@@ -302,22 +339,6 @@ export function queryProjectStatsSnapshot(
       data: buckets.map((b) => b.purposeInvocations.get(purposeId) || 0), formatter: 'number' as const
     })),
   ];
-
-  const mapEntityUsage = (map: Map<string, ExecutionUsageTotals>, activityMap: Map<string, string>, getMeta?: (id: string) => StatsEntityMetadata | undefined) => {
-    return Array.from(map.entries()).map(([id, usage]) => {
-      const meta = getMeta ? getMeta(id) : undefined;
-      return {
-        id,
-        label: meta?.label || id,
-        secondaryLabel: meta?.secondaryLabel || null,
-        status: (meta?.status || null) as any,
-        purpose: (meta?.purpose || null) as any,
-        provider: (meta?.provider || null) as any,
-        usage,
-        lastActivityAt: activityMap.get(id) || null,
-      };
-    }).sort((a, b) => b.usage.totalTokens - a.usage.totalTokens);
-  };
 
   return {
     projectId: projectRow?.id || projectId,
@@ -363,12 +384,12 @@ export function queryProjectStatsSnapshot(
         usage: modelTotals,
         statusCounts: counts,
         successRate: computeSuccessRate(counts),
-        duration: computeDurationStats(modelDurations.get(key) || []),
+        duration: computeDurationStatsFromAggregates(modelDurationAggs.get(key), modelDurations.get(key) || []),
         lastActivityAt: modelLastActivity.get(key) || null,
       };
     }).sort((a, b) => b.usage.totalTokens - a.usage.totalTokens),
     statusCounts,
-    duration: computeDurationStats(allDurations),
+    duration: computeDurationStatsFromAggregates(overallDurationAggs, allDurations),
     tokenSources: Array.from(tokenSourceCounts.entries()).map(([source, count]) => ({ source: source as any, count })).sort((a, b) => b.count - a.count),
     chartSeries,
   };

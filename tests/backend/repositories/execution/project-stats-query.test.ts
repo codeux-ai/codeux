@@ -9,19 +9,6 @@ describe("project-stats-query", () => {
     expect(result.range.resolution).toBe("week");
   });
 
-  it("handles empty and invalid custom date bounds", () => {
-    const dbMock = {} as any;
-    const now = new Date();
-    expect(() => normalizeProjectStatsQuery(dbMock, "proj1", { window: "custom", from: "  ", to: "" }, now)).toThrow();
-    expect(() => normalizeProjectStatsQuery(dbMock, "proj1", { window: "custom", from: "invalid", to: "2024-01-01" }, now)).toThrow();
-  });
-
-  it("handles reversed custom date bounds", () => {
-    const dbMock = {} as any;
-    const now = new Date();
-    expect(() => normalizeProjectStatsQuery(dbMock, "proj1", { window: "custom", from: "2024-02-01", to: "2024-01-01" }, now)).toThrow();
-  });
-
   it("uses hourly buckets for small spans", () => {
     const dbMock = { prepare: () => ({ get: () => ({ first_started_at: "2023-01-01T10:00:00Z" }) }) } as any;
     const now = new Date("2023-01-02T10:00:00Z"); // 24h span

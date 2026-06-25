@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   classifyProviderError,
   computeResetAfterFromClockTime,
+  isTransientCodexTransportError,
+  isClaudeConversationNotFoundError,
   extractProviderErrorCategory,
   extractRetryAfterIso,
   resultHasSilentQuotaSignal,
@@ -659,3 +661,37 @@ describe("classifyProviderError", () => {
       expect(classification.category).toBe("QUOTA_EXHAUSTED");
     });
   });
+
+describe("isTransientCodexTransportError", () => {
+  it("returns true for stream disconnected before completion", () => {
+    const result = makeResult("Stream disconnected before completion", "");
+    expect(isTransientCodexTransportError(result)).toBe(true);
+  });
+  it("returns true for error sending request for url", () => {
+    const result = makeResult("", "Error sending request for url");
+    expect(isTransientCodexTransportError(result)).toBe(true);
+  });
+  it("returns true for channel closed", () => {
+    const result = makeResult("Channel closed", "some other error");
+    expect(isTransientCodexTransportError(result)).toBe(true);
+  });
+  it("returns false for unrelated errors", () => {
+    const result = makeResult("Syntax error", "Missing semicolon");
+    expect(isTransientCodexTransportError(result)).toBe(false);
+  });
+});
+
+describe("isClaudeConversationNotFoundError", () => {
+  it("returns true for no conversation found in stdout", () => {
+    const result = makeResult("No conversation found for ID 123", "");
+    expect(isClaudeConversationNotFoundError(result)).toBe(true);
+  });
+  it("returns true for no conversation found in stderr", () => {
+    const result = makeResult("", "no conversation found");
+    expect(isClaudeConversationNotFoundError(result)).toBe(true);
+  });
+  it("returns false for unrelated errors", () => {
+    const result = makeResult("Usage limit exceeded", "");
+    expect(isClaudeConversationNotFoundError(result)).toBe(false);
+  });
+});

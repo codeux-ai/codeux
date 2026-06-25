@@ -1,16 +1,18 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import { useMemo, useLayoutEffect, useRef, useId, useState } from "preact/hooks";
+import { getLiveActionDisplayProps, getPendingActionState } from "../lib/live-session-runtime.js";
 import gsap from "gsap";
-import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import { useReducedMotion, useResolvedMotionDuration } from "../hooks/use-reduced-motion.js";
+import { INTERACTION_TOKENS } from "../lib/motion/tokens.js";
 import { Bot, CheckCircle2, ChevronDown, XCircle } from "lucide-preact";
 import { renderMarkdown } from "../../lib/markdown.js";
 import { formatTime } from "../../lib/time.js";
 import { MARKDOWN_PROSE_CLASS } from "./ui/MarkdownEditorField.js";
 import { useExecutionTimeline } from "../../hooks/ExecutionTimelineContext.js";
 import { ATTENTION_OWNER_LABELS, ATTENTION_SEVERITY_TONE, ATTENTION_TYPE_LABELS, ATTENTION_STATUS_TONE, shortenRuntimeId } from "./live-session/ExecutionRuntimePanel.js";
-import { BorderTrace } from "./ui/BorderTrace.js";
-import { WaveFluid } from "./ui/WaveFluid.js";
+
+
 
 type AttentionLedgerProps = {
     collapsible?: boolean;
@@ -44,6 +46,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
     const listRef = useRef<HTMLDivElement>(null);
     const prevCountRef = useRef<number>(0);
     const reducedMotion = useReducedMotion();
+    const duration = useResolvedMotionDuration(parseFloat(INTERACTION_TOKENS.enterExit.duration) / 1000);
     const attentionItems = snapshot?.attentionItems || [];
 
     const { openCount, claimedCount } = useMemo(() => {
@@ -71,10 +74,7 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
 
             if (newElements.length > 0) {
                 ctx = gsap.context(() => {
-                    gsap.fromTo(newElements,
-                        { opacity: 0, x: -10 },
-                        { opacity: 1, x: 0, duration: 0.25, stagger: 0.04, ease: "power2.out" }
-                    );
+                    gsap.fromTo(newElements, { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: duration, stagger: 0.04, ease: INTERACTION_TOKENS.enterExit.ease, overwrite: "auto" });
                 });
                 newElements.forEach(el => el.setAttribute('data-entered', 'true'));
             }
@@ -112,9 +112,9 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
     );
 
     return (
-        <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-            <WaveFluid accentHex="#00E0A0" />
-            <BorderTrace accentHex="#00E0A0" />
+        <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+
+
 
             {collapsible ? (
                 <button
@@ -213,34 +213,37 @@ export const AttentionLedger: FunctionComponent<AttentionLedgerProps> = memo(({
                                                 {canClaim && snapshot.projectId && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => onClaimAttentionItem(snapshot.projectId!, item.id)}
-                                                        disabled={pendingActionIds.has(claimActionId)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 transition-colors hover:bg-signal-500/15 disabled:opacity-50"
+                                                        onClick={() => getPendingActionState(pendingActionIds, claimActionId) === "idle" && onClaimAttentionItem(snapshot.projectId!, item.id)}
+                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, claimActionId) === "pending", false)}
+                                                        className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 transition-colors hover:bg-signal-500/15 aria-disabled:opacity-50"
                                                     >
-                                                        <Bot className="h-3 w-3" strokeWidth={2} />
-                                                        {pendingActionIds.has(claimActionId) ? "Claiming" : "Claim"}
+                                                        <Bot className={`h-3 w-3 ${getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "animate-pulse" : ""}`} strokeWidth={2} />
+                                                        {getPendingActionState(pendingActionIds, claimActionId) === "pending" ? "Claiming" : "Claim"}
+                                                        {getPendingActionState(pendingActionIds, claimActionId) === "pending" && <span className="sr-only">Claiming...</span>}
                                                     </button>
                                                 )}
                                                 {snapshot.projectId && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => onResolveAttentionItem(snapshot.projectId!, item.id)}
-                                                        disabled={pendingActionIds.has(resolveActionId)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-green transition-colors hover:bg-status-green/15 disabled:opacity-50"
+                                                        onClick={() => getPendingActionState(pendingActionIds, resolveActionId) === "idle" && onResolveAttentionItem(snapshot.projectId!, item.id)}
+                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, resolveActionId) === "pending", false)}
+                                                        className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-green transition-colors hover:bg-status-green/15 aria-disabled:opacity-50"
                                                     >
-                                                        <CheckCircle2 className="h-3 w-3" strokeWidth={2} />
-                                                        {pendingActionIds.has(resolveActionId) ? "Resolving" : "Resolve"}
+                                                        <CheckCircle2 className={`h-3 w-3 ${getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "animate-spin" : ""}`} strokeWidth={2} />
+                                                        {getPendingActionState(pendingActionIds, resolveActionId) === "pending" ? "Resolving" : "Resolve"}
+                                                        {getPendingActionState(pendingActionIds, resolveActionId) === "pending" && <span className="sr-only">Resolving...</span>}
                                                     </button>
                                                 )}
                                                 {snapshot.projectId && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => onDismissAttentionItem(snapshot.projectId!, item.id)}
-                                                        disabled={pendingActionIds.has(dismissActionId)}
-                                                        className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.05] disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.05]"
+                                                        onClick={() => getPendingActionState(pendingActionIds, dismissActionId) === "idle" && onDismissAttentionItem(snapshot.projectId!, item.id)}
+                                                        {...getLiveActionDisplayProps(getPendingActionState(pendingActionIds, dismissActionId) === "pending", false)}
+                                                        className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.05] aria-disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.05]"
                                                     >
-                                                        <XCircle className="h-3 w-3" strokeWidth={2} />
-                                                        {pendingActionIds.has(dismissActionId) ? "Dismissing" : "Dismiss"}
+                                                        <XCircle className={`h-3 w-3 ${getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "animate-spin" : ""}`} strokeWidth={2} />
+                                                        {getPendingActionState(pendingActionIds, dismissActionId) === "pending" ? "Dismissing" : "Dismiss"}
+                                                        {getPendingActionState(pendingActionIds, dismissActionId) === "pending" && <span className="sr-only">Dismissing...</span>}
                                                     </button>
                                                 )}
                                             </div>

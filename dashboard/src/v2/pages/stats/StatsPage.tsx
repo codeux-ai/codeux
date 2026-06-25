@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
+import { Folder, Loader2, AlertTriangle } from "lucide-preact";
 import { useProjectData } from "../../context/project-data.js";
 import { useStatsPageData } from "./use-stats-page-data.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -9,12 +10,15 @@ import { AnalysisStudioSection } from "./components/AnalysisStudioSection.js";
 import { TopCardsModeRenderer } from "../../components/stats/TopCardsModeRenderer.js";
 import { Button } from "../../components/ui/Button.js";
 import { PageContainer } from "../../components/layout/PageContainer.js";
+import { EmptyState } from "../../components/ui/EmptyState.js";
+import { PANEL_CLASS } from "./components/stats-ui-primitives.js";
 import styles from "./StatsPage.module.css";
 
 export const StatsPage: FunctionComponent = () => {
-  const rootRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLElement>(null);
   const hasAnimated = useRef(false);
   const { selectedProject } = useProjectData();
+  console.log("DEBUG: selectedProject is:", selectedProject);
   const reducedMotion = useReducedMotion();
   const {
     stats,
@@ -57,7 +61,7 @@ export const StatsPage: FunctionComponent = () => {
   }, [stats, reducedMotion]);
 
   return (
-    <PageContainer containerRef={rootRef} padding="stats" className={`gap-8 xl:gap-12 ${styles.pageRoot}`}>
+    <PageContainer containerRef={rootRef} padding="stats" className={`gap-8 xl:gap-12 ${styles.pageRoot}`} role="region" aria-label="Statistics">
       <StatsPageHero
         selectedProject={selectedProject}
         stats={stats}
@@ -73,19 +77,32 @@ export const StatsPage: FunctionComponent = () => {
       />
 
       {!selectedProject ? (
-        <div className="rounded-[2rem] border border-dashed border-black/[0.08] bg-white/68 px-8 py-16 text-center text-base text-slate-400 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/55 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-          Select a project to load telemetry.
+        <div className={PANEL_CLASS}>
+          <EmptyState
+            icon={<Folder className="h-8 w-8" />}
+            title="Select a project"
+            description="Choose a project to load telemetry and execution history."
+          />
         </div>
       ) : loading && !stats ? (
-        <div className="rounded-[2rem] border border-black/[0.05] bg-white/68 px-8 py-16 text-center text-base text-slate-500 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.05] dark:bg-void-800/55 dark:text-slate-400 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-          Loading the telemetry field for {selectedProject.name}.
+        <div className={PANEL_CLASS} role="status">
+          <EmptyState
+            icon={<Loader2 className="h-8 w-8 animate-spin" />}
+            title="Loading telemetry field"
+            description={`Gathering statistics for ${selectedProject.name}...`}
+          />
         </div>
       ) : error && !stats ? (
-        <div className="flex flex-col items-center gap-4 rounded-[2rem] border border-red-500/20 bg-red-500/10 px-8 py-12 text-base text-red-600 dark:text-red-300">
-          <div>{error}</div>
-          <Button variant="danger" size="sm" onClick={() => refresh()}>
-            Retry
-          </Button>
+        <div className={PANEL_CLASS}>
+          <EmptyState
+            icon={<AlertTriangle className="h-8 w-8 text-rose-500" />}
+            title={error}
+            primaryAction={
+              <Button variant="danger" size="sm" onClick={() => refresh()}>
+                Retry
+              </Button>
+            }
+          />
         </div>
       ) : stats ? (
         <>

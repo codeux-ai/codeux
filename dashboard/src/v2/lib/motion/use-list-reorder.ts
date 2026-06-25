@@ -9,6 +9,8 @@ if (typeof window !== "undefined") {
     gsap.registerPlugin(Flip);
 }
 
+import { INTERACTION_TOKENS } from "./tokens.js";
+
 export interface UseListReorderOptions {
     flipIdSelector?: string;
     stagger?: number;
@@ -28,8 +30,8 @@ export function useListReorder(
 
     const {
         flipIdSelector = '[data-flip-id]',
-        stagger = 0.03,
-        duration = GSAP_DURATIONS.slow,
+        stagger = parseFloat(INTERACTION_TOKENS.listReorder.duration) / 1000 * 0.2,
+        duration = parseFloat(INTERACTION_TOKENS.listReorder.duration) / 1000,
         ease = GSAP_EASINGS.smooth
     } = options;
 
@@ -73,10 +75,10 @@ export function useListReorder(
                 absolute: true,
                 onEnter: (elements) => gsap.fromTo(elements,
                     { opacity: 0, y: 15 },
-                    { opacity: 1, y: 0, duration, stagger, ease }
+                    { opacity: 1, y: 0, duration, stagger, ease, overwrite: "auto" }
                 ),
                 onLeave: (elements) => gsap.to(elements,
-                    { opacity: 0, y: -15, duration, onComplete: () => elements.forEach(el => el.remove()) }
+                    { opacity: 0, y: -15, duration, onComplete: () => elements.forEach(el => el.remove()), overwrite: "auto" }
                 ),
                 onComplete: () => {
                     if (containerRef.current) containerRef.current.style.minHeight = '';

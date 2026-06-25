@@ -186,6 +186,25 @@ Checks:
   - `Recovered runtime state on startup`
 - Verify the affected sprint run returns to active monitoring without creating a brand-new sprint run record.
 
+### 8a. Task shows a provider session or PR from another project/sprint
+Symptoms:
+- A task is marked `CODING_COMPLETED` with a PR that targets an unrelated feature branch.
+- The task provider does not match the selected sprint's routing settings.
+- The same `session_id` or `pr_url` appears under another project, sprint, or task in `task_runs`.
+
+Checks:
+- Query the local app database for the session or PR:
+  - `SELECT tr.*, p.name, s.name, t.task_key, t.title FROM task_runs tr JOIN projects p ON p.id = tr.project_id JOIN sprints s ON s.id = tr.sprint_id JOIN tasks t ON t.id = tr.task_id WHERE tr.session_id = '<session>' OR tr.pr_url = '<pr-url>';`
+- If more than one project/sprint/task owns the same session or PR, keep the original owner and clear the duplicate task run before rerunning the affected task.
+- Current runtime sync rejects foreign session and PR artifacts before persisting them. If the duplicate row predates that guard, remove the duplicate `task_runs` row, reset the affected `tasks.status` to `pending`, clear merge flags, restart the dashboard server, then rerun the task.
+
+
+### Transient Provider Failures
+Transient provider failures are classified and managed in `src/shared/providers/provider-error-classifier.ts`. These shared helpers encapsulate the operational meaning of failures such as:
+- **Codex transport errors**: Disconnections or channel closures (e.g., "stream disconnected before completion", "channel closed").
+- **Claude missing conversations**: Attempts to resume a non-existent session resulting in "no conversation found".
+- **Silent quota signals**: Provider tools (like Antigravity) failing due to capacity limits without explicit failure output.
+
 ## Recovery Techniques
 
 - Temporarily disable selected loop steps for diagnosis.
@@ -203,6 +222,24 @@ Checks:
   - provider overrides target the exact provider instance from **Settings -> Integrations** and may include a model override, so reruns can switch between multiple logins/configs for the same provider type
   - optional downstream reset rewrites dependent tasks to fresh pending execution snapshots so old completed/running descendants do not keep stale runtime metadata
   - if a task already merged code, operators can check the **Undo the Git merge** option to automatically revert the merge commit programmatically in the feature branch before restarting the task cleanly.
+
+### 9. Accidentally Exposed Dashboard or MCP Endpoints
+Symptoms:
+- Unexpected or unauthorized activities appearing in the dashboard logs.
+- Connections originating from unknown IP addresses.
+
+Failure Modes & Rollback Notes:
+- **Failure Mode**: By default, Code UX binds only to the loopback interface (`127.0.0.1`). If bound to `0.0.0.0` without external authentication, any user on the network can execute arbitrary commands on the host machine.
+- **Rollback / Recovery**:
+  1. Immediately terminate the Code UX server process.
+  2. Verify the configuration `HOST` or bind settings to ensure it restricts to `127.0.0.1`.
+  3. Review the `ExecutionInvocations` logs to identify any unauthorized commands executed.
+  4. If exposing Code UX to the network is required, **front it with a reverse proxy** (e.g., Nginx, Traefik, Caddy) that enforces authentication (such as Basic Auth, mTLS, or an OAuth proxy).
+  5. For the MCP HTTP gateway, ensure `--mcp-http-auth-token` is configured when binding beyond loopback.
+
+### Subprocess Execution Limits
+
+Subprocess execution restricts accumulated `stdout` (default 5MB) and `stderr` (default 4KB) memory growth by slicing long outputs and prepending `"..."`. Streaming callbacks (e.g., `onStdoutLine`, `onStderrLine`) still process the full, untruncated line output regardless of this cap, avoiding memory bloat while preserving line-by-line inspection. These bounds can be overridden via `maxStdoutChars` and `maxStderrChars` in command options.
 
 ## Useful Commands
 

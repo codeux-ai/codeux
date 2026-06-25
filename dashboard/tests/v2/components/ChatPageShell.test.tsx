@@ -58,4 +58,22 @@ describe("ChatPageShell", () => {
     // Check that we removed min-h-[70vh]
     expect(gridContainer?.className).not.toContain("min-h-[70vh]");
   });
+
+  it("handles reduced motion context smoothly", () => {
+    render(
+      <ChatPageShell
+        selectedProject={null}
+        chatMode="threads"
+        onSetChatMode={() => {}}
+        onRefresh={() => {}}
+        manualRefreshing={false}
+        onCreateThread={() => {}}
+        pendingDashboardMessages={0}
+        error={null}
+        railSlot={<div>Rail</div>}
+        detailSlot={<div>Detail</div>}
+      />
+    );
+    expect(screen.getAllByText("Dashboard Chat")[0]).toBeInTheDocument();
+  });
 });

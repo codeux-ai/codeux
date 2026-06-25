@@ -1,4 +1,4 @@
-import { h, ComponentChildren, RefObject, isValidElement } from "preact";
+import { h, ComponentChildren, RefObject, isValidElement, cloneElement } from "preact";
 import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
@@ -59,16 +59,22 @@ export const Menu = ({
       setIsRendered(true);
       previousFocusRef.current = document.activeElement as HTMLElement | null;
       setTimeout(() => {
-        const first = menuRef.current?.querySelector('[role="menuitem"]:not([aria-disabled="true"])') as HTMLElement | null;
+        const first = menuRef.current?.querySelector('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])') as HTMLElement | null;
         first?.focus();
       }, 0);
     } else if (isRendered) { // Only restore if it was previously open
       // Restore focus on close
-      if (previousFocusRef.current) {
-        previousFocusRef.current.focus();
-        previousFocusRef.current = null;
-      } else if (triggerRef.current) {
-        triggerRef.current.focus();
+      if (
+        !document.activeElement ||
+        document.activeElement === document.body ||
+        (menuRef.current && menuRef.current.contains(document.activeElement))
+      ) {
+        if (previousFocusRef.current?.isConnected) {
+          previousFocusRef.current.focus();
+          previousFocusRef.current = null;
+        } else if (triggerRef.current?.isConnected) {
+          triggerRef.current.focus();
+        }
       }
     }
   }, [isOpen]);
@@ -140,18 +146,12 @@ export const Menu = ({
 
       if (e.key === "Escape") {
         onOpenChange(false);
-        if (previousFocusRef.current) {
-          previousFocusRef.current.focus();
-          previousFocusRef.current = null;
-        } else if (triggerRef.current) {
-          triggerRef.current.focus();
-        }
         return;
       }
 
       if (!menuRef.current) return;
 
-      const items = Array.from(menuRef.current.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"]), button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')) as HTMLElement[];
+      const items = Array.from(menuRef.current.querySelectorAll('[role="menuitem"]:not([disabled]):not([aria-disabled="true"]), button:not([disabled]):not([aria-disabled="true"]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')) as HTMLElement[];
       if (items.length === 0) return;
 
       const currentIndex = items.findIndex((item) => item === document.activeElement);
@@ -194,18 +194,16 @@ export const Menu = ({
 
   return (
     <>
-      {isValidElement(children) && (children.type === 'button' || (children.props as any).role === 'button') ? (
-        <div
-          ref={externalTriggerRef ? undefined : (localTriggerRef as unknown as RefObject<HTMLDivElement>)}
-          className="inline-flex cursor-pointer"
-          onClick={() => onOpenChange(!isOpen)}
-          aria-haspopup="menu"
-          aria-expanded={isOpen}
-          aria-controls={isOpen ? menuId : undefined}
-        >
-          {children}
-        </div>
-      ) : (
+      {isValidElement(children) ? cloneElement(children as preact.VNode<any>, {
+        ref: externalTriggerRef ? undefined : localTriggerRef,
+        onClick: (e: MouseEvent) => {
+          onOpenChange(!isOpen);
+          if ((children.props as any).onClick) (children.props as any).onClick(e);
+        },
+        "aria-haspopup": "menu",
+        "aria-expanded": isOpen,
+        "aria-controls": isOpen ? menuId : undefined,
+      }) : (
         <button
           type="button"
           ref={externalTriggerRef ? undefined : (localTriggerRef as unknown as RefObject<HTMLButtonElement>)}

@@ -194,6 +194,10 @@ export const useSettingsPageState = (
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const clearFeedback = useCallback(() => {
+    setError(null);
+    setSaveMessage(null);
+  }, []);
   const [savingSystem, setSavingSystem] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
   const [resettingProject, setResettingProject] = useState(false);
@@ -491,9 +495,7 @@ export const useSettingsPageState = (
     if (!selectedProject) {
       return;
     }
-    if (!window.confirm(`Delete project "${selectedProject.name}" and all of its sprints, tasks, chats, and runtime records?`)) {
-      return;
-    }
+
 
     setDeletingProject(true);
     try {
@@ -510,9 +512,7 @@ export const useSettingsPageState = (
   }, [selectedProject, deleteProject]);
 
   const handleResetDatabase = useCallback(async (): Promise<void> => {
-    if (!window.confirm("Reset the full database and scoped settings back to a clean development state? This deletes all projects, sprints, tasks, runtime state, chats, and saved settings.")) {
-      return;
-    }
+
 
     setResettingDatabase(true);
     try {
@@ -669,6 +669,7 @@ export const useSettingsPageState = (
   const activeSaving = savingSystem || savingProject;
 
   return {
+    clearFeedback,
     activeCategory, setActiveCategory,
     activeScope, setActiveScope: setPersistedActiveScope,
     selectedIntegration, setSelectedIntegration,

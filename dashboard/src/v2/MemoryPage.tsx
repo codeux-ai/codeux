@@ -5,7 +5,7 @@ import { effect } from "@preact/signals";
 import { Inspector } from "./components/memory/Inspector.js";
 import { MemoryFilters, MemoryDetails, MemoryCard } from "./components/memory/index.js";
 import MemorySidebar from "./components/memory/MemorySidebar.js";
-import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./components/memory/memoryState.js";
+import { memorySidebarExpandedSignal, searchQuerySignal, activeMemoryIdSignal, hoveredMemoryIdSignal, activeTierSignal, selectedSprintIdSignal, selectedAgentPresetIdSignal } from "./components/memory/memoryState.js";
 
 import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
@@ -30,11 +30,11 @@ interface Pulse { edgeIdx: number; progress: number; speed: number }
 const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
     architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
     codebase:     { label: "Codebase",     hex: "#FFB800", r: 255, g: 184, b: 0   },
-    context:      { label: "Context",      hex: "#00AB84", r: 0,   g: 171, b: 132 },
-    preferences:  { label: "Preferences",  hex: "#94a3b8", r: 148, g: 163, b: 184 },
+    context:      { label: "Context",      hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
+    preferences:  { label: "Preferences",  hex: "#94A3B8", r: 148, g: 163, b: 184 },
     patterns:     { label: "Patterns",     hex: "#F59E0B", r: 245, g: 158, b: 11  },
-    decision:     { label: "Decision",     hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
-    error:        { label: "Error",        hex: "#EF4444", r: 239, g: 68,  b: 68  },
+    decision:     { label: "Decision",     hex: "#64748B", r: 100, g: 116, b: 139 },
+    error:        { label: "Error",        hex: "#F43F5E", r: 244, g: 63,  b: 94  },
     learning:     { label: "Learning",     hex: "#33FFB8", r: 51,  g: 255, b: 184 },
 };
 
@@ -94,6 +94,14 @@ export const MemoryPage: FunctionComponent = () => {
             if (canvasRef.current) {
                 window.dispatchEvent(new Event("resize"));
             }
+        });
+    }, []);
+
+    useEffect(() => {
+        return effect(() => {
+            const hId = hoveredMemoryIdSignal.value;
+            const idx = hId ? S.current.graph.nodes.findIndex(n => n.id === hId) : -1;
+            S.current.hoveredIdx = idx;
         });
     }, []);
 
@@ -184,24 +192,39 @@ export const MemoryPage: FunctionComponent = () => {
         s.searchMatch = null;
         activeMemoryIdSignal.value = null;
 
-        // Animate entrance
-        gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
-        const tl = gsap.timeline();
-        tl.to(s.cam, { zoom: 1, duration: 1.8, ease: "power2.out" }, 0);
-        s.graph.nodes.forEach((node, i) => {
-            tl.to(node, {
-                x: node.targetX, y: node.targetY,
-                scale: 1, opacity: 1,
-                duration: 1.2, ease: "power3.out",
-            }, 0.15 + Math.min(i, 20) * 0.03);
-        });
-        s.entranceDone = true;
+        const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-        return () => {
-            tl.kill();
-            gsap.killTweensOf(s.cam);
-            s.graph.nodes.forEach(node => gsap.killTweensOf(node));
-        };
+        // Animate entrance
+        if (prefersReducedMotion) {
+            s.cam.x = 0;
+            s.cam.y = 0;
+            s.cam.zoom = 1;
+            s.graph.nodes.forEach(node => {
+                node.x = node.targetX;
+                node.y = node.targetY;
+                node.scale = 1;
+                node.opacity = 1;
+            });
+            s.entranceDone = true;
+        } else {
+            gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
+            const tl = gsap.timeline();
+            tl.to(s.cam, { zoom: 1, duration: 1.8, ease: "power2.out" }, 0);
+            s.graph.nodes.forEach((node, i) => {
+                tl.to(node, {
+                    x: node.targetX, y: node.targetY,
+                    scale: 1, opacity: 1,
+                    duration: 1.2, ease: "power3.out",
+                }, 0.15 + Math.min(i, 20) * 0.03);
+            });
+            s.entranceDone = true;
+
+            return () => {
+                tl.kill();
+                gsap.killTweensOf(s.cam);
+                s.graph.nodes.forEach(node => gsap.killTweensOf(node));
+            };
+        }
     }, [graphData]);
 
 /* ── Canvas setup & render loop ───────────────────────────────────── */
@@ -380,7 +403,7 @@ export const MemoryPage: FunctionComponent = () => {
                 const effOpacity = dimmed ? n.opacity * 0.12 : n.opacity;
 
                 const glR = r * (3 + n.glow * 2.5);
-                const glAlpha = (n.glow * 0.12 + (isHov ? 0.14 : 0) + (isSel ? 0.1 : 0)) * effOpacity;
+                const glAlpha = (n.glow * 0.12 + (isHov ? 0.18 : 0) + (isSel ? 0.15 : 0)) * effOpacity;
                 const gl = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glR);
                 gl.addColorStop(0, lob ? `rgba(227,0,15,${glAlpha})` : `rgba(${cc.r},${cc.g},${cc.b},${glAlpha})`);
                 gl.addColorStop(1, "transparent");
@@ -391,24 +414,26 @@ export const MemoryPage: FunctionComponent = () => {
 
                 ctx.beginPath();
                 ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-                const bodyAlpha = (0.65 + n.strength * 0.35) * effOpacity;
+                const bodyAlpha = isHov || isSel
+                    ? Math.min(1, (0.75 + n.strength * 0.45) * effOpacity)
+                    : (0.65 + n.strength * 0.35) * effOpacity;
                 ctx.fillStyle = lob
                     ? `rgba(227,0,15,${bodyAlpha})`
                     : `rgba(${cc.r},${cc.g},${cc.b},${bodyAlpha})`;
                 if (isHov || isSel) {
-                    ctx.shadowBlur = 22;
-                    ctx.shadowColor = lob ? "rgba(227,0,15,0.6)" : cc.hex;
+                    ctx.shadowBlur = isSel ? 28 : 22;
+                    ctx.shadowColor = lob ? "rgba(227,0,15,0.8)" : `rgba(${cc.r},${cc.g},${cc.b},0.8)`;
                 }
                 ctx.fill();
                 ctx.shadowBlur = 0;
 
                 if (isSel) {
                     ctx.beginPath();
-                    ctx.arc(n.x, n.y, r + 5, 0, Math.PI * 2);
+                    ctx.arc(n.x, n.y, r + 6, 0, Math.PI * 2);
                     ctx.strokeStyle = lob
-                        ? "rgba(227,0,15,0.4)"
-                        : `rgba(${cc.r},${cc.g},${cc.b},0.4)`;
-                    ctx.lineWidth = 1.5;
+                        ? "rgba(227,0,15,0.6)"
+                        : `rgba(${cc.r},${cc.g},${cc.b},0.6)`;
+                    ctx.lineWidth = 2.0;
                     ctx.setLineDash([4, 4]);
                     ctx.stroke();
                     ctx.setLineDash([]);
@@ -692,7 +717,7 @@ export const MemoryPage: FunctionComponent = () => {
 
     /* ─── Render ──────────────────────────────────────────────────────── */
     return (
-        <PageContainer padding="section" className="gap-8">
+        <PageContainer aria-label="Memory" padding="section" className="gap-8">
 
             <div aria-hidden className="fixed inset-0 pointer-events-none -z-10">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_40%,rgba(0,224,160,0.04)_0%,transparent_70%)]
@@ -847,7 +872,7 @@ export const MemoryPage: FunctionComponent = () => {
                             className="w-9 h-9 rounded-xl flex items-center justify-center
                                        bg-white/80 dark:bg-void-800/80 backdrop-blur-2xl
                                        border border-black/[0.06] dark:border-white/[0.06]
-                                       text-slate-500 hover:text-slate-900 dark:hover:text-white
+                                       text-slate-500 hover:text-signal-500 hover:border-signal-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:hover:text-signal-400
                                        shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.3)]
                                        transition-colors duration-200">
                             <Icon className="w-4 h-4" strokeWidth={1.5} />

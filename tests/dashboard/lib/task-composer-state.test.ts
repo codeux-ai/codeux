@@ -36,13 +36,30 @@ describe("Task Composer State Helper", () => {
   });
 
   it("hydrates edit state correctly", () => {
-    const initialTask = mockTasks[1]; // t2
-    const { result } = renderHook(() => useTaskComposerState(mockSprints, mockTasks, initialTask));
+    const initialTask = {
+      ...mockTasks[1],
+      description: "some desc",
+      promptMarkdown: "some prompt"
+    }; // t2 with required fields
+    const { result } = renderHook(() => useTaskComposerState(mockSprints, mockTasks, initialTask as any));
 
     expect(result.current.isEditing).toBe(true);
     expect(result.current.sprintId).toBe("s1");
     expect(result.current.title).toBe("Task 2");
     expect(result.current.isValid).toBe(true);
+  });
+
+  it("filters dependency options to prevent cycles", () => {
+    const cycleTasks: Task[] = [
+      ...mockTasks,
+      { recordId: "t4", id: "TASK-4", sprintId: "s1", title: "Task 4", status: "pending", priority: "medium", executorType: "auto", dependsOnTaskIds: ["t1"], source: "", sprint: "", assignee: "", time: "", createdAt: "", promptMarkdown: "", description: "", isIndependent: true, isMerged: false, mergeIndicator: null },
+      { recordId: "t5", id: "TASK-5", sprintId: "s1", title: "Task 5", status: "pending", priority: "medium", executorType: "auto", dependsOnTaskIds: ["t4"], source: "", sprint: "", assignee: "", time: "", createdAt: "", promptMarkdown: "", description: "", isIndependent: true, isMerged: false, mergeIndicator: null },
+    ];
+    // if we edit t1, we shouldn't be able to depend on t4 or t5 because they depend on t1 (creates cycle).
+    const initialTask = cycleTasks[0]; // t1
+    const { result } = renderHook(() => useTaskComposerState(mockSprints, cycleTasks, initialTask));
+
+    expect(result.current.dependencyOptions.map(t => t.recordId)).toEqual(["t2"]); // t1 is self, t4/t5 are cycles
   });
 
   it("filters dependency options by selected sprint", () => {

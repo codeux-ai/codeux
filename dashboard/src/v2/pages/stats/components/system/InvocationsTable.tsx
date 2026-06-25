@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { useState, useMemo } from "preact/hooks";
 import {
   ChevronRight,
   ChevronDown,
@@ -15,6 +16,7 @@ import {
 import type { ExecutionInvocationRecord } from "../../../../types.js";
 import type { SystemSort, SystemSortKey } from "../../hooks/use-system-view-data.js";
 import { formatTokens, formatDuration, formatDateTime } from "../../stats-utils.js";
+import { DEFAULT_LIST_WINDOW, resolveListWindow } from "../../../../lib/list-window.js";
 import {
   LEDGER_ROW_MODERN_CLASS,
   CHIP_CLASS,
@@ -31,6 +33,35 @@ export interface InvocationsTableProps {
   loading?: boolean;
 }
 
+export function useInvocationsWindow(
+  invocations: ExecutionInvocationRecord[],
+  expandedId: string | null,
+  initialWindow = DEFAULT_LIST_WINDOW
+) {
+  const initialCount = typeof initialWindow === "number" ? initialWindow : resolveListWindow(initialWindow, invocations.length);
+  const [visibleCount, setVisibleCount] = useState(initialCount);
+
+  const visibleInvocations = useMemo(() => {
+    let visible = invocations.slice(0, visibleCount);
+    if (expandedId) {
+      const isVisible = visible.some((i) => i.id === expandedId);
+      if (!isVisible) {
+        const expandedItem = invocations.find((i) => i.id === expandedId);
+        if (expandedItem) {
+          visible = [...visible, expandedItem];
+        }
+      }
+    }
+    return visible;
+  }, [invocations, visibleCount, expandedId]);
+
+  return {
+    visibleInvocations,
+    hasMore: visibleCount < invocations.length,
+    revealMore: () => setVisibleCount((c: number) => c + (typeof initialWindow === "number" ? initialWindow : 20)),
+  };
+}
+
 export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   invocations,
   sort,
@@ -43,6 +74,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     ? null
     : invocations.find((invocation) => invocation.id === expandedId) ?? null;
 
+  const { visibleInvocations, hasMore, revealMore } = useInvocationsWindow(invocations, expandedId);
+
   const handleSort = (key: SystemSortKey) => {
     if (sort.key === key) {
       onSortChange({ key, dir: sort.dir === "asc" ? "desc" : "asc" });
@@ -52,11 +85,11 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
   };
 
   const renderSortIcon = (key: SystemSortKey) => {
-    if (sort.key !== key) return <ArrowUpDown className="ml-1 h-3 w-3" />;
+    if (sort.key !== key) return <ArrowUpDown aria-label="sortable" className="ml-1 h-3 w-3" />;
     return sort.dir === "asc" ? (
-      <ArrowUp className="ml-1 h-3 w-3 text-signal-500" />
+      <ArrowUp aria-label="sorted ascending" className="ml-1 h-3 w-3 text-signal-500" />
     ) : (
-      <ArrowDown className="ml-1 h-3 w-3 text-signal-500" />
+      <ArrowDown aria-label="sorted descending" className="ml-1 h-3 w-3 text-signal-500" />
     );
   };
 
@@ -64,7 +97,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
     switch (status) {
       case "running":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-blue-500/40 bg-blue-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300 dark:border-white/[0.06]`}>
             <div className="h-2 w-2 rounded-full bg-blue-500" />
             <Loader2 className="h-3 w-3 animate-spin" />
             Running
@@ -72,7 +105,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       case "completed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300 dark:border-white/[0.06]`}>
             <div className="h-2 w-2 rounded-full bg-emerald-500" />
             <CheckCircle2 className="h-3 w-3" />
             Completed
@@ -80,7 +113,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       case "failed":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-red-500/40 bg-red-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-300 dark:border-white/[0.06]`}>
             <div className="h-2 w-2 rounded-full bg-red-500" />
             <XCircle className="h-3 w-3" />
             Failed
@@ -88,7 +121,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       case "cancelled":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-slate-500/40 bg-slate-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 dark:border-white/[0.06]`}>
             <div className="h-2 w-2 rounded-full bg-slate-500" />
             <MinusCircle className="h-3 w-3" />
             Cancelled
@@ -96,7 +129,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
         );
       case "paused":
         return (
-          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300`}>
+          <div className={`${CHIP_CLASS} flex items-center gap-1.5 border border-black/[0.06] bg-[color:var(--surface-glass)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-300 dark:border-white/[0.06]`}>
             <div className="h-2 w-2 rounded-full bg-amber-500" />
             <PauseCircle className="h-3 w-3" />
             Paused
@@ -113,9 +146,9 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   if (loading) {
     return (
-      <div className="space-y-3">
+      <div role="status" aria-label="Loading invocations" className="space-y-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 animate-pulse bg-slate-100/50 dark:bg-white/5`} />
+          <div key={i} className={`${LEDGER_ROW_MODERN_CLASS} h-20 motion-safe:animate-pulse bg-slate-100/50 dark:bg-white/5`} />
         ))}
       </div>
     );
@@ -123,7 +156,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   if (invocations.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+      <div role="status" className="flex flex-col items-center justify-center py-20 text-slate-500">
         <AlertTriangle className="mb-4 h-10 w-10 opacity-20" />
         <div className="text-sm font-medium">No invocations match the current filters</div>
       </div>
@@ -189,7 +222,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           </tr>
         </thead>
         <tbody className="block lg:table-row-group">
-          {invocations.map((invocation) => {
+          {visibleInvocations.map((invocation) => {
             const isExpanded = expandedId === invocation.id;
             const { icon: ProviderIcon, bg: providerBg, text: providerText } = getProviderIcon(invocation.provider);
             const duration = invocation.finishedAt
@@ -200,7 +233,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
               <>
                 <tr key={invocation.id} className="block lg:table-row">
                   <td colSpan={11} className="p-0 block lg:table-cell">
-                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-6`}>
+                    <div className={`${LEDGER_ROW_MODERN_CLASS} flex items-center p-4 lg:p-6 ${invocation.status === "running" ? "border-l-2 border-l-blue-400 bg-blue-500/[0.02]" : invocation.status === "failed" ? "border-l-2 border-l-red-400 bg-red-500/[0.02]" : ""}`}>
                       <div className="flex flex-col gap-3 lg:grid lg:w-full lg:grid-cols-[1.2fr_1fr_1fr_1.4fr_0.6fr_0.6fr_0.6fr_0.8fr_0.8fr_1fr_0.4fr] lg:items-center lg:gap-2">
                         {/* Header Row: Time and Expand */}
                         <div className="flex items-center justify-between lg:contents">
@@ -216,7 +249,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                               type="button"
                               onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
                               aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                              className={`rounded-full p-2 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/5 ${
+                              className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
                                 isExpanded ? "text-signal-500" : "text-slate-400"
                               }`}
                             >
@@ -323,7 +356,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                             type="button"
                             onClick={() => onRowExpand(isExpanded ? null : invocation.id)}
                             aria-label={isExpanded ? `Collapse invocation ${invocation.id}` : `Expand invocation ${invocation.id}`}
-                            className={`rounded-full p-2 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/5 ${
+                            className={`rounded-full p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 hover:bg-black/[0.04] dark:hover:bg-white/5 ${
                               isExpanded ? "text-signal-500" : "text-slate-400"
                             }`}
                           >
@@ -358,6 +391,17 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
           })}
         </tbody>
       </table>
+      {hasMore && (
+        <div className="mt-4 flex justify-center pb-4">
+          <button
+            type="button"
+            onClick={revealMore}
+            className="rounded-full bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+          >
+            Show more invocations
+          </button>
+        </div>
+      )}
     </div>
   );
 };

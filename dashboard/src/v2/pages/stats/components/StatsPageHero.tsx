@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { useState } from "preact/hooks";
 import { Activity, BarChart3, Clock3, Cpu, ShieldCheck, Zap } from "lucide-preact";
 import type {
   Source,
@@ -6,7 +7,7 @@ import type {
   ProjectStatsQuery,
   ProjectStatsWindow,
 } from "../../../types.js";
-import { formatDateTime, formatDuration, formatTokens } from "../stats-utils.js";
+import { formatDateTime, formatDuration, formatTokens, isValidCustomRange } from "../stats-utils.js";
 import {
   PANEL_CLASS,
   CHIP_CLASS,
@@ -21,7 +22,7 @@ const HeroKpi: FunctionComponent<{
   value: string;
   valueClassName?: string;
 }> = ({ icon: Icon, label, value, valueClassName = "text-slate-900 dark:text-white" }) => (
-  <div className="flex items-center gap-3 rounded-2xl border border-black/[0.05] bg-white/68 px-4 py-3 backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
+  <div className="flex items-center gap-3 rounded-2xl border border-[var(--stats-card-border)] bg-[var(--stats-card-bg)] px-4 py-3 backdrop-blur-xl">
     <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-signal-500/10 text-signal-600 dark:text-signal-400">
       <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
     </div>
@@ -83,6 +84,17 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
   visualMode,
   setVisualMode,
 }) => {
+  const [customRangeError, setCustomRangeError] = useState<string>("");
+
+  const handleApplyCustom = () => {
+    if (customFrom && customTo && new Date(customFrom) > new Date(customTo)) {
+      setCustomRangeError("End date must be after start date.");
+    } else {
+      setCustomRangeError("");
+      applyCustomRange();
+    }
+  };
+
   const usage = stats?.usage;
   const finishedCount = stats?.statusCounts
     ? stats.statusCounts.completed + stats.statusCounts.failed + stats.statusCounts.cancelled
@@ -104,8 +116,7 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
 
   return (
     <section className={`${PANEL_CLASS} rounded-[2.5rem] p-8 md:p-10`}>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
-      <div className="relative flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
+      <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-4xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
             <BarChart3 className="h-3.5 w-3.5" strokeWidth={2.2} />
@@ -153,8 +164,8 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             </div>
           ) : null}
         </div>
-        <div className="flex flex-col items-start gap-4 xl:items-end xl:justify-end w-full xl:w-auto mt-6 xl:mt-0">
-          <div className={`inline-flex flex-wrap p-1 w-full sm:w-auto ${CHIP_CLASS}`}>
+        <div className="flex flex-col items-start gap-4 lg:items-end lg:justify-end w-full lg:w-auto mt-6 lg:mt-0">
+          <div role="group" aria-label="Time window presets" className={`inline-flex flex-wrap p-1 w-full sm:w-auto ${CHIP_CLASS}`}>
             {WINDOW_PRESETS.map((window) => {
               const isActive = activeQuery.window === window;
               return (
@@ -163,10 +174,10 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
                   type="button"
                   onClick={() => applyPresetWindow(window)}
                   aria-pressed={isActive}
-                  className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all border border-transparent ${
+                  className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent-focus-ring)] ${
                     isActive
                       ? "bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                      : "text-slate-500 hover:bg-[color:var(--fill-muted)] hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                   }`}
                 >
                   {window === "all" ? "All time" : window}
@@ -175,27 +186,55 @@ export const StatsPageHero: FunctionComponent<StatsPageHeroProps> = ({
             })}
           </div>
           {activeQuery.window === "custom" ? (
-            <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-              <input
-                type="date"
-                value={customFrom}
-                onInput={(event) => setCustomFrom((event.currentTarget as HTMLInputElement).value)}
-                className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
-              />
-              <input
-                type="date"
-                value={customTo}
-                onInput={(event) => setCustomTo((event.currentTarget as HTMLInputElement).value)}
-                className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
-              />
-              <button
-                type="button"
-                onClick={applyCustomRange}
-                className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
-              >
-                Apply
-              </button>
-            </div>
+            <div className="w-full flex flex-col gap-2">
+              <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                <input
+                  type="date"
+                  aria-label="Custom start date"
+                  value={customFrom}
+                  onInput={(event) => {
+                    setCustomFrom((event.currentTarget as HTMLInputElement).value);
+                    setCustomRangeError("");
+                  }}
+                  className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
+                  aria-invalid={!isValidCustomRange(customFrom, customTo) ? "true" : undefined}
+                  aria-errormessage={!isValidCustomRange(customFrom, customTo) ? "custom-range-error" : undefined}
+                />
+                <input
+                  type="date"
+                  aria-label="Custom end date"
+                  value={customTo}
+                  onInput={(event) => {
+                    setCustomTo((event.currentTarget as HTMLInputElement).value);
+                    setCustomRangeError("");
+                  }}
+                  className={`${INPUT_CLASS} !h-10 !px-3 !text-[12px]`}
+                  aria-invalid={!isValidCustomRange(customFrom, customTo) ? "true" : undefined}
+                  aria-errormessage={!isValidCustomRange(customFrom, customTo) ? "custom-range-error" : undefined}
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyCustom}
+                  disabled={!customFrom || !customTo}
+                  aria-disabled={!customFrom || !customTo ? "true" : undefined}
+                  className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Apply
+                </button>
+              </div>
+              <div className="min-h-[1.25rem]">
+                {!isValidCustomRange(customFrom, customTo) && customFrom && customTo && (
+                  <span id="custom-range-error" className="text-xs text-red-500 dark:text-red-400 font-medium" role="alert">
+                    End date cannot be before start date
+                  </span>
+                )}
+              </div>
+            {customRangeError ? (
+              <div aria-live="polite" className="text-xs text-red-500 dark:text-red-400">
+                {customRangeError}
+              </div>
+            ) : null}
+          </div>
           ) : null}
           <ViewToggle value={visualMode} onChange={setVisualMode} />
         </div>

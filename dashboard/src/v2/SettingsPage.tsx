@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { Check, Compass, RefreshCw, Search, Settings, Zap } from "lucide-preact";
 import { ActionButton, NoticePanel } from "./components/settings/SettingsSurface.js";
+import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 import { useSettingsPageState } from "./hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES, CATEGORY_SEARCH_HINTS } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
@@ -17,6 +18,7 @@ export const SettingsPage: FunctionComponent = () => {
 
   const state = useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS);
   const {
+    clearFeedback,
     activeCategory,
     activeScope,
     setActiveScope,
@@ -86,7 +88,7 @@ export const SettingsPage: FunctionComponent = () => {
   }, [activeCategory, state, prefersReducedMotion]);
 
   return (
-    <PageContainer padding="settings" className="gap-10">
+    <PageContainer aria-label="Settings" padding="settings" className="gap-10">
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_-5%_-10%,rgba(0,224,160,0.04)_0%,transparent_60%)] dark:bg-[radial-gradient(ellipse_60%_50%_at_-5%_-10%,rgba(0,224,160,0.06)_0%,transparent_60%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,rgba(255,184,0,0.025)_0%,transparent_60%)] dark:bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,rgba(255,184,0,0.04)_0%,transparent_60%)]" />
@@ -118,11 +120,11 @@ export const SettingsPage: FunctionComponent = () => {
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-2xl border border-black/[0.06] bg-white/70 p-1 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60">
+            <div className="rounded-2xl border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-1 backdrop-blur-2xl shadow-[var(--elevation-base)]">
               <button
                 type="button"
                 onClick={() => setActiveScope("system")}
-                className={`rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors ${
+                className={`h-8 rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors ${
                   activeScope === "system"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
@@ -134,7 +136,7 @@ export const SettingsPage: FunctionComponent = () => {
                 type="button"
                 onClick={() => selectedProject && setActiveScope("project")}
                 disabled={!selectedProject}
-                className={`rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                className={`h-8 rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:pointer-events-none ${
                   activeScope === "project"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
@@ -164,7 +166,7 @@ export const SettingsPage: FunctionComponent = () => {
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 backdrop-blur-2xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+        <div className="rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-4 backdrop-blur-2xl shadow-[var(--elevation-base)]">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
             <Compass className="h-3.5 w-3.5" strokeWidth={2.2} />
             Smart Find
@@ -218,8 +220,8 @@ export const SettingsPage: FunctionComponent = () => {
               disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
               className={`group inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
                 saveMessage && !error
-                  ? "bg-status-green text-white shadow-[0_4px_20px_rgba(0,171,132,0.3)]"
-                  : "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
+                  ? "bg-status-green text-white shadow-[var(--elevation-raised)]"
+                  : "bg-slate-900 text-white shadow-[var(--elevation-raised)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
               }`}
             >
               {activeSaving ? (
@@ -269,11 +271,13 @@ export const SettingsPage: FunctionComponent = () => {
             <div className="h-px flex-1 bg-gradient-to-r from-black/[0.06] to-transparent dark:from-white/[0.06]" />
           </div>
 
-          {error ? (
-            <NoticePanel title="Settings error" tone="warning">
-              {error}
-            </NoticePanel>
-          ) : null}
+          <div className="flex flex-col gap-3">
+            <ActionFeedbackRegion
+              status={error ? "error" : saveMessage ? "success" : "idle"}
+              message={error || saveMessage || null}
+              onDismiss={clearFeedback}
+            />
+          </div>
 
           <SettingsContentPanels state={state} />
         </div>

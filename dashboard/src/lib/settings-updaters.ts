@@ -1,4 +1,5 @@
 import type { DashboardSettings, ProviderId } from "../types.js";
+import { sanitizeSystemProviderConfig } from "../v2/lib/provider-runtime-preview.js";
 
 const syncGitManagerSkills = (
   skills: DashboardSettings["skills"],
@@ -36,10 +37,10 @@ export const updateProviderConfig = (
   providerId: ProviderId,
   patch: Partial<DashboardSettings["aiProvider"]["providers"][ProviderId]>
 ): DashboardSettings => {
-  const nextProviderConfig = {
+  const nextProviderConfig = sanitizeSystemProviderConfig({
     ...settings.aiProvider.providers[providerId],
     ...patch,
-  };
+  });
 
   const hasApiKeyPatch = Object.prototype.hasOwnProperty.call(patch, "apiKey");
 

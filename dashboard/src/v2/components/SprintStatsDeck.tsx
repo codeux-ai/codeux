@@ -32,8 +32,8 @@ import {
   type LiveTaskTimingSummary,
 } from "../lib/live-stats.js";
 import { formatTime } from "../../lib/time.js";
-import { WaveFluid } from "./ui/WaveFluid.js";
-import { BorderTrace } from "./ui/BorderTrace.js";
+
+
 import { formatTokens } from "../pages/stats/stats-utils.js";
 
 export interface Tone {
@@ -348,9 +348,9 @@ export const SprintStatsDeck: FunctionComponent<{
 
   if (!hasSprintContext) {
     return (
-      <div className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-        <WaveFluid accentHex="#00E0A0" />
-        <BorderTrace accentHex="#00E0A0" />
+      <div className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+
+
         <div className="relative z-10 flex min-h-[22rem] flex-col items-center justify-center text-center">
           <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-[1.3rem] border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.16)]">
             <Timer className="h-8 w-8" strokeWidth={1.4} />
@@ -368,9 +368,9 @@ export const SprintStatsDeck: FunctionComponent<{
   }
 
   return (
-    <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/80 p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-      <WaveFluid accentHex="#00E0A0" />
-      <BorderTrace accentHex="#00E0A0" />
+    <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+
+
 
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="dag-aurora absolute -left-20 top-8 h-56 w-56 rounded-full" style={{ background: 'radial-gradient(circle, rgba(0,224,160,0.08) 0%, transparent 70%)' }} />

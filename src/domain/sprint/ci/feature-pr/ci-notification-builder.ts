@@ -47,6 +47,16 @@ export function buildMergeConflictText(
   return reportText;
 }
 
+export function buildMergeConflictPendingText(
+  taskId: string,
+  prNumber: number,
+  targetBranch: string,
+): string {
+  let reportText = `⏳ **Feature PR Mergeability Pending:** Task \`${taskId}\` reported a transient conflict state (PR #${prNumber} -> \`${targetBranch}\`).\n`;
+  reportText += `   - Waiting for GitHub to finish recomputing mergeability before deciding — re-checking next cycle.\n`;
+  return reportText;
+}
+
 export function buildCiWaitSkippedText(baseBranch: string, reason: string): string {
   return `   - CI wait skipped for base \`${baseBranch}\`: ${reason}\n`;
 }

@@ -13,7 +13,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
 
     if (isLoading) {
         return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
                 <SkeletonCard />
                 <SkeletonCard />
                 <SkeletonCard />
@@ -23,7 +23,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
 
             {/* Card 1: Total Tokens */}
             <StatsCard

@@ -26,7 +26,24 @@ vi.mock("../../../src/services/git-branch-sync-service.js", () => ({
   syncRemoteBranchIfAvailable: vi.fn(),
 }));
 
+vi.mock("../../../src/services/cli-process-runner.js", () => ({
+  runCommandStrict: vi.fn().mockResolvedValue({ ok: true, stdout: "", stderr: "" }),
+}));
+
+vi.mock("../../../src/shared/subprocess/command-runner.js", () => ({
+  commandRunner: {
+    run: vi.fn().mockResolvedValue({ ok: true, stdout: "", stderr: "" }),
+  },
+}));
+
+vi.mock("../../../src/infrastructure/git/local-merge.js", () => ({
+  findRecoverableWorkerBranch: vi.fn(),
+}));
+
 import { syncRemoteBranchIfAvailable } from "../../../src/services/git-branch-sync-service.js";
+import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
+import { commandRunner } from "../../../src/shared/subprocess/command-runner.js";
+import { findRecoverableWorkerBranch } from "../../../src/infrastructure/git/local-merge.js";
 
 const tempDirs: string[] = [];
 
@@ -37,6 +54,101 @@ afterEach(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(syncRemoteBranchIfAvailable).mockResolvedValue(true);
+});
+
+describe("QualityAssuranceService.resolveReviewBranch", () => {
+  const makeService = (updateTaskRun = vi.fn()) =>
+    new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: { updateTaskRun } as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+  it("prefers the recorded worker branch on the task without recovering", async () => {
+    const service = makeService();
+    const branch = await (service as any).resolveReviewBranch({
+      task: { id: "T01", provider: "claude-code", worker_branch: "task/feature-x-t01-claude-code-abc" },
+      taskRun: { id: "run-1", workerBranch: null, provider: "claude-code" },
+      repoPath: "/repo",
+      featureBranch: "feature/x",
+      githubMode: "LOCAL",
+    });
+    expect(branch).toBe("task/feature-x-t01-claude-code-abc");
+    expect(findRecoverableWorkerBranch).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the latest run's worker branch when the task has none", async () => {
+    const service = makeService();
+    const branch = await (service as any).resolveReviewBranch({
+      task: { id: "T01", provider: "claude-code", worker_branch: undefined },
+      taskRun: { id: "run-1", workerBranch: "task/feature-x-t01-claude-code-def", provider: "claude-code" },
+      repoPath: "/repo",
+      featureBranch: "feature/x",
+      githubMode: "LOCAL",
+    });
+    expect(branch).toBe("task/feature-x-t01-claude-code-def");
+    expect(findRecoverableWorkerBranch).not.toHaveBeenCalled();
+  });
+
+  it("recovers the worker branch from local refs in LOCAL mode when metadata was lost", async () => {
+    vi.mocked(findRecoverableWorkerBranch).mockResolvedValue("task/feature-x-t01-claude-code-ghi");
+    const updateTaskRun = vi.fn();
+    const service = makeService(updateTaskRun);
+    const task: any = { id: "T01", provider: "claude-code", worker_branch: undefined };
+    const taskRun: any = { id: "run-1", workerBranch: null, provider: "claude-code" };
+
+    const branch = await (service as any).resolveReviewBranch({
+      task,
+      taskRun,
+      repoPath: "/repo",
+      featureBranch: "feature/x",
+      githubMode: "LOCAL",
+    });
+
+    expect(branch).toBe("task/feature-x-t01-claude-code-ghi");
+    expect(findRecoverableWorkerBranch).toHaveBeenCalledWith(
+      expect.objectContaining({ repoPath: "/repo", featureBranch: "feature/x" }),
+    );
+    // Backfilled onto the task and the run so the fix path / merge gate agree.
+    expect(task.worker_branch).toBe("task/feature-x-t01-claude-code-ghi");
+    expect(taskRun.workerBranch).toBe("task/feature-x-t01-claude-code-ghi");
+    expect(updateTaskRun).toHaveBeenCalledWith("run-1", { workerBranch: "task/feature-x-t01-claude-code-ghi" });
+  });
+
+  it("falls back to the feature branch when no worker branch with real work exists", async () => {
+    vi.mocked(findRecoverableWorkerBranch).mockResolvedValue(null);
+    const service = makeService();
+    const branch = await (service as any).resolveReviewBranch({
+      task: { id: "T04", provider: "qwen-code", worker_branch: undefined },
+      taskRun: { id: "run-4", workerBranch: null, provider: "qwen-code" },
+      repoPath: "/repo",
+      featureBranch: "feature/x",
+      githubMode: "LOCAL",
+    });
+    expect(branch).toBe("feature/x");
+    expect(findRecoverableWorkerBranch).toHaveBeenCalled();
+  });
+
+  it("does not attempt local-ref recovery in REMOTE mode", async () => {
+    const service = makeService();
+    const branch = await (service as any).resolveReviewBranch({
+      task: { id: "T01", provider: "claude-code", worker_branch: undefined },
+      taskRun: { id: "run-1", workerBranch: null, provider: "claude-code" },
+      repoPath: "/repo",
+      featureBranch: "feature/x",
+      githubMode: "REMOTE",
+    });
+    expect(branch).toBe("feature/x");
+    expect(findRecoverableWorkerBranch).not.toHaveBeenCalled();
+  });
 });
 
 describe("QualityAssuranceService", () => {
@@ -357,6 +469,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 1,
           },
         },
@@ -421,7 +535,7 @@ describe("QualityAssuranceService", () => {
     expect(providerRunner.runProviderForText).not.toHaveBeenCalled();
   });
 
-  it("does not rerun sprint QA after fixes when maxTaskReviewRuns is 1", async () => {
+  it("does not rerun sprint QA after fixes when maxSprintReviewRuns is 1", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-max-runs-"));
     tempDirs.push(dir);
     const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -474,7 +588,10 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 1,
+            maxSprintReviewRuns: 1,
           },
         },
       }),
@@ -639,6 +756,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 1,
           },
         },
@@ -684,6 +803,7 @@ describe("QualityAssuranceService", () => {
           runIndex: 3,
         }),
         countTaskRuns: vi.fn().mockReturnValue(3),
+        countDecisiveTaskRuns: vi.fn().mockReturnValue(3),
       } as any,
       taskService: {} as any,
       agentPresetSyncService: {} as any,
@@ -695,6 +815,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 3,
           },
         },
@@ -719,7 +841,10 @@ describe("QualityAssuranceService", () => {
     });
 
     expect(gate.mergeAllowed).toBe(false);
-    expect(gate.reason).toBe("changes_requested");
+    // At the retry cap with changes still outstanding the gate now reports
+    // exhaustion (not changes_requested) so the orchestrator applies the
+    // exhaustion policy instead of looping forever.
+    expect(gate.reason).toBe("retries_exhausted");
     expect(gate.runsUsed).toBe(3);
     expect(gate.maxRuns).toBe(3);
   });
@@ -741,6 +866,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns,
           },
         },
@@ -862,6 +989,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             taskCompletion: { enabled: false, agentPresetId: null },
             completedTaskWithoutPr: { enabled: true, agentPresetId: null },
           },
@@ -993,6 +1122,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 1,
           },
         },
@@ -1037,6 +1168,132 @@ describe("QualityAssuranceService", () => {
     expect(outcome.reviewed).toBe(true);
     expect(outcome.reportText).toContain("Follow-up fix verified");
     expect(qaReviewRepository.listRunsForTask(task.id)).toHaveLength(2);
+  });
+
+  it("does not force-pass a completed_task_without_pr when the verdict is changes_requested even if shouldHavePr is false", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-no-pr-changes-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "coding_completed",
+      isIndependent: true,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      state: "COMPLETED",
+      provider: "qwen-code",
+      sessionId: "session-1",
+      startedAt: "2026-06-13T20:40:00.000Z",
+      finishedAt: "2026-06-13T20:41:00.000Z",
+    });
+    const qaPreset = agentPresetRepository.createAgentPreset(project.id, {
+      name: "QA",
+      presetId: "QA-no-pr-changes",
+      instructionMarkdown: "QA Agent",
+    });
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        resolveTargetedQualityAssuranceAgent: async () => ({
+          id: qaPreset.id,
+          name: qaPreset.name,
+          instructionMarkdown: qaPreset.instructionMarkdown,
+        }),
+      } as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            maxTaskReviewRuns: 3,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+    // Reviewer says the work is wrong (changes_requested) yet also reports that no
+    // PR was needed. The changes_requested verdict must win — the task must reopen
+    // and stay merge-blocked, not be force-passed by `shouldHavePr === false`.
+    vi.spyOn(service as any, "runReview").mockResolvedValue({
+      verdict: "changes_requested",
+      summary: "The content of alpha.md does not match the required status line.",
+      findings: [],
+      fixInstructions: null,
+      targetTaskKey: "T1",
+      shouldHavePr: false,
+      followUpTasks: [],
+      raw: {},
+    });
+    vi.spyOn(service as any, "cleanupCliWorkspaceIfNeeded").mockResolvedValue(undefined);
+
+    const outcome = await service.reviewCompletedTask({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      task: {
+        record_id: task.id,
+        project_id: project.id,
+        sprint_id: sprint.id,
+        id: "T1",
+        title: "Initial task",
+        prompt: "Implement the initial feature.",
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+        provider: "qwen-code",
+        session_id: "session-1",
+        // No pr_url / worker_branch → resolves to the completed_task_without_pr trigger.
+      },
+      subtasks: [],
+    });
+
+    expect(outcome.reviewed).toBe(true);
+    expect(outcome.reopenedTask).toBe(true);
+    expect(outcome.mergeBlocked).toBe(true);
+    const latestRun = qaReviewRepository.getLatestTaskRun(task.id);
+    expect(latestRun?.triggerType).toBe("completed_task_without_pr");
+    expect(latestRun?.outcome).toBe("changes_requested");
   });
 
   it("recovers a running task QA review when the execution invocation never linked provider runtime", async () => {
@@ -1123,6 +1380,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 1,
           },
         },
@@ -1259,6 +1518,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 2,
           },
         },
@@ -1371,6 +1632,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 2,
           },
         },
@@ -1508,6 +1771,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 3,
             completedTaskWithoutPr: { enabled: true, agentPresetId: "QA-1" },
           },
@@ -1629,6 +1894,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             maxTaskReviewRuns: 3,
             completedTaskWithoutPr: { enabled: true, agentPresetId: "QA-1" },
           },
@@ -1920,6 +2187,254 @@ describe("QualityAssuranceService", () => {
     })).rejects.toThrow(
       "Cannot continue CLI QA fixes for T1: worker branch metadata is missing and resume workspace is missing for session session-1.",
     );
+  });
+
+  it("recovers worker branch from git branch listing and persists it when task metadata and resume workspace are missing", async () => {
+    const runProvider = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: "",
+      stderr: "",
+      text: "done",
+      usageTelemetry: {
+        transcriptText: "",
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        usageSource: "reported",
+        rawUsageJson: null,
+      },
+    });
+
+    const updateTaskMock = vi.fn();
+    const updateTaskRunMock = vi.fn();
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {
+        updateTask: updateTaskMock,
+        getSprint: vi.fn().mockReturnValue(null),
+      } as any,
+      executionRepository: {
+        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue(null),
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-followup" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-followup" }),
+        updateProviderInvocationUsage: vi.fn(),
+        updateTaskRun: updateTaskRunMock,
+        appendTaskRunEvent: vi.fn(),
+      } as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {
+        updateSession: vi.fn(),
+        appendActivity: vi.fn(),
+      } as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue(undefined),
+      } as any,
+      providerRunner: {
+        runProvider,
+        runProviderForText: vi.fn(),
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        git: {
+          ...DEFAULT_DASHBOARD_SETTINGS.git,
+          autoCreatePr: false,
+        },
+        memory: {
+          ...DEFAULT_DASHBOARD_SETTINGS.memory,
+          enabled: false,
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    vi.spyOn((service as any).workspaceManager, "resolveResumeWorktreePath").mockResolvedValue(undefined);
+    vi.spyOn((service as any).workspaceManager, "buildWorktreePath").mockReturnValue("docker-volume://session-1");
+    vi.spyOn((service as any).workspaceManager, "resolveCurrentBranch").mockResolvedValue(null);
+    vi.spyOn((service as any).workspaceManager, "fastForwardResumedWorkspace").mockResolvedValue(true);
+    const prepareWorktreeSpy = vi.spyOn((service as any).workspaceManager, "prepareWorktree").mockResolvedValue({ worktreePath: "docker-volume://session-1", resumed: false });
+    vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
+    vi.spyOn(service as any, "runWorkspaceCommand").mockResolvedValue({ stdout: "abc123\n", stderr: "" });
+    vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
+    vi.spyOn((service as any).prService, "hasUnpushedCommits").mockResolvedValue(false);
+    vi.spyOn((service as any).prService, "hasWorkerBranchCommitsAgainstFeature").mockResolvedValue(false);
+
+    vi.mocked(runCommandStrict).mockImplementation(async (cmd, args, cwd) => {
+      if (cmd === "git" && args.includes("branch")) {
+        return { ok: true, stdout: "  task/feature-sprint-1-T1-gemini-recovered\n", stderr: "" };
+      }
+      return { ok: true, stdout: "", stderr: "" };
+    });
+
+    const taskShape = {
+      id: "T1",
+      record_id: "task-record-1",
+      title: "Fix thing",
+      prompt: "Implement the fix",
+      depends_on: [],
+      is_independent: true,
+      status: "COMPLETED",
+    };
+
+    const taskRunShape = {
+      id: "task-run-123",
+      workerBranch: null,
+    };
+
+    await (service as any).continueCliTaskSession({
+      provider: "gemini",
+      sessionId: "session-1",
+      task: taskShape,
+      taskRun: taskRunShape,
+      repoPath: "/repo",
+      featureBranch: "feature/sprint-1",
+      scope: {
+        projectId: "project-1",
+        sprintId: "sprint-1",
+      },
+      followUpPrompt: "Address QA findings",
+    });
+
+    expect(prepareWorktreeSpy).toHaveBeenCalledWith("/repo", "docker-volume://session-1", "task/feature-sprint-1-T1-gemini-recovered", "feature/sprint-1", undefined, expect.any(Object));
+    expect(updateTaskRunMock).toHaveBeenCalledWith("task-run-123", { workerBranch: "task/feature-sprint-1-T1-gemini-recovered" });
+    expect(taskShape.worker_branch).toBe("task/feature-sprint-1-T1-gemini-recovered");
+    expect(taskRunShape.workerBranch).toBe("task/feature-sprint-1-T1-gemini-recovered");
+  });
+
+  it("recovers worker branch from PR metadata and persists it when task metadata and resume workspace are missing", async () => {
+    const runProvider = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: "",
+      stderr: "",
+      text: "done",
+      usageTelemetry: {
+        transcriptText: "",
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
+        totalTokens: 0,
+        usageSource: "reported",
+        rawUsageJson: null,
+      },
+    });
+
+    const updateTaskMock = vi.fn();
+    const updateTaskRunMock = vi.fn();
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {
+        updateTask: updateTaskMock,
+        getSprint: vi.fn().mockReturnValue(null),
+      } as any,
+      executionRepository: {
+        getLatestProviderInvocationUsageBySession: vi.fn().mockReturnValue(null),
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-followup" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-followup" }),
+        updateProviderInvocationUsage: vi.fn(),
+        updateTaskRun: updateTaskRunMock,
+        appendTaskRunEvent: vi.fn(),
+      } as any,
+      guardrailService: qaGuardrailStub(),
+      sessionTracking: {
+        updateSession: vi.fn(),
+        appendActivity: vi.fn(),
+      } as any,
+      qaReviewRepository: {} as any,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue(undefined),
+      } as any,
+      providerRunner: {
+        runProvider,
+        runProviderForText: vi.fn(),
+      } as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        git: {
+          ...DEFAULT_DASHBOARD_SETTINGS.git,
+          autoCreatePr: false,
+        },
+        memory: {
+          ...DEFAULT_DASHBOARD_SETTINGS.memory,
+          enabled: false,
+        },
+      }),
+      getGithubToken: () => "gh-token",
+      sendSessionMessage: async () => ({}),
+    });
+
+    vi.spyOn((service as any).workspaceManager, "resolveResumeWorktreePath").mockResolvedValue(undefined);
+    vi.spyOn((service as any).workspaceManager, "buildWorktreePath").mockReturnValue("docker-volume://session-1");
+    vi.spyOn((service as any).workspaceManager, "resolveCurrentBranch").mockResolvedValue(null);
+    vi.spyOn((service as any).workspaceManager, "fastForwardResumedWorkspace").mockResolvedValue(true);
+    const prepareWorktreeSpy = vi.spyOn((service as any).workspaceManager, "prepareWorktree").mockResolvedValue({ worktreePath: "docker-volume://session-1", resumed: false });
+    vi.spyOn((service as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("");
+    vi.spyOn(service as any, "runWorkspaceCommand").mockResolvedValue({ stdout: "abc123\n", stderr: "" });
+    vi.spyOn((service as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    vi.spyOn((service as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
+    vi.spyOn((service as any).prService, "hasUnpushedCommits").mockResolvedValue(false);
+    vi.spyOn((service as any).prService, "hasWorkerBranchCommitsAgainstFeature").mockResolvedValue(false);
+
+    vi.mocked(commandRunner.run).mockImplementation(async (cmd, args, options) => {
+      if (cmd === "git" && args.includes("remote") && args.includes("get-url")) {
+        return { ok: true, stdout: "https://github.com/org/repo.git\n", stderr: "" };
+      }
+      if (cmd === "gh" && args.includes("pr") && args.includes("list")) {
+        const prList = [
+          {
+            number: 1,
+            url: "https://github.com/org/repo/pull/1",
+            state: "OPEN",
+            headRefName: "task/feature-sprint-1-T1-gemini-pr-recovered",
+          }
+        ];
+        return { ok: true, stdout: JSON.stringify(prList), stderr: "" };
+      }
+      return { ok: true, stdout: "", stderr: "" };
+    });
+
+    const taskShape = {
+      id: "T1",
+      record_id: "task-record-1",
+      title: "Fix thing",
+      prompt: "Implement the fix",
+      depends_on: [],
+      is_independent: true,
+      status: "COMPLETED",
+      pr_url: "https://github.com/org/repo/pull/1",
+    };
+
+    const taskRunShape = {
+      id: "task-run-123",
+      workerBranch: null,
+    };
+
+    await (service as any).continueCliTaskSession({
+      provider: "gemini",
+      sessionId: "session-1",
+      task: taskShape,
+      taskRun: taskRunShape,
+      repoPath: "/repo",
+      featureBranch: "feature/sprint-1",
+      scope: {
+        projectId: "project-1",
+        sprintId: "sprint-1",
+      },
+      followUpPrompt: "Address QA findings",
+    });
+
+    expect(prepareWorktreeSpy).toHaveBeenCalledWith("/repo", "docker-volume://session-1", "task/feature-sprint-1-T1-gemini-pr-recovered", "feature/sprint-1", undefined, expect.any(Object));
+    expect(updateTaskRunMock).toHaveBeenCalledWith("task-run-123", { workerBranch: "task/feature-sprint-1-T1-gemini-pr-recovered" });
   });
 
   it("reuses an existing CLI QA follow-up workspace and syncs it with worker branch before running the fix", async () => {
@@ -2380,8 +2895,10 @@ describe("QualityAssuranceService", () => {
           agents: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents,
             qualityAssurance: {
-              ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
-              enabled: true,
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
             },
           },
         }),
@@ -2556,6 +3073,8 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            taskCompletion: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
+            completedTaskWithoutPr: { enabled: true, agentPresetId: typeof qaPreset !== "undefined" ? qaPreset.id : "qa-preset" },
           },
         },
       }),

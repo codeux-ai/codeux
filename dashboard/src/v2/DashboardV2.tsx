@@ -15,7 +15,7 @@ import { SectionDivider } from "./components/ui/SectionDivider.js";
 const OverviewTelemetry = lazy(() => import("./components/OverviewTelemetry.js").then(m => ({ default: m.OverviewTelemetry })));
 
 export const DashboardV2: FunctionComponent = () => {
-    const mainContentRef = useRef<HTMLDivElement>(null);
+    const mainContentRef = useRef<HTMLElement>(null);
     const pageData = useOverviewPageData();
     const prefersReducedMotion = useReducedMotion();
 
@@ -37,14 +37,14 @@ export const DashboardV2: FunctionComponent = () => {
     }, [prefersReducedMotion]);
 
     return (
-        <PageContainer containerRef={mainContentRef} padding="overview" className="gap-12 md:gap-24">
+        <PageContainer containerRef={mainContentRef} padding="overview" className="gap-12 md:gap-24" aria-label="Dashboard Overview">
             {/* Page Header */}
             <header className="flex flex-col md:flex-row items-start md:items-end justify-between w-full gap-6">
                 <div>
-                    <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-slate-900 dark:text-white mb-4 font-display leading-[0.95]">
+                    <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-white mb-2 font-display leading-[0.95]">
                         Overview.
                     </h1>
-                    <p className="text-base md:text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl leading-relaxed">
+                    <p className="text-sm md:text-base text-slate-500 dark:text-slate-500 font-medium max-w-xl leading-relaxed">
                         Real-time metrics and operational intelligence across your cluster.
                     </p>
                 </div>
@@ -69,15 +69,12 @@ export const DashboardV2: FunctionComponent = () => {
             {/* Main Grid */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-12 md:gap-24 flex-grow relative z-20">
                 {/* Sources and Tasks */}
-                <div className="xl:col-span-8 flex flex-col gap-24">
+                <div className="xl:col-span-8 flex flex-col gap-16">
                     <section aria-label="Sources" className="w-full relative">
-                        {/* Subtle signal glow — very restrained */}
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] rounded-full pointer-events-none -z-10" style={{ background: 'radial-gradient(circle, rgba(0,224,160,0.03) 0%, rgba(0,224,160,0.01) 40%, transparent 70%)' }} />
                         <SourcesGrid />
                     </section>
 
                     <section aria-label="Tasks" className="w-full relative">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-[130%] rounded-full pointer-events-none -z-10" style={{ background: 'radial-gradient(circle, rgba(255,184,0,0.03) 0%, rgba(255,184,0,0.01) 40%, transparent 70%)' }} />
                         <TasksList pageData={pageData} />
                     </section>
                 </div>

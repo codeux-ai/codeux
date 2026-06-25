@@ -63,7 +63,10 @@ export function useFocusTrap(
           containerRef.current.querySelectorAll(FOCUSABLE_SELECTOR)
         ) as HTMLElement[];
 
-        if (focusableElements.length === 0) return;
+        if (focusableElements.length === 0) {
+          event.preventDefault();
+          return;
+        }
 
         const first = focusableElements[0];
         const last = focusableElements[focusableElements.length - 1];
@@ -93,7 +96,11 @@ export function useFocusTrap(
       if (restoreFocus && triggerRef.current) {
         // Defer focus restoration to ensure element is re-enabled or DOM is updated
         const trigger = triggerRef.current;
-        window.setTimeout(() => trigger.focus(), 0);
+        window.setTimeout(() => {
+          if (trigger.isConnected) {
+            trigger.focus();
+          }
+        }, 0);
       }
     };
   }, [active]);

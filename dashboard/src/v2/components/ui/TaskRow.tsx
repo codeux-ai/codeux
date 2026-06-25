@@ -53,15 +53,15 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                 task.status === 'in_progress' ? 'bg-signal-500/10' :
                 'bg-slate-500/5 dark:bg-slate-500/10'
             }`}>
-                {task.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-status-green dark:text-status-green" strokeWidth={2} />}
-                {task.status === 'coding_completed' && <CheckCircle2 className="w-4 h-4 text-cyan-700 dark:text-cyan-500" strokeWidth={2} />}
+                {task.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-status-green dark:text-status-green" strokeWidth={2} aria-hidden="true" />}
+                {task.status === 'coding_completed' && <CheckCircle2 className="w-4 h-4 text-cyan-700 dark:text-cyan-500" strokeWidth={2} aria-hidden="true" />}
                 {task.status === 'in_progress' && (
                     <div className="relative flex items-center justify-center w-4 h-4">
                         <div className="absolute inset-0 rounded-full bg-signal-500 animate-[spin_3s_linear_infinite] opacity-30 shadow-[0_0_10px_rgba(0,224,160,0.6)] pointer-events-none" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%', clipPath: 'inset(-2px)' }} />
-                        <PlayCircle className="w-4 h-4 text-signal-600 dark:text-signal-500 relative z-10" strokeWidth={2} />
+                        <PlayCircle className="w-4 h-4 text-signal-600 dark:text-signal-500 relative z-10" strokeWidth={2} aria-hidden="true" />
                     </div>
                 )}
-                {task.status === 'pending' && <Circle className="w-4 h-4 text-slate-500 dark:text-slate-400" strokeWidth={2} />}
+                {task.status === 'pending' && <Circle className="w-4 h-4 text-slate-500 dark:text-slate-400" strokeWidth={2} aria-hidden="true" />}
 
                 <span className={`text-[9px] md:text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 ease-in-out ${
                     task.status === 'completed'   ? 'text-status-green dark:text-status-green' :
@@ -76,7 +76,8 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
             {/* Time / Actions */}
             <div className="hidden sm:flex col-span-2 items-center justify-end h-full relative overflow-hidden">
                 <div className="flex items-center gap-2 absolute right-0 transition-all duration-300 opacity-100 group-hover:opacity-0 group-hover:translate-x-3">
-                    <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" strokeWidth={2} />
+                    <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" strokeWidth={2} aria-hidden="true" />
+                    <span className="sr-only">Duration: </span>
                     <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{task.time}</span>
                 </div>
 
@@ -86,7 +87,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                         type="button"
                         className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95"
                         title={isRunning ? "Stop task" : "Rerun task"}
-                        aria-label={isRunning ? "Stop task" : "Rerun task"}
+                        aria-label={`${isRunning ? "Stop" : "Rerun"} task ${task.id}`}
                         aria-busy={busy}
                         disabled={busy || !onPlayStop}
                         onClick={(event) => {
@@ -100,7 +101,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                         href={`/tasks?sprint=${encodeURIComponent(task.sprintId)}`}
                         className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95"
                         title="Configure task"
-                        aria-label="Configure task"
+                        aria-label={`Configure task ${task.id}`}
                         onClick={(event: MouseEvent) => event.stopPropagation()}
                     >
                         <Settings className="w-3.5 h-3.5" />
@@ -109,7 +110,7 @@ export const TaskRow: FunctionComponent<TaskRowProps> = memo(({ task, state, onP
                         href="/live"
                         className="touch-target p-2 text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-status-green bg-transparent hover:bg-slate-100 dark:hover:bg-void-600 rounded-full transition-colors active:scale-95"
                         title="Open live session"
-                        aria-label="Open live session"
+                        aria-label={`Open live session for task ${task.id}`}
                         onClick={(event: MouseEvent) => event.stopPropagation()}
                     >
                         <Maximize2 className="w-3.5 h-3.5" />

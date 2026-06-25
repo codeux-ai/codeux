@@ -1,5 +1,8 @@
 import { type FunctionComponent } from "preact";
-import { useState } from "preact/hooks";
+import { useState, useRef, useLayoutEffect } from "preact/hooks";
+import gsap from "gsap";
+import { INTERACTION_TOKENS } from "../../../lib/motion/tokens.js";
+import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import { Brain, ChevronRight } from "lucide-preact";
 
 export interface ReasoningWidgetProps {
@@ -10,12 +13,23 @@ const PREVIEW_CHARS = 180;
 
 export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({ text }) => {
   const [expanded, setExpanded] = useState(false);
+  const contentRef = useRef<HTMLParagraphElement>(null);
+  const prefersReducedMotion = useReducedMotion();
+
+  useLayoutEffect(() => {
+    if (!contentRef.current) return;
+    const el = contentRef.current;
+    if (prefersReducedMotion) return;
+
+    // Animate opacity changes when text swaps, a simple and smooth transition
+    gsap.fromTo(el, { opacity: 0.5 }, { opacity: 1, duration: parseFloat(INTERACTION_TOKENS.expansionCollapse.duration) / 1000, ease: INTERACTION_TOKENS.expansionCollapse.ease });
+  }, [expanded, prefersReducedMotion]);
   const trimmed = (text || "").trim();
   const isLong = trimmed.length > PREVIEW_CHARS;
   const preview = isLong ? `${trimmed.slice(0, PREVIEW_CHARS).trimEnd()}…` : trimmed;
 
   return (
-    <div class="overflow-hidden rounded-xl border border-dashed border-black/[0.07] bg-black/[0.015] dark:border-white/[0.08] dark:bg-white/[0.015]">
+    <div class="overflow-hidden rounded-xl border border-dashed border-black/[0.04] dark:border-white/[0.04] bg-slate-50/50 dark:bg-white/[0.02]">
       <button
         type="button"
         disabled={!isLong}
@@ -34,9 +48,11 @@ export const ReasoningWidget: FunctionComponent<ReasoningWidgetProps> = ({ text 
         )}
       </button>
       <div class="px-3 pb-3 pt-0">
-        <p class="whitespace-pre-wrap text-[12.5px] italic leading-relaxed text-slate-500 dark:text-slate-400">
+        <div aria-expanded={expanded}>
+        <p ref={contentRef} class="whitespace-pre-wrap text-[12.5px] italic leading-relaxed text-slate-500 dark:text-slate-400">
           {expanded || !isLong ? trimmed : preview}
         </p>
+      </div>
       </div>
     </div>
   );

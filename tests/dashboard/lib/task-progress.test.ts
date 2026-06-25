@@ -183,4 +183,52 @@ describe("task progress phase", () => {
       },
     })).toBe("CODING_COMPLETED");
   });
+
+  it("resolves active provider cap wait in getLiveTaskProgressPhase", () => {
+    const task = {
+      id: "8",
+      title: "Capped task",
+      prompt: "",
+      depends_on: [],
+      is_independent: true,
+      status: "PENDING" as const,
+    };
+    const events = [
+      {
+        id: "evt-1",
+        scopeType: "task_run" as const,
+        projectId: "p1",
+        sprintId: "s1",
+        taskId: "8",
+        taskKey: "8",
+        taskTitle: "Capped task",
+        eventType: "provider_concurrency_wait",
+        createdAt: "2026-03-27T10:05:00.000Z",
+        payload: {
+          provider: "codex",
+          currentCount: 2,
+          limit: 2,
+        },
+      } as any,
+    ];
+
+    expect(getLiveTaskProgressPhase({
+      task,
+      dispatch: { status: "queued", taskRunState: "PENDING", finishedAt: null, workerBranch: null, prUrl: null },
+      events,
+    })).toBe("PENDING_cap_2_2");
+  });
+
+  it("reverts PENDING_cap prefix back to PENDING in getTaskProgressPhase for lane filtering compatibility", () => {
+    expect(
+      getTaskProgressPhase({
+        id: "9",
+        title: "Capped task status",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "PENDING_cap_2_2" as any,
+      }),
+    ).toBe("PENDING");
+  });
 });

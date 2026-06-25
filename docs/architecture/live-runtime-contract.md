@@ -56,3 +56,13 @@ The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned 
 
 9. **Automation Handoff Consistency:**
    When orchestration automatically approves a plan, answers a clarification, or resumes a paused task, the execution tables are updated immediately to clear the prior blocked/error dispatch state for that task run. This prevents stale "action required" warnings from surviving on Live task cards after automation has already taken ownership of the handoff.
+
+10. **Cache TTLs and Invalidation Policies:**
+    To guarantee real-time latency budgets, portions of the snapshot are aggressively cached by the `DashboardSnapshotCache`. Cache policies (TTLs and invalidation keys) are explicitly defined in `src/app/lifecycle/dashboard-snapshot-cache-policy.ts`. Current baseline TTLs are 500ms for global telemetry and 2s for project-level stats and execution snapshots. Cached snapshots are immutable to ensure safe concurrent reads without deep cloning.
+
+## 11. Optimistic UI and Accessibility Guidelines
+When the UI initiates an action (such as pausing a sprint, claiming an attention item, or rerunning a task), the client should rely on optimistic state markers to provide immediate feedback without waiting for the next snapshot. During these pending states, and for dynamic real-time areas:
+
+- **Pending Controls:** Action buttons must use `aria-disabled="true"` and `aria-busy="true"` (rather than simply `disabled="true"`) to prevent interaction while retaining focus visibility. A visually hidden element (`<span className="sr-only">`) should be embedded within the control to explain the pending state (e.g., "Pausing...").
+- **Dynamic Content:** Containers for realtime updates (such as event feeds, connection lists, and heartbeat timestamps) must implement `aria-live="polite"` so screen readers appropriately announce updates. Critical recovery or disconnection banners should use `aria-live="assertive"` or `role="alert"`.
+- **Status Tones:** Feedback surfaces and error boundaries must consistently use standardized T04 dashboard status tones and apply `aria-busy="true"` when in recovery modes.

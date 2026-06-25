@@ -80,4 +80,29 @@ describe("useStatsPageData", () => {
     expect(result.current.tokenSeries).toBe(initialTokenSeries);
     expect(result.current.providerSegments).toBe(initialProviderSegments);
   });
+
+  it("updates activeQuery when preset window is applied (range switch)", async () => {
+    const { result } = renderHook(() => useStatsPageData("proj-1"));
+
+    await act(async () => {
+      result.current.applyPresetWindow("24h");
+    });
+
+    expect(result.current.activeQuery).toEqual({ window: "24h" });
+  });
+
+  it("updates activeQuery when custom range is applied (range switch)", async () => {
+    const { result } = renderHook(() => useStatsPageData("proj-1"));
+
+    await act(async () => {
+      result.current.setCustomFrom("2023-10-01");
+      result.current.setCustomTo("2023-10-15");
+    });
+
+    await act(async () => {
+      result.current.applyCustomRange();
+    });
+
+    expect(result.current.activeQuery).toEqual({ window: "custom", from: "2023-10-01", to: "2023-10-15" });
+  });
 });

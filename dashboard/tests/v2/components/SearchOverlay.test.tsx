@@ -4,7 +4,8 @@ import { expect, describe, it, vi } from 'vitest';
 import { SearchOverlay } from '../../../src/v2/components/search/SearchOverlay';
 
 vi.mock('@tanstack/react-router', () => ({
-    useNavigate: () => vi.fn()
+    useNavigate: () => vi.fn(),
+    Link: ({ children }: any) => <a href="#">{children}</a>
 }));
 
 vi.mock('../../../src/v2/hooks/use-reduced-motion.js', () => ({

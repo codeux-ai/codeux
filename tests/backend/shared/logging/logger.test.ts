@@ -149,6 +149,29 @@ describe("createLogger", () => {
     await expect(fs.stat(logFilePath)).rejects.toMatchObject({ code: "ENOENT" });
     await fs.rm(dir, { recursive: true, force: true });
   });
+
+  it("redacts sensitive metadata keys", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({
+      environment: "production",
+      level: "debug",
+    });
+
+    logger.info("testing secrets", {
+      apiKey: "secret123",
+      nested: { token: "secret456", public: "ok" },
+      errors: [new Error("auth failed")]
+    });
+
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String(stderrSpy.mock.calls[0][0]));
+    expect(payload.metadata.apiKey).toBe("[REDACTED]");
+    expect(payload.metadata.nested.token).toBe("[REDACTED]");
+    expect(payload.metadata.nested.public).toBe("ok");
+    expect(payload.metadata.errors[0].name).toBe("Error");
+    expect(payload.metadata.errors[0].message).toBe("auth failed");
+    expect(payload.metadata.errors[0].stack).toBeDefined();
+  });
 });
 
 describe("correlationIdMiddleware", () => {

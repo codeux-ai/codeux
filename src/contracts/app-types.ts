@@ -372,6 +372,10 @@ export interface ExecutionUsageTotals {
   outputTokens: number;
   reasoningOutputTokens: number;
   totalTokens: number;
+  inputCostUsd: number;
+  outputCostUsd: number;
+  cachedInputCostUsd: number;
+  totalCostUsd: number;
   /** Total tool-style operations across the aggregated invocations. Optional so
    *  existing literal consumers stay valid; backend aggregators populate it. */
   toolCallCount?: number;
@@ -627,6 +631,12 @@ export interface AutomationInterventionsSettings {
   clarificationCooldownSeconds: number;
 }
 
+export interface TokenPricing {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+}
+
 export interface ProviderSettings {
   provider: ProviderId;
   name: string;
@@ -642,6 +652,7 @@ export interface ProviderSettings {
   /** Custom model identifier sent to the CLI when routing through a custom base URL (claude-code, codex). */
   customModel?: string;
   maxConcurrentTasks: number;
+  pricing?: TokenPricing;
   qwenAuthMode?: "LOCAL_AUTH" | "ALIBABA_CODING_PLAN" | "MODEL_PROVIDER";
   qwenRegion?: "china" | "international";
   qwenBaseUrl?: string;
@@ -715,6 +726,13 @@ export interface CiIntelligenceSettings {
   enableLivePrMonitoring: boolean;
   resolveAllCommentsBeforeMainMerge: boolean;
   resolveMainMergeConflicts: boolean;
+  /**
+   * When the final feature→default merge PR has failing CI checks, dispatch a
+   * worker to fix them (bounded by the `ci_fix` guardrail) instead of immediately
+   * pausing the sprint for a human. The sprint still escalates to a human once the
+   * worker exhausts its CI-fix attempts.
+   */
+  resolveMainMergeFailedChecks: boolean;
   resolveAllCommentsBeforeFeatureMerge: boolean;
   resolveMergeConflicts: boolean;
   waitForJulesCiAutofix: boolean;
@@ -726,8 +744,9 @@ export interface CiIntelligenceSettings {
 /**
  * Agent job types tracked and capped by the unified guardrail layer. A subset of
  * {@link ProviderInvocationPurpose} (execution-types.ts). `qa_review` is intentionally
- * excluded: QA review caps are handled by the dedicated `qaRunsCap` to avoid two
- * competing caps colliding with `agents.qualityAssurance.maxTaskReviewRuns`.
+ * excluded: QA review budgets are owned entirely by
+ * `agents.qualityAssurance.maxTaskReviewRuns` / `maxSprintReviewRuns`, so the
+ * guardrail layer never caps QA (this avoids two competing caps).
  */
 export type GuardrailJobType =
   | "task_coding"
@@ -753,9 +772,6 @@ export interface GuardrailSettings {
   /** Optional hard cap on total agent invocations per task across all job types. 0 = unlimited. */
   perTaskTotalCeiling: number;
   jobs: Record<GuardrailJobType, GuardrailJobConfig>;
-  /** Separate per-task QA-review cap. Distinct from agents.qualityAssurance.maxTaskReviewRuns. 0 = unlimited. */
-  qaRunsCap: number;
-  qaRunsOnLimit: GuardrailOnLimitAction;
 }
 
 export interface SprintLoopStepSettings {
@@ -836,9 +852,24 @@ export interface QualityAssuranceTriggerSettings {
   agentPresetId: string | null;
 }
 
+/**
+ * What to do with a code-complete task once its QA review budget is spent
+ * without ever earning a pass. Replaces the previous fail-closed-only behaviour
+ * with an explicit, configurable policy.
+ */
+export type QaExhaustionPolicy =
+  | "ESCALATE_TO_HUMAN" // hold in QA_REVIEW_FAILED + raise a human-attention item (fail closed)
+  | "FAIL_TASK" // mark the task FAILED and let the sprint move on
+  | "FINISH_TASK"; // mark the task COMPLETED despite no QA pass (fail open)
+
 export interface QualityAssuranceSettings {
   enabled: boolean;
+  /** Per-task QA review budget (Task QA Max Runs). 0 = unlimited. */
   maxTaskReviewRuns: number;
+  /** Sprint-completion QA review budget (Sprint QA Max Runs). 0 = unlimited. */
+  maxSprintReviewRuns: number;
+  /** What happens when a task exhausts its QA budget without a pass. */
+  exhaustionPolicy: QaExhaustionPolicy;
   taskCompletion: QualityAssuranceTriggerSettings;
   sprintCompletion: QualityAssuranceTriggerSettings;
   completedTaskWithoutPr: QualityAssuranceTriggerSettings;
@@ -1286,6 +1317,7 @@ export interface FileBrowserDiff {
   modified: string | null;
   binary: boolean;
   language: string | null;
+  truncated?: boolean;
 }
 
 export interface DashboardStatusSnapshot {

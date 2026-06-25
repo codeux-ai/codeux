@@ -24,6 +24,8 @@ import type { ExecutionHumanInterventionSummary } from "../../../../../src/contr
 import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js";
 import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { SprintControls } from "./SprintControls.js";
+import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useResolvedMotionDuration } from "../../hooks/use-reduced-motion.js";
 import { TableRow, TableCell } from "../ui/Table.js";
 import { getSprintStatusPresentation } from "../../lib/sprint-status-presentation.js";
 import { computeSprintActionMenuPosition } from "../../lib/sprint-menu-positioning.js";
@@ -147,7 +149,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
   const isPauseResumePending = pendingPauseResumeActionId.length > 0 && pendingActionIds.has(pendingPauseResumeActionId);
   const isPinPending = pendingActionIds.has(pinActionId);
   const isDeletePending = pendingActionIds.has(deleteActionId);
-  const isRowPending = isTogglePending || isPauseResumePending || isPinPending || isDeletePending;
+  // The menu icon only needs to show a loader if deleting/pinning. toggle and pause are shown in their own controls.
+  const isRowPending = isPinPending || isDeletePending;
+
+  const duration = useResolvedMotionDuration(INTERACTION_TOKENS.selectionMovement.duration);
+  const ease = INTERACTION_TOKENS.selectionMovement.ease;
 
   const rowTone = isSelected
     ? "border-signal-500/35 bg-signal-500/[0.08] shadow-[0_18px_44px_rgba(0,224,160,0.12)]"
@@ -179,17 +185,27 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
     badgeTone = attentionOverride.tone;
   }
 
+  const pendingRowClass = isDeletePending
+    ? "bg-status-red/5 grayscale opacity-50"
+    : isPinPending || isTogglePending || isPauseResumePending
+      ? "bg-signal-500/5 opacity-80"
+      : isAnyBulkPending
+        ? "opacity-60 grayscale-[0.2]"
+        : "";
+
   return (
     <TableRow
-      className={`group transition-all duration-300 hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${isDeletePending ? "grayscale opacity-50" : ""} hover:bg-[var(--bg-hover-subtle)]`}
+      className={`group transition-all hover:-translate-y-0.5 focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)]`}
+      style={{ transitionDuration: duration, transitionTimingFunction: ease }}
     >
       <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
-          disabled={isRowPending || isAnyBulkPending}
+          disabled={isDeletePending || isAnyBulkPending}
           className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-black/[0.06] bg-white/72 text-slate-400 transition-colors hover:border-signal-500/25 hover:text-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.07] dark:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
           title={isSelected ? "Deselect sprint" : "Select sprint"}
+          aria-label={isSelected ? `Deselect sprint ${sprint.name}` : `Select sprint ${sprint.name}`}
         >
           {isSelected
             ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
@@ -200,13 +216,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         <button
           type="button"
           onClick={() => onToggleShowcase(sprint)}
-          disabled={isPinPending}
+          disabled={isPinPending || isDeletePending}
           className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition-all focus-visible:ring-2 focus-visible:ring-signal-500/30 ${
             sprint.showcasePinned
               ? "border-status-red/20 bg-status-red/10 text-status-red shadow-[0_8px_20px_rgba(239,68,68,0.10)]"
               : "border-black/[0.06] bg-white/70 text-slate-400 hover:border-status-red/20 hover:text-status-red dark:border-white/[0.07] dark:bg-white/[0.04]"
           } disabled:cursor-not-allowed disabled:opacity-50`}
           title={sprint.showcasePinned ? "Remove from showcase" : "Pin to showcase"}
+          aria-label={sprint.showcasePinned ? `Remove sprint ${sprint.name} from showcase` : `Pin sprint ${sprint.name} to showcase`}
         >
           {isPinPending ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} />
@@ -215,15 +232,13 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           )}
         </button>
       </TableCell>
-      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Sprint ID</span>
+      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`} mobileLabel="Sprint ID">
         <div className="font-mono text-sm font-bold text-[var(--text-primary)] truncate">{formatSprintKey(sprint, sprintKeyPrefix)}</div>
         <div className="mt-1 text-[10px] font-bold text-slate-400 truncate">
           {shortenId(sprint.id)}
         </div>
       </TableCell>
-      <TableCell className={`min-w-0 max-w-full lg:w-[220px] lg:min-w-[220px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Sprint</span>
+      <TableCell className={`min-w-0 max-w-full lg:w-[220px] lg:min-w-[220px] ${desktopCellTone}`} mobileLabel="Sprint">
         <div className="flex flex-wrap items-center gap-2">
           <div className={`font-display text-lg font-black leading-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-[var(--text-primary)]"}`}>{sprint.name}</div>
           {sprint.latestReview && (
@@ -257,16 +272,32 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           </p>
         ) : null}
       </TableCell>
-      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
+      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`} mobileLabel="Status">
         <div className="flex flex-wrap items-center gap-2 lg:flex-col lg:items-start">
-          <span className="text-[10px] font-bold text-slate-400 lg:hidden">Status</span>
-          <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
-            {badgeLabel}
-          </span>
+          {isDeletePending ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-status-red/25 bg-status-red/10 px-3 py-1.5 text-[11px] font-bold text-status-red">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> Deleting
+            </span>
+          ) : isPinPending ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[11px] font-bold text-signal-700 dark:text-signal-300">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> Pinning
+            </span>
+          ) : isTogglePending ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[11px] font-bold text-signal-700 dark:text-signal-300">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> {activeRun ? "Stopping" : "Starting"}
+            </span>
+          ) : isPauseResumePending ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[11px] font-bold text-signal-700 dark:text-signal-300">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.2} /> {sprint.status === "paused" ? "Resuming" : "Pausing"}
+            </span>
+          ) : (
+            <span className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-bold ${badgeTone}`}>
+              {badgeLabel}
+            </span>
+          )}
         </div>
       </TableCell>
-      <TableCell align="right" className={`lg:w-[100px] lg:min-w-[100px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Tasks</span>
+      <TableCell align="right" className={`lg:w-[100px] lg:min-w-[100px] ${desktopCellTone}`} mobileLabel="Tasks">
         <div className="flex items-center gap-3 justify-end lg:block">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/70 text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04] lg:hidden">
             <ListChecks className="h-4 w-4" strokeWidth={2.2} />
@@ -277,8 +308,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           </div>
         </div>
       </TableCell>
-      <TableCell align="right" className={`min-w-[12rem] lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Completion</span>
+      <TableCell align="right" className={`min-w-[12rem] lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`} mobileLabel="Completion">
         <div className="flex items-center justify-end gap-3">
           <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10 ring-1 ring-black/[0.03] dark:bg-white/[0.08] dark:ring-white/[0.04]">
             <div
@@ -289,8 +319,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <span className="font-mono text-sm font-bold text-[var(--text-primary)]">{sprint.completion}%</span>
         </div>
       </TableCell>
-      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Created</span>
+      <TableCell className={`lg:w-[120px] lg:min-w-[120px] ${desktopCellTone}`} mobileLabel="Created">
         <div className="font-medium text-[var(--text-primary)]">
           {formatTableDate(sprint.createdAt)}
           <span className="ml-1.5 font-mono text-[10px] text-slate-400">{formatTableTime(sprint.createdAt)}</span>
@@ -312,8 +341,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           )}
         </div>
       </TableCell>
-      <TableCell align="right" isLast className={`lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`}>
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">Controls</span>
+      <TableCell align="right" isLast className={`lg:w-[140px] lg:min-w-[140px] ${desktopCellTone}`} mobileLabel="Controls">
         <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:whitespace-nowrap">
           <SprintControls
             isActive={Boolean(activeRun)}
@@ -322,9 +350,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             isPauseResumePending={isPauseResumePending}
             onStartStop={() => onSprintToggle(sprint.id)}
             onPauseResume={() => onSprintPauseResume(sprint.id)}
+            sprintName={sprint.name}
           />
           <a
             href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
+            aria-label={`Open sprint ${sprint.name}`}
             className="inline-flex h-10 min-w-[5rem] flex-1 items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/80 px-4 text-xs font-bold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white sm:flex-none"
           >
             Open
@@ -333,12 +363,12 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           {onOpenRowMenu ? (
             <button
               type="button"
-              disabled={isRowPending}
+              disabled={isDeletePending}
               onClick={(e) => onOpenRowMenu(e, sprint.id)}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-              title="Open sprint actions"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              title="Open sprint actions" aria-label={`Open actions menu for sprint ${sprint.name}`}
             >
-              {isRowPending ? (
+              {isDeletePending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2.2} />
               ) : (
                 <MoreVertical className="h-3.5 w-3.5" />
@@ -362,23 +392,24 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
                   isCompleted={isCompleted}
                   showcaseBusy={isPinPending}
                   markCompletedDisabled={false}
+                  deleteBusy={isDeletePending}
                   onToggleShowcase={() => onToggleShowcase(sprint)}
                   onClose={() => setMenuOpen(false)}
                   markCompletedIcon="square"
                   role="menuitem"
-                  buttonClassName="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                  buttonClassName="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white focus:outline-none"
                 />
               }
             >
               <button
                 type="button"
-                disabled={isRowPending}
+                disabled={isDeletePending}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                title="Open sprint actions"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-signal-500/30 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                title="Open sprint actions" aria-label={`Open actions menu for sprint ${sprint.name}`}
               >
-                {isRowPending ? (
+                {isDeletePending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-signal-500" strokeWidth={2.2} />
                 ) : (
                   <MoreVertical className="h-3.5 w-3.5" />

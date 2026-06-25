@@ -9,6 +9,7 @@ import { evaluateInProgressState } from "./feature-pr/in-progress-policy.js";
 import {
   buildCiWaitSkippedText,
   buildMergeConflictText,
+  buildMergeConflictPendingText,
   buildMergeConfirmedText,
   buildMergeReadyText,
   buildNoPrFoundText,
@@ -28,6 +29,7 @@ import type {
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
 import type { WorkerCiFixPayload } from "./feature-pr/ci-autofix-policy.js";
 import { evaluatePreCiGateTransition, isCompletedTaskAwaitingMerge, isTaskCodeComplete, taskHasMergeEvidence } from "../task-merge-state.js";
+import type { MergeConflictDebouncer } from "./merge-conflict-debouncer.js";
 import type { TaskQaMergeGateStatus } from "../../../services/quality-assurance-service.js";
 
 export interface CiGateContext {
@@ -49,6 +51,12 @@ export interface CiGateContext {
   openCiFixAttentionItems?: (items: Array<{ task: Subtask; payload: WorkerCiFixPayload }>) => void;
   hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
   evaluateTaskQaGate?: (task: Subtask) => TaskQaMergeGateStatus;
+  /**
+   * Debounces transient `DIRTY` PR states so a conflict is only acted on once it
+   * has persisted across cycles (see {@link MergeConflictDebouncer}). Shared with
+   * the protocol/attention layer so both agree on what counts as a real conflict.
+   */
+  mergeConflictDebouncer?: MergeConflictDebouncer;
   logger?: Logger;
 }
 
@@ -408,7 +416,15 @@ export class FeaturePrGateService {
       const sourceBranch = workerBranch || pr.headRefName || "the task worker branch";
       const qaGate = context.evaluateTaskQaGate?.(task);
 
-      if (pr.mergeStateStatus === "DIRTY") {
+      // A single `DIRTY` reading is not a reliable conflict signal — GitHub
+      // returns it transiently while recomputing mergeability after a push/base
+      // advance. Only treat it as a real conflict once it has persisted across
+      // cycles; until then keep the task waiting and re-check next cycle instead
+      // of escalating a phantom conflict.
+      const conflictConfirmed = context.mergeConflictDebouncer
+        ? context.mergeConflictDebouncer.observe(pr.url, pr.mergeStateStatus)
+        : pr.mergeStateStatus === "DIRTY";
+      if (conflictConfirmed) {
         task.status = "CODING_COMPLETED";
         task.merge_indicator = "MERGE_CONFLICT";
         await this.persistMergedTask(task, context);
@@ -420,6 +436,20 @@ export class FeaturePrGateService {
           sourceBranch,
           targetBranch: context.featureBranch,
         } });
+        return { reportText, events, attentionItem };
+      }
+      if (pr.mergeStateStatus === "DIRTY") {
+        // Suspected-but-unconfirmed conflict: hold in the CI-wait state so the gate
+        // re-evaluates next cycle once GitHub has settled the mergeable state.
+        task.status = "RUNNING";
+        task.merge_indicator = "CI";
+        await this.persistMergedTask(task, context);
+        events.push({ state: "merge_conflict_pending", payload: {
+          prNumber: pr.number,
+          prUrl: pr.url,
+          mergeStateStatus: pr.mergeStateStatus,
+        } });
+        reportText += buildMergeConflictPendingText(task.id, pr.number, context.featureBranch);
         return { reportText, events, attentionItem };
       }
 

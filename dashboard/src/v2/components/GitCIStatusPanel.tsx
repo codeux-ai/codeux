@@ -19,8 +19,9 @@ import {
 } from "lucide-preact";
 import { formatTime } from "../../lib/time.js";
 import type { GitTrackingStatus } from "../../types.js";
-import { BorderTrace } from "./ui/BorderTrace.js";
-import { WaveFluid } from "./ui/WaveFluid.js";
+
+
+import { getSafeUrl } from "../lib/safe-url.js";
 
 interface GitCIStatusPanelProps {
   status: GitTrackingStatus | null;
@@ -104,7 +105,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
 
   if (!status) {
     return (
-      <div role="status" aria-live="polite" className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/80 p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+      <div role="status" aria-live="polite" className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
         <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Loading git status...</span>
       </div>
     );
@@ -113,9 +114,9 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
   const activeCiCount = status.ciRuns.filter((run) => isActiveCiState(run.status) || isActiveCiState(run.conclusion)).length;
 
   return (
-    <div aria-live="polite" className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/80 p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-void-800/75 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-      <WaveFluid accentHex="#00E0A0" />
-      <BorderTrace accentHex="#00E0A0" />
+    <div aria-live="polite" className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white p-7 shadow-sm dark:border-white/[0.08] dark:bg-void-800">
+
+
 
       <div className="relative z-10 space-y-6">
         <div className="flex items-center justify-between gap-2">
@@ -182,9 +183,9 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                 return (
                   <a
                     key={pr.url}
-                    href={pr.url}
+                    href={getSafeUrl(pr.url)}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="group/pr block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 hover:bg-signal-500/[0.02] dark:border-white/[0.04] dark:bg-white/[0.015]"
                   >
                     <div className="mb-1 flex items-start justify-between gap-2">
@@ -225,9 +226,9 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                 return (
                   <a
                     key={`${run.id ?? run.url}`}
-                    href={run.url}
+                    href={getSafeUrl(run.url)}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -260,9 +261,9 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
               {status.mergedPullRequests.map((merged) => (
                 <a
                   key={merged.url}
-                  href={merged.url}
+                  href={getSafeUrl(merged.url)}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-status-green/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
                 >
                   <p className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">

@@ -13,6 +13,7 @@ import {
   MAX_MESSAGE_CONTENT_CHARS,
   truncateForStorage,
 } from "../../services/invocation-message-limits.js";
+import { isNotFoundError } from "../../integrations/jules-api-client.js";
 
 type GitMetrics = { insertions?: number; deletions?: number; filesChanged?: number } | null | undefined;
 
@@ -70,7 +71,22 @@ export class JulesUsageService {
         return;
       }
 
-      const activities = await this.julesClient.getFullConversation(sessionId);
+      const hasSafeContext = Boolean(passedPrompt || existingRecord);
+      let activities: JulesActivity[];
+      try {
+        activities = await this.julesClient.getFullConversation(sessionId);
+      } catch (error) {
+        if (isNotFoundError(error)) {
+          if (!hasSafeContext) {
+            this.logger.info("Skipping Jules usage telemetry for missing session (no existing prompt/record)", { sessionId });
+            return;
+          }
+          activities = [];
+        } else {
+          throw error;
+        }
+      }
+
       const resolved = await this.resolvePromptAndGitMetrics(sessionId, passedPrompt, gitMetrics);
 
       this.persist({
@@ -126,7 +142,11 @@ export class JulesUsageService {
         final: false,
       });
     } catch (error) {
-      this.logger.warn("Failed live Jules invocation sync", { error, sessionId });
+      if (isNotFoundError(error)) {
+        this.logger.debug("Live Jules session is not available (404), skipping live sync", { sessionId });
+      } else {
+        this.logger.warn("Failed live Jules invocation sync", { error, sessionId });
+      }
     }
   }
 
@@ -153,7 +173,11 @@ export class JulesUsageService {
           filesChanged = parseStat(pr.filesChanged);
         }
       } catch (err) {
-        this.logger.warn("Failed to fetch Jules session details", { sessionId, error: err });
+        if (isNotFoundError(err)) {
+          this.logger.debug("Failed to fetch Jules session details (404/not found)", { sessionId });
+        } else {
+          this.logger.warn("Failed to fetch Jules session details", { sessionId, error: err });
+        }
       }
     }
 

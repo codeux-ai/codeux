@@ -144,8 +144,7 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
           description="When enabled, dashboard edits write a companion markdown file under `.code-ux/agents` for the selected project. Default and home agent files are never modified."
           badge={getFieldBadge("agents.saveToProjectDirectory")}
         >
-          <Toggle
-            value={editableSettings.agents.saveToProjectDirectory}
+          <Toggle aria-label="Toggle setting"             value={editableSettings.agents.saveToProjectDirectory}
             onChange={() => updateEditableSettings((current) => ({
               ...current,
               agents: {

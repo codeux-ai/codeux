@@ -9,6 +9,8 @@ import { useReducedMotion } from "../../../dashboard/src/v2/hooks/use-reduced-mo
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/preact";
 import { PlanningProgressOverlay } from "../../../dashboard/src/v2/components/ui/PlanningProgressOverlay.js";
+import { ToastProvider, useToast } from "../../../dashboard/src/v2/components/feedback/ToastProvider.js";
+import { ActionFeedbackRegion } from "../../../dashboard/src/v2/components/ui/ActionFeedbackRegion.js";
 import { SkeletonRow, SkeletonCard, SkeletonPanel } from "../../../dashboard/src/v2/components/layout/SkeletonLoader.js";
 import { AvantgardeSelect } from "../../../dashboard/src/v2/components/ui/AvantgardeSelect.js";
 import { FilterStrip } from "../../../dashboard/src/v2/components/ui/FilterStrip.js";
@@ -16,6 +18,7 @@ import { SprintComposer } from "../../../dashboard/src/v2/components/ui/SprintCo
 import { KineticDock } from "../../../dashboard/src/v2/components/KineticDock.js";
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import { CollapsiblePanel } from "../../../dashboard/src/v2/components/ui/CollapsiblePanel.js";
+import { Menu } from "../../../dashboard/src/v2/components/ui/Menu.js";
 import { ExecutionTimelineProvider } from "../../../dashboard/src/hooks/ExecutionTimelineContext.js";
 import { ConfirmDialog } from "../../../dashboard/src/v2/components/ui/ConfirmDialog.js";
 import { RerunTaskModal } from "../../../dashboard/src/v2/components/ui/RerunTaskModal.js";
@@ -36,6 +39,7 @@ vi.mock("@tanstack/react-router", () => {
 });
 
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useResolvedMotionDuration: (d: any) => d,
   useReducedMotion: vi.fn().mockReturnValue(false)
 }));
 
@@ -69,6 +73,75 @@ global.ResizeObserver = class ResizeObserver {
 };
 
 describe("UI Components Coverage", () => {
+
+  describe("Feedback Components", () => {
+    it("handles toast overflow dismissal properly", () => {
+      vi.useFakeTimers();
+      const TestToast = () => {
+        const { addToast } = useToast();
+        return (
+          <button onClick={() => addToast({ type: 'success', message: 'Test message' })}>
+            Add
+          </button>
+        );
+      };
+
+      render(
+        <ToastProvider>
+          <TestToast />
+        </ToastProvider>
+      );
+
+      const btn = screen.getByText("Add");
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+      fireEvent.click(btn);
+
+      expect(screen.getAllByText("Test message")).toHaveLength(4);
+      act(() => { vi.advanceTimersByTime(500); });
+      vi.useRealTimers();
+    });
+
+    it("ensures persistent error retry action does not auto-dismiss", () => {
+      vi.useFakeTimers();
+      const TestToastError = () => {
+        const { addToast } = useToast();
+        return (
+          <button onClick={() => addToast({ type: 'error', message: 'Error message', action: { label: 'Retry', onClick: vi.fn() } })}>
+            Add Error
+          </button>
+        );
+      };
+
+      render(
+        <ToastProvider>
+          <TestToastError />
+        </ToastProvider>
+      );
+
+      const btn = screen.getByText("Add Error");
+      fireEvent.click(btn);
+      expect(screen.getByText("Error message")).toBeInTheDocument();
+
+      act(() => { vi.advanceTimersByTime(10000); });
+      expect(screen.getByText("Error message")).toBeInTheDocument();
+      vi.useRealTimers();
+    });
+
+    it("verifies inline feedback live-region semantics", () => {
+      const { rerender } = render(
+        <ActionFeedbackRegion status="success" message="Saved successfully" />
+      );
+
+      let regions = screen.getAllByRole("status");
+      expect(regions[0]).toHaveAttribute("aria-live", "polite");
+
+      rerender(<ActionFeedbackRegion status="error" message="Failed to save" />);
+      let alertRegions = screen.getAllByRole("alert");
+      expect(alertRegions[0]).toHaveAttribute("aria-live", "assertive");
+    });
+  });
 
   it("verifies ARIA state transitions in FilterStrip", () => {
     const options = [{ value: "1", label: "Opt 1" }, { value: "2", label: "Opt 2" }];
@@ -254,11 +327,40 @@ describe("UI Components Coverage", () => {
     const trigger = screen.getByRole("button", { name: /Test Panel/i });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
 
+    const panelContent = trigger.nextElementSibling;
+    expect(panelContent?.getAttribute("aria-hidden")).toBe("true");
+
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(panelContent?.getAttribute("aria-hidden")).toBe("false");
 
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(panelContent?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("handles Menu Escape focus restoration", () => {
+    const triggerRef = { current: null };
+    const { unmount } = render(
+      <Menu
+        isOpen={true}
+        onOpenChange={() => {}}
+        content={<button role="menuitem">Item</button>}
+        triggerRef={triggerRef as any}
+      >
+        <button ref={triggerRef as any}>Trigger</button>
+      </Menu>
+    );
+
+    // Simulate active element inside menu
+    const menuItem = screen.getByRole("menuitem");
+    menuItem.focus();
+
+    // Trigger escape
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    // Simulate cleanup which triggers focus restore
+    unmount();
   });
 
   it("renders SprintComposer", () => {

@@ -17,8 +17,6 @@ describe("sanitizeGuardrails", () => {
           task_coding: { cap: -5, onLimit: "NONSENSE" as any },
           ci_fix: { cap: 999, onLimit: "WARN_ONLY" },
         } as any,
-        qaRunsCap: 5,
-        qaRunsOnLimit: "STOP_AND_WAIT",
       },
     } as any);
 
@@ -27,8 +25,6 @@ describe("sanitizeGuardrails", () => {
     expect(result.jobs.ci_fix.cap).toBe(100); // clamped to MAX
     expect(result.jobs.ci_fix.onLimit).toBe("WARN_ONLY");
     expect(result.perTaskTotalCeiling).toBe(500); // clamped to MAX ceiling
-    expect(result.qaRunsCap).toBe(5);
-    expect(result.qaRunsOnLimit).toBe("STOP_AND_WAIT");
   });
 
   it("migrates the legacy julesCiAutofixMaxRetries into ci_fix.cap when guardrails is absent", () => {

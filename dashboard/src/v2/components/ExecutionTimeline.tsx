@@ -76,7 +76,11 @@ export const ExecutionTimeline: FunctionComponent<ExecutionTimelineProps> = memo
       <div className={collapsible ? `collapsible-section ${open ? "open" : ""}` : ""} id={contentId}>
         <div className={collapsible ? "collapsible-content relative z-10 px-5 pb-5 pt-0" : "relative z-10 px-5 pb-5 pt-0"}>
           {timelineEvents.length === 0 ? (
-            <p role="status" className="font-mono text-[11px] text-slate-400 dark:text-slate-600">No task run events recorded yet.</p>
+            <div role="status" className="flex flex-col items-center justify-center py-10 rounded-xl border border-black/[0.04] bg-black/[0.015] dark:border-white/[0.05] dark:bg-white/[0.015]">
+              <Workflow className="w-8 h-8 mb-3 opacity-40 text-signal-500" strokeWidth={1.5} />
+              <p className="text-sm font-bold tracking-tight text-slate-600 dark:text-slate-400">No runtime events yet</p>
+              <p className="text-xs mt-1 font-mono opacity-80 text-slate-500">Listening for execution activity...</p>
+            </div>
           ) : (
             <div className="max-h-72 overflow-y-auto pr-1 dashboard-scrollbar">
               <RuntimeEventFeed events={timelineEvents} />

@@ -33,7 +33,7 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
               type="button"
               onClick={() => setActiveTab(tab.id)}
               aria-pressed={isActive}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all ${
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
                 isActive
                   ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"

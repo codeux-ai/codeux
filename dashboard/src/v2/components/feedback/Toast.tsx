@@ -17,6 +17,8 @@ export interface ToastProps {
   type: ToastType;
   message: string;
   action?: ToastAction;
+  retryAction?: () => void;
+  retryLabel?: string;
   onDismiss: (id: string) => void;
   autoDismissMs?: number;
   className?: string;
@@ -42,6 +44,8 @@ export const Toast: FunctionComponent<ToastProps> = ({
   type,
   message,
   action,
+  retryAction,
+  retryLabel,
   onDismiss,
   autoDismissMs = 5000,
   className = "",
@@ -49,6 +53,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const actionButtonRef = useRef<HTMLButtonElement>(null);
+  const dismissButtonRef = useRef<HTMLButtonElement>(null);
   const reducedMotion = useReducedMotion();
   const Icon = icons[type];
   const colorClass = colors[type];
@@ -67,9 +72,6 @@ export const Toast: FunctionComponent<ToastProps> = ({
           duration: reducedMotion ? 0 : 0.4,
           ease: GSAP_EASINGS.smooth, // smooth easing curve
           onComplete: () => {
-            if (type === "error" && actionButtonRef.current) {
-              actionButtonRef.current.focus();
-            }
           }
         }
       );
@@ -91,6 +93,14 @@ export const Toast: FunctionComponent<ToastProps> = ({
   const handleDismiss = () => {
     if (!containerRef.current) return;
 
+    if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current) {
+      const fallback = document.querySelector('[role="main"]') || document.body;
+      (fallback as HTMLElement).focus();
+      if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current) {
+          (document.activeElement as HTMLElement)?.blur();
+      }
+    }
+
     gsap.to(containerRef.current, {
       opacity: 0,
       scale: 0.95,
@@ -110,16 +120,26 @@ export const Toast: FunctionComponent<ToastProps> = ({
   return (
     <div
       ref={containerRef}
-      role={type === "error" ? "alert" : "status"}
-      aria-live={type === "error" ? "assertive" : "polite"}
-      aria-atomic="true"
-      className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm p-4 rounded-xl shadow-lg border backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
+      className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm p-4 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
     >
       <Icon aria-hidden="true" className="w-5 h-5 shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium leading-relaxed dark:text-slate-200">
           {message}
         </p>
+        {retryAction && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              retryAction();
+              handleDismiss();
+            }}
+            className="mt-2 text-xs font-bold uppercase tracking-wider underline hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current rounded mr-3"
+          >
+            {retryLabel || "Retry"}
+          </button>
+        )}
         {action && (
           <button
             ref={actionButtonRef}
@@ -136,6 +156,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
         )}
       </div>
       <button
+        ref={dismissButtonRef}
         type="button"
         onClick={(e) => {
           e.preventDefault();

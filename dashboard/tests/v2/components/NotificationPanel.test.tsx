@@ -58,6 +58,7 @@ describe("NotificationPanel", () => {
     );
 
     expect(screen.getByLabelText("Notifications Panel")).toBeInTheDocument();
+    expect(screen.getByText("1 unread notification")).toBeInTheDocument();
     expect(screen.getByText("Cluster not ready")).toBeInTheDocument();
     expect(screen.queryByText("Deployment successful")).not.toBeInTheDocument();
 
@@ -70,5 +71,42 @@ describe("NotificationPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh notifications" }));
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores focus when an action button is clicked", () => {
+    const markAllRead = vi.fn();
+    const markRead = vi.fn();
+    const dismiss = vi.fn();
+    const refresh = vi.fn();
+    const action = vi.fn();
+
+    render(
+      <NotificationPanel
+        unreadCount={1}
+        notifications={[{
+          id: "startup-cluster-not-ready",
+          severity: "critical",
+          title: "Cluster not ready",
+          body: "Docker daemon must be available before containerized provider CLIs can run.",
+          time: "just now",
+          unread: true,
+          dismissible: false,
+          icon: AlertTriangle,
+          actionLabel: "Open onboarding",
+          onAction: action,
+        }]}
+        onMarkAllRead={markAllRead}
+        onMarkRead={markRead}
+        onDismiss={dismiss}
+        onRefresh={refresh}
+      />,
+    );
+
+    const actionBtn = screen.getByRole("button", { name: "Open onboarding" });
+    actionBtn.focus();
+    expect(document.activeElement).toBe(actionBtn);
+
+    fireEvent.click(actionBtn);
+    expect(document.activeElement).not.toBe(actionBtn);
   });
 });

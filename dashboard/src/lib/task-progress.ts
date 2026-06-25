@@ -1,6 +1,42 @@
-import type { ExecutionTaskDispatchSummary, Subtask } from "../types.js";
+import type { ExecutionRuntimeEventSummary, ExecutionTaskDispatchSummary, Subtask } from "../types.js";
 
-export type TaskProgressPhase = NonNullable<Subtask["status"]>;
+export type TaskProgressPhase = NonNullable<Subtask["status"]> | string;
+
+export interface ActiveConcurrencyWait {
+  provider: string;
+  currentCount: number;
+  limit: number;
+}
+
+export function findActiveConcurrencyWait(
+  events: ExecutionRuntimeEventSummary[] | undefined,
+  dispatchStatus?: string | null,
+): ActiveConcurrencyWait | null {
+  if (!events || events.length === 0) {
+    return null;
+  }
+  if (dispatchStatus && dispatchStatus !== "queued") {
+    return null;
+  }
+  let latest: ExecutionRuntimeEventSummary | null = null;
+  for (const event of events) {
+    if (event.eventType !== "provider_concurrency_wait") {
+      continue;
+    }
+    if (!latest || event.createdAt.localeCompare(latest.createdAt) > 0) {
+      latest = event;
+    }
+  }
+  if (!latest) {
+    return null;
+  }
+  const payload = latest.payload || {};
+  const provider = typeof payload.provider === "string" ? payload.provider : "";
+  const currentCount = typeof payload.currentCount === "number" ? payload.currentCount : 0;
+  const limit = typeof payload.limit === "number" ? payload.limit : 0;
+
+  return { provider, currentCount, limit };
+}
 
 const POST_CODING_RUNNING_INDICATORS = new Set([
   "CI",
@@ -74,6 +110,9 @@ function resolveRunningPostCodingPhase(
 
 export function getTaskProgressPhase(task: Subtask): TaskProgressPhase {
   const initialRawStatus = task.status || "PENDING";
+  if (initialRawStatus.startsWith("PENDING_cap_")) {
+    return "PENDING";
+  }
   const runningPostCodingPhase = resolveRunningPostCodingPhase(initialRawStatus, task.merge_indicator);
   if (runningPostCodingPhase) {
     return runningPostCodingPhase;
@@ -92,6 +131,7 @@ export interface LiveTaskProgressPhaseArgs {
   dispatch?: Pick<ExecutionTaskDispatchSummary, "status" | "taskRunState" | "finishedAt" | "workerBranch" | "prUrl"> | null;
   runtimeTerminalPhase?: TaskProgressPhase | null;
   runtimeMergeSettled?: boolean;
+  events?: ExecutionRuntimeEventSummary[];
 }
 
 function dispatchHasMergeEvidence(
@@ -150,6 +190,13 @@ function resolveTerminalExecutionPhase(
 }
 
 export function getLiveTaskProgressPhase(args: LiveTaskProgressPhaseArgs): TaskProgressPhase {
+  if (args.events) {
+    const activeCap = findActiveConcurrencyWait(args.events, args.dispatch?.status);
+    if (activeCap) {
+      return `PENDING_cap_${activeCap.currentCount}_${activeCap.limit}`;
+    }
+  }
+
   const initialRawStatus = resolveTerminalExecutionPhase(args.dispatch, args.runtimeTerminalPhase)
     ?? args.task.status
     ?? "PENDING";

@@ -160,15 +160,15 @@ describe("SprintLedger Component", () => {
       expect(screen.getByText("Alpha Design")).toBeInTheDocument();
     });
 
-    const checkboxes = screen.getAllByRole("button").filter(b => b.innerHTML.includes("lucide-square"));
+    const checkboxes = screen.getAllByRole("button", { name: /Select sprint/i });
 
     // Initial state: bulk actions not present (or at least no selection shown)
     expect(screen.queryByText(/1 of 2 selected/)).not.toBeInTheDocument();
 
     // Click first row's checkbox
-    fireEvent.click(checkboxes[1]); // This checks "Beta API" due to initial descending sort (date)
+    fireEvent.click(checkboxes[0]); // This checks "Beta API" due to initial descending sort (date)
     await waitFor(() => {
-      expect(screen.getByText(/1 of 2 selected/)).toBeInTheDocument();
+      expect(screen.getAllByText("Start", { selector: 'button' }).length).toBeGreaterThan(0);
     });
 
     // Perform bulk start
@@ -205,7 +205,7 @@ describe("SprintLedger Component", () => {
     // That means the Clear button is gone already. Let's select it again to test clear:
     fireEvent.click(checkboxes[1]);
     await waitFor(() => {
-      expect(screen.getByText(/1 of 2 selected/)).toBeInTheDocument();
+      expect(screen.getAllByText("Start", { selector: 'button' }).length).toBeGreaterThan(0);
     });
     const clearBtn = screen.getAllByText("Clear")[0];
     fireEvent.click(clearBtn);
@@ -243,7 +243,7 @@ describe("SprintLedger Component", () => {
 
     // In bulk pending mode, ALL row selection buttons should be disabled
     await waitFor(() => {
-      const selectAllBtn = screen.getByTitle("Select all visible");
+      const selectAllBtn = screen.getByTitle("Select all visible sprints");
       expect(selectAllBtn).toBeDisabled();
     });
 
@@ -254,7 +254,7 @@ describe("SprintLedger Component", () => {
     render(<SprintLedger {...defaultProps} pendingActionIds={specificPendingIds} />);
 
     await waitFor(() => {
-      const selectAllBtn = screen.getByTitle("Select all visible");
+      const selectAllBtn = screen.getByTitle("Select all visible sprints");
       expect(selectAllBtn).not.toBeDisabled();
 
       const rows = screen.getAllByRole("row");
@@ -264,11 +264,11 @@ describe("SprintLedger Component", () => {
       expect(lockedRow).toBeDefined();
       expect(unlockedRow).toBeDefined();
 
-      const lockedCheckbox = lockedRow!.querySelector("button");
-      const unlockedCheckbox = unlockedRow!.querySelector("button");
+      const lockedPinBtn = Array.from(lockedRow!.querySelectorAll("button")).find(b => b.getAttribute("aria-label")?.includes("showcase"));
+      const unlockedPinBtn = Array.from(unlockedRow!.querySelectorAll("button")).find(b => b.getAttribute("aria-label")?.includes("showcase"));
 
-      expect(lockedCheckbox).toBeDisabled();
-      expect(unlockedCheckbox).not.toBeDisabled();
+      expect(lockedPinBtn).toBeDisabled();
+      expect(unlockedPinBtn).not.toBeDisabled();
     });
   });
 

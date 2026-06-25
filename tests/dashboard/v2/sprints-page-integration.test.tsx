@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, screen, cleanup, waitFor } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintsPage } from "../../../dashboard/src/v2/pages/sprints/SprintsPage";
+import userEvent from "@testing-library/user-event";
 
 // @ts-expect-error Types are not required for test
 import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-sprints-page-data";
@@ -29,6 +30,16 @@ vi.mock("gsap", () => ({
 
 vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
   useProjectEffectiveSettings: vi.fn().mockReturnValue({ data: null, loading: false, error: null, refresh: vi.fn() }),
+}));
+
+vi.mock("../../../dashboard/src/v2/hooks/use-confirm-dialog.js", () => ({
+  useConfirmDialog: vi.fn().mockReturnValue({
+    isOpen: false,
+    options: {},
+    requestConfirm: vi.fn().mockResolvedValue(true),
+    handleConfirm: vi.fn(),
+    handleCancel: vi.fn()
+  }),
 }));
 
 vi.mock("@tanstack/react-router", async () => {
@@ -183,5 +194,59 @@ describe("SprintsPage Integration Regressions", () => {
     
     // Action menu trigger presence
     expect(screen.getAllByTitle("Open sprint actions")[0]).toBeInTheDocument();
+  });
+
+  it("shows disabled reasons on controls and presents destructive confirmation", async () => {
+    const handleDeleteSprint = vi.fn();
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      ...mockBaseData,
+      sortedSprints: [
+        { id: "sprint-3", number: 3, slug: "spr-03", name: "Sprint 3", status: "paused", tasksCount: 1, completion: 0, createdAt: "2026-06-01T12:00:00Z", updatedAt: "2026-06-01T12:00:00Z", projectId: "proj-1" }
+      ],
+      pendingActionIds: new Set(["sprint-resume:run-123", "sprint-delete:sprint-3"]),
+      activeRunsBySprintId: new Map(),
+      pauseResumeRunsBySprintId: new Map([["sprint-3", { id: "run-123", status: "paused" }]]),
+      handleDeleteSprint,
+    } as any);
+
+    render(<SprintsPage />);
+
+    // SprintControls disable states check
+    const resumeBtn = screen.getByRole('button', { name: /Resuming/i });
+    expect(resumeBtn).toBeDisabled();
+    expect(resumeBtn).toHaveAttribute('title', 'Wait for the current action to finish');
+
+    // For the row menu
+    const moreTrigger = screen.getAllByRole("button", { name: /Open actions menu for sprint/i })[0];
+    expect(moreTrigger).toBeDisabled(); // the trigger is disabled when isRowPending (isDeletePending)
+  });
+
+  it("handles row action menu keyboard behavior and bulk selection feedback correctly", async () => {
+    const handleClearSelected = vi.fn();
+
+    vi.mocked(useSprintsPageData).mockReturnValue({
+      ...mockBaseData,
+      sortedSprints: [
+        { id: "sprint-4", number: 4, slug: "spr-04", name: "Sprint 4", status: "queued", tasksCount: 1, completion: 0, createdAt: "2026-06-01T12:00:00Z", updatedAt: "2026-06-01T12:00:00Z", projectId: "proj-1" }
+      ],
+      selectedSprintIds: new Set(["sprint-4"]),
+      handleClearSelected,
+    } as any);
+
+    render(<SprintsPage />);
+
+    // Check bulk action feedback
+    const clearBtn = screen.getByRole('button', { name: /Clear/i });
+    expect(clearBtn).toBeInTheDocument();
+    expect(clearBtn.className).toContain("focus-visible:ring-offset-2");
+
+    // Check row action menu focus behavior by opening it
+    const moreTrigger = screen.getAllByRole("button", { name: /Open actions menu for sprint/i })[0];
+    await userEvent.click(moreTrigger);
+
+    const editBtn = await screen.findByRole('button', { name: /Edit/i });
+
+    expect(editBtn.className).toContain("focus-visible:ring-offset-2");
   });
 });

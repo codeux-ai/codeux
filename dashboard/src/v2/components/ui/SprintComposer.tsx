@@ -28,15 +28,32 @@ import { getPlanningFeedback, type PlanningActionType, PLANNING_ACTION_LABELS } 
 import { PlanningProgressOverlay } from "./PlanningProgressOverlay.js";
 import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
-import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import type { ImprovePromptInput } from "../../types.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 import { JiraIcon } from "../icons/JiraIcon.js";
 import { AgentSelectAvatarIcon } from "../agents/AgentSelectAvatarIcon.js";
+import { getSafeUrl } from "../../lib/safe-url.js";
+import { ProviderBrandIcon } from "../providers/ProviderBrandIcon.js";
+import type { ProviderId } from "../../types.js";
+
+interface VirtualProviderOption {
+  id?: string;
+  providerConfigId?: string;
+  provider?: string;
+  label?: string;
+  displayLabel?: string;
+  iconProviderId?: ProviderId;
+  effectiveModel?: string;
+}
 
 interface SprintComposerProps {
   nextId: string;
   initialSprint?: Sprint | null;
-  virtualProviders: Array<{ id: VirtualWorkerProvider; label: string }>;
+  virtualProviders: VirtualProviderOption[];
+  defaultRouteOptionLabel?: string;
+  defaultModelOptionLabel?: string;
+  defaultRouteIconProviderId?: ProviderId | null;
   planningPresets: AgentPreset[];
   agentPresets?: AgentPreset[];
   defaultPlanningAgentPresetId?: string | null;
@@ -59,6 +76,7 @@ interface SprintComposerProps {
     clientRequestId?: string;
     sprintKeyOverride?: string;
     signal?: AbortSignal;
+    shouldHandleResult?: () => boolean;
   }) => Promise<void> | void;
   onCancelPlanningRequest?: (clientRequestId: string) => Promise<void> | void;
   onStartNewSprint?: () => void;
@@ -71,6 +89,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   nextId,
   initialSprint = null,
   virtualProviders,
+  defaultRouteOptionLabel = "Default Route",
+  defaultModelOptionLabel = "Default Model",
+  defaultRouteIconProviderId = null,
   planningPresets,
   agentPresets,
   defaultPlanningAgentPresetId = null,
@@ -101,6 +122,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [isImproving, setIsImproving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { feedback: actionFeedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
+  const [touchedName, setTouchedName] = useState(false);
+  const [touchedGoal, setTouchedGoal] = useState(false);
+  const reducedMotion = useReducedMotion();
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
 
@@ -262,7 +286,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     activeRequestRef.current = null;
     setIsImproving(false);
     setIsSubmitting(false);
-    clearFeedback();
+    setError("Planning request cancelled.", { autoDismiss: true });
     if (previousFocusRef.current) {
       const el = previousFocusRef.current;
       setTimeout(() => el.focus(), 0);
@@ -274,9 +298,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       activeRequestRef.current.detached = true;
       ignoredRequestIdsRef.current.add(activeRequestRef.current.id);
     }
-    if (abortRef.current) {
-      abortRef.current = null;
-    }
+    activeRequestRef.current = null;
+    abortRef.current = null;
     setIsImproving(false);
     setIsSubmitting(false);
     setIsOverlayDismissed(true);
@@ -286,7 +309,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   };
 
   const handleImprovePrompt = async (): Promise<void> => {
-    if (!onImprovePrompt || !state.name.trim() || !state.goal.trim()) {
+    if (!onImprovePrompt) return;
+    if (!state.name.trim() || !state.goal.trim()) {
+      state.setHasAttemptedSubmit(true);
+      state.setHasAttemptedImprove(true);
       return;
     }
     previousFocusRef.current = document.activeElement as HTMLElement | null;
@@ -295,8 +321,17 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     activeRequestRef.current = { id: clientRequestId, detached: false, cancelled: false };
     const controller = new AbortController();
     abortRef.current = controller;
+    const shouldHandleResult = (): boolean => {
+      const activeRequest = activeRequestRef.current;
+      return !isUnmountedRef.current
+        && !!activeRequest
+        && activeRequest.id === clientRequestId
+        && !activeRequest.detached
+        && !activeRequest.cancelled;
+    };
     setIsImproving(true);
     clearFeedback();
+    setPending(PLANNING_ACTION_LABELS.improve);
     try {
       const improvedGoal = await onImprovePrompt({
         name: state.name.trim(),
@@ -305,10 +340,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         planningAgentPresetId: state.planningAgentPresetId || undefined,
         overrides: toPlanningOverrides(state.routeOverride, state.modelOverride, state.planningAgentPresetId),
       });
-      const activeRequest = activeRequestRef.current;
-      if (!activeRequest || (activeRequest.id === clientRequestId && !activeRequest.detached && !activeRequest.cancelled)) {
+      if (shouldHandleResult()) {
         state.setGoal(improvedGoal);
         state.setOriginalPrompt(rawPrompt);
+        setSuccess("Prompt refined");
       }
     } catch (error) {
       const activeRequest = activeRequestRef.current;
@@ -323,7 +358,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         setError(error instanceof Error ? error.message : String(error), { retryAction: handleImprovePrompt, retryLabel: "Retry Improve", autoDismiss: false });
       }
     } finally {
-      abortRef.current = null;
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       const activeRequest = activeRequestRef.current;
       if (activeRequest?.id === clientRequestId) {
         activeRequestRef.current = null;
@@ -342,6 +379,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
     if (!state.name.trim()) {
+      state.setHasAttemptedSubmit(true);
       return;
     }
 
@@ -355,8 +393,18 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     activeRequestRef.current = { id: clientRequestId, detached: false, cancelled: false };
     const controller = new AbortController();
     abortRef.current = controller;
+    const shouldHandleResult = (): boolean => {
+      const activeRequest = activeRequestRef.current;
+      return !isUnmountedRef.current
+        && !!activeRequest
+        && activeRequest.id === clientRequestId
+        && !activeRequest.detached
+        && !activeRequest.cancelled;
+    };
     setIsSubmitting(true);
     clearFeedback();
+    const actionType = state.submitMode === "plan_only" ? "plan_only" : state.submitMode === "replan" ? "replan" : "plan_and_start";
+    setPending(PLANNING_ACTION_LABELS[actionType]);
     try {
       await onSubmit({
         name: state.name.trim(),
@@ -371,9 +419,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         linkedIssues: visibleLinkedIssues,
         clientRequestId,
         sprintKeyOverride: state.sprintKeyOverride.trim() || undefined,
+        signal: controller.signal,
+        shouldHandleResult,
       });
-      const activeRequest = activeRequestRef.current;
-      if (!isUnmountedRef.current && activeRequest?.id === clientRequestId && !activeRequest.detached && !activeRequest.cancelled) {
+      if (shouldHandleResult()) {
         onClose();
       }
     } catch (error) {
@@ -389,7 +438,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         setError(error instanceof Error ? error.message : String(error), { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry Request", autoDismiss: false });
       }
     } finally {
-      abortRef.current = null;
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       const activeRequest = activeRequestRef.current;
       if (activeRequest?.id === clientRequestId) {
         activeRequestRef.current = null;
@@ -416,15 +467,38 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     })),
     ...virtualProviders.map(v => ({
       type: 'virtual' as const,
-      id: v.id,
-      label: v.label,
-      provider: v.id,
+      id: v.providerConfigId || v.id || v.provider || "",
+      label: v.displayLabel || v.label || v.providerConfigId || v.id || v.provider || "Provider",
+      provider: v.providerConfigId || v.id || v.provider,
+      iconProviderId: v.iconProviderId || (v.provider as ProviderId | undefined) || (v.id as ProviderId | undefined),
+      effectiveModel: v.effectiveModel,
     }))
   ];
 
   const currentRoute = state.routeOverride || null;
   const showModelOverride = currentRoute?.type === 'virtual';
-  const modelOptions = currentRoute?.provider ? getProviderModelOptions(currentRoute.provider) : [];
+  const modelProviderId = currentRoute?.iconProviderId;
+  const modelOptions = modelProviderId ? getProviderModelOptions(modelProviderId) : [];
+  const defaultModelLabel = currentRoute?.effectiveModel
+    ? `Default Model (${currentRoute.effectiveModel})`
+    : defaultModelOptionLabel;
+  const renderProviderIcon = (providerId: ProviderId) => (
+    <ProviderBrandIcon id={providerId} className="h-5 w-5 rounded-md" imageClassName="h-3 w-3" />
+  );
+  const renderConnectedRouteIcon = () => (
+    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-slate-500/18 bg-slate-500/[0.08] text-slate-600 dark:border-slate-300/18 dark:bg-slate-300/[0.08] dark:text-slate-300">
+      <Workflow className="h-3.5 w-3.5" strokeWidth={2.2} />
+    </span>
+  );
+
+  useEffect(() => {
+    if (!state.modelOverride) {
+      return;
+    }
+    if (!showModelOverride || !modelOptions.some((option) => option.value === state.modelOverride)) {
+      state.setModelOverride(null);
+    }
+  }, [modelOptions, showModelOverride, state.modelOverride]);
 
   const isDark = document.documentElement.classList.contains("dark");
 
@@ -497,7 +571,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
           </div>
 
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-3">
-            <div className="group rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 transition-colors focus-within:bg-white dark:border-white/[0.06] dark:bg-white/[0.03] dark:focus-within:bg-black/[0.05]">
+            <div className="group rounded-xl border border-black/[0.06] bg-black/[0.025] p-3 transition-colors focus-within:bg-white dark:border-white/[0.06] dark:bg-white/[0.03] dark:focus-within:bg-black/[0.05]">
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Key</div>
               <input
                 type="text"
@@ -510,7 +584,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               />
             </div>
 
-            <div className={`rounded-[1.4rem] border p-4 transition-all ${
+            <div className={`rounded-xl border p-3 transition-all ${
               isBusy ? "border-black/[0.06] bg-black/[0.025] opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03]" : "border-black/[0.06] bg-black/[0.025] dark:border-white/[0.06] dark:bg-white/[0.03]"
             }`}>
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Route</div>
@@ -525,10 +599,24 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     state.setRouteOverride(opt || null);
                   }}
                   options={[
-                    { value: "", label: "Default Route" },
-                    ...routeOptions.map(opt => ({ value: opt.id, label: opt.label })),
+                    {
+                      value: "",
+                      label: defaultRouteOptionLabel,
+                      icon: defaultRouteIconProviderId
+                        ? () => renderProviderIcon(defaultRouteIconProviderId)
+                        : undefined,
+                    },
+                    ...routeOptions.map(opt => ({
+                      value: opt.id,
+                      label: opt.label,
+                      icon: opt.type === "virtual" && opt.iconProviderId
+                        ? () => renderProviderIcon(opt.iconProviderId!)
+                        : opt.type === "connected"
+                          ? renderConnectedRouteIcon
+                          : undefined,
+                    })),
                   ]}
-                  placeholder="Default Route"
+                  placeholder={defaultRouteOptionLabel}
                 />
               </div>
             </div>
@@ -540,34 +628,68 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             }`}>
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Model Override</div>
               <div className="mt-2">
-                <AvantgardeSelect
-                  variant="compact"
-                  aria-label="Model Override"
-                  disabled={!showModelOverride || isBusy}
-                  value={state.modelOverride || ""}
-                  onChange={(val) => state.setModelOverride(val || null)}
-                  options={[
-                    { value: "", label: "Default Model" },
-                    ...modelOptions.map(opt => ({ value: opt.value, label: opt.label })),
-                  ]}
-                  placeholder="Default Model"
-                />
+                {(() => {
+                  const showModelError = (state.hasAttemptedSubmit || state.hasAttemptedImprove) && showModelOverride && !state.modelOverride;
+                  return (
+                    <AvantgardeSelect
+                      variant="compact"
+                      aria-label="Model Override"
+                      disabled={!showModelOverride || isBusy}
+                      invalid={showModelError}
+                      value={state.modelOverride || ""}
+                      onChange={(val) => state.setModelOverride(val || null)}
+                      options={[
+                        {
+                          value: "",
+                          label: defaultModelLabel,
+                          icon: modelProviderId
+                            ? () => renderProviderIcon(modelProviderId)
+                            : undefined,
+                        },
+                        ...modelOptions.map(opt => ({
+                          value: opt.value,
+                          label: opt.label,
+                          icon: modelProviderId
+                            ? () => renderProviderIcon(modelProviderId)
+                            : undefined,
+                        })),
+                      ]}
+                      placeholder={defaultModelLabel}
+                    />
+                  );
+                })()}
               </div>
             </div>
           </div>
 
           <label data-composer-stagger className="mt-8 block space-y-2">
             <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Name</span>
-            <input
-              type="text"
-              value={state.name}
-              onInput={(event) => state.setName((event.target as HTMLInputElement).value)}
-              disabled={isBusy}
-              placeholder="Runtime hardening"
-              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
-              required
-              autoFocus
-            />
+            {(() => {
+              const showNameError = (touchedName || state.hasAttemptedSubmit) && !state.name.trim();
+              return (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={state.name}
+                    onInput={(event) => state.setName((event.target as HTMLInputElement).value)}
+                    onBlur={() => setTouchedName(true)}
+                    disabled={isBusy}
+                    aria-invalid={showNameError ? "true" : "false"}
+                    placeholder="Runtime hardening"
+                    className={`w-full border-0 border-b-2 bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:text-[1.9rem] ${
+                      showNameError
+                        ? "border-ember-500 text-ember-600 placeholder:text-ember-300 focus:border-ember-500 dark:border-ember-500 dark:text-ember-400 dark:placeholder:text-ember-800"
+                        : "border-black/[0.08] text-slate-900 placeholder:text-slate-200 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700"
+                    } ${showNameError && !reducedMotion ? "animate-form-shake" : ""}`}
+                    required
+                    autoFocus
+                  />
+                  {showNameError && (
+                    <div className="absolute -bottom-6 left-0 text-[11px] font-bold text-ember-600 dark:text-ember-400">Sprint name is required</div>
+                  )}
+                </div>
+              );
+            })()}
           </label>
 
           <div data-composer-stagger className="mt-8 space-y-3">
@@ -576,7 +698,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               <button
                 type="button"
                 onClick={() => { void handleImprovePrompt(); }}
-                disabled={isBusy || !state.name.trim() || !state.goal.trim()}
+                disabled={isBusy}
                 aria-busy={isImproving}
                 className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/[0.14] disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300"
               >
@@ -625,9 +747,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                             </h3>
                           </div>
                           <a
-                            href={issue.url}
+                            href={getSafeUrl(issue.url)}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-black/[0.05] hover:text-slate-900 dark:hover:bg-white/[0.06] dark:hover:text-white"
                             aria-label={`Open ${issue.title}`}
                           >
@@ -672,13 +794,29 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     ? "border-black/[0.07] bg-black/[0.025] opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03]"
                     : "border-black/[0.07] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.03]"
               }`}>
-                <textarea
-                  value={state.goal}
-                  onInput={(event) => state.setGoal((event.target as HTMLTextAreaElement).value)}
-                  disabled={isBusy}
-                  placeholder="Describe the outcome, affected systems, and what done looks like when this sprint lands."
-                  className="min-h-[220px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300 disabled:cursor-not-allowed dark:text-slate-300 dark:placeholder:text-slate-600 sm:min-h-[260px] sm:px-5"
-                />
+                {(() => {
+                  const showGoalError = (touchedGoal || state.hasAttemptedImprove) && !state.goal.trim();
+                  return (
+                    <div className="relative h-full">
+                      <textarea
+                        value={state.goal}
+                        onInput={(event) => state.setGoal((event.target as HTMLTextAreaElement).value)}
+                        onBlur={() => setTouchedGoal(true)}
+                        disabled={isBusy}
+                        aria-invalid={showGoalError ? "true" : "false"}
+                        placeholder="Describe the outcome, affected systems, and what done looks like when this sprint lands."
+                        className={`min-h-[220px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed outline-none disabled:cursor-not-allowed sm:min-h-[260px] sm:px-5 ${
+                          showGoalError
+                            ? "text-ember-600 placeholder:text-ember-300 dark:text-ember-400 dark:placeholder:text-ember-800"
+                            : "text-slate-700 placeholder:text-slate-300 dark:text-slate-300 dark:placeholder:text-slate-600"
+                        } ${showGoalError && !reducedMotion ? "animate-form-shake" : ""}`}
+                      />
+                      {showGoalError && (
+                        <div className="absolute bottom-2 right-4 text-[11px] font-bold text-ember-600 dark:text-ember-400">Prompt is required to plan</div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {state.originalPrompt && (
@@ -803,7 +941,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                       {PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress..."}
                     </div>
                     <div className="mt-0.5 text-[10px] text-signal-600/70 dark:text-signal-400/70">
-                      {Math.floor(elapsedMs / 60000)}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed
+                      {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed
                     </div>
                   </div>
                 </button>
@@ -811,7 +949,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             )}
             <button
               type="submit"
-              disabled={isBusy || !state.name.trim()}
+              disabled={isBusy}
               aria-busy={isSubmitting}
               className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-void-900"
             >

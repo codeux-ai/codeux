@@ -1,5 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
+import { resolveConfiguredPath } from "./cli-docker-utils.js";
 
 export type SprintPreviewPackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
@@ -237,14 +238,50 @@ export function buildGeneratedSprintPreviewScript(): string {
     "}",
     "trap cleanup_preview_runtime EXIT INT TERM",
     "",
+    "# Dependency/build caching. node_modules and build output live in the per-sprint",
+    "# Docker volume, which survives container removal and dashboard restarts. We only",
+    "# re-run install when the dependency manifests change, and only re-run the build when",
+    "# the source commit changes — keeping warm restarts cheap. Any missing stamp or",
+    "# artifact falls back to a full build, so the cache can never serve stale output.",
+    "preview_install_stamp=\"$SPRINT_PREVIEW_WORKSPACE/.code-ux-preview-install.stamp\"",
+    "preview_build_stamp=\"$SPRINT_PREVIEW_WORKSPACE/.code-ux-preview-build.stamp\"",
+    "",
+    "preview_dependency_signature() {",
+    "  local manifests=\"\"",
+    "  local f",
+    "  for f in package.json package-lock.json npm-shrinkwrap.json pnpm-lock.yaml yarn.lock bun.lockb; do",
+    "    [ -f \"$f\" ] && manifests=\"$manifests $f\"",
+    "  done",
+    "  if [ -z \"$manifests\" ]; then echo \"no-manifest\"; return 0; fi",
+    "  if command -v sha256sum >/dev/null 2>&1; then",
+    "    cat $manifests | sha256sum | awk '{print $1}'",
+    "  else",
+    "    cat $manifests | cksum | awk '{print $1\"-\"$2}'",
+    "  fi",
+    "}",
+    "",
     "if [ -n \"${SPRINT_PREVIEW_INSTALL_COMMAND:-}\" ]; then",
-    "  echo \"[preview] Running install command: $SPRINT_PREVIEW_INSTALL_COMMAND\"",
-    "  bash -c \"$SPRINT_PREVIEW_INSTALL_COMMAND\"",
+    "  preview_install_signature=\"$(preview_dependency_signature)\"",
+    "  if [ -d node_modules ] && [ -f \"$preview_install_stamp\" ] && [ \"$(cat \"$preview_install_stamp\" 2>/dev/null)\" = \"$preview_install_signature\" ]; then",
+    "    echo \"[preview] Dependencies unchanged; reusing cached node_modules (skipping install).\"",
+    "  else",
+    "    echo \"[preview] Running install command: $SPRINT_PREVIEW_INSTALL_COMMAND\"",
+    "    bash -c \"$SPRINT_PREVIEW_INSTALL_COMMAND\"",
+    "    printf '%s' \"$preview_install_signature\" > \"$preview_install_stamp\"",
+    "    # Dependencies changed, so any prior build is stale — force a rebuild below.",
+    "    rm -f \"$preview_build_stamp\"",
+    "  fi",
     "fi",
     "",
     "if [ -n \"${SPRINT_PREVIEW_BUILD_COMMAND:-}\" ]; then",
-    "  echo \"[preview] Running build command: $SPRINT_PREVIEW_BUILD_COMMAND\"",
-    "  bash -c \"$SPRINT_PREVIEW_BUILD_COMMAND\"",
+    "  preview_build_key=\"${SPRINT_PREVIEW_SOURCE_COMMIT:-}\"",
+    "  if [ -n \"$preview_build_key\" ] && [ -f \"$preview_build_stamp\" ] && [ \"$(cat \"$preview_build_stamp\" 2>/dev/null)\" = \"$preview_build_key\" ]; then",
+    "    echo \"[preview] Source commit unchanged ($preview_build_key); reusing cached build (skipping build).\"",
+    "  else",
+    "    echo \"[preview] Running build command: $SPRINT_PREVIEW_BUILD_COMMAND\"",
+    "    bash -c \"$SPRINT_PREVIEW_BUILD_COMMAND\"",
+    "    if [ -n \"$preview_build_key\" ]; then printf '%s' \"$preview_build_key\" > \"$preview_build_stamp\"; fi",
+    "  fi",
     "fi",
     "",
     "start_preview_port_proxy \"$SPRINT_PREVIEW_PROXY_PORT\" \"$SPRINT_PREVIEW_PORT\"",
@@ -357,3 +394,36 @@ export async function resolveStaticPreviewEntry(repoPath: string): Promise<strin
   }
   return null;
 }
+
+export const resolvePreviewScriptPath = async (repoPath: string, configuredPath: string): Promise<string> => {
+  const defaultScript = path.resolve(repoPath, ".code-ux/browser/start-preview.sh");
+
+  if (!configuredPath || typeof configuredPath !== "string" || configuredPath.trim().length === 0) {
+    return defaultScript;
+  }
+
+  let resolved = resolveConfiguredPath(repoPath, configuredPath);
+
+  try {
+    resolved = await fs.realpath(resolved);
+  } catch (err) {
+    // If file doesn't exist, we fallback to string check, assuming it will be created.
+    // Wait, the "last-mile" verification implies we should check realpath. If it doesn't exist,
+    // we can check the realpath of the directory it's going into.
+    try {
+       const dir = await fs.realpath(path.dirname(resolved));
+       resolved = path.join(dir, path.basename(resolved));
+    } catch {
+       // if even directory does not exist, just use string matching for creation.
+    }
+  }
+
+  const realRepoPath = await fs.realpath(repoPath).catch(() => path.resolve(repoPath));
+  const isWithin = resolved === realRepoPath || resolved.startsWith(realRepoPath + path.sep);
+
+  if (!isWithin) {
+    return defaultScript;
+  }
+
+  return resolved;
+};

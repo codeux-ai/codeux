@@ -11,6 +11,15 @@
     --accent-hover: #006644;
     --radius-ui: 8px;
 
+    /* Shared Primitives */
+    --surface-glass: rgba(255, 255, 255, 0.72);
+    --surface-glass-hover: rgba(255, 255, 255, 0.9);
+    --fill-muted: rgba(0, 0, 0, 0.02);
+    --fill-muted-hover: rgba(0, 0, 0, 0.04);
+    --border-hairline: rgba(0, 0, 0, 0.06);
+    --accent-focus-ring: var(--accent-primary);
+    --text-metadata: #64748b; /* slate-500 */
+
     /* Tailwind Typography Overrides - replaces default blue with semantic grays */
     --tw-prose-links: var(--text-secondary);
     --tw-prose-quotes: var(--text-secondary);
@@ -35,6 +44,15 @@
     --border-muted: var(--color-border-muted);
     --accent-primary: #00e0a0;
     --accent-hover: #33ffb8;
+
+    /* Shared Primitives — warm void surfaces (brand "Warm Void" identity) */
+    --surface-glass: rgba(24, 20, 17, 0.66); /* void-800 tint, frosted panel */
+    --surface-glass-hover: rgba(35, 31, 27, 0.76); /* void-700 tint */
+    --fill-muted: rgba(250, 244, 237, 0.035); /* warm-white inset fill */
+    --fill-muted-hover: rgba(250, 244, 237, 0.06);
+    --border-hairline: rgba(250, 244, 237, 0.08); /* warm hairline */
+    --accent-focus-ring: var(--accent-primary);
+    --text-metadata: #94a3b8; /* slate-400 */
   }
 }
 

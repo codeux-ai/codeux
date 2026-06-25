@@ -3,6 +3,8 @@ import { Target, ListChecks, Cpu, Compass, ArrowRight } from "lucide-preact";
 import { Link } from "@tanstack/react-router";
 import { AgentAvatarSvg } from "../agents/AgentAvatarSvg.js";
 import type { SearchItem } from "./SearchOverlay";
+import { INTERACTION_TOKENS } from "../../lib/motion/tokens.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface SearchResultRowProps {
     item: SearchItem;
@@ -25,6 +27,9 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
     activeItemRef,
     onClick,
 }) => {
+    const reducedMotion = useReducedMotion();
+    const transitionDuration = reducedMotion ? "0ms" : INTERACTION_TOKENS.selectionMovement.duration;
+    const transitionTimingFunction = reducedMotion ? "none" : INTERACTION_TOKENS.selectionMovement.ease;
     // Determine icon and specific formatting based on category
     let Icon = Target;
     let itemId = item.id;
@@ -112,18 +117,20 @@ export const SearchResultRow: FunctionComponent<SearchResultRowProps> = ({
         <Link
             to={targetTo as any}
             search={targetSearch as any}
-            onClick={onClick}
-            id={`search-result-${globalItemIndex}`}
+            onClick={item.status === 'unavailable' || item.status === 'disabled' ? (e: any) => e.preventDefault() : onClick}
+            id={`search-result-${item.id}`}
             ref={activeItemRef as any}
             onMouseEnter={onFocus}
+            aria-disabled={item.status === 'unavailable' || item.status === 'disabled' ? 'true' : undefined}
             aria-label={`${categoryType} result: ${title}`}
             role="option"
             aria-selected={isFocused}
-            className={`group relative flex items-center justify-between w-full text-left px-4 py-3 rounded-[1.25rem] transition-all duration-200 overflow-hidden ${
+            style={{ transitionDuration, transitionTimingFunction }}
+            className={`group relative flex items-center justify-between w-full text-left px-4 py-3 rounded-[1.25rem] transition-all overflow-hidden ${
                 isFocused
                     ? 'bg-signal-500/8 dark:bg-signal-500/10 border-signal-500/20 shadow-[0_0_20px_rgba(0,224,160,0.08)] backdrop-blur-2xl'
                     : 'bg-white/50 dark:bg-void-800/40 hover:bg-white/80 dark:hover:bg-void-700/60 border-black/5 dark:border-white/5 backdrop-blur-xl'
-            } border`}
+            } border aria-disabled:opacity-50 aria-disabled:pointer-events-none`}
         >
             {/* Hover/Focus Background Glow */}
             {isFocused && (

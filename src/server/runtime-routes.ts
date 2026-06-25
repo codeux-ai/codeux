@@ -1,35 +1,8 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
 import { asyncRoute, syncRoute } from "./route-utils.js";
-import { parseTrimmedString, requireTrimmedString, parsePreferredWorkerAssignment, parseClaimAttentionItemPayload, parseResolveAttentionItemPayload } from "./request-parsers.js";
+import { parseProjectStatsQuery, parseTrimmedString, requireTrimmedString, parsePreferredWorkerAssignment, parseClaimAttentionItemPayload, parseResolveAttentionItemPayload } from "./request-parsers.js";
 import type { ProjectStatsQuery, ProjectStatsWindow } from "../contracts/app-types.js";
-
-export function parseProjectStatsQuery(query: Record<string, unknown>): ProjectStatsQuery {
-  const requestedWindow = typeof query.window === "string" ? query.window.trim() : "";
-  const window: ProjectStatsWindow = (
-    requestedWindow === "1h"
-    || requestedWindow === "24h"
-    || requestedWindow === "7d"
-    || requestedWindow === "30d"
-    || requestedWindow === "all"
-    || requestedWindow === "custom"
-  )
-    ? requestedWindow as ProjectStatsWindow
-    : "7d";
-
-  const from = typeof query.from === "string" && query.from.trim().length > 0 ? query.from.trim() : undefined;
-  const to = typeof query.to === "string" && query.to.trim().length > 0 ? query.to.trim() : undefined;
-
-  if (window === "custom" && (!from || !to)) {
-    throw new Error("Custom stats windows require both from and to query parameters.");
-  }
-
-  return {
-    window,
-    from,
-    to,
-  };
-}
 
 export function registerRuntimeRoutes(app: Express, options: DashboardDependencies): void {
   app.get("/api/status", syncRoute((req, res) => {

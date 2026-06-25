@@ -1,9 +1,10 @@
 import type { FunctionComponent } from "preact";
 import { useState } from "preact/hooks";
-import { Terminal, Trash2 } from "lucide-preact";
+import { Terminal, Trash2, Banknote } from "lucide-preact";
 import { PillChoiceGroup, ProviderLogo, Row, SelectInput, TextInput, Toggle } from "./SettingsFormFields.js";
 import { getProviderDefaultAuthPath, getProviderTypeLabel } from "../../lib/settings-view-models.js";
 import { TerminalLoginModal } from "./TerminalLoginModal.js";
+import { TokenPricingModal } from "./TokenPricingModal.js";
 import {
   buildOpenCodeConfigPreview,
   buildQwenSettingsPreview,
@@ -14,6 +15,7 @@ import {
   qwenRegionOptions,
   splitOpenCodeModel,
   type SystemProviderConfig,
+  sanitizeSystemProviderConfig,
 } from "../../lib/provider-runtime-preview.js";
 
 /**
@@ -35,11 +37,12 @@ export const ProviderInstanceCard: FunctionComponent<{
   total?: number;
 }> = ({ providerConfigId, provider, providerModel, dockerExecutionEnabled, onUpdate, onRemove, isLast = true, enabled, onToggleEnabled, index, total }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showPricingModal, setShowPricingModal] = useState(false);
 
   const currentAuthType = provider.authType || (provider.mountAuth ? "localAuth" : "apiKey");
 
   return (
-    <div className="space-y-3 rounded-[1.45rem] border border-black/[0.06] bg-white/84 p-6 shadow-[0_16px_38px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+    <div className="space-y-3 rounded-[1.45rem] border border-[var(--border-hairline)] bg-[var(--surface-glass)] p-6 shadow-[var(--elevation-base)] ">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
         <div className="flex items-start gap-3">
           {index !== undefined && total !== undefined ? (
@@ -54,13 +57,23 @@ export const ProviderInstanceCard: FunctionComponent<{
           </div>
         </div>
         <div className="flex items-center gap-2">
+
           {onToggleEnabled ? (
-            <label className="flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            <label className="flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500  dark:text-slate-300">
               Enabled
-              <Toggle value={enabled ?? true} onChange={() => onToggleEnabled(!(enabled ?? true))} />
+              <Toggle aria-label="Toggle setting" value={enabled ?? true} onChange={() => onToggleEnabled(!(enabled ?? true))} />
             </label>
           ) : null}
+          <button
+            type="button"
+            onClick={() => setShowPricingModal(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 hover:bg-black/[0.04]  dark:text-slate-300 dark:hover:bg-white/[0.06]"
+          >
+            <Banknote className="h-3.5 w-3.5" />
+            Token pricing
+          </button>
           {onRemove ? (
+
             <button
               type="button"
               onClick={onRemove}
@@ -75,6 +88,20 @@ export const ProviderInstanceCard: FunctionComponent<{
 
       <Row label="Display name" description="Used throughout AI Models and runtime route summaries.">
         <TextInput value={provider.name} onChange={(value) => onUpdate({ name: value })} />
+        <div className="mt-2 flex flex-wrap gap-2">
+          {provider.tokenPricing ? (
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-[10px] font-semibold text-signal-600 dark:border-signal-400/20 dark:bg-signal-400/10 dark:text-signal-400">
+              <Banknote className="h-3 w-3" />
+              ${provider.tokenPricing.inputTokens}/M in • ${provider.tokenPricing.outputTokens}/M out
+              {provider.tokenPricing.cachedInputTokens > 0 ? ` • ${provider.tokenPricing.cachedInputTokens}/M cached` : ""}
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-black/[0.06] bg-black/[0.02] px-2 py-1 text-[10px] font-semibold text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
+              <Banknote className="h-3 w-3" />
+              Unset pricing
+            </div>
+          )}
+        </div>
       </Row>
 
       {provider.provider !== "jules" ? (
@@ -104,7 +131,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                   updates.openCodeAuthMode = "ENV_KEY";
                 }
               }
-              onUpdate(updates);
+              onUpdate(sanitizeSystemProviderConfig({ ...provider, ...updates }));
             }}
             options={[
               { value: "apiKey", label: "API Key", hint: "API token override" },
@@ -118,7 +145,7 @@ export const ProviderInstanceCard: FunctionComponent<{
       {/* API Key Panel */}
       {currentAuthType === "apiKey" && (
         <Row label="API key" description="Stored for this named provider instance.">
-          <TextInput value={provider.apiKey} onChange={(value) => onUpdate({ apiKey: value })} mono />
+          <TextInput value={provider.apiKey} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, apiKey: value }))} mono />
         </Row>
       )}
 
@@ -134,7 +161,7 @@ export const ProviderInstanceCard: FunctionComponent<{
               <Terminal className="h-3.5 w-3.5" />
               Connect & Login
             </button>
-            <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 text-[11px] font-mono text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
+            <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 text-[11px] font-mono text-slate-500  dark:text-slate-400">
               Path: <span className="font-semibold text-slate-700 dark:text-slate-200">~/.code-ux/credentials/{providerConfigId}</span>
             </div>
           </div>
@@ -149,16 +176,19 @@ export const ProviderInstanceCard: FunctionComponent<{
               <Row label="Authentication sub-mode" description="Configure whether to use Alibaba Cloud Coding Plan or custom modelProviders.">
                 <PillChoiceGroup
                   value={provider.qwenAuthMode || "MODEL_PROVIDER"}
-                  onChange={(value) => onUpdate({
-                    qwenAuthMode: value as SystemProviderConfig["qwenAuthMode"],
-                    ...(value === "MODEL_PROVIDER" ? {
-                      apiKey: provider.apiKey || "your_api_key",
-                      qwenBaseUrl: provider.qwenBaseUrl || "http://127.0.0.1:11434/v1",
-                      qwenEnvKey: provider.qwenEnvKey || "OLLAMA_API_KEY",
-                      qwenModelId: provider.qwenModelId || "glm-4.7-flash",
-                      qwenProtocol: "openai" as const,
-                    } : {}),
-                  })}
+                  onChange={(value) => {
+                    const updates: Partial<SystemProviderConfig> = {
+                      qwenAuthMode: value as SystemProviderConfig["qwenAuthMode"],
+                      ...(value === "MODEL_PROVIDER" ? {
+                        apiKey: provider.apiKey || "your_api_key",
+                        qwenBaseUrl: provider.qwenBaseUrl || "http://127.0.0.1:11434/v1",
+                        qwenEnvKey: provider.qwenEnvKey || "OLLAMA_API_KEY",
+                        qwenModelId: provider.qwenModelId || "glm-4.7-flash",
+                        qwenProtocol: "openai" as const,
+                      } : {}),
+                    };
+                    onUpdate(sanitizeSystemProviderConfig({ ...provider, ...updates }));
+                  }}
                   options={qwenAuthModeOptions.filter((opt) => opt.value !== "LOCAL_AUTH")}
                 />
               </Row>
@@ -208,12 +238,12 @@ export const ProviderInstanceCard: FunctionComponent<{
 
           {currentAuthType === "localAuth" && (
             <Row label="Qwen auth path" description="Usually `~/.qwen`; contains settings.json, .env, and cached OAuth state.">
-              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} mono />
             </Row>
           )}
 
           <Row label="Generated settings preview" description="Masked Qwen settings.json fragment produced for Docker runtime." last={isLast}>
-            <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600  dark:text-slate-300">
               {buildQwenSettingsPreview(provider, providerModel, dockerExecutionEnabled)}
             </pre>
           </Row>
@@ -228,17 +258,20 @@ export const ProviderInstanceCard: FunctionComponent<{
               <Row label="Authentication sub-mode" description="Configure whether to use custom model endpoint or standard environment key.">
                 <PillChoiceGroup
                   value={provider.openCodeAuthMode || "ENV_KEY"}
-                  onChange={(value) => onUpdate({
-                    openCodeAuthMode: value as SystemProviderConfig["openCodeAuthMode"],
-                    ...(value === "CUSTOM_PROVIDER" ? {
-                      apiKey: provider.apiKey || "your_api_key",
-                      openCodeProviderId: provider.openCodeProviderId || "ollama",
-                      openCodeModelId: provider.openCodeModelId || "glm-4.7-flash",
-                      openCodeBaseUrl: provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1",
-                      openCodeEnvKey: provider.openCodeEnvKey || "OLLAMA_API_KEY",
-                      openCodePackage: provider.openCodePackage || "@ai-sdk/openai-compatible",
-                    } : {}),
-                  })}
+                  onChange={(value) => {
+                    const updates: Partial<SystemProviderConfig> = {
+                      openCodeAuthMode: value as SystemProviderConfig["openCodeAuthMode"],
+                      ...(value === "CUSTOM_PROVIDER" ? {
+                        apiKey: provider.apiKey || "your_api_key",
+                        openCodeProviderId: provider.openCodeProviderId || "ollama",
+                        openCodeModelId: provider.openCodeModelId || "glm-4.7-flash",
+                        openCodeBaseUrl: provider.openCodeBaseUrl || "http://127.0.0.1:11434/v1",
+                        openCodeEnvKey: provider.openCodeEnvKey || "OLLAMA_API_KEY",
+                        openCodePackage: provider.openCodePackage || "@ai-sdk/openai-compatible",
+                      } : {}),
+                    };
+                    onUpdate(sanitizeSystemProviderConfig({ ...provider, ...updates }));
+                  }}
                   options={openCodeAuthModeOptions.filter((opt) => opt.value !== "LOCAL_AUTH")}
                 />
               </Row>
@@ -272,12 +305,12 @@ export const ProviderInstanceCard: FunctionComponent<{
 
           {currentAuthType === "localAuth" && (
             <Row label="OpenCode auth path" description="Usually `~/.local/share/opencode`; contains auth.json created by `/connect` or `opencode auth login`.">
-              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} mono />
             </Row>
           )}
 
           <Row label="Generated config preview" description="Masked OpenCode config materialized from OPENCODE_CONFIG_CONTENT for host and Docker runs." last={isLast}>
-            <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            <pre className="max-h-72 min-w-[280px] overflow-auto rounded-[1rem] border border-black/[0.06] bg-black/[0.04] p-3 text-left font-mono text-[11px] leading-relaxed text-slate-600  dark:text-slate-300">
               {buildOpenCodeConfigPreview(provider, providerModel, dockerExecutionEnabled)}
             </pre>
           </Row>
@@ -289,7 +322,7 @@ export const ProviderInstanceCard: FunctionComponent<{
         <>
           {currentAuthType === "localAuth" && (
             <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance.">
-              <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+              <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} mono />
             </Row>
           )}
           <Row
@@ -300,7 +333,7 @@ export const ProviderInstanceCard: FunctionComponent<{
                 : "Override OPENAI_BASE_URL. Route Codex through a custom OpenAI-compatible endpoint, e.g. https://openrouter.ai/api/v1. Leave empty to use the default OpenAI API."
             }
           >
-            <TextInput value={provider.customBaseUrl || ""} onChange={(value) => onUpdate({ customBaseUrl: value || undefined })} mono />
+            <TextInput value={provider.customBaseUrl || ""} onChange={(value) => onUpdate({ customBaseUrl: value || undefined })} disabled={currentAuthType !== "apiKey"} mono />
           </Row>
           <Row
             label="Custom model"
@@ -311,7 +344,7 @@ export const ProviderInstanceCard: FunctionComponent<{
             }
             last={isLast}
           >
-            <TextInput value={provider.customModel || ""} onChange={(value) => onUpdate({ customModel: value || undefined })} mono />
+            <TextInput value={provider.customModel || ""} onChange={(value) => onUpdate({ customModel: value || undefined })} disabled={currentAuthType !== "apiKey"} mono />
           </Row>
         </>
       )}
@@ -319,7 +352,7 @@ export const ProviderInstanceCard: FunctionComponent<{
       {/* Standard Local Auth Option for Generic CLI Providers */}
       {provider.provider !== "jules" && provider.provider !== "qwen-code" && provider.provider !== "opencode" && provider.provider !== "claude-code" && provider.provider !== "codex" && currentAuthType === "localAuth" && (
         <Row label="Auth path" description="Host path copied into the Docker runtime for this exact provider instance." last={isLast}>
-          <TextInput value={provider.authPath} onChange={(value) => onUpdate({ authPath: value })} mono />
+          <TextInput value={provider.authPath} onChange={(value) => onUpdate(sanitizeSystemProviderConfig({ ...provider, authPath: value }))} mono />
         </Row>
       )}
 
@@ -340,6 +373,14 @@ export const ProviderInstanceCard: FunctionComponent<{
             // Trigger an update with a new lastLoginAt timestamp to make the form dirty so the user can Save Changes
             onUpdate({ lastLoginAt: Date.now() });
           }}
+        />
+      )}
+      {showPricingModal && (
+        <TokenPricingModal
+          isOpen={showPricingModal}
+          onClose={() => setShowPricingModal(false)}
+          pricing={provider.tokenPricing}
+          onSave={(pricing) => onUpdate({ tokenPricing: pricing })}
         />
       )}
     </div>

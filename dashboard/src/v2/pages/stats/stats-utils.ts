@@ -19,6 +19,16 @@ import {
 import type { ComponentType } from "preact";
 import type { StatsCardAccent } from "./components/StatsCard.js";
 
+export function isValidCustomRange(from: string, to: string): boolean {
+  if (!from || !to) return false;
+  const fromDate = new Date(from);
+  const toDate = new Date(to);
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    return false;
+  }
+  return fromDate <= toDate;
+}
+
 export const EMPTY_USAGE: ExecutionUsageTotals = {
   invocationCount: 0,
   activeTimeMs: 0,
@@ -32,6 +42,10 @@ export const EMPTY_USAGE: ExecutionUsageTotals = {
   estimatedInvocationCount: 0,
   unavailableInvocationCount: 0,
   unsupportedInvocationCount: 0,
+  inputCostUsd: 0,
+  outputCostUsd: 0,
+  cachedInputCostUsd: 0,
+  totalCostUsd: 0,
 };
 
 export const NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
@@ -44,6 +58,18 @@ export function formatTokens(value: number): string {
     return `${(value / 1_000).toFixed(1)}k`;
   }
   return NUMBER_FORMATTER.format(value);
+}
+
+
+export function formatCost(usd: number | null | undefined): string {
+  if (usd === null || usd === undefined) return "—";
+  if (usd === 0) return "$0.00";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4
+  }).format(usd);
 }
 
 export function formatDuration(value: number): string {
@@ -97,6 +123,10 @@ export function sumUsage(items: ExecutionStatsEntitySummary[]): ExecutionUsageTo
     estimatedInvocationCount: accumulator.estimatedInvocationCount + item.usage.estimatedInvocationCount,
     unavailableInvocationCount: accumulator.unavailableInvocationCount + item.usage.unavailableInvocationCount,
     unsupportedInvocationCount: accumulator.unsupportedInvocationCount + item.usage.unsupportedInvocationCount,
+    inputCostUsd: accumulator.inputCostUsd + item.usage.inputCostUsd,
+    outputCostUsd: accumulator.outputCostUsd + item.usage.outputCostUsd,
+    cachedInputCostUsd: accumulator.cachedInputCostUsd + item.usage.cachedInputCostUsd,
+    totalCostUsd: accumulator.totalCostUsd + item.usage.totalCostUsd,
   }), { ...EMPTY_USAGE });
 }
 

@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 /**
  * SVG sparkline with smooth cubic bezier curves (tension 0.35).
@@ -8,6 +9,8 @@ import gsap from "gsap";
  * On hover (detected via closest `.group`): replays from the start and adds a glow.
  */
 export const Sparkline: FunctionComponent<{ points: number[]; color: string }> = ({ points, color }) => {
+    const isReducedMotion = useReducedMotion();
+
     if (!points || points.length === 0) {
         return null;
     }
@@ -36,6 +39,10 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
         if (!pathRef.current || !pathRef.current.getTotalLength) return;
         const len = pathRef.current.getTotalLength();
         gsap.killTweensOf(pathRef.current);
+        if (isReducedMotion) {
+            gsap.set(pathRef.current, { strokeDasharray: `${len} ${len}`, strokeDashoffset: 0 });
+            return;
+        }
         gsap.set(pathRef.current, { strokeDasharray: `${len} ${len}`, strokeDashoffset: len });
         if (animate) {
             gsap.to(pathRef.current, { strokeDashoffset: 0, duration: 1.4, ease: "power3.inOut", delay: 0.4 });
@@ -57,7 +64,7 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
     // Hover: replay from the start + glow the whole SVG
     useEffect(() => {
         const group = svgRef.current?.closest('.group') as HTMLElement | null;
-        if (!group) return;
+        if (!group || isReducedMotion) return;
 
         const onEnter = () => {
             if (!pathRef.current || !svgRef.current) return;
@@ -97,6 +104,7 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
             style={{ opacity: 0.2 }}
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
+            aria-hidden="true"
         >
             <defs>
                 <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">

@@ -45,7 +45,7 @@ const MemorySidebar = ({ nodes, onSelectNode }: MemorySidebarProps) => {
       {/* Toggle Button */}
       <button
         onClick={toggleSidebar}
-        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 flex h-10 w-5 items-center justify-center bg-void-800 border border-void-700 rounded-full text-void-300 hover:text-signal hover:border-signal transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-signal"
+        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 flex h-10 w-5 items-center justify-center bg-void-800 border border-void-700 rounded-full text-void-300 hover:text-signal-500 hover:border-signal-500 transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-signal-500"
         aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
         aria-expanded={isExpanded}
       >

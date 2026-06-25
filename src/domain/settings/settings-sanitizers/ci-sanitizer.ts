@@ -36,6 +36,10 @@ export const sanitizeCiIntelligence = (
       ciInput.resolveMainMergeConflicts,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveMainMergeConflicts
     ),
+    resolveMainMergeFailedChecks: readBoolean(
+      ciInput.resolveMainMergeFailedChecks,
+      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveMainMergeFailedChecks
+    ),
     resolveAllCommentsBeforeFeatureMerge: readBoolean(
       ciInput.resolveAllCommentsBeforeFeatureMerge,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveAllCommentsBeforeFeatureMerge

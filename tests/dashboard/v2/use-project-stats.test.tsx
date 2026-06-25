@@ -131,6 +131,15 @@ describe("useProjectStats cancellation", () => {
     expect(getByTestId("stats").textContent).toBe("stats-snapshot");
   });
 
+  it("handles 400 error responses gracefully", async () => {
+    vi.mocked(fetchProjectStats).mockRejectedValueOnce(new Error("Custom stats windows require both from and to query parameters."));
+    const { getByTestId } = render(h(TestComponent, { projectId: "p1", query: "custom" }));
+    await waitFor(() => {
+      expect(getByTestId("loading").textContent).toBe("idle");
+    });
+    expect(getByTestId("stats").textContent).toBe("none");
+  });
+
   it("performs background refresh on matching realtime event", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
 

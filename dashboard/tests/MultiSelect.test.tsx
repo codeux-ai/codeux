@@ -52,3 +52,24 @@ test("MultiSelect removes last tag on backspace when input is empty", () => {
 
   expect(onChange).toHaveBeenCalledWith(["bug"]);
 });
+
+test("passes ARIA and ID props to internal combobox input", () => {
+  render(
+    <MultiSelect
+      value={[]}
+      onChange={() => {}}
+      id="test-id"
+      aria-describedby="test-desc"
+      aria-invalid="true"
+      aria-errormessage="test-error"
+      aria-required={true}
+    />
+  );
+
+  const input = screen.getByRole("combobox");
+  expect(input.id).toBe("test-id");
+  expect(input.getAttribute("aria-describedby")).toBe("test-desc");
+  expect(input.getAttribute("aria-invalid")).toBe("true");
+  expect(input.getAttribute("aria-errormessage")).toBe("test-error");
+  expect(input.getAttribute("aria-required")).toBe("true");
+});

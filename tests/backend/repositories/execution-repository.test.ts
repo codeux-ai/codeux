@@ -2534,6 +2534,36 @@ describe("ExecutionRepository", () => {
     });
   });
 
+
+  describe("queryProjectInvocations", () => {
+    it("filters and paginates execution invocations", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({ name: "Proj", sourceType: "git", sourceRef: "https://foo" });
+      const sprint = projectRepository.createSprint(project.id, { name: "Sprint" });
+
+      const usage1 = executionRepository.createProviderInvocationUsage({ projectId: project.id, sessionId: "s1", provider: "p1", purpose: "task_coding", status: "completed" });
+      const inv1 = executionRepository.createExecutionInvocation({ projectId: project.id, type: "t1", status: "completed", providerInvocationId: usage1.id });
+
+      const usage2 = executionRepository.createProviderInvocationUsage({ projectId: project.id, sessionId: "s2", provider: "p2", purpose: "ci_fix", status: "running" });
+      const inv2 = executionRepository.createExecutionInvocation({ projectId: project.id, type: "t2", status: "running", providerInvocationId: usage2.id });
+
+      let res = executionRepository.queryProjectInvocations({ projectId: project.id });
+      expect(res.totalCount).toBe(2);
+      expect(res.items.length).toBe(2);
+
+      res = executionRepository.queryProjectInvocations({ projectId: project.id, status: "completed" });
+      expect(res.totalCount).toBe(1);
+      expect(res.items[0].id).toBe(inv1.id);
+
+      res = executionRepository.queryProjectInvocations({ projectId: project.id, purpose: "ci_fix" });
+      expect(res.totalCount).toBe(1);
+      expect(res.items[0].id).toBe(inv2.id);
+
+      res = executionRepository.queryProjectInvocations({ projectId: project.id, limit: 1, offset: 0 });
+      expect(res.items.length).toBe(1);
+    });
+  });
+
   describe("getLatestProviderInvocationUsageBySession", () => {
     it("normalizes and retrieves provider invocation usage across prefixes correctly", async () => {
       const { projectRepository, executionRepository } = await createRepositories();

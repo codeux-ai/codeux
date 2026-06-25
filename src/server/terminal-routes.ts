@@ -2,7 +2,8 @@ import { spawn, ChildProcess } from "child_process";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
+import { isHostileBrowserOrigin } from "./dashboard-security.js";
 import type { IncomingMessage, Server as HttpServer } from "http";
 import * as net from "net";
 import type { Socket } from "net";
@@ -107,7 +108,7 @@ function closeSocket(socket: Socket): void {
   }
 }
 
-function parseClientFrames(buffer: Buffer): {
+function parseClientFrames(buffer: Buffer, maxFrameSize: number = 10 * 1024 * 1024): {
   messages: string[];
   nextBuffer: Buffer;
   closed: boolean;
@@ -125,6 +126,7 @@ function parseClientFrames(buffer: Buffer): {
     let headerLength = 2;
 
     if (!masked) {
+      closed = true;
       break;
     }
 
@@ -145,6 +147,11 @@ function parseClientFrames(buffer: Buffer): {
       }
       payloadLength = bigLength;
       headerLength = 10;
+    }
+
+    if (payloadLength > maxFrameSize) {
+      closed = true;
+      break;
     }
 
     const totalLength = headerLength + 4 + payloadLength;
@@ -458,6 +465,14 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
         }
       }
 
+      if (providerId) {
+        const knownProviders = ["gemini", "codex", "claude-code", "qwen-code", "opencode", "antigravity", "generic-cli"];
+        if (!knownProviders.includes(providerId)) {
+          res.status(400).json({ error: `Unknown providerId: ${providerId}` });
+          return;
+        }
+      }
+
       if (!providerId) {
         res.status(400).json({ error: "Unable to resolve a valid provider type from the request." });
         return;
@@ -477,7 +492,7 @@ export function registerTerminalRoutes(app: Express, options: DashboardDependenc
       }
 
       const resolvedConfigId = providerConfigId || providerId;
-      const sessionId = Math.random().toString(36).substring(2, 15);
+      const sessionId = randomUUID();
       const hostCredsDir = path.join(os.homedir(), ".code-ux", "credentials", resolvedConfigId);
       const tempCredsDir = path.join(os.homedir(), ".code-ux", "credentials", `${resolvedConfigId}-temp-${sessionId}`);
 
@@ -883,6 +898,17 @@ export function bootDashboardTerminalWebSocketServer(args: {
       return;
     }
 
+    const fakeReq = {
+      method: "POST",
+      path: "/api/terminal/ws",
+      headers: req.headers,
+    };
+    if (isHostileBrowserOrigin(fakeReq as any)) {
+      socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
     socket.write(
       [
         "HTTP/1.1 101 Switching Protocols",
@@ -903,9 +929,15 @@ export function bootDashboardTerminalWebSocketServer(args: {
     }
 
     let buffered: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+    const MAX_WEBSOCKET_BUFFER_SIZE = 25 * 1024 * 1024;
+    const MAX_WEBSOCKET_FRAME_SIZE = 10 * 1024 * 1024;
     socket.on("data", (chunk: Buffer) => {
+      if (buffered.length + chunk.length > MAX_WEBSOCKET_BUFFER_SIZE) {
+        socket.destroy();
+        return;
+      }
       buffered = Buffer.concat([buffered, chunk]);
-      const parsed = parseClientFrames(buffered);
+      const parsed = parseClientFrames(buffered, MAX_WEBSOCKET_FRAME_SIZE);
       buffered = parsed.nextBuffer;
 
       if (parsed.closed) {

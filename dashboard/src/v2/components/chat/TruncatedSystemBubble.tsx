@@ -22,7 +22,7 @@ export const TruncatedSystemBubble: FunctionComponent<TruncatedSystemBubbleProps
           <ChatAvatar role="system" />
         </div>
 
-        <div className="flex flex-col w-full max-w-[calc(100%-3rem)] rounded-2xl rounded-tl-sm border bg-slate-900/50 border-dashed border-slate-700 p-4 pb-2 shadow-[0_2px_16px_rgba(0,0,0,0.04)]">
+        <div className="flex flex-col w-full max-w-[calc(100%-3rem)] rounded-2xl rounded-tl-sm border bg-slate-100/50 dark:bg-slate-900/50 border-dashed border-slate-300 dark:border-slate-700 p-4 pb-2 shadow-[0_2px_16px_rgba(0,0,0,0.04)]">
 
           <div className="flex items-center gap-3 mb-2 text-[11px] font-mono text-slate-400 justify-start">
             <span className="font-semibold text-slate-300 capitalize flex items-center gap-1.5">

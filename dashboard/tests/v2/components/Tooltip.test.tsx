@@ -62,3 +62,32 @@ it("maintains a stable tooltip ID across re-renders", async () => {
   expect(wrapper?.getAttribute("aria-describedby")).toBe(tooltipId);
   expect(document.getElementById(tooltipId!)).toBeInTheDocument();
 });
+
+  it("is keyboard discoverable when focused", async () => {
+    const { waitFor } = await import("@testing-library/preact");
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const user = userEvent.setup();
+
+    const { getByTestId } = render(
+      <Tooltip content="Keyboard hint" delay={0}>
+        <button type="button" data-testid="kb-trigger">Focus me</button>
+      </Tooltip>
+    );
+
+    const trigger = getByTestId("kb-trigger");
+    trigger.focus();
+
+    // the Tooltip checks for :focus-visible via standard DOM which JSDOM doesn't perfectly emulate in focus() alone,
+    // but the test environment setup allows us to mock or bypass it if we mock the matches method:
+    trigger.matches = (selector: string) => selector === ":focus-visible" || HTMLElement.prototype.matches.call(trigger, selector);
+
+    const wrapper = trigger.parentElement!;
+    wrapper.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+
+    await waitFor(() => {
+      expect(wrapper.getAttribute("aria-describedby")).toBeTruthy();
+    });
+
+    const tooltipId = wrapper.getAttribute("aria-describedby");
+    expect(document.getElementById(tooltipId!)).toBeInTheDocument();
+  });

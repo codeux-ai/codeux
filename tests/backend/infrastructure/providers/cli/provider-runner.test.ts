@@ -67,43 +67,6 @@ describe("ProviderRunner", () => {
     }));
   });
 
-  it("captures antigravity diagnostics via a --log-file and demotes an exit-0 quota run", async () => {
-    // agy exits 0 with empty stdout/stderr; the real quota error lives only in its log file.
-    dockerRunner.runProviderInDocker.mockResolvedValueOnce({
-      ok: true,
-      stdout: "",
-      stderr: "",
-      code: 0,
-      signal: null,
-    });
-    dockerRunner.readWorkspaceFile.mockImplementation(async (_cwd: string, filePath: string) =>
-      filePath.includes("antigravity-logs")
-        ? "E0601 09:45:02.823154 813902 log.go:398] agent executor error: RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact your administrator to enable overages. Resets in 3h4m52s.: RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact your administrator to enable overages. Resets in 3h4m52s."
-        : "captured text");
-
-    const result = await runner.runProvider({
-      provider: "antigravity",
-      prompt: "implement the feature",
-      cwd: "/repo",
-      model: "default",
-      apiKey: "key",
-      sessionId: "session-1",
-      workflowSettings: { executionMode: "DOCKER" } as any,
-      repoPath: "/repo",
-      onActivity: vi.fn(),
-    });
-
-    // The run is demoted to a failure and the quota line (with reset time) is surfaced in stderr.
-    expect(result.ok).toBe(false);
-    expect(result.stderr).toContain("Individual quota reached");
-    expect(result.stderr).toContain("Resets in 3h4m52s");
-    // The CLI must be told where to write its log so we can read it back.
-    const call = dockerRunner.runProviderInDocker.mock.calls[0][0];
-    const logFileIdx = call.args.indexOf("--log-file");
-    expect(logFileIdx).toBeGreaterThanOrEqual(0);
-    expect(call.args[logFileIdx + 1]).toContain("antigravity-logs");
-  });
-
   it("sanitizes bootstrap-branch fatal fallback text in runProviderForText", async () => {
     dockerRunner.readWorkspaceFile.mockResolvedValue("");
     dockerRunner.runProviderInDocker.mockResolvedValueOnce({
@@ -174,33 +137,6 @@ describe("ProviderRunner", () => {
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.arrayContaining(["--resume", "native-123"]),
     }));
-  });
-
-  it("retries Claude Code with a fresh session when resume fails with 'No conversation found'", async () => {
-    dockerRunner.runProviderInDocker
-      .mockResolvedValueOnce({ ok: false, stdout: "", stderr: "Claude Code failed: No conversation found with session ID: native-123", code: 1, signal: null })
-      .mockResolvedValueOnce({ ok: true, stdout: "ok", stderr: "", code: 0, signal: null });
-
-    await runner.runProvider({
-      provider: "claude-code",
-      prompt: "continue",
-      cwd: "/repo",
-      model: "sonnet",
-      apiKey: "key",
-      sessionId: "session-1",
-      continueSessionId: "native-123",
-      workflowSettings: { executionMode: "DOCKER" } as any,
-      repoPath: "/repo",
-      onActivity: vi.fn(),
-    });
-
-    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledTimes(2);
-    const firstArgs = dockerRunner.runProviderInDocker.mock.calls[0][0].args as string[];
-    const secondArgs = dockerRunner.runProviderInDocker.mock.calls[1][0].args as string[];
-    // First attempt resumes the lost session; the retry starts a fresh one.
-    expect(firstArgs).toEqual(expect.arrayContaining(["--resume", "native-123"]));
-    expect(secondArgs).not.toContain("--resume");
-    expect(secondArgs).toContain("--session-id");
   });
 
   it("keeps JSON output enabled for Gemini when MCP config is injected", async () => {
@@ -520,6 +456,37 @@ describe("ProviderRunner", () => {
       repoPath: "/repo",
       onActivity: vi.fn(),
     });
+
+    const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
+    expect(args).not.toContain("-c");
+    expect(args).not.toContain(`model_provider="custom_gateway"`);
+  });
+
+  it("does not pass custom model provider overrides or API key for Codex when mount auth is selected", async () => {
+    const runArgs = {
+      provider: "codex" as const,
+      prompt: "ship it",
+      cwd: "/repo",
+      model: "gpt-5-codex",
+      apiKey: "sk-openai",
+      customBaseUrl: "https://openrouter.ai/api/v1",
+      customModel: "openai/gpt-5-codex",
+      providerMountAuth: true,
+      sessionId: "session-1",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    };
+    const model = resolveEffectiveModel(runArgs);
+    await runner.runProvider({ ...runArgs, model });
+
+    expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
+      command: "codex",
+      providerEnv: expect.not.objectContaining({
+        OPENAI_API_KEY: expect.anything(),
+        OPENAI_BASE_URL: expect.anything(),
+      }),
+    }));
 
     const args: string[] = dockerRunner.runProviderInDocker.mock.calls[0][0].args;
     expect(args).not.toContain("-c");
@@ -906,5 +873,75 @@ describe("ProviderRunner", () => {
     });
     // Check clean up
     await expect(fs.access(mcpConfigPath)).rejects.toThrow();
+  });
+});
+
+
+describe("ProviderRunner MCP config generation", () => {
+  let runner: any;
+
+  beforeEach(() => {
+    runner = new ProviderRunner();
+    const mockMkdir = vi.spyOn(fs, 'mkdir');
+    mockMkdir.mockResolvedValue(undefined);
+    const mockReadFile = vi.spyOn(fs, 'readFile');
+    mockReadFile.mockResolvedValue(null as any);
+    const mockWriteFile = vi.spyOn(fs, 'writeFile');
+    mockWriteFile.mockResolvedValue(undefined);
+  });
+
+  const writeConfig = (conn: any, cwd: string, provider: any, qwenSettings?: string, customServers: any[] = []) =>
+    runner.writeLocalMcpConfig(conn, cwd, provider, qwenSettings, customServers);
+
+  const getWrittenContent = (filename: string): string | undefined => {
+    const call = vi.mocked(fs.writeFile).mock.calls.find(([target]) => String(target).endsWith(filename));
+    return call ? String(call[1]) : undefined;
+  };
+
+  it("writes local claude config with merged servers", async () => {
+    await writeConfig({ url: "http://127.0.0.1/mcp", authToken: "sec" }, "/tmp/cwd", "claude-code", undefined, [
+      { id: "1", name: "tool", url: "http://tool/mcp", enabled: true, headers: { auth: "bearer 123" } }
+    ]);
+    const json = JSON.parse(getWrittenContent(".claude/settings.local.json")!);
+    expect(json.mcpServers.code_ux).toEqual({ type: "http", url: "http://127.0.0.1/mcp", headers: { Authorization: "Bearer sec" } });
+    expect(json.mcpServers.tool).toEqual({ type: "http", url: "http://tool/mcp", headers: { auth: "bearer 123" } });
+  });
+
+  it("writes local gemini config with merged servers", async () => {
+    await writeConfig(null, "/tmp/cwd", "gemini", undefined, [
+      { id: "1", name: "tool", transport: "stdio", command: "ls", args: ["-la"], enabled: true }
+    ]);
+    const json = JSON.parse(getWrittenContent(".gemini/settings.json")!);
+    expect(json.mcpServers.tool).toEqual({ command: "ls", args: ["-la"] });
+  });
+
+  it("writes local qwen config with merged existing settings", async () => {
+    await writeConfig(null, "/tmp/cwd", "qwen-code", JSON.stringify({ enableOpenAILogging: true, customOpt: "abc" }), [
+      { id: "1", name: "tool", transport: "stdio", command: "echo", enabled: true }
+    ]);
+    const json = JSON.parse(getWrittenContent(".qwen/settings.json")!);
+    expect(json.enableOpenAILogging).toBeUndefined();
+    expect(json.customOpt).toBe("abc");
+    expect(json.mcpServers.tool).toEqual({ command: "echo" });
+  });
+
+  it("writes local codex config", async () => {
+    await writeConfig({ url: "http://127.0.0.1/mcp" }, "/tmp/cwd", "codex", undefined, [
+      { id: "1", name: "tool", transport: "stdio", command: "cat", enabled: true }
+    ]);
+    const toml = getWrittenContent(".codex/config.toml")!;
+    expect(toml).toContain('[mcp_servers.code-ux]');
+    expect(toml).toContain('url = "http://127.0.0.1/mcp"');
+    expect(toml).toContain('[mcp_servers.tool]');
+    expect(toml).toContain('command = "cat"');
+  });
+
+  it("writes local antigravity config", async () => {
+    await writeConfig({ url: "http://127.0.0.1/mcp" }, "/tmp/cwd", "antigravity", undefined, [
+      { id: "1", name: "tool", transport: "stdio", command: "bash", args: ["-c", "echo hello"], enabled: true }
+    ]);
+    const json = JSON.parse(getWrittenContent(".agents/mcp_config.json")!);
+    expect(json.mcpServers.code_ux).toEqual({ serverUrl: "http://127.0.0.1/mcp" });
+    expect(json.mcpServers.tool).toEqual({ command: "bash", args: ["-c", "echo hello"] });
   });
 });

@@ -20,6 +20,10 @@ Code UX now separates:
 
 *(Note: In routing contexts, `available` means detected credentials/auth presence or local auth enabled on that exact provider instance, whereas `enabled` means user-approved routing participation.)*
 
+## Provider Runtime Artifacts
+
+Provider runtime artifacts (such as host log paths, temporary output files, and Docker paths) are owned and managed by the `provider-runtime-artifacts` module. `ProviderRunner` delegates path resolution and artifact cleanup logic to this helper to ensure safer execution boundaries and testing.
+
 ## Configuration Model
 
 Backend types:
@@ -31,6 +35,7 @@ Routing implementation:
 
 Provider CLI command generation and configuration utilities:
 - `src/infrastructure/providers/cli/provider-command-specs.ts`
+- `src/infrastructure/providers/cli/mcp-config-format.ts` (Local and Docker provider MCP config generation share one contract via `buildProviderMcpConfigArtifact`)
 
 Each `aiProvider.invocationRouting.<routeId>` entry contains:
 - `profile`
@@ -84,6 +89,22 @@ Manual route selection is authoritative for that route. If a route sets `provide
 9. If a persisted task already has a concrete provider assignment, such as `gemini` on retry, Code UX resolves the matching provider instance settings for that provider instead of reusing settings from a newly resolved fallback route. This keeps model and auth-copy settings aligned with the actual CLI being launched.
 10. Legacy provider-id keyed payloads are normalized into the instance model so older settings rows and tests continue to resolve through the new routing engine.
 
+## Credential Mutual Exclusion
+
+To prevent conflicting generated runtime configuration and credential leakage, Code UX enforces strict mutual exclusion between API key and local copy / dashboard login authentication modes for every non-Jules provider:
+
+1. **API Key Mode (`authType === "apiKey"`)**:
+   - `mountAuth` is automatically disabled (`false`).
+   - The local copy / dashboard auth path (`authPath`) is cleared.
+   - Preserves custom provider API-key sub-modes (e.g. Alibaba Cloud Coding Plan, custom OpenAI-compatible endpoints) and their specific endpoints/keys.
+
+2. **Local Auth / Dashboard Login (`authType === "localAuth"` or `authType === "dashboardAuth"`)**:
+   - The `apiKey` field is cleared.
+   - Any custom model provider base URL (`customBaseUrl`) or custom model slug (`customModel`) overrides are cleared and ignored.
+   - For **Qwen Code**, forces `qwenAuthMode` to `LOCAL_AUTH` and clears all custom API-key sub-mode fields (`qwenRegion`, `qwenBaseUrl`, `qwenEnvKey`, `qwenModelId`, `qwenProtocol`, `qwenAdditionalModelProviders`).
+   - For **OpenCode**, forces `openCodeAuthMode` to `LOCAL_AUTH` and clears all custom API-key sub-mode fields (`openCodeProviderId`, `openCodeModelId`, `openCodeBaseUrl`, `openCodeEnvKey`, `openCodePackage`).
+   - For **Codex**, ensures that no stale API key or custom model-provider overrides are passed to the child process environment (`withProviderEnv`) or command construction arguments.
+
 ## Current Defaults
 
 - `task_coding` uses `GLOBAL`
@@ -98,6 +119,12 @@ That means:
 - task coding uses the strategy stored on the `task_coding` route
 - dashboard chat replies, clarification auto-answer, and QA review runs follow the preferred worker CLI provider/model by default instead of inheriting the global primary provider
 - dashboard chat replies resolve from Route Mapping on every turn; stale thread runtime state is used only to decide whether a chat session can continue or must replay after the provider changes
+
+## Provider Capacity Deferrals
+
+Provider `maxConcurrentTasks` is enforced before a task is counted as started. When the selected provider is already at its global cap, sprint task dispatch creates or refreshes a queued dispatch/task-run record, records a `provider_concurrency_wait` event, and returns the task to a retryable `PENDING` state for the next orchestration cycle.
+
+Provider-cap queueing is not a task creation failure. It must not increment the consecutive task creation failure counter, trigger the emergency stop, or record `task_coding` guardrail usage. Real startup failures still use the normal failure path and continue to count toward `maxFailures`.
 
 ## Services Using Invocation Routing
 
@@ -132,6 +159,13 @@ The v2 settings page exposes:
 - quick category search with `/` focus
 - Route Mapping as the main AI routing workspace with route summaries, provider-pool counts, and override counts
 - pill-style controls for common mode switches such as profile, strategy, execution mode, and merge policy
+
+Dashboard route and model controls share provider display metadata from the settings view-model helpers:
+- provider routes use provider instance ids internally but display the settings page instance name, such as `Codex Primary`, instead of legacy virtual-worker labels
+- provider icons use the underlying provider type, so additional Codex, Qwen Code, OpenCode, and Antigravity instances keep the correct brand icon
+- default route/model options show the resolved inherited worker defaults when available, such as `Default Route (Codex Primary)` and `Default Model (gpt-5.5)`
+- Sprint Composer and Quicksprint default route/model labels resolve from the `planning` invocation route mapping. A pinned Planning Route provider and its route-specific model override are displayed as the default, even when the worker default points at a different provider.
+- model option values remain the provider catalog values returned by `getProviderModelOptions`; only labels and icons are display metadata
 
 File:
 - `dashboard/src/v2/SettingsPage.tsx`

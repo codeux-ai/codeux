@@ -20,7 +20,21 @@ export const TASK_STATUS_CFG = {
 
 export type TaskStatusKey = keyof typeof TASK_STATUS_CFG;
 
-export const getTaskCfg = (status?: string) => TASK_STATUS_CFG[(status as TaskStatusKey) ?? "PENDING"] ?? TASK_STATUS_CFG.PENDING;
+export const getTaskCfg = (status?: string) => {
+    const baseCfg = TASK_STATUS_CFG.PENDING;
+    if (status && status.startsWith("PENDING_cap_")) {
+        const match = status.match(/^PENDING_cap_(\d+)_(\d+)$/);
+        if (match) {
+            const current = match[1];
+            const limit = match[2];
+            return {
+                ...baseCfg,
+                label: `Waiting for slot (${current}/${limit})`,
+            };
+        }
+    }
+    return TASK_STATUS_CFG[(status as TaskStatusKey) ?? "PENDING"] ?? TASK_STATUS_CFG.PENDING;
+};
 
 export const MERGE_INDICATOR_CFG: Record<string, { label: string; text: string; bg: string; border: string }> = {
     CI:            { label: "CI",            text: "text-signal-400",     bg: "bg-signal-500/8",      border: "border-signal-500/15" },
@@ -94,6 +108,8 @@ export const getExecutionEventText = (event: ExecutionRuntimeEventSummary): stri
     const payload = event.payload || {};
 
     switch (event.eventType) {
+        case "provider_concurrency_wait":
+            return `Waiting for slot (${String(payload.currentCount || 0)}/${String(payload.limit || 0)})`;
         case "dispatch_queued":
             return `Queued for ${String(payload.executorType || event.provider || "execution")}`;
         case "dispatch_started":

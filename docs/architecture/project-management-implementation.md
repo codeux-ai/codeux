@@ -10,7 +10,7 @@ It includes:
 - Code UX app database tables in `~/.code-ux/app.db`
 - typed project/sprint/task repositories
 - selected-project persistence in sqlite
-- project-scoped dashboard HTTP endpoints
+- project-scoped dashboard HTTP endpoints with runtime type validation using dedicated parser helpers
 - v2 dashboard wiring for Projects, Sprints, Tasks, top-nav selection, and overview widgets
 - a structured import flyout supporting markdown import (and placeholders for future providers like Jira), plus export for sprints and tasks
 - selected-project runtime projection for live dashboard status
@@ -18,6 +18,7 @@ It includes:
 - first listen-loop MCP connection and conversation contracts
 - first DB-native sprint orchestration slice for project/sprint scope
 - `manage_code_ux` MCP tool handlers for projects and sprints domain actions
+- the Projects page now renders source kind, repository details, local path, timestamps, and latest run activity directly from `GET /api/projects` without per-card follow-up requests
 
 It does not yet include:
 - multi-MCP scheduling
@@ -97,6 +98,8 @@ The dashboard now has project-scoped CRUD endpoints:
 - `POST /api/projects/:projectId/conversations/messages`
 - `GET /api/projects/:projectId/execution/invocations`
 - `GET /api/execution/invocations/:invocationId/messages`
+
+`GET /api/projects` is the single data source for Projects page cards. The project summary payload includes the source kind, repository metadata, local base path, creation and update timestamps, and the latest project-scoped run activity derived from `sprint_runs` and `task_runs`.
 
 Legacy runtime endpoints still exist for the old live runtime/status surfaces:
 - `GET /api/status`

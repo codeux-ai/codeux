@@ -27,16 +27,18 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
   const addToast = useCallback((toast: Omit<ToastMessage, "id">) => {
     setToasts((prev) => {
       const newToasts = [...prev, { ...toast, id: Math.random().toString(36).slice(2) }];
-      if (newToasts.length > 3) {
-        // Trigger exit animation for older toasts instead of abruptly unmounting
-        const overflow = newToasts.slice(0, newToasts.length - 3);
-        setDismissingIds(dPrev => {
+
+      setDismissingIds(dPrev => {
+        const activeNonErrorToasts = newToasts.filter(t => t.type !== 'error' && !dPrev.has(t.id));
+        if (activeNonErrorToasts.length > 3) {
+          const overflow = activeNonErrorToasts.slice(0, activeNonErrorToasts.length - 3);
           const dNext = new Set(dPrev);
           overflow.forEach(t => dNext.add(t.id));
           return dNext;
-        });
-        return newToasts;
-      }
+        }
+        return dPrev;
+      });
+
       return newToasts;
     });
   }, []);
@@ -60,7 +62,7 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div aria-live="polite" aria-atomic="false" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div role="status" aria-live="polite" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.filter(t => t.type !== 'error').map((toast) => (
           <Toast
             key={toast.id}
@@ -70,7 +72,7 @@ export const ToastProvider: FunctionComponent<{ children: ComponentChildren }> =
           />
         ))}
       </div>
-      <div role="alert" aria-live="assertive" aria-atomic="true" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div role="alert" aria-live="assertive" className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
         {toasts.filter(t => t.type === 'error').map((toast) => (
           <Toast
             key={toast.id}

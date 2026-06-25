@@ -8,6 +8,7 @@ import type {
 import type { McpConnectionRecord } from "../../contracts/connection-chat-types.js";
 import type { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import type { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
+import { DashboardSnapshotCachePolicy } from "./dashboard-snapshot-cache-policy.js";
 
 export function mapExecutionConnections(connections: McpConnectionRecord[]): ExecutionConnectionSummary[] {
   return connections.map((connection) => ({
@@ -101,11 +102,6 @@ export type DashboardSnapshotCacheDeps = Pick<BootDashboardDeps,
 export class DashboardSnapshotCache {
   private deps: DashboardSnapshotCacheDeps;
 
-  private PROJECT_EXECUTION_CACHE_TTL_MS = 2_000;
-  private PROJECT_STATS_CACHE_TTL_MS = 2_000;
-  private OVERVIEW_CACHE_TTL_MS = 500;
-  private PROJECTS_CACHE_TTL_MS = 500;
-
   private projectExecutionSnapshotCache = new Map<string, { snapshot: ExecutionDashboardSnapshot; expiresAt: number }>();
   private projectStatsSnapshotCache = new Map<string, { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getProjectStatsSnapshot"]>; expiresAt: number }>();
   private overviewTelemetryCache: { snapshot: ReturnType<DashboardSnapshotCacheDeps["executionRepository"]["getOverviewTelemetrySnapshot"]>; expiresAt: number } | null = null;
@@ -123,7 +119,7 @@ export class DashboardSnapshotCache {
     const snapshot = this.deps.projectManagementRepository.listProjects();
     this.projectsSnapshotCache = {
       snapshot,
-      expiresAt: now + this.PROJECTS_CACHE_TTL_MS,
+      expiresAt: now + DashboardSnapshotCachePolicy.PROJECTS_CACHE_TTL_MS,
     };
     return snapshot;
   };
@@ -136,7 +132,7 @@ export class DashboardSnapshotCache {
     const snapshot = this.deps.executionRepository.getOverviewTelemetrySnapshot();
     this.overviewTelemetryCache = {
       snapshot,
-      expiresAt: now + this.OVERVIEW_CACHE_TTL_MS,
+      expiresAt: now + DashboardSnapshotCachePolicy.OVERVIEW_CACHE_TTL_MS,
     };
     return snapshot;
   };
@@ -169,14 +165,14 @@ export class DashboardSnapshotCache {
 
     this.projectExecutionSnapshotCache.set(projectId, {
       snapshot,
-      expiresAt: now + this.PROJECT_EXECUTION_CACHE_TTL_MS,
+      expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_EXECUTION_CACHE_TTL_MS,
     });
     return snapshot;
   };
 
   getProjectStatsSnapshot = (projectId: string, query: ProjectStatsQuery = { window: "7d" }) => {
     const now = Date.now();
-    const cacheKey = `${projectId}:${JSON.stringify(query)}`;
+    const cacheKey = DashboardSnapshotCachePolicy.getProjectStatsCacheKey(projectId, query);
     const cached = this.projectStatsSnapshotCache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
       return cached.snapshot;
@@ -184,7 +180,7 @@ export class DashboardSnapshotCache {
     const snapshot = this.deps.executionRepository.getProjectStatsSnapshot(projectId, query);
     this.projectStatsSnapshotCache.set(cacheKey, {
       snapshot,
-      expiresAt: now + this.PROJECT_STATS_CACHE_TTL_MS,
+      expiresAt: now + DashboardSnapshotCachePolicy.PROJECT_STATS_CACHE_TTL_MS,
     });
     return snapshot;
   };
@@ -194,7 +190,7 @@ export class DashboardSnapshotCache {
   }
 
   invalidateProjectStats(projectId: string): void {
-    const keysToDelete = Array.from(this.projectStatsSnapshotCache.keys()).filter((k) => k.startsWith(`${projectId}:`));
+    const keysToDelete = Array.from(this.projectStatsSnapshotCache.keys()).filter((k) => DashboardSnapshotCachePolicy.isProjectStatsCacheKeyMatch(k, projectId));
     for (const key of keysToDelete) {
       this.projectStatsSnapshotCache.delete(key);
     }

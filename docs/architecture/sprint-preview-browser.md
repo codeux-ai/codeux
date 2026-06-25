@@ -74,6 +74,7 @@ Command detection reads `package.json` and lockfiles to infer:
 Install behavior:
 - preview runtime now uses `pnpm install --prefer-offline --no-frozen-lockfile` so non-fatal manifest/lockfile drift does not spam container logs and warmed runtime caches are reused before going back to the registry
 - preview containers now reuse the shared Docker runtime package caches instead of mounting host `node_modules`, and pnpm is pinned to a persistent store under that runtime cache so exported workspaces do not trigger cold installs on every rebuild
+- preview docker arguments and runtime path layouts are deterministically constructed via the helper in `sprint-preview-docker-plan.ts`
 - preview fallback now prefers the base image plus app-level install/build commands over re-running the worker-oriented setup script, which avoids unrelated provider/Playwright bootstrap work from blocking app previews
 - the shared worker setup script now leaves Playwright bootstrap disabled by default, so fresh Docker startup in WSL is not blocked by browser downloads unless an image explicitly opts in with `CODE_UX_INSTALL_PLAYWRIGHT=1`
 
@@ -106,6 +107,10 @@ The dashboard injects a small preview bridge script into proxied HTML responses.
 
 Host-based preview routing also proxies websocket upgrades so preview apps that derive websocket URLs from `window.location` continue to work on their own preview origin.
 
+Preview host responses intentionally skip the dashboard origin's frame and permissions hardening headers. For proxied HTML documents, Code UX also strips upstream `Content-Security-Policy`, `Content-Security-Policy-Report-Only`, and `X-Frame-Options` headers before injecting the preview bridge. This keeps locally trusted sprint previews embeddable in the in-app iframe even when the previewed app ships production headers such as `frame-ancestors 'none'` or `X-Frame-Options: DENY`.
+
+Preview hosts also apply permissive CORS at the Code UX proxy boundary. `OPTIONS` preflight requests are answered before they reach the container, proxied responses override upstream `Access-Control-*` headers, and proxied browser requests normalize `Origin`, same-preview `Referer`, and `Sec-Fetch-Site` to the loopback upstream origin before entering the container. The injected preview bridge loads before app head scripts so it can rewrite same-dashboard and any-port loopback `fetch` / `XMLHttpRequest` calls back onto the preview origin. Together, these rules prevent previewed apps from accidentally hitting the dashboard API origin or rejecting their own preview-origin requests as cross-site while they are running inside the in-app browser.
+
 ## Automation
 
 `SprintPreviewService.reconcileSessions()` runs on a background interval from `CodeUxServer`.
@@ -136,6 +141,7 @@ Current preview controls include:
 - `startupScriptPath`
 
 Startup hygiene:
+- Docker session lifecycle management (such as `docker ps` parsing, lock acquisition for atomic container operations, container removal, and name sanitization) has been extracted to `DockerSessionLifecycle` in `src/services/docker-session-lifecycle.ts` so both preview and file-browser share identical mechanics without diverging.
 - Code UX now removes any existing `code-ux.preview=true` containers on server startup before the preview reconciliation loop begins
 - Code UX also removes orphaned unlabeled setup-helper containers that were created by older inline setup-image preview flows
 - persisted preview sessions are reset back to `stopped` during that startup cleanup so stale containers do not survive process restarts
@@ -185,3 +191,10 @@ Current intentional limits:
 - one persisted preview session row per project+sprint pair
 - preview host routing assumes projects use relative URLs or origin-derived absolute URLs for API/websocket traffic
 - script detection prefers production-style preview/start commands and does not automatically fall back to `dev`
+
+## File Browser Limits and Policy
+
+To harden against large repository scans, the file browser implements several limits:
+- **MAX_TREE_ENTRIES (20,000):** Limits the number of file nodes returned by the `getTree` operation.
+- **MAX_FILE_BYTES (2MB):** Caps the maximum size of a file read by `readFile` or diff generation.
+- **Pruned Directories:** Directories like `node_modules`, `.git`, `dist`, `build` are pruned at scan time to prevent unbounded tree generation and expensive reads.

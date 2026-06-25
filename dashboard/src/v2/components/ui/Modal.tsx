@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { Overlay } from "./Overlay.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface ModalProps {
   isOpen: boolean;
@@ -39,30 +40,33 @@ export const Modal: FunctionComponent<ModalProps> = ({
   const reducedMotion = useReducedMotion();
   const [shouldRender, setShouldRender] = useState(isOpen);
   const cardRef = useRef<HTMLDivElement>(null);
-  const trapRef = useFocusTrap(isOpen && shouldRender, onClose);
+  const trapRef = useFocusTrap(isOpen && shouldRender, { onClose, restoreFocus: true, initialFocusRef });
+
+  const hasAccessibleName = ariaLabel || titleId || ariaLabelledBy || ariaLabelledby;
+  const fallbackAriaLabel = !hasAccessibleName ? "Dialog" : undefined;
 
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
-      const duration = reducedMotion ? 0 : 0.2;
+      const duration = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
 
       // Delay slightly to ensure ref is populated before animating
       requestAnimationFrame(() => {
         if (cardRef.current) {
           gsap.fromTo(cardRef.current,
             { opacity: 0, scale: 0.95 },
-            { opacity: 1, scale: 1, duration, ease: "power2.out" }
+            { opacity: 1, scale: 1, duration, ease: MODAL_MOTION.entry.ease }
           );
         }
       });
     } else {
-      const duration = reducedMotion ? 0 : 0.15;
+      const duration = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
       if (cardRef.current) {
         gsap.to(cardRef.current, {
           opacity: 0,
           scale: 0.95,
           duration,
-          ease: "power2.in",
+          ease: MODAL_MOTION.exit.ease,
           onComplete: () => {
             setShouldRender(false);
           }
@@ -85,10 +89,11 @@ export const Modal: FunctionComponent<ModalProps> = ({
         }}
         role="dialog"
         aria-modal="true"
-        aria-label={ariaLabel}
+        aria-label={ariaLabel || fallbackAriaLabel}
         aria-labelledby={titleId || ariaLabelledBy || ariaLabelledby}
         aria-describedby={ariaDescribedBy || ariaDescribedby}
         tabIndex={-1}
+        inert={!isOpen ? true : undefined}
         className={`relative z-50 bg-white dark:bg-void-800 rounded-[12px] shadow-lg border border-black/[0.06] dark:border-white/[0.06] outline-none max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
