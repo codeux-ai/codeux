@@ -186,12 +186,12 @@ const AppLayout = () => {
   const showSidebar = isMobile || navMode === "SIDEBAR";
 
   return (
-    <div className="app-shell flex flex-col h-screen overflow-hidden font-sans text-slate-900 dark:text-slate-200 bg-[#F9F8F4] dark:bg-void-900 transition-colors duration-700">
+    <div className="app-shell flex flex-col h-dvh overflow-hidden font-sans text-slate-900 dark:text-slate-200 bg-[#F9F8F4] dark:bg-void-900 transition-colors duration-700">
       {isElectron && <TitleBar />}
       <div className="flex flex-1 min-h-0 overflow-hidden">
       {showSidebar && <Sidebar isMobile={isMobile} isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />}
 
-      <div className="flex flex-col flex-1 h-full overflow-hidden relative">
+      <div className="flex flex-col flex-1 min-h-0 h-full overflow-hidden relative">
         {/*
           Keep the Suspense boundary permanently mounted and only toggle its
           child. Replacing the boundary with a plain <div> when a background
@@ -229,7 +229,7 @@ const AppLayout = () => {
           />
         )}
 
-        <div className="flex-1 flex flex-col h-full relative z-10 overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0 h-full relative z-10 overflow-hidden">
           <TopNav
             onMenuToggle={() => setIsMobileSidebarOpen(prev => !prev)}
             isMobile={isMobile}
@@ -237,7 +237,7 @@ const AppLayout = () => {
             isMobileMenuOpen={isMobileSidebarOpen}
           />
 
-          <main id="main-content" tabIndex={-1} aria-label="Main content" className={`flex-1 overflow-y-auto dashboard-scrollbar relative ${showSidebar ? '' : 'pb-32'}`} style={{ contain: 'layout style' }}>
+          <main id="main-content" tabIndex={-1} aria-label="Main content" className={`flex-1 overflow-y-auto dashboard-scrollbar relative ${showSidebar ? 'pb-20 lg:pb-0' : 'pb-32'}`} style={{ contain: 'layout style' }}>
             <Suspense fallback={<div className="flex-1 p-8"><SkeletonPanel /></div>}>
               <Outlet />
             </Suspense>
