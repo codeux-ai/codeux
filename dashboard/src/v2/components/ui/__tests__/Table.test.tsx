@@ -79,6 +79,26 @@ describe("Table component", () => {
     expect(cells[0]).toHaveTextContent("Data 1");
   });
 
+  it("renders inline mobileLabels correctly in block layout", () => {
+    render(
+      <Table>
+        <TableBody>
+          <TableRow>
+            <TableCell mobileLabel="Label A">Data A</TableCell>
+            <TableCell mobileLabel="Label B">Data B</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+
+    const labelA = screen.getByText("Label A");
+    const labelB = screen.getByText("Label B");
+    expect(labelA).toBeInTheDocument();
+    expect(labelB).toBeInTheDocument();
+    expect(labelA).toHaveClass("inline-flex", "lg:hidden");
+    expect(labelB).toHaveClass("inline-flex", "lg:hidden");
+  });
+
   it("applies aria-selected when TableRow is selected", () => {
     const { rerender } = render(
       <Table>

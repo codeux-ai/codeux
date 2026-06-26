@@ -85,11 +85,11 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
   return (
     <td
       colSpan={colSpan}
-      className={`block px-4 py-3 align-middle lg:table-cell lg:border-y lg:px-4 lg:py-3 ${alignClass} ${roundedClass} ${className}`}
+      className={`flex flex-wrap items-start gap-x-2 border-b border-white/[0.04] px-4 py-2 last:border-b-0 align-middle lg:table-cell lg:border-y lg:px-4 lg:py-3 ${alignClass} ${roundedClass} ${className}`}
       role="cell"
     >
       {mobileLabel && (
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 lg:hidden">
+        <span className="inline-flex text-xs font-medium text-muted-foreground mr-2 lg:hidden" aria-hidden>
           {mobileLabel}
         </span>
       )}
