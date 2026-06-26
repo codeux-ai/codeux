@@ -1,7 +1,7 @@
 {
-  "name": "docs-release",
+  "name": "codeux-docs",
   "version": "1.0.0",
-  "description": "",
+  "description": "Documentation site for Code UX — the open-source, container-first agentic coding runtime.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

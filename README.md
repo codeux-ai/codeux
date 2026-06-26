@@ -1,28 +1,39 @@
 # Code UX
 
-**A containerized agentic runtime for professional software teams.**
+**The open-source, container-first agentic coding runtime.**
 
 [![npm](https://img.shields.io/npm/v/@codeuxai/codeux.svg)](https://www.npmjs.com/package/@codeuxai/codeux)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
+[![npm downloads](https://img.shields.io/npm/dm/@codeuxai/codeux.svg)](https://www.npmjs.com/package/@codeuxai/codeux)
+[![GitHub stars](https://img.shields.io/github/stars/codeux-ai/codeux.svg?style=flat)](https://github.com/codeux-ai/codeux/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-22+-green.svg)](https://nodejs.org/)
-[![pnpm](https://img.shields.io/badge/pnpm-10.33+-orange.svg)](https://pnpm.io/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-Code UX is a local-first orchestration platform for running serious AI-assisted engineering work. It turns a feature, refactor, migration, QA pass, or CI repair into a managed sprint: planned, routed to the right agent provider, executed in isolated workspaces, tracked in a live dashboard, reviewed through Git and CI, and surfaced back to the developer with clear intervention points.
+Code UX is a **local-first, MIT-licensed** orchestration platform for running serious AI-assisted
+engineering work. It turns a feature, refactor, migration, QA pass, or CI repair into a managed
+sprint: planned, routed to the right agent provider, executed in isolated workspaces, tracked in a
+live dashboard, reviewed through Git and CI, and surfaced back to the developer with clear
+intervention points.
 
-The vision is simple: **a token-efficient agentic runtime built around how professional programmers and agencies already work.** Code UX does not try to replace the tools developers love. It coordinates them. Jules, Claude Code, Codex CLI, Gemini CLI, Qwen Code, OpenCode, Antigravity CLI, MCP tools, GitHub, GitLab, Jira, Docker, and browser previews all become part of one governed runtime.
+The idea is simple: **a token-efficient agentic runtime built around how professional programmers and
+agencies already work.** Code UX does not try to replace the tools developers love — it coordinates
+them. Jules, Claude Code, Codex CLI, Gemini CLI, Qwen Code, OpenCode, Antigravity CLI, MCP tools,
+GitHub, GitLab, Jira, Docker, and browser previews all become part of one governed runtime.
 
-## Install
+No accounts, no seats, no usage limits. Everything runs on your machine. **If it saves you time,
+[star the repo](https://github.com/codeux-ai/codeux) — it genuinely helps.**
 
-The recommended path is the desktop app. Download the latest installer for your platform from the project [GitHub Releases](https://github.com/codeux-ai/codeux/releases).
+## Download
 
-| Platform | Release artifact | Notes |
+The recommended path is the desktop app. Download the latest installer for your platform from
+[GitHub Releases](https://github.com/codeux-ai/codeux/releases/latest).
+
+| Platform | Artifact | Notes |
 | --- | --- | --- |
-| Windows | `.exe` installer | Assisted installer with license and beta notice screens. |
-| macOS | `.dmg` | Choose Apple Silicon or Intel according to your Mac. |
-| Linux | `.AppImage`, `.deb`, or other packaged target | Use AppImage for portable use or `.deb` for Debian/Ubuntu-style installs. |
+| **Windows** | `Code-UX-<version>-win-x64.exe` | Assisted installer. On first run, Windows SmartScreen may warn because the build is not yet code-signed — choose **More info → Run anyway**. |
+| **macOS** | `Code-UX-<version>-mac-arm64.dmg` (or `.zip`) | Apple Silicon build. |
+| **Linux** | `Code-UX-<version>-linux-x86_64.AppImage`, `…-linux-amd64.deb`, or `…-linux-x64.tar.gz` | Use the AppImage for portable use or the `.deb` for Debian/Ubuntu-style installs. |
 
-After launch, Code UX opens its local dashboard, normally at:
+After launch, Code UX opens its local dashboard at:
 
 ```text
 http://localhost:4444
@@ -36,19 +47,23 @@ Prefer the command line? Install the runtime globally from npm:
 npm i -g @codeuxai/codeux
 ```
 
-This installs the `codeux` command — the orchestration server, MCP server, and live dashboard (the same runtime that powers the desktop app, without the Electron shell). Start it with:
+This installs the `codeux` command — the orchestration server, MCP server, and live dashboard (the
+same runtime that powers the desktop app, without the Electron shell). Start it with:
 
 ```bash
 codeux
 ```
 
-Then open the dashboard at `http://localhost:4444`. Requires Node.js 22 or newer; Docker is recommended for virtual worker execution and required for preview containers. Run `codeux --help` for the full list of flags and environment variables.
+Then open the dashboard at `http://localhost:4444`. Requires **Node.js 22 or newer**; Docker is
+recommended for virtual worker execution and required for preview containers. Run `codeux --help` for
+the full list of flags and environment variables.
 
 Need to build or run from source? Jump to [Run From Source](#run-from-source).
 
 ## What Code UX Does
 
-Code UX is an agentic desktop runtime with a full dashboard for projects, sprints, agents, settings, live execution, memory, telemetry, Git state, and browser previews.
+Code UX is an agentic desktop runtime with a full dashboard for projects, sprints, agents, settings,
+live execution, memory, telemetry, Git state, and browser previews.
 
 At a high level, Code UX:
 
@@ -65,9 +80,16 @@ At a high level, Code UX:
 
 ## Why It Exists
 
-Most current agentic coding tools try to be a single autonomous agent for everything. They push more context into longer conversations, ask a model to reason through every operational step, and burn tokens on work that should be deterministic: branch setup, dependency ordering, merge checks, CI polling, PR state, reruns, conflict detection, and status bookkeeping.
+Most current agentic coding tools try to be a single autonomous agent for everything. They push more
+context into longer conversations, ask a model to reason through every operational step, and burn
+tokens on work that should be deterministic: branch setup, dependency ordering, merge checks, CI
+polling, PR state, reruns, conflict detection, and status bookkeeping.
 
-Code UX takes the opposite path. It keeps the coding path predictable and moves the repetitive operational work into software. The runtime plans work as a dependency-aware DAG, starts only the tasks that are ready, tracks each execution in durable state, watches Git and CI programmatically, and automates merge gates wherever policy allows. Agents spend their tokens on the parts that actually need judgment: planning, implementation, review, repair, and conflict resolution.
+Code UX takes the opposite path. It keeps the coding path predictable and moves the repetitive
+operational work into software. The runtime plans work as a dependency-aware DAG, starts only the
+tasks that are ready, tracks each execution in durable state, watches Git and CI programmatically,
+and automates merge gates wherever policy allows. Agents spend their tokens on the parts that
+actually need judgment: planning, implementation, review, repair, and conflict resolution.
 
 That difference matters at professional scale:
 
@@ -79,15 +101,21 @@ That difference matters at professional scale:
 - Short-lived worker containers isolate agent execution and are destroyed after runs, reducing long-lived access and keeping company workspaces easier to govern.
 - CI failures, merge conflicts, PR gates, issue imports, sprint exports, and intervention states are handled by the runtime instead of repeatedly explained to a model.
 
-For agencies and senior engineers, this turns AI coding from an ad hoc chat workflow into an operating system for delivery. Jira, GitHub, and GitLab issue imports let teams start from the project-management systems they already use. Sprint planning turns client requests and backlog items into executable work. Containerized workers keep repositories separate. Sprint-aware memory carries forward what matters without bloating every provider call. Live Browser previews make frontend progress inspectable without terminal juggling. The dashboard gives leads a way to supervise many moving parts without reading every token of every agent conversation.
-
-Code UX is built for huge work: migrations, product features, cleanup waves, QA passes, and multi-branch delivery where one agent session is not enough. Its dispatch architecture is also the foundation for something larger: a real containerized agent cluster. The long-term direction is an agent runtime that feels less like an oversized chatbot and more like Kubernetes for Docker-backed coding workers: schedulable, observable, policy-driven, and efficient by design.
+For agencies and senior engineers, this turns AI coding from an ad hoc chat workflow into an
+operating system for delivery. Jira, GitHub, and GitLab issue imports let teams start from the
+project-management systems they already use. Sprint planning turns client requests and backlog items
+into executable work. Containerized workers keep repositories separate. Sprint-aware memory carries
+forward what matters without bloating every provider call. Live Browser previews make frontend
+progress inspectable without terminal juggling. The dashboard gives leads a way to supervise many
+moving parts without reading every token of every agent conversation.
 
 ## Core Features
 
 ### Multi-provider agent routing
 
-Route work across all supported providers and models. Each provider can be configured with weights, concurrency limits, thinking mode, model defaults, credentials, Docker auth mounting, and route-specific overrides.
+Route work across all supported providers and models. Each provider can be configured with weights,
+concurrency limits, thinking mode, model defaults, credentials, Docker auth mounting, and
+route-specific overrides.
 
 | Provider | Runtime type | Typical role |
 | --- | --- | --- |
@@ -99,11 +127,15 @@ Route work across all supported providers and models. Each provider can be confi
 | OpenCode | Local OpenCode CLI | Multi-model CLI routing, OpenRouter-style provider flexibility, custom endpoints. |
 | Antigravity | Local Antigravity CLI | CLI routing for teams that use Antigravity in their development flow. |
 
-Code UX brings the same centralized routing, agents, memory, and tool setup to the provider CLIs teams already use: Claude Code, Codex CLI, Gemini CLI, Qwen Code, OpenCode, and Antigravity CLI.
+Code UX brings the same centralized routing, agents, memory, and tool setup to the provider CLIs
+teams already use: Claude Code, Codex CLI, Gemini CLI, Qwen Code, OpenCode, and Antigravity CLI.
 
 ### Docker-first execution
 
-The default runtime is containerized. Code UX executes CLI providers in Docker-backed workspaces using a shared, configurable runtime image and setup flow. This keeps agent runs isolated from the host while still allowing controlled access to repository checkouts, Git credentials, provider auth, and runtime caches.
+The default runtime is containerized. Code UX executes CLI providers in Docker-backed workspaces
+using a shared, configurable runtime image and setup flow. This keeps agent runs isolated from the
+host while still allowing controlled access to repository checkouts, Git credentials, provider auth,
+and runtime caches.
 
 Docker-backed execution provides:
 
@@ -114,13 +146,22 @@ Docker-backed execution provides:
 - Isolated merge-conflict repair and CI autofix flows.
 - Startup cleanup for stale containers, workspaces, and preview sessions.
 
-Host execution is available for provider CLIs when speed or local tooling access is more important than isolation.
+Host execution is available for provider CLIs when speed or local tooling access is more important
+than isolation.
 
 ### Security by deterministic isolation
 
-Code UX is designed for company environments where agent execution must be understandable, bounded, and auditable. The runtime avoids handing an autonomous agent an open-ended workspace and hoping it behaves correctly. Instead, Code UX keeps the workflow deterministic: tasks are dispatched through known routes, dependencies are explicit, merge rules are enforced by policy, CI state is checked programmatically, and human intervention points are surfaced when the runtime cannot safely proceed.
+Code UX is designed for environments where agent execution must be understandable, bounded, and
+auditable. The runtime avoids handing an autonomous agent an open-ended workspace and hoping it
+behaves correctly. Instead, Code UX keeps the workflow deterministic: tasks are dispatched through
+known routes, dependencies are explicit, merge rules are enforced by policy, CI state is checked
+programmatically, and human intervention points are surfaced when the runtime cannot safely proceed.
 
-The container model strengthens that control. Provider CLIs run in short-lived Docker workspaces by default, scoped to the task or repair flow they are handling. After the run, Code UX captures the resulting patch, memory learnings, logs, and execution state, then cleans up the worker environment. Credentials can be mounted deliberately, caches can be shared without exposing full host state, and stale containers are pruned on startup.
+The container model strengthens that control. Provider CLIs run in short-lived Docker workspaces by
+default, scoped to the task or repair flow they are handling. After the run, Code UX captures the
+resulting patch, memory learnings, logs, and execution state, then cleans up the worker environment.
+Credentials can be mounted deliberately, caches can be shared without exposing full host state, and
+stale containers are pruned on startup.
 
 For teams, this creates a stronger security posture than persistent, all-purpose agent sandboxes:
 
@@ -132,7 +173,9 @@ For teams, this creates a stronger security posture than persistent, all-purpose
 
 ### Live Browser preview containers
 
-Code UX can start one preview container per sprint and render the running app inside the dashboard. Preview sessions are isolated by project and sprint, receive their own local origin, proxy HTTP and websocket traffic, and can be rebuilt as tasks complete.
+Code UX can start one preview container per sprint and render the running app inside the dashboard.
+Preview sessions are isolated by project and sprint, receive their own local origin, proxy HTTP and
+websocket traffic, and can be rebuilt as tasks complete.
 
 The Browser page supports:
 
@@ -145,7 +188,9 @@ The Browser page supports:
 
 ### Sprint orchestration
 
-Sprints are database-backed and can also round-trip through markdown for portable, reviewable task definitions. The orchestrator understands task dependencies, branch preparation, provider assignment, worker attention, CI gates, QA state, merge state, and terminal sprint outcomes.
+Sprints are database-backed and can also round-trip through markdown for portable, reviewable task
+definitions. The orchestrator understands task dependencies, branch preparation, provider assignment,
+worker attention, CI gates, QA state, merge state, and terminal sprint outcomes.
 
 Important sprint capabilities include:
 
@@ -159,7 +204,9 @@ Important sprint capabilities include:
 
 ### Sprint-aware memory
 
-Code UX treats memory as part of the runtime, not as an ever-growing prompt dump. It separates short-term sprint memory from long-term project memory so agents can learn from completed work without carrying irrelevant history into every task.
+Code UX treats memory as part of the runtime, not as an ever-growing prompt dump. It separates
+short-term sprint memory from long-term project memory so agents can learn from completed work
+without carrying irrelevant history into every task.
 
 The memory architecture is designed for token efficiency:
 
@@ -168,15 +215,16 @@ The memory architecture is designed for token efficiency:
 - Planning, coding, QA, CI repair, and merge-conflict prompts can receive scoped memory instead of a full transcript.
 - Memory inspection in the dashboard lets operators see what the runtime has learned and where that context came from.
 
-This keeps context focused: a worker fixing a CI failure gets the relevant sprint and project learnings, not a noisy archive of unrelated conversations.
+This keeps context focused: a worker fixing a CI failure gets the relevant sprint and project
+learnings, not a noisy archive of unrelated conversations.
 
 ### Professional dashboard
 
-The dashboard is a real-time Preact interface served locally by the backend and packaged inside the desktop app. It is designed for active operation, not passive reporting.
+The dashboard is a real-time Preact interface served locally by the backend and packaged inside the
+desktop app. It is designed for active operation, not passive reporting.
 
 Main surfaces include:
 
-- **Overview**: cross-project status, active runs, telemetry, and runtime health.
 - **Projects**: local and Git URL project creation, setup-agent initialization, project selection, and repository metadata.
 - **Sprints**: sprint composer, quicksprint templates, imported issues, live controls, status ledger, gallery, filters, and exports.
 - **Tasks**: task creation, dependency editing, board/list views, and sprint-scoped task management.
@@ -186,7 +234,7 @@ Main surfaces include:
 - **Scheduler**: scheduled sprints, quicksprints, and project messages with recurrence support.
 - **File Browser**: project file inspection and repository navigation from the dashboard.
 - **Memory**: short-term and long-term agent memory inspection.
-- **Stats**: token, time, provider, purpose, task, and sprint analytics.
+- **Stats**: token, time, provider, purpose, task, and sprint analytics, plus Git telemetry.
 - **Settings**: scoped system/project/sprint configuration, provider setup, route mapping, Git integrations, Docker controls, appearance, scheduler, and browser preview settings.
 - **Browser**: embedded sprint preview containers with logs, controls, and editable startup scripts.
 
@@ -204,7 +252,9 @@ Code UX is built around existing professional delivery mechanics:
 
 ### Centralized MCP and agent setup
 
-Code UX gives teams one place to configure the tools and agents used by all their favorite coding CLIs. Instead of maintaining separate agent files, MCP tool connections, and setup instructions for every provider, Code UX centralizes that configuration at the system, project, and sprint level.
+Code UX gives teams one place to configure the tools and agents used by all their favorite coding
+CLIs. Instead of maintaining separate agent files, MCP tool connections, and setup instructions for
+every provider, Code UX centralizes that configuration at the system, project, and sprint level.
 
 MCP support is provider-wide:
 
@@ -213,13 +263,22 @@ MCP support is provider-wide:
 - Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity CLI can receive the same tool surface without hand-configuring each CLI separately.
 - Containerized runs get the same project MCP setup as host runs, while still keeping execution scoped to the active project and task.
 
-Agent setup works the same way. Project agent presets live in Code UX, can be edited from the dashboard, synced to project markdown, and routed per invocation type. A team can define a planning agent, implementation agent, QA agent, CI repair agent, merge-conflict agent, and project-specific specialists once, then reuse them across all supported provider CLIs.
+Code UX itself also runs as an **MCP server** (over stdio or streamable HTTP), so MCP-aware clients
+can drive the runtime directly. See the [MCP clients guide](./docs-web/user/mcp-clients.md).
 
-For new repositories, the Project Setup Agent can bootstrap a tailored set of specialized agents, quicksprint templates, preview scripts, and CI guidance. That makes project onboarding much faster: add the repository, let Code UX inspect the project, generate the right operating structure, and start planning sprint work without rebuilding the same agent setup for every CLI.
+Agent setup works the same way. Project agent presets live in Code UX, can be edited from the
+dashboard, synced to project markdown, and routed per invocation type. A team can define a planning
+agent, implementation agent, QA agent, CI repair agent, merge-conflict agent, and project-specific
+specialists once, then reuse them across all supported provider CLIs.
+
+For new repositories, the Project Setup Agent can bootstrap a tailored set of specialized agents,
+quicksprint templates, preview scripts, and CI guidance. That makes project onboarding much faster:
+add the repository, let Code UX inspect the project, generate the right operating structure, and
+start planning sprint work without rebuilding the same agent setup for every CLI.
 
 ## Typical Workflow
 
-1. Install Code UX from Releases and open the dashboard.
+1. Install Code UX from Releases (or npm) and open the dashboard.
 2. Add a local repository or clone a Git URL into a managed project.
 3. Configure provider credentials and choose Docker or host execution for each provider.
 4. Create a sprint from a prompt, linked issue set, or quicksprint template.
@@ -230,13 +289,14 @@ For new repositories, the Project Setup Agent can bootstrap a tailored set of sp
 
 ## Documentation
 
-- [Documentation index](./docs/index.md)
 - [User quickstart](./docs-web/user/quickstart.md)
+- [Installation](./docs-web/user/installation.md)
 - [Providers and models](./docs-web/user/providers-and-models.md)
-- [Dashboard guide](./docs/dashboard/dashboard-guide.md)
-- [Sprint preview browser](./docs/architecture/sprint-preview-browser.md)
+- [Sprint orchestration](./docs-web/user/sprint-orchestration.md)
+- [MCP clients](./docs-web/user/mcp-clients.md)
 - [Configuration](./docs-web/developer/configuration.md)
 - [Building from source](./docs-web/developer/building-from-source.md)
+- [Architecture overview](./docs-web/architecture/index.md)
 
 ## Run From Source
 
@@ -260,7 +320,10 @@ pnpm install
 
 ### Configure providers
 
-You can start Code UX without API keys or environment variables. When you are ready to run agent work, configure providers from the dashboard. For local CLI providers, authenticate with the provider's normal CLI login flow; Code UX can detect and optionally mount local auth for Gemini, Codex, Claude Code, Qwen Code, OpenCode, and Antigravity CLI.
+You can start Code UX without API keys or environment variables. When you are ready to run agent
+work, configure providers from the dashboard. For local CLI providers, authenticate with the
+provider's normal CLI login flow; Code UX can detect and optionally mount local auth for Gemini,
+Codex, Claude Code, Qwen Code, OpenCode, and Antigravity CLI.
 
 ### Run in development
 
@@ -268,11 +331,7 @@ You can start Code UX without API keys or environment variables. When you are re
 pnpm run dev
 ```
 
-Then open:
-
-```text
-http://localhost:4444
-```
+Then open `http://localhost:4444`.
 
 ### Build and run
 
@@ -301,6 +360,13 @@ GitHub Actions also runs the high-severity dependency audit after the consolidat
 ```bash
 pnpm run audit
 ```
+
+## Contributing
+
+Code UX is open source and contributions are welcome. Open an
+[issue](https://github.com/codeux-ai/codeux/issues) to report a bug or propose a feature, or send a
+pull request. If the project is useful to you, the simplest way to help is to
+**[star it on GitHub](https://github.com/codeux-ai/codeux)**.
 
 ## License
 
