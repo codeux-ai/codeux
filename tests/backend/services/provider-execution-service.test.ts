@@ -155,6 +155,26 @@ describe("ProviderExecutionService", () => {
     );
   });
 
+  it("preserves Docker provider usage for startup recovery when restart interrupts the spawner", async () => {
+    providerRunner.runProviderForText.mockRejectedValue(
+      new Error("Command spawner host exited (code=null, signal=SIGINT)"),
+    );
+
+    await expect(service.executeProvider({
+      ...defaultArgs,
+      expectTextOutput: true,
+      workflowSettings: {
+        ...defaultArgs.workflowSettings,
+        executionMode: "DOCKER",
+      },
+    })).rejects.toThrow("Command spawner host exited");
+
+    expect(executionRepository.updateProviderInvocationUsage).not.toHaveBeenCalledWith(
+      "prov-inv-1",
+      expect.objectContaining({ status: "failed" }),
+    );
+  });
+
   it("Text output mode: calls runProviderForText when expectTextOutput is true", async () => {
     const textMockResult = { ...mockResult, text: "text output" };
     providerRunner.runProviderForText.mockResolvedValue(textMockResult);

@@ -1037,6 +1037,43 @@ export class ExecutionRepository {
     `).run(trimmed, nativeSessionId ?? trimmed, now, invocationId);
   }
 
+  associateProviderInvocationRuntime(
+    invocationId: string,
+    input: { sprintRunId?: string | null; dispatchId?: string | null; taskRunId?: string | null },
+  ): ProviderInvocationUsageRecord {
+    try {
+      const current = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
+      const sprintRunId = input.sprintRunId === undefined ? current.sprintRunId : input.sprintRunId;
+      const dispatchId = input.dispatchId === undefined ? current.dispatchId : input.dispatchId;
+      const taskRunId = input.taskRunId === undefined ? current.taskRunId : input.taskRunId;
+
+      if (sprintRunId) {
+        requireSprintRun((id) => this.getSprintRun(id), sprintRunId);
+      }
+      if (dispatchId) {
+        requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
+      }
+      if (taskRunId) {
+        requireTaskRun((id) => this.getTaskRun(id), taskRunId);
+      }
+
+      const now = new Date().toISOString();
+      this.db.prepare(`
+        UPDATE provider_invocations
+        SET sprint_run_id = ?, dispatch_id = ?, task_run_id = ?, updated_at = ?
+        WHERE id = ?
+      `).run(sprintRunId ?? null, dispatchId ?? null, taskRunId ?? null, now, invocationId);
+
+      const updated = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
+      this.notifyRealtime(updated.projectId, false);
+      return updated;
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, invocationId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
   updateProviderInvocationUsage(invocationId: string, input: UpdateProviderInvocationUsageInput): ProviderInvocationUsageRecord {
     try {
       const current = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
@@ -1312,6 +1349,53 @@ export class ExecutionRepository {
       } catch (error) {
       if (error instanceof RepositoryError) throw error;
       this.logger.error("Operation failed", { error, taskRunId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
+  reassignTaskRunSprintRun(taskRunId: string, sprintRunId: string): TaskRunRecord {
+    try {
+      const current = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
+      requireSprintRunScoped((id) => this.getSprintRun(id), sprintRunId, current.projectId, current.sprintId);
+
+      this.db.prepare(`
+        UPDATE task_runs
+        SET sprint_run_id = ?
+        WHERE id = ?
+      `).run(sprintRunId, taskRunId);
+
+      const updated = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
+      if (current.sprintRunId) {
+        this.wallTimeQuery.invalidateSprintRun(current.projectId, current.sprintRunId);
+      }
+      this.wallTimeQuery.invalidateSprintRun(updated.projectId, sprintRunId);
+      this.notifyRealtime(updated.projectId, false);
+      return updated;
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, taskRunId, sprintRunId });
+      throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
+    }
+  }
+
+  reassignTaskDispatchSprintRun(dispatchId: string, sprintRunId: string): TaskDispatchRecord {
+    try {
+      const current = requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
+      requireSprintRunScoped((id) => this.getSprintRun(id), sprintRunId, current.projectId, current.sprintId);
+      const now = new Date().toISOString();
+
+      this.db.prepare(`
+        UPDATE task_dispatches
+        SET sprint_run_id = ?, updated_at = ?
+        WHERE id = ?
+      `).run(sprintRunId, now, dispatchId);
+
+      const updated = requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
+      this.notifyRealtime(updated.projectId, true);
+      return updated;
+    } catch (error) {
+      if (error instanceof RepositoryError) throw error;
+      this.logger.error("Operation failed", { error, dispatchId, sprintRunId });
       throw new RepositoryError(error instanceof Error ? error.message : "Operation failed", error);
     }
   }

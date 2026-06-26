@@ -14,9 +14,11 @@ import { RECOVERED_STALE_QA_SUMMARY_PREFIX } from "../domain/qa-review/qa-review
 const ACTIVE_SPRINT_RUN_STATUSES = ["queued", "running"] as const;
 const ACTIVE_DISPATCH_STATUSES = ["queued", "claimed", "running", "cancel_requested"] as const;
 const TERMINAL_TASK_RUN_STATES = new Set(["COMPLETED", "FAILED", "BLOCKED", "QUOTA"]);
+const TERMINAL_SPRINT_RUN_STATUSES = new Set(["completed", "failed", "cancelled"]);
 const ACTIVE_TASK_RUN_STATES = ["PENDING", "RUNNING", "PAUSED"] as const;
 const TASK_CODING_INVOCATION_TYPES = ["task_coding", "cli_task_coding", "cli_task_followup"] as const;
 const CLI_PROVIDERS = new Set<ProviderId>(["gemini", "codex", "claude-code", "qwen-code", "opencode"]);
+const DURABLE_REMOTE_PROVIDERS = new Set(["jules"]);
 const QA_RUN_START_TIMEOUT_MS = 60_000;
 
 export interface RuntimeStartupRecoveryResult {
@@ -28,6 +30,7 @@ export interface RuntimeStartupRecoveryResult {
   reconciledStructuredInvocationIds: string[];
   reconciledTaskCodingInvocationIds: string[];
   reconciledTaskCodingProviderIds: string[];
+  rehydratedSprintRunIds: string[];
   reconciledTaskRunIds: string[];
   reconciledPausedSprintRunIds: string[];
   reconciledRetryInvocationIds: string[];
@@ -60,6 +63,7 @@ export class RuntimeStartupRecoveryService {
     const reconciledContainerInvocationIds = await this.reconcileInterruptedCliInvocations(new Set(recoveredCliSessionIds));
     const reconciledQaReviewRunIds = await this.reconcileInterruptedQaReviewRuns();
     const reconciledStructuredInvocationIds = await this.reconcileInterruptedStructuredInvocations();
+    const rehydratedSprintRunIds = this.rehydrateDurableProviderSprintRuns();
     const reconciledTaskCodingInvocationIds = await this.reconcileInterruptedTaskCodingInvocations();
     const reconciledTaskCodingProviderIds = this.reconcileOrphanedTaskCodingProviderInvocations();
     const reconciledTaskRunIds = this.reconcileInterruptedTaskRuns();
@@ -76,6 +80,7 @@ export class RuntimeStartupRecoveryService {
       || reconciledStructuredInvocationIds.length > 0
       || reconciledTaskCodingInvocationIds.length > 0
       || reconciledTaskCodingProviderIds.length > 0
+      || rehydratedSprintRunIds.length > 0
       || reconciledTaskRunIds.length > 0
       || reconciledPausedSprintRunIds.length > 0
       || resumedSprintRunIds.length > 0
@@ -91,6 +96,7 @@ export class RuntimeStartupRecoveryService {
         reconciledStructuredInvocations: reconciledStructuredInvocationIds.length,
         reconciledTaskCodingInvocations: reconciledTaskCodingInvocationIds.length,
         reconciledTaskCodingProviders: reconciledTaskCodingProviderIds.length,
+        rehydratedSprintRuns: rehydratedSprintRunIds.length,
         reconciledTaskRuns: reconciledTaskRunIds.length,
         reconciledPausedSprintRuns: reconciledPausedSprintRunIds.length,
         resumedSprintRuns: resumedSprintRunIds.length,
@@ -108,6 +114,7 @@ export class RuntimeStartupRecoveryService {
       reconciledStructuredInvocationIds,
       reconciledTaskCodingInvocationIds,
       reconciledTaskCodingProviderIds,
+      rehydratedSprintRunIds,
       reconciledTaskRunIds,
       reconciledPausedSprintRunIds,
       resumedSprintRunIds,
@@ -540,6 +547,201 @@ export class RuntimeStartupRecoveryService {
     }
 
     return null;
+  }
+
+  private rehydrateDurableProviderSprintRuns(): string[] {
+    const executionRepository = this.deps.executionRepository as ExecutionRepository & {
+      listTaskRunsByStates?: (states: TaskRunRecord["state"][]) => TaskRunRecord[];
+      reassignTaskRunSprintRun?: (taskRunId: string, sprintRunId: string) => TaskRunRecord;
+      reassignTaskDispatchSprintRun?: (dispatchId: string, sprintRunId: string) => unknown;
+      associateProviderInvocationRuntime?: (
+        invocationId: string,
+        input: { sprintRunId?: string | null; dispatchId?: string | null; taskRunId?: string | null },
+      ) => ProviderInvocationUsageRecord;
+    };
+    if (
+      typeof executionRepository.listTaskRunsByStates !== "function"
+      || typeof executionRepository.reassignTaskRunSprintRun !== "function"
+      || typeof executionRepository.reassignTaskDispatchSprintRun !== "function"
+      || typeof executionRepository.associateProviderInvocationRuntime !== "function"
+    ) {
+      return [];
+    }
+
+    const durableTaskRuns = executionRepository.listTaskRunsByStates([...ACTIVE_TASK_RUN_STATES])
+      .filter((taskRun) => this.isRecoverableDurableProviderTaskRun(taskRun));
+    if (durableTaskRuns.length === 0) {
+      return [];
+    }
+
+    const taskRunsBySprintId = new Map<string, TaskRunRecord[]>();
+    for (const taskRun of durableTaskRuns) {
+      const entries = taskRunsBySprintId.get(taskRun.sprintId) || [];
+      entries.push(taskRun);
+      taskRunsBySprintId.set(taskRun.sprintId, entries);
+    }
+
+    const now = new Date().toISOString();
+    const rehydratedSprintRunIds = new Set<string>();
+
+    for (const [sprintId, taskRuns] of taskRunsBySprintId.entries()) {
+      const rawStatus = this.deps.projectManagementRepository.getRawSprintStatus(sprintId);
+      if (rawStatus === null || rawStatus === "completed" || rawStatus === "cancelled") {
+        continue;
+      }
+
+      const targetRun = this.resolveDurableProviderRecoverySprintRun(taskRuns);
+      if (!targetRun) {
+        continue;
+      }
+
+      const targetRunWasTerminal = TERMINAL_SPRINT_RUN_STATUSES.has(targetRun.status);
+      if (TERMINAL_SPRINT_RUN_STATUSES.has(targetRun.status)) {
+        this.deps.executionRepository.updateSprintRun(targetRun.id, {
+          status: "running",
+          startedAt: targetRun.startedAt || now,
+          finishedAt: null,
+          lastHeartbeatAt: now,
+        });
+        this.deps.executionRepository.appendSprintRunEvent(targetRun.id, "sprint_rehydrated", "system", {
+          reason: "durable_provider_sessions_survived_restart",
+          previousStatus: targetRun.status,
+          durableProvider: "jules",
+          recoveredTaskRunCount: taskRuns.length,
+        }, {
+          sourceEventKey: `startup-recovery:durable-provider-sprint:${targetRun.id}`,
+        });
+        rehydratedSprintRunIds.add(targetRun.id);
+      }
+
+      for (const originalTaskRun of taskRuns) {
+        let taskRehydrated = targetRunWasTerminal;
+        const taskRun = originalTaskRun.sprintRunId === targetRun.id
+          ? originalTaskRun
+          : executionRepository.reassignTaskRunSprintRun(originalTaskRun.id, targetRun.id);
+        if (originalTaskRun.sprintRunId !== targetRun.id) {
+          rehydratedSprintRunIds.add(targetRun.id);
+          taskRehydrated = true;
+        }
+
+        let dispatchId = taskRun.dispatchId;
+        if (dispatchId) {
+          const dispatch = this.deps.executionRepository.getTaskDispatch(dispatchId);
+          if (dispatch) {
+            if (dispatch.sprintRunId !== targetRun.id) {
+              executionRepository.reassignTaskDispatchSprintRun(dispatch.id, targetRun.id);
+              rehydratedSprintRunIds.add(targetRun.id);
+              taskRehydrated = true;
+            }
+            if (!ACTIVE_DISPATCH_STATUSES.includes(dispatch.status as (typeof ACTIVE_DISPATCH_STATUSES)[number])) {
+              this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+                status: this.resolveRehydratedDispatchStatus(taskRun),
+                startedAt: dispatch.startedAt || taskRun.startedAt || now,
+                finishedAt: null,
+                lastHeartbeatAt: now,
+                errorMessage: null,
+              });
+              rehydratedSprintRunIds.add(targetRun.id);
+              taskRehydrated = true;
+            }
+          } else {
+            dispatchId = null;
+          }
+        }
+
+        if (!taskRehydrated) {
+          continue;
+        }
+
+        const sessionKey = this.resolveTaskRunSessionKey(taskRun);
+        const usage = sessionKey
+          ? this.deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionKey, "task_coding")
+          : null;
+        if (usage) {
+          executionRepository.associateProviderInvocationRuntime(usage.id, {
+            sprintRunId: targetRun.id,
+            dispatchId,
+            taskRunId: taskRun.id,
+          });
+          if (usage.status !== "running") {
+            this.deps.executionRepository.updateProviderInvocationUsage(usage.id, {
+              status: "running",
+              finishedAt: null,
+              durationMs: null,
+            });
+          }
+        }
+
+        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "task_run_rehydrated", "system", {
+          reason: "durable_provider_session_survived_restart",
+          previousSprintRunId: originalTaskRun.sprintRunId,
+          sprintRunId: targetRun.id,
+          dispatchId,
+          provider: taskRun.provider,
+          sessionId: taskRun.sessionId,
+        }, {
+          sourceEventKey: `startup-recovery:durable-task-run:${taskRun.id}:${targetRun.id}`,
+        });
+      }
+    }
+
+    return [...rehydratedSprintRunIds];
+  }
+
+  private isRecoverableDurableProviderTaskRun(taskRun: TaskRunRecord): boolean {
+    return DURABLE_REMOTE_PROVIDERS.has(String(taskRun.provider || ""))
+      && taskRun.mode === "jules"
+      && Boolean(this.resolveTaskRunSessionKey(taskRun))
+      && !isTerminalTaskRunState(taskRun);
+  }
+
+  private resolveDurableProviderRecoverySprintRun(taskRuns: TaskRunRecord[]): ReturnType<ExecutionRepository["getSprintRun"]> {
+    const firstTaskRun = taskRuns[0];
+    if (!firstTaskRun) {
+      return null;
+    }
+
+    const activeRun = this.deps.executionRepository.findActiveSprintRun(firstTaskRun.projectId, firstTaskRun.sprintId);
+    if (activeRun) {
+      return activeRun;
+    }
+
+    const candidateRuns = new Map<string, NonNullable<ReturnType<ExecutionRepository["getSprintRun"]>>>();
+    for (const taskRun of taskRuns) {
+      if (!taskRun.sprintRunId) {
+        continue;
+      }
+      const sprintRun = this.deps.executionRepository.getSprintRun(taskRun.sprintRunId);
+      if (sprintRun) {
+        candidateRuns.set(sprintRun.id, sprintRun);
+      }
+    }
+
+    return [...candidateRuns.values()].sort((left, right) => (
+      Date.parse(right.createdAt) - Date.parse(left.createdAt)
+    ))[0] || null;
+  }
+
+  private resolveRehydratedDispatchStatus(taskRun: TaskRunRecord): "queued" | "running" | "paused" {
+    if (taskRun.state === "PENDING") {
+      return "queued";
+    }
+    if (taskRun.state === "PAUSED") {
+      return "paused";
+    }
+    return "running";
+  }
+
+  private resolveTaskRunSessionKey(taskRun: TaskRunRecord): string | null {
+    const sessionId = taskRun.sessionId?.trim();
+    if (sessionId) {
+      return sessionId;
+    }
+    const sessionName = taskRun.sessionName?.trim();
+    if (!sessionName) {
+      return null;
+    }
+    return sessionName.replace(/^sessions\//, "");
   }
 
   private reconcileInterruptedTaskRuns(): string[] {

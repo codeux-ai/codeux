@@ -613,6 +613,163 @@ describe("RuntimeStartupRecoveryService", () => {
     });
   });
 
+  it("rehydrates active Jules sessions from terminal sprint runs and resumes one recovered run", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+      recoverSprintRun,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Rehydrate Durable Jules Project",
+      sourceType: "local",
+      sourceRef: "/workspace/rehydrate-durable-jules-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Rehydrate Durable Jules Sprint",
+      number: 5,
+      status: "running",
+    });
+    const olderTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Older durable Jules task",
+      executorType: "jules",
+      status: "in_progress",
+    });
+    const newerTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Newer durable Jules task",
+      executorType: "jules",
+      status: "in_progress",
+    });
+    const olderRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "jules",
+      status: "failed",
+    });
+    executionRepository.updateSprintRun(olderRun.id, {
+      status: "failed",
+      startedAt: "2026-03-29T10:00:00.000Z",
+      finishedAt: "2026-03-29T10:05:00.000Z",
+      lastHeartbeatAt: "2026-03-29T10:05:00.000Z",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const newerRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "jules",
+      status: "cancelled",
+    });
+    executionRepository.updateSprintRun(newerRun.id, {
+      status: "cancelled",
+      startedAt: "2026-03-29T10:10:00.000Z",
+      finishedAt: "2026-03-29T10:11:00.000Z",
+      lastHeartbeatAt: "2026-03-29T10:11:00.000Z",
+    });
+
+    const olderDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: olderTask.id,
+      sprintRunId: olderRun.id,
+      executorType: "jules",
+      status: "failed",
+    });
+    executionRepository.updateTaskDispatch(olderDispatch.id, {
+      status: "failed",
+      startedAt: "2026-03-29T10:01:00.000Z",
+      finishedAt: "2026-03-29T10:05:00.000Z",
+      errorMessage: "Provider session failed before dispatch reconciliation.",
+    });
+    const olderTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: olderTask.id,
+      sprintRunId: olderRun.id,
+      dispatchId: olderDispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "jules-older-survived",
+      sessionName: "sessions/jules-older-survived",
+      state: "RUNNING",
+      startedAt: "2026-03-29T10:01:00.000Z",
+    });
+    const olderUsage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: olderTask.id,
+      sprintRunId: olderRun.id,
+      sessionId: "jules-older-survived",
+      provider: "jules",
+      purpose: "task_coding",
+      status: "failed",
+      startedAt: "2026-03-29T10:01:00.000Z",
+      invocationSource: "EXTERNAL_API",
+    });
+
+    const newerDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: newerTask.id,
+      sprintRunId: newerRun.id,
+      executorType: "jules",
+      status: "running",
+    });
+    const newerTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: newerTask.id,
+      sprintRunId: newerRun.id,
+      dispatchId: newerDispatch.id,
+      provider: "jules",
+      mode: "jules",
+      sessionId: "jules-newer-survived",
+      sessionName: "sessions/jules-newer-survived",
+      state: "RUNNING",
+      startedAt: "2026-03-29T10:12:00.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.rehydratedSprintRunIds).toEqual([newerRun.id]);
+    expect(result.resumedSprintRunIds).toEqual([newerRun.id]);
+    expect(result.supersededSprintRunIds).toEqual([]);
+    expect(recoverSprintRun).toHaveBeenCalledWith(newerRun.id);
+
+    expect(executionRepository.getSprintRun(newerRun.id)).toMatchObject({
+      status: "running",
+      finishedAt: null,
+    });
+    expect(executionRepository.getSprintRun(olderRun.id)).toMatchObject({
+      status: "failed",
+    });
+    expect(executionRepository.getTaskRun(olderTaskRun.id)).toMatchObject({
+      sprintRunId: newerRun.id,
+      state: "RUNNING",
+      sessionId: "jules-older-survived",
+    });
+    expect(executionRepository.getTaskRun(newerTaskRun.id)).toMatchObject({
+      sprintRunId: newerRun.id,
+      state: "RUNNING",
+      sessionId: "jules-newer-survived",
+    });
+    expect(executionRepository.getTaskDispatch(olderDispatch.id)).toMatchObject({
+      sprintRunId: newerRun.id,
+      status: "running",
+      finishedAt: null,
+      errorMessage: null,
+    });
+    expect(executionRepository.getProviderInvocationUsage(olderUsage.id)).toMatchObject({
+      sprintRunId: newerRun.id,
+      dispatchId: olderDispatch.id,
+      taskRunId: olderTaskRun.id,
+      status: "running",
+      finishedAt: null,
+    });
+  });
+
   it("recovers only the newest active run per sprint and fails older duplicate active runs", async () => {
     const {
       projectRepository,
@@ -1214,6 +1371,7 @@ describe("RuntimeStartupRecoveryService", () => {
       reconciledStructuredInvocations: 0,
       reconciledTaskCodingInvocations: 0,
       reconciledTaskCodingProviders: 0,
+      rehydratedSprintRuns: 0,
       reconciledTaskRuns: 0,
       reconciledPausedSprintRuns: 0,
       resumedSprintRuns: 1,

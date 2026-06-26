@@ -29,6 +29,18 @@ function countConversationToolCalls(conversation: ParsedConversationTurn[] | und
   return conversation.reduce((count, turn) => (turn.kind === "tool_call" ? count + 1 : count), 0);
 }
 
+function isRestartInterruptedDockerInvocation(error: unknown, args: ExecutionProviderRunArgs): boolean {
+  if (args.workflowSettings.executionMode !== "DOCKER") {
+    return false;
+  }
+
+  const message = error instanceof Error ? error.message : String(error || "");
+  return (
+    /Command spawner host exited/i.test(message)
+    && /(signal=SIGINT|signal=SIGTERM|signal=SIGHUP)/i.test(message)
+  );
+}
+
 export interface ProviderExecutionServiceDeps {
   executionRepository?: ExecutionRepository;
   sessionTracking?: SessionTrackingRepository;
@@ -340,7 +352,8 @@ export class ProviderExecutionService {
             ? await this.deps.providerRunner.runProviderForText(runnerOpts)
             : await this.deps.providerRunner.runProvider(runnerOpts);
         } catch (error) {
-          if (invocation && this.deps.executionRepository) {
+          const preserveForStartupRecovery = isRestartInterruptedDockerInvocation(error, args);
+          if (invocation && this.deps.executionRepository && !preserveForStartupRecovery) {
             const finishedAt = new Date().toISOString();
             const durationMs = Date.now() - startedMs;
             this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {

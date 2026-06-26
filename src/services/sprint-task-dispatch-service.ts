@@ -168,6 +168,14 @@ export class SprintTaskDispatchService {
       startedAt: queuedAt,
     });
 
+    if (julesClaim) {
+      this.executionRepository.associateProviderInvocationRuntime(julesClaim.id, {
+        sprintRunId: args.sprintRunId,
+        dispatchId: dispatch.id,
+        taskRunId: taskRun.id,
+      });
+    }
+
     this.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_started", "system", {
       dispatchId: dispatch.id,
       executorType,
