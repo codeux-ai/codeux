@@ -331,7 +331,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                     {/* Project Dropdown */}
                     {dropdownOpen && (
-                        <div id="project-listbox" role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
+                        <div id="project-listbox" role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 min-w-[12rem] w-56 max-w-[calc(100vw-1rem)] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Projects</span>
                             </div>
@@ -350,7 +350,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                 />
                                 <span id="project-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
                             </div>
-                            <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
+                            <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto dropdown-scrollbar">
                             {filteredProjects.length === 0 && (
                                 <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                     No projects found.
@@ -451,7 +451,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
 
                         {/* Sprint Dropdown */}
                         {sprintDropdownOpen && sprints.length > 0 && (
-                            <div id="sprint-listbox" role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
+                            <div id="sprint-listbox" role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 max-w-[calc(100vw-1rem)] min-w-[10rem] bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
                                 <div className="px-3 pt-3 pb-1.5">
                                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Scope</span>
                                 </div>
@@ -470,7 +470,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ onMenuToggle, isMobile,
                                     />
                                     <span id="sprint-filter-desc" className="sr-only">Use arrow keys to navigate options.</span>
                                 </div>
-                                <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
+                                <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto dropdown-scrollbar">
                                 {filteredSprints.length === 0 && !sprintFilter.toLowerCase().includes('all') && (
                                     <div className="px-3 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                         No sprints found.
