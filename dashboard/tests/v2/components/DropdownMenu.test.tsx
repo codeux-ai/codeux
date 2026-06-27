@@ -35,6 +35,30 @@ describe("DropdownMenu Accessibility & Keyboard Navigation", () => {
     cleanup();
   });
 
+  it("plays stagger animation when opened", async () => {
+    const gsapMock = vi.mocked((await import("gsap")).default);
+
+    render(<TestMenu />);
+    const trigger = screen.getByRole("button", { name: "Open Menu" });
+    fireEvent.click(trigger);
+
+    await waitFor(() => {
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+    });
+
+    expect(gsapMock.fromTo).toHaveBeenCalledWith(
+      "[data-dropdown-item]",
+      { opacity: 0, y: 4 },
+      expect.objectContaining({
+        opacity: 1,
+        y: 0,
+        stagger: Math.min(0.018, 0.18 / 5),
+        duration: 0.12,
+        ease: "power2.out",
+      })
+    );
+  });
+
   const TestMenu = () => {
     const [isOpen, setIsOpen] = useState(false);
     return (
