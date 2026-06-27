@@ -39,4 +39,14 @@ describe("Drawer", () => {
     expect(dialog.getAttribute("aria-label")).toBeNull();
     expect(dialog.getAttribute("aria-labelledby")).toBe("title-id");
   });
+
+  test("omits aria-describedby when not provided", () => {
+    render(
+      <Drawer isOpen={true} onClose={() => {}}>
+        <div>Content</div>
+      </Drawer>
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.hasAttribute("aria-describedby")).toBe(false);
+  });
 });

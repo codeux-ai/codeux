@@ -220,7 +220,6 @@ export const KanbanTaskCard: FunctionComponent<{
         options={confirmOptions}
         onConfirm={handleConfirm}
         onCancel={handleCancel}
-        triggerRef={triggerRef}
       />
     </div>
   );

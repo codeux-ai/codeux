@@ -63,8 +63,8 @@ export const SettingsDangerPanel: FunctionComponent<{ state: SettingsPageState }
         </SectionCard>
       ) : null}
 
-      <ConfirmDialog isOpen={projectConfirm.isOpen} options={projectConfirm.options} onConfirm={projectConfirm.handleConfirm} onCancel={projectConfirm.handleCancel} triggerRef={projectConfirm.triggerRef} />
-      <ConfirmDialog isOpen={dbConfirm.isOpen} options={dbConfirm.options} onConfirm={dbConfirm.handleConfirm} onCancel={dbConfirm.handleCancel} triggerRef={dbConfirm.triggerRef} />
+      <ConfirmDialog isOpen={projectConfirm.isOpen} options={projectConfirm.options} onConfirm={projectConfirm.handleConfirm} onCancel={projectConfirm.handleCancel} />
+      <ConfirmDialog isOpen={dbConfirm.isOpen} options={dbConfirm.options} onConfirm={dbConfirm.handleConfirm} onCancel={dbConfirm.handleCancel} />
     </div>
   );
 };

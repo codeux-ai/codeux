@@ -114,7 +114,6 @@ export const MemoryCard: FunctionComponent<MemoryCardProps> = memo(({
                 options={confirmOptions}
                 onConfirm={handleConfirm}
                 onCancel={handleCancel}
-                triggerRef={triggerRef}
             />
         </div>
     );

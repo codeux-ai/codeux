@@ -138,7 +138,6 @@ export const Inspector: FunctionComponent<{
                                 options={options}
                                 onConfirm={handleConfirm}
                                 onCancel={handleCancel}
-                                triggerRef={triggerRef}
                             />
                         </>
                     )}
