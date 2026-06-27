@@ -109,8 +109,8 @@ describe("Sidebar Mobile Accessibility", () => {
 
         // Wait for focus trap to initialize (it has a setTimeout)
         await waitFor(() => {
-            const firstLink = screen.getAllByRole("link")[0]; // Should be the Logo link
-            expect(document.activeElement).toBe(firstLink);
+            const logoLink = document.querySelector('a[href="/"]');
+            expect(document.activeElement).toBe(logoLink);
         });
 
         const aside = screen.getAllByRole("dialog")[0];

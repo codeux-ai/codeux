@@ -23,6 +23,8 @@ type PageContainerProps = Omit<JSX.HTMLAttributes<HTMLElement>, "ref"> & {
   className?: string;
   containerRef?: Ref<HTMLElement>;
   padding?: PageContainerPadding;
+  as?: "div" | "main";
+  id?: string;
 };
 
 export const PageContainer: FunctionComponent<PageContainerProps> = ({
@@ -30,6 +32,7 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
   className = "",
   containerRef,
   padding = "standard",
+  as = "div",
   ...props
 }) => {
   const classes = [
@@ -39,10 +42,12 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
     className,
   ].filter(Boolean).join(" ");
 
+  const Component = as;
+
   return (
-    <div {...props} ref={containerRef as any} className={classes}>
+    <Component {...props} ref={containerRef as any} className={classes}>
       {children}
-    </div>
+    </Component>
   );
 };
 
