@@ -49,7 +49,7 @@ describe("FieldWrapper Accessibility", () => {
     expect(input?.getAttribute("aria-errormessage")).toBe(errorId);
 
     const ariaDescribedBy = input?.getAttribute("aria-describedby");
-    expect(ariaDescribedBy).toBe(`helper-123 ${errorId}`);
+    expect(ariaDescribedBy).toBe(`${errorId}`);
   });
 
   it("supports helperText prop and renders it", () => {
@@ -125,4 +125,43 @@ describe("FieldWrapper Accessibility", () => {
     expect(input?.getAttribute("aria-invalid")).toBeFalsy();
     expect(input?.getAttribute("aria-describedby")).toBeTruthy();
   });
+  it("handles helper-to-error transition and successful recovery", () => {
+    const { container, rerender, getByText, queryByText } = render(
+      <FieldWrapper label="Test" helperText="Help text" error={undefined}>
+        <Input />
+      </FieldWrapper>
+    );
+
+    const input = container.querySelector("input")!;
+    expect(input.getAttribute("aria-describedby")).toContain("helper");
+    expect(input.getAttribute("aria-invalid")).toBeFalsy();
+
+    // Transition to error
+    rerender(
+      <FieldWrapper label="Test" helperText="Help text" error="Bad value" forceTouch>
+        <Input />
+      </FieldWrapper>
+    );
+
+    const errorId = input.getAttribute("aria-errormessage")!;
+    expect(errorId).toBeTruthy();
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+
+    const ariaDescribedBy = input.getAttribute("aria-describedby");
+    expect(ariaDescribedBy).toContain(errorId);
+    expect(ariaDescribedBy).not.toContain("helper"); // Helper ID should be removed to prevent redundant reading
+
+    // Successful recovery
+    rerender(
+      <FieldWrapper label="Test" helperText="Help text" error={undefined} valid={true}>
+        <Input />
+      </FieldWrapper>
+    );
+
+    expect(input.getAttribute("aria-invalid")).toBeFalsy();
+    expect(input.getAttribute("aria-errormessage")).toBeFalsy();
+    expect(input.getAttribute("aria-describedby")).toContain("helper");
+    expect(input.getAttribute("data-valid")).toBe("true");
+  });
+
 });

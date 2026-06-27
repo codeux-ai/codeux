@@ -1,4 +1,5 @@
 import type { FunctionComponent, ComponentProps } from "preact";
+import { useId } from "preact/hooks";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export interface InputProps extends ComponentProps<"input"> {
@@ -12,17 +13,25 @@ export interface InputProps extends ComponentProps<"input"> {
 
 export const Input: FunctionComponent<InputProps> = ({ className = "", disabled, valid, style, errorText, helperText, id, ...props }) => {
   const tokens = useInteractionTokens();
-  const generatedId = id || (props.name ? `input-${props.name}` : undefined);
+  const uniqueId = useId();
+  const generatedId = id || (props.name ? `input-${props.name}` : uniqueId);
   const errorId = errorText ? `${generatedId}-error` : undefined;
   const helperId = helperText ? `${generatedId}-helper` : undefined;
+
+  const describedBy = [
+    errorText ? errorId : helperText ? helperId : undefined,
+    props["aria-describedby"]
+  ].filter(Boolean).join(" ") || undefined;
+
+  const errorMessage = [errorId, props["aria-errormessage"]].filter(Boolean).join(" ") || undefined;
 
   return (
     <div className="flex flex-col gap-1.5">
       <input
         id={generatedId}
-        aria-invalid={!!errorText || props["aria-invalid"]}
-        aria-errormessage={errorId || props["aria-errormessage"]}
-        aria-describedby={helperId || props["aria-describedby"]}
+        aria-invalid={errorText ? "true" : props["aria-invalid"]}
+        aria-errormessage={errorMessage}
+        aria-describedby={describedBy}
       style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof style === "object" ? style : {}) }}
       disabled={disabled}
       data-valid={valid ? 'true' : undefined}
