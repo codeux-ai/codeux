@@ -1,3 +1,6 @@
+import gsap from "gsap";
+import { useRef, useEffect } from "preact/hooks";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { type ComponentChildren } from "preact";
 
 interface TableProps {
@@ -35,7 +38,35 @@ export function TableHeader({ children }: { children: ComponentChildren }) {
 }
 
 export function TableBody({ children }: { children: ComponentChildren }) {
-  return <tbody className="block lg:table-row-group" role="rowgroup">{children}</tbody>;
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
+  const hasMounted = useRef(false);
+  const isReducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (isReducedMotion || !tbodyRef.current || hasMounted.current) return;
+
+    // We only want to animate children rows once
+    const rows = tbodyRef.current.querySelectorAll(':scope > [data-table-row]');
+    if (rows.length === 0) return;
+
+    const tween = gsap.fromTo(
+      rows,
+      { opacity: 0, y: 6 },
+      {
+        opacity: 1,
+        y: 0,
+        stagger: Math.min(25, 200 / rows.length),
+        duration: 0.15,
+        ease: 'power2.out'
+      }
+    );
+
+    if (tween && typeof tween.eventCallback === 'function') { tween.eventCallback('onComplete', () => { hasMounted.current = true; }); }
+
+
+  }, [children, isReducedMotion]);
+
+  return <tbody ref={tbodyRef} className="block lg:table-row-group" role="rowgroup">{children}</tbody>;
 }
 
 export function TableRow({ children, className = "", selected, onClick, style }: { children: ComponentChildren; className?: string; selected?: boolean; onClick?: (e: MouseEvent) => void; style?: import("preact").JSX.CSSProperties }) {
@@ -43,6 +74,7 @@ export function TableRow({ children, className = "", selected, onClick, style }:
   const cursorClass = onClick ? "cursor-pointer" : "";
   return (
     <tr
+      data-table-row
       onClick={onClick as any}
       aria-selected={selected}
       role="row"

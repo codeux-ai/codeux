@@ -1,3 +1,5 @@
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import gsap from "gsap";
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
 import {
@@ -13,7 +15,7 @@ import {
   MoreVertical,
   Square,
 } from "lucide-preact";
-import { useState } from "preact/hooks";
+import { useState, useRef, useEffect } from "preact/hooks";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
 import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import { SprintActionMenu } from "./SprintActionMenu.js";
@@ -124,6 +126,27 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 }) => {
   const settings = useProjectEffectiveSettings(sprint.projectId);
   const [menuOpen, setMenuOpen] = useState(false);
+  const checkIconRef = useRef<HTMLSpanElement>(null);
+  const isReducedMotion = useReducedMotion();
+  const prevSelected = useRef(isSelected);
+
+  useEffect(() => {
+    if (isReducedMotion || !checkIconRef.current) {
+      prevSelected.current = isSelected;
+      return;
+    }
+
+    if (isSelected && !prevSelected.current) {
+      // Transitioned from false to true
+      gsap.fromTo(
+        checkIconRef.current,
+        { scale: 0 },
+        { scale: 1, duration: 0.15, ease: 'back.out(2)' }
+      );
+    }
+    prevSelected.current = isSelected;
+  }, [isSelected, isReducedMotion]);
+
   const sprintKeyPrefix = settings.data?.settings?.git?.sprintKeyPrefix || "SPR";
 
   const pendingToggleActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
@@ -208,7 +231,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           aria-label={isSelected ? `Deselect sprint ${sprint.name}` : `Select sprint ${sprint.name}`}
         >
           {isSelected
-            ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
+            ? <span ref={checkIconRef} className="flex"><CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} /></span>
             : <Square className="h-4 w-4" strokeWidth={2.2} />}
         </button>
       </TableCell>
