@@ -137,11 +137,13 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       role={isError ? "alert" : "status"}
       aria-live={isError ? "assertive" : "polite"}
       aria-atomic="true"
+      aria-busy={displayedStatus === "pending" ? "true" : undefined}
       className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl shadow-[0_4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.2)] border ${config.colors} bg-white dark:bg-void-800 ${className}`}
     >
-      <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out]`} />
+      <Icon key={displayedStatus} className={`w-5 h-5 shrink-0 ${displayedStatus === "pending" ? "animate-spin" : ""} motion-safe:animate-[icon-pop_0.18s_ease-out] motion-reduce:animate-none`} />
       <div className="flex-1 text-sm font-medium mt-0.5 relative">
         <div ref={messageRef}>
+          <span className="sr-only">{displayedStatus}</span>
           {displayedMessage}
         </div>
       </div>
@@ -164,8 +166,11 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
             onClick={() => {
               if (document.activeElement === dismissBtnRef.current) {
                 // attempt to restore focus contextually or drop it safely
-                const fallback = document.querySelector('[role="main"]') || document.body;
-                (fallback as HTMLElement).focus();
+                const fallback = (document.querySelector('[role="main"]') as HTMLElement) || document.body;
+                if (fallback !== document.body && fallback.tabIndex < 0) {
+                    fallback.tabIndex = -1;
+                }
+                fallback.focus();
                 if (document.activeElement === dismissBtnRef.current) {
                     dismissBtnRef.current?.blur();
                 }

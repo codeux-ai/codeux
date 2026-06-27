@@ -37,6 +37,7 @@ export const LiveDurationBadge: FunctionComponent<LiveDurationBadgeProps> = ({ d
             ref={ref}
             className="font-mono truncate tabular-nums rounded px-0.5 -ml-0.5"
         >
+            <span className="sr-only">Live duration: </span>
             {durationText}
         </span>
     );

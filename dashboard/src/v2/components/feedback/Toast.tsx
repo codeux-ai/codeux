@@ -91,6 +91,14 @@ export const Toast: FunctionComponent<ToastProps> = ({
   }, [autoDismissMs, type]);
 
   const handleDismiss = () => {
+    if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current) {
+      const fallback = (document.querySelector('[role="main"]') as HTMLElement) || document.body;
+      if (fallback !== document.body && fallback.tabIndex < 0) fallback.tabIndex = -1;
+      fallback.focus();
+      if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current) {
+          (document.activeElement as HTMLElement).blur();
+      }
+    }
     if (!containerRef.current) return;
 
     gsap.to(containerRef.current, {
@@ -115,6 +123,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
       className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm p-4 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
     >
       <Icon aria-hidden="true" className="w-5 h-5 shrink-0 mt-0.5" />
+      <span className="sr-only">{type}</span>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium leading-relaxed dark:text-slate-200">
           {message}
