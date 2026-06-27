@@ -64,7 +64,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   };
 
   return (
-    <div className="sticky top-16 flex flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)]">
+    <div className="lg:sticky lg:top-16 flex flex-col gap-3 rounded-[1.75rem] border border-[color:var(--border-hairline)] bg-[var(--surface-glass)] p-3 backdrop-blur-2xl shadow-[var(--elevation-base)]">
       <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
         <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600">
           <Layers3 className="h-3.5 w-3.5" strokeWidth={2} />

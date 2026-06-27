@@ -72,9 +72,9 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
         aria-modal="true"
         aria-labelledby="unsaved-modal-title"
         aria-describedby="unsaved-modal-body"
-        className="bg-white dark:bg-void-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-black/[0.08] dark:border-white/[0.08] flex flex-col"
+        className="bg-white dark:bg-void-800 w-full max-w-md max-h-[calc(100vh-2rem)] overflow-hidden rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] flex flex-col"
       >
-        <div className="p-7 pb-5">
+        <div className="p-7 pb-5 flex-1 overflow-y-auto">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-status-red/10 text-status-red">
               <AlertTriangle className="h-5 w-5" />
@@ -88,12 +88,12 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-3 bg-void-50 dark:bg-void-900/30 p-5 border-t border-black/[0.06] dark:border-white/[0.06]">
+        <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-end gap-3 bg-void-50 dark:bg-void-900/30 p-5 border-t border-black/[0.06] dark:border-white/[0.06]">
           <button
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl border border-black/[0.06] bg-white/70 text-slate-600 hover:text-slate-900 transition-all disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
+            className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl border border-black/[0.06] bg-white/70 text-slate-600 hover:text-slate-900 transition-all disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
           >
             Keep editing
           </button>
@@ -101,7 +101,7 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
             type="button"
             onClick={onConfirm}
             disabled={saving}
-            className="px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl border border-status-red/30 bg-white/70 text-status-red hover:bg-status-red/10 transition-all disabled:cursor-not-allowed disabled:opacity-50 dark:border-status-red/30 dark:bg-white/[0.03]"
+            className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl border border-status-red/30 bg-white/70 text-status-red hover:bg-status-red/10 transition-all disabled:cursor-not-allowed disabled:opacity-50 dark:border-status-red/30 dark:bg-white/[0.03]"
           >
             Discard changes
           </button>
@@ -110,7 +110,7 @@ export const UnsavedChangesModal: FunctionComponent<UnsavedChangesModalProps> = 
               type="button"
               onClick={onSave}
               disabled={saving}
-              className="px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
+              className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
             >
               {saving ? "Saving…" : "Save changes"}
             </button>
