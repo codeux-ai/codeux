@@ -1,6 +1,6 @@
 import express from "express";
 import request from "supertest";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -110,6 +110,7 @@ const mapAttentionItems = (projectAttentionRepository: ProjectAttentionRepositor
 
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+  vi.useRealTimers();
 });
 
 async function createServerHandle(): Promise<{
@@ -625,6 +626,10 @@ describe("dashboard project management API", () => {
   });
 
   it("creates and queries DB-backed projects, sprints, tasks, and markdown export", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const fixedNow = new Date("2026-03-09T18:00:00.000Z").getTime();
+    vi.setSystemTime(fixedNow);
+
     const {
       dir,
       fetch,
@@ -954,7 +959,7 @@ describe("dashboard project management API", () => {
       executionSnapshot.recentEvents.find((event) => (event as { eventType?: string })?.eventType === "status_sync"),
     ).toBeUndefined();
 
-    const fixedNow = Date.now();
+
     const telemetryRun = executionRepository.createSprintRun({
       projectId: project.id,
       sprintId: sprint.id,
