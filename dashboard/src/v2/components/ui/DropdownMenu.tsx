@@ -1,9 +1,10 @@
-import { h, ComponentChildren, RefObject, isValidElement, cloneElement } from "preact";
+import { h, ComponentChildren, RefObject, isValidElement, cloneElement, toChildArray, VNode, Fragment } from "preact";
 import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
+import type { JSX } from "preact";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
-import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
+import { useGsapInteractionTokens, GSAP_DURATIONS } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface DropdownMenuProps {
@@ -34,6 +35,14 @@ interface DropdownMenuProps {
   };
 }
 
+export const DropdownMenuItem = ({ children, className = "", ...props }: JSX.HTMLAttributes<HTMLButtonElement> & { children?: ComponentChildren }) => {
+  return (
+    <button role="menuitem" data-dropdown-item="true" className={className} {...props}>
+      {children}
+    </button>
+  );
+};
+
 export const DropdownMenu = ({
   children,
   content,
@@ -58,6 +67,32 @@ export const DropdownMenu = ({
 
   // Generate a unique ID for ARIA wiring if none exists
   const [menuId] = useState(() => `menu-${Math.random().toString(36).substr(2, 9)}`);
+
+  const enhanceContent = (node: ComponentChildren): ComponentChildren => {
+    return toChildArray(node).map((child) => {
+      if (!isValidElement(child)) return child;
+
+      const vnode = child as VNode<any>;
+
+      if (vnode.props && vnode.props.role === "menuitem") {
+        return cloneElement(vnode, {
+          "data-dropdown-item": "true"
+        });
+      }
+
+      const isFragment = vnode.type === Fragment;
+      if (isFragment && vnode.props && vnode.props.children) {
+        return cloneElement(vnode, {
+          ...vnode.props,
+          children: enhanceContent(vnode.props.children)
+        });
+      }
+
+      return child;
+    });
+  };
+
+  const enhancedContent = enhanceContent(content);
 
   const updatePosition = useCallback(() => {
     if (!triggerRef.current || !menuRef.current) return;
@@ -137,6 +172,8 @@ export const DropdownMenu = ({
 
 
     if (isOpen) {
+      const itemCount = menuRef.current?.querySelectorAll('[data-dropdown-item]').length || 0;
+
       gsap.fromTo(
         menuRef.current,
         {
@@ -152,6 +189,22 @@ export const DropdownMenu = ({
           ease: gsapTokens.enterExit.ease,
         }
       );
+
+      if (!isReducedMotion && itemCount > 0) {
+        gsap.fromTo(
+          menuRef.current?.querySelectorAll('[data-dropdown-item]') || [],
+          { opacity: 0, y: 4 },
+          {
+            opacity: 1,
+            y: 0,
+            stagger: Math.min(0.018, 0.18 / itemCount),
+            duration: 0.12,
+            ease: "power2.out",
+            delay: gsapTokens.enterExit.duration,
+          }
+        );
+      }
+
       requestAnimationFrame(() => {
         const firstItem = menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled]):not([aria-disabled="true"])');
         firstItem?.focus({ preventScroll: true });
@@ -281,7 +334,7 @@ export const DropdownMenu = ({
             style={{ top: coords.top, left: coords.left, transformOrigin }}
             onClick={(e) => e.stopPropagation()}
           >
-            {content}
+            {enhancedContent}
           </div>,
           document.body
         )}
