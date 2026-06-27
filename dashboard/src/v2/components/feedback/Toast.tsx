@@ -3,7 +3,7 @@ import { useEffect, useRef, useLayoutEffect } from "preact/hooks";
 import { AlertTriangle, CheckCircle, Info, XCircle, X } from "lucide-preact";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { GSAP_EASINGS } from "../../lib/motion/constants.js";
+import { GSAP_EASINGS, GSAP_DURATIONS } from "../../lib/motion/constants.js";
 
 export type ToastType = "success" | "error" | "warning" | "info";
 
@@ -23,6 +23,7 @@ export interface ToastProps {
   autoDismissMs?: number;
   className?: string;
   isDismissing?: boolean;
+  toastRef?: (el: HTMLDivElement | null) => void;
 }
 
 const icons: Record<ToastType, FunctionComponent<any>> = {
@@ -50,6 +51,7 @@ export const Toast: FunctionComponent<ToastProps> = ({
   autoDismissMs = 5000,
   className = "",
   isDismissing = false,
+  toastRef,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const actionButtonRef = useRef<HTMLButtonElement>(null);
@@ -102,11 +104,10 @@ export const Toast: FunctionComponent<ToastProps> = ({
     }
 
     gsap.to(containerRef.current, {
+      x: '110%',
       opacity: 0,
-      scale: 0.95,
-      y: -10,
-      duration: reducedMotion ? 0 : 0.3,
-      ease: GSAP_EASINGS.smooth, // smooth exit
+      duration: GSAP_DURATIONS.base,
+      ease: 'power2.in',
       onComplete: () => onDismiss(id),
     });
   };
@@ -119,7 +120,10 @@ export const Toast: FunctionComponent<ToastProps> = ({
 
   return (
     <div
-      ref={containerRef}
+      ref={(el) => {
+        containerRef.current = el;
+        if (toastRef) toastRef(el);
+      }}
       className={`pointer-events-auto flex items-start gap-3 w-full max-w-sm p-4 rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.08] backdrop-blur-md bg-white/95 dark:bg-void-900/95 ${colorClass} ${className}`}
     >
       <Icon aria-hidden="true" className="w-5 h-5 shrink-0 mt-0.5" />
