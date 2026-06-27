@@ -187,6 +187,12 @@ const AppLayout = () => {
 
   return (
     <div className="app-shell flex flex-col h-dvh overflow-hidden font-sans text-slate-900 dark:text-slate-200 bg-[#F9F8F4] dark:bg-void-900 transition-colors duration-700">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[200] focus:bg-white dark:focus:bg-void-800 focus:text-slate-900 dark:focus:text-slate-100 focus:px-4 focus:py-2 focus:rounded-xl focus:shadow-lg focus:ring-2 focus:ring-signal-500 focus-visible:outline-none"
+      >
+        Skip to main content
+      </a>
       {isElectron && <TitleBar />}
       <div className="flex flex-1 min-h-0 overflow-hidden">
       {showSidebar && <Sidebar isMobile={isMobile} isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />}
