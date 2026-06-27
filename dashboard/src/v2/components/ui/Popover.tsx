@@ -1,10 +1,11 @@
-import { h, ComponentChildren, RefObject, isValidElement } from "preact";
+import { h, ComponentChildren, RefObject, isValidElement, cloneElement } from "preact";
 import { useCallback, useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { calculatePosition, Position, Alignment } from "../../lib/positioning/index.js";
 import { useGsapInteractionTokens } from "../../lib/motion/constants.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 
 interface PopoverProps {
   children: ComponentChildren;
@@ -31,6 +32,7 @@ export const Popover = ({
   triggerRef: externalTriggerRef,
   isTooltip = false,
 }: PopoverProps) => {
+  const focusTrapRef = useFocusTrap(!isTooltip && isOpen, { onClose: () => onOpenChange(false), restoreFocus: true });
   const isReducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
   const [isRendered, setIsRendered] = useState(false);
@@ -65,7 +67,7 @@ export const Popover = ({
       }
     } else if (isRendered) { // Only restore if it was previously open
       // Restore focus on close
-      if (!isTooltip) {
+      if (!isTooltip && !focusTrapRef.current) {
         if (
           !document.activeElement ||
           document.activeElement === document.body ||
@@ -168,18 +170,16 @@ export const Popover = ({
   return (
     <>
       {isValidElement(children) && (children.type === 'button' || (children.props as any).role === 'button') ? (
-        <div
-            ref={externalTriggerRef ? undefined : (localTriggerRef as unknown as RefObject<HTMLDivElement>)}
-            className="inline-flex cursor-pointer text-left"
-            onClick={(e) => {
-                onOpenChange(!isOpen);
-            }}
-            aria-haspopup={isTooltip ? "true" : "dialog"}
-            aria-expanded={isOpen}
-            aria-controls={isOpen ? popoverId : undefined}
-        >
-            {children}
-        </div>
+        cloneElement(children as preact.VNode<any>, {
+          "aria-haspopup": isTooltip ? ("true" as const) : ("dialog" as const),
+          "aria-expanded": isOpen,
+          "aria-controls": isOpen ? popoverId : undefined,
+          onClick: (e: MouseEvent) => {
+            onOpenChange(!isOpen);
+            (children.props as any).onClick?.(e);
+          },
+          ref: externalTriggerRef ? undefined : (localTriggerRef as unknown as any),
+        })
       ) : (
       <button
         type="button"
@@ -198,7 +198,14 @@ export const Popover = ({
         createPortal(
           <div
             id={popoverId}
-            ref={popoverRef}
+            ref={(node) => {
+              // @ts-ignore - Preact refs can be functions
+              popoverRef.current = node;
+              if (focusTrapRef) {
+                // @ts-ignore - Preact refs can be functions
+                focusTrapRef.current = node;
+              }
+            }}
             role={isTooltip ? "tooltip" : "dialog"}
             tabIndex={-1}
             className={`fixed z-[9999] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-4 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
