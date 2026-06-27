@@ -32,6 +32,7 @@ interface DropdownMenuProps {
     left: number;
     transformOrigin?: string;
   };
+  menuAriaLabel?: string;
 }
 
 export const DropdownMenu = ({
@@ -45,6 +46,7 @@ export const DropdownMenu = ({
   onOpenChange,
   triggerRef: externalTriggerRef,
   computePosition,
+  menuAriaLabel,
 }: DropdownMenuProps) => {
   const isReducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
@@ -58,6 +60,7 @@ export const DropdownMenu = ({
 
   // Generate a unique ID for ARIA wiring if none exists
   const [menuId] = useState(() => `menu-${Math.random().toString(36).substr(2, 9)}`);
+  const [triggerId] = useState(() => `trigger-${Math.random().toString(36).substr(2, 9)}`);
 
   const updatePosition = useCallback(() => {
     if (!triggerRef.current || !menuRef.current) return;
@@ -235,6 +238,7 @@ export const DropdownMenu = ({
   return (
     <>
       {isValidElement(children) ? cloneElement(children as preact.VNode<any>, {
+        id: (children.props as any).id || triggerId,
         ref: externalTriggerRef ? undefined : localTriggerRef,
         onClick: (e: MouseEvent) => {
           e.stopPropagation();
@@ -254,6 +258,7 @@ export const DropdownMenu = ({
       }) : (
         <button
           type="button"
+          id={triggerId}
           ref={externalTriggerRef ? undefined : (localTriggerRef as unknown as RefObject<HTMLButtonElement>)}
           className="inline-flex cursor-pointer text-left"
           onClick={(e) => { e.stopPropagation(); onOpenChange(!isOpen); }}
@@ -277,6 +282,8 @@ export const DropdownMenu = ({
             id={menuId}
             ref={menuRef}
             role="menu"
+            aria-label={menuAriaLabel}
+            aria-labelledby={menuAriaLabel ? undefined : (isValidElement(children) && (children.props as any).id ? (children.props as any).id : triggerId)}
             className={`fixed z-[100] bg-white dark:bg-void-800 border border-black/[0.08] dark:border-white/[0.08] shadow-[0_16px_36px_rgba(15,23,42,0.14)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.4)] rounded-2xl p-2 ${!isOpen ? "pointer-events-none" : ""} ${className}`}
             style={{ top: coords.top, left: coords.left, transformOrigin }}
             onClick={(e) => e.stopPropagation()}

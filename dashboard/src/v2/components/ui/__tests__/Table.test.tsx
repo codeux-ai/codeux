@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/preact";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
@@ -125,5 +125,25 @@ describe("Table component", () => {
 
     const rowFalse = screen.getAllByRole("row")[0];
     expect(rowFalse).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("renders a sort button when isHeader is true and onSort is provided", () => {
+    const handleSort = vi.fn();
+    render(
+      <Table>
+        <TableHeader>
+          <TableCell isHeader onSort={handleSort} ariaSort="ascending">Sortable Header</TableCell>
+        </TableHeader>
+      </Table>
+    );
+
+    const header = screen.getByRole("columnheader", { name: "Sortable Header" });
+    expect(header).toHaveAttribute("aria-sort", "ascending");
+
+    const button = screen.getByRole("button", { name: "Sortable Header" });
+    expect(button).toBeInTheDocument();
+
+    button.click();
+    expect(handleSort).toHaveBeenCalledTimes(1);
   });
 });

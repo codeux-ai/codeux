@@ -64,9 +64,10 @@ interface TableCellProps {
   align?: "left" | "center" | "right";
   colSpan?: number;
   mobileLabel?: string;
+  onSort?: () => void;
 }
 
-export function TableCell({ children, className = "", isFirst, isLast, isHeader, align = "left", colSpan, mobileLabel, ariaSort }: TableCellProps) {
+export function TableCell({ children, className = "", isFirst, isLast, isHeader, align = "left", colSpan, mobileLabel, ariaSort, onSort }: TableCellProps) {
   const alignClass = align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
 
   if (isHeader) {
@@ -76,7 +77,17 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
       <th scope="col" aria-sort={ariaSort}
         className={`border-y border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 ${alignClass} ${roundedClass} ${plClass} ${className}`}
       >
-        {children}
+        {onSort ? (
+          <button
+            type="button"
+            onClick={onSort}
+            className="inline-flex items-center gap-1 w-full text-inherit font-inherit text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-md bg-transparent border-0 p-0 cursor-pointer"
+          >
+            {children}
+          </button>
+        ) : (
+          children
+        )}
       </th>
     );
   }

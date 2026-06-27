@@ -33,16 +33,16 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
   ...props
 }) => {
   const classes = [
-    "relative z-10 mx-auto flex w-full flex-col animate-in fade-in duration-200",
+    "relative z-10 mx-auto flex w-full flex-col animate-in fade-in duration-200 motion-reduce:animate-none",
     PAGE_CONTAINER_WIDTH,
     pageContainerPadding[padding],
     className,
   ].filter(Boolean).join(" ");
 
   return (
-    <main id="main-content" tabIndex={-1} {...props} ref={containerRef} className={classes}>
+    <div {...props} ref={containerRef as any} className={classes}>
       {children}
-    </main>
+    </div>
   );
 };
 
