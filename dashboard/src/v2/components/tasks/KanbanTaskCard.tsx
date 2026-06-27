@@ -49,6 +49,23 @@ export const KanbanTaskCard: FunctionComponent<{
     // Trigger flash if the task status changes
     if (prevStatusRef.current !== task.status) {
       shouldFlash = true;
+
+      if (!isReducedMotion && cardRef.current) {
+        let flashColor = '';
+        const rawStatus = task.status as string;
+        if (rawStatus === 'done' || rawStatus === 'completed') flashColor = 'rgba(0,224,160,0.2)';
+        else if (rawStatus === 'in_progress' || rawStatus === 'active') flashColor = 'rgba(59,130,246,0.2)';
+        else if (rawStatus === 'blocked' || rawStatus === 'failed' || rawStatus === 'QA_REVIEW_FAILED') flashColor = 'rgba(245,158,11,0.2)';
+
+        if (flashColor) {
+          cardRef.current.style.setProperty('--status-flash', flashColor);
+          const tl = gsap.timeline();
+          tl.to(cardRef.current, { backgroundColor: 'var(--status-flash)', duration: 0.15 })
+            .to(cardRef.current, { backgroundColor: '', duration: 0.3, ease: 'power1.out', onComplete: () => {
+              if (cardRef.current) gsap.set(cardRef.current, { clearProps: 'backgroundColor' });
+            }});
+        }
+      }
     }
 
     // Trigger flash on initial data load (transition from null to value)
@@ -62,7 +79,7 @@ export const KanbanTaskCard: FunctionComponent<{
 
     prevStatusRef.current = task.status;
     prevRunningTimeRef.current = liveRunningTime;
-  }, [task.status, liveRunningTime]);
+  }, [task.status, liveRunningTime, isReducedMotion]);
 
   useTaskCardMotion(cardRef, task.status, isReducedMotion, index);
   useTaskCardDragMotion(cardRef, isDragging, isReducedMotion);
@@ -83,7 +100,7 @@ export const KanbanTaskCard: FunctionComponent<{
           // Optional: Toggle accessible drag mode if implemented
         }
       }}
-      className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${isDragging ? 'is-dragging opacity-50 ring-2 ring-signal-500 scale-[1.02] shadow-[0_20px_40px_rgba(0,0,0,0.2)]' : ''}`}
+      className={`kanban-card group relative flex flex-col bg-white/80 dark:bg-void-800/75 backdrop-blur-sm rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"} ${isReducedMotion ? 'kanban-card-reduced-motion' : ''} ${isDragging ? 'kanban-card--dragging ring-2 ring-signal-500' : ''}`}
       style={{ transformStyle: "preserve-3d", willChange: "transform" }}
     >
       <span id={`task-card-kbd-${task.recordId}`} className="sr-only">
