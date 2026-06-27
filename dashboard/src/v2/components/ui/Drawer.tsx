@@ -47,6 +47,7 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
   });
 
   const hasAccessibleName = ariaLabel || ariaLabelledBy || ariaLabelledby;
+  const fallbackAriaLabel = !hasAccessibleName ? "Drawer" : undefined;
 
   const isRight = position === "right";
   const alignmentClass = isRight ? "right-0" : "left-0";
@@ -128,7 +129,7 @@ export const Drawer: FunctionComponent<DrawerProps> = ({
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        aria-label={ariaLabel }
+        aria-label={ariaLabel || fallbackAriaLabel}
         aria-labelledby={ariaLabelledBy || ariaLabelledby}
         aria-describedby={ariaDescribedBy || ariaDescribedby}
         tabIndex={-1}
