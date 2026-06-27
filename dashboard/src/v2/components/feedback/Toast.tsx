@@ -93,14 +93,6 @@ export const Toast: FunctionComponent<ToastProps> = ({
   const handleDismiss = () => {
     if (!containerRef.current) return;
 
-    if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current) {
-      const fallback = document.querySelector('[role="main"]') || document.body;
-      (fallback as HTMLElement).focus();
-      if (document.activeElement === dismissButtonRef.current || document.activeElement === actionButtonRef.current) {
-          (document.activeElement as HTMLElement)?.blur();
-      }
-    }
-
     gsap.to(containerRef.current, {
       opacity: 0,
       scale: 0.95,
