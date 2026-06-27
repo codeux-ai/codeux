@@ -1,0 +1,129 @@
+Let's refine the plan:
+
+1. **dashboard/src/v2/components/ui/Table.tsx**
+   - In `<Table>`: Remove `role="table"`.
+   - In `<TableHeader>`: Remove `role="rowgroup"`.
+   - In `<TableBody>`: Remove `role="rowgroup"`.
+   - In `<TableRow>`:
+     - Remove `role="row"`.
+     - Add `tabIndex={onClick ? 0 : undefined}` and an `onKeyDown` handler that triggers `onClick` when Enter or Space is pressed.
+   - In `<TableCell>`:
+     - Remove `role="cell"`.
+     - Remove `aria-hidden` from the `<span>` that renders the `mobileLabel` (so it becomes accessible to screen readers on mobile, but remains visually and semantically hidden on desktop due to `lg:hidden`).
+
+2. **dashboard/src/v2/components/sprints/__tests__/SprintLedger.accessibility.test.tsx**
+   - The test "announces sorting state via aria-sort and sort buttons" is currently failing because `<TableCell isHeader ariaSort="...">` adds `aria-sort` to the `th`. The tests expect `aria-sort="descending"`.
+   Wait, why did the test fail? Let's look at the error output for that test.
+   "Object.getElementError ... activeCell is null or undefined?"
+   Wait, the test is:
+   ```tsx
+   const activeCell = createdBtn.closest("th");
+   expect(activeCell).toHaveAttribute("aria-sort", "descending");
+   ```
+   Let's check `SprintLedger.tsx`. The created button says "Created". But it has a sort indicator.
+   `createdBtn` is found using `/Sort by Created, currently sorted/i`.
+   Wait! The `aria-label` inside `SprintLedger` on the button is:
+   ```tsx
+   aria-label={`Sort by Created, currently ${... ? "sorted ascending" : "unsorted"}...`}
+   ```
+   Wait, if it's unsorted, it says `currently unsorted`.
+   Wait, the test fails on `bulkDeleteBtn`. The test `requests confirmation before bulk delete` failed.
+   Wait, `requests confirmation before bulk delete` failed because the bulk delete button was disabled!
+   Ah, `disabled={isDeletePending || isAnyBulkPending}`.
+   Let's check the test:
+   ```tsx
+   const checkbox = screen.getAllByRole("button", { name: /Select sprint Frontend Onboarding/i })[0];
+   await user.click(checkbox);
+   await vi.waitFor(() => expect(screen.getByText(/1 of 1 selected/i)).toBeInTheDocument());
+   const bulkDeleteBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+   const bulkDeleteBtn = bulkDeleteBtns[0];
+   await user.click(bulkDeleteBtn); // <--- FAILS HERE!
+   ```
+   Why does it fail? "Element is disabled"?
+   Let's check the error for `requests confirmation before bulk delete`:
+   Yes, the button might be disabled, or maybe `user.click` is throwing because there are pointer events disabled?
+   Actually, `isAnyBulkPending` might be true in the test if it shares state? No, `isAnyBulkPending={false}` in the test.
+   Oh! I see `isAnyPending` is a prop to `SprintLedgerBulkActions`. Wait, does `onBulkDelete` open a confirmation modal? Let's check `SprintLedger.tsx`.
+   Wait, no, the test failure was on `requests confirmation before bulk delete` and `announces sorting state via aria-sort and sort buttons`.
+
+Let's look at the failure for `announces sorting state via aria-sort and sort buttons`:
+```
+    const activeCell = createdBtn.closest("th");
+    expect(activeCell).toHaveAttribute("aria-sort", "descending");
+
+    const nameBtns = screen.getAllByRole("button", { name: /Sort by Sprint, currently sorted/i });
+    const inactiveCell = nameBtns[0].closest("th");
+    expect(inactiveCell).not.toHaveAttribute("aria-sort");
+```
+Wait! `SprintLedger.tsx` sets `ariaSort` like this:
+`ariaSort={sort.key === "createdAt" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}`
+And `TableCell` renders:
+```tsx
+      <th scope="col" aria-sort={ariaSort}
+```
+If `ariaSort` is `undefined`, it renders `aria-sort="undefined"`? No, Preact omits `undefined` attributes.
+BUT in Preact, `aria-sort={undefined}` might render `aria-sort="undefined"` or something?
+Wait, if we removed `role="cell"`, we also might have removed `role="columnheader"`? No, it uses `th`.
+Why did `announces sorting state` fail?
+Because `createdBtn` was found, but `createdBtn.closest("th")` returned the `th`. Then `toHaveAttribute("aria-sort", "descending")` failed.
+Let's check the DOM output in the test:
+```html
+  <th
+    aria-sort="descending"
+    class="border-y border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 text-left  "
+    scope="col"
+  >
+```
+Wait! It DOES have `aria-sort="descending"`!
+Then why did the test fail?
+Look at the error: `Object.getElementError ... nameBtns[0].closest("th") is null or undefined?`
+Ah! `nameBtns[0]` is undefined?
+```tsx
+const nameBtns = screen.getAllByRole("button", { name: /Sort by Sprint, currently sorted/i });
+```
+Wait! The aria-label in `SprintLedger.tsx` says:
+```tsx
+aria-label={`Sort by Sprint, currently ${sort.key === "name" ? (sort.direction === "asc" ? "sorted ascending" : "sorted descending") : "unsorted"}. Click to sort by Sprint in ${sort.key === "name" && sort.direction === "asc" ? "descending" : "ascending"} order.`}
+```
+So for "name" (which is inactive initially), `sort.key !== "name"`.
+So the label is: `"Sort by Sprint, currently unsorted. Click to sort by Sprint in ascending order."`
+But the test queries for:
+```tsx
+const nameBtns = screen.getAllByRole("button", { name: /Sort by Sprint, currently sorted/i });
+```
+Wait! It queries for `currently sorted`!
+But the label says `currently unsorted`!
+Ah! The test code is: `name: /Sort by Sprint, currently sorted/i`. But if it's unsorted, it won't match `currently sorted`! It should be `/Sort by Sprint, currently unsorted/i`! Wait, `/currently sorted/` doesn't match `currently unsorted`.
+Wait, the test was already passing before my changes? No, I haven't made any changes yet, and it was failing! The repository came with failing tests! My job is to fix the issue.
+
+Let's check `requests confirmation before bulk delete` failure.
+It does `user.click(bulkDeleteBtn);`.
+But the button is:
+```html
+          <button
+            aria-disabled="false"
+            aria-label="Delete selected sprints"
+            class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-status-red/20 bg-status-red/10 px-3 text-xs font-bold text-status-red transition-colors hover:bg-status-red/20 focus-visible:ring-2 focus-visible:ring-status-red/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+          >
+```
+Wait, the name is `"Delete selected sprints"`.
+But the test queries: `screen.getAllByRole("button", { name: /^Delete$/i });`
+Wait! The visible text inside the button is "Delete". But `aria-label` is "Delete selected sprints". So `getByRole("button", { name: /^Delete$/i })` will FAIL to match because the accessible name is "Delete selected sprints", which doesn't match the exact regex `/^Delete$/i`!
+The test should query `/Delete selected sprints/i`!
+
+So both tests in `SprintLedger.accessibility.test.tsx` are failing because the test code is broken! Wait, the prompt says "Add tests for table captions, sortable header buttons, mobile labels, selected rows, and clickable-row keyboard behavior."
+Wait, the prompt says: "Add tests for table captions, sortable header buttons, mobile labels, selected rows, and clickable-row keyboard behavior."
+Wait, `tests/dashboard/v2/ui-components.test.tsx` has UI components tests. I should add tests for `Table.tsx` there.
+Let's see what is needed in `ui-components.test.tsx`:
+```tsx
+describe("Table", () => {
+  it("renders table captions properly", () => { ... });
+  it("renders sortable header buttons", () => { ... });
+  it("renders mobile labels without aria-hidden", () => { ... });
+  it("renders selected rows with correct classes", () => { ... });
+  it("supports keyboard navigation for clickable rows", () => { ... });
+});
+```
+
+And I need to update `docs/dashboard/design-system-shared-primitives.md` with responsive table accessibility requirements.
