@@ -17,6 +17,12 @@ This document outlines the design system for the Projects page and related compo
 *   Align footers consistently at the bottom of the card.
 *   Ensure stat tiles have balanced proportions.
 
+### Responsive Design
+
+*   **Mobile Headers:** Stack the page header and status pills vertically on narrow screens, switching to horizontal on tablet/desktop.
+*   **Action Wrapping:** Allow card actions and filter tabs to wrap (`flex-wrap`) to prevent horizontal overflow or clipping.
+*   **Dialogs:** Ensure inline dialogs (like Setup) have a maximum height (`max-h-[calc(100vh-2rem)]`) with internal scrolling (`overflow-y-auto`) and stack their primary actions (`flex-col-reverse`) on small viewports.
+
 ### Visual Style
 
 *   **Backgrounds:** Use subtle translucency (glassmorphism) with appropriate contrast for light and dark modes.
