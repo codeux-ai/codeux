@@ -18,8 +18,17 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
   const [shake, setShake] = useState(false);
   const [touched, setTouched] = useState(false);
 
+  let explicitChildId: string | undefined;
+  const childArray = toChildArray(children);
+  for (const child of childArray) {
+    if (isValidElement(child) && (child as any).props?.id) {
+      explicitChildId = (child as any).props.id;
+      break;
+    }
+  }
+
   const generatedId = useId();
-  const inputId = htmlFor ?? generatedId;
+  const inputId = htmlFor ?? explicitChildId ?? generatedId;
   const showError = (touched || !!forceTouch) && !!error;
   const errorId = showError ? `${inputId}-error` : undefined;
   const actualHelperId = helperText ? (helperTextId || `${inputId}-helper`) : helperTextId;
@@ -47,29 +56,45 @@ export function FieldWrapper({ label, error, children, htmlFor, required, helper
     }
   }, [showError, error]); // ONLY depend on the current values to avoid re-triggering from state setter delays
 
-  // Combine multiple aria-describedby ids if needed
-  let ariaDescribedBy: string | undefined = undefined;
-  const ids = [actualHelperId, showError ? errorId : undefined].filter(Boolean);
-  if (ids.length > 0) {
-    ariaDescribedBy = ids.join(' ');
+  // Only include helperId if there's no error showing, to prevent redundant announcements
+  const wrapperDescribedByIds = [];
+  if (showError && errorId) {
+    wrapperDescribedByIds.push(errorId);
+  } else if (actualHelperId) {
+    wrapperDescribedByIds.push(actualHelperId);
   }
+  const wrapperDescribedBy = wrapperDescribedByIds.length > 0 ? wrapperDescribedByIds.join(" ") : undefined;
 
   // Clone children to append aria attributes if valid
   let idAssigned = false;
   const child = toChildArray(children).map(child => {
     if (!isValidElement(child)) return child;
     const existingOnBlur = (child as any)?.props?.onBlur;
+    const existingDescribedBy = (child as any)?.props?.["aria-describedby"];
+    const existingErrorMessage = (child as any)?.props?.["aria-errormessage"];
+    const existingInvalid = (child as any)?.props?.["aria-invalid"];
+    const existingRequired = (child as any)?.props?.["aria-required"];
+
+    const combinedDescribedBy = [
+      wrapperDescribedBy,
+      existingDescribedBy
+    ].filter(Boolean).join(" ") || undefined;
+
+    const combinedErrorMessage = [
+      showError ? errorId : undefined,
+      existingErrorMessage
+    ].filter(Boolean).join(" ") || undefined;
 
     const childProps: any = {
-      "aria-invalid": showError ? "true" : undefined,
-      "aria-describedby": ariaDescribedBy || undefined,
-      "aria-errormessage": showError ? errorId : undefined,
-      "aria-required": required ? "true" : undefined,
+      "aria-invalid": showError ? "true" : existingInvalid,
+      "aria-describedby": combinedDescribedBy,
+      "aria-errormessage": combinedErrorMessage,
+      "aria-required": required ? "true" : existingRequired,
       onBlur: (e: any) => {
         setTouched(true);
         existingOnBlur?.(e);
       },
-      valid: !error ? valid : undefined,
+      valid: !error ? (valid ?? (child as any).props.valid) : undefined,
     };
 
     if (!idAssigned) {

@@ -181,6 +181,21 @@ expect(errorElement.className).toContain("motion-safe:animate-form-slide-down");
 expect(errorElement.className).not.toContain("pointer-events-none");
   });
 
+  it("correctly conveys required state visually and programmatically", () => {
+    const { getByText, getByRole } = render(
+      <FieldWrapper label="Test Label" htmlFor="test-input" required>
+        <Input id="test-input" />
+      </FieldWrapper>
+    );
+
+    const srOnly = getByText("(Required)");
+    expect(srOnly).toBeInTheDocument();
+    expect(srOnly).toHaveClass("sr-only");
+
+    const input = getByRole("textbox");
+    expect(input).toHaveAttribute("aria-required", "true");
+  });
+
   it("correctly handles and wires multiple children", () => {
     const { rerender } = render(
       <FieldWrapper label="Test Label" htmlFor="test-input" error="Required">
