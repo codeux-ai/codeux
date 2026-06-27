@@ -33,7 +33,7 @@ export const PageContainer: FunctionComponent<PageContainerProps> = ({
   ...props
 }) => {
   const classes = [
-    "relative z-10 mx-auto flex w-full flex-col animate-in fade-in duration-200",
+    "relative z-10 mx-auto flex w-full flex-col animate-in fade-in duration-200 motion-reduce:animate-none",
     PAGE_CONTAINER_WIDTH,
     pageContainerPadding[padding],
     className,
