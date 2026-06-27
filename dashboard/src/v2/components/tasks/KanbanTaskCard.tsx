@@ -157,7 +157,7 @@ export const KanbanTaskCard: FunctionComponent<{
 
       <DependencyStatusIndicators indicators={dependencyIndicators} />
 
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-black/[0.04] dark:border-white/[0.04] relative z-10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mt-3 pt-3 border-t border-black/[0.04] dark:border-white/[0.04] relative z-10">
         <div className="flex items-center gap-3">
           <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-slate-300 dark:text-slate-600">
             <Clock className="w-3 h-3 shrink-0" strokeWidth={2} aria-hidden="true" />

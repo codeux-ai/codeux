@@ -21,10 +21,10 @@ export function TaskStatusBadge({ status, className = "" }: TaskStatusBadgeProps
   return (
     <div
       data-testid="task-status-badge"
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${variantStyles[config.variant]} ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${variantStyles[config.variant]} max-w-full truncate ${className}`}
     >
       <Icon className="w-3.5 h-3.5" />
-      <span>{config.label}</span>
+      <span className="truncate">{config.label}</span>
     </div>
   );
 }

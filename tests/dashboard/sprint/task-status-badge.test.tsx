@@ -35,4 +35,13 @@ describe("TaskStatusBadge", () => {
     expect(badge).not.toHaveTextContent("Completed");
     expect(badge.className).toContain("text-red-800");
   });
+
+  it("applies truncation classes for responsive layout", () => {
+    render(<TaskStatusBadge status="completed" />);
+    const badge = screen.getByTestId("task-status-badge");
+    expect(badge.className).toContain("max-w-full");
+    expect(badge.className).toContain("truncate");
+    const label = badge.querySelector("span");
+    expect(label?.className).toContain("truncate");
+  });
 });
