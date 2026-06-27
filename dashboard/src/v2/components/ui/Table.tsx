@@ -96,7 +96,7 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
   return (
     <td
       colSpan={colSpan}
-      className={`flex flex-wrap items-start gap-x-2 border-b border-white/[0.04] px-4 py-2 last:border-b-0 align-middle lg:table-cell lg:border-y lg:px-4 lg:py-3 ${alignClass} ${roundedClass} ${className}`}
+      className={`flex flex-wrap items-start gap-x-2 border-b border-white/[0.04] px-4 py-2 last:border-b-0 align-middle min-w-0 break-words lg:table-cell lg:border-y lg:px-4 lg:py-3 ${alignClass} ${roundedClass} ${className}`}
       role="cell"
     >
       {mobileLabel && (
@@ -104,7 +104,9 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
           {mobileLabel}
         </span>
       )}
-      {children}
+      <div className="min-w-0 flex-1 break-words lg:contents">
+        {children}
+      </div>
     </td>
   );
 }
