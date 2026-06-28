@@ -488,12 +488,30 @@ export const LiveSessionPage: FunctionComponent = () => {
             <SectionDivider label="Task Pipeline" />
 
             {/* ── Filter Strip ────────────────────────────────────────── */}
-            <div className="-mt-8 flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit">
-                {TASK_FILTERS.map((filter) => (
+            <div className="-mt-8 flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit" role="tablist" aria-label="Task status filters">
+                {TASK_FILTERS.map((filter, index) => (
                     <button
                         key={filter}
+                        role="tab"
+                        aria-selected={activeFilter === filter}
+                        tabIndex={activeFilter === filter ? 0 : -1}
                         onClick={() => setFilter(filter)}
-                        aria-pressed={activeFilter === filter}
+                        onKeyDown={(e) => {
+                            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                const nextFilter = TASK_FILTERS[(index + 1) % TASK_FILTERS.length];
+                                setFilter(nextFilter);
+                                const nextTab = e.currentTarget.parentElement?.children[(index + 1) % TASK_FILTERS.length] as HTMLElement;
+                                nextTab?.focus();
+                            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                const prevIndex = index - 1 < 0 ? TASK_FILTERS.length - 1 : index - 1;
+                                const prevFilter = TASK_FILTERS[prevIndex];
+                                setFilter(prevFilter);
+                                const prevTab = e.currentTarget.parentElement?.children[prevIndex] as HTMLElement;
+                                prevTab?.focus();
+                            }
+                        }}
                         className={`text-xs font-semibold tracking-wide px-4 py-1.5 rounded-lg
                                    transition-all duration-200 flex items-center gap-2
                                    ${activeFilter === filter
@@ -514,10 +532,10 @@ export const LiveSessionPage: FunctionComponent = () => {
             </div>
 
             {/* ── Main Content Grid ───────────────────────────────────── */}
-            <div ref={contentRef} className="grid grid-cols-1 xl:grid-cols-12 gap-10 xl:gap-16">
+            <div ref={contentRef} className="grid grid-cols-1 xl:grid-cols-12 gap-6 md:gap-10 xl:gap-16">
 
                 {/* Task cards */}
-                <div className="xl:col-span-8 flex flex-col gap-5">
+                <div className="xl:col-span-8 flex flex-col gap-5 min-w-0">
                     {!hasSprintContext && !initialLoadComplete ? (
                         /* Initial load in progress — render nothing to avoid flashing idle placeholder */
                         null
@@ -563,7 +581,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 </div>
 
                 {/* Sidebar */}
-                <div className="xl:col-span-4 flex flex-col gap-5">
+                <div className="xl:col-span-4 flex flex-col gap-5 min-w-0">
                     <ExecutionTimelineProvider
                         execution={execution}
                         onOrchestrateSprint={handleOrchestrateSprint}

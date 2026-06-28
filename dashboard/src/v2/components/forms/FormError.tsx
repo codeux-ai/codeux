@@ -29,6 +29,7 @@ export function FormError({ id, error, helperId, helperText }: FormErrorProps) {
       {error && (
         <div
           id={id}
+          role="alert"
           class="col-start-1 row-start-1 text-xs font-medium text-status-red motion-safe:animate-form-slide-down opacity-100 visible"
         >
           {error}

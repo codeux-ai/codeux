@@ -251,7 +251,7 @@ export const TelemetryLedger: FunctionComponent<{
                                 {formatTokens(item.usage.totalTokens / Math.max(1, item.usage.invocationCount))}/call
                               </div>
                             ) : null}
-                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2 min-w-0">
                               {item.provider ? (() => {
                                 const pIcon = getProviderIcon(item.provider as string);
                                 const ProviderIcon = pIcon.icon;

@@ -64,7 +64,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
   const hasActiveFilters = filters.status.length > 0 || filters.purpose.length > 0 || filters.provider.length > 0 || (filters.errorCategories && filters.errorCategories.length > 0) || search !== "";
 
   return (
-    <div className={`${SUBPANEL_CLASS} flex flex-nowrap items-center gap-3 p-3 overflow-x-auto whitespace-nowrap scrollbar-hide`}>
+    <div className={`${SUBPANEL_CLASS} flex flex-nowrap items-center gap-3 p-3 overflow-x-auto whitespace-nowrap scrollbar-hide min-w-0`}>
       <div className="relative min-w-0 w-full lg:flex-1 lg:basis-[18rem]">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" strokeWidth={2} />
         <input
@@ -86,7 +86,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Status filters">
         <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
           <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.2} />
           Status
@@ -108,7 +108,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
       </div>
 
       {availablePurposes.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Purposes filters">
           <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
             Purposes
           </div>
@@ -130,7 +130,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
       ) : null}
 
       {availableProviders.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Providers filters">
           <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
             Providers
           </div>
@@ -151,7 +151,7 @@ export const SystemFilterBar: FunctionComponent<SystemFilterBarProps> = ({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Error Category filters">
         <div className={`inline-flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 ${CHIP_CLASS}`}>
           Error Category
         </div>

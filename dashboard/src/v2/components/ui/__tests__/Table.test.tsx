@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/preact";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
@@ -125,5 +125,45 @@ describe("Table component", () => {
 
     const rowFalse = screen.getAllByRole("row")[0];
     expect(rowFalse).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("renders a sort button when isHeader is true and onSort is provided", () => {
+    const handleSort = vi.fn();
+    render(
+      <Table>
+        <TableHeader>
+          <TableCell isHeader onSort={handleSort} ariaSort="ascending">Sortable Header</TableCell>
+        </TableHeader>
+      </Table>
+    );
+
+    const header = screen.getByRole("columnheader", { name: "Sortable Header" });
+    expect(header).toHaveAttribute("aria-sort", "ascending");
+
+    const button = screen.getByRole("button", { name: "Sortable Header" });
+    expect(button).toBeInTheDocument();
+
+    button.click();
+    expect(handleSort).toHaveBeenCalledTimes(1);
+  });
+
+  it("handles long continuous strings without breaking mobile layout", () => {
+    const longString = "verylongstringwithoutspacesthatmightoverflowthecontainer".repeat(5);
+
+    render(
+      <Table>
+        <TableBody>
+          <TableRow>
+            <TableCell mobileLabel="Label">{longString}</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+
+    const cell = screen.getByRole("cell");
+    expect(cell).toHaveClass("break-words", "min-w-0");
+
+    const innerContainer = cell.querySelector("div");
+    expect(innerContainer).toHaveClass("break-words", "min-w-0", "flex-1", "lg:contents");
   });
 });

@@ -156,7 +156,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
 
   if (invocations.length === 0) {
     return (
-      <div role="status" className="flex flex-col items-center justify-center py-20 text-slate-500">
+      <div role="status" aria-live="polite" aria-label="Empty invocations table" className="flex flex-col items-center justify-center py-20 text-slate-500">
         <AlertTriangle className="mb-4 h-10 w-10 opacity-20" />
         <div className="text-sm font-medium">No invocations match the current filters</div>
       </div>
@@ -168,7 +168,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
       <table className="w-full border-separate border-spacing-y-2 block lg:table">
         <thead className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm dark:bg-void-900/80 hidden lg:table-header-group">
           <tr className="text-left text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-            <th className="pb-2 pl-6">
+            <th scope="col" className="pb-2 pl-6">
               <button
                 type="button"
                 onClick={() => handleSort("startedAt")}
@@ -177,10 +177,10 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 Time {renderSortIcon("startedAt")}
               </button>
             </th>
-            <th className="pb-2">Status</th>
-            <th className="pb-2">Type</th>
-            <th className="pb-2">Model</th>
-            <th className="pb-2">
+            <th scope="col" className="pb-2">Status</th>
+            <th scope="col" className="pb-2">Type</th>
+            <th scope="col" className="pb-2">Model</th>
+            <th scope="col" className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("inputTokens")}
@@ -189,7 +189,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 In {renderSortIcon("inputTokens")}
               </button>
             </th>
-            <th className="pb-2">
+            <th scope="col" className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("outputTokens")}
@@ -198,8 +198,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 Out {renderSortIcon("outputTokens")}
               </button>
             </th>
-            <th className="pb-2">Cached</th>
-            <th className="pb-2">
+            <th scope="col" className="pb-2">Cached</th>
+            <th scope="col" className="pb-2">
               <button
                 type="button"
                 onClick={() => handleSort("totalTokens")}
@@ -208,7 +208,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 Total {renderSortIcon("totalTokens")}
               </button>
             </th>
-            <th className="hidden pb-2 md:table-cell">
+            <th scope="col" className="hidden pb-2 md:table-cell">
               <button
                 type="button"
                 onClick={() => handleSort("durationMs")}
@@ -217,8 +217,8 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                 Avg Duration {renderSortIcon("durationMs")}
               </button>
             </th>
-            <th className="pb-2">Context</th>
-            <th className="pb-2 pr-6 text-right">Expand</th>
+            <th scope="col" className="pb-2">Context</th>
+            <th scope="col" className="pb-2 pr-6 text-right">Expand</th>
           </tr>
         </thead>
         <tbody className="block lg:table-row-group">
@@ -264,7 +264,7 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                           <div>{renderStatusChip(invocation.status)}</div>
 
                         {/* Type */}
-                          <div className="flex">
+                          <div className="flex min-w-0">
 
                           <div className={`${CHIP_CLASS} px-2 py-0.5 text-[10px] font-medium text-slate-500`}>
                             {invocation.type?.replace(/_/g, " ") || "unknown"}
@@ -275,12 +275,12 @@ export const InvocationsTable: FunctionComponent<InvocationsTableProps> = ({
                         {/* Model & Duration Row */}
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between lg:contents">
                           {/* Model */}
-                          <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                          <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300 min-w-0">
 
                           <div className={`rounded-lg p-1.5 ${providerBg} ${providerText}`}>
                             <ProviderIcon className="h-3 w-3" strokeWidth={2.5} />
                           </div>
-                          <span className="truncate">{invocation.model || "—"}</span>
+                          <span className="truncate min-w-0">{invocation.model || "—"}</span>
                           </div>
 
                         {/* Token Stats Row */}

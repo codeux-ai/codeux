@@ -104,4 +104,68 @@ describe("queryExecutionTaskDispatches latest-per-task", () => {
     expect(taskDispatches[0]?.status).toBe("completed");
     expect(taskDispatches[0]?.errorMessage ?? null).toBeNull();
   });
+
+  it("normalizes stale blocked dispatch state for completed merged tasks", async () => {
+    const { executionRepository, projectRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Settled Project",
+      sourceType: "local",
+      sourceRef: "/workspace/settled-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Settled Sprint",
+      number: 2,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Settled task",
+      promptMarkdown: "Do work",
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      triggerType: "dashboard",
+      triggeredBy: "user:test",
+      executorMode: "mixed",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      queuedAt: "2026-01-02T09:00:00.000Z",
+    });
+    executionRepository.updateTaskDispatch(dispatch.id, {
+      status: "blocked",
+      startedAt: "2026-01-02T09:00:00.000Z",
+      finishedAt: "2026-01-02T09:05:00.000Z",
+      lastHeartbeatAt: "2026-01-02T09:05:00.000Z",
+      errorMessage: "Provider session requires attention: AWAITING_USER_FEEDBACK",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskId: task.id,
+      provider: "jules",
+      state: "COMPLETED",
+      startedAt: "2026-01-02T09:00:00.000Z",
+      finishedAt: "2026-01-02T09:04:00.000Z",
+    });
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+    const taskDispatches = snapshot.taskDispatches.filter((d) => d.taskId === task.id);
+
+    expect(taskDispatches).toHaveLength(1);
+    expect(taskDispatches[0]?.status).toBe("completed");
+    expect(taskDispatches[0]?.taskRunState).toBe("COMPLETED");
+    expect(taskDispatches[0]?.errorMessage ?? null).toBeNull();
+  });
 });

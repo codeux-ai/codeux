@@ -46,20 +46,20 @@ it("maintains a stable tooltip ID across re-renders", async () => {
   const trigger = getByTestId("trigger");
   await user.hover(trigger);
 
-  const wrapper = trigger.parentElement;
+  const triggerEl = trigger;
 
   await waitFor(() => {
-    expect(wrapper?.getAttribute("aria-describedby")).toBeTruthy();
+    expect(triggerEl.getAttribute("aria-describedby")).toBeTruthy();
   });
 
-  const tooltipId = wrapper?.getAttribute("aria-describedby");
+  const tooltipId = triggerEl.getAttribute("aria-describedby");
   expect(document.getElementById(tooltipId!)).toBeInTheDocument();
 
   const incrementButton = getByText(/Increment: 0/);
   await user.click(incrementButton);
 
   // Re-verify the ID matches and component is still rendering properly
-  expect(wrapper?.getAttribute("aria-describedby")).toBe(tooltipId);
+  expect(triggerEl.getAttribute("aria-describedby")).toBe(tooltipId);
   expect(document.getElementById(tooltipId!)).toBeInTheDocument();
 });
 
@@ -81,13 +81,13 @@ it("maintains a stable tooltip ID across re-renders", async () => {
     // but the test environment setup allows us to mock or bypass it if we mock the matches method:
     trigger.matches = (selector: string) => selector === ":focus-visible" || HTMLElement.prototype.matches.call(trigger, selector);
 
-    const wrapper = trigger.parentElement!;
-    wrapper.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+    const triggerEl = trigger;
+    triggerEl.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
 
     await waitFor(() => {
-      expect(wrapper.getAttribute("aria-describedby")).toBeTruthy();
+      expect(triggerEl.getAttribute("aria-describedby")).toBeTruthy();
     });
 
-    const tooltipId = wrapper.getAttribute("aria-describedby");
+    const tooltipId = triggerEl.getAttribute("aria-describedby");
     expect(document.getElementById(tooltipId!)).toBeInTheDocument();
   });

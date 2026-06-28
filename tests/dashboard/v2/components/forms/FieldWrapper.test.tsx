@@ -70,7 +70,7 @@ describe("FieldWrapper", () => {
     expect(errorText).toBeInTheDocument();
     expect(inputAfter?.getAttribute("aria-invalid")).toBe("true");
     expect(inputAfter?.getAttribute("aria-errormessage")).toBe(errorText.id);
-    expect(inputAfter?.getAttribute("aria-describedby")).toBe(`${expectedHelperId} ${errorText.id}`);
+    expect(inputAfter?.getAttribute("aria-describedby")).toBe(`${errorText.id}`);
   });
 
   it("triggers shake only when error changes to a new truthy value", async () => {

@@ -195,7 +195,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <RefreshCw className="h-4 w-4" strokeWidth={2.2} />
           </button>
           <form
-            className="flex min-w-[240px] flex-1 items-center"
+            className="flex min-w-0 flex-1 items-center"
             onSubmit={(event) => {
               event.preventDefault();
               onAddressSubmit(addressValue);

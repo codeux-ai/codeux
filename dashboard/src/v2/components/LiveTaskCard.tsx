@@ -70,7 +70,7 @@ export const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = memo(
     }
 
     return (
-        <div className="flex items-center gap-2 text-status-amber">
+        <div className="flex items-center gap-2 text-status-amber" role="status" aria-live="polite">
             <Clock className="w-3 h-3 flex-shrink-0" strokeWidth={2} />
             <span>
                 {remaining <= 0
@@ -332,7 +332,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
             <div className="relative z-10">
                 {/* Header row */}
-                <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
                     <div className="flex items-start gap-3.5 min-w-0 flex-1">
                         {/* Status icon blob */}
                         <div
@@ -350,7 +350,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                 {/* Status badge */}
                                 <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
                                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${cfg.dot}`} />
-                                    {cfg.label}
+                                    <span className="sr-only">Task status: </span>{cfg.label}
                                 </span>
                                 {mergeCfg && taskPhase !== "RUNNING" && taskPhase !== "PENDING" && (
                                     <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${mergeCfg.bg} ${mergeCfg.text} border ${mergeCfg.border}`}>
@@ -368,7 +368,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     </div>
 
                     {/* Right meta column */}
-                    <div className="flex flex-col items-end gap-2 shrink-0">
+                    <div className="flex flex-col items-start sm:items-end gap-2 shrink-0 w-full sm:w-auto">
                         {agentPreset && (
                             <div className="flex items-center gap-1.5">
                                 <AgentSelectAvatarIcon avatarConfig={agentPreset.avatarConfig} seed={agentPreset.name} />

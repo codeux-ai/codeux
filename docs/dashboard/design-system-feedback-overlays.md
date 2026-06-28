@@ -56,4 +56,9 @@ Feedback surfaces indicate system status or asynchronous progress.
 
 - Ensure overlays (`Dialog`, `Modal`, `ConfirmDialog`) manage focus properly using `useFocusTrap`.
 - Maintain appropriate ARIA attributes for semantic landmarks: `role="dialog"`, `aria-modal="true"`.
+- Every dialog primitive must have an accessible name via `ariaLabel`, `ariaLabelledBy`, or `titleId`.
+- `aria-describedby` must only be added if there is meaningful help or body text.
+- All dialogs must use `useFocusTrap` to trap focus, restore focus on close, and allow `Escape` key dismissal even if backdrop clicks are disabled (unless the dialog represents a fully blocking workflow).
 - Action feedback and toasts must use `role="status"` for polite announcements and `role="alert"` or `aria-live="assertive"` exclusively for destructive errors.
+- All badges, status dots, and live timing indicators must include visually hidden text (`<span className="sr-only">`) to provide explicit status and severity announcements, ensuring they do not rely purely on color or motion.
+- Spinning or pinging indicators must respect reduced motion by using `motion-reduce:animate-none` or `motion-safe` variants.

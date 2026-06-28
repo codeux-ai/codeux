@@ -426,7 +426,7 @@ export const FileBrowserPage: FunctionComponent = () => {
           lastError={selectedSession?.status === "error" ? selectedSession.lastError : null}
         />
       ) : (
-        <div class="grid h-[calc(100vh-340px)] min-h-[520px] grid-cols-1 gap-5 lg:grid-cols-[340px_minmax(0,1fr)]" data-testid="file-browser-main-tool-panel">
+        <div class="grid min-h-[520px] grid-cols-1 gap-5 lg:h-[calc(100vh-340px)] lg:grid-cols-[340px_minmax(0,1fr)]" data-testid="file-browser-main-tool-panel">
           {/* Sidebar panel */}
           <div class="flex min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-black/[0.06] bg-white/74 shadow-[0_12px_30px_rgba(15,23,42,0.05)] backdrop-blur-md dark:border-white/[0.07] dark:bg-void-900/42">
             {mode === "files" ? (

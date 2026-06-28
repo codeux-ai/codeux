@@ -90,11 +90,12 @@ describe("MemoryCard", () => {
                 content="accessible-test-content"
                 category="architecture"
                 strength={0.75}
+                scope="project"
                 onClick={vi.fn()}
             />
         );
 
-        const card = getByRole("option", { name: "Architecture memory, strength 75%. accessible-test-content" });
+        const card = getByRole("option", { name: "Architecture memory, scope project, strength 75%. accessible-test-content" });
         expect(card).toBeInTheDocument();
         expect(card).toHaveAttribute("aria-selected", "false");
     });

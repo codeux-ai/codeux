@@ -57,6 +57,10 @@ describe("HeaderStats", () => {
 
         // The MetricCard might contain other SVGs like WaveFluid
         // Instead of picking specific indices, we search within each card
+        // Verify the layout container uses the responsive grid classes
+        const grid = container.firstChild as Element;
+        expect(grid.className).toContain("grid-cols-[repeat(auto-fit,minmax(240px,1fr))]");
+
         const cards = container.querySelectorAll(".group");
         expect(cards.length).toBe(4);
 

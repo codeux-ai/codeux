@@ -348,7 +348,18 @@ describe("SprintLedger Accessibility", () => {
     const idLabels = screen.getAllByText("Sprint ID");
     const idLabel = idLabels.find(el => el.classList.contains('lg:hidden'));
     expect(idLabel).toBeInTheDocument();
-    expect(idLabel).toHaveClass("lg:hidden");
+
+    const selectLabels = screen.getAllByText("Select");
+    expect(selectLabels.find(el => el.classList.contains('lg:hidden'))).toBeInTheDocument();
+
+    const pinLabels = screen.getAllByText("Pin");
+    expect(pinLabels.find(el => el.classList.contains('lg:hidden'))).toBeInTheDocument();
+
+    const controlsLabels = screen.getAllByText("Controls");
+    expect(controlsLabels.find(el => el.classList.contains('lg:hidden'))).toBeInTheDocument();
+
+    const statusLabels = screen.getAllByText("Status");
+    expect(statusLabels.find(el => el.classList.contains('lg:hidden'))).toBeInTheDocument();
   });
 });
 

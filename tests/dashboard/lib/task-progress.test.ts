@@ -95,6 +95,28 @@ describe("task progress phase", () => {
     ).toBe("COMPLETED");
   });
 
+  it("does not let stale failed dispatch state override a merged task", () => {
+    expect(getLiveTaskProgressPhase({
+      task: {
+        id: "3b",
+        title: "Task",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        merge_indicator: "MERGED",
+        is_merged: true,
+      },
+      dispatch: {
+        status: "failed",
+        taskRunState: "FAILED",
+        finishedAt: "2026-03-19T10:05:00.000Z",
+        workerBranch: null,
+        prUrl: null,
+      },
+    })).toBe("COMPLETED");
+  });
+
   it("keeps shared task phase unchanged while live phase honors terminal dispatch completion", () => {
     const task = {
       id: "4",

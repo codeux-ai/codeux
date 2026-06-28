@@ -191,6 +191,12 @@ const baseProps: any = {
         }
     });
 
-
-
+    it("makes hover-revealed controls accessible by keyboard", () => {
+        render(<ProjectDataProvider initialData={null as any}><TasksList pageData={pageData} /></ProjectDataProvider>);
+        const actionButtons = screen.getAllByRole('link');
+        const actionButton = actionButtons.find(b => b.title === "Open live session");
+        if(!actionButton) { throw new Error("Live session button not found"); }
+        actionButton.focus();
+        expect(actionButton.className).toMatch(/focus-visible:ring-2/);
+    });
 });

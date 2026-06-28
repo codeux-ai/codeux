@@ -28,6 +28,9 @@ describe("DependencyStatusIndicators", () => {
     const task1Elements = container.querySelectorAll('span[aria-hidden="true"]');
     expect(Array.from(task1Elements).some(el => el.textContent === "TASK-1")).toBeTruthy();
 
+    // Verify explicit accessible text
+    expect(getByText("Depends on task TASK-1, status: completed. Title: Test task 1")).toBeTruthy();
+
     // Verify sr-only accessible text
     const srText = getByText((content, element) => {
         return element?.tagName.toLowerCase() === 'span' && element?.className.includes('sr-only') && content.includes('Depends on task TASK-1');

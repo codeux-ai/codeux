@@ -23,7 +23,24 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex gap-1 self-start rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35">
+      <div
+        role="tablist"
+        aria-label="Telemetry ledgers"
+        className="flex gap-1 self-start rounded-2xl border border-black/[0.05] bg-white/68 p-1 dark:border-white/[0.05] dark:bg-void-900/35"
+        onKeyDown={(e) => {
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            e.preventDefault();
+            const currentIndex = tabs.findIndex(t => t.id === activeTab);
+            let nextIndex = e.key === "ArrowRight" ? currentIndex + 1 : currentIndex - 1;
+            if (nextIndex >= tabs.length) nextIndex = 0;
+            if (nextIndex < 0) nextIndex = tabs.length - 1;
+            setActiveTab(tabs[nextIndex].id);
+            setTimeout(() => {
+              document.getElementById(`tab-${tabs[nextIndex].id}`)?.focus();
+            }, 0);
+          }
+        }}
+      >
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -31,8 +48,12 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
             <button
               key={tab.id}
               type="button"
+              id={`tab-${tab.id}`}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`tabpanel-${tab.id}`}
+              tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
-              aria-pressed={isActive}
               className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-900 ${
                 isActive
                   ? "bg-slate-900 text-white shadow-sm dark:bg-white dark:text-void-900"
@@ -55,25 +76,32 @@ export const TelemetryLedgerTabs: FunctionComponent<TelemetryLedgerTabsProps> = 
         })}
       </div>
 
-      {activeTab === "git" && stats.git ? (
-        <GitTelemetryTab gitStats={stats.git} />
-      ) : activeTab === "sprints" ? (
-        <TelemetryLedger
-          title="Sprint Telemetry"
-          eyebrow="Sprint Ledger"
-          items={stats.sprints}
-          kindLabel="sprints"
-          emptyLabel="No sprint telemetry active in this window."
-        />
-      ) : (
-        <TelemetryLedger
-          title="Task Telemetry"
-          eyebrow="Task Ledger"
-          items={stats.tasks}
-          kindLabel="tasks"
-          emptyLabel="No task telemetry landed in this window yet."
-        />
-      )}
+      <div
+        role="tabpanel"
+        id={`tabpanel-${activeTab}`}
+        aria-labelledby={`tab-${activeTab}`}
+        tabIndex={0}
+      >
+        {activeTab === "git" && stats.git ? (
+          <GitTelemetryTab gitStats={stats.git} />
+        ) : activeTab === "sprints" ? (
+          <TelemetryLedger
+            title="Sprint Telemetry"
+            eyebrow="Sprint Ledger"
+            items={stats.sprints}
+            kindLabel="sprints"
+            emptyLabel="No sprint telemetry active in this window."
+          />
+        ) : (
+          <TelemetryLedger
+            title="Task Telemetry"
+            eyebrow="Task Ledger"
+            items={stats.tasks}
+            kindLabel="tasks"
+            emptyLabel="No task telemetry landed in this window yet."
+          />
+        )}
+      </div>
     </div>
   );
 };

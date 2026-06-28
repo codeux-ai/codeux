@@ -164,13 +164,13 @@ export const AgentMcpManagePanel: FunctionComponent<{
                     <Plug className="h-4 w-4" strokeWidth={2.2} />
                   </span>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{server.label || server.name}</span>
-                      <span className="inline-flex h-5 items-center rounded-full border border-black/[0.08] bg-black/[0.03] px-2 text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-500">
+                      <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-black/[0.08] bg-black/[0.03] px-2 text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-500">
                         {server.transport === "stdio" ? "stdio" : "HTTP"}
                       </span>
                       {server.enabled === false && (
-                        <span className="inline-flex h-5 items-center rounded-full border border-amber-400/20 bg-amber-400/[0.08] px-2 text-[8px] font-bold uppercase tracking-[0.14em] text-amber-600 dark:text-amber-400">
+                        <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-amber-400/20 bg-amber-400/[0.08] px-2 text-[8px] font-bold uppercase tracking-[0.14em] text-amber-600 dark:text-amber-400">
                           Off in settings
                         </span>
                       )}

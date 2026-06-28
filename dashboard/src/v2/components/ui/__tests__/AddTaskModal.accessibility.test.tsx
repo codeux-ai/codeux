@@ -24,4 +24,10 @@ describe("AddTaskModal Accessibility", () => {
     expect(statusRegion).toHaveAttribute("aria-live", "polite");
     expect(statusRegion).toHaveAttribute("role", "status");
   });
+
+  test("applies FieldWrapper attributes to required form inputs", () => {
+    render(<AddTaskModal sprints={dummySprints as any} availableTasks={dummyTasks as any} onClose={() => {}} onSubmit={() => {}} />);
+    const titleInput = screen.getAllByRole("textbox").find(el => el.id === "add-task-title");
+    expect(titleInput).toHaveAttribute("aria-required", "true");
+  });
 });

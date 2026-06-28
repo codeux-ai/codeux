@@ -96,9 +96,10 @@ interface TableCellProps {
   align?: "left" | "center" | "right";
   colSpan?: number;
   mobileLabel?: string;
+  onSort?: () => void;
 }
 
-export function TableCell({ children, className = "", isFirst, isLast, isHeader, align = "left", colSpan, mobileLabel, ariaSort }: TableCellProps) {
+export function TableCell({ children, className = "", isFirst, isLast, isHeader, align = "left", colSpan, mobileLabel, ariaSort, onSort }: TableCellProps) {
   const alignClass = align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
 
   if (isHeader) {
@@ -108,7 +109,17 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
       <th scope="col" aria-sort={ariaSort}
         className={`border-y border-[color:var(--border-hairline)] bg-[var(--surface-glass)] px-4 py-2 ${alignClass} ${roundedClass} ${plClass} ${className}`}
       >
-        {children}
+        {onSort ? (
+          <button
+            type="button"
+            onClick={onSort}
+            className="inline-flex items-center gap-1 w-full text-inherit font-inherit text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-md bg-transparent border-0 p-0 cursor-pointer"
+          >
+            {children}
+          </button>
+        ) : (
+          children
+        )}
       </th>
     );
   }
@@ -117,7 +128,7 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
   return (
     <td
       colSpan={colSpan}
-      className={`flex flex-wrap items-start gap-x-2 border-b border-white/[0.04] px-4 py-2 last:border-b-0 align-middle lg:table-cell lg:border-y lg:px-4 lg:py-3 ${alignClass} ${roundedClass} ${className}`}
+      className={`flex flex-wrap items-start gap-x-2 border-b border-white/[0.04] px-4 py-2 last:border-b-0 align-middle min-w-0 break-words lg:table-cell lg:border-y lg:px-4 lg:py-3 ${alignClass} ${roundedClass} ${className}`}
       role="cell"
     >
       {mobileLabel && (
@@ -125,7 +136,9 @@ export function TableCell({ children, className = "", isFirst, isLast, isHeader,
           {mobileLabel}
         </span>
       )}
-      {children}
+      <div className="min-w-0 flex-1 break-words lg:contents">
+        {children}
+      </div>
     </td>
   );
 }

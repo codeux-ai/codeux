@@ -497,6 +497,54 @@ describe("action-required-automation", () => {
     expect(result2.subtasks[0].intervention_hint).toContain("already answered automatically");
   });
 
+  it("keeps an unresolved duplicate clarification blocked after the cooldown expires", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const onTaskEvent = vi.fn();
+    const lastAutomatedInterventionKeys = new Map<string, string>();
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [{ agentMessaged: { agentMessage: "Should I use Prisma or raw SQL?" } }],
+    });
+    let now = 1_000;
+
+    const commonArgs = {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL" as const,
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE" as const,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+        clarificationCooldownSeconds: 5,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      lastAutomatedInterventionKeys,
+      onTaskEvent,
+      now: () => now,
+    };
+
+    const result1 = await applyActionRequiredAutomation([{ ...task }], commonArgs);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(result1.subtasks[0].status).toBe("RUNNING");
+
+    now += 6_000;
+    const result2 = await applyActionRequiredAutomation([{ ...task }], commonArgs);
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(result2.subtasks[0].status).toBe("BLOCKED");
+    expect(result2.subtasks[0].intervention_owner).toBe("HUMAN");
+    expect(result2.subtasks[0].intervention_hint).toContain("manual review");
+    expect(result2.reportText).toContain("Clarification Still Blocked");
+    expect(onTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "action_required_auto_reply_unresolved",
+    }));
+  });
+
   it("sends auto-reply again when the latest clarification request changes", async () => {
     const sendMessage = vi.fn().mockResolvedValue({});
     const lastAutomatedInterventionKeys = new Map<string, string>();

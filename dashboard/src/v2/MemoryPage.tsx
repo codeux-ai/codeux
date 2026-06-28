@@ -852,11 +852,7 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Neural Canvas ───────────────────────────────────────── */}
             <div
-                className="flex w-full overflow-hidden rounded-[2rem]
-                           bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl
-                           border border-black/[0.05] dark:border-white/[0.05]
-                           shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)]"
-                style={{ height: "max(600px, calc(100vh - 440px))" }}
+                className="flex flex-col lg:flex-row w-full overflow-hidden rounded-[2rem] bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl border border-black/[0.05] dark:border-white/[0.05] shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)] h-[calc(100dvh-12rem)] min-h-[500px]"
             >
                 <div ref={wrapRef} className="flex-1 relative overflow-hidden">
                     <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />

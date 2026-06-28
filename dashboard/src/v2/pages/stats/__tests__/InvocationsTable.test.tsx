@@ -115,6 +115,9 @@ describe("InvocationsTable", () => {
     expect(getByText("S1")).toBeTruthy();
     expect(getByText("TASK-1")).toBeTruthy();
     expect(getByText("Rate limited")).toBeTruthy();
+
+    const headers = document.querySelectorAll("th[scope='col']");
+    expect(headers.length).toBeGreaterThan(0);
   });
 
   it("handles sorting", () => {

@@ -1,4 +1,5 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
+import { isValidElement, cloneElement } from "preact";
 import { useEffect, useRef, useState, useLayoutEffect, useId } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
@@ -138,17 +139,50 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
     // Return just the children if no content
     if (!content) return <>{children}</>;
 
-    return (
-        <div
-            ref={wrapperRef}
-            className={`inline-flex relative ${triggerClassName}`}
-            onPointerEnter={handlePointerEnter}
-            onPointerLeave={handlePointerLeave}
-            onFocusCapture={handleFocus}
-            onBlurCapture={handlePointerLeave}
+    const triggerElement = isValidElement(children) ? cloneElement(children as preact.VNode<any>, {
+        ref: (node: any) => {
+            (wrapperRef as any).current = node;
+            const childRef = (children as any).ref;
+            if (childRef) {
+                if (typeof childRef === 'function') childRef(node);
+                else childRef.current = node;
+            }
+        },
+        className: `${(children.props as any).className || ''} ${triggerClassName}`.trim(),
+        onPointerEnter: (e: PointerEvent) => {
+            handlePointerEnter(e);
+            (children.props as any).onPointerEnter?.(e);
+        },
+        onPointerLeave: (e: PointerEvent) => {
+            handlePointerLeave(e);
+            (children.props as any).onPointerLeave?.(e);
+        },
+        onFocusCapture: (e: FocusEvent) => {
+            handleFocus(e);
+            (children.props as any).onFocusCapture?.(e);
+        },
+        onBlurCapture: (e: FocusEvent) => {
+            handlePointerLeave(e);
+            (children.props as any).onBlurCapture?.(e);
+        },
+        "aria-describedby": isRendered ? tooltipId : (children.props as any)["aria-describedby"]
+    }) : (
+        <span
+            ref={wrapperRef as any}
+            className={triggerClassName}
+            onPointerEnter={handlePointerEnter as any}
+            onPointerLeave={handlePointerLeave as any}
+            onFocusCapture={handleFocus as any}
+            onBlurCapture={handlePointerLeave as any}
             aria-describedby={isRendered ? tooltipId : undefined}
         >
             {children}
+        </span>
+    );
+
+    return (
+        <>
+            {triggerElement}
             {isRendered && createPortal(
                 <div
                     id={tooltipId}
@@ -163,6 +197,6 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
                 </div>,
                 document.body
             )}
-        </div>
+        </>
     );
 };

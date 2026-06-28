@@ -139,4 +139,61 @@ describe("DropdownMenu Accessibility & Keyboard Navigation", () => {
     // but the actual functionality is verified in other tests (like DockerStatusMenu).
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
+
+  it("clones a custom button trigger and merges props correctly", async () => {
+    const customOnClick = vi.fn();
+    const customOnKeyDown = vi.fn();
+
+    render(
+      <DropdownMenu
+        isOpen={false}
+        onOpenChange={() => {}}
+        content={<div><button role="menuitem">Item</button></div>}
+      >
+        <button type="button" onClick={customOnClick} onKeyDown={customOnKeyDown} aria-label="Custom Aria Label">Custom Trigger</button>
+      </DropdownMenu>
+    );
+
+    const trigger = screen.getByRole("button", { name: "Custom Aria Label" });
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    expect(trigger).toHaveAttribute("aria-label", "Custom Aria Label");
+
+    fireEvent.click(trigger);
+    expect(customOnClick).toHaveBeenCalled();
+
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    expect(customOnKeyDown).toHaveBeenCalled();
+  });
+
+  it("focuses the last item when opened with ArrowUp", async () => {
+    const TestMenuArrowUp = () => {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <DropdownMenu
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          content={
+            <div>
+              <button role="menuitem" type="button">Item 1</button>
+              <button role="menuitem" type="button">Item 2</button>
+            </div>
+          }
+        >
+          <button type="button">Open Menu Up</button>
+        </DropdownMenu>
+      );
+    };
+
+    render(<TestMenuArrowUp />);
+
+    const trigger = screen.getByRole("button", { name: "Open Menu Up" });
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });
+
+    await waitFor(() => {
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+    });
+
+    const item2 = screen.getByText("Item 2");
+    expect(item2).toHaveFocus();
+  });
 });

@@ -146,6 +146,38 @@ const buildInterventionEventSuffix = (kind: string, sessionId: string, dedupKey:
 
 const getInterventionStateKey = (sessionId: string, state: "clarification" | "paused"): string => `${state}:${sessionId}`;
 
+interface StoredInterventionKey {
+  key: string;
+  storedAtMs: number | null;
+}
+
+const parseStoredInterventionKey = (value: string | undefined): StoredInterventionKey | null => {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value) as { key?: unknown; storedAtMs?: unknown };
+    if (typeof parsed.key === "string") {
+      return {
+        key: parsed.key,
+        storedAtMs: typeof parsed.storedAtMs === "number" && Number.isFinite(parsed.storedAtMs)
+          ? parsed.storedAtMs
+          : null,
+      };
+    }
+  } catch {
+    // Older in-memory callers stored the raw key string.
+  }
+  return { key: value, storedAtMs: null };
+};
+
+const serializeStoredInterventionKey = (key: string, storedAtMs: number): string => JSON.stringify({ key, storedAtMs });
+
+const resolveClarificationCooldownMs = (settings: AutomationInterventionsSettings): number => {
+  const seconds = Number(settings.clarificationCooldownSeconds);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 300_000;
+};
+
 const buildClarificationAutoReply = (task: Subtask, template: string): string => {
   const latestPrompt = getLatestAgentRequest(task).message;
   const contextBlock = latestPrompt.length > 0
@@ -208,6 +240,7 @@ export interface ApplyActionRequiredAutomationArgs {
     payload: Record<string, unknown>;
   }) => void;
   lastAutomatedInterventionKeys?: Map<string, string>;
+  now?: () => number;
 }
 
 export const applyActionRequiredAutomation = async (
@@ -295,20 +328,37 @@ export const applyActionRequiredAutomation = async (
       if (task.session_state === "AWAITING_USER_FEEDBACK") {
         const clarificationKey = buildClarificationDedupKey(task);
         const clarificationStateKey = getInterventionStateKey(sessionId, "clarification");
-        const storedClarificationKey = args.lastAutomatedInterventionKeys?.get(clarificationStateKey);
-        if (storedClarificationKey === clarificationKey) {
+        const nowMs = args.now?.() ?? Date.now();
+        const storedClarification = parseStoredInterventionKey(args.lastAutomatedInterventionKeys?.get(clarificationStateKey));
+        if (storedClarification?.key === clarificationKey) {
+          const elapsedMs = storedClarification.storedAtMs === null ? 0 : nowMs - storedClarification.storedAtMs;
+          if (elapsedMs >= resolveClarificationCooldownMs(args.settings)) {
+            task.status = "BLOCKED";
+            task.intervention_owner = "HUMAN";
+            task.intervention_hint = "Automatic clarification reply did not clear the Jules waiting state; manual review is required.";
+            emitTaskEvent(task, "action_required_auto_reply_unresolved", {
+              sessionId,
+              sessionState: task.session_state || null,
+              elapsedMs,
+              clarificationKeyPreview: clarificationKey.slice(0, 200),
+            }, buildInterventionEventSuffix("unresolved-clarification", sessionId, clarificationKey));
+            reportText += `⚠️ **Clarification Still Blocked:** Task \`${task.id}\` remained waiting after an automated reply.\n`;
+            continue;
+          }
+
           task.status = "RUNNING";
           task.intervention_owner = "AGENT";
           task.intervention_hint = "Latest clarification request was already answered automatically; waiting for Jules to resume.";
           emitTaskEvent(task, "action_required_auto_reply_skipped_duplicate", {
             sessionId,
             sessionState: task.session_state || null,
+            elapsedMs,
             clarificationKeyPreview: clarificationKey.slice(0, 200),
           }, buildInterventionEventSuffix("duplicate-clarification", sessionId, clarificationKey));
           continue;
         }
 
-        args.lastAutomatedInterventionKeys?.set(clarificationStateKey, clarificationKey);
+        args.lastAutomatedInterventionKeys?.set(clarificationStateKey, serializeStoredInterventionKey(clarificationKey, nowMs));
 
         let reply: string;
         if (args.settings.autoAnswerClarificationMode === "WORKER" && args.generateWorkerClarificationReply) {
@@ -373,8 +423,9 @@ export const applyActionRequiredAutomation = async (
       if (task.session_state === "AWAITING_USER_FEEDBACK") {
         const clarificationStateKey = getInterventionStateKey(sessionId, "clarification");
         const clarificationKey = buildClarificationDedupKey(task);
-        if (args.lastAutomatedInterventionKeys?.get(clarificationStateKey) === clarificationKey) {
-          args.lastAutomatedInterventionKeys.delete(clarificationStateKey);
+        const storedClarification = parseStoredInterventionKey(args.lastAutomatedInterventionKeys?.get(clarificationStateKey));
+        if (storedClarification?.key === clarificationKey) {
+          args.lastAutomatedInterventionKeys?.delete(clarificationStateKey);
         }
       }
       reportText += `⚠️ **Auto-Intervention Failed:** Task \`${task.id}\` could not be unblocked automatically.\n`;

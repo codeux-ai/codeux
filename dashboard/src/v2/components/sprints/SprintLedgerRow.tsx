@@ -221,7 +221,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       className={`group transition-all focus-within:ring-2 focus-within:ring-signal-500/20 ${rowTone} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""} ${pendingRowClass} hover:bg-[var(--bg-hover-subtle)] transition-[box-shadow,transform] duration-150 [@media(hover:hover)]:hover:shadow-[0_4px_12px_rgba(0,0,0,0.12)] [@media(hover:hover)]:hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:transform-none`}
       style={{ transitionDuration: duration, transitionTimingFunction: ease }}
     >
-      <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
+      <TableCell isFirst className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Select">
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
@@ -235,7 +235,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             : <Square className="h-4 w-4" strokeWidth={2.2} />}
         </button>
       </TableCell>
-      <TableCell className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`}>
+      <TableCell className={`lg:w-[80px] lg:min-w-[80px] ${desktopCellTone}`} mobileLabel="Pin">
         <button
           type="button"
           onClick={() => onToggleShowcase(sprint)}

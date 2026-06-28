@@ -23,7 +23,8 @@ export const SkeletonLoader: FunctionComponent<{
   children?: ComponentChildren;
   skeleton?: ComponentChildren;
   className?: string;
-}> = ({ show, children, skeleton, className }) => {
+  loadingLabel?: string;
+}> = ({ show, children, skeleton, className, loadingLabel = "Loading content" }) => {
   const [renderSkeleton, setRenderSkeleton] = useState(show);
   const [renderChildren, setRenderChildren] = useState(!show);
   const isReducedMotion = useReducedMotion();
@@ -77,6 +78,9 @@ export const SkeletonLoader: FunctionComponent<{
           {children}
         </div>
       )}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {show ? loadingLabel : ""}
+      </div>
     </div>
   );
 };

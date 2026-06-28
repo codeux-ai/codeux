@@ -125,12 +125,18 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                     <div className="flex items-center gap-2.5 flex-wrap">
                         <LivePreviewLink session={selectedSession} />
                         {/* ── View Toggle ─────────────────────────────── */}
-                        <div className="flex gap-0.5 p-0.5 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl backdrop-blur-md">
+                        <div className="flex gap-0.5 p-0.5 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl backdrop-blur-md" role="tablist" aria-label="View toggle">
                             <button
                                 type="button"
                                 ref={btnStatsRef}
                                 onClick={() => setHeaderView("stats")}
-                                aria-pressed={headerView === "stats"}
+                                role="tab"
+                                aria-selected={headerView === "stats"}
+                                tabIndex={headerView === "stats" ? 0 : -1}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setHeaderView("race"); btnRaceRef.current?.focus(); }
+                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setHeaderView("dag"); btnDagRef.current?.focus(); }
+                                }}
                                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${headerView === "stats" ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
                             >
                                 <BarChart3 className="w-3 h-3" strokeWidth={2} />
@@ -140,7 +146,13 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                                 type="button"
                                 ref={btnRaceRef}
                                 onClick={() => setHeaderView("race")}
-                                aria-pressed={headerView === "race"}
+                                role="tab"
+                                aria-selected={headerView === "race"}
+                                tabIndex={headerView === "race" ? 0 : -1}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setHeaderView("dag"); btnDagRef.current?.focus(); }
+                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setHeaderView("stats"); btnStatsRef.current?.focus(); }
+                                }}
                                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${headerView === "race" ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
                             >
                                 <Ship className="w-3 h-3" strokeWidth={2} />
@@ -150,7 +162,13 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                                 type="button"
                                 ref={btnDagRef}
                                 onClick={() => setHeaderView("dag")}
-                                aria-pressed={headerView === "dag"}
+                                role="tab"
+                                aria-selected={headerView === "dag"}
+                                tabIndex={headerView === "dag" ? 0 : -1}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); setHeaderView("stats"); btnStatsRef.current?.focus(); }
+                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); setHeaderView("race"); btnRaceRef.current?.focus(); }
+                                }}
                                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-300 ${headerView === "dag" ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
                             >
                                 <Workflow className="w-3 h-3" strokeWidth={2} />

@@ -1,5 +1,5 @@
 import type { FunctionComponent, ComponentProps } from "preact";
-import { useState, useEffect } from "preact/hooks";
+import { useState, useEffect, useId } from "preact/hooks";
 import { useInteractionTokens } from "../../lib/motion/tokens.js";
 
 export interface InputProps extends ComponentProps<"input"> {
@@ -24,7 +24,8 @@ export const Input: FunctionComponent<InputProps> = ({
   ...props
 }) => {
   const tokens = useInteractionTokens();
-  const generatedId = id || (props.name ? `input-${props.name}` : undefined);
+  const uniqueId = useId();
+  const generatedId = id || (props.name ? `input-${props.name}` : uniqueId);
   const errorId = errorText ? `${generatedId}-error` : undefined;
   const helperId = helperText ? `${generatedId}-helper` : undefined;
 
@@ -77,17 +78,22 @@ export const Input: FunctionComponent<InputProps> = ({
     }
   }
 
-  // Use transition-colors for the input border color change as requested
-  // Do not put helper and counter side by side, strictly stack vertically
+  const describedBy = [
+    errorText ? errorId : helperText ? helperId : undefined,
+    props["aria-describedby"]
+  ].filter(Boolean).join(" ") || undefined;
+
+  const errorMessage = [errorId, props["aria-errormessage"]].filter(Boolean).join(" ") || undefined;
+
   return (
     <div className="flex flex-col gap-1.5">
       <input
         id={generatedId}
         maxLength={maxLength}
         onInput={handleInput}
-        aria-invalid={!!errorText || props["aria-invalid"]}
-        aria-errormessage={errorId || props["aria-errormessage"]}
-        aria-describedby={helperId || props["aria-describedby"]}
+        aria-invalid={errorText ? "true" : props["aria-invalid"]}
+        aria-errormessage={errorMessage}
+        aria-describedby={describedBy}
         style={{ transitionDuration: tokens.controlFeedback.duration, transitionTimingFunction: tokens.controlFeedback.ease, ...(typeof style === "object" ? style : {}) }}
         disabled={disabled}
         data-valid={valid ? 'true' : undefined}

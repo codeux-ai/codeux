@@ -163,7 +163,7 @@ export const AgentMemoryConfigPanel: FunctionComponent<AgentMemoryConfigPanelPro
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col items-end gap-2">
+        <div className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-2 md:flex-col md:items-end">
           <button
             type="button"
             onClick={onClose}

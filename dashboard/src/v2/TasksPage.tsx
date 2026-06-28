@@ -198,7 +198,7 @@ const SprintSelector: FunctionComponent<{
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-80 z-50 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden">
+        <div className="absolute left-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] z-50 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col max-h-[60vh]">
           <button
             onClick={() => { onSelect(null); setOpen(false); }}
             className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors duration-200 ${
@@ -211,8 +211,9 @@ const SprintSelector: FunctionComponent<{
             </div>
           </button>
 
-          <div className="h-px bg-black/[0.04] dark:bg-white/[0.04]" />
+          <div className="h-px bg-black/[0.04] dark:bg-white/[0.04] shrink-0" />
 
+          <div className="overflow-y-auto min-h-0">
           {sprints.map((sprint) => {
             const isActive = selectedId === sprint.id;
             return (
@@ -248,6 +249,7 @@ const SprintSelector: FunctionComponent<{
               </button>
             );
           })}
+          </div>
         </div>
       )}
     </div>
@@ -733,7 +735,7 @@ export const TasksPage: FunctionComponent = () => {
       className={isTaskScopeReady ? "gap-16" : "gap-10"}
       padding={isTaskScopeReady ? "standard" : "sprintsEmpty"}
     >
-      <div ref={headerRef} className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
+      <div ref={headerRef} className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 md:gap-8">
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-2.5 text-signal-500 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
             <ListChecks className="w-3.5 h-3.5" strokeWidth={2.5} />
@@ -764,8 +766,8 @@ export const TasksPage: FunctionComponent = () => {
           </p>
         </div>
 
-        <div className="flex flex-col items-start lg:items-end gap-4 shrink-0">
-          <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex flex-col items-start lg:items-end gap-4 shrink-0 w-full lg:w-auto mt-4 lg:mt-0">
+          <div className="flex items-center gap-2.5 flex-wrap w-full lg:w-auto">
             {stats.inProgress > 0 && (
               <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-signal-500/[0.08] border border-signal-500/20 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-signal-500 relative">
@@ -799,7 +801,7 @@ export const TasksPage: FunctionComponent = () => {
             variant="signal"
             icon={(showComposer || editingTask) ? X : Plus}
             disabled={!selectedProject || sprints.length === 0}
-            className="!flex !items-center !gap-2.5 !px-6 !py-3.5 !font-bold !text-sm !rounded-2xl !transition-all !duration-300 !shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:!shadow-[0_8px_32px_rgba(0,224,160,0.45)] hover:!-translate-y-px !shrink-0"
+            className="!flex !items-center !justify-center !w-full lg:!w-auto !gap-2.5 !px-6 !py-3.5 !font-bold !text-sm !rounded-2xl !transition-all !duration-300 !shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:!shadow-[0_8px_32px_rgba(0,224,160,0.45)] hover:!-translate-y-px !shrink-0"
           >
             {(showComposer || editingTask) ? "Close Composer" : "New Task"}
           </Button>
@@ -807,7 +809,7 @@ export const TasksPage: FunctionComponent = () => {
       </div>
 
       {isTaskScopeReady && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 -mt-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mt-2 sm:-mt-4">
           <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} sprintKeyPrefix={sprintKeyPrefix} />
 
           <FilterStrip
@@ -833,7 +835,7 @@ export const TasksPage: FunctionComponent = () => {
             onChange={(val) => setPriorityFilter(val as PriorityFilter)}
           />
 
-          <div className="ml-auto">
+          <div className="ml-auto w-full sm:w-auto">
             <ListWindowSelector value={listWindow} onChange={setListWindow} label="Show" />
           </div>
         </div>
@@ -887,8 +889,8 @@ export const TasksPage: FunctionComponent = () => {
       {isTaskScopeReady && (
         <div ref={boardRef} className={`grid gap-6 ${
           columns.length === 1 ? "grid-cols-1" :
-          columns.length === 2 ? "grid-cols-1 lg:grid-cols-2" :
-          "grid-cols-1 lg:grid-cols-3"
+          columns.length === 2 ? "grid-cols-1 md:grid-cols-2" :
+          "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
         }`}>
           {columns.map(({ status, count, tasks: columnTasks }) => (
             <div key={status} className="flex flex-col">

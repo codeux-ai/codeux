@@ -48,6 +48,26 @@ function compareExecutionTaskDispatchSummaryRows(
     || right.id.localeCompare(left.id);
 }
 
+function isTaskSettled(row: ExecutionTaskDispatchSummaryRow): boolean {
+  return row.task_status === "completed"
+    || row.task_merge_indicator === "MERGED"
+    || row.task_merge_indicator === "AUTOMERGE"
+    || row.task_is_merged === 1
+    || row.task_is_merged === "1";
+}
+
+function normalizeSettledTaskDispatch(row: ExecutionTaskDispatchSummaryRow): void {
+  if (!isTaskSettled(row) || row.task_run_state !== "COMPLETED") {
+    return;
+  }
+
+  row.status = "completed";
+  row.error_message = null;
+  if (!row.finished_at) {
+    row.finished_at = row.last_heartbeat_at || row.started_at || row.queued_at;
+  }
+}
+
 export function queryExecutionTaskDispatches(
   db: DatabaseAdapter,
   storage: AppDbStorage,
@@ -71,6 +91,9 @@ export function queryExecutionTaskDispatches(
       td.task_id,
       t.task_key,
       t.title AS task_title,
+      t.status AS task_status,
+      t.is_merged AS task_is_merged,
+      t.merge_indicator AS task_merge_indicator,
       td.status,
       td.executor_type,
       td.priority,
@@ -122,6 +145,9 @@ export function queryExecutionTaskDispatches(
         td.task_id,
         t.task_key,
         t.title AS task_title,
+        t.status AS task_status,
+        t.is_merged AS task_is_merged,
+        t.merge_indicator AS task_merge_indicator,
         td.status,
         td.executor_type,
         td.priority,
@@ -200,6 +226,7 @@ export function queryExecutionTaskDispatches(
     td.session_name = taskRun?.session_name || null;
     td.worker_branch = taskRun?.worker_branch || null;
     td.pr_url = taskRun?.pr_url || null;
+    normalizeSettledTaskDispatch(td);
   }
 
   return taskDispatches;

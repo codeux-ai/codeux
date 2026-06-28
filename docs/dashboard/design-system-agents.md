@@ -22,3 +22,8 @@ Use explicit badging inside `.code-ux/agents` lists:
 
 ## Empty States
 For empty states on the Agents page, avoid generic `<EmptyState />` implementations. Instead, use tailored rounded containers (`rounded-[1.9rem]`), dashed borders (`border-dashed border-black/[0.08]`), and a highly blured backdrop (`backdrop-blur-2xl`) that houses an oversized icon container (`h-16 w-16 bg-signal-500/10 text-signal-600 shadow-sm ring-1 ring-slate-900/5`).
+
+## Responsive Layouts
+- Use `flex-col-reverse` for primary-secondary layouts so side panels (like roster) stack below editors on small viewports.
+- Apply `min-w-0` aggressively in `flex` containers and flex children where text truncation is required.
+- Ensure action button clusters wrap natively using `flex-wrap` and preserve alignment.

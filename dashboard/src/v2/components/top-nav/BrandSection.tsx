@@ -19,13 +19,14 @@ export const BrandSection: FunctionComponent<BrandSectionProps> = ({ isMobile, o
     }
 
     return (
-        <div className="flex shrink-0 items-center gap-4 md:gap-10">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-4 md:gap-10">
             {isMobile && (
                 <button
                     type="button"
                     onClick={onMenuToggle}
                     aria-label={isMobileMenuOpen ? "Close mobile menu" : "Open mobile menu"}
                     aria-expanded={!!isMobileMenuOpen}
+                    aria-haspopup="menu"
                     aria-controls="primary-navigation"
                     className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 shrink-0"
                 >

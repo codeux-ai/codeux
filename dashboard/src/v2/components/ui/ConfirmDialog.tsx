@@ -183,28 +183,18 @@ interface ConfirmDialogProps {
   options: ConfirmDialogOptions | null;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
-  triggerRef?: { current: HTMLElement | null };
 }
 
-export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef }: ConfirmDialogProps) {
+export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmDialogProps) {
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmFlash, setConfirmFlash] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
-  const fallbackTriggerRef = useRef<HTMLElement | null>(null);
-  const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus: false });
+  const trapRef = useFocusTrap(shouldRender && !isClosing, { onClose: () => handleClose(onCancel), restoreFocus: true });
   const reducedMotion = useReducedMotion();
   const gsapTokens = useGsapInteractionTokens();
-
-  const actualTriggerRef = triggerRef || fallbackTriggerRef;
-
-  useLayoutEffect(() => {
-    if (isOpen && !shouldRender) {
-      actualTriggerRef.current = document.activeElement as HTMLElement | null;
-    }
-  }, [isOpen, shouldRender, actualTriggerRef]);
 
   useEffect(() => {
     if (isOpen) {
@@ -254,11 +244,6 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
         setShouldRender(false);
         setIsClosing(false);
 
-        if (actualTriggerRef.current) {
-          actualTriggerRef.current.focus();
-          actualTriggerRef.current = null;
-        }
-
         if (pendingCallback.current) {
           pendingCallback.current();
           pendingCallback.current = null;
@@ -279,7 +264,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
         onExitComplete();
       }
     }
-  }, [isClosing, reducedMotion, actualTriggerRef]);
+  }, [isClosing, reducedMotion]);
 
   if (!shouldRender || !options) return null;
 
@@ -302,16 +287,18 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel, triggerRef
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
-        aria-describedby="confirm-dialog-body"
+        aria-describedby={body ? "confirm-dialog-body" : undefined}
         className="bg-white dark:bg-void-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-black/[0.08] dark:border-white/[0.08] flex flex-col"
       >
         <div className="p-6 pb-4">
           <h2 id="confirm-dialog-title" className="text-xl font-semibold text-void-900 dark:text-white">
             {title}
           </h2>
-          <p id="confirm-dialog-body" className="mt-3 text-sm text-void-600 dark:text-void-300">
-            {body}
-          </p>
+          {body && (
+            <p id="confirm-dialog-body" className="mt-3 text-sm text-void-600 dark:text-void-300">
+              {body}
+            </p>
+          )}
           {destructive && (
             <div className="mt-4 p-3 bg-status-red/10 border border-status-red/20 rounded-lg">
               <p className="text-xs font-medium text-status-red">

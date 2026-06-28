@@ -78,6 +78,41 @@ describe("RuntimeStatusProjection", () => {
     expect(status.subtasks[0]?.status).toBe("RUNNING");
   });
 
+  it("keeps completed merged tasks completed when a stale failed run is newer", async () => {
+    const { storage, projection, projectRepository } = await createProjection();
+    const db = storage.getDatabase();
+
+    const project = projectRepository.createProject({ name: "Proj", sourceType: "local", sourceRef: "/path" });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Task 1",
+      status: "completed",
+      isMerged: true,
+      mergeIndicator: "MERGED",
+    });
+
+    db.prepare(`
+      INSERT INTO task_runs (id, project_id, sprint_id, task_id, state, started_at, finished_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run("run-1", project.id, sprint.id, task.id, "COMPLETED", "2024-01-01T10:00:00Z", "2024-01-01T10:05:00Z");
+
+    db.prepare(`
+      INSERT INTO task_runs (id, project_id, sprint_id, task_id, state, started_at, finished_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run("run-2", project.id, sprint.id, task.id, "FAILED", "2024-01-01T11:00:00Z", "2024-01-01T11:01:00Z");
+
+    const status = projection.buildProjectStatus(project.id, sprint.id, null);
+
+    expect(status.subtasks).toHaveLength(1);
+    expect(status.subtasks[0]).toMatchObject({
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    });
+  });
+
   it("projects latest task QA review summaries for live status", async () => {
     const { storage, projection, projectRepository } = await createProjection();
     const db = storage.getDatabase();

@@ -91,6 +91,14 @@ describe("Sidebar Mobile Accessibility", () => {
         expect(triggerClosed).toHaveAttribute("aria-expanded", "false");
     });
 
+    it("should allow internal scroll and avoid browser chrome overlap", () => {
+        render(<Sidebar isMobile={true} isOpen={true} onClose={() => {}} />);
+        const aside = screen.getByRole("dialog", { name: /navigation menu/i });
+        // The nav itself has overflow-y-auto, let's select it directly
+        const nav = screen.getByRole("navigation", { name: /main navigation/i });
+        expect(nav).toHaveClass("overflow-y-auto");
+    });
+
     it("should close on Escape key", async () => {
         const onClose = vi.fn();
         render(<Sidebar isMobile={true} isOpen={true} onClose={onClose} />);
@@ -109,8 +117,8 @@ describe("Sidebar Mobile Accessibility", () => {
 
         // Wait for focus trap to initialize (it has a setTimeout)
         await waitFor(() => {
-            const firstLink = screen.getAllByRole("link")[0]; // Should be the Logo link
-            expect(document.activeElement).toBe(firstLink);
+            const logoLink = document.querySelector('a[href="/"]');
+            expect(document.activeElement).toBe(logoLink);
         });
 
         const aside = screen.getAllByRole("dialog")[0];

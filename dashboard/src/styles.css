@@ -13,6 +13,34 @@
   - Tiny indicators: rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]
 */
 
+.skip-link {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: white;
+  color: rgb(15, 23, 42);
+  border-radius: 0.5rem;
+  font-weight: 600;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-100%);
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  outline: 2px solid rgb(0, 224, 160);
+  outline-offset: 2px;
+}
+.dark .skip-link {
+  background: rgb(22, 27, 34);
+  color: white;
+}
+
 html.has-bg-image {
   background-image: var(--bg-image) !important;
   background-size: cover;

@@ -60,6 +60,22 @@ describe("ActionFeedbackRegion", () => {
     expect(dismissBtn).toBeInTheDocument();
   });
 
+  it("sets aria-busy and visually hidden text for pending status", () => {
+    const { container, unmount } = render(<ActionFeedbackRegion status="pending" message="Loading..." />);
+
+    // There might be multiple things with role="status" in the DOM due to other tests not cleaning up perfectly if unmount wasn't called,
+    // so we search within our rendered container.
+    const el = container.querySelector('[role="status"]');
+    expect(el).not.toBeNull();
+    expect(el).toHaveAttribute("aria-busy", "true");
+
+    const hiddenText = container.querySelector(".sr-only");
+    expect(hiddenText).not.toBeNull();
+    expect(hiddenText?.textContent).toBe("pending");
+
+    unmount();
+  });
+
   it("does not render progress for pending or error statuses", () => {
     const { unmount } = render(<ActionFeedbackRegion status="error" message="Error msg" />);
     expect(document.querySelector(".absolute.bottom-0")).not.toBeInTheDocument();
