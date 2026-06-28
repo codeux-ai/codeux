@@ -42,7 +42,8 @@ export const TaskExecutionMeta: FunctionComponent<TaskExecutionMetaProps> = memo
       {/* Time Chip */}
       <div className="flex items-center gap-1.5 bg-black/[0.03] dark:bg-white/[0.03] px-2 py-0.5 rounded-full border border-black/[0.06] dark:border-white/[0.08]">
         <Clock className="w-3 h-3" strokeWidth={2} aria-hidden="true" />
-        <span className="sr-only">Duration: </span><span>{time || "Not started"}</span>
+        <span className="sr-only">Duration: </span>
+        <span>{time || "Not started"}</span>
       </div>
 
       {/* Executor Chip */}

@@ -158,7 +158,6 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
             <FieldWrapper label="Sprint" required error={state.sprintIdError} forceTouch={state.touchedFields.sprintId || state.hasAttemptedSubmit}>
               <select
-                id="composer-sprint"
                 value={state.sprintId}
                 onInput={(event) => state.setSprintId((event.target as HTMLSelectElement).value)}
                 onBlur={() => state.setFieldTouched('sprintId')}
@@ -201,7 +200,6 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           <div data-composer-stagger className="mt-8 block space-y-2">
             <FieldWrapper label="Task Title" required error={state.titleError} forceTouch={state.touchedFields.title || state.hasAttemptedSubmit}>
               <input
-                id="composer-title"
                 ref={titleInputRef}
                 type="text"
                 value={state.title}
